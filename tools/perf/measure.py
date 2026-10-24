@@ -11,7 +11,7 @@ browser is Chromium: WebKit reports neither layout shifts nor long tasks.
 
 import http.client
 from contextlib import closing
-from typing import Any
+from typing import Any, NamedTuple
 from urllib.parse import urlsplit
 
 from tools.perf import parse
@@ -55,6 +55,12 @@ FETCHED = """() => {
 }"""
 
 
+class Answer(NamedTuple):
+    status: int
+    took_ms: float | None
+    body: bytes
+
+
 class Server:
     """One kept-alive connection to a server, signed in with a session cookie."""
 
@@ -63,13 +69,13 @@ class Server:
         self.connection = http.client.HTTPConnection(parts.hostname, parts.port, timeout=60)
         self.cookie = "=".join(cookie)
 
-    def get(self, page: str) -> tuple[int, float | None]:
-        """The status, and the time the server says it spent."""
+    def get(self, page: str) -> Answer:
+        """The status, the time the server says it spent, and what it sent."""
 
         self.connection.request("GET", page, headers={"Cookie": self.cookie})
         response = self.connection.getresponse()
-        response.read()
-        return response.status, parse.server_time(response.getheader("Server-Timing", ""))
+        body = response.read()
+        return Answer(response.status, parse.server_time(response.getheader("Server-Timing", "")), body)
 
     def close(self) -> None:
         self.connection.close()
@@ -79,11 +85,13 @@ def one_pass(url: str, cookie: tuple[str, str], pages: list[str]) -> dict[str, i
     """Each page asked once, by its status."""
 
     with closing(Server(url, cookie)) as server:
-        return {page: server.get(page)[0] for page in pages}
+        return {page: server.get(page).status for page in pages}
 
 
 def server_times(url: str, cookie: tuple[str, str], pages: list[str], requests: int) -> dict[str, dict[str, Any]]:
-    """Each page's status, and the median and 95th percentile of its server time over ``requests``."""
+    """Each page's status, the median and 95th percentile of its server time over ``requests``, and
+    the records its tables hold and its HTML's size, so a page drawing more rows at one ref than at
+    another is told apart from code that got slower."""
 
     measured = {}
     with closing(Server(url, cookie)) as server:
@@ -91,9 +99,16 @@ def server_times(url: str, cookie: tuple[str, str], pages: list[str], requests: 
             for _ in range(WARM):
                 server.get(page)
             answers = [server.get(page) for _ in range(requests)]
-            times = [took for _, took in answers if took is not None]
+            times = [answer.took_ms for answer in answers if answer.took_ms is not None]
             p50, p95 = parse.percentiles(times) if times else (None, None)
-            measured[page] = {"status": answers[-1][0], "p50_ms": p50, "p95_ms": p95}
+            last = answers[-1]
+            measured[page] = {
+                "status": last.status,
+                "p50_ms": p50,
+                "p95_ms": p95,
+                "rows": parse.data_rows(last.body.decode("utf-8", errors="replace")),
+                "html_bytes": len(last.body),
+            }
     return measured
 
 

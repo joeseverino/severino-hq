@@ -19,6 +19,8 @@ SERVER: tuple[tuple[str, Read, int], ...] = (
     ("p50 ms", lambda server: server.get("p50_ms"), 1),
     ("p95 ms", lambda server: server.get("p95_ms"), 1),
     ("queries", lambda server: server.get("queries"), 0),
+    ("rows", lambda server: server.get("rows"), 0),
+    ("HTML KB", lambda server: _kilobytes(server["html_bytes"]), 1),
 )
 # The browser's, read from a page's `browser[width]`.
 BROWSER: tuple[tuple[str, Read, int], ...] = (

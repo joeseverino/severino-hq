@@ -79,7 +79,7 @@ def rows(rendered: str) -> dict[tuple[str, str], dict[str, str]]:
         if not line.startswith(" "):
             page = cells.pop(0)
         server = len(cells) == len(table.HEADERS) - 1
-        headers = [name for name in table.HEADERS[1:] if server or name not in {"p50 ms", "p95 ms", "queries"}]
+        headers = [name for name in table.HEADERS[1:] if server or name not in {name for name, _, _ in table.SERVER}]
         found[page, cells[0]] = dict(zip(headers, cells, strict=True))
     return found
 
@@ -98,6 +98,17 @@ class TableTests(SimpleTestCase):
         found = rows(table.render(RECORDED))
 
         self.assertEqual(found["/domains/ (302)", "402"]["queries"], "-")
+
+    def test_a_page_s_records_and_html_size_sit_beside_its_server_time(self):
+        report = copy.deepcopy(RECORDED)
+        report["pages"][0]["server"] |= {"rows": 50, "html_bytes": 40960}
+        base = copy.deepcopy(report)
+        base["pages"][0]["server"] |= {"rows": 25, "html_bytes": 20480}
+
+        found = rows(table.render(report, base))
+
+        self.assertEqual(found["/", "402"]["rows"], "50 +25")
+        self.assertEqual(found["/", "402"]["HTML KB"], "40.0 +20.0")
 
     def test_the_total_sums_every_page(self):
         found = rows(table.render(RECORDED))

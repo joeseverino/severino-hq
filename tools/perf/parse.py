@@ -2,6 +2,8 @@
 
 import re
 import statistics
+from html.parser import HTMLParser
+from typing import override
 
 # One metric of a Server-Timing header: its name, then `;dur=<ms>` among its parameters.
 _METRIC = re.compile(r"(?:^|,)\s*([!#$%&'*+.^_`|~\w-]+)((?:\s*;[^,]*)*)")
@@ -67,6 +69,57 @@ def api_refusal(log: str) -> str | None:
 
     found = _API_REFUSAL.search(log)
     return found.group(0) if found else None
+
+
+# Elements that never hold others, so never close.
+_VOID = frozenset(
+    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+)
+# A table body's rows that are no record: a group's heading, and the line held beneath an open row.
+_NOT_RECORDS = frozenset({"row-group", "row-detail"})
+
+
+class _Rows(HTMLParser):
+    """Counts the records a reader meets in a page's tables, as the browser gates select them
+    (`main .data-table > tbody > tr`), leaving out the rows that hold no record of their own."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.open: list[tuple[str, frozenset[str]]] = []
+        self.rows = 0
+
+    @override
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        classes = frozenset((dict(attrs).get("class") or "").split())
+        if tag == "tr" and self._in_body() and not classes & _NOT_RECORDS:
+            self.rows += 1
+        if tag not in _VOID:
+            self.open.append((tag, classes))
+
+    def _in_body(self) -> bool:
+        return (
+            len(self.open) >= 2
+            and self.open[-1][0] == "tbody"
+            and self.open[-2][0] == "table"
+            and "data-table" in self.open[-2][1]
+            and any(tag == "main" for tag, _ in self.open)
+        )
+
+    @override
+    def handle_endtag(self, tag: str) -> None:
+        for depth in range(len(self.open) - 1, -1, -1):
+            if self.open[depth][0] == tag:
+                del self.open[depth:]
+                return
+
+
+def data_rows(html: str) -> int:
+    """How many records the tables of a page's main region hold."""
+
+    reader = _Rows()
+    reader.feed(html)
+    reader.close()
+    return reader.rows
 
 
 def cookie(output: str) -> tuple[str, str]:

@@ -106,3 +106,34 @@ class ApiRefusalTests(SimpleTestCase):
         ):
             with self.subTest(log=log):
                 self.assertIsNone(parse.api_refusal(log))
+
+
+# A page as HQ draws a list: a grouped table whose rows each hold back a line
+# beneath, a chart's table of values, and tables outside main or no data table.
+LIST_PAGE = """\
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/s.css"></head><body>
+<nav><table class="data-table"><tbody><tr><td>menu</td></tr></tbody></table></nav>
+<main>
+  <table class="data-table queue-table">
+    <thead><tr><th>Name</th></tr></thead>
+    <tbody>
+      <tr class="row-group"><th>Open</th></tr>
+      <tr><td>one<br><img src="/a.png"></td></tr>
+      <tr class="row-detail" hidden><td>held</td></tr>
+      <tr data-attention-item><td><input type="checkbox">two</td></tr>
+      <tr class="row-detail" hidden><td>held</td></tr>
+    </tbody>
+  </table>
+  <table class="calendar"><tbody><tr><td>1</td></tr></tbody></table>
+  <details><table class="data-table compact-table"><tbody><tr><th>Mon</th><td>3</td></tr></tbody></table></details>
+</main>
+</body></html>
+"""
+
+
+class DataRowTests(SimpleTestCase):
+    def test_counts_the_records_in_main_s_data_tables(self):
+        self.assertEqual(parse.data_rows(LIST_PAGE), 3)
+
+    def test_a_page_without_one_holds_none(self):
+        self.assertEqual(parse.data_rows("<main><p>Nothing here yet.</p></main>"), 0)
