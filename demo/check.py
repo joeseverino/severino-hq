@@ -9,6 +9,7 @@ import os
 import re
 import unittest
 from html import unescape
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
@@ -34,6 +35,35 @@ _MOST_ITEMS = 3
 _MARK = re.compile(r'\sclass="([^"]*)"|\s(data-[\w-]+)')
 # The repository the About dialog links into.
 _SOURCE = "https://github.com/joeseverino/severino-hq"
+
+
+class _Anchors(HTMLParser):
+    """Each link on a page, its attributes by name, and the ids of the
+    dialogs it sits in."""
+
+    def __init__(self):
+        super().__init__()
+        self.anchors: list[tuple[dict[str, str], tuple[str, ...]]] = []
+        self._dialogs: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        found = {name: value or "" for name, value in attrs}
+        if tag == "dialog":
+            self._dialogs.append(found.get("id", ""))
+        elif tag == "a":
+            self.anchors.append((found, tuple(self._dialogs)))
+
+    def handle_endtag(self, tag):
+        if tag == "dialog" and self._dialogs:
+            self._dialogs.pop()
+
+
+def _anchors(page: str) -> list[tuple[dict[str, str], tuple[str, ...]]]:
+    parser = _Anchors()
+    parser.feed(page)
+    return parser.anchors
+
+
 _ROOT = Path(__file__).resolve().parents[1]
 # The pages of a list demo/build.py saves, from its first (its _MOST_PAGES_OF_A_LIST).
 _MOST_PAGES_OF_A_LIST = 6
@@ -276,9 +306,11 @@ class DemoSiteTests(unittest.TestCase):
         dashboard = (OUT / "index.html").read_text(encoding="utf-8")
         about = re.search(r'<dialog[^>]*id="modal-demo-about".*?</dialog>', dashboard, re.DOTALL)
         self.assertTrue(about, "the About dialog is on the page")
-        mark = re.search(r'<a class="demo-about" href="([^"]+)"', dashboard)
-        self.assertTrue(mark, "the corner control is a link")
-        links = [mark.group(1), *re.findall(r'<a href="([^"]+)"', about.group(0))]
+        anchors = _anchors(dashboard)
+        marks = [found["href"] for found, _ in anchors if "demo-about" in found.get("class", "").split()]
+        self.assertEqual(len(marks), 1, "the corner control is a link")
+        inside = [found["href"] for found, dialogs in anchors if "modal-demo-about" in dialogs and "href" in found]
+        links = [*marks, *inside]
         self.assertIn(_SOURCE, links)
         for link in links:
             with self.subTest(link=link):

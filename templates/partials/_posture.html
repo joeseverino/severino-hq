@@ -5,7 +5,7 @@ sentence is its tooltip, and how to enforce the standard is in the docs the
 heading links to. An unread check says what would read it.
 {% endcomment %}
 <section class="posture{% if card %} card{% endif %}" aria-labelledby="posture-heading">
-  {% section_head id="posture-heading" %}{% if posture.advanced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture enabled{% else %}HQ's standard{% endif %}{% aside %}<span class="count">{{ posture.count_line|breakable }}{% if posture.guide %} · {% entity posture.guide|declared_link:"How the checks work" %}{% endif %}</span>{% endsection_head %}
+  {% section_head id="posture-heading" %}{% if posture.advanced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture enabled{% else %}HQ's standard{% endif %}{% aside %}<span class="count">{{ posture.count_line|breakable }}{% if posture.guide %} · {% entity posture.guide|outside label="How the checks work" %}{% endif %}</span>{% endsection_head %}
   <ol class="step-list posture-checks">
     {% for standing in posture.standings %}
       <li class="tone-{{ standing.state }}"{% if standing.met %} title="{{ standing.check.holds }}"{% endif %}>

@@ -31,7 +31,7 @@ A check met everywhere is a word in one closing line.
     {% for row in repositories %}{% with posture=row.posture %}
       <li>
         <div class="posture-repo-name">
-          {% if row.project %}<a href="{{ row.project.get_absolute_url }}">{{ posture.subject.short|breakable }}</a>{% else %}{% entity posture.subject.url|declared_link:posture.subject.short %}{% endif %}
+          {% if row.project %}<a href="{{ row.project.get_absolute_url }}">{{ posture.subject.short|breakable }}</a>{% else %}{% entity posture.subject.url|outside label=posture.subject.short %}{% endif %}
           <small class="muted">{% if posture.subject.private %}Private{% else %}Public{% endif %}</small>
         </div>
         <strong class="posture-score {% if posture.unmet %}is-unmet{% else %}is-met{% endif %}">{{ posture.met|breakable }} of {{ posture.measured|breakable }}</strong>

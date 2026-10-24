@@ -15,10 +15,10 @@ base.html draws on a saved copy (SEVERINO_RENDERED_COPY) and nowhere else.
 <p>No server answers these pages, so a form that would change something says so and changes nothing. Dismissals and your theme are kept in this browser until you choose Reset demo in the menu.</p>
 <h3 class="demo-about-heading">Behind it</h3>
 <ul>
-  <li>{% entity "https://github.com/joeseverino/severino-hq"|declared_link:"The repository" %}</li>
-  <li>{% entity "https://github.com/joeseverino/severino-hq/blob/main/demo/README.md"|declared_link:"How the demo is built" mark="," %} with <code>mise run browser:demo</code></li>
-  <li>{% entity "https://github.com/joeseverino/severino-hq/blob/main/.github/workflows/demo.yml"|declared_link:"The workflow" %} that publishes it when a change lands on main, and once a week</li>
-  <li>{% entity "https://github.com/joeseverino/severino-hq/blob/main/docs/Development.md"|declared_link:"Developing HQ" %}</li>
-  <li>{% entity "https://github.com/joeseverino/severino-hq/blob/main/docs/AI.md"|declared_link:"AI and HQ" %}</li>
+  <li>{% entity "https://github.com/joeseverino/severino-hq"|outside label="The repository" %}</li>
+  <li>{% entity "https://github.com/joeseverino/severino-hq/blob/main/demo/README.md"|outside label="How the demo is built" mark="," %} with <code>mise run browser:demo</code></li>
+  <li>{% entity "https://github.com/joeseverino/severino-hq/blob/main/.github/workflows/demo.yml"|outside label="The workflow" %} that publishes it when a change lands on main, and once a week</li>
+  <li>{% entity "https://github.com/joeseverino/severino-hq/blob/main/docs/Development.md"|outside label="Developing HQ" %}</li>
+  <li>{% entity "https://github.com/joeseverino/severino-hq/blob/main/docs/AI.md"|outside label="AI and HQ" %}</li>
 </ul>
 <p class="muted">Saved {{ saved_copy|when:"day" }}.</p>

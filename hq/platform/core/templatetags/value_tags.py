@@ -563,7 +563,8 @@ def entity(context, link, code=False, label="", mark=""):
         return format_html('<span class="empty-value" title="None">{}</span>', MISSING) + conditional_escape(
             _mark(mark)
         )
-    if label:
+    # A count of nothing is still a name to show.
+    if label is not None and label != "":
         link = replace(link, label=str(label))
     label = format_html("<code>{}</code>", breakable(link.label, mark)) if code else breakable(link.label, mark)
     if link.url and not link.external and _is_this_page(context, link.url):
@@ -648,20 +649,21 @@ def entity_of(kind, identity):
     return entity_link(str(kind), str(identity or ""))
 
 
-_UNNAMED = object()
+@register.filter
+def declared_link(link):
+    """A link an emitter declared (a label and a url), as an entity mention."""
+
+    return declared(link.label, link.url)
 
 
 @register.filter
-def declared_link(link, label=_UNNAMED):
-    """A link an emitter declared (a label and a url), as an entity mention.
+def outside(url):
+    """``{% entity url|outside label=name %}``: a page outside HQ, named.
 
-    ``{% entity url|declared_link:label %}`` names a page outside HQ: a url
-    that is not a web address leaves the label unlinked, so a page builds no
-    href from data HQ did not write (``web_url``)."""
+    A url that is not a web address leaves the name unlinked, so a page builds
+    no href from data HQ did not write (``web_url``)."""
 
-    if label is _UNNAMED:
-        return declared(link.label, link.url)
-    return declared(str(label), _web_url(link), kind="dependency")
+    return declared("", _web_url(url), kind="dependency")
 
 
 @register.filter

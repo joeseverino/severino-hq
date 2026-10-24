@@ -1,6 +1,6 @@
 {% comment %}
 A link to a page outside HQ, the one form every outside link takes: written by
-{% entity %} for a name, and by {% outside_link url %}markup{% endoutside_link %}
+{% entity url|outside label=name %} for a name, and by {% outside_link url %}markup{% endoutside_link %}
 for anything else (a chip, an icon, a card). It opens in a new tab with no way
 back to this page, and only a web address is a link (web_url); anything else
 draws what it holds, unlinked. A name carries the arrow that says it leaves

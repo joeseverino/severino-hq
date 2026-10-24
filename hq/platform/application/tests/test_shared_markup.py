@@ -152,7 +152,7 @@ class OutsideLinkTests(SimpleTestCase):
     def test_markup_links_out_the_way_a_name_does(self):
         html = _render(
             '{% outside_link url=url css="chip" tone="good" tip="Success" %}<b>deploy</b>{% endoutside_link %}'
-            "{% entity url|declared_link:name %}",
+            "{% entity url|outside label=name %}",
             url="https://example.com/run",
             name="deploy",
         )
@@ -171,6 +171,11 @@ class OutsideLinkTests(SimpleTestCase):
         self.assertEqual(elements(html, "a"), [])
         self.assertEqual(texts(html, "b"), ["deploy"])
 
+    def test_a_count_of_nothing_is_still_shown(self):
+        html = _render("{% entity url|outside label=n %}", url="https://example.com/followers", n=0)
+
+        self.assertEqual(texts(html, "a"), ["0"])
+
     def test_a_dialog_s_trigger_keeps_its_dialog(self):
         html = _render('{% outside_link url="https://example.com/about" modal="about" %}About{% endoutside_link %}')
 
@@ -179,7 +184,7 @@ class OutsideLinkTests(SimpleTestCase):
         self.assertEqual(link.attrs["aria-controls"], "modal-about")
 
     def test_a_page_outside_hq_opens_in_a_new_tab_without_a_way_back(self):
-        html = _render("{% entity url|declared_link:name %}", url="https://example.com/a", name="example-repo")
+        html = _render("{% entity url|outside label=name %}", url="https://example.com/a", name="example-repo")
 
         (link,) = elements(html, "a")
         self.assertEqual(link.attrs["href"], "https://example.com/a")
@@ -191,7 +196,7 @@ class OutsideLinkTests(SimpleTestCase):
     def test_an_address_that_is_not_a_web_page_is_not_a_link(self):
         for url in ("javascript:alert(1)", "/commit/abc", "", None):
             with self.subTest(url=url):
-                html = _render("{% entity url|declared_link:name %}", url=url, name="abc")
+                html = _render("{% entity url|outside label=name %}", url=url, name="abc")
 
                 self.assertEqual(elements(html, "a"), [])
                 self.assertIn("abc", html)
@@ -217,4 +222,4 @@ class SharedMarkupTemplateTests(SimpleTestCase):
         # An anchor to a web address, or one that leaves in a new tab.
         outside = r'<a\b[^>]*(?:href="https?:|rel="noopener|target="_blank"|class="external-link)'
         found = _written_by_hand(outside, OutsideLinkTests.PARTIAL)
-        self.assertEqual(found, [], "write {% entity url|declared_link:label %} or {% outside_link %} instead")
+        self.assertEqual(found, [], "write {% entity url|outside label=name %} or {% outside_link %} instead")

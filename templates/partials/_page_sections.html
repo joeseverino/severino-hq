@@ -31,7 +31,7 @@
                 {% if cell.link %}
                   {% entity cell.link %}
                 {% elif cell.url %}
-                  {% if cell.external %}{% entity cell.url|declared_link:cell.text %}{% else %}<a href="{{ cell.url }}">{{ cell.text|breakable }}</a>{% endif %}
+                  {% if cell.external %}{% entity cell.url|outside label=cell.text %}{% else %}<a href="{{ cell.url }}">{{ cell.text|breakable }}</a>{% endif %}
                 {% elif cell.muted %}
                   <span class="muted">{{ cell.text|breakable }}</span>
                 {% else %}

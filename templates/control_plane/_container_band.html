@@ -19,17 +19,17 @@ of its repository instead: the production deploy, and the repository's alerts.
   {% if standing.repository %}{% with deploy=standing.repository.production %}
     {% band_fact icon="deploy" label="Production deploy" %}
       <strong>{% if standing.repository.production_verified %}Verified{% elif standing.repository.production_verified is False %}Failed its checks{% elif deploy %}Deployed{% else %}No deploy found{% endif %}</strong>
-      {% if deploy %}<small>{% entity standing.repository.url|add:"/commit/"|add:deploy.sha|declared_link:"commit" code=True label=deploy.sha|slice:":7" %}{% if deploy.created_at %} · {{ deploy.created_at|ago_short }}{% endif %}</small>{% endif %}
+      {% if deploy %}<small>{% entity standing.repository.url|add:"/commit/"|add:deploy.sha|outside code=True label=deploy.sha|slice:":7" %}{% if deploy.created_at %} · {{ deploy.created_at|ago_short }}{% endif %}</small>{% endif %}
       <small>{% if standing.repository.production_verified %}Passed its checks before deploying.{% else %}From {{ standing.repository.name|breakable:"." }}{% endif %}</small>
     {% tone %}{% if standing.repository.production_verified %}good{% elif standing.repository.production_verified is False %}serious{% endif %}{% endband_fact %}
     {% band_fact icon="shield" label="Security" %}
-      <strong>{% if standing.repository.open_alerts %}{% entity standing.repository.alerts_url|declared_link:standing.repository.open_alerts label=standing.repository.open_alerts|stringformat:"s"|add:" open" %}{% else %}{% entity standing.repository.alerts_url|declared_link:"Clear" %}{% endif %}</strong>
+      <strong>{% if standing.repository.open_alerts %}{% entity standing.repository.alerts_url|outside label=standing.repository.open_alerts|stringformat:"s"|add:" open" %}{% else %}{% entity standing.repository.alerts_url|outside label="Clear" %}{% endif %}</strong>
       <small>{% for n, level in standing.repository.severities %}{{ n|breakable }} {{ level|breakable:forloop }}{% if not forloop.last %} {% endif %}{% empty %}No open alerts on the repository.{% endfor %}</small>
     {% tone %}{% if standing.repository.serious_alerts %}serious{% elif standing.repository.open_alerts %}attention{% else %}good{% endif %}{% endband_fact %}
   {% endwith %}{% else %}
     {% band_fact icon="deploy" label="Update" %}
       {% if standing.newer %}
-        <strong>{% entity standing.release.url|declared_link:standing.latest code=True %} available</strong>
+        <strong>{% entity standing.release.url|outside label=standing.latest code=True %} available</strong>
         <small>{{ standing.newer|length|counted:"newer release,newer releases" }}{% if standing.release.published %}, the newest {{ standing.release.published|ago_short }}{% endif %}</small>
       {% elif standing.update_state == "current" %}
         <strong>Up to date</strong>
@@ -43,11 +43,11 @@ of its repository instead: the production deploy, and the repository's alerts.
     {% band_fact icon="shield" label="Known vulnerabilities" %}
       {% if standing.state == 'vulnerable' %}
         <strong>{{ standing.vulnerabilities|capfirst|breakable }}</strong>
-        {% for advisory in standing.advisories|slice:":2" %}<small>{% entity advisory.url|declared_link:advisory.id %} {{ advisory.severity|breakable }}</small>{% endfor %}
-        {% if not standing.advisories %}{% for finding in standing.urgent|slice:":2" %}<small>{% entity finding.url|declared_link:finding.id %} {{ finding.package|breakable }}</small>{% endfor %}{% endif %}
+        {% for advisory in standing.advisories|slice:":2" %}<small>{% entity advisory.url|outside label=advisory.id %} {{ advisory.severity|breakable }}</small>{% endfor %}
+        {% if not standing.advisories %}{% for finding in standing.urgent|slice:":2" %}<small>{% entity finding.url|outside label=finding.id %} {{ finding.package|breakable }}</small>{% endfor %}{% endif %}
       {% elif standing.checked or standing.source %}
         <strong>{% if standing.findings %}None serious{% else %}None known{% endif %}</strong>
-        <small>{% if standing.findings %}{{ standing.findings|length }} lower, in {% endif %}{% if standing.checked %}{{ standing.checked.checked|counted:"package,packages" }}{% endif %}{% if standing.checked and standing.source %} and {% endif %}{% if standing.source %}<span class="nowrap">{% entity standing.source|add:"/security/advisories"|declared_link:"its repository" %}</span>{% endif %}</small>
+        <small>{% if standing.findings %}{{ standing.findings|length }} lower, in {% endif %}{% if standing.checked %}{{ standing.checked.checked|counted:"package,packages" }}{% endif %}{% if standing.checked and standing.source %} and {% endif %}{% if standing.source %}<span class="nowrap">{% entity standing.source|add:"/security/advisories"|outside label="its repository" %}</span>{% endif %}</small>
       {% else %}
         <strong>Cannot check</strong>
         <small>The image does not say where its source is.{% if edit_url %} <a href="{{ edit_url }}">Name its source repository</a>{% endif %}</small>

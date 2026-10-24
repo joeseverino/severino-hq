@@ -16,13 +16,13 @@ would be a page about anybody.
     {% if profile.avatar %}<img class="gh-avatar" src="{{ profile.avatar }}" alt="" width="64" height="64">{% endif %}
     <div class="gh-identity">
       <p class="gh-name">{{ profile.name|default:profile.login|breakable }}<span class="gh-verified" tabindex="0" data-tip="This is your GitHub account, according to your sign-in.{% if app_repositories %}&#10;HQ's GitHub App is installed on it.{% endif %}">{% include "partials/_icon.html" with name="check-circle" %}<span class="visually-hidden">This is your GitHub account, according to your sign-in.</span></span></p>
-      <p>{% entity profile.url|declared_link:profile.login label="@"|add:profile.login %}{% if profile.bio %} · {{ profile.bio|breakable }}{% endif %}</p>
+      <p>{% entity profile.url|outside label="@"|add:profile.login %}{% if profile.bio %} · {{ profile.bio|breakable }}{% endif %}</p>
     </div>
     <dl class="gh-stats">
-      <div><dt>Followers</dt><dd>{% entity profile.url|add:"?tab=followers"|declared_link:profile.followers %}</dd></div>
-      <div><dt>Following</dt><dd>{% entity profile.url|add:"?tab=following"|declared_link:profile.following %}</dd></div>
-      <div><dt>Public repos</dt><dd>{% entity profile.url|add:"?tab=repositories"|declared_link:profile.public_repos %}</dd></div>
-      <div><dt>Starred</dt><dd>{% entity profile.url|add:"?tab=stars"|declared_link:profile.starred %}</dd></div>
+      <div><dt>Followers</dt><dd>{% entity profile.url|add:"?tab=followers"|outside label=profile.followers %}</dd></div>
+      <div><dt>Following</dt><dd>{% entity profile.url|add:"?tab=following"|outside label=profile.following %}</dd></div>
+      <div><dt>Public repos</dt><dd>{% entity profile.url|add:"?tab=repositories"|outside label=profile.public_repos %}</dd></div>
+      <div><dt>Starred</dt><dd>{% entity profile.url|add:"?tab=stars"|outside label=profile.starred %}</dd></div>
     </dl>
   </section>
 
@@ -34,16 +34,16 @@ would be a page about anybody.
         {% for repo in profile.watched %}
           <tr>
             <td class="row-gutter">
-              <strong>{% entity repo.url|declared_link:repo.name %}</strong>
+              <strong>{% entity repo.url|outside label=repo.name %}</strong>
               {% if repo.description %}<div class="muted">{{ repo.description|truncatechars:110|breakable }}</div>{% endif %}
               {% row_toggle %}
             </td>
-            <td>{% if repo.release %}{% entity repo.release.url|declared_link:repo.release.tag %}{% if repo.release.published %} <span class="muted nowrap">{{ repo.release.published|ago_short }}</span>{% endif %}{% else %}{% empty_value %}{% endif %}</td>
+            <td>{% if repo.release %}{% entity repo.release.url|outside label=repo.release.tag %}{% if repo.release.published %} <span class="muted nowrap">{{ repo.release.published|ago_short }}</span>{% endif %}{% else %}{% empty_value %}{% endif %}</td>
             <td>
               {% for item in repo.advisories|slice:":2" %}
-                <div><span class="pill{% if item.severity == 'critical' or item.severity == 'high' %} pill-serious{% elif item.severity == 'medium' %} pill-attention{% endif %}">{{ item.severity|default:"advisory"|breakable }}</span> {% entity item.url|declared_link:item.id %}{% if item.summary %} {{ item.summary|truncatechars:90|breakable }}{% endif %}{% if item.published %} <span class="muted nowrap">{{ item.published|ago_short }}</span>{% endif %}</div>
+                <div><span class="pill{% if item.severity == 'critical' or item.severity == 'high' %} pill-serious{% elif item.severity == 'medium' %} pill-attention{% endif %}">{{ item.severity|default:"advisory"|breakable }}</span> {% entity item.url|outside label=item.id %}{% if item.summary %} {{ item.summary|truncatechars:90|breakable }}{% endif %}{% if item.published %} <span class="muted nowrap">{{ item.published|ago_short }}</span>{% endif %}</div>
               {% empty %}{% empty_value %}{% endfor %}
-              {% if repo.advisories|length > 2 %}<span class="muted">and {% entity repo.url|add:"/security/advisories"|declared_link:"more" label=repo.advisories|length|add:"-2"|stringformat:"s"|add:" more" %}</span>{% endif %}
+              {% if repo.advisories|length > 2 %}<span class="muted">and {% entity repo.url|add:"/security/advisories"|outside label=repo.advisories|length|add:"-2"|stringformat:"s"|add:" more" %}</span>{% endif %}
             </td>
             <td class="nowrap">{% if repo.starred %}{{ repo.starred|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
           </tr>
@@ -57,15 +57,15 @@ would be a page about anybody.
     {% if profile.since %}<div><dt>On GitHub since</dt><dd>{{ profile.since|when:"day" }}</dd></div>{% endif %}
     {% if profile.company %}<div><dt>Company</dt><dd>{{ profile.company|breakable }}</dd></div>{% endif %}
     {% if profile.location %}<div><dt>Location</dt><dd>{{ profile.location|breakable }}</dd></div>{% endif %}
-    {% if profile.website|web_url %}<div><dt>Website</dt><dd>{% entity profile.website|declared_link:profile.website label=profile.website|cut:"https://" %}</dd></div>{% endif %}
+    {% if profile.website|web_url %}<div><dt>Website</dt><dd>{% entity profile.website|outside label=profile.website|cut:"https://" %}</dd></div>{% endif %}
     {% if profile.social %}<div><dt>X</dt><dd>@{{ profile.social|breakable }}</dd></div>{% endif %}
     <div><dt>Open to work</dt><dd>{% if profile.hireable %}Yes, on the profile{% else %}Not shown{% endif %}</dd></div>
     {% if profile.public_gists %}<div><dt>Public gists</dt><dd>{{ profile.public_gists|breakable }}</dd></div>{% endif %}
     <div><dt>HQ's GitHub App</dt><dd>
       {% if app_repositories %}
         Installed, reading {{ app_repositories|length }} of your repositories:
-        {% for item in app_repositories %}{% if item.project %}<a href="{{ item.project.get_absolute_url }}">{{ item.repo.short|breakable }}</a>{% else %}{% entity item.repo.url|declared_link:item.repo.short %}{% endif %}{% if item.repo.private %} <span class="muted">(private)</span>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
-        · {% entity "https://github.com/settings/installations"|declared_link:"Manage on GitHub" %}
+        {% for item in app_repositories %}{% if item.project %}<a href="{{ item.project.get_absolute_url }}">{{ item.repo.short|breakable }}</a>{% else %}{% entity item.repo.url|outside label=item.repo.short %}{% endif %}{% if item.repo.private %} <span class="muted">(private)</span>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
+        · {% entity "https://github.com/settings/installations"|outside label="Manage on GitHub" %}
       {% else %}
         <span class="muted">Not reading any repository this account owns.</span>
       {% endif %}

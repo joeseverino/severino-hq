@@ -35,7 +35,7 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
 {% if not standing.known %}
 <section class="card controller-start" aria-labelledby="controller-start-heading">
   <h2 id="controller-start-heading">Start the controller</h2>
-  <p class="muted">It holds your connections' credentials; HQ never does.{% if start_guide %} {% entity start_guide|declared_link:"Install guide" %}{% endif %}</p>
+  <p class="muted">It holds your connections' credentials; HQ never does.{% if start_guide %} {% entity start_guide|outside label="Install guide" %}{% endif %}</p>
   <ol class="resolution-workflow">
     <li><strong>Install it</strong>{% include "partials/_command.html" with command="sudo /usr/local/lib/severino-hq/deploy/bin/hq-host install" only %}</li>
     <li><strong>Start it</strong>{% include "partials/_command.html" with command="sudo systemctl start severino-hq-controller.service" only %}</li>
