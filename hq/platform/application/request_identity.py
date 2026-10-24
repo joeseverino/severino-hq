@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 lazy from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -88,8 +89,23 @@ class Identity:
         )
 
 
-def identity_of(request, device: tailnet.Device | None) -> Identity:
+def signed_in(request) -> Any:
+    """The person this request's session signed in, or None.
+
+    None for a request signed out, and for one no session reached: a request
+    the MCP boundary admitted carries no ``user`` at all. Reading
+    ``is_authenticated`` here also resolves Django's lazy user in the thread
+    serving the request.
+    """
+
     user = getattr(request, "user", None)
+    if user is None or not user.is_authenticated:
+        return None
+    return user
+
+
+def identity_of(request, device: tailnet.Device | None) -> Identity:
+    user = signed_in(request)
     backends = tuple(settings.AUTHENTICATION_BACKENDS)
     session = getattr(request, "session", None)
     expiry = None

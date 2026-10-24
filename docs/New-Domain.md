@@ -73,7 +73,8 @@ file past 1,000 lines), `OneDefinitionTests` (a module-level name is
 assigned once), `SettingsReadTests` (a setting is read as `settings.NAME`, never with a
 default), `OperationQueueTests` (an operation is queued through
 `resource_operations.enqueue`, whose unique key settles two writers),
-`CommentHistoryTests` (comments
+`SignedInTests` (who a request's session signed in is
+`request_identity.signed_in`), `CommentHistoryTests` (comments
 describe the present), `AssertionPrecisionTests` (`assertEqual(a, b)`, not
 `assertTrue(a == b)`), `CellMarkupTests` (a table cell is read by its text,
 never by the tag that closes it), `CountedTests` (plurals), `InterfaceTextTests` (no em dash, hand-built plural,

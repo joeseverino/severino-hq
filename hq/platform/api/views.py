@@ -50,6 +50,7 @@ from hq.platform.application.idempotency import (
 from hq.platform.application.integration_specs import RESERVED_QUERY_FIELD
 from hq.platform.application.projection import QueryRefusal
 from hq.platform.application.record_errors import RecordNotFound
+from hq.platform.application.request_identity import signed_in
 from hq.platform.application.resources import (
     InvalidResourceInput,
     ResourceDescription,
@@ -237,10 +238,8 @@ def _operator(request: HttpRequest) -> Principal | None:
 
     if "Authorization" in request.headers:
         return None
-    user = getattr(request, "user", None)
-    if user is None or not user.is_authenticated:
-        return None
-    return web_principal(user)
+    user = signed_in(request)
+    return None if user is None else web_principal(user)
 
 
 def _request_schema(spec: Mapping[str, Any]) -> dict[str, Any]:

@@ -26,6 +26,7 @@ from hq.platform.core.outbound import serving
 lazy from hq.platform.application import hq_self
 lazy from hq.platform.application.plugins import plugin_token_authenticated_prefixes
 lazy from hq.platform.application.projection import projection_scope
+lazy from hq.platform.application.request_identity import signed_in
 
 # Where the browser's own answer to "show me stand-ins" is kept. Named here
 # because the middleware that reads it and the view that writes it are the only
@@ -54,9 +55,7 @@ class DemoModeMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        showing = bool(
-            getattr(request, "user", None) and request.user.is_authenticated and request.session.get(DEMO_SESSION_KEY)
-        )
+        showing = bool(signed_in(request) is not None and request.session.get(DEMO_SESSION_KEY))
         request.showing_demo = showing
         with demo_scope(showing):
             return self.get_response(request)
@@ -169,16 +168,13 @@ class CurrentUserMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        user = getattr(request, "user", None)
-        if user is not None:
-            # AuthenticationMiddleware exposes a SimpleLazyObject. Keeping it
-            # in a ContextVar lets ASGI's context restoration evaluate the
-            # session-backed object on the event-loop thread (Django 6.1 then
-            # correctly raises SynchronousOnlyOperation). Resolve it while
-            # this synchronous middleware is still running in its worker.
-            _ = user.is_authenticated
-            user = getattr(request, "_cached_user", user)
-        token = _current_user.set(user)
+        # AuthenticationMiddleware exposes a SimpleLazyObject. Keeping it
+        # in a ContextVar lets ASGI's context restoration evaluate the
+        # session-backed object on the event-loop thread (Django 6.1 then
+        # correctly raises SynchronousOnlyOperation). Resolve it while
+        # this synchronous middleware is still running in its worker.
+        signed_in(request)
+        token = _current_user.set(getattr(request, "_cached_user", None))
         try:
             return self.get_response(request)
         finally:

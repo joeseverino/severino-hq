@@ -32,7 +32,7 @@ from hq.platform.application.printable import admitted
 from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import MISSING, counted as _counted
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
-lazy from hq.platform.application import references, security
+lazy from hq.platform.application import references, request_identity, security
 lazy from hq.platform.application.derivations import this_year
 lazy from hq.platform.application.problems import problems_about as _problems_about
 lazy from hq.platform.application.references import reference_of
@@ -218,7 +218,7 @@ def signed_in(request):
 
     session = getattr(request, "session", None)
     when = moment(str(session.get(SIGNED_IN_SESSION_KEY) or "")) if session is not None else None
-    when = when or getattr(getattr(request, "user", None), "last_login", None)
+    when = when or getattr(request_identity.signed_in(request), "last_login", None)
     if when is None:
         return ""
     hours = int((timezone.now() - when).total_seconds() // 3600)

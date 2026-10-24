@@ -1748,6 +1748,44 @@ class OperationQueueTests(SimpleTestCase):
         self.assertEqual(writes, set(), "queue it with resource_operations.enqueue")
 
 
+def _user_reads(tree: ast.AST) -> list[int]:
+    """Lines of ``getattr(x, "user", ...)`` or ``hasattr(x, "user")``."""
+
+    return [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in {"getattr", "hasattr"}
+        and len(node.args) >= 2
+        and isinstance(node.args[1], ast.Constant)
+        and node.args[1].value == "user"
+    ]
+
+
+@tag("source")
+class SignedInTests(SimpleTestCase):
+    """Who a request's session signed in is ``request_identity.signed_in``.
+
+    Every request Django serves has a ``user``; only one the MCP boundary
+    admitted has none. That case is answered once, so no reader decides on its
+    own whether a missing or anonymous user counts as signed in.
+    """
+
+    def test_only_signed_in_asks_whether_a_request_has_a_user(self):
+        root = Path(__file__).resolve().parents[4]
+        home = root / "hq/platform/application/request_identity.py"
+        self.assertTrue(_user_reads(parsed(home)), "signed_in no longer reads the attribute this test looks for")
+        reads = {
+            f"{path.relative_to(root)}:{line}"
+            for package in ("hq", "hq_sdk")
+            for path in source_files(root / package, "*.py")
+            if path != home and "tests" not in path.parts
+            for line in _user_reads(parsed(path))
+        }
+        self.assertEqual(reads, set(), "ask request_identity.signed_in(request)")
+
+
 class RouteOwnerTests(SimpleTestCase):
     """Routes are resolved in one place, so the answer can be remembered."""
 
