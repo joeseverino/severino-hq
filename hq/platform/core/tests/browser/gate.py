@@ -220,8 +220,10 @@ class BrowserGate(SimpleTestCase):
         super().setUpClass()
         # Rendered, and rolled back, before the browser starts: Django refuses
         # database access while Playwright's event loop runs on this thread.
-        cls.pages = cls.render()
+        # The policy first: a render may leave settings that refuse the test
+        # client's host until the class is done (dev:look's estate).
         cls.policy = policy()
+        cls.pages = cls.render()
         cls.served = named_by_every_page()
         try:
             from playwright.sync_api import sync_playwright
