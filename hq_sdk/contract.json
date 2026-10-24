@@ -793,6 +793,12 @@
               "**kwargs"
             ]
           },
+          "get_form_kwargs": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
           "get_page_actions": {
             "kind": "method",
             "parameters": [

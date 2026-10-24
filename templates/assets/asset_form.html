@@ -6,8 +6,8 @@
   {{ form }}
   <p class="muted">Deductible estimate = cost × business use. Updated when you save.</p>
   <div class="form-actions">
-    <button type="submit" class="primary">{% if form.instance.pk %}Save changes{% else %}Save asset{% endif %}</button>
-    <a class="btn" href="{% if form.instance.pk %}{{ form.instance.get_absolute_url }}{% else %}{% url 'assets:list' %}{% endif %}">Cancel</a>
+    <button type="submit" class="primary">{% if object %}Save changes{% else %}Save asset{% endif %}</button>
+    <a class="btn" href="{% if object %}{{ object.get_absolute_url }}{% else %}{% url 'assets:list' %}{% endif %}">Cancel</a>
   </div>
 </form>
 {% endblock %}

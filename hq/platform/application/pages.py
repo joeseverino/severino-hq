@@ -12,6 +12,7 @@ to ``render``.
 
 import re
 from collections.abc import Iterable
+from copy import copy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -194,6 +195,21 @@ class PageMixin(FragmentMixin):
 
     def get_page_trail(self) -> tuple[tuple[str, str], ...]:
         return ()
+
+    def get_form_kwargs(self) -> dict[str, Any]:
+        """An edit page's form changes a copy of its record, so the head reads
+        the record as stored.
+
+        A ``ModelForm`` writes what it cleaned onto its instance before it knows
+        the whole form is valid (``BaseModelForm._post_clean``), and an edit
+        view's instance is ``self.object``: a refused edit would title the page
+        and link its trail by the values it refused.
+        """
+
+        kwargs = super().get_form_kwargs()
+        if kwargs.get("instance") is not None:
+            kwargs["instance"] = copy(kwargs["instance"])
+        return kwargs
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)

@@ -5,8 +5,8 @@
   {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
   {{ form }}
   <div class="form-actions">
-    <button type="submit" class="primary">{% if form.instance.pk %}Save changes{% else %}Create project{% endif %}</button>
-    <a class="btn" href="{% if form.instance.pk %}{{ form.instance.get_absolute_url }}{% else %}{% url 'projects:list' %}{% endif %}">Cancel</a>
+    <button type="submit" class="primary">{% if object %}Save changes{% else %}Create project{% endif %}</button>
+    <a class="btn" href="{% if object %}{{ object.get_absolute_url }}{% else %}{% url 'projects:list' %}{% endif %}">Cancel</a>
   </div>
 </form>
 {% endblock %}
