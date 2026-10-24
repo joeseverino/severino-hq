@@ -161,7 +161,11 @@
 .connection-table td > .connection-ability-more { display: inline; margin: 0 0 0 var(--space-3); font-size: var(--text-2xs); }
 /* Its names wrap one under another, so each line is a target tall. */
 .connection-depends { line-height: var(--target-min); }
-.connection-depends .row-less { margin-left: var(--space-2); white-space: nowrap; }
+/* The dot before a name keeps to it: a line breaks only between names, so
+   no dot stands on a line of its own. The name itself still wraps. */
+.connection-depends > span { white-space: nowrap; }
+.connection-depends > span > * { white-space: normal; }
+.connection-depends .row-less { margin-left: var(--space-2); }
 /* Opened, the rest of them, flowing across the line beneath the row. */
 .connection-ability-all { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); }
 .connection-ability-all > li { flex: none; }
