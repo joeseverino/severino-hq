@@ -344,6 +344,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.humanize",
+    # Django's own form and widget templates, for the renderer below.
+    "django.forms",
     "mozilla_django_oidc",
     # Severino HQ: the machinery, then every app a host domain declares in
     # application/domains.py, then the extensions.
@@ -424,6 +426,10 @@ TEMPLATES = [
         },
     },
 ]
+
+# Forms render through the template loaders, so templates/django/forms/ holds
+# HQ's field markup and every {{ form }} or {{ field.as_field_group }} wears it.
+FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
 
 WSGI_APPLICATION = "hq.config.wsgi.application"
 

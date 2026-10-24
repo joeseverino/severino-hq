@@ -5,11 +5,11 @@
   {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
   {% for field in form %}
     {% if field.name == "interval" or field.name == "repeat_until" %}
-      <div data-when="repeat">{% include "partials/_form_field.html" %}</div>
+      <div data-when="repeat">{{ field.as_field_group }}</div>
     {% elif field.name == "weekdays" %}
-      <div data-when="repeat=weekly">{% include "partials/_form_field.html" %}</div>
+      <div data-when="repeat=weekly">{{ field.as_field_group }}</div>
     {% else %}
-      {% include "partials/_form_field.html" %}
+      {{ field.as_field_group }}
     {% endif %}
   {% endfor %}
   <div class="form-actions">

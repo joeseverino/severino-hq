@@ -3,7 +3,7 @@
 <form method="post" class="form">
   {% csrf_token %}
   {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
-  {% for field in form %}{% include "partials/_form_field.html" %}{% endfor %}
+  {{ form }}
   <p class="muted">Deductible estimate = cost × business use. Updated when you save.</p>
   <div class="form-actions">
     <button type="submit" class="primary">{% if form.instance.pk %}Save changes{% else %}Save expense{% endif %}</button>

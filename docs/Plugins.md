@@ -510,6 +510,14 @@ something back. A `TableListMixin` list declares the same through
 `TableColumn(kind=)`, its ranks derived from the columns unless one says
 `drop=`, and its region's `room=` as `table_room`.
 
+A form renders as `{{ form }}`, and one field as `{{ field.as_field_group }}`:
+HQ's form renderer draws every field in its own markup, with the help text and
+errors the control's `aria-describedby` names, and a checkbox inside its label.
+The page draws `form.non_field_errors` where it says them. A form field may
+set `wide = True` to take the whole row, `change_effect` to the sentence
+saying what changing it causes, or `confirms = True` to close the form as the
+callout a submission is confirmed in.
+
 <!-- sdk_contract: shared UI contract, written by `mise run regen` from hq_sdk/template_contract.py -->
 
 | Frame | Blocks a page fills | What it is |

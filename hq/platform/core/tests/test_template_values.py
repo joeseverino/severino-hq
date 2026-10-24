@@ -84,7 +84,8 @@ _TAG = re.compile(r"<(/?)([A-Za-z][\w-]*)")
 # bound field has, or a template it includes that uses the name as one. A
 # method of the field that returns markup (`as_hidden`, `label_tag`) prints
 # markup. A name used as a field in one place is a field everywhere in that
-# template.
+# template. A form printed whole renders its fields, so a name read for what
+# only a form answers (`non_field_errors`) is markup printed bare as well.
 _FIELD_LOOP = re.compile(r"for\s+(\w+)\s+in\s+form(?:\.\w+)?")
 _READ = re.compile(r"\b(\w+)\.(\w+)")
 _INCLUDE = re.compile(r"""include\s+["']([^"']+)["'](?:\s+with\s+(.*?))?(\s+only)?$""")
@@ -100,6 +101,17 @@ def bound_field_reads() -> frozenset[str]:
     field = _ExampleForm()["name"]
     others = {*dir(str), *dir(dict), *dir(forms.Field), *dir(models.Field)}
     names = {*dir(type(field)), *vars(field)} - others
+    return frozenset(name for name in names if not name.startswith("_") and "_" in name)
+
+
+@cache
+def form_reads() -> frozenset[str]:
+    """The attributes a form answers and no string, dict, bound field, form
+    field or model field does, compound as `bound_field_reads` keeps them."""
+
+    form = _ExampleForm()
+    others = {*dir(str), *dir(dict), *dir(form["name"]), *dir(forms.Field), *dir(models.Field)}
+    names = {*dir(type(form)), *vars(form)} - others
     return frozenset(name for name in names if not name.startswith("_") and "_" in name)
 
 
@@ -229,10 +241,10 @@ def _included_fields(contents: str, included: Mapping[str, set[str]]) -> set[str
 
 
 def form_fields(source: str, included: Mapping[str, set[str]] | None = None) -> set[str]:
-    """The names ``source`` gets as a form's fields or uses as one, with
-    ``included`` naming the fields of each template it may include."""
+    """The names ``source`` gets as a form's fields or uses as one or as a
+    form, with ``included`` naming the fields of each template it may include."""
 
-    reads = bound_field_reads()
+    reads = bound_field_reads() | form_reads()
     names = set()
     for token in Lexer(source).tokenize():
         if token.token_type == TokenType.BLOCK and (loop := _FIELD_LOOP.fullmatch(token.contents.strip())):
@@ -521,6 +533,14 @@ class UnheldTests(SimpleTestCase):
         )
 
         self.assertEqual(unheld(source, included=included), [])
+
+    def test_a_form_printed_whole_is_markup(self):
+        source = (
+            "{% if material.non_field_errors %}{{ material.non_field_errors }}{% endif %}{{ material }}"
+            "<p>{{ material.title|breakable }}</p>{{ identity }}"
+        )
+
+        self.assertEqual([site.value for site in unheld(source)], ["identity"])
 
     def test_an_include_that_hands_on_no_field_names_none(self):
         included = template_fields({"partials/_form_field.html": "{{ field.id_for_label }}"})

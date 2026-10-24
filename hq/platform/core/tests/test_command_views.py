@@ -163,7 +163,7 @@ class CommandViewTests(TestCase):
         response = self.client.get("/commands/certificate.renew/")
 
         (label,) = select(response, "for", "id___target")
-        self.assertEqual(label.words, "Certificate")
+        self.assertEqual(label.words.removesuffix(" *"), "Certificate")
         self.assertIn("The certificate to renew.", text(response))
         self.assertIn("example-certificate", options(response))
         self.assertNotIn("example-zone", options(response))

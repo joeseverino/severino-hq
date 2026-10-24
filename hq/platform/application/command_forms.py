@@ -246,6 +246,8 @@ def command_form_class(
                 else "I understand this deletes data."
             )
         )
+        # Read by templates/django/forms/field.html, which draws it as the callout closing the form.
+        fields["__confirm_effect"].confirms = True
     return type(
         f"{schema.get('title', 'Capability')}WebForm",
         (CapabilityCommandForm,),

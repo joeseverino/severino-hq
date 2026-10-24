@@ -1,0 +1,6 @@
+{% comment %}
+Each field as its own group, with no wrapper of Django's around it. The page
+draws the form's own errors where it says them, so none are drawn here.
+{% endcomment %}
+{% for field in hidden_fields %}{{ field }}{% endfor %}
+{% for field, errors in fields %}{{ field.as_field_group }}{% endfor %}

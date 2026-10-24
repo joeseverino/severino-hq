@@ -1,0 +1,20 @@
+{% comment %}
+HQ's markup for one field, which {{ form }} and {{ field.as_field_group }}
+render (FORM_RENDERER reads templates/ before Django's own). The ids on the
+help and the errors are the ones the control's aria-describedby names. Help
+text is held like any value: escaped, unless its field marked it safe.
+A field that causes something states it here, from the provider's own
+declaration, and the form marks a field that confirms the whole submission;
+nothing in this template knows which fields those are.
+{% endcomment %}
+<div class="field{% if field.errors %} has-errors{% endif %}{% if field.field.wide %} is-wide{% endif %}{% if field.field.confirms %} command-confirm{% endif %}"{% if field.field.change_effect %} data-change-effect="{{ field.field.change_effect }}"{% endif %}>
+  {% if field.widget_type == "checkbox" %}
+    <label class="check-row">{{ field }} <span>{{ field.label|breakable }}{% if field.field.required %} *{% endif %}</span></label>
+  {% else %}
+    <label for="{{ field.id_for_label }}">{{ field.label|breakable }}{% if field.field.required %} *{% endif %}</label>
+    {{ field }}
+  {% endif %}
+  {% if field.help_text %}<p class="help"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ field.help_text|breakable }}</p>{% endif %}
+  {% if field.field.change_effect %}<p class="help field-effect">{{ field.field.change_effect|breakable }}</p>{% endif %}
+  {% if field.errors %}<ul class="errors"{% if field.auto_id %} id="{{ field.auto_id }}_error"{% endif %}>{% for e in field.errors %}<li>{{ e|breakable }}</li>{% endfor %}</ul>{% endif %}
+</div>

@@ -84,10 +84,10 @@ button named for what it does. How it is built belongs to the API reference.
           {{ field.errors }}
         </div>
       {% else %}
-        {% include "partials/_command_field.html" %}
+        {{ field.as_field_group }}
       {% endif %}
     {% endfor %}
-    {% for field in form.confirmation_fields %}{% include "partials/_command_field.html" %}{% endfor %}
+    {% for field in form.confirmation_fields %}{{ field.as_field_group }}{% endfor %}
     <div class="form-actions">
       <button class="btn primary" type="submit">{{ command_label|breakable }}</button>
       <span class="muted" data-submit-status hidden role="status">Working…</span>
