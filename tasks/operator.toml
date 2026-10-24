@@ -5,31 +5,31 @@
 ["dev:look"]
 extends = "django-heavy"
 depends = [{ task = "setup:browser", args = ["{{usage.engine}}"] }]
-description = "Screenshot HQ pages as the browser gates draw them at a few widths, and run one of their rules there, reported page by page"
+description = "Screenshot HQ pages as the browser gates draw them, judged by a rule if asked (docs/Development.md, Browser layout)"
 usage = '''
-arg "<pages>" help="Comma-separated pages, any mix: the gate's estate (connections,dense/services,derived/assets/list), the API reference (api/docs), the example estate's navigation (estate, estate/infrastructure, estate/all for every page of it, or any address as estate/<path>), or all"
+arg "<pages>" help="Comma-separated pages: a gate page (connections, dense/services, derived/<app>/<list>), api/docs, estate/<path>, estate/all, or all"
 flag "--widths <widths>" help="Comma-separated widths in CSS pixels; default the phone, 820 and 1360"
-flag "--rule <rule>" help="A rule method of LayoutBrowserTests to run on each page: survey runs every check the layout gates hold and tables records what each table shows. Findings are written page by page to var/gate/look.txt, and the run prints a verdict naming every page that failed"
-flag "--css <css>" help="CSS added after app.css, as text or the file holding it (a relative path is read from the checkout): the defect a new rule must catch"
-flag "--base <ref>" help="Also look at <ref>, in a temporary worktree removed however the run ends and judged by this checkout's rules, and write the findings new here and those fixed to var/gate/look.txt, printing each new one and the verdict. Every probe reports all it finds, matched as a multiset with UUIDs, hex ids and origin panels' ids taken out, sizes and contrasts kept to their power of four, other numbers and the record named after a measure taken out, so a finding whose row moved, whose pixels moved a little, or that names another record, is neither; fails only on new ones. Implies --rule survey unless --rule says otherwise. With --columns or --eval, a line the base measured otherwise follows this checkout's, marked with <ref>"
-flag "--columns" help="Also print every table's columns at each page and width: the width each is drawn at, and the widths it would take at min-content and at max-content (measured on an offscreen copy of the table), named by its header text, after the table's own widths and its region's. A table an open row holds (with --expand) is drawn at the widths it had before the row opened, and its line says so; its min and max are measured without the hold. Kept beside each screenshot as .columns.txt"
-flag "--eval <file>" help="Run the script in <file> (a relative path is read from the checkout) on each page at each width, after --css, --open and --expand and before the screenshot, so what it changes is seen, and print what it returns, as JSON unless it is text: a function, called with nothing, or one expression, such as () => getComputedStyle(document.querySelector('main')).inlineSize. Kept beside each screenshot as .eval.txt; with --dialog it runs again with each dialog open"
-flag "--dialog <ids>" help="Also shoot each page with a dialog open, named by its id (connection; comma-separated for several) or all for every dialog the page declares: opened by pressing a control that opens it, after the menus that hold it, as a reader does, once its parts have loaded, and with --open every disclosure in it open. Shot as <page>-<width>.dialog-<id>.png, with bands when it scrolls within itself; --rule runs again with it open, saying what it finds past the page beneath"
-flag "--slow <ms>" help="As a loaded machine draws it: each animation frame <ms> late and each idle callback three times its timeout, so a timing flake reproduces on an idle machine. HQ_BROWSER_SLOW=<ms> does the same for the browser gates"
-flag "--engine <engine>" default="webkit" help="The browser engine to draw in, installed first; HQ_BROWSER_ENGINE does the same for the browser gates" {
+flag "--rule <rule>" help="What to judge on each page: survey (every check the browser gates hold), tables (print each table) or one layout check by name, such as a_table_fits_its_box_at_every_width. Findings go to var/gate/look.txt"
+flag "--css <css>" help="Extra CSS after app.css, as text or a file: the defect a new rule must catch"
+flag "--base <ref>" help="Also look at <ref> in a temporary worktree and report only findings new or fixed here; implies --rule survey"
+flag "--columns" help="Also print each table's column widths as drawn, at min-content and at max-content"
+flag "--eval <file>" help="Run the script in <file> on each page at each width before the screenshot and print what it returns"
+flag "--dialog <ids>" help="Also shoot each page with these dialogs open, comma-separated ids or all; --rule runs again inside each"
+flag "--slow <ms>" help="Draw as a loaded machine does, each animation frame <ms> late, to reproduce a timing flake"
+flag "--engine <engine>" default="webkit" help="The browser engine to draw in, installed first" {
   choices "webkit" "chromium" "firefox"
 }
 flag "--dark" help="In the dark palette"
-flag "--fallback-face" help="With Inter withheld, in the next face of the font stack, as the browser gates draw with --fallback-face"
-flag "--open" help="With every disclosure open, again until nothing more opens, so a disclosure another one brings in opens too; a rule runs again with one popover of each kind (its classes, table and column) shown on its own, saying what it finds past the page beneath"
+flag "--fallback-face" help="With Inter withheld, in the next face of the font stack"
+flag "--open" help="With every disclosure open; --rule runs again with one popover of each kind shown"
 flag "--expand" help="With every table row opened"
-flag "--no-script" help="As the server drew it, before tables.js and the rest run"
-flag "--deep" help="Also every page the example estate pages link to: each list's records and the command forms they open"
+flag "--no-script" help="As the server drew it, before any script runs"
+flag "--deep" help="Also every page the estate pages link to: each record and the command forms it opens"
 '''
 run = "HQ_BROWSER_ENGINE=${usage_engine} HQ_BROWSER_FACE=${usage_fallback_face:+fallback} HQ_BROWSER_SLOW=${usage_slow:-${HQ_BROWSER_SLOW:-}} uv run --group browser python manage.py test hq.platform.core.tests.look.Look.test_look --noinput --parallel 1"
 
 [manage]
-description = "manage.py with the development settings the gates use: mise run manage -- <command>"
+description = "Run a manage.py command on a new empty database, host alone, as the gates set it up: mise run manage -- <command>"
 raw = true
 extends = "django"
 run = "uv run --group browser python manage.py"
@@ -40,7 +40,7 @@ usage = 'arg "<run>" help="The run id, as gh run list prints it"'
 run = 'uv run python -m tools.pipeline.ci_timings "${usage_run}"'
 
 ["ci:caches"]
-description = "Fill the caches CI's jobs restore: every Python group, the controller built as each gate builds it, every npm project's tools"
+description = "Fill the caches CI's jobs restore: every Python group, the Go controller's builds, every npm project's tools"
 depends = ["setup:openapi", "setup:lint-tools"]
 run = [
   "uv sync --all-groups",

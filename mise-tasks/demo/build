@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="Build the public demo into var/demo; another seed into var/demo-<seed>"
+#MISE description="Build the static public demo site into var/demo; another seed into var/demo-<seed>"
 #MISE extends="django"
 #MISE timeout="30m"
 #USAGE arg "[seed]" default="showcase" {
