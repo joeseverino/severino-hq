@@ -66,6 +66,6 @@ set +f
 [ -n "${served}" ] || exit "${looked}"
 
 measured=0
-mise run perf:report "${served}" ${usage_base:+--base "${usage_base}"} || measured=$?
+mise run perf:report "${served}" --seed "${usage_seed}" ${usage_base:+--base "${usage_base}"} || measured=$?
 [ "${looked}" -ne 0 ] && exit "${looked}"
 exit "${measured}"

@@ -347,27 +347,33 @@ declares) also shoots each page with that dialog open
 any menu holding that control, so the page's own wiring opens it, and waits
 for its parts to load; `--eval` and the rule run again there.
 
-`mise run perf:report [pages] [--image] [--base <ref>] [--host-alone] [--fresh]`
-measures how light and fast HQ is, page by page: server time, queries, the
-rows its tables hold and its HTML size, then bytes, requests, script time and
-layout shift in Chromium, memory and cold start. `pages` names the example
-estate's pages as `dev:look` does (`estate/infrastructure`, any address as
-`estate/<path>`), by default every page its navigation lists. Each run is kept
-as `var/perf/<run>.json`, saved after each measurement; a failed one is
-recorded with its error and the rest go on, and each step says how long it
-took. `<run>.txt`, which the session log shows, is the summary, and
-`<run>.table` has every page. `--base` shows each number beside how far it
-moved and, unless `--fresh`, takes the ref's numbers from a complete kept
-report under the same plan holding the pages asked, so a run of every page
-first makes any later run of some of them measure this checkout alone. A ref
-that refuses the extension set for its plugin API makes the run measure the
-host alone on both sides, as `--host-alone` asks, and its closing line says
-so. It is a report, not a gate. With `--base` one page takes under a minute
-and every page a little over two, most of it each page's server time over
-`--requests` and its visits in Chromium. `mise run perf:ab <base>
-[page]...` answers whether a change moved a page's server time: both refs'
-test clients, alternating, over `--rounds` rounds. `mise run perf:note <label>
-<value> [unit]` keeps a measurement made by hand for the session log.
+`mise run perf:report [pages] [--image] [--seed <name>] [--base <ref>]
+[--host-alone] [--fresh] [--requests <n>]` measures how light and fast HQ is,
+page by page: server time, queries, the rows its tables hold and its HTML
+size, then bytes, requests, script time and layout shift in Chromium, memory
+and cold start. `pages` names the example estate's pages as `dev:look` does
+(`estate/infrastructure`, any address as `estate/<path>`), by default every
+page its navigation lists. `--seed` names the data set the servers are seeded
+with, as `dev:scratch --seed` does (default showcase); the stress sets live in
+the test tree, so no server can serve them. Each run is kept as
+`var/perf/<run>.json`, saved after each measurement; a failed one is recorded
+with its error and the rest go on, and each step says how long it took.
+`<run>.txt`, which the session log shows, is the summary, and `<run>.table`
+has every page.
+
+`--base` keeps both servers up and asks every page of both in turn over
+`--requests` rounds, alternating which goes first, before anything else
+touches either server. Each number is shown beside how far it moved, and each
+page's server time beside its median round-by-round difference and that
+difference's interquartile range. A page whose difference is past that range
+is marked moved, and the closing line counts those pages. Unless `--fresh`,
+the base's browser, memory and cold start come from a complete kept report
+under the same plan, seed included. A ref that refuses the extension set for
+its plugin API makes the run measure the host alone on both sides, as
+`--host-alone` asks, and its closing line says so. It is a report, not a
+gate. With `--base`, one page takes about 40 s (under 30 with the base kept)
+and every page about two and a half minutes (two with the base kept).
+`mise run perf:note <label> <value> [unit]` keeps a measurement made by hand for the session log.
 
 A look holds still: the page's clock is frozen at the moment the run began
 (its `--base` run shares that instant), so a time a script reads is drawn
