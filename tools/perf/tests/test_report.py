@@ -12,17 +12,22 @@ from tools.perf.tests.test_runs import FakeTarget, Measured
 
 class AnsweredTests(Measured):
     def test_a_page_that_does_not_answer_200_fails_the_run_naming_the_page_and_its_status(self):
+        # /hq/ is only walked for memory, so its redirect is no page measured.
+        answers = {"/contacts/": 404, "/hq/": 302}
+
         def one_pass(_url, _cookie, pages):
-            return {page: 404 if page == "/contacts/" else 200 for page in pages}
+            return {page: answers.get(page, 200) for page in pages}
 
         with mock.patch.object(report.measure, "one_pass", one_pass):
             kept, _ = self.measure(FakeTarget())
         with mock.patch.object(report, "ROOT", self.out):
             said = report.closing(kept, kept.doc["here"], None)
 
+        self.assertEqual(
+            [failure for failure in report.failures(kept.doc) if "answered" in failure],
+            ["here page estate/contacts: /contacts/ answered 404, not 200"],
+        )
         self.assertIn("/contacts/ answered 404", said)
-        self.assertIn("estate/contacts", said)
-        self.assertTrue(report.failures(kept.doc))
 
 
 class AskedTests(SimpleTestCase):

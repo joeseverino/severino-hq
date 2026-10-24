@@ -235,17 +235,24 @@ class Live:
             self.recorder.fail("stop", error)
 
 
-def first_pass(server: Live, asked: Plan) -> None:
-    """Every page the navigation lists and the pages asked, once: what memory is read after, and
-    what every later measurement stands on, so its failure raises."""
+def first_pass(server: Live, asked: Plan) -> dict[str, int]:
+    """Every page the navigation lists and the pages asked, once, by status: what memory is read
+    after, and what every later measurement stands on, so its failure raises."""
 
     with server.recorder.timed("first pass"):
         answered = measure.one_pass(server.target.url, server.cookie, asked.walked)
     if 200 not in answered.values():
         raise NotMeasured(f"no page answered 200 to the session dev_session minted: {answered}")
-    for page, status in answered.items():
-        if status != 200:
-            server.recorder.fail(f"page {estate_name(page)}", NotMeasured(f"{page} answered {status}, not 200"))
+    return answered
+
+
+def unanswered(server: Live, asked: Plan, answered: dict[str, int]) -> None:
+    """Each page asked that answered anything but 200, recorded as a failure: its numbers measure no page."""
+
+    for page in asked.pages:
+        if answered[page] != 200:
+            failed = NotMeasured(f"{page} answered {answered[page]}, not 200")
+            server.recorder.fail(f"page {estate_name(page)}", failed)
 
 
 def measure_costs(server: Live, asked: Plan) -> None:
@@ -317,10 +324,11 @@ def serve(tree: Path, commit: str, here: bool, asked: Plan, kept: runs.Run, side
     try:
         with recorder.timed("sign in"):
             server.cookie = target.session()
-        first_pass(server, asked)
+        answered = first_pass(server, asked)
     except NotMeasured as error:
         recorder.fail("sign in and first pass", error)
         return None
+    unanswered(server, asked, answered)
     return server
 
 
