@@ -2,8 +2,20 @@
 
 The gate fails a near-duplicate pair of executable code that its baseline
 does not list; file size is `FileSizeTests`, a fixed ceiling in the suite.
-Three forms, classified from the source, leave the pair check. There is no
+The forms below, classified from the source, leave the pair check. There is no
 list of exempt pairs, symbols or paths.
+
+A pair is near when the graph's MinHash fingerprints of the two functions
+agree on 85% of their 64 slots, in the same language, outside tests (a test
+file, or a Python function named `test_*`). The graph fingerprints a body of
+at least 30 tokens from its token-type trigrams, with names and literals
+normalized away, so a pair is two functions of the same shape. The bar reads
+every fingerprint and compares them itself: the graph draws its own
+`SIMILAR_TO` edges only at 95%, a constant of the pinned release, where every
+pair outside tests is generated code. Below the bar's reach: a repeated
+fragment inside larger functions, and an idiom of a line or two (a lookup
+repeated across sites, a two-line override). Those are held by an
+architecture test that names the one place the rule lives.
 
 * Generated Go: the parser finds a `// Code generated ... DO NOT EDIT.` comment
   before the package statement. The generated file, adjacent generation source,
@@ -39,6 +51,21 @@ list of exempt pairs, symbols or paths.
   collisions reject ambiguous resolution. The classifier reads the shape of
   the orchestration and makes no claim about the purity of the producer or
   the shared helper.
+* Python dict projections over disjoint keys: each function (a method found
+  in its class) has, after an optional docstring, one return of a dict literal
+  whose keys are all literal strings, and the two key sets share none. A
+  shared key, `**` unpacking, an empty literal or any other statement does not
+  qualify. Two such functions share only the literal's shape.
+* Go delegation to one shared function: in the same file, each body is a
+  single return of a call (an instantiated generic included) of the same
+  unshadowed nonmethod declared there. The logic both run is already one
+  function; what differs is what they hand it.
+* Go switch tables over disjoint cases: each body is variable declarations
+  without values, `:=` of a literal, one switch, and a final return identical
+  in both. Every clause sets one and the same variable from a literal or a
+  call of a named function on identifiers and literals. Case expressions name
+  a declared variable by its type, so a renamed copy reads the same, and the
+  two case sets share none.
 
 The AST inspector uses Go's standard-library parser, never imports or executes
 provider code. Python uses `ast`. Missing, unreadable, malformed or escaped source
@@ -47,8 +74,9 @@ unsupported executable patterns stay in the similarity gate. Typed projection
 loops over Nginx Proxy Manager's records stay gated too.
 
 The inspector is `controller/cmd/structural-inspector`, held by the
-controller's gate like the rest of its module. The adversarial tests are
-`mise run checks:source tools.structural`, which builds it.
+controller's gate like the rest of its module, its own tests among them. The
+adversarial tests of the pairs are `mise run checks:source tools.structural`,
+which builds it.
 
 ## Asking the graph
 
@@ -56,14 +84,16 @@ With the repository indexed in a code knowledge graph, ask:
 
 | Question | Query | Bar |
 | --- | --- | --- |
-| Did I re-implement something? | `MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name` | no new executable pair outside tests; the classifications above |
+| Did I re-implement something? | `mise run checks:structural`, which compares every fingerprint (`f.fp`) at the bar's threshold; the graph's `SIMILAR_TO` edges hold only the pairs at 95% | no new executable pair outside tests; the classifications above |
 | Hidden O(n²)? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.linear_scan_in_loop >= 1 RETURN f.qualified_name, f.linear_scan_in_loop` | every hit bounded by a fixed or small input |
 | Did I tangle the call graph? | `get_architecture(aspects: ["cycles"])` | no new confirmed cycle |
 
 Write the queries exactly as given, and mind the traps in this engine. The
-generated `*.gen.go` files are near-duplicates of each other by design, so the
-pair query returns thousands of rows until it is scoped positively to the
-paths under review. The graph cannot answer "what has no callers": an `OPTIONAL
+generated `*.gen.go` files are near-duplicates of each other by design, so a
+`SIMILAR_TO` query returns hundreds of rows until it is scoped positively to
+the paths under review. A query answers in pages, and each page runs it
+again: ask for `max_output_tokens` large enough for one page, or a whole-graph
+read takes minutes. The graph cannot answer "what has no callers": an `OPTIONAL
 MATCH` comes back empty and `max_degree` counts both directions, so dead code
 is found by diffing the defined names against the referenced ones with `rg`.
 `is_test` is **not** reliable: test classes carry `is_test: false`, so a filter
