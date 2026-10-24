@@ -16,6 +16,11 @@ modules laid over and names each support file laid over or kept.
 The worktree goes on every exit, and the exit status is the test run's, except
 when a label does not import at the ref: that run says nothing about the
 tests, so it has a verdict of its own and exits 3.
+
+A run takes the heavy turn (tools/lib/heavy.sh) unless its tests are light:
+labels named, and none of the tests they load makes a test database or drives
+a browser. Loading them costs about half a second; the whole suite, which is
+never light, is not loaded to say so.
 """
 
 import argparse
@@ -28,6 +33,11 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+import django
+from django.conf import settings
+from django.core.management.commands.test import Command as TestCommand
+from django.test.utils import get_runner
 
 from hq.platform.application.ui import counted
 from tools.gate.verdict import Step, close, run
@@ -43,6 +53,11 @@ IMPORT_ERROR = "ImportError: Failed to import test module:"
 UNIMPORTED = 3
 # Django's default discovery pattern: a file it finds tests in on its own.
 TEST_MODULE = "test*.py"
+HEAVY = ROOT / "tools" / "lib" / "heavy.sh"
+# heavy.sh runs its command as a process of its own; this front marks that
+# process as the run that goes ahead, as tools/lib/heavy-turn.sh does a file
+# task's, and execs this module in it, keeping the pid.
+IN_TURN = 'SEVERINO_HEAVY_TASK=$$; export SEVERINO_HEAVY_TASK; exec "$@"'
 USAGE = "usage: mise run test --at <ref> [--keep <path>]... <label>... [manage.py test options]"
 
 
@@ -206,8 +221,40 @@ def stop(signum: int, _frame: object) -> None:
     raise SystemExit(128 + signum)
 
 
+def light(argv: list[str]) -> bool:
+    """Whether the tests ``argv`` selects, as manage.py test reads it, run
+    without the heavy turn. Tests that cannot be loaded here are not light."""
+
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hq.config.settings")
+    try:
+        django.setup()
+        options = vars(TestCommand().create_parser("manage.py", "test").parse_args([*TEST[2:], *argv]))
+        labels = options.pop("args")
+        if not labels:
+            return False
+        # One suite, not a parallel run's partition of it.
+        runner = get_runner(settings, options["testrunner"])(**(options | {"parallel": 1}))
+        return not runner.needs_the_turn(runner.build_suite(labels))
+    except Exception, SystemExit:  # noqa: BLE001 - manage.py says what stopped it, in the turn
+        return False
+
+
+def is_at(argv: list[str]) -> bool:
+    return bool(argv) and (argv[0] == "--at" or argv[0].startswith("--at="))
+
+
+def take_the_turn(argv: list[str]) -> None:
+    """Run again inside the heavy turn, unless this is that run or the tests
+    are light. A run at a ref builds a worktree, so it is never light."""
+
+    if os.environ.get("SEVERINO_HEAVY_TASK") == str(os.getpid()):
+        return
+    if is_at(argv) or not light(argv):
+        os.execv(HEAVY, [str(HEAVY), "sh", "-c", IN_TURN, "sh", sys.executable, "-m", "tools.gate.at", *argv])
+
+
 def main(argv: list[str]) -> int:
-    if not argv or not (argv[0] == "--at" or argv[0].startswith("--at=")):
+    if not is_at(argv):
         os.execv(sys.executable, [sys.executable, *TEST, *argv])
     try:
         options, args = ARGS.parse_known_args(argv)
@@ -228,4 +275,5 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
+    take_the_turn(sys.argv[1:])
     sys.exit(main(sys.argv[1:]))

@@ -14,10 +14,11 @@ import unittest.mock
 from pathlib import Path
 from typing import override
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
 from hq.config.sandbox import sweep_abandoned
 from hq.platform.core.test_runner import (
+    BROWSER_TESTS,
     DEFAULT_STALL_SECONDS,
     SOURCE,
     STALL_SECONDS,
@@ -309,3 +310,42 @@ class StallWatchTests(SimpleTestCase):
             ClassTimedSuite(unittest.defaultTestLoader.loadTestsFromTestCase(Pages)).run(CompositionRemoteResult())
 
         self.assertTrue(any("second" in mark for mark in watch.marks), watch.marks)
+
+
+class HeavyTurnTests(SimpleTestCase):
+    """A run takes the machine's heavy turn only when it makes a test
+    database or drives a browser."""
+
+    def setUp(self):
+        class Plain(SimpleTestCase):
+            def test_it(self):
+                pass
+
+        self.plain = Plain
+
+    def needs_the_turn(self, *kinds):
+        loader = unittest.defaultTestLoader
+        suite = unittest.TestSuite(loader.loadTestsFromTestCase(kind) for kind in kinds)
+        return SeverinoTestRunner(verbosity=0).needs_the_turn(suite)
+
+    def test_tests_without_a_database_or_a_browser_run_at_once(self):
+        self.assertFalse(self.needs_the_turn(self.plain))
+
+    def test_one_test_with_a_database_takes_the_turn(self):
+        class Stored(TestCase):
+            def test_it(self):
+                pass
+
+        class Asks(self.plain):
+            databases = {"default"}
+
+        self.assertTrue(self.needs_the_turn(self.plain, Stored))
+        self.assertTrue(self.needs_the_turn(Asks))
+
+    def test_a_browser_test_takes_the_turn_wherever_its_class_is_declared(self):
+        gate = type("Gate", (self.plain,), {"__module__": f"{BROWSER_TESTS}.gate"})
+
+        class Drawn(gate):
+            pass
+
+        self.assertTrue(self.needs_the_turn(self.plain, Drawn))

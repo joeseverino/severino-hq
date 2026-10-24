@@ -568,6 +568,17 @@ def tests_in(suite: unittest.TestSuite):
             yield test
 
 
+# The browser gates' package: a test whose class comes from it drives a browser.
+BROWSER_TESTS = "hq.platform.core.tests.browser"
+
+
+def drives_a_browser(test: unittest.TestCase) -> bool:
+    return any(
+        kind.__module__ == BROWSER_TESTS or kind.__module__.startswith(f"{BROWSER_TESTS}.")
+        for kind in type(test).__mro__
+    )
+
+
 def require_tests_from(suite: unittest.TestSuite, modules: list[str]) -> None:
     """Refuse a run in which an installed plugin contributed no test."""
 
@@ -637,6 +648,12 @@ class SeverinoTestRunner(DiscoverRunner):
             # A gate that selects by tag and finds nothing has checked nothing.
             raise RuntimeError(f"No test carries the tag(s) {', '.join(sorted(self.tags))}.")
         return suite
+
+    def needs_the_turn(self, suite: unittest.TestSuite) -> bool:
+        """Whether running ``suite`` loads the machine, so it takes the heavy
+        turn (tools/lib/heavy.sh): it makes a test database or drives a browser."""
+
+        return bool(self.get_databases(suite)) or any(map(drives_a_browser, tests_in(suite)))
 
     def get_resultclass(self):
         return super().get_resultclass() or CompositionTextResult

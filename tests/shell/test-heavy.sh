@@ -3,8 +3,9 @@
 # bound that runs out exits 75 naming the holder, a killed command frees the
 # turn, a heavy command inside a turn runs, a waiting one names the holder
 # again at its interval, a turn prints the load average as it starts and ends,
-# CI takes no lock, and every heavy task carries a bound that, run out, stops
-# what it started and frees the turn.
+# the test task takes it only for tests with a database or a browser, CI takes
+# no lock, and every heavy task carries a bound that, run out, stops what it
+# started and frees the turn.
 set -eu
 
 repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
@@ -104,6 +105,19 @@ esac
 said="$("${heavy}" sh -c '"$1" echo nested' sh "${heavy}" 2>/dev/null)" || fail "a heavy command inside a turn was refused"
 [ "${said}" = nested ] || fail "the nested command did not run: ${said}"
 
+# The test task takes the turn itself, only for tests that need it: one with
+# no database and no browser runs while another command holds the turn, one
+# with a database waits for it.
+hold
+SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q test hq.platform.core.tests.test_test_runner.HeavyTurnTests \
+    >"${work}/light" 2>&1 || { cat "${work}/light" >&2; fail "a test run with no database or browser waited for the turn, or failed"; }
+status=0
+SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q test hq.platform.core.tests.test_audit_retention >/dev/null 2>&1 || status=$?
+[ "${status}" -eq 75 ] || fail "a test run with a database exited ${status} while the turn was held, not 75"
+echo go >"${work}/release"
+wait "${holder}" || fail "the holder failed"
+holder=""
+
 rm -rf "${XDG_CACHE_HOME}"
 CI=true "${heavy}" true
 [ ! -e "${lock}" ] || fail "under CI a lock file was made"
@@ -115,6 +129,8 @@ heavies="$(jq '[.[] | select((.shell // "") | startswith("tools/lib/heavy.sh"))]
 [ "${heavies}" -gt 3 ] || fail "found ${heavies} tasks that take the turn through heavy.sh"
 unbounded="$(jq -r '.[] | select(.timeout == null) | select((.shell // "") | startswith("tools/lib/heavy.sh")) | .name' "${work}/tasks.json")"
 [ -z "${unbounded}" ] || fail "a heavy task without a timeout: ${unbounded}"
+jq -e '.[] | select(.name == "test") | .timeout != null' "${work}/tasks.json" >/dev/null ||
+    fail "the test task, which takes the turn from inside its run, has no timeout"
 jq -r '.[] | select(.timeout == null and .file != null) | .file' "${work}/tasks.json" >"${work}/files"
 while IFS= read -r file; do
     if grep -q '^\. .*tools/lib/heavy-turn\.sh' "${file}"; then

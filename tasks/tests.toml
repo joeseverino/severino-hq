@@ -26,7 +26,10 @@ run = "uv run python manage.py test tests.fuzz.api_properties --noinput --parall
 # follows the labels reaches manage.py test as typed, so a later --parallel or
 # -k wins. `--at <ref>` first runs them on the ref with this tree's test files
 # laid over it, but the support files `--keep <path>` names (tools/gate/at.py).
+# Only the run knows its tests' weight, so tools/gate/at.py takes the heavy
+# turn itself, unless they are light; the timeout is the heavy template's.
 [test]
 description = "manage.py test on the labels named, as the gates run it: mise run test [--at <ref> [--keep <path>]...] <label>..."
-extends = "django-heavy"
+extends = "django"
+timeout = "30m"
 run = "uv run --group browser python -m tools.gate.at"

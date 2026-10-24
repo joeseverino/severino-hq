@@ -172,7 +172,10 @@ machine and takes no lock.
 
 A TOML task takes the turn by extending the `heavy` template in `mise.toml`,
 or `django-heavy` when it is a Django gate; a file task sources
-`tools/lib/heavy-turn.sh` and sets `#MISE timeout`. Each heavy
+`tools/lib/heavy-turn.sh` and sets `#MISE timeout`. `mise run test` decides
+in its run (`tools/gate/at.py`): it loads the labels' tests and takes the turn
+only when one makes a test database or drives a browser, or for `--at`, so a
+run of `SimpleTestCase` labels starts at once. Each heavy
 task has a timeout (30 minutes for a gate, two hours for an aggregate), so a
 hung gate stops and frees the turn. `heavy.sh` runs the command as a process
 group of its own and stops that group when it is stopped, since a `mise run`
