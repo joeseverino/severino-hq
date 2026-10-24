@@ -208,8 +208,6 @@ class SummaryItem:
     link: EntityLink | None = None
     detail: str = ""
     tone: str = ""
-    # Shown as a pill in ``tone``: a state never carried by color alone.
-    pill: bool = False
     # What kind of fact it is, drawn as its tile: a name in partials/_icon.html.
     icon: str = ""
 
@@ -230,7 +228,6 @@ def service_summary(service) -> tuple[SummaryItem, ...]:
                 service.health.label,
                 detail=_health_detail(service),
                 tone=service.health.state,
-                pill=True,
                 icon="activity",
             ),
             # Where it runs only when there is no path to show it: the path

@@ -7,10 +7,6 @@
    One chronological primitive for every domain. A two-column horizon uses the
    desktop canvas without turning eight dates into a full page of vertical rail;
    source order remains chronological and collapses to one column on phones. */
-.timeline-head { align-items: flex-start; }
-.timeline-head > div { min-width: 0; }
-.timeline-head .count { margin-left: auto; }
-.timeline-description { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
 .timeline-list {
   list-style: none;
   margin: var(--space-2) 0 0;
