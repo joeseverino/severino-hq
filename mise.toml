@@ -251,6 +251,8 @@ run = "uv run python manage.py"
 [tasks.fast]
 description = "Inner loop: the tests the change reaches, and the quick gates that read the paths it touched"
 extends = "django-heavy"
+# The lint tools the quick gates and the stylesheet tests run.
+depends = ["setup:lint-tools"]
 usage = '''
 arg "[base]" env="CHECK_BASE" help="The ref to diff against; default origin/main, then main"
 flag "--list" help="Print the selected test modules and run nothing"

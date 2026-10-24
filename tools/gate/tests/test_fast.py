@@ -176,6 +176,9 @@ class FastGateTreeTests(GateTestCase):
         self.assertEqual(label, "tests")
         self.assertNotIn("tree", cmd)
 
+    def test_fast_installs_the_lint_tools_its_gates_and_tests_run(self):
+        self.assertIn("setup:lint-tools", mise_tasks()["fast"]["depends"])
+
 
 @tag("source")
 class FastGateBaseTests(GateTestCase):
