@@ -39,9 +39,6 @@ ignore = ["DEP003", "DEP004"]
 [tool.deptry.per_rule_ignores]
 # Runtime dependencies no host code imports, and why each is installed anyway.
 DEP002 = [
-    # The HTTP client extensions import: admitted wheels install with --no-deps,
-    # so the host provides it.
-    "httpx2",
     # Django's parallel test runner pickles a failure's traceback with it, in
     # the image as well.
     "tblib",

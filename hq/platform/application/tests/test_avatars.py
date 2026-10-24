@@ -3,7 +3,7 @@
 from datetime import timedelta
 from unittest import mock
 
-import requests
+import httpx2
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
@@ -20,13 +20,6 @@ ISSUER = "https://sso.example.test"
 PICTURE = f"{ISSUER}/api/users/1/profile-picture.png"
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 32
-
-
-class _Reply:
-    def __init__(self, body: bytes, status: int = 200):
-        self.status_code = status
-        self.raw = mock.Mock()
-        self.raw.read = lambda amount, decode_content=True: body[:amount]
 
 
 class PictureAllowedTests(SimpleTestCase):
@@ -51,37 +44,56 @@ class PictureAllowedTests(SimpleTestCase):
 
 
 class FetchPictureTests(SimpleTestCase):
-    def _fetch(self, reply):
-        with mock.patch.object(avatars.requests, "get", return_value=reply) as get:
-            return fetch_picture(PICTURE, access_token="token"), get
+    """The provider is answered at httpx2's transport, so redirects, headers and
+    streaming are the client's own."""
 
-    def test_an_image_comes_back_as_what_its_bytes_say_it_is(self):
-        fetched, get = self._fetch(_Reply(JPEG))
+    def _fetch(self, *replies: httpx2.Response, access_token: str = "token"):
+        asked: list[httpx2.Request] = []
+
+        def answer(_transport, request):
+            asked.append(request)
+            return replies[len(asked) - 1]
+
+        with mock.patch.object(httpx2.HTTPTransport, "handle_request", answer):
+            return fetch_picture(PICTURE, access_token=access_token), asked
+
+    def test_an_image_comes_back_as_what_its_bytes_say_it_is_with_the_providers_token(self):
+        fetched, asked = self._fetch(httpx2.Response(200, content=JPEG))
 
         self.assertEqual(fetched, ("image/jpeg", JPEG))
-        self.assertFalse(get.call_args.kwargs["allow_redirects"])
-        self.assertTrue(get.call_args.kwargs["timeout"])
+        self.assertEqual(asked[0].headers["Authorization"], "Bearer token")
+        self.assertNotIn(None, asked[0].extensions["timeout"].values())
+
+    def test_without_a_token_none_is_sent(self):
+        _fetched, asked = self._fetch(httpx2.Response(200, content=PNG), access_token="")
+
+        self.assertNotIn("Authorization", asked[0].headers)
 
     def test_a_redirect_is_not_followed_and_is_no_picture(self):
-        fetched, _get = self._fetch(_Reply(b"", status=302))
+        moved = httpx2.Response(302, headers={"Location": "https://evil.example.test/a.png"})
+        fetched, asked = self._fetch(moved, httpx2.Response(200, content=PNG))
 
         self.assertIsNone(fetched)
+        self.assertEqual([str(request.url) for request in asked], [PICTURE])
 
     def test_something_that_is_not_an_image_is_not_kept(self):
         for body in (b"<svg xmlns='http://www.w3.org/2000/svg'><script/></svg>", b"<html>", b""):
             with self.subTest(body):
-                self.assertIsNone(self._fetch(_Reply(body))[0])
+                self.assertIsNone(self._fetch(httpx2.Response(200, content=body))[0])
 
     def test_a_file_past_the_limit_is_not_kept_and_no_more_of_it_is_read(self):
-        asked = []
-        reply = _Reply(PNG)
-        reply.raw.read = lambda amount, decode_content=True: asked.append(amount) or PNG + b"\x00" * amount
+        sent = []
 
-        self.assertIsNone(self._fetch(reply)[0])
-        self.assertEqual(asked, [MAX_BYTES + 1])
+        def endless():
+            while True:
+                sent.append(PNG)
+                yield PNG
+
+        self.assertIsNone(self._fetch(httpx2.Response(200, content=endless()))[0])
+        self.assertLessEqual(len(sent) * len(PNG), MAX_BYTES + 2 * len(PNG))
 
     def test_a_provider_that_cannot_be_reached_is_no_picture(self):
-        with mock.patch.object(avatars.requests, "get", side_effect=requests.ConnectionError):
+        with mock.patch.object(httpx2.HTTPTransport, "handle_request", side_effect=httpx2.ConnectError("refused")):
             self.assertIsNone(fetch_picture(PICTURE))
 
 
