@@ -1,0 +1,112 @@
+#!/bin/sh
+#MISE description="Before a host branch is pushed: every extension checkout with work off main carries its name and is pushed first"
+# The global pre-push hook runs this with git's refs on stdin. Compose builds
+# an extension from its branch of the host branch's name on GitHub, else from
+# its admitted main, so a host branch pushed before its extension work would be
+# verified without it. Acts when HQ_LOCAL_PLUGINS names a set, reading each
+# checkout from HQ_LOCAL_PYTHONPATH as mise resolved it, and refuses a push it
+# cannot judge.
+set -eu
+
+[ -n "${HQ_LOCAL_PLUGINS:-}" ] || exit 0
+
+# The branches pushed, one per line. A tag, or a deletion (all zeros), adds
+# nothing for Compose to verify.
+branches=""
+while read -r local_ref local_sha _remote_ref _remote_sha; do
+    case "$local_ref" in refs/heads/*) ;; *) continue ;; esac
+    case "$local_sha" in *[!0]*) ;; *) continue ;; esac
+    branches="$branches${local_ref#refs/heads/}
+"
+done
+[ -n "$branches" ] || exit 0
+
+# A hook run from a worktree hands down its GIT_DIR, which would answer for
+# every checkout asked below.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+
+# Its stdin, the reason and then what to do, to the pusher.
+blocked() {
+    sed -e '1s/^/Push blocked: /' -e '2,$s/^/  /' >&2
+    failed=1
+}
+
+failed=0
+if [ -z "${HQ_LOCAL_PYTHONPATH:-}" ]; then
+    blocked <<EOF
+HQ_LOCAL_PLUGINS names an extension set but HQ_LOCAL_PYTHONPATH names no source, so its branches cannot be checked.
+Name each extension checkout's src directory in mise.local.toml.
+EOF
+    exit 1
+fi
+
+# One checkout per line, each named once however many sources it holds.
+checkouts=""
+old_ifs=$IFS
+IFS=:
+for source in $HQ_LOCAL_PYTHONPATH; do
+    [ -n "$source" ] || continue
+    if [ ! -d "$source" ]; then
+        blocked <<EOF
+HQ_LOCAL_PYTHONPATH names $source, which does not exist, so its branch cannot be checked.
+Point it at the extension checkout's src directory in mise.local.toml.
+EOF
+        continue
+    fi
+    if ! repo=$(git -C "$source" rev-parse --show-toplevel 2>/dev/null); then
+        blocked <<EOF
+$source is not in a git checkout, so its branch cannot be checked.
+EOF
+        continue
+    fi
+    case "
+$checkouts
+" in *"
+$repo
+"*) ;; *) checkouts="$checkouts
+$repo" ;; esac
+done
+IFS=$old_ifs
+[ "$failed" = 0 ] || exit 1
+
+# Whether the checkout $repo is ready for a push of $branch.
+check() {
+    name=${repo##*/}
+    if ! git -C "$repo" rev-parse --verify --quiet refs/remotes/origin/main >/dev/null; then
+        blocked <<EOF
+$name has no origin/main, so its work off main cannot be counted.
+git -C $repo fetch origin main
+EOF
+        return 0
+    fi
+    ahead=$(git -C "$repo" rev-list --count origin/main..HEAD)
+    [ "$ahead" -gt 0 ] || return 0
+    if ! extension=$(git -C "$repo" symbolic-ref --quiet --short HEAD); then
+        blocked <<EOF
+$name has $ahead commit(s) off main on a detached HEAD, and this push is '$branch'.
+Compose builds $name from a branch named '$branch'. Put the work on it:
+git -C $repo switch -c $branch
+EOF
+    elif [ "$extension" != "$branch" ]; then
+        blocked <<EOF
+$name has $ahead commit(s) off main on '$extension', and this push is '$branch'.
+Compose builds $name from a branch named '$branch', else from its admitted main. Rename it:
+git -C $repo branch -m $extension $branch
+EOF
+    elif ! git -C "$repo" rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null ||
+        [ "$(git -C "$repo" rev-list --count "origin/$branch..HEAD")" -gt 0 ]; then
+        blocked <<EOF
+$name's '$branch' is not on GitHub as it is here. Push it first:
+git -C $repo push -u origin $branch
+EOF
+    fi
+}
+
+IFS='
+'
+for branch in $branches; do
+    for repo in $checkouts; do
+        check
+    done
+done
+exit "$failed"
