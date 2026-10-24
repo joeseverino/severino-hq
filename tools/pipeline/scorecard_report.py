@@ -2,7 +2,7 @@
 
 Reads the JSON that `scorecard --local <tree> --show-details --format json`
 writes. Every check in CHECKS must score 10 and the STRICT ones must carry no
-warning.
+warning. The closing line names each check that failed.
 """
 
 from __future__ import annotations
@@ -36,34 +36,43 @@ STRICT = {
     "Token-Permissions",
 }
 
+# Scorecard's score for a check that could not run.
+ERRORED = -1
+
+
+def failures(check: dict) -> list[str]:
+    """Why a check fails, one line each; empty when it passes."""
+    name, score = check["name"], check["score"]
+    warnings = [d for d in check.get("details") or [] if d.startswith("Warn:")]
+    if score == 10:
+        return warnings if name in STRICT else []
+    return [check.get("reason") or "no reason given", *warnings]
+
 
 def main(path: str) -> int:
     with Path(path).open() as handle:
         report = json.load(handle)
 
-    failed = 0
+    failed = []
     for check in report.get("checks", []):
         name, score = check["name"], check["score"]
-        warnings = [d for d in check.get("details") or [] if d.startswith("Warn:")]
-        ok = score == 10 and not (name in STRICT and warnings)
-        if score == 10 and name not in STRICT:
-            warnings = []
-        print(f"  {name}: {score}/10")
-        for detail in warnings:
-            print(f"      {detail}")
-        if not ok:
-            if not warnings:
-                print(f"      {check.get('reason', 'no reason given')}")
-            failed += 1
+        why = failures(check)
+        shown = "errored" if score == ERRORED else f"{score}/10"
+        print(f"  {name}: {shown}{' FAILED' if why else ''}")
+        for line in why:
+            print(f"      {line}")
+        if why:
+            failed.append(name)
 
     ran = {check["name"] for check in report.get("checks", [])}
     for missing in sorted(set(CHECKS) - ran):
-        print(f"  {missing}: not reported")
-        failed += 1
+        print(f"  {missing}: not reported FAILED")
+        failed.append(missing)
 
     if failed:
-        print(f"[security] Scorecard: {failed} of {len(CHECKS)} checks failed.", file=sys.stderr)
+        print(f"[security] Scorecard: {len(failed)} of {len(CHECKS)} checks failed: {', '.join(failed)}.")
         return 1
+    print(f"[security] Scorecard: all {len(CHECKS)} checks passed.")
     return 0
 
 

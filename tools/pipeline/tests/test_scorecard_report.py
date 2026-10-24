@@ -62,6 +62,28 @@ class ScorecardReportTests(SimpleTestCase):
     def test_an_inconclusive_check_fails(self):
         self.assertEqual(self.judge(every_check(Packaging=check("Packaging", -1)))[0], 1)
 
+    def test_the_closing_line_names_each_failed_check_and_the_output_says_why(self):
+        # Token-Permissions scores 10 and warns on a job-level write, as v5.6.0 writes it.
+        warned = "Warn: jobLevel 'contents' permission set to 'write': .github/workflows/example.yml:12"
+        code, out = self.judge(
+            every_check(
+                Packaging=check("Packaging", -1, None, "internal error: no network"),
+                **{"Token-Permissions": check("Token-Permissions", 10, ["Info: read", warned])},
+            )
+        )
+        self.assertEqual(code, 1)
+        closing = out.splitlines()[-1]
+        self.assertIn("Packaging", closing)
+        self.assertIn("Token-Permissions", closing)
+        self.assertNotIn("SAST", closing)
+        self.assertIn("internal error: no network", out)
+        self.assertIn(warned, out)
+
+    def test_a_passing_run_closes_on_its_verdict(self):
+        code, out = self.judge(every_check())
+        self.assertEqual(code, 0)
+        self.assertIn("Scorecard", out.splitlines()[-1])
+
     def test_a_warning_beside_a_ten_is_informational_except_in_a_strict_check(self):
         warned = ["Info: detected", "Warn: no pull requests merged into dev branch"]
         self.assertEqual(self.judge(every_check(SAST=check("SAST", 10, warned)))[0], 0)
