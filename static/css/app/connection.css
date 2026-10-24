@@ -21,8 +21,8 @@
    The panel is the nav's dropdown (same box, same shadow, same radius) so
    there is one dropdown in HQ rather than two that nearly match. */
 .overflow-menu { position: relative; display: flex; align-self: center; }
-/* Exactly a button's height, stated: its glyph comes from whatever face the
-   device has for it, and must not set the size of the control. */
+/* Exactly a button's height, stated, so the menu matches the buttons beside it
+   whatever its icon measures. */
 .overflow-menu > summary {
   display: inline-flex; align-items: center; justify-content: center;
   box-sizing: border-box; height: var(--control-size); min-width: 38px;
