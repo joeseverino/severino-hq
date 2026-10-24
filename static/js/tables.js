@@ -70,9 +70,12 @@
     const was = gaveWay.get(table);
     const most = dropOrder(table).length + 2;
     let steps = Math.min(was ?? 0, most);
-    // A table first fitted is told how many columns share its region
-    // before it is measured, so its first measure is the one it keeps.
-    if (steps !== was) giveWay(table, steps);
+    // Every row is marked for how far the table has given way before it is
+    // measured: a table first fitted is told how many columns share its
+    // region, so its first measure is the one it keeps, and rows the parser
+    // added since are measured without the columns that left, at any step,
+    // the last one too.
+    giveWay(table, steps);
     if (overflows(table)) {
       while (steps < most && overflows(table)) giveWay(table, ++steps);
       return;
