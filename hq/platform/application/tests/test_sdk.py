@@ -117,40 +117,63 @@ class SdkContractTests(SimpleTestCase):
         with TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "invalid.py").write_text(
-                "from application.capabilities import CapabilitySpec\nimport core.audit\n",
+                "from hq.platform.application.capabilities import CapabilitySpec\nimport hq.domains.core\n",
                 encoding="utf-8",
             )
             self.assertEqual(
                 unsupported_hq_imports(root),
-                ["invalid.py:1: application.capabilities", "invalid.py:2: core.audit"],
+                ["invalid.py:1: hq.platform.application.capabilities", "invalid.py:2: hq.domains.core"],
             )
+
+    def test_a_plugin_package_named_like_a_host_app_is_its_own(self):
+        from hq_sdk import validation
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "plugin.py").write_text(
+                "from core import audit\nimport jobs.runner\nfrom calendars.models import Entry\n",
+                encoding="utf-8",
+            )
+            with patch("hq_sdk.validation.HOST_INTERNAL_PACKAGES", validation._FLOOR):
+                self.assertEqual(unsupported_hq_imports(root), [])
+
+    def test_the_host_packages_are_the_packages_of_its_tree_and_nothing_else(self):
+        from hq_sdk import validation
+
+        root = Path(validation.__file__).resolve().parents[1]
+        top_level = {
+            entry.name
+            for entry in root.iterdir()
+            if entry.is_dir() and (entry / "__init__.py").exists() and entry.name != "hq_sdk"
+        }
+        self.assertEqual(validation.HOST_INTERNAL_PACKAGES, top_level)
 
     def test_a_relative_import_is_the_plugins_own_whatever_it_is_called(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "plugin.py").write_text(
-                "from .calendars import sources\nfrom ..core import helpers\nfrom calendars.models import Entry\n",
+                "from .calendars import sources\nfrom ..core import helpers\nfrom hq.domains.calendars import Entry\n",
                 encoding="utf-8",
             )
-            self.assertEqual(unsupported_hq_imports(root), ["plugin.py:3: calendars.models"])
+            self.assertEqual(unsupported_hq_imports(root), ["plugin.py:3: hq.domains.calendars"])
 
     def test_the_import_boundary_reads_every_form_and_every_file(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "pkg").mkdir()
             (root / "pkg" / "deep.py").write_text(
-                "import os, jobs.runner\n"
+                "import os, hq.jobs.runner\n"
                 "from hq_sdk import ui\n"
                 "from . import sibling\n"
                 "def f():\n"
-                "    from core import audit; from core import audit\n",
+                "    from hq import audit; from hq import audit\n",
                 encoding="utf-8",
             )
             (root / "broken.py").write_text("def (:\n", encoding="utf-8")
 
             found = unsupported_hq_imports(root)
 
-        self.assertEqual(found[1:], ["pkg/deep.py:1: jobs.runner", "pkg/deep.py:5: core"])
+        self.assertEqual(found[1:], ["pkg/deep.py:1: hq.jobs.runner", "pkg/deep.py:5: hq"])
         self.assertTrue(found[0].startswith("broken.py:1: "))
 
     def test_capability_spec_is_available_from_the_sdk(self):
