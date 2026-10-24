@@ -56,15 +56,15 @@ SEVERINO_LOG_LEVEL = "CRITICAL"
 # moved past, as `--locked` does. So do `uv lock` and `uv add`: change the lock
 # outside mise, or with UV_LOCKED=0.
 UV_LOCKED = "1"
-# Go builds with the release mise pins and never downloads the one go.mod
-# names, here and in the image.
+# Go builds with the release mise installs and never downloads one, here and
+# in the image.
 GOTOOLCHAIN = "local"
 
 [tools]
 node = "26.12.1"
-# The controller's Go, a release of go.mod's language version (checks:toolchain).
-# The images install it and uv from mise.lock, so this line is their only pin.
-go = "1.27.3"
+# The controller's Go is the release go.mod's toolchain line names, its one
+# pin, which Renovate moves; the images install it and uv from mise.lock.
+go = '{{ read_file(path="controller/go.mod") | regex_replace(pattern="(?ms).*^toolchain go([0-9.]+)$.*", rep="$1") }}'
 shellcheck = "0.11.0"
 actionlint = "1.7.12"
 # The workflows' security audit (checks:workflows), offline.

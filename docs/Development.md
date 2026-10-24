@@ -10,7 +10,9 @@ How agents work on HQ through these gates: [AI](AI.md).
 Install [mise](https://mise.jdx.dev) and a `python3`; `mise install` brings uv
 with the other tools `fast` and `check` run. A tool only a heavier gate needs
 (CodeQL, age) is `lazy` in `mise.toml`: its first use installs it, checked
-against `mise.lock` like the rest.
+against `mise.lock` like the rest. Go is the one tool `mise.toml` does not
+pin itself: it reads the release from `controller/go.mod`'s `toolchain` line,
+which Renovate moves, so mise loads `mise.toml` only beside that file.
 
 ```sh
 git clone https://github.com/joeseverino/severino-hq.git

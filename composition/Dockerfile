@@ -12,12 +12,14 @@
 ARG HQ_IMAGE=scratch
 # uv at the release mise.toml pins, installed by mise from mise.lock, which
 # refuses a download whose checksum differs from it (as the host image's
-# tools stage does, with the same mise).
+# tools stage does, with the same mise). mise.toml reads Go's release from
+# go.mod, so mise cannot load it without that file.
 FROM python:3.15-slim-trixie@sha256:533b0b2f9b5d46fd097091cf826f27902f1d6c3bca714b6dc74551356aa97a51 AS tools
 COPY --from=ghcr.io/jdx/mise:2026.10.18@sha256:fc31de7b93d195613deb600d42c65a164b0205716ade38132aadeabac3838248 /usr/local/bin/mise /usr/local/bin/mise
 ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
 COPY mise.toml mise.lock ./
+COPY controller/go.mod controller/
 RUN mise install uv \
     && install -D "$(mise which uv)" /opt/bin/uv
 

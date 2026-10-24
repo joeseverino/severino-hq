@@ -45,14 +45,25 @@
       "groupSlug": "{{depName}}-{{newMajor}}.{{newMinor}}"
     },
     {
-      "description": "Go's patch releases are its security releases, and OSV sees the standard library only through a go.mod toolchain line, so a Go patch opens at once. mise.toml is Go's one pin: the images install it from mise.lock.",
-      "matchManagers": ["mise"],
-      "matchDepNames": ["go"],
+      "description": "Go's patch releases are its security releases, and OSV sees the standard library through go.mod's toolchain line, so a Go patch opens at once.",
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["toolchain"],
       "matchUpdateTypes": ["patch"],
       "minimumReleaseAge": "0 days",
       "schedule": ["at any time"],
       "groupName": "go patch",
       "groupSlug": "go-patch"
+    },
+    {
+      "description": "go.mod's toolchain line is Go's one pin and mise.toml reads it, so mise.lock is locked again for the new release, which the images install from.",
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["toolchain"],
+      "postUpgradeTasks": {
+        "commands": ["mise trust mise.toml", "mise lock go"],
+        "installTools": { "mise": {} },
+        "fileFilters": ["mise.lock"],
+        "executionMode": "branch"
+      }
     },
     {
       "description": "requires-python and the go directive say what the project supports, not what it runs, so they stay ranges.",

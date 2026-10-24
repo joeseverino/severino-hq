@@ -6,6 +6,7 @@
 
 # The build tools, Go and uv, at the releases mise.toml pins: mise installs
 # each from mise.lock and refuses a download whose checksum differs from it.
+# mise.toml reads Go's release from go.mod, so mise loads neither without it.
 # mise is the release min_version names, from its image by digest
 # (checks:toolchain holds the tag to min_version).
 FROM python:3.15-slim-trixie@sha256:533b0b2f9b5d46fd097091cf826f27902f1d6c3bca714b6dc74551356aa97a51 AS tools
@@ -13,6 +14,7 @@ COPY --from=ghcr.io/jdx/mise:2026.10.18@sha256:fc31de7b93d195613deb600d42c65a164
 ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
 COPY mise.toml mise.lock ./
+COPY controller/go.mod controller/
 RUN mise install go uv \
     && cp -a "$(mise where go)" /opt/go \
     && install -D "$(mise which uv)" /opt/bin/uv
@@ -44,7 +46,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # The controller and the root secret renderer, one static binary each: CGO off,
 # -trimpath, so the runtime image carries no Go toolchain and the binaries no
-# build paths. Their Go is mise's (checks:toolchain holds it to go.mod).
+# build paths. Their Go is mise's, the release go.mod's toolchain line names.
 FROM tools AS controller
 ENV PATH=/opt/go/bin:$PATH \
     CGO_ENABLED=0 \
