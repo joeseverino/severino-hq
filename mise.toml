@@ -59,7 +59,7 @@ UV_LOCKED = "1"
 GOTOOLCHAIN = "local"
 
 [tools]
-node = "24.22.0"
+node = "26.12.1"
 # The controller's Go, a release of go.mod's language version (checks:toolchain).
 # The images install it and uv from mise.lock, so this line is their only pin.
 go = "1.27.3"
@@ -86,7 +86,7 @@ crane = { version = "0.22.1", lazy = true }
 # (static) build so the runner needs no matching libc. Lazy: only
 # checks:structural runs it, and its first run of the command installs it.
 [tools."github:DeusData/codebase-memory-mcp"]
-version = "0.12.0"
+version = "0.12.1"
 lazy = true
 lazy_bins = ["codebase-memory-mcp"]
 

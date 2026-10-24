@@ -2,7 +2,7 @@
   "name": "hq-lint-tools",
   "private": true,
   "engines": {
-    "node": ">=24.21.0"
+    "node": ">=26.12.1"
   },
   "devDependencies": {
     "axe-core": "4.14.0",
