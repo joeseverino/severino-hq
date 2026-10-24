@@ -866,6 +866,36 @@ class OperationPolicyTests(TestCase):
         self.assertFalse(second["queued"])
         self.assertEqual(OperationRequest.objects.count(), 1)
 
+    @patch(
+        "hq.platform.application.resource_operations.controller_action_policy",
+        return_value=(True, "active"),
+    )
+    def test_a_finished_operations_key_replays_it_and_refuses_another_resource(self, _policy):
+        first = request_reconcile(
+            OperationCommand(idempotency_key="finished-once"), principal=cli_principal(), current_key=self.resource.key
+        )
+        OperationRequest.objects.filter(pk=first["operation"]["id"]).update(
+            state=OperationRequest.State.SUCCEEDED, completed_at=timezone.now()
+        )
+
+        again = request_reconcile(
+            OperationCommand(idempotency_key="finished-once"), principal=cli_principal(), current_key=self.resource.key
+        )
+        self.assertFalse(again["queued"])
+        self.assertEqual(again["operation"]["id"], first["operation"]["id"])
+
+        save_managed_resource(
+            ManagedResourceCommand(key="other-wildcard", kind="tls.certificate", spec=certificate_spec()),
+            principal=cli_principal(),
+        )
+        with self.assertRaisesMessage(PolicyError, "already used by another operation"):
+            request_reconcile(
+                OperationCommand(idempotency_key="finished-once"),
+                principal=cli_principal(),
+                current_key="other-wildcard",
+            )
+        self.assertEqual(OperationRequest.objects.count(), 1)
+
     @override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=False)
     def test_mcp_infrastructure_is_fail_closed(self):
         result = execute_capability(

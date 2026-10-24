@@ -71,7 +71,9 @@ tokens, spacing, color), `StyleContractTests` and `SharedPrimitiveStyleTests`
 `CognitiveComplexityTests` (score 20 per function), `FileSizeTests` (no source
 file past 1,000 lines), `OneDefinitionTests` (a module-level name is
 assigned once), `SettingsReadTests` (a setting is read as `settings.NAME`, never with a
-default), `CommentHistoryTests` (comments
+default), `OperationQueueTests` (an operation is queued through
+`resource_operations.enqueue`, whose unique key settles two writers),
+`CommentHistoryTests` (comments
 describe the present), `AssertionPrecisionTests` (`assertEqual(a, b)`, not
 `assertTrue(a == b)`), `CellMarkupTests` (a table cell is read by its text,
 never by the tag that closes it), `CountedTests` (plurals), `InterfaceTextTests` (no em dash, hand-built plural,

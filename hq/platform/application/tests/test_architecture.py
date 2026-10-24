@@ -1710,6 +1710,44 @@ class SettingsReadTests(SimpleTestCase):
         self.assertEqual(reads, set(), "declare the setting in hq/config/settings.py and read settings.NAME")
 
 
+def _operation_writes(tree: ast.AST) -> list[int]:
+    """Lines that write an ``OperationRequest`` row one at a time."""
+
+    return [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in {"create", "get_or_create", "update_or_create"}
+        and isinstance(node.func.value, ast.Attribute)
+        and node.func.value.attr == "objects"
+        and isinstance(node.func.value.value, ast.Name)
+        and node.func.value.value.id == "OperationRequest"
+    ]
+
+
+@tag("source")
+class OperationQueueTests(SimpleTestCase):
+    """An operation enters the queue through ``resource_operations.enqueue``.
+
+    Its key column is unique, and ``enqueue`` lets that column settle two
+    writers on one key. A caller that checks for the key and then creates the
+    row has a race of its own between the two.
+    """
+
+    def test_only_enqueue_writes_an_operation(self):
+        root = Path(__file__).resolve().parents[4]
+        home = root / "hq/platform/application/resource_operations.py"
+        self.assertTrue(_operation_writes(parsed(home)), "enqueue no longer writes the row this test looks for")
+        writes = {
+            f"{path.relative_to(root)}:{line}"
+            for path in source_files(root / "hq", "*.py")
+            if path != home and "tests" not in path.parts
+            for line in _operation_writes(parsed(path))
+        }
+        self.assertEqual(writes, set(), "queue it with resource_operations.enqueue")
+
+
 class RouteOwnerTests(SimpleTestCase):
     """Routes are resolved in one place, so the answer can be remembered."""
 
