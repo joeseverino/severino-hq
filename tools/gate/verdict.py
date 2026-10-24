@@ -45,6 +45,10 @@ TASK = re.compile(r"\[([^\]\s]+)\] exited with status \d+")
 # Duration: in seconds from one second up, in ms, µs or ns below.
 TIMED = re.compile(r"\[([^\]\s]+)\] Finished in (\d+(?:\.\d+)?)(ns|µs|ms|s)\b")
 UNITS = {"ns": 1e-9, "µs": 1e-6, "ms": 1e-3, "s": 1.0}
+# A terminal escape sequence. mise colors its task lines on a CI runner even
+# into a pipe (and wherever CLICOLOR_FORCE is set), so a line is read without
+# them while the copy passed through keeps its color.
+ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 # A traceback kept in the file stops here.
 KEPT_LINES = 60
 # Past this many failing tests the line names the first few and counts the rest.
@@ -76,6 +80,7 @@ class Step:
     took: dict[str, float] = field(default_factory=dict)
 
     def read(self, line: str) -> None:
+        line = ESCAPE.sub("", line)
         for task in TASK.findall(line):
             if task not in self.tasks:
                 self.tasks.append(task)

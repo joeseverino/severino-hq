@@ -336,17 +336,20 @@ class GateVerdictTests(GateTestCase):
         self.assertTrue(result.stdout.splitlines()[-1].startswith("[check] passed in"))
 
     def test_a_nested_mise_run_keeps_each_passed_tasks_time(self):
-        """Inside a task mise turns its timings off; the verdict turns them back on and keeps them."""
+        """Inside a task mise turns its timings off; the verdict turns them back on and keeps them.
+
+        Colored, as mise writes on a CI runner even into a pipe."""
         (ROOT / "var").mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(dir=ROOT / "var") as config:
             Path(config, "mise.toml").write_text(
                 '[tasks."gate:one"]\nrun = "true"\n[tasks."gate:two"]\nrun = "exit 3"\n'
             )
             mise = [shutil.which("mise") or "mise", "-C", config, "run", "-c", "gate:*"]
+            env = {**os.environ, "MISE_TRUSTED_CONFIG_PATHS": config, "MISE_TASK_TIMINGS": "0", "CLICOLOR_FORCE": "1"}
             result = subprocess.run(
                 [sys.executable, "-c", VERDICT_IN, str(gate_verdict.VERDICTS), "check", *mise],
                 cwd=ROOT,
-                env={**os.environ, "MISE_TRUSTED_CONFIG_PATHS": config, "MISE_TASK_TIMINGS": "0"},
+                env=env,
                 capture_output=True,
                 text=True,
                 check=False,
