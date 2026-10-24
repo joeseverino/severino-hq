@@ -12,6 +12,11 @@ from django.contrib.staticfiles import finders
 # link on press, and one over plain http is refused it.
 ORIGIN = "https://hq.example.test"
 
+# The nonce a page a test puts together carries on its script tags, and the
+# policy it is answered with names (gate.policy): HQ's script-src admits only
+# a script whose tag carries the response's nonce.
+NONCE = "hq-browser-gate"
+
 # A face the stylesheet lets the browser skip when it is late (`font-display:
 # optional`). A late face is drawn in the fallback for the page's whole life,
 # so on a loaded machine a wrapping check would read one page in either face

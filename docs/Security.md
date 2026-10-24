@@ -62,9 +62,15 @@
   The node keys, handshake age, endpoint and counters remain observer-relative;
   missing placement evidence stays visibly unverified.
 - Django's native Content Security Policy middleware enforces same-origin
-  assets, nonce-authorized scripts, no object embedding, and no framing.
-  Application JavaScript is external; a regression test rejects inline scripts
-  and event handlers before they can weaken the policy.
+  assets, no object embedding, and no framing. Scripts are admitted by nonce
+  alone: `script-src` is the response's nonce and `'strict-dynamic'`, so a
+  browser that supports it ignores `'self'` (kept for one that does not) and a
+  same-origin file, a receipt or any static file, cannot run as script from
+  markup HQ did not write. Every `<script>` a template renders carries
+  `{% csp_nonce_attr %}`, held by a source test over every template; a script a
+  nonced one adds is trusted through it. Application JavaScript is external; a
+  regression test rejects inline scripts and event handlers before they can
+  weaken the policy.
 - The policy also requires Trusted Types, so assigning a string to `innerHTML`,
   `outerHTML`, `srcdoc` or a script URL throws instead of parsing: a DOM-based
   XSS sink cannot execute even if one is introduced, and `trusted-types 'none'`
@@ -74,7 +80,8 @@
   vendored Scalar bundle (`static/vendor/scalar`, version and SHA-256 in
   `UPSTREAM`, checked by a test) renders through `innerHTML`. Its policy is
   derived from the main one (`SEVERINO_API_REFERENCE_CSP`), keeps scripts to
-  `'self'` with no inline code or `eval`, and fetches nothing off-origin.
+  the nonce and `'strict-dynamic'` with no inline code or `eval`, and fetches
+  nothing off-origin.
 - Violations are reported back. The policy carries `report-to` and `report-uri`
   pointing at `/csp-report/`, which records the directive, the blocked URI and
   the reporting address to the audit log: bounded body size, truncated fields,

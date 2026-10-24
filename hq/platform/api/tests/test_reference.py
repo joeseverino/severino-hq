@@ -27,7 +27,9 @@ def _uncommented(source: str) -> str:
 
 
 def _directives(policy: str) -> set[str]:
-    return {" ".join(part.split()) for part in policy.split(";") if part.strip()}
+    """Each directive, its nonce read as the one placeholder: every response draws its own."""
+
+    return {re.sub(r"'nonce-[^']+'", "'nonce'", " ".join(part.split())) for part in policy.split(";") if part.strip()}
 
 
 class ReferencePageTests(TestCase):
@@ -59,7 +61,7 @@ class ReferencePageTests(TestCase):
 
         Scalar writes strings into innerHTML, so the two Trusted Types
         directives go and nothing else: no inline script, no eval, no origin
-        but this one.
+        but this one, and its scripts run through the page's nonce.
         """
 
         self._sign_in()
@@ -68,7 +70,7 @@ class ReferencePageTests(TestCase):
         removed = {d.split()[0] for d in _directives(application) - _directives(page)}
         self.assertEqual(removed, {"require-trusted-types-for", "trusted-types"})
         self.assertEqual(_directives(page) - _directives(application), set())
-        self.assertIn("script-src 'self'", page)
+        self.assertIn("script-src 'nonce' 'strict-dynamic' 'self'", _directives(page))
         self.assertNotIn("unsafe-eval", page)
 
     def test_a_stranger_is_sent_to_sign_in(self):

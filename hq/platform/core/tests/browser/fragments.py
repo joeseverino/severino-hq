@@ -10,12 +10,12 @@ from django.urls import reverse
 
 from hq.platform.core.tests.browser.gate import BrowserGate, answered
 from hq.platform.core.tests.browser.selectors import SELECTORS
-from hq.platform.core.tests.browser.serving import ORIGIN
+from hq.platform.core.tests.browser.serving import NONCE, ORIGIN
 
 # A region that polls and names its parts, a placeholder behind a closed
 # disclosure, and one whose address answers a whole page.
 _FRAGMENT_PROBE = f"""<!doctype html><html><head><title>Probe</title>
-<script defer src="{settings.STATIC_URL}js/fragment.js"></script>
+<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
 </head><body><main>
 <section data-fragment="/probe-strip/" data-fragment-poll="1">
 <details data-fragment-part="first"><summary>First</summary>as drawn</details>

@@ -43,8 +43,8 @@
   {% endcomment %}
   <link rel="preload" href="{% static 'fonts/inter/inter-variable-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
   {% stylesheets %}
-  <script src="{% static 'js/transitions.js' %}"></script>
-  <script src="{% static 'js/tables.js' %}"></script>
+  <script src="{% static 'js/transitions.js' %}" {% csp_nonce_attr %}></script>
+  <script src="{% static 'js/tables.js' %}" {% csp_nonce_attr %}></script>
   {% block head_extra %}{% endblock %}
 </head>
 <body data-sign-in="{% url 'login' %}">
@@ -293,11 +293,11 @@
     {% endif %}
   {% endif %}
 
-  <script src="{% static 'js/fragment.js' %}" defer></script>
-  <script src="{% static 'js/app.js' %}" defer></script>
-  <script src="{% static 'js/ask.js' %}" defer></script>
-  <script src="{% static 'js/connection.js' %}" defer></script>
-  <script src="{% static 'js/topology.js' %}" defer></script>
+  <script src="{% static 'js/fragment.js' %}" {% csp_nonce_attr %} defer></script>
+  <script src="{% static 'js/app.js' %}" {% csp_nonce_attr %} defer></script>
+  <script src="{% static 'js/ask.js' %}" {% csp_nonce_attr %} defer></script>
+  <script src="{% static 'js/connection.js' %}" {% csp_nonce_attr %} defer></script>
+  <script src="{% static 'js/topology.js' %}" {% csp_nonce_attr %} defer></script>
   {% block scripts_extra %}{% endblock %}
 </body>
 </html>

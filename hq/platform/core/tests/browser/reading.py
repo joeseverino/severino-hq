@@ -5,19 +5,23 @@ from functools import cache, wraps
 from django.conf import settings
 lazy from django.template import Context, Template
 
+from hq.platform.core.tests.browser.serving import NONCE
+
 # A probe page: a table drawn through the table tags, as a template draws one,
 # with the stylesheet and the table script.
 _PROBE_PAGE = """{% load table_tags stylesheet_tags %}<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {% stylesheets %}
-<script defer src="{{ static }}js/tables.js"></script>
+<script defer src="{{ static }}js/tables.js" nonce="{{ nonce }}"></script>
 </head><body><main>"""
 
 
 def probe(markup):
     """``markup``, in the table tags, as a page."""
 
-    return Template(_PROBE_PAGE + markup + "</main></body></html>").render(Context({"static": settings.STATIC_URL}))
+    return Template(_PROBE_PAGE + markup + "</main></body></html>").render(
+        Context({"static": settings.STATIC_URL, "nonce": NONCE})
+    )
 
 
 class ProbeThrew(Exception):

@@ -35,7 +35,7 @@ from hq.platform.core.tests.browser.probes.settle import (
 )
 from hq.platform.core.tests.browser.reading import _in_one_trip, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
-from hq.platform.core.tests.browser.serving import ORIGIN, slow_frames, static_file
+from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, slow_frames, static_file
 from hq.platform.core.tests.browser.survey import _AS_FINDINGS, _PALETTE, _as_is, geometry_probes
 from hq.platform.core.tests.browser.widths import viewport
 
@@ -113,10 +113,20 @@ def sent(body, headers):
     return page
 
 
-def answered_as(page, body):
-    """``body``, answered with the headers ``page`` was."""
+# A nonce as a policy names it, and a script tag as a browser serializes it
+# once parsed: emptied, so a page cannot read its nonce back out of the markup.
+_NONCE_SOURCE = re.compile(r"'nonce-([^']+)'")
+_HIDDEN_NONCE = re.compile(r'(<script\b[^>]*\snonce=)""')
 
-    return sent(body, page.headers) if isinstance(page, Sent) else body
+
+def answered_as(page, body):
+    """``body``, the page as the browser holds it, answered with the headers
+    ``page`` was and its script tags carrying the nonce those headers name."""
+
+    if not isinstance(page, Sent):
+        return _HIDDEN_NONCE.sub(rf'\1"{NONCE}"', body)
+    named = _NONCE_SOURCE.search(page.headers.get(CSP.HEADER_ENFORCE, ""))
+    return sent(_HIDDEN_NONCE.sub(rf'\1"{named[1]}"', body) if named else body, page.headers)
 
 
 def answered(response):
@@ -134,11 +144,16 @@ POLICY_HEADERS = (CSP.HEADER_ENFORCE, CSP.HEADER_REPORT_ONLY, "Reporting-Endpoin
 
 
 def policy():
-    """The policy headers HQ sends with an answer that took no nonce, read off
-    a real one: what a page put together by a test is answered with."""
+    """The policy headers HQ sends with a page that took a nonce, read off a
+    real one whose nonce is ``NONCE``: what a page put together by a test is
+    answered with, so its script tags carry ``NONCE``."""
 
-    response = Client().get(reverse("health_live"))
-    return {name: value for name, value in response.items() if name in POLICY_HEADERS}
+    with mock.patch("django.utils.csp.generate_nonce", return_value=NONCE):
+        response = Client().get(settings.LOGIN_URL)
+    headers = {name: value for name, value in response.items() if name in POLICY_HEADERS}
+    if f"'nonce-{NONCE}'" not in headers.get(CSP.HEADER_ENFORCE, ""):
+        raise AssertionError(f"{settings.LOGIN_URL} took no nonce, so its policy admits no script.")
+    return headers
 
 
 def named_by_every_page():

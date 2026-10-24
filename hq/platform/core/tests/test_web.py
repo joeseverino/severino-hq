@@ -198,7 +198,9 @@ class AuthGateTests(TestCase):
         }
 
         self.assertEqual(directives["default-src"], ["'self'"])
-        self.assertEqual(directives["script-src"], ["'self'"])
+        nonce, *scripts = directives["script-src"]
+        self.assertRegex(nonce, r"^'nonce-[^']+'$")
+        self.assertEqual(scripts, ["'strict-dynamic'", "'self'"])
         self.assertEqual(directives["object-src"], ["'none'"])
         self.assertEqual(directives["frame-ancestors"], ["'none'"])
         relaxed = sorted(

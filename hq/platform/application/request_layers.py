@@ -754,13 +754,15 @@ def _browser_layer() -> Layer:
     policy = dict(getattr(settings, "SECURE_CSP", {}) or {})
     trusted_types = "'script'" in (policy.get("require-trusted-types-for") or ())
     scripts = tuple(policy.get("script-src") or ())
-    nonce_only = CSP.NONCE in scripts and CSP.UNSAFE_INLINE not in scripts
+    # The nonce alone decides: 'strict-dynamic' makes a CSP3 browser ignore
+    # 'self' and host sources, and nothing may allow inline script.
+    nonce_only = CSP.NONCE in scripts and CSP.STRICT_DYNAMIC in scripts and CSP.UNSAFE_INLINE not in scripts
     framed = tuple(policy.get("frame-ancestors") or ()) == (CSP.NONE,)
     reports = bool(policy.get("report-uri") or policy.get("report-to"))
     holds = trusted_types and nonce_only and framed
     stated = [
         "Trusted Types" if trusted_types else "no Trusted Types",
-        "nonce scripts" if nonce_only else "inline scripts",
+        "nonce and strict-dynamic" if nonce_only else "scripts by origin",
         "no framing" if framed else "framing allowed",
         "reported" if reports else "unreported",
     ]
@@ -769,8 +771,9 @@ def _browser_layer() -> Layer:
         "Scripts only from HQ",
         holds,
         (
-            "Scripts run only from HQ or with a one-time code for this page, "
-            "the page cannot be framed, and Trusted Types is on."
+            "A script runs only if HQ wrote its tag into this page, with a one-time code, "
+            "or one of those scripts added it; a file on HQ's address is not enough. "
+            "The page cannot be framed, and Trusted Types is on."
             if holds
             else "The content security policy is missing a rule that stops scripts HQ did not send."
         ),

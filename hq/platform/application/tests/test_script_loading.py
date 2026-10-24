@@ -1,4 +1,4 @@
-"""Every script waits for the page, except the two that must answer before it is drawn."""
+"""Every script carries the response's nonce, and waits for the page, except the two that must answer before it is drawn."""
 
 import re
 from pathlib import Path
@@ -9,6 +9,10 @@ from .source import source_files
 
 ROOT = Path(__file__).resolve().parents[4]
 SCRIPT = re.compile(r"<script\b[^>]*\bsrc=[^>]*>")
+ANY_SCRIPT = re.compile(r"<script\b[^>]*>", re.IGNORECASE)
+# The policy's script-src is the nonce and 'strict-dynamic' (settings.SECURE_CSP),
+# so a tag without the response's nonce is refused in the browser.
+NONCE = "{% csp_nonce_attr %}"
 # `pagereveal` fires before the new page's first frame, which is before a
 # deferred script runs, so its listener loads in the head without `defer`.
 TRANSITION = "js/transitions.js"
@@ -29,6 +33,17 @@ class ScriptLoadingTests(SimpleTestCase):
             if not re.search(r"\bdefer\b|type=\"module\"", tag_) and not any(name in tag_ for name in BEFORE_DRAWING)
         ]
         self.assertEqual(blocking, [])
+
+    def test_every_script_tag_carries_the_nonce(self):
+        """Every template in the checkout, under templates/ and any app's own."""
+
+        unnonced = [
+            f"{path.relative_to(ROOT)}: {tag_}"
+            for path in source_files(ROOT, "*.html")
+            for tag_ in ANY_SCRIPT.findall(path.read_text(encoding="utf-8"))
+            if NONCE not in tag_
+        ]
+        self.assertEqual(unnonced, [])
 
     def test_the_two_load_in_the_head_without_waiting(self):
         base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")

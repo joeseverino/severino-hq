@@ -238,8 +238,16 @@ SEVERINO_CSP_REPORT_PATH = "/csp-report/"
 # extensions have not yet moved such work to a job.
 SEVERINO_OUTBOUND_IN_REQUEST = "refuse"
 
-# Django owns the browser security boundary. Scripts are limited to same-origin
-# assets or per-response nonces; objects and framing are disabled outright.
+# Django owns the browser security boundary. A script runs only when HQ
+# rendered its tag: each carries the response's nonce (TemplateSourceTests), and
+# 'strict-dynamic' makes the nonce, and scripts a nonced one adds, all a CSP3
+# browser trusts, so a same-origin file cannot run as script just by being
+# here. 'self' is for a browser without 'strict-dynamic'. A response that took
+# no nonce drops the sentinel (django.utils.csp.build_policy) and so permits no
+# script, which is right: it renders no script tag.
+# https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/script-src
+# https://web.dev/articles/strict-csp
+# Objects and framing are disabled outright.
 # Inline styles remain allowed so a chart can place a mark with a per-datum
 # custom property; application templates keep styles in the static bundle.
 #
@@ -259,7 +267,7 @@ SEVERINO_OUTBOUND_IN_REQUEST = "refuse"
 # audited sink worth more than a blanket ban nobody could satisfy.
 SECURE_CSP = {
     "default-src": [CSP.SELF],
-    "script-src": [CSP.SELF, CSP.NONCE],
+    "script-src": [CSP.NONCE, CSP.STRICT_DYNAMIC, CSP.SELF],
     "style-src": [CSP.SELF, CSP.UNSAFE_INLINE],
     "img-src": [CSP.SELF, "data:"],
     "font-src": [CSP.SELF],
@@ -633,8 +641,9 @@ if _sign_in.scheme in {"http", "https"} and _sign_in.netloc:
 # strings into innerHTML through Vue and its markdown renderer, and no
 # configuration of it creates only the `hq-fragment` policy. Spelled as a
 # derivation rather than a second literal policy, so tightening the real one
-# cannot leave a stale copy behind. Its sources are the real policy's; it needs no
-# inline script and, configured jitless, no eval.
+# cannot leave a stale copy behind. Its sources are the real policy's, the
+# nonce and 'strict-dynamic' included; it needs no inline script and,
+# configured jitless, no eval.
 SEVERINO_API_REFERENCE_CSP = without_trusted_types(SECURE_CSP)
 OIDC_CREATE_USER = env_bool("SEVERINO_OIDC_CREATE_USER", default=True)
 # Where a sign-in that did not finish lands: the login page, told to stop and

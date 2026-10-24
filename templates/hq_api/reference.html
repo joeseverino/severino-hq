@@ -15,6 +15,6 @@
 {% comment %}The reference fills the page under the header; its pinned sidebar runs to the bottom.{% endcomment %}
 {% block site_footer %}{% endblock %}
 {% block scripts_extra %}
-  <script src="{% static 'js/api-reference.js' %}" defer></script>
-  <script src="{% static 'vendor/scalar/standalone.js' %}" defer></script>
+  <script src="{% static 'js/api-reference.js' %}" {% csp_nonce_attr %} defer></script>
+  <script src="{% static 'vendor/scalar/standalone.js' %}" {% csp_nonce_attr %} defer></script>
 {% endblock %}

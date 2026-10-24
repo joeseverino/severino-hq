@@ -55,8 +55,12 @@ _MOST_PAGES = 800
 _HREF = re.compile(r'(?:href|data-[\w-]+-url)="(/[^"#?]*)')
 _REGION = re.compile(r'<[^>]*\sdata-fragment="([^"]+)"[^>]*>')
 _NAME = re.compile(r'\sdata-fragment-name="([^"]*)"')
-# Inserted right after the charset tag, before HQ's own scripts.
-_INJECT = '<script src="/static/js/demo-theme.js"></script><script defer src="/static/js/demo.js"></script>'
+# Inserted right after the charset tag, before HQ's own scripts, carrying the
+# page's nonce: HQ's script-src admits no script without it.
+_INJECT = (
+    '<script src="/static/js/demo-theme.js"{nonce}></script><script defer src="/static/js/demo.js"{nonce}></script>'
+)
+_NONCE = re.compile(r"'nonce-([^']+)'")
 _CHARSET = '<meta charset="utf-8">'
 # Directives a meta tag can't carry; browsers ignore them there and say so.
 _HEADER_ONLY = ("frame-ancestors", "report-uri", "report-to", "sandbox")
@@ -273,7 +277,9 @@ def _inject(page: str, response, *, address: str = "") -> bytes:
     saved copy stands for, and the demo's scripts, after the charset."""
 
     shown = f'<meta name="hq-demo-address" content="{escape(address)}">' if address else ""
-    return _real_docs(page).replace(_CHARSET, _CHARSET + _meta_policy(response) + shown + _INJECT, 1).encode()
+    nonce = _NONCE.search(response.get("Content-Security-Policy", ""))
+    scripts = _INJECT.format(nonce=f' nonce="{nonce[1]}"' if nonce else "")
+    return _real_docs(page).replace(_CHARSET, _CHARSET + _meta_policy(response) + shown + scripts, 1).encode()
 
 
 class _Offered:
