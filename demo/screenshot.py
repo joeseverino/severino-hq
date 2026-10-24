@@ -64,6 +64,8 @@ def _open(page: Page, origin: str, shot: Shot) -> None:
     if shot.follow:
         link = page.locator(shot.follow).first
         page.goto(f"{origin}{link.get_attribute('href')}", wait_until="networkidle")
+    # The docs picture HQ itself, so the demo's own corner chip stays out of them.
+    page.add_style_tag(content=".demo-foot { display: none; }")
 
 
 def _clip(page: Page, shot: Shot) -> dict[str, float] | None:
