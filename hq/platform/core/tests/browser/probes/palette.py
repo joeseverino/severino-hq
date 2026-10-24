@@ -139,9 +139,11 @@ _FAINT_LINES = (
 # A field is found by its edge: the border it draws, or, for a control drawn
 # bare inside one that acts as the field (a search box's frame, a drop zone),
 # the nearest frame around it. That edge, or the frame's own fill, stands out
-# from what is behind the frame. A disabled field is exempt, as WCAG exempts it.
+# from what is behind the frame. A disabled field is exempt, as WCAG exempts it,
+# and so is one framed by a control that is pressed (`pressed`: the sort's
+# label around its select), which its label identifies, as a button's does.
 _FIELD_EDGES = (
-    "([fillable, least]) => {"
+    "([fillable, least, pressed]) => {"
     + _DESCRIBE
     + _COLOR
     + """
@@ -153,7 +155,7 @@ _FIELD_EDGES = (
     if (field.closest(':disabled, [aria-disabled="true"], [hidden]')) continue;
     let frame = field;
     while (frame && !edged(getComputedStyle(frame))) frame = frame.parentElement;
-    if (!frame || !frame.parentElement || !frame.checkVisibility()) continue;
+    if (!frame || !frame.parentElement || !frame.checkVisibility() || frame.matches(pressed)) continue;
     const style = getComputedStyle(frame);
     const behind = background(frame.parentElement);
     const fill = rgba(style.backgroundColor);
@@ -163,6 +165,39 @@ _FIELD_EDGES = (
       fill[3] > 0 ? ratio(over(fill, behind), behind) : 0,
     );
     if (measured < least) found.push(`${describe(frame)} ${measured.toFixed(2)}:1 on ${behind.slice(0, 3).map(Math.round)}`);
+  }
+  return [...new Set(found)];
+}"""
+)
+
+# A field's edge (`--field-line`) says "type here". A control that is pressed
+# or picked from (a button, a disclosure's handle, a label around a select or
+# a checkbox) is identified by its label and wears a button's edge, so no
+# side of its border is drawn in the field's. The token is resolved where the
+# control sits, in the palette the page is in.
+_BUTTON_EDGES = (
+    "(pressed) => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  const fieldLine = new Map();
+  const resolved = (parent) => {
+    if (!fieldLine.has(parent)) {
+      const probe = document.createElement('span');
+      probe.style.cssText = 'position: absolute; border: 1px solid var(--field-line)';
+      parent.append(probe);
+      fieldLine.set(parent, getComputedStyle(probe).borderTopColor);
+      probe.remove();
+    }
+    return fieldLine.get(parent);
+  };
+  for (const control of document.querySelectorAll(pressed)) {
+    if (!control.parentElement || !control.checkVisibility()) continue;
+    const style = getComputedStyle(control);
+    const edge = resolved(control.parentElement);
+    const sides = ['Top', 'Right', 'Bottom', 'Left'].filter((side) =>
+      parseFloat(style[`border${side}Width`]) > 0 && style[`border${side}Style`] !== 'none' && style[`border${side}Color`] === edge);
+    if (sides.length) found.push(`${describe(control)} wears a field's edge`);
   }
   return [...new Set(found)];
 }"""

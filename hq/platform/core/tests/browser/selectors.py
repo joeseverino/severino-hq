@@ -62,6 +62,12 @@ SELECTORS = {
     "form": ".form",
     # A control a reader fills in or picks from, whose edge is what shows it.
     "fillable": "input:not([type=checkbox], [type=radio], [type=hidden], [type=range], [type=color], [type=submit], [type=button], [type=reset], [type=image]), select, textarea",
+    # A control pressed or picked from rather than typed into: a button, a
+    # disclosure's handle, a label drawn around a select or a checkbox.
+    "pressed": (
+        "button, .btn, summary, input:is([type=submit], [type=button], [type=reset]),"
+        " label:has(select, input:is([type=checkbox], [type=radio]))"
+    ),
     # A row of controls that wraps when its screen is narrow.
     "wrapping_bar": ".filter-bar, .table-toolbar, .table-filters",
     # Everything pressed: a button, a link drawn as one, a disclosure's handle.

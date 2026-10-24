@@ -68,7 +68,9 @@
      --line, which is the resting rule. */
   --line-strong: light-dark(#c4c4c0, #4c4e56);
   /* A field's edge is what shows a reader where to type, so it clears WCAG
-     1.4.11's 3:1 on every surface a field sits on, the tint included. */
+     1.4.11's 3:1 on every surface a field sits on, the tint included. A
+     control pressed or picked from (a button, a menu, a label around a
+     select) is named by its label and wears a button's --line instead. */
   --field-line: light-dark(#84847f, #787a82);
 
   /* Category identity. Like --series-* these are a set, not a list: they are

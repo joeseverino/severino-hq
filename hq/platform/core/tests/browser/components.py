@@ -8,6 +8,7 @@ from hq.platform.core.stylesheets import DIRECTORY, stylesheet
 from hq.platform.core.tests.browser.gate import add_css, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.boxes import _MAP, _SMALL_TARGETS
+from hq.platform.core.tests.browser.probes.palette import _BUTTON_EDGES
 from hq.platform.core.tests.browser.probes.parts import _READINGS, _SPILLED_LABELS, reading_problems
 from hq.platform.core.tests.browser.probes.settle import _KEPT_SELECTORS, _PRESS_EVERY_SHOWN, _SETTLED
 from hq.platform.core.tests.browser.probes.tables import (
@@ -309,6 +310,28 @@ class ComponentLayoutTests(LayoutBrowserTests):
         found = [line for line in self.page.evaluate(_BROKEN_WORDS_IN_TEXT, _IDENTIFIER) if "example-" in line]
         self.assertEqual(len(found), 1, found)
         self.assertIn("example-loose", found[0])
+
+    def test_a_toolbars_menus_wear_a_buttons_edge_and_its_search_a_fields(self):
+        """A list's filter menu, toggle and sort are pressed, so in either
+        palette none is edged as the search box beside them is, and a control
+        given the field's edge is found."""
+
+        self.open("projects", WIDE)
+        self.assertGreater(self.page.locator(SELECTORS["table_filter"]).count(), 0)
+        for palette in ("light", "dark"):
+            with self.subTest(palette=palette):
+                self.page.emulate_media(color_scheme=palette)
+                self.assertEqual(self.page.evaluate(_BUTTON_EDGES, SELECTORS["pressed"]), [])
+        self.page.evaluate("""() => {
+          const button = document.createElement('button');
+          button.className = 'example-edged';
+          button.textContent = 'Example';
+          button.style.setProperty('border-color', 'var(--field-line)');
+          document.querySelector('main').append(button);
+        }""")
+        self.assertEqual(
+            self.page.evaluate(_BUTTON_EDGES, SELECTORS["pressed"]), ["button.example-edged wears a field's edge"]
+        )
 
     def test_a_small_target_under_an_open_menu_is_not_measured_and_one_in_view_is(self):
         """A target drawn under another element is out of a pointer's reach,

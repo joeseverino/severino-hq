@@ -278,7 +278,11 @@
 .table-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin: 0 0 var(--space-6); padding: var(--surface-inset, var(--space-5)); }
 .table-filters { flex: 1 1 auto; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
 .table-filter-menu { position: relative; }
-.table-filter-menu summary, .table-toggle, .table-sort { min-height: var(--control-size); display: flex; justify-content: center; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--field-line); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--ink-2); font-size: var(--text-sm); cursor: pointer; }
+/* A menu, a toggle and the sort are pressed and named by their labels, so
+   they wear the Filter button's edge and fill; only the search, which is typed
+   into, wears a field's. */
+.table-filter-menu summary, .table-toggle, .table-sort { min-height: var(--control-size); display: flex; justify-content: center; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow-sm); color: var(--ink); font-size: var(--text-sm); font-weight: 500; line-height: 1.45; cursor: pointer; transition: border-color .12s ease, background-color .12s ease; }
+.table-filter-menu summary:hover, .table-toggle:hover, .table-sort:hover { border-color: var(--line-strong); background-color: var(--surface-2); }
 /* A filter that opens to its choices wears the select's chevron, so it reads
    as a choice beside the sort, not as a button that acts. */
 .table-filter-menu summary {

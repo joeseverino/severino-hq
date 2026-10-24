@@ -21,6 +21,7 @@ from hq.platform.core.tests.browser.probes.cut_names import (
     _SPLIT_NAMES,
 )
 from hq.platform.core.tests.browser.probes.palette import (
+    _BUTTON_EDGES,
     _CONTRAST,
     _FAINT_LINES,
     _FIELD_EDGES,
@@ -129,10 +130,18 @@ _CONTRAST_READ = (_CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_
 
 _LINES_READ = (_FAINT_LINES, [SELECTORS["contrast_scope"], LINE_CONTRAST])
 
-_FIELDS_READ = (_FIELD_EDGES, [SELECTORS["fillable"], FIELD_CONTRAST])
+_FIELDS_READ = (_FIELD_EDGES, [SELECTORS["fillable"], FIELD_CONTRAST, SELECTORS["pressed"]])
+
+_BUTTON_EDGES_READ = (_BUTTON_EDGES, SELECTORS["pressed"])
 
 # Every check whose verdict depends on the palette the page is drawn in.
-_PALETTE = {"frames": _FRAMES_READ, "contrast": _CONTRAST_READ, "lines": _LINES_READ, "fields": _FIELDS_READ}
+_PALETTE = {
+    "frames": _FRAMES_READ,
+    "contrast": _CONTRAST_READ,
+    "lines": _LINES_READ,
+    "fields": _FIELDS_READ,
+    "button edges": _BUTTON_EDGES_READ,
+}
 
 _SIDEWAYS_READ = (_SIDEWAYS, SELECTORS["sideways"])
 
