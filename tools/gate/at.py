@@ -2,8 +2,8 @@
 closing on the line tools/gate/verdict.py prints.
 
 mise parses the task's arguments (its usage in tasks/tests.toml) and this
-reads what it parsed. What `--at` and `--keep` do is in docs/Development.md's
-task table. A run takes the heavy turn (tools/lib/heavy.sh) unless its tests
+reads what it parsed. What `--at` and `--keep` do is the task's help
+(`mise run test --help`). A run takes the heavy turn (tools/lib/heavy.sh) unless its tests
 are light: labels named, and none of the tests they load makes a test database
 or drives a browser. The whole suite is never light, so it is not loaded to say so.
 """
