@@ -41,21 +41,17 @@
   const giveWay = (table, steps) => {
     const order = dropOrder(table);
     const left = new Set(order.slice(0, steps));
-    const before = new Set(order.slice(0, gaveWay.get(table) ?? 0));
-    // Only the cells of a column that left or came back are marked again.
-    const changed = order.filter((place) => left.has(place) !== before.has(place));
     const width = headingsOf(table).length;
-    if (changed.length) {
-      table.querySelectorAll(":scope > * > tr").forEach((row) => {
-        if (row.children.length !== width) return;
-        changed.forEach((place) => row.children[place].toggleAttribute("data-dropped", left.has(place)));
-      });
-      // A column's part of each row's line beneath shows while the column is gone.
-      table.querySelectorAll(":scope > tbody > tr.row-detail [data-column]").forEach((part) => {
-        const place = Number(part.dataset.column);
-        if (changed.includes(place)) part.toggleAttribute("data-dropped", left.has(place));
-      });
-    }
+    // Every row is marked, since the parser adds a long table's later rows
+    // after its first are fitted; a cell already marked so is not changed.
+    table.querySelectorAll(":scope > * > tr").forEach((row) => {
+      if (row.children.length !== width) return;
+      order.forEach((place) => row.children[place].toggleAttribute("data-dropped", left.has(place)));
+    });
+    // A column's part of each row's line beneath shows while the column is gone.
+    table.querySelectorAll(":scope > tbody > tr.row-detail [data-column]").forEach((part) => {
+      part.toggleAttribute("data-dropped", left.has(Number(part.dataset.column)));
+    });
     table.toggleAttribute("data-narrow", steps > order.length);
     table.toggleAttribute("data-tight", steps > order.length + 1);
     // The columns that share the region's width (tables.css, `--share`).

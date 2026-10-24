@@ -199,6 +199,28 @@ _UNPADDED_CELLS = (
 }"""
 )
 
+# A row that arrives in a table already fitted, as the parser adds a long
+# table's later rows after the first are fitted, then for every record's row
+# the places where a cell shows in a column whose heading left, or the other
+# way about.
+_ROW_ARRIVES = """async (scroll) => {
+  const table = document.querySelector('main ' + scroll + ' > table');
+  const headings = [...table.querySelectorAll(':scope > thead > tr:last-child > th')];
+  // A record's row has a cell under every heading; a group's heading row and
+  // the line beneath a row span them.
+  const records = () => [...table.querySelectorAll(':scope > tbody > tr')]
+    .filter((row) => row.children.length === headings.length);
+  const record = records()[0];
+  const arriving = record.cloneNode(true);
+  arriving.querySelectorAll('[data-dropped]').forEach((cell) => cell.removeAttribute('data-dropped'));
+  record.parentElement.append(arriving);
+  await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  const left = headings.map((heading) => heading.hasAttribute('data-dropped'));
+  return records()
+    .map((row) => [...row.children].map((cell, place) => cell.hasAttribute('data-dropped') !== left[place]))
+    .flatMap((row, at) => row.flatMap((wrong, place) => (wrong ? [[at, place]] : [])));
+}"""
+
 # The first table on a page as a phone lays it out: whether it runs past its
 # box, how wide each showing column is, how tall each record's row is, how
 # many rows show their toggle, and what the open rows' lines beneath name.

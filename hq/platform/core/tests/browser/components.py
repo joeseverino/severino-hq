@@ -18,6 +18,7 @@ from hq.platform.core.tests.browser.probes.tables import (
     _COLUMNS_SHOWN,
     _PHONE_TABLE,
     _PRESS_FIRST_ROW_TOGGLE,
+    _ROW_ARRIVES,
     _ROW_TOGGLE_TABLES,
     _ROW_TOGGLES,
     _SORT_BY,
@@ -580,6 +581,18 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertEqual(again["details"], [])
                 self.assertEqual(again["columns"], closed["columns"])
                 self.assertEqual(again["rows"], closed["rows"])
+
+    @with_script
+    def test_a_row_that_arrives_after_its_table_is_fitted_leaves_out_the_columns_that_left(self):
+        """The parser hands a long table its rows in pieces, and the table is
+        fitted as each piece arrives: a row added once columns have left
+        leaves them out too, so it is no wider or taller than the rows
+        before it."""
+
+        self.open("containers", PHONE_SCREEN[0])
+        fitted = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
+        self.assertLess(len(fitted["columns"]), fitted["headings"])
+        self.assertEqual(self.page.evaluate(_ROW_ARRIVES, SELECTORS["table_scroll"]), [])
 
     @with_script
     def test_a_fragment_that_is_not_percent_encoding_breaks_no_table(self):
