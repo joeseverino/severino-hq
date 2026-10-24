@@ -21,7 +21,7 @@ flag "--engine <engine>" default="webkit" help="The browser engine to draw in, i
 }
 flag "--dark" help="In the dark palette"
 flag "--fallback-face" help="With Inter withheld, in the next face of the font stack, as the browser gates draw with --fallback-face"
-flag "--open" help="With every disclosure open, again until nothing more opens, so a disclosure another one brings in opens too; a rule runs again with each popover shown on its own, saying what it finds past the page beneath"
+flag "--open" help="With every disclosure open, again until nothing more opens, so a disclosure another one brings in opens too; a rule runs again with one popover of each kind (its classes, table and column) shown on its own, saying what it finds past the page beneath"
 flag "--expand" help="With every table row opened"
 flag "--no-script" help="As the server drew it, before tables.js and the rest run"
 flag "--deep" help="Also every page the example estate pages link to: each list's records and the command forms they open"

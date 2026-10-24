@@ -362,9 +362,10 @@ A page that could not be looked at (refused, no `main`, a rule that could not
 run) is shot as it stands, as `<page>-<width>.failed.png`, and its path
 printed. `--open` opens every disclosure, round after round until nothing
 more opens, so a disclosure a region brings in when another opens is opened
-too; then a rule is run again with each popover shown on its own, as a reader
-shows one, and what it finds past the page beneath is said under the
-popover's id. `--engine chromium` or `firefox` draws in
+too; then a rule is run again with one popover of each kind shown on its own,
+as a reader shows one, and what it finds past the page beneath is said under
+that popover's id. A kind is the popover's classes and the table and column it
+sits in, so a list's many panels from one partial cost one run. `--engine chromium` or `firefox` draws in
 another engine, installed first (`webkit` by default).
 
 `--columns` prints each table's column widths as drawn and at min-content and

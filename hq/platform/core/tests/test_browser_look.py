@@ -76,12 +76,13 @@ class _Popovers:
     """A page's popovers as the look's scripts reach them: some shown, one
     that will not show."""
 
-    def __init__(self, ids, refused=()):
+    def __init__(self, ids, refused=(), kinds=None):
         self.ids, self.refused, self.shown = ids, set(refused), set()
+        self.kinds = kinds or ids
 
     def evaluate(self, script, place=None):
-        if script == look._POPOVERS:
-            return len(self.ids)
+        if script == look._POPOVER_KINDS:
+            return list(self.kinds)
         popover = self.ids[place]
         if script == look._SHOW_POPOVER:
             if popover in self.refused:
@@ -121,6 +122,21 @@ class PopoverTests(SimpleTestCase):
             ["with #origin-one shown: cut: a key in origin-one", "with #origin-two shown: cut: a key in origin-two"],
         )
         self.assertEqual(page.shown, set())
+
+    def test_one_popover_stands_for_its_kind_and_the_next_stands_in_for_one_that_will_not_show(self):
+        page = _Popovers(
+            ["origin-one", "origin-two", "origin-three", "origin-four"],
+            refused=["origin-one"],
+            kinds=["origin-panel 0 2", "origin-panel 0 2", "origin-panel 0 2", "origin-panel 1 0"],
+        )
+        found = _Lens(page).with_each_popover("example/one", 820, "survey", ["frames: a box beneath"])
+        self.assertEqual(
+            found,
+            [
+                "with #origin-two and 2 like it shown: cut: a key in origin-two",
+                "with #origin-four shown: cut: a key in origin-four",
+            ],
+        )
 
 
 class _Folds:

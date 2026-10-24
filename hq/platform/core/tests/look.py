@@ -90,7 +90,16 @@ _OPEN_ONCE = """(busy) => {
   });
   return opened;
 }"""
-_POPOVERS = "() => document.querySelectorAll('[popover]').length"
+# Each popover's kind: its classes and the table and column it sits in. Popovers
+# of one kind are drawn by one partial in one place, so one of them stands for
+# all, and an opened survey costs a run per kind rather than per record.
+_POPOVER_KINDS = """() => {
+  const tables = [...document.querySelectorAll('table')];
+  return [...document.querySelectorAll('[popover]')].map((popover) => {
+    const table = popover.closest('table');
+    return [popover.className, tables.indexOf(table), popover.closest('td, th')?.cellIndex ?? -1].join(' ');
+  });
+}"""
 # The popover at a place in the page shown, and what names it in a finding;
 # nothing for one that will not show.
 _SHOW_POPOVER = """(place) => {
@@ -609,19 +618,23 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         return []
 
     def with_each_popover(self, name, width, rule, beneath) -> list[str]:
-        """What ``rule`` finds with each popover shown on its own, as a reader
-        shows one, past what it finds on the page ``beneath``. Shown all at
-        once they would lie over one another, which no reader sees, and where
-        each lands would hang on which drew last."""
+        """What ``rule`` finds with one popover of each kind shown on its own,
+        as a reader shows one, past what it finds on the page ``beneath``.
+        Shown all at once they would lie over one another, which no reader
+        sees, and where each lands would hang on which drew last."""
 
-        found = []
-        for place in range(self.page.evaluate(_POPOVERS)):
-            if (shown := self.page.evaluate(_SHOW_POPOVER, place)) is None:
+        kinds = self.page.evaluate(_POPOVER_KINDS)
+        judged, found = set(), []
+        for place, kind in enumerate(kinds):
+            if kind in judged or (shown := self.page.evaluate(_SHOW_POPOVER, place)) is None:
                 continue
+            judged.add(kind)
             self.settle()
             said = self.judged(name, width, rule)
             self.page.evaluate(_HIDE_POPOVER, place)
-            found += [f"with {shown} shown: {line}" for line in unmatched(said, beneath)]
+            alike = kinds.count(kind) - 1
+            named = f"{shown} and {alike} like it" if alike else shown
+            found += [f"with {named} shown: {line}" for line in unmatched(said, beneath)]
         return found
 
     def with_each_dialog(self, name, width, rule, beneath) -> list[str]:
