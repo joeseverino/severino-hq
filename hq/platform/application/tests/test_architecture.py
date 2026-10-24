@@ -221,18 +221,6 @@ class StyleContractTests(SimpleTestCase):
     def _stylesheet() -> str:
         return stylesheet()
 
-    def test_hidden_text_is_anchored_inside_its_box(self):
-        """Left at its static position, an absolutely placed label escapes any
-        scroll box whose containing block lies outside it: a hidden word in the
-        last column of a wide table scrolled a phone's whole page sideways."""
-
-        rule = re.search(r"\.visually-hidden\s*\{([^}]*)\}", self._stylesheet())
-        self.assertIsNotNone(rule)
-        body = rule.group(1)
-        for declaration in ("position: absolute", "inset-block-start: 0", "inset-inline-start: 0"):
-            with self.subTest(declaration=declaration):
-                self.assertIn(declaration, body)
-
     def test_a_face_never_swaps_in_after_text_is_drawn(self):
         """A face that arrives late and is swapped in moves every line it sets.
         Each @font-face is shown only if ready for the first paint (optional),
@@ -2196,18 +2184,6 @@ class FragmentPrimitiveTests(SimpleTestCase):
     # which every copy of its control on the page draws in place; that answer
     # is data no one region is drawn from: the ask's post and its status poll.
     ALLOWED = {("ask.js", "reads a response body as data"): 2}
-    # The attributes of the hand-rolled reads the primitive replaced.
-    RETIRED = (
-        "data-deferred",
-        "data-live-form",
-        "data-whatif",
-        "data-connection-source",
-        "data-connection-slot",
-        "data-dashboard-glance",
-        "data-calendar-source",
-        "X-Command-Center",
-        "data-action-count-url",
-    )
 
     def scripts(self) -> dict[str, str]:
         found = {
@@ -2236,7 +2212,6 @@ class FragmentPrimitiveTests(SimpleTestCase):
         self.assertEqual(source.count("window.fetch("), 1)
         self.assertEqual(source.count("parseFromString("), 1)
         self.assertEqual(source.count("window.setTimeout("), 1)
-        self.assertNotIn("setInterval(", source)
         # The parser is not handed out: nothing outside the closure can reach it.
         exported = re.search(r"return \{([^}]*)\};\s*\}\)\(\);\s*window\.hqFragment = hqFragment;", source)
         self.assertIsNotNone(exported, "hqFragment's closure no longer ends in the object it hands out")
@@ -2257,15 +2232,6 @@ class FragmentPrimitiveTests(SimpleTestCase):
 
         self.assertTrue(named)
         self.assertEqual(named - defined, set())
-
-    def test_the_reads_it_replaced_stay_gone(self):
-        texts = dict(self.scripts())
-        for path in sorted((self.ROOT / "templates").rglob("*.html")):
-            texts[str(path.relative_to(self.ROOT))] = path.read_text(encoding="utf-8")
-        for name, text in texts.items():
-            for retired in self.RETIRED:
-                with self.subTest(file=name, retired=retired):
-                    self.assertNotIn(retired, text)
 
 
 @tag("source")

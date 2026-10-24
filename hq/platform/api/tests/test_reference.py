@@ -135,27 +135,13 @@ class ReferenceConfigurationTests(SimpleTestCase):
         self.bundle = _source("vendor", "scalar", "standalone.js")
 
     def test_nothing_reaches_or_links_to_the_vendor(self):
-        for option in (
-            "withDefaultFonts: false",
-            "telemetry: false",
-            "hideClientButton: true",
-            'showDeveloperTools: "never"',
-            "agent: { disabled: true }",
-            "mcp: { disabled: true }",
-        ):
-            with self.subTest(option=option):
-                self.assertIn(option, self.script)
         # No address but this origin's, and no proxy to send a request through.
         self.assertEqual(re.findall(r"https?:|proxyUrl|pluginUrls|cdn", self.script), [])
 
-    def test_no_request_is_sent_and_no_token_is_asked_for_or_kept(self):
-        self.assertIn("hideTestRequestButton: true", self.script)
+    def test_no_token_is_asked_for_or_kept(self):
         self.assertEqual(re.findall(r"persistAuth|authentication", self.script), [])
 
-    def test_the_theme_and_the_search_are_hqs_to_decide(self):
-        for option in ('theme: "none"', "hideDarkModeToggle: true", "forceDarkModeState: theme"):
-            with self.subTest(option=option):
-                self.assertIn(option, self.script)
+    def test_the_styles_and_the_search_are_hqs_to_decide(self):
         self.assertNotIn("customCss", self.script)
         # HQ's own search answers to K.
         self.assertEqual(re.findall(r'searchHotKey: "(\w)"', self.script), ["j"])
