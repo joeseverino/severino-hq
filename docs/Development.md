@@ -33,7 +33,7 @@ Every gate and server is a mise task. These are the ones to start from;
 | --- | --- |
 | `mise run fast` | The inner loop: the quick gates and the tests the change reaches. |
 | `mise run test <label>...` | `manage.py test` on the labels named, in parallel, as the gates run it; options after the labels reach it as typed. |
-| `mise run test --at <ref> <label>...` | The same on `<ref>`'s code with this tree's test files laid over it (every `tests/` directory and the browser gates' modules, uncommitted work included): does a new test fail on the old code, was a failure already there. A label that does not import at `<ref>` is its own verdict, `DOES NOT IMPORT`, exit 3: no test ran on that code. The throwaway worktree goes on every exit. |
+| `mise run test --at <ref> [--keep <path>]... <label>...` | The same on `<ref>`'s code with this tree's test files laid over it (every `tests/` directory and the browser gates' modules, uncommitted work included): does a new test fail on the old code, was a failure already there. `--keep` leaves a support file (a test file that is not `test*.py` and not named by a label) as the ref has it, for a check whose logic lives in a gate, probe or helper; the closing line counts the test modules and names each support file laid over or kept. A label that does not import at `<ref>` is its own verdict, `DOES NOT IMPORT`, exit 3: no test ran on that code. The throwaway worktree goes on every exit. |
 | `mise run fix` | Write Ruff's fixes and format and `mise fmt`'s, so the lint gates have nothing to report. |
 | `mise doctor project` | Whether this checkout can compose its extensions, with the fix for each gap. |
 | `mise run check` | Does my change work: every Checks gate, the Tests gates, the composed suite. |
