@@ -1,27 +1,10 @@
 """The test task: manage.py test on the labels named, here or at another ref,
 closing on the line tools/gate/verdict.py prints.
 
-    mise run test <label>... [manage.py test options]
-    mise run test --at <ref> [--keep <path>]... <label>... [manage.py test options]
-
-With `--at`, the labels run in a throwaway worktree of the ref with this
-tree's test files laid over it, so one command says whether a new test fails
-on the old code, or whether a failure was already there. Test files are those
-under a `tests` directory; everything else is the ref's. A test module
-(`test*.py`, or one a label names) always comes from this tree. Any other test
-file (a gate, a probe, a fixture) is support: laid over too, so the new test
-imports, unless `--keep <path>` leaves it as the ref has it, which is how a
-check whose logic lives in support is proven. The closing line counts the test
-modules laid over and names each support file laid over or kept.
-
-The worktree goes on every exit, and the exit status is the test run's, except
-when a label does not import at the ref: that run says nothing about the
-tests, so it has a verdict of its own and exits 3.
-
-A run takes the heavy turn (tools/lib/heavy.sh) unless its tests are light:
-labels named, and none of the tests they load makes a test database or drives
-a browser. Loading them costs about half a second; the whole suite, which is
-never light, is not loaded to say so.
+What `--at` and `--keep` do is in docs/Development.md's task table. A run
+takes the heavy turn (tools/lib/heavy.sh) unless its tests are light: labels
+named, and none of the tests they load makes a test database or drives a
+browser. The whole suite is never light, so it is not loaded to say so.
 """
 
 import argparse

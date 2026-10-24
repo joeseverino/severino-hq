@@ -1,32 +1,10 @@
 """`mise run perf:report [--image] [--base <ref>]`: how light and fast HQ is.
 
-Boots this checkout's `dev:scratch` seeded with the showcase estate (or, with
-`--image`, its built image), signs in as dev_session does, and measures every
-page the layout survey walks (`estate.navigation`): the server's time, p50
-and p95 over `--requests` requests, and its queries; in Chromium at the phone
-and the wide desktop, bytes and requests on a first and a repeat visit, main
-thread script time, long tasks and layout shift; memory idle and after one
-pass over every page; and the cold start to /health/ready/.
-
-Each run is kept in var/perf/<run>.json (tools/perf/runs.py), rewritten as
-each measurement finishes: one that fails is recorded with its error and the
-rest go on, and a server that fails to stop keeps what it served. The table
-of every page goes beside it as <run>.table, and its summary (the totals,
-memory, cold start and the pages that moved most) as <run>.txt, which the
-session log shows.
-
-`--host-alone` measures the host with no extension composed. A ref whose
-server refuses the extension set for the plugin API it supports (its log
-holds HQ's refusal) makes the run start again host alone on both sides, and
-its closing line says so and why.
-
-`--base <ref>` measures the ref first, its own server in a throwaway worktree
-made and removed as `mise run test --at` makes one (tools/gate/at.py), with
-this checkout's harness and page list, and prints each number beside how far
-it moved. A complete report of the ref's commit under the same plan, kept by
-an earlier run, stands in for measuring it again unless `--fresh`. A report,
-never a gate: it exits 0 when every measurement finished, 1 when any failed,
-2 for a ref that names no commit.
+Measures every page the layout survey walks (`estate.navigation`) on this
+checkout's `dev:scratch`, or its built image, so a change's cost is a number.
+What it measures and its flags are in docs/Development.md. A report, never a
+gate: it exits 0 when every measurement finished, 1 when any failed, 2 for a
+ref that names no commit.
 """
 
 import copy

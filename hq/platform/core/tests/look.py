@@ -1,60 +1,9 @@
 """A page as the browser gates draw it, for a person or an agent to look at.
 
-`mise run dev:look -- <pages>` opens pages at a few widths, saves a screenshot
-of each under var/look/, and, given `--rule`, runs that rule of
-`LayoutBrowserTests` there, writes what it finds page by page and width by
-width to var/gate/look.txt, and prints one verdict that names every page it
-failed on. `--css` adds
-CSS after the page's own, as text or a file of it: how a new rule is shown to
-fail on the defect it was written for before it lands. Not a gate: it fails
-only when the rule it was asked to run fails.
-
-`--base <ref>` runs the same look at another commit first, in a temporary
-worktree of it judged by this checkout's rules (`LENS`), and then reports
-what is new here and what is no longer found: what a change caused, apart
-from what was already there. Findings are matched by `finding_key`, as a
-multiset, so one whose row or pixel count moved, or that names a record made
-this run, is neither. With `--columns` or `--eval`, a line the base measured
-otherwise follows this checkout's.
-
-Each run's clock is frozen at the moment the run that asked began, its base's
-too, so a time a script reads is drawn alike in both; screenshots are taken
-with animations finished. A page taller than the window is also cut into
-window-sized bands beside its full screenshot (`<page>-<width>.band-01.png`),
-and a page that could not be looked at is shot as it stands
-(`<page>-<width>.failed.png`), its path printed.
-
-What it was asked comes from the task's `usage_*` environment, so it runs only
-as the task: a run through `manage` without it is refused rather than guessed.
-
-A page is one of the stress estate's (sparse, dense, and every list filled
-from its model under derived/), the API reference
-(`api/docs`, `api/docs/dark`), or a page the example estate's navigation
-reaches, named for its address under `estate` (`estate`, `estate/finance`).
-`--deep` adds every page those link to: each list's records, the command forms
-they open. Only the sources the pages asked for are rendered.
-
-The example estate is answered as the browser asks, by HQ's own views over the
-run's throwaway test database, each request marked as a prefetch: a page
-that would act or reach out when fetched is refused there
-(`hq.platform.core.speculation`), and is reported rather than looked at.
-
-`--rule survey` runs every check the layout gates hold, at whatever page and
-width it is asked for; markup a vendored script draws is not judged.
-`--columns` prints every table's column widths: as drawn, and at
-min-content and at max-content, measured on an offscreen copy of the table;
-a table an open row holds says it is drawn at the held widths, and its
-min and max are measured without the hold.
-`--eval <file.js>` runs the script in that file on each page at each width,
-once it is drawn as asked and before its screenshot, and prints what it
-returns: a function, called with nothing, or an expression.
-`--dialog <id>` (or `all`) opens each dialog the way a reader does, by
-pressing a control that opens it, waits for its parts to load, and shoots the
-window with it open (`<page>-<width>.dialog-<id>.png`); `--eval` and the rule
-run again there.
-`--rule tables` records what each table shows (its columns, the rows that
-open, the gutter, the sort controls) beside each screenshot, for comparing
-two runs.
+It runs only as `mise run dev:look`, whose flags say what each does
+(`mise run dev:look --help`), and reads what it was asked from that task's
+`usage_*` environment, so a run through `manage` without it is refused. How
+to use it is in docs/Development.md, under "Browser layout".
 """
 
 import json

@@ -79,7 +79,7 @@ on a laptop and a pass in CI mean the same thing.
 (`tools/lib/heavy.sh`), so several agents on one machine never run two suites
 at once ([Heavy gates take turns](Development.md#heavy-gates-take-turns)).
 
-The architecture is held by tests rather than by review:
+Tests hold the architecture:
 
 - `hq/platform/application/tests/test_architecture.py`:
   `test_web_views_do_not_mutate_models_directly`,
@@ -98,8 +98,8 @@ and the test rules in `hq-house-rules`.
 
 ### What stays private
 
-Some of the setup belongs to the operator rather than to HQ, and is kept out
-of this public repository:
+Part of the setup is the operator's own and stays out of this public
+repository:
 
 - The agent and its skills, described above, while they change.
 - Claude Code's local settings and agent worktrees, which `.gitignore` leaves

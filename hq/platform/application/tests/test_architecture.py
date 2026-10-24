@@ -1624,10 +1624,9 @@ class FileSizeTests(SimpleTestCase):
     vendored copies are not counted.
 
     Python test files are held to it through ``file_size_baseline.txt``, the
-    files already over it with the length each had when listed. The baseline
-    shrinks as workers split the files they touch: a listed file may not grow,
-    one now under the ceiling leaves the list, and no new test file passes the
-    ceiling.
+    files already over it with the length each had when listed. A listed file
+    may not grow, one under the ceiling leaves the list, and no new test file
+    passes the ceiling.
     """
 
     LIMIT = 1000

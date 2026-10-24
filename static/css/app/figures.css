@@ -238,7 +238,7 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-6); margin: var(--space-6) 0 var(--space-1); color: var(--muted); font-size: var(--text-xs); }
 .chart-legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
 .chart-legend i { inline-size: 9px; block-size: 9px; border-radius: 2px; }
-/* `.chart-scroll` has no rule, and that is the rule: a chart has no floor, so there is nothing to scroll, and an end label hangs into the card's padding. */
+/* `.chart-scroll` has no rule on purpose: a chart has no floor, so there is nothing to scroll, and an end label hangs into the card's padding. */
 /* Fills the card at a height this sheet decides: its parts are rectangles and rules, so `preserveAspectRatio="none"` stretches them truthfully, the labels are HTML so no type stretches, and a floor could only ever turn into a scrollbar. */
 .bar-chart {
   display: block;
@@ -273,7 +273,7 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .chart-line-3 { stroke: var(--series-3); }
 .chart-line-4 { stroke: var(--series-4); }
 .chart-line-5 { stroke: var(--series-5); }
-/* Dashed and thinner than its series: a fitted line is a claim about the data, not the data. */
+/* Dashed and thinner than its series, so a fitted line reads as an estimate. */
 .chart-trend { fill: none; stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .65; }
 .chart-dot { stroke: var(--surface); stroke-width: 1.5; pointer-events: none; }
 /* A 3px dot cannot be hit with a mouse, so the tooltip is carried by an invisible circle four times its size. */
