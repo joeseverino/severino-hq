@@ -90,6 +90,9 @@ so Scalar does not offer GitHub Pages as one.
   with no console error and nothing from another site. On the main pages
   Reset demo is in the user menu and the Demo data switch is locked on.
 - Every page is drawn in the reader's color scheme.
+- Every script on every page is a same-origin file its policy runs: a static
+  page carries HQ's policy without the nonce and `'strict-dynamic'`, since a
+  nonce saved into HTML is the same on every visit, and no tag carries one.
 - The first glance is healthy: no alarm on the dashboard, every control on
   the connection panel passing, and only the three things left to do on
   purpose (an image update, a certificate to renew and an agent's request

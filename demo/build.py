@@ -55,12 +55,17 @@ _MOST_PAGES = 800
 _HREF = re.compile(r'(?:href|data-[\w-]+-url)="(/[^"#?]*)')
 _REGION = re.compile(r'<[^>]*\sdata-fragment="([^"]+)"[^>]*>')
 _NAME = re.compile(r'\sdata-fragment-name="([^"]*)"')
-# Inserted right after the charset tag, before HQ's own scripts, carrying the
-# page's nonce: HQ's script-src admits no script without it.
-_INJECT = (
-    '<script src="/static/js/demo-theme.js"{nonce}></script><script defer src="/static/js/demo.js"{nonce}></script>'
-)
-_NONCE = re.compile(r"'nonce-([^']+)'")
+# Inserted right after the charset tag, before HQ's own scripts.
+_INJECT = '<script src="/static/js/demo-theme.js"></script><script defer src="/static/js/demo.js"></script>'
+# A static page has no response to draw a nonce for: one saved into the HTML is
+# public and repeats on every visit, so it admits nothing an attacker could not
+# copy (web.dev's strict CSP guide: a nonce for server-rendered pages, a hash
+# for static ones). The demo has no inline script to hash, and its origin
+# serves only what the build wrote, so its script-src is HQ's without the
+# nonce and 'strict-dynamic': the same-origin files, under 'self'.
+# https://web.dev/articles/strict-csp
+_PER_RESPONSE_SOURCES = re.compile(r"\s+(?:'nonce-[^']*'|'strict-dynamic')")
+_NONCE_ATTR = re.compile(r'(<script\b[^>]*?)\snonce="[^"]*"')
 _CHARSET = '<meta charset="utf-8">'
 # Directives a meta tag can't carry; browsers ignore them there and say so.
 _HEADER_ONLY = ("frame-ancestors", "report-uri", "report-to", "sandbox")
@@ -222,10 +227,11 @@ def _real_docs(page: str) -> str:
 
 def _meta_policy(response) -> str:
     """HQ's CSP for this response, as a meta tag, so the browser enforces on
-    each page the policy HQ sends for its route."""
+    each page the policy HQ sends for its route, less what only a response
+    drawn per request can carry."""
 
     kept = [
-        directive.strip()
+        _PER_RESPONSE_SOURCES.sub("", directive.strip())
         for directive in response.get("Content-Security-Policy", "").split(";")
         if directive.strip() and directive.split()[0] not in _HEADER_ONLY
     ]
@@ -277,9 +283,8 @@ def _inject(page: str, response, *, address: str = "") -> bytes:
     saved copy stands for, and the demo's scripts, after the charset."""
 
     shown = f'<meta name="hq-demo-address" content="{escape(address)}">' if address else ""
-    nonce = _NONCE.search(response.get("Content-Security-Policy", ""))
-    scripts = _INJECT.format(nonce=f' nonce="{nonce[1]}"' if nonce else "")
-    return _real_docs(page).replace(_CHARSET, _CHARSET + _meta_policy(response) + shown + scripts, 1).encode()
+    page = _NONCE_ATTR.sub(r"\1", _real_docs(page))
+    return page.replace(_CHARSET, _CHARSET + _meta_policy(response) + shown + _INJECT, 1).encode()
 
 
 class _Offered:

@@ -17,6 +17,9 @@ from demo.serve import serving
 # Where demo:build saved it. This file doesn't import Django.
 OUT = Path(os.environ.get("HQ_DEMO_OUT") or Path(__file__).resolve().parents[1] / "var" / "demo")
 
+# The policy a saved page carries, and each script tag it holds.
+_POLICY = re.compile(r'<meta http-equiv="Content-Security-Policy" content="([^"]*)">')
+_SCRIPT = re.compile(r"<script\b[^>]*>", re.IGNORECASE)
 _ADDRESS = re.compile(r'(?:href|src|data-[\w-]+-url)="(/[^"#?]*)')
 # The main pages, including the one with cards to dismiss.
 _VISITED = ("/", "/hq/", "/infrastructure/findings/", "/action-items/", "/infrastructure/", "/connection/")
@@ -99,6 +102,14 @@ def _pages_linked(here: str, page: str) -> list[str]:
     return keys
 
 
+def _script_sources(page: str) -> list[str]:
+    """The script-src of the policy ``page`` carries, empty when it has none."""
+
+    policy = _POLICY.search(page)
+    directives = (directive.split() for directive in unescape(policy[1] if policy else "").split(";"))
+    return next((sources for name, *sources in directives if name == "script-src"), [])
+
+
 def _exists(path: str) -> bool:
     target = OUT / path.lstrip("/")
     return target.is_file() or (target / "index.html").is_file()
@@ -132,6 +143,27 @@ class DemoSiteTests(unittest.TestCase):
                 if not _exists(unescape(address)):
                     missing.add(f"{page.relative_to(OUT)} -> {address}")
         self.assertEqual(sorted(missing)[:20], [])
+
+    def test_every_script_is_one_its_page_s_policy_runs(self):
+        """A static page's policy admits same-origin files by 'self': a nonce
+        saved into the HTML is the same on every visit and admits whatever
+        copies it, and 'strict-dynamic' beside no nonce admits nothing."""
+
+        wrong = []
+        for page in sorted(OUT.rglob("*.html")):
+            text = page.read_text(encoding="utf-8")
+            scripts = _SCRIPT.findall(text)
+            if not scripts:
+                continue
+            sources = _script_sources(text)
+            if "'self'" not in sources or any(s == "'strict-dynamic'" or s.startswith("'nonce-") for s in sources):
+                wrong.append(f"{page.relative_to(OUT)}: script-src {sources}")
+            wrong += [
+                f"{page.relative_to(OUT)}: {tag}"
+                for tag in scripts
+                if "nonce=" in tag or not re.search(r'\ssrc="/(?!/)', tag)
+            ]
+        self.assertEqual(wrong[:20], [])
 
     def test_the_first_glance_is_a_healthy_homelab(self):
         dashboard = (OUT / "index.html").read_text(encoding="utf-8")
