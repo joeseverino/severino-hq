@@ -172,10 +172,7 @@
     .page-head .page-actions { flex-wrap: nowrap; }
   }
 
-  /* A row's toggle: the one tables.js adds where a row says more than it
-     shows, or the one a row heading rows folded under it carries. Either is
-     the one disclosure a row has, so it is sized to be found and hit, and
-     turns when open. */
+  /* A row's toggle, drawn by the server where a row holds something back or heads rows folded under it: the one disclosure a row has, sized to be hit, turned when open. */
   :is(.row-expand, .row-fold) {
     display: inline-grid; place-items: center;
     width: 1.5rem; height: 1.5rem; min-height: 0; padding: 0; margin: 0;

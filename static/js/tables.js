@@ -149,10 +149,10 @@
   window.addEventListener("resize", () => fitEvery());
 
   // A row can say more than it shows: a clamped name, an ellipsis, a list
-  // folded behind "+5 more". Such a row's toggle shows all of it, every
-  // cut-off value in full and every folded part open, and puts it back. The
-  // parts keep their own toggles too; this is the row's, not a replacement.
-  // A value cut short is measured (`markCut`); everything else a row holds
+  // folded behind "+5 more", a column that left. Such a row's toggle shows
+  // all of it: every cut value in full, every folded part open, and the line
+  // beneath the row that the server drew with what the row holds back. A
+  // value cut short is measured (`markCut`); everything else a row holds
   // back the stylesheet reads from the HTML.
   // Screen-reader text is clipped to a pixel on purpose, and a decoration
   // hidden from assistive technology says nothing a reader could miss, so
@@ -225,10 +225,10 @@
   };
 
   // Opening a row must not move the table. Left to itself the browser sizes
-  // every column again around whatever the open row now shows, and each row
-  // on the page shifts. So the columns are held at the widths they have, for
-  // as long as any row is open, and let go when the last one closes or the
-  // window changes.
+  // every column again around what the open row now shows whole, and each
+  // row on the page shifts. So the columns are held at the widths they have,
+  // for as long as any row is open, and let go when the last one closes or
+  // the window changes.
   const holdColumns = (table) => {
     if ("rowsHeld" in table.dataset) return;
     const headings = headingsOf(table);
@@ -354,8 +354,8 @@
     settleOpenRows();
     markCuts();
   };
-  const markTablesSoon = () => {
   let rowsTimer = null;
+  const markTablesSoon = () => {
     window.clearTimeout(rowsTimer);
     rowsTimer = window.setTimeout(markTables, 120);
   };
