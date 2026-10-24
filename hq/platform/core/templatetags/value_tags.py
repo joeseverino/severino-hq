@@ -570,7 +570,7 @@ def entity(context, link, code=False, label="", mark=""):
             'rel="noopener noreferrer" title="Opens {}">{}</a>',
             link.url,
             link.kind_label,
-            link.kind_label,
+            urlsplit(link.url).hostname,
             label,
         )
     if link.url:
@@ -646,11 +646,20 @@ def entity_of(kind, identity):
     return entity_link(str(kind), str(identity or ""))
 
 
-@register.filter
-def declared_link(link):
-    """A link an emitter declared (a label and a url), as an entity mention."""
+_UNNAMED = object()
 
-    return declared(link.label, link.url)
+
+@register.filter
+def declared_link(link, label=_UNNAMED):
+    """A link an emitter declared (a label and a url), as an entity mention.
+
+    ``{% entity url|declared_link:label %}`` names a page outside HQ: a url
+    that is not a web address leaves the label unlinked, so a page builds no
+    href from data HQ did not write (``web_url``)."""
+
+    if label is _UNNAMED:
+        return declared(link.label, link.url)
+    return declared(str(label), _web_url(link), kind="dependency")
 
 
 @register.filter

@@ -26,7 +26,7 @@ connected is in one place.
           <ol class="resolution-workflow">
             <li>
               <strong>Create</strong>
-              <p>{{ setup.create|breakable }}{% if setup.create_url|web_url %} <a class="external-link" href="{{ setup.create_url|web_url }}" rel="noopener">Where to make it</a>{% endif %}</p>
+              <p>{{ setup.create|breakable }}{% if setup.create_url|web_url %} {% entity setup.create_url|declared_link:"Where to make it" %}{% endif %}</p>
               {% if setup.permissions %}
                 <p>Give it these permissions, and no others:</p>
                 <ul class="setup-permissions">{% for permission in setup.permissions %}<li><code>{{ permission|breakable }}</code></li>{% endfor %}</ul>
@@ -69,7 +69,7 @@ connected is in one place.
       <li class="setup-other">
         <strong>{{ group.spec.label|breakable }}</strong>
         <span class="muted">{{ group.spec.empty_message|breakable }}</span>
-        {% if group.spec.setup_route %}<a href="{% url group.spec.setup_route %}">Connect</a>{% elif group.spec.documentation_url %}<a class="external-link" href="{{ group.spec.documentation_url }}" rel="noopener">Docs</a>{% endif %}
+        {% if group.spec.setup_route %}<a href="{% url group.spec.setup_route %}">Connect</a>{% elif group.spec.documentation_url %}{% entity group.spec.documentation_url|declared_link:"Docs" %}{% endif %}
       </li>
     {% endfor %}
   </ul>

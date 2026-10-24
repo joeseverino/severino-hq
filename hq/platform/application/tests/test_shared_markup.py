@@ -146,6 +146,26 @@ class BandFactTests(SimpleTestCase):
             Template('{% band_fact label="A" %}{% tone %}good{% value %}<strong>1</strong>{% endband_fact %}')
 
 
+class OutsideLinkTests(SimpleTestCase):
+    def test_a_page_outside_hq_opens_in_a_new_tab_without_a_way_back(self):
+        html = _render("{% entity url|declared_link:name %}", url="https://example.com/a", name="example-repo")
+
+        (link,) = elements(html, "a")
+        self.assertEqual(link.attrs["href"], "https://example.com/a")
+        self.assertEqual(link.attrs["target"], "_blank")
+        self.assertEqual(set(link.attrs["rel"].split()), {"noopener", "noreferrer"})
+        self.assertIn("external-link", link.classes)
+        self.assertEqual(link.words, "example-repo")
+
+    def test_an_address_that_is_not_a_web_page_is_not_a_link(self):
+        for url in ("javascript:alert(1)", "/commit/abc", "", None):
+            with self.subTest(url=url):
+                html = _render("{% entity url|declared_link:name %}", url=url, name="abc")
+
+                self.assertEqual(elements(html, "a"), [])
+                self.assertIn("abc", html)
+
+
 @tag("source")
 class SharedMarkupTemplateTests(SimpleTestCase):
     """No template writes by hand what a shared partial or tag draws."""
@@ -161,3 +181,7 @@ class SharedMarkupTemplateTests(SimpleTestCase):
     def test_only_the_tag_draws_a_band_fact(self):
         found = _written_by_hand(r'class="band-fact[" {]', BandFactTests.PARTIAL)
         self.assertEqual(found, [], "write {% band_fact %} instead")
+
+    def test_only_the_entity_tag_writes_an_outside_link(self):
+        found = _written_by_hand(r'class="external-link', "")
+        self.assertEqual(found, [], "write {% entity url|declared_link:label %} instead")

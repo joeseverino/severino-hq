@@ -46,17 +46,17 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
           {% for group in listed %}{% with standing=group.standing plan=group.plan %}
             <tr>
               <td class="row-gutter">
-                <code>{{ standing.label|breakable }}</code>{% if standing.newer %} <span class="container-arrow">→</span> {% if standing.release %}<a class="external-link" href="{{ standing.release.url }}" rel="noopener"><code>{{ standing.latest|breakable }}</code></a>{% else %}<code>{{ standing.latest|breakable }}</code>{% endif %}{% endif %}
+                <code>{{ standing.label|breakable }}</code>{% if standing.newer %} <span class="container-arrow">→</span> {% entity standing.release.url|declared_link:standing.latest code=True %}{% endif %}
                 <div class="row-below">
                   <p>{% if plan %}Upgrade risk {% if plan.risk_reason %}{{ plan.risk|breakable:"," }} because {{ plan.risk_reason|breakable:"." }}{% else %}{{ plan.risk|breakable:"." }}{% endif %}{% if plan.stateful %} Snapshot {{ plan.data|length|counted:"mount,mounts" }} first.{% endif %}{% if plan.verified_by %} Checked afterwards by {{ plan.verified_by.0|breakable:"." }}{% endif %}{% else %}{{ standing.summary|capfirst|breakable:"," }} and no newer release yet.{% endif %}{% if standing.release.published %} Released {{ standing.release.published|ago_short }}.{% endif %}</p>
                   {% if standing.moved_to %}<p class="github-gap">Its tag <code>{{ standing.tag|breakable }}</code> now names a newer build than the one running.</p>{% endif %}
                   {% if standing.advisories or standing.urgent %}
                     <ul class="container-advisories">
                       {% for advisory in standing.advisories %}
-                        <li><span class="pill pill-{% if advisory.severity == "critical" or advisory.severity == "high" %}serious{% else %}attention{% endif %}">{{ advisory.severity|capfirst|breakable }}</span> <a class="external-link" href="{{ advisory.url }}" rel="noopener">{{ advisory.id|breakable }}</a> {{ advisory.summary|breakable }}</li>
+                        <li><span class="pill pill-{% if advisory.severity == "critical" or advisory.severity == "high" %}serious{% else %}attention{% endif %}">{{ advisory.severity|capfirst|breakable }}</span> {% entity advisory.url|declared_link:advisory.id %} {{ advisory.summary|breakable }}</li>
                       {% endfor %}
                       {% for finding in standing.urgent|slice:":3" %}
-                        <li><span class="pill pill-serious">{{ finding.severity|capfirst|breakable }}</span> <a class="external-link" href="{{ finding.url }}" rel="noopener">{{ finding.id|breakable }}</a> <code>{{ finding.package|breakable }}</code> {{ finding.installed|breakable }} → {{ finding.fixed|join:", "|breakable }}</li>
+                        <li><span class="pill pill-serious">{{ finding.severity|capfirst|breakable }}</span> {% entity finding.url|declared_link:finding.id %} <code>{{ finding.package|breakable }}</code> {{ finding.installed|breakable }} → {{ finding.fixed|join:", "|breakable }}</li>
                       {% endfor %}
                       {% if standing.urgent|length > 3 %}<li class="muted">and {{ standing.urgent|length|add:"-3"|breakable }} more on <a href="{{ group.containers.0.url }}#supply-chain">its page</a></li>{% endif %}
                     </ul>

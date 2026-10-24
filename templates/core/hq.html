@@ -30,7 +30,7 @@ they share a row; either alone takes it.
   {% include "partials/_problems.html" with problems=hq.problems_in.release|not_urgent only %}
   <dl class="kv">
         <dt>Commit</dt>
-          <dd>{% if release.commit_url %}<a class="external-link" href="{{ release.commit_url }}" rel="noopener"><code>{{ release.short|breakable }}</code></a>{% elif release.revision %}<code>{{ release.short|breakable }}</code>{% else %}<span class="muted">This build does not say which commit it is.</span>{% endif %}</dd>
+          <dd>{% if release.commit_url %}{% entity release.commit_url|declared_link:release.short code=True %}{% elif release.revision %}<code>{{ release.short|breakable }}</code>{% else %}<span class="muted">This build does not say which commit it is.</span>{% endif %}</dd>
         {% if release.repository %}{% with repository=release.repository %}
         <dt>{{ repository.default_branch|default:"Branch"|capfirst|breakable }}</dt>
           <dd>
@@ -38,7 +38,7 @@ they share a row; either alone takes it.
             {% elif release.behind is False %}Production runs its head, <code>{{ release.head|slice:":7"|breakable }}</code>
             {% else %}<span class="muted">Its head or its production deploy has not been read.</span>{% endif %}
             {% if release.runs_deployed is False %}<br><strong>This process is not the commit production last deployed.</strong>{% endif %}
-            <br>{% if repository.url|web_url %}<a class="external-link" href="{{ repository.url|web_url }}" rel="noopener">{{ repository.name|breakable }}</a>{% else %}{{ repository.name|breakable }}{% endif %} <span class="muted">· {% include "partials/_reading_age.html" with reading=repository.reading only %}</span>
+            <br>{% entity repository.url|declared_link:repository.name %} <span class="muted">· {% include "partials/_reading_age.html" with reading=repository.reading only %}</span>
           </dd>
         {% endwith %}{% endif %}
         {% if release.image %}
@@ -50,7 +50,7 @@ they share a row; either alone takes it.
         <dt>Signature</dt>
           <dd>{% if release.signed %}Signed{% elif release.signed is False %}<strong>Not signed</strong>{% else %}<span class="muted">Not read</span>{% endif %}</dd>
         <dt>Vulnerabilities</dt>
-          <dd>{{ release.vulnerabilities|capfirst|breakable }}{% if release.vulnerabilities_note %} <span class="muted">{{ release.vulnerabilities_note|breakable }}</span>{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %} · <a class="external-link" href="{{ repository.alerts_url|web_url }}" rel="noopener">{% if repository.open_alerts %}{{ repository.open_alerts|counted:"open alert,open alerts" }}{% else %}no open alerts{% endif %}</a>{% endif %}{% endwith %}{% endif %}</dd>
+          <dd>{{ release.vulnerabilities|capfirst|breakable }}{% if release.vulnerabilities_note %} <span class="muted">{{ release.vulnerabilities_note|breakable }}</span>{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %} · {% if repository.open_alerts %}{% entity repository.alerts_url|declared_link:repository.open_alerts label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|declared_link:"no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</dd>
         {% endif %}
         <dt>Extensions</dt>
           <dd>{% for name, version in release.extensions %}{{ name|breakable }} <span class="muted">{{ version|breakable }}</span>{% if not forloop.last %} · {% endif %}{% empty %}<span class="muted">None composed into this build</span>{% endfor %}</dd>

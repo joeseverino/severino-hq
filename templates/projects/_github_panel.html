@@ -4,10 +4,10 @@ what is at the head, whether it passes, what production runs, what is open.
 The page reads a stored reading; nothing here calls GitHub.
 {% endcomment %}
 <section class="github-panel" aria-labelledby="github-heading">
-  <h2 id="github-heading">GitHub <span class="heading-aside"><a class="external-link" href="{{ repo.url }}" rel="noopener">{{ repo.name|breakable }}</a>{% if repo.private %} · private{% endif %} · {% include "partials/_reading_age.html" with reading=repo.reading only %}</span></h2>
+  <h2 id="github-heading">GitHub <span class="heading-aside">{% entity repo.url|declared_link:repo.name %}{% if repo.private %} · private{% endif %} · {% include "partials/_reading_age.html" with reading=repo.reading only %}</span></h2>
   <div class="fact-band">
     {% band_fact icon="commit" label="Latest commit on "|add:repo.default_branch %}
-      <strong><a class="external-link" href="{{ repo.head.url }}" rel="noopener"><code>{{ repo.head.sha|slice:":7"|breakable }}</code></a></strong>
+      <strong>{% entity repo.head.url|declared_link:"commit" code=True label=repo.head.sha|slice:":7" %}</strong>
       <small class="one-line" title="{{ repo.head.message }}">{{ repo.head.message|breakable }}</small>
       <small>{% if repo.head.author %}{{ repo.head.author|breakable }}{% endif %}{% if repo.head.date %} · {{ repo.head.date|ago_short }}{% endif %}</small>
     {% endband_fact %}
@@ -19,7 +19,7 @@ The page reads a stored reading; nothing here calls GitHub.
       {% if repo.production %}
         {% with state=repo.production.state %}
         {% comment %}GitHub's deployment states, as what happened.{% endcomment %}
-        <strong>{% if repo.production.url %}<a class="external-link" href="{{ repo.production.url }}" rel="noopener">{% endif %}{% if state == "failure" or state == "error" %}Deploy failed{% elif state == "in_progress" or state == "queued" or state == "pending" %}Deploying{% elif state == "inactive" %}Replaced{% else %}Deployed{% endif %}{% if repo.production.url %}</a>{% endif %}</strong>
+        <strong>{% if state == "failure" or state == "error" %}{% entity repo.production.url|declared_link:"Deploy failed" %}{% elif state == "in_progress" or state == "queued" or state == "pending" %}{% entity repo.production.url|declared_link:"Deploying" %}{% elif state == "inactive" %}{% entity repo.production.url|declared_link:"Replaced" %}{% else %}{% entity repo.production.url|declared_link:"Deployed" %}{% endif %}</strong>
         {% endwith %}
         <small><code>{{ repo.production.sha|slice:":7"|breakable }}</code> · {{ repo.production.created_at|ago_short }}{% if repo.production.sha != repo.head.sha %} · {{ repo.default_branch|breakable }} has newer commits{% endif %}</small>
         {% if repo.production.verified %}<small class="github-verified{% if repo.production_verified %} is-verified{% endif %}" tabindex="0" data-tip="{% for step in repo.production.verified %}{{ step.name }}: {{ step.conclusion|default:'not run' }}{% if not forloop.last %}&#10;{% endif %}{% endfor %}">{% include "partials/_icon.html" with name="check-circle" %}{% if repo.production_verified %}Verified before deploying{% else %}Verification failed{% endif %}</small>{% endif %}
@@ -29,7 +29,7 @@ The page reads a stored reading; nothing here calls GitHub.
     {% tone %}{% if repo.production.state == 'success' %}good{% elif repo.production.state == 'failure' or repo.production.state == 'error' %}serious{% elif repo.production %}attention{% endif %}{% endband_fact %}
     {% band_fact icon="shield" label="Security" %}
       {% if repo.alerts %}
-        <strong><a class="external-link" href="{{ repo.alerts_url }}" rel="noopener">{% if repo.open_alerts %}{{ repo.open_alerts|counted:"open alert,open alerts" }}{% else %}Clear{% endif %}</a></strong>
+        <strong>{% if repo.open_alerts %}{% entity repo.alerts_url|declared_link:repo.open_alerts label=repo.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repo.alerts_url|declared_link:"Clear" %}{% endif %}</strong>
         <small>{% for n, level in repo.severities %}{{ n|breakable }} {{ level|breakable:forloop }}{% if not forloop.last %} {% endif %}{% empty %}No open alerts.{% endfor %}</small>
       {% else %}
         <strong>Not available</strong><small>GitHub does not offer security alerts for this repository's plan.</small>
