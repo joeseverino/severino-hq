@@ -230,10 +230,10 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .data-table td code { white-space: nowrap; overflow-wrap: normal; display: inline-block; max-width: min(var(--identifier-max), var(--hold)); overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 /* Cut to one line, a token is plain text: the ellipsis lands in it and no part draws a box past the cut. */
 .data-table td code :is(.token, .whole) { display: contents; }
-/* A one-token identifier asks for its whole length and holds out for its longest piece, through a grid track sized by the name's unseen strut (value_tags); the chip is as wide as the track, with a pixel of slack so a value that fits keeps its last character. */
+/* A one-token identifier asks for its whole length and holds out for its longest piece, through a grid track sized by the name's unseen strut (value_tags); the chip is as wide as the track, with a pixel of slack so a value that fits keeps its last character. Nothing in it is clipped, so it sits on the baseline of the words before it. */
 .data-table td code:not(.cell-whole):has(> .token[data-sole]) {
   display: inline-grid; grid-template-columns: minmax(0, max-content);
-  min-width: var(--cut-floor); max-width: none; padding: 0; background: none;
+  min-width: var(--cut-floor); max-width: none; padding: 0; background: none; vertical-align: baseline;
 }
 /* A panel shown from the cell is not the column: there the token sets the track, and only the column holds out for the longest piece. */
 .data-table td code:not(.cell-whole, [popover] *):has(> .token[data-sole]) {
