@@ -128,8 +128,10 @@ mise run preflight        # ready: every CI gate, the composed suite, the host
 
 Agents work in their own worktrees on `mise run dev:scratch` and pass the same
 gates. [`AGENTS.md`](AGENTS.md) is the engineering contract: placement rules, the
-boundary, frontend standards and the definition of done.
-[Development](docs/Development.md) has setup and the gates in full.
+boundary, frontend standards and the definition of done. How agents build HQ
+and operate it, through MCP and the machine API under a person's policy, is in
+[AI and HQ](docs/AI.md). [Development](docs/Development.md) has setup and the
+gates in full.
 
 ## Documentation
 
