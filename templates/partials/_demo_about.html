@@ -2,24 +2,26 @@
 What a saved copy of HQ is and how it is made: the body of the About dialog
 base.html draws on a saved copy (SEVERINO_RENDERED_COPY) and nowhere else.
 `saved_copy` is the moment the copy was rendered, which is when it was saved.
+Each thing to try is a fact band's cell that leads to the page it names.
 {% endcomment %}
-<p class="demo-about-lede">HQ is the app one person runs a homelab from: its hosts, containers, certificates and DNS, and the agents that work on them. This demo shows it with sample data. The pages are HQ's own, saved as static files by the same build that CI and development run.</p>
-<h3 class="demo-about-heading">Things to try</h3>
-<ul>
-  <li>Read the DNS change an agent is waiting for you to approve.</li>
-  <li>Open a container and follow it down to the host it runs on.</li>
-  <li>See what needs doing, and dismiss one.</li>
-  <li>Search from the header, or switch the theme in the menu.</li>
-</ul>
-<h3 class="demo-about-heading">What stays put</h3>
-<p>No server answers these pages, so a form that would change something says so and changes nothing. Dismissals and your theme are kept in this browser until you choose Reset demo in the menu.</p>
-<h3 class="demo-about-heading">Behind it</h3>
-<ul>
-  <li>{% entity "https://github.com/joeseverino/severino-hq"|outside label="The repository" %}</li>
-  <li>{% entity "https://github.com/joeseverino/severino-hq/blob/main/demo/README.md"|outside label="How the demo is built" mark="," %} with <code>mise run browser:demo</code></li>
-  <li>{% entity "https://github.com/joeseverino/severino-hq/blob/main/.github/workflows/demo.yml"|outside label="The workflow" %} that publishes it when a change lands on main, and once a week</li>
-  <li>{% entity "https://github.com/joeseverino/severino-hq/blob/main/docs/Development.md"|outside label="Developing HQ" %}</li>
-  <li>{% entity "https://github.com/joeseverino/severino-hq/blob/main/docs/AI.md"|outside label="AI and HQ" %}</li>
-</ul>
-<p>Made by {% entity "https://jseverino.com"|outside label="Joe Severino" mark="." %}</p>
-<p class="muted">Saved {{ saved_copy|when:"day" }}.</p>
+<p class="modal-lede">HQ is the app one person runs a homelab from, shown here with sample data. Its own pages are saved as static files, so nothing you do here saves beyond this browser.</p>
+<section class="demo-about-part" aria-labelledby="demo-about-try">
+  <h3 class="eyebrow" id="demo-about-try">Things to try</h3>
+  <div class="fact-band">
+    {% band_fact icon="shield" label="Approval" %}<strong><a href="{% url 'core:audit_list' %}?awaiting=1">An agent's DNS change</a></strong>{% endband_fact %}
+    {% band_fact icon="container" label="Containers" %}<strong><a href="{% url 'control_plane:containers' %}">Follow one to its host</a></strong>{% endband_fact %}
+    {% band_fact icon="check-circle" label="Needs you" %}<strong><a href="{% url 'action_items' %}">Dismiss what can wait</a></strong>{% endband_fact %}
+    {% band_fact icon="layers" label="Search" %}<strong><a href="{% url 'search' %}" data-command-center-open aria-haspopup="dialog" aria-controls="modal-command-center">Find anything</a></strong>{% endband_fact %}
+  </div>
+</section>
+<nav class="demo-about-part" aria-labelledby="demo-about-behind">
+  <h3 class="eyebrow" id="demo-about-behind">Behind it</h3>
+  <ul class="ext-links">
+    <li>{% outside_link url="https://github.com/joeseverino/severino-hq" %}Repository<span class="ext-arrow" aria-hidden="true">↗</span>{% endoutside_link %}</li>
+    <li>{% outside_link url="https://github.com/joeseverino/severino-hq/blob/main/demo/README.md" %}How it is built<span class="ext-arrow" aria-hidden="true">↗</span>{% endoutside_link %}</li>
+    <li>{% outside_link url="https://github.com/joeseverino/severino-hq/blob/main/.github/workflows/demo.yml" %}Workflow<span class="ext-arrow" aria-hidden="true">↗</span>{% endoutside_link %}</li>
+    <li>{% outside_link url="https://github.com/joeseverino/severino-hq/blob/main/docs/Development.md" %}Developing HQ<span class="ext-arrow" aria-hidden="true">↗</span>{% endoutside_link %}</li>
+    <li>{% outside_link url="https://github.com/joeseverino/severino-hq/blob/main/docs/AI.md" %}AI and HQ<span class="ext-arrow" aria-hidden="true">↗</span>{% endoutside_link %}</li>
+  </ul>
+</nav>
+<p class="demo-about-foot">Made by {% entity "https://jseverino.com"|outside label="Joe Severino" %} · saved {{ saved_copy|when:"day" }}</p>

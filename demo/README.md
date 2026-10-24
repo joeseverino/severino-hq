@@ -73,10 +73,10 @@ laptop the demo was rendered for. `as_production()` sets HQ's
 `partials/_example_connection.html` then marks each of those places as an
 example connection. The wording lives in HQ; the demo only says it is a copy.
 
-The same setting puts About this demo at the foot of every page, after its
-content, a control that opens a dialog drawn by `partials/_demo_about.html`:
-what the demo is, what to try, what doesn't save, links into this
-repository, and the day the pages were saved. Without script the control is
+The same setting puts About this demo in the bottom left corner of every
+page, a control that opens a dialog drawn by `partials/_demo_about.html`:
+what the demo is, links to the pages worth trying, links into this
+repository, who made it and the day the pages were saved. Without script the control is
 a link to this README. The API reference names the example HQ as its server,
 so Scalar does not offer GitHub Pages as one.
 
@@ -106,11 +106,13 @@ so Scalar does not offer GitHub Pages as one.
   runs past it at 402 and 1360px.
 - A machine's addresses read as one list that fits.
 - A dismissal survives a reload until Reset demo clears it.
-- About this demo follows the page's content at 390, 402, 820 and 1360px,
-  is drawn over no control at any scroll stop on the dashboard, a list and
-  the queue, and opens the dialog by keyboard, which Escape closes. Each link in the dialog names a file in this
-  repository, and the dialog says the day the pages were saved, as HQ writes a
-  day.
+- About this demo stays in the bottom left corner at 390, 402, 820 and
+  1360px, the dashboard, a list and the queue end with room for it so no
+  control is left under it, and it opens the dialog by keyboard, which
+  Escape closes. The dialog is read whole without scrolling on a 1360 by
+  800 window and a 402px phone. Each thing to try in it is a page of the
+  demo and each other link a file in this repository or its author, and it
+  says the day the pages were saved, as HQ writes a day.
 - `404.html` is HQ's not-found page, and the API document names a server.
 
 HQ's own suite holds the other side: a running HQ with demo data on draws

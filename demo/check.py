@@ -15,6 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 from demo.serve import serving
 from hq.platform.core.tests.browser.uncaught import Uncaught
+from hq.platform.core.tests.browser.widths import PHONE_SCREEN
 
 # Where demo:build saved it. This file doesn't import Django.
 OUT = Path(os.environ.get("HQ_DEMO_OUT") or Path(__file__).resolve().parents[1] / "var" / "demo")
@@ -72,33 +73,33 @@ _ROOT = Path(__file__).resolve().parents[1]
 _MOST_PAGES_OF_A_LIST = 6
 # The widths HQ's browser gate reads (WIDTHS in core/tests/browser/widths.py), and a small phone's.
 _WIDTHS = (390, 402, 820, 1360)
-# Each control About this demo is drawn over at some scroll stop: where its
-# box meets the control's, the point at the middle of the two is the chip's.
-# A control under the sticky header there is the header's, and not counted.
-_COVERED_BY_ABOUT = """() => {
+# About this demo floats in the bottom left corner, over some of the page at
+# almost every scroll stop; what it promises is to leave none of it there.
+# Read at the page's end: the room below the content, against the room the
+# chip and its inset take (from its top down), and each control still under
+# it. The content is every part of the body in the page's flow but the
+# chip's own footer.
+_ABOUT_AT_THE_END = """() => {
+  scrollTo(0, document.documentElement.scrollHeight);
   const chip = document.querySelector('.demo-about');
-  const targets = [...document.querySelectorAll(
+  const c = chip.getBoundingClientRect();
+  const parts = [...document.body.children].filter((el) =>
+    !el.matches('.demo-foot, dialog, script') && el.checkVisibility()
+    && !['fixed', 'absolute'].includes(getComputedStyle(el).position));
+  const contentEnd = Math.max(...parts.map((el) => el.getBoundingClientRect().bottom));
+  const covered = [...document.querySelectorAll(
     "a[href], button, summary, select, textarea, input:not([type=hidden]), [tabindex]:not([tabindex='-1'])"
-  )].filter((el) => !chip.contains(el) && !el.closest('dialog') && el.checkVisibility());
-  const covered = new Set();
-  const root = document.documentElement;
-  for (let y = 0; ; y += innerHeight / 2) {
-    scrollTo(0, y);
-    const c = chip.getBoundingClientRect();
-    for (const el of targets) {
-      const r = el.getBoundingClientRect();
-      const left = Math.max(c.left, r.left), right = Math.min(c.right, r.right);
-      const top = Math.max(c.top, r.top), bottom = Math.min(c.bottom, r.bottom);
-      if (right - left < 1 || bottom - top < 1) continue;
-      const hit = document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
-      if (!hit || !chip.contains(hit)) continue;
-      const said = (el.textContent || el.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim();
-      covered.add(`${el.tagName.toLowerCase()} ${said.slice(0, 40)}`);
-    }
-    if (y + innerHeight >= root.scrollHeight) break;
-  }
+  )].filter((el) => !chip.contains(el) && !el.closest('dialog') && el.checkVisibility()).filter((el) => {
+    const r = el.getBoundingClientRect();
+    return Math.min(c.right, r.right) - Math.max(c.left, r.left) >= 1
+      && Math.min(c.bottom, r.bottom) - Math.max(c.top, r.top) >= 1;
+  }).map((el) => {
+    const said = (el.textContent || el.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim();
+    return `${el.tagName.toLowerCase()} ${said.slice(0, 40)}`;
+  });
+  const room = innerHeight - contentEnd, needed = innerHeight - c.top;
   scrollTo(0, 0);
-  return [...covered].slice(0, 10);
+  return {room, needed, covered: covered.slice(0, 10)};
 }"""
 
 
@@ -303,10 +304,11 @@ class DemoSiteTests(unittest.TestCase):
         self.assertEqual(errors[:20], [])
         self.assertEqual(elsewhere, [])
 
-    def test_the_about_links_lead_to_files_in_the_repository_or_to_its_author(self):
+    def test_the_about_links_lead_to_demo_pages_files_in_the_repository_or_its_author(self):
         # The dialog's links and the corner control's own address, which is
-        # where it leads without script. Each names a file on main, held here
-        # to the checkout the demo was built from.
+        # where it leads without script. A thing to try is a page of the
+        # demo; any other link names a file on main, held here to the
+        # checkout the demo was built from, or who made it.
         dashboard = (OUT / "index.html").read_text(encoding="utf-8")
         about = re.search(r'<dialog[^>]*id="modal-demo-about".*?</dialog>', dashboard, re.DOTALL)
         self.assertTrue(about, "the About dialog is on the page")
@@ -317,17 +319,23 @@ class DemoSiteTests(unittest.TestCase):
         links = [*marks, *inside]
         self.assertIn(_SOURCE, links)
         self.assertIn(_AUTHOR, links)
+        pages = [link for link in inside if link.startswith("/")]
+        self.assertTrue(pages, "the things to try lead to pages")
         for link in links:
             with self.subTest(link=link):
                 if link in (_SOURCE, _AUTHOR):
+                    continue
+                if link in pages:
+                    path = urlsplit(link).path
+                    self.assertTrue((OUT / path.lstrip("/") / "index.html").is_file(), f"{path} is a page of the demo")
                     continue
                 self.assertTrue(link.startswith(f"{_SOURCE}/blob/main/"), link)
                 file = link.removeprefix(f"{_SOURCE}/blob/main/")
                 self.assertTrue((_ROOT / file).is_file(), f"{file} is in the repository")
         # The day it was saved, written the way HQ writes a day.
-        self.assertRegex(about.group(0), r'Saved <time datetime="[^"]+" title="[^"]+">[^<]+</time>\.')
+        self.assertRegex(about.group(0), r'saved <time datetime="[^"]+" title="[^"]+">[^<]+</time>')
 
-    def test_about_this_demo_opens_by_keyboard_from_the_page_s_end(self):
+    def test_about_this_demo_stays_in_the_corner_and_opens_by_keyboard(self):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
@@ -337,18 +345,24 @@ class DemoSiteTests(unittest.TestCase):
                 page.goto(self.origin + "/", wait_until="load")
                 with self.subTest(width=width):
                     control = page.get_by_role("link", name="About this demo")
-                    self.assertTrue(control.is_visible())
-                    page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
-                    content_end = page.evaluate("document.getElementById('content').getBoundingClientRect().bottom")
-                    self.assertLessEqual(content_end, control.bounding_box()["y"], "it follows the page's content")
+                    for stop in (
+                        "0",
+                        "document.documentElement.scrollHeight / 2",
+                        "document.documentElement.scrollHeight",
+                    ):
+                        page.evaluate(f"window.scrollTo(0, {stop})")
+                        self.assertTrue(control.is_visible())
+                        box = control.bounding_box()
+                        self.assertLess(box["x"] + box["width"], width / 2, f"it sits on the left at {stop}")
+                        self.assertGreater(box["y"], 700 / 2, f"it sits at the bottom at {stop}")
+                        self.assertLessEqual(box["y"] + box["height"], 700, f"it is on screen at {stop}")
                     self._assert_opens_and_closes(page, control)
                 page.close()
             browser.close()
 
-    def test_about_this_demo_covers_no_control(self):
+    def test_about_this_demo_leaves_no_control_under_it(self):
         # Pages with controls along their left edge and at their foot: a
-        # list's tick boxes and pages, the dashboard's calendar. Read at every
-        # scroll stop, so a control drawn over the page at any one is found.
+        # list's tick boxes and pages, the dashboard's calendar.
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
@@ -358,7 +372,27 @@ class DemoSiteTests(unittest.TestCase):
                 for path in ("/", "/infrastructure/containers/", "/action-items/"):
                     page.goto(self.origin + path, wait_until="load")
                     with self.subTest(path=path, width=width):
-                        self.assertEqual(page.evaluate(_COVERED_BY_ABOUT), [])
+                        end = page.evaluate(_ABOUT_AT_THE_END)
+                        self.assertGreaterEqual(end["room"], end["needed"], "the page ends with room for it")
+                        self.assertEqual(end["covered"], [], "no control is under it at the page's end")
+                page.close()
+            browser.close()
+
+    def test_about_this_demo_is_read_whole_without_scrolling(self):
+        # A laptop's window and a phone's screen.
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            browser = playwright.webkit.launch()
+            for width, height in ((1360, 800), PHONE_SCREEN):
+                page = browser.new_page(viewport={"width": width, "height": height})
+                page.goto(self.origin + "/", wait_until="load")
+                with self.subTest(width=width, height=height):
+                    page.get_by_role("link", name="About this demo").click()
+                    dialog = page.locator("#modal-demo-about")
+                    self.assertTrue(dialog.evaluate("dialog => dialog.open"))
+                    overflow = dialog.evaluate("dialog => dialog.scrollHeight - dialog.clientHeight")
+                    self.assertLessEqual(overflow, 0, "the dialog fits without scrolling")
                 page.close()
             browser.close()
 

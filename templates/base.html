@@ -264,9 +264,11 @@
   {% block site_footer %}
     {% if saved_copy and user.is_authenticated %}
       {% comment %}
-      A saved copy of HQ (the public demo) says what it is at the foot of every
-      page, after the content, so it covers nothing. Without script it is a
-      link to the demo's README, so no page is made for the copy alone.
+      A saved copy of HQ (the public demo) says what it is from the corner of
+      every page. The control comes after the content in the tab order, and
+      its footer is the room the page ends with, so nothing stays under it.
+      Without script it is a link to the demo's README, so no page is made
+      for the copy alone.
       {% endcomment %}
       <footer class="demo-foot">
         {% outside_link url="https://github.com/joeseverino/severino-hq/blob/main/demo/README.md" css="demo-about" modal="demo-about" %}<span class="demo-about-dot" aria-hidden="true"></span>About this demo{% endoutside_link %}
