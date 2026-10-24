@@ -142,11 +142,18 @@ _SQUEEZED_TITLES = (
 }"""
 )
 
-# A word of running text broken across lines: a word never breaks.
+# A word or a number of running text broken across lines: neither ever
+# breaks. A number is a figure with its sign and currency mark ("\u2212$1,243.52",
+# "+5%"), which UAX #14 lets a line end inside (between the sign and the mark,
+# both class PR) unless the writer glues them.
 _BROKEN_WORDS_IN_TEXT = (
     "(identifier) => {"
     + _DESCRIBE
     + r"""
+  const WORD = /[A-Za-z]{4,}/g;
+  // A figure standing on its own (not the digits inside a word), with what
+  // goes before it: a sign, a word joiner, a currency mark.
+  const NUMBER = /(?<![\p{L}\p{N}_.,$\u00a3\u20ac\u2060+\u2212])(?:[+\u2212]\u2060?)?[$\u00a3\u20ac]?\d(?:[\d,.]*\d)?%?/gu;
   const main = document.querySelector('main');
   const range = document.createRange();
   const found = [];
@@ -154,11 +161,13 @@ _BROKEN_WORDS_IN_TEXT = (
   for (let node = words.nextNode(); node; node = words.nextNode()) {
     const el = node.parentElement;
     if (el.closest(identifier) || el.closest('pre, script, style, template') || !el.checkVisibility()) continue;
-    for (const word of node.data.matchAll(/[A-Za-z]{4,}/g)) {
-      range.setStart(node, word.index);
-      range.setEnd(node, word.index + word[0].length);
-      const lines = new Set([...range.getClientRects()].filter((r) => r.width).map((r) => Math.round(r.top)));
-      if (lines.size > 1) found.push(`${describe(el)} breaks the word "${word[0]}"`);
+    for (const [kind, pattern] of [['word', WORD], ['number', NUMBER]]) {
+      for (const token of node.data.matchAll(pattern)) {
+        range.setStart(node, token.index);
+        range.setEnd(node, token.index + token[0].length);
+        const lines = new Set([...range.getClientRects()].filter((r) => r.width).map((r) => Math.round(r.top)));
+        if (lines.size > 1) found.push(`${describe(el)} breaks the ${kind} "${token[0].replace(/\u2060/g, '')}"`);
+      }
     }
   }
   return [...new Set(found)];

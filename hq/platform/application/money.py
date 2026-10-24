@@ -52,19 +52,38 @@ def to_money(value: object, default: Decimal | None = None) -> Decimal | None:
 # A true minus sign. A hyphen beside a figure reads as a dash.
 MINUS = "\u2212"
 
+# UAX #14 gives a sign and the currency mark after it the same class, PR, and
+# allows a break between two PRs, so "\u2212$5.00" can end a line after its
+# sign. A WORD JOINER (class WJ, rule LB11: no break before or after it) holds
+# the sign to the figure, and draws nothing.
+WORD_JOINER = "\u2060"
 
-def money(value: Decimal | int | float | None, *, cents: bool = True) -> str:
+
+def signed(figure: str, *, negative: bool, plus: bool = False) -> str:
+    """``figure`` behind its sign, the two one unbreakable unit.
+
+    ``plus`` writes "+" before a figure that is not negative, for a change
+    rather than a balance.
+    """
+
+    sign = MINUS if negative else "+" if plus else ""
+    return f"{sign}{WORD_JOINER}{figure}" if sign else figure
+
+
+def money(value: Decimal | int | float | None, *, cents: bool = True, plus: bool = False) -> str:
     """An amount as every page writes one: "$1,234.50", and "\u2212$5.00" when negative.
 
     ``cents=False`` is for a figure that is scanned, never reconciled: a
-    balance, a total over a year. Nothing shows the mark for a missing value.
+    balance, a total over a year. ``plus`` signs a change that is not
+    negative, "+$5.00". A debt is a negative value. Nothing shows the mark for
+    a missing value.
     """
 
     amount = to_money(value)
     if amount is None:
         return MISSING
-    sign = MINUS if amount < 0 else ""
-    return f"{sign}${abs(amount):,.2f}" if cents else f"{sign}${abs(amount):,.0f}"
+    figure = f"${abs(amount):,.2f}" if cents else f"${abs(amount):,.0f}"
+    return signed(figure, negative=amount < 0, plus=plus)
 
 
-__all__ = ["CENTS", "MINUS", "money", "quantize_money", "to_money"]
+__all__ = ["CENTS", "MINUS", "money", "quantize_money", "signed", "to_money"]

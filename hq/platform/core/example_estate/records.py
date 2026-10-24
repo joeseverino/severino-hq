@@ -200,6 +200,8 @@ def money():
         (365 - RENEWS_IN.days, "Cloudflare", "example.com renewal", "domains", "10.44", 100, None, None),
         # Storage is billed monthly; the backups hold family photos as well as the lab's volumes.
         *((days, "Backblaze", "Offsite backup storage", "hosting", "6.00", 50, None, backups) for days in STORAGE),
+        # A refund is a negative cost.
+        (100, "Newegg", "2 TB backup drive return", "hardware", "-79.99", 50, None, backups),
     ):
         expense = Expense.objects.create(
             date=today - timedelta(days=days),

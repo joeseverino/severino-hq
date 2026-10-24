@@ -63,6 +63,7 @@ def amounts() -> None:
     assert_type(money.to_money("1.20", Decimal(0)), Decimal)
     assert_type(money.quantize_money(Decimal("1.234")), Decimal)
     assert_type(money.money(Decimal(1)), str)
+    assert_type(money.money(Decimal(-1), cents=False, plus=True), str)
 
     money.quantize_money(1.5)  # type: ignore[arg-type]
     money.money("1.00")  # type: ignore[arg-type]

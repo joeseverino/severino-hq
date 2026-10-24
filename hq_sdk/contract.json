@@ -638,7 +638,8 @@
         "parameters": [
           "value",
           "*",
-          "cents="
+          "cents=",
+          "plus="
         ]
       },
       "quantize_money": {

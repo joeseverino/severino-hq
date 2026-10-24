@@ -7,7 +7,7 @@ from django.test import SimpleTestCase
 
 from hq_sdk import money as sdk
 
-from ..money import MINUS, money
+from ..money import MINUS, WORD_JOINER, money
 from ..ui import MISSING
 from .markup import text, with_class
 
@@ -17,8 +17,14 @@ class MoneyTests(SimpleTestCase):
         self.assertEqual(money(Decimal("1234.5")), "$1,234.50")
         self.assertEqual(money(0), "$0.00")
 
-    def test_a_negative_amount_takes_one_true_minus_sign_before_the_dollar(self):
-        self.assertEqual(money(Decimal(-5)), f"{MINUS}$5.00")
+    def test_a_negative_amount_takes_one_true_minus_sign_held_to_the_dollar(self):
+        # The joiner is what keeps a line from ending between the sign and the figure.
+        self.assertEqual(money(Decimal(-5)), f"{MINUS}{WORD_JOINER}$5.00")
+
+    def test_a_change_is_signed_either_way_and_held_to_its_sign(self):
+        self.assertEqual(money(Decimal(5), plus=True), f"+{WORD_JOINER}$5.00")
+        self.assertEqual(money(Decimal(-5), cents=False, plus=True), f"{MINUS}{WORD_JOINER}$5")
+        self.assertEqual(money(None, plus=True), MISSING)
 
     def test_an_amount_that_rounds_to_nothing_is_not_negative(self):
         self.assertEqual(money(Decimal("-0.004")), "$0.00")
@@ -38,7 +44,7 @@ class MoneyTests(SimpleTestCase):
             Context({"a": Decimal("-1234.5"), "nothing": None})
         )
 
-        self.assertEqual(text(drawn), f"{MINUS}$1,234.50 {MINUS}$1,234 {MISSING}")
+        self.assertEqual(text(drawn), f"{money(Decimal('-1234.5'))} {money(Decimal('-1234.5'), cents=False)} {MISSING}")
         self.assertEqual([mark.words for mark in with_class(drawn, "empty-value")], [MISSING])
 
     def test_the_filter_refuses_a_form_it_does_not_have(self):

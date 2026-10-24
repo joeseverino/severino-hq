@@ -34,11 +34,15 @@
     },
     {
       "input": "-5",
-      "output": "\u2212$5.00"
+      "output": "\u2212\u2060$5.00"
     },
     {
       "input": "1234.4, cents=False",
       "output": "$1,234"
+    },
+    {
+      "input": "5, plus=True",
+      "output": "+\u2060$5.00"
     },
     {
       "input": "None",

@@ -1,7 +1,9 @@
 """The layout rules held over single components, drawn on probe pages and pages of the stress estate."""
 
 import re
+from decimal import Decimal
 
+from hq.platform.application.money import money
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
 from hq.platform.core.tests.browser.gate import add_css, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
@@ -19,11 +21,12 @@ from hq.platform.core.tests.browser.probes.tables import (
     _SORT_BY,
     _TABLES_THAT_DO_NOT_FIT,
 )
-from hq.platform.core.tests.browser.probes.text import _BROKEN_WORDS, _OVERLAPPING_TEXT
+from hq.platform.core.tests.browser.probes.text import _BROKEN_WORDS, _BROKEN_WORDS_IN_TEXT, _OVERLAPPING_TEXT
 from hq.platform.core.tests.browser.reading import probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.stress import ALL_PAGES
+from hq.platform.core.tests.browser.survey import _IDENTIFIER
 from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS
 from hq.platform.core.tests.test_browser_fixtures import PAGES
 
@@ -279,6 +282,33 @@ class ComponentLayoutTests(LayoutBrowserTests):
         found = [line for line in self.page.evaluate(_BROKEN_WORDS) if "abcdef" in line or "example" in line]
         self.assertEqual(len(found), 1)
         self.assertIn("example", found[0])
+
+    def test_an_amount_holds_to_its_sign_and_one_that_does_not_is_found(self):
+        """In a box narrower than any amount, every amount HQ writes stays one
+        unit, while a sign written loose before its currency mark ends a line
+        and is a finding of the broken-text check."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate(
+            """(written) => {
+              for (const [name, text] of written) {
+                const box = document.createElement('p');
+                box.className = name;
+                box.textContent = text;
+                // Only the breaks the text itself allows: none forced past them.
+                box.style.cssText = 'inline-size: 1ch; overflow-wrap: normal; word-break: normal';
+                document.querySelector('main').append(box);
+              }
+            }""",
+            [
+                ["example-written", f"{money(Decimal('-1243.52'))} {money(Decimal(-5), cents=False)}"],
+                ["example-loose", "\u2212$1,243.52"],
+            ],
+        )
+
+        found = [line for line in self.page.evaluate(_BROKEN_WORDS_IN_TEXT, _IDENTIFIER) if "example-" in line]
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("example-loose", found[0])
 
     def test_a_small_target_under_an_open_menu_is_not_measured_and_one_in_view_is(self):
         """A target drawn under another element is out of a pointer's reach,
