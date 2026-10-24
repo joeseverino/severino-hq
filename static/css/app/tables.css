@@ -419,8 +419,10 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 }
 .row-columns { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-3) var(--space-6); margin: 0; }
 .row-columns dt { color: var(--muted); font-size: var(--text-2xs); }
-/* A value under its column's name has the line to itself, not the share its column had in the row. */
-.row-columns dd { min-width: 0; margin: 0; overflow-wrap: break-word; --hold: 100%; --name-hold: min(28ch, 100%); }
+/* A value under its column's name has the line to itself, not the share its column had in the row, less the em a list's separator takes before a name. */
+.row-columns dd { min-width: 0; margin: 0; overflow-wrap: break-word; --hold: calc(100% - 1em); --name-hold: min(28ch, 100%); }
+/* A name there is cut at the same edge, so one that follows a separator on its line still ends inside it. */
+.data-table .row-columns dd [data-entity] { max-width: var(--hold); }
 /* A value moved under its column's name is cut at the line's edge, which on a phone comes before its column's cap. */
 .row-columns dd code { max-width: min(100%, var(--identifier-max)); }
 /* What a row keeps for that line at any width (`row-below`): its tall parts, on the name's edge. */
