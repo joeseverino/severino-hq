@@ -70,7 +70,8 @@ tokens, spacing, color), `StyleContractTests` and `SharedPrimitiveStyleTests`
 (CSS, layers), `TemplateCommentTests` (what a `{# #}` comment left open is),
 `CognitiveComplexityTests` (score 20 per function), `FileSizeTests` (no source
 file past 1,000 lines), `OneDefinitionTests` (a module-level name is
-assigned once), `CommentHistoryTests` (comments
+assigned once), `SettingsReadTests` (a setting is read as `settings.NAME`, never with a
+default), `CommentHistoryTests` (comments
 describe the present), `AssertionPrecisionTests` (`assertEqual(a, b)`, not
 `assertTrue(a == b)`), `CellMarkupTests` (a table cell is read by its text,
 never by the tag that closes it), `CountedTests` (plurals), `InterfaceTextTests` (no em dash, hand-built plural,

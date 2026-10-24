@@ -1674,6 +1674,42 @@ class OneDefinitionTests(SimpleTestCase):
         self.assertEqual(twice, {}, "give each its own name")
 
 
+def _defaulted_settings_reads(tree: ast.AST) -> list[int]:
+    """Lines of ``getattr(settings, NAME, default)``, a read that survives a misspelled NAME."""
+
+    return [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "getattr"
+        and len(node.args) == 3
+        and isinstance(node.args[0], ast.Name)
+        and node.args[0].id == "settings"
+    ]
+
+
+@tag("source")
+class SettingsReadTests(SimpleTestCase):
+    """A setting is declared once, in ``hq/config/settings.py``, and read as ``settings.NAME``.
+
+    ``getattr(settings, "NAME", default)`` turns a misspelled name into a
+    feature quietly switched off, and writes the default a second time.
+    """
+
+    def test_no_source_reads_a_setting_with_a_default(self):
+        root = Path(__file__).resolve().parents[4]
+        self.assertEqual(_defaulted_settings_reads(ast.parse('getattr(settings, "X", 1)')), [1])
+        reads = {
+            f"{path.relative_to(root)}:{line}"
+            for package in ("hq", "hq_sdk", "tools")
+            for path in source_files(root / package, "*.py")
+            if "tests" not in path.parts and not path.name.startswith("test")
+            for line in _defaulted_settings_reads(parsed(path))
+        }
+        self.assertEqual(reads, set(), "declare the setting in hq/config/settings.py and read settings.NAME")
+
+
 class RouteOwnerTests(SimpleTestCase):
     """Routes are resolved in one place, so the answer can be remembered."""
 
