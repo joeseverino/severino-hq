@@ -13,6 +13,7 @@ carries any of it).
 | `pipeline/` | CI and release programs: reports, composition, image checks, the release rehearsals |
 | `structural/` | the structural bar and its baseline |
 | `openapi/` | the locked Redocly install `checks:openapi` lints the API documents with |
+| `lint/` | the locked browser and stylesheet lint tools (axe-core, ESLint, html-validate, Stylelint), installed by `setup:lint-tools` |
 | `tests/` | the tests of the top-level modules |
 
 The top level holds the credential minting (`credentials.py`) and the

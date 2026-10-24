@@ -23,7 +23,7 @@ inputs:
     required: false
     default: "false"
   npm:
-    description: Restore npm's downloads, for a job that installs tools/openapi.
+    description: Restore npm's downloads, for a job that installs an npm project under tools/.
     required: false
     default: "false"
   save:
@@ -90,14 +90,14 @@ runs:
     # What decides each cache: uv's downloads by the Python and uv.lock (uv
     # verifies every artifact against the lock), Go's modules and compiled
     # packages by its release (mise's, from mise.lock) and go.sum, npm's
-    # downloads by the OpenAPI lint's lock.
+    # downloads by every npm project's lock under tools/.
     - id: caches
       shell: bash
       env:
         PYTHON: ${{ inputs.python || steps.read.outputs.oldest-python }}
         UV_LOCK: ${{ hashFiles('uv.lock') }}
         GO_SUM: ${{ hashFiles('controller/go.sum') }}
-        NPM_LOCK: ${{ hashFiles('tools/openapi/package-lock.json') }}
+        NPM_LOCK: ${{ hashFiles('tools/*/package-lock.json') }}
         GO: ${{ inputs.go }}
       run: |
         set -euo pipefail

@@ -16,7 +16,7 @@
   "automerge": false,
   "rangeStrategy": "pin",
   "lockFileMaintenance": {
-    "description": "Moves what only the locks name (uv.lock, mise.lock, the npm lock) in the same Monday window; Renovate never groups it with other updates.",
+    "description": "Moves what only the locks name (uv.lock, mise.lock, the npm locks) in the same Monday window; Renovate never groups it with other updates.",
     "schedule": ["* * * * 1"]
   },
   "vulnerabilityAlerts": {

@@ -1,0 +1,8 @@
+#!/bin/sh
+#MISE description="Install the browser and stylesheet lint tools tools/lint pins: axe-core, ESLint, html-validate, Stylelint"
+#MISE hide=true
+#MISE sources=["tools/lint/package-lock.json"]
+#MISE outputs=["tools/lint/node_modules/.package-lock.json"]
+set -eu
+
+npm --prefix tools/lint ci

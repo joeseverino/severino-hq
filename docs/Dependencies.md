@@ -8,6 +8,7 @@ Where every pin lives, and how to move one.
 | :--- | :--- | :--- |
 | Tools: Go, uv, CodeQL, Scorecard and the rest | [`mise.toml`](../mise.toml), checksums in [`mise.lock`](../mise.lock). The images install Go and uv from the same lock, with mise copied from its image at `min_version`, by digest | `checks:toolchain`; CodeQL also `checks:codeql-bundle`, the bundle the pinned action runs |
 | Python packages | `pyproject.toml`, resolved with hashes in `uv.lock` | `checks:lockfile`, `checks:audit` |
+| npm tools: Redocly, the browser and stylesheet lints | `tools/openapi/package.json` and `tools/lint/package.json`, exact, resolved with hashes in each `package-lock.json` | `npm ci`, which refuses a lock its `package.json` has moved past |
 | Go and its modules | the release in `mise.toml`, of the language version `controller/go.mod` names; modules in `go.sum` | `checks:toolchain`, `controller:check` |
 | The Python base image, every stage's start | `Dockerfile` and `composition/Dockerfile`, by digest | `image:build`; `checks:toolchain` refuses any other image |
 | GitHub Actions | each workflow, by commit with its version beside it | `ActionPinTests` |
@@ -31,7 +32,7 @@ and Renovate moves that workflow's own action and image too.
   Docker, the runner image, Trivy, Cordon and the API reference bundle. A
   release is proposed once it is 7 days old.
 - **Lock maintenance**, `deps: lock file maintenance`, the same day: it
-  refreshes what only `uv.lock`, `mise.lock` and the npm lock name. Renovate
+  refreshes what only `uv.lock`, `mise.lock` and the npm locks name. Renovate
   never groups it with other updates.
 - **Each major on its own pull request**, with its release notes, so a
   breaking change never holds the weekly one. A new Python or Go minor is
