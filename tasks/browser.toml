@@ -24,7 +24,12 @@ run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser p
 ["browser:layout-chromium"]
 description = "browser:layout in Chromium: a CI leg, which mise run browser leaves out"
 env = { HQ_BROWSER_ENGINE = "chromium" }
-run = [{ task = "setup:browser", args = ["chromium"] }, "mise run --skip-deps browser:layout"]
+run = [
+  { task = "setup:browser", args = [
+    "chromium",
+  ] },
+  "mise run --skip-deps browser:layout",
+]
 
 ["browser:navigation"]
 description = "Real-browser invariants over the example estate, the frame around a page and its fragments"
