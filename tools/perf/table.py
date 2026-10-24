@@ -1,9 +1,11 @@
-"""One report, or one beside its base, as the table `perf:report` prints.
+"""One report, or one beside its base, as the table `perf:report` prints, and its summary.
 
 A row is a page at one width: the server's numbers on its first width's row,
 the browser's on each. A total row sums each column over every page, so a
 change's whole effect reads as one number per column. With a base, each number
-is followed by how far it moved from the base's.
+is followed by how far it moved from the base's. The summary is the totals,
+memory, cold start and the pages that moved most, which is what a reader of the
+session log needs; the table it summarizes is kept beside it.
 """
 
 from collections.abc import Callable
@@ -34,6 +36,8 @@ SUMMARY: tuple[tuple[str, Read, int, str], ...] = (
     ("memory after a pass over every page", lambda report: report["memory"]["after_pass_bytes"] / 1024**2, 1, "MB"),
     ("cold start to /health/ready/, median", lambda report: report["cold_start"]["median_ms"] / 1000, 2, "s"),
 )
+# The pages a summary names: those whose server time moved most, or without a base the slowest.
+MOVED = 5
 HEADERS = ("page", "width", *(name for name, _, _ in SERVER), *(name for name, _, _ in BROWSER))
 
 
@@ -76,12 +80,18 @@ def _read(read: Read, source: dict[str, Any] | None) -> float | None:
         return None
 
 
-def _row(entry: dict[str, Any], base: dict[str, Any] | None, width: str, first: bool, compared: bool) -> list[str]:
-    base = base or {}
-    server = [
-        _cell(_read(read, entry.get("server")), _read(read, base.get("server")), places, compared) if first else ""
-        for _, read, places in SERVER
+def _server(entry: dict[str, Any], base: dict[str, Any] | None, compared: bool) -> list[str]:
+    """A page's server numbers, each beside how far it moved from ``base``'s when ``compared``."""
+
+    before = (base or {}).get("server")
+    return [
+        _cell(_read(read, entry.get("server")), _read(read, before), places, compared) for _, read, places in SERVER
     ]
+
+
+def _row(entry: dict[str, Any], base: dict[str, Any] | None, width: str, first: bool, compared: bool) -> list[str]:
+    server = _server(entry, base, compared) if first else [""] * len(SERVER)
+    base = base or {}
     seen, seen_before = entry.get("browser", {}).get(width), base.get("browser", {}).get(width)
     browser = [_cell(_read(read, seen), _read(read, seen_before), places, compared) for _, read, places in BROWSER]
     return [_page(entry) if first else "", width, *server, *browser]
@@ -138,20 +148,68 @@ def _summary(report: Report, base: Report | None) -> list[str]:
     return lines
 
 
-def render(report: Report, base: Report | None = None) -> str:
-    """The table, then memory and cold start; with ``base``, each number beside how far it moved."""
+def _title(report: Report, base: Report | None) -> str:
+    title = f"{report['commit']} ({report['target']}, {report['requests']} requests a page)"
+    if base:
+        title += f", beside {base['commit']}"
+    if memory := (report.get("memory") or {}).get("measured"):
+        title += f"; memory is {memory}"
+    return title
 
+
+def _table(report: Report, base: Report | None, every_page: bool) -> list[str]:
     compared = base is not None
     theirs = _pages(base) if base else {}
     rows = [list(HEADERS)]
-    for entry in report["pages"]:
+    for entry in report["pages"] if every_page else []:
         for index, width in enumerate(_widths(report)):
             rows.append(_row(entry, theirs.get(entry["page"]), width, index == 0, compared))
     for index, width in enumerate(_widths(report)):
         rows.append(_totals(report, base, width, index == 0))
-    title = f"{report['commit']} ({report['target']}, {report['requests']} requests a page)"
-    if base:
-        title += f", beside {base['commit']}"
-    if memory := report.get("memory", {}).get("measured"):
-        title += f"; memory is {memory}"
-    return "\n".join([title, *_aligned(rows), "", *_summary(report, base)])
+    return _aligned(rows)
+
+
+def _p50(entry: dict[str, Any] | None) -> float | None:
+    return _read(SERVER[0][1], (entry or {}).get("server"))
+
+
+def moved(report: Report, base: Report | None = None) -> list[str]:
+    """The MOVED pages whose server p50 moved most from the base's, or without one the slowest, with
+    every server number beside the base's."""
+
+    theirs = _pages(base) if base else {}
+    scored = []
+    for entry in report["pages"]:
+        mine, before = _p50(entry), _p50(theirs.get(entry["page"]))
+        if mine is not None and (base is None or before is not None):
+            scored.append((mine if base is None else abs(mine - before), entry))
+    if not scored:
+        return []
+    picked = [entry for _, entry in sorted(scored, key=lambda pair: -pair[0])[:MOVED]]
+    rows = [["page", *(name for name, _, _ in SERVER)]]
+    rows += [[_page(entry), *_server(entry, theirs.get(entry["page"]), base is not None)] for entry in picked]
+    heading = "The pages whose server p50 moved most:" if base else "The slowest pages by server p50:"
+    return [heading, *_aligned(rows)]
+
+
+def render(report: Report, base: Report | None = None) -> str:
+    """The table, then memory and cold start; with ``base``, each number beside how far it moved."""
+
+    return "\n".join([_title(report, base), *_table(report, base, True), "", *_summary(report, base)])
+
+
+def summary(report: Report, base: Report | None, table: str) -> str:
+    """The totals, memory, cold start and the pages that moved most, naming ``table``, where every page is."""
+
+    return "\n".join(
+        [
+            _title(report, base),
+            *_table(report, base, False),
+            "",
+            *_summary(report, base),
+            "",
+            *moved(report, base),
+            "",
+            f"Every page at each width: {table}",
+        ]
+    )

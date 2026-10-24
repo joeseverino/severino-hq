@@ -11,7 +11,9 @@ pass over every page; and the cold start to /health/ready/.
 Each run is kept in var/perf/<run>.json (tools/perf/runs.py), rewritten as
 each measurement finishes: one that fails is recorded with its error and the
 rest go on, and a server that fails to stop keeps what it served. The table
-goes beside it as <run>.txt.
+of every page goes beside it as <run>.table, and its summary (the totals,
+memory, cold start and the pages that moved most) as <run>.txt, which the
+session log shows.
 
 `--host-alone` measures the host with no extension composed. A ref whose
 server refuses the extension set for the plugin API it supports (its log
@@ -342,9 +344,12 @@ def main() -> int:
             sys.executable, [sys.executable, "-m", "tools.perf.report"], os.environ | {ALONE_BECAUSE: str(refused)}
         )
     rendered = table.render(here, base)
-    print(rendered)
-    # The session log shows this table as printed, beside the run it renders.
-    kept.path.with_suffix(".txt").write_text(rendered + "\n", encoding="utf-8")
+    every_page = kept.path.with_suffix(".table")
+    every_page.write_text(rendered + "\n", encoding="utf-8")
+    # The session log shows each var/perf/*.txt whole, so the summary is the .txt and the table is not.
+    summary = table.summary(here, base, str(every_page.relative_to(ROOT)))
+    kept.path.with_suffix(".txt").write_text(summary + "\n", encoding="utf-8")
+    print(rendered, "", *table.moved(here, base), sep="\n")
     print("\n" + closing(kept, here, base))
     return 1 if failures(kept.doc) else 0
 

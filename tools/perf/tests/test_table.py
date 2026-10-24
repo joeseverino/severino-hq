@@ -137,3 +137,36 @@ class TableTests(SimpleTestCase):
         found = rows(table.render(RECORDED, base))
 
         self.assertEqual(found["/domains/ (302)", "402"]["p50 ms"], "7.5")
+
+
+class SummaryTests(SimpleTestCase):
+    """The session log shows the summary whole, so it holds the totals and names the table, never every page."""
+
+    def test_the_summary_holds_the_totals_and_names_the_table_of_every_page(self):
+        said = table.summary(RECORDED, None, "var/perf/run.table")
+        lines = said.splitlines()
+
+        self.assertTrue(any(line.startswith("total ") for line in lines))
+        self.assertIn("memory idle", said)
+        self.assertIn("var/perf/run.table", lines[-1])
+        rows = [line for line in lines if line.startswith("/") or line.startswith(" ")]
+        self.assertFalse([line for line in rows if line.split()[1:2] in (["402"], ["1360"])], "no page's width row")
+
+    def test_beside_a_base_it_names_the_pages_whose_server_time_moved_most_first(self):
+        base = copy.deepcopy(RECORDED)
+        base["commit"] = "0123456789ab"
+        base["pages"][0]["server"]["p50_ms"] = 36.21
+        base["pages"][1]["server"]["p50_ms"] = 1.48
+
+        listed = table.moved(RECORDED, base)
+
+        self.assertIn("moved most", listed[0])
+        self.assertTrue(listed[2].startswith("/domains/"), listed)
+        self.assertIn("+6.0", listed[2])
+        self.assertTrue(listed[3].startswith("/ "), listed)
+
+    def test_without_a_base_it_names_the_slowest_pages(self):
+        listed = table.moved(RECORDED)
+
+        self.assertIn("slowest", listed[0])
+        self.assertTrue(listed[2].startswith("/ "), listed)
