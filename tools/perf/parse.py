@@ -8,6 +8,9 @@ _METRIC = re.compile(r"(?:^|,)\s*([!#$%&'*+.^_`|~\w-]+)((?:\s*;[^,]*)*)")
 _DURATION = re.compile(r";\s*dur\s*=\s*([0-9.]+)")
 # `footprint -f bytes` prints each process's resident footprint as this line.
 _FOOTPRINT = re.compile(r"^\s*phys_footprint:\s*(\d+)\s*B\s*$", re.MULTILINE)
+# How HQ refuses an extension built for another plugin API
+# (hq/platform/application/plugins.py), as a server's log holds it.
+_API_REFUSAL = re.compile(r"Plugin \S+ requires API \d+; HQ supports \d+\.?")
 # `docker stats --format '{{.MemUsage}}'`: the usage, a slash, the limit.
 _DOCKER_MEMORY = re.compile(r"^\s*([0-9.]+)\s*([kKMGT]?i?B)\s*/")
 _UNITS = {
@@ -57,6 +60,13 @@ def docker_memory_bytes(output: str) -> int:
     if not match or match.group(2) not in _UNITS:
         raise ValueError(f"docker stats said no memory in use: {output.strip()!r}")
     return round(float(match.group(1)) * _UNITS[match.group(2)])
+
+
+def api_refusal(log: str) -> str | None:
+    """HQ's refusal of an extension built for another plugin API, from a server's log; None without one."""
+
+    found = _API_REFUSAL.search(log)
+    return found.group(0) if found else None
 
 
 def cookie(output: str) -> tuple[str, str]:

@@ -12,7 +12,7 @@ from unittest import mock
 
 from django.test import SimpleTestCase
 
-from tools.perf import report, runs
+from tools.perf import report, runs, targets
 from tools.perf.targets import NotMeasured
 
 PLAN = report.Plan(
@@ -75,10 +75,12 @@ class Measured(SimpleTestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
-    def measure(self, target: FakeTarget) -> tuple[runs.Run, list[dict]]:
-        """A run measuring ``target`` as its here side, and the document as each save left it."""
+    def measure(self, target: FakeTarget, asked: report.Plan = PLAN, log: str = "") -> tuple[runs.Run, list[dict]]:
+        """A run measuring ``target`` as its here side, its server's log saying ``log``, and the
+        document as each save left it."""
 
-        kept = runs.Run.start(self.out, "here-dev-scratch", plan=PLAN.key())
+        kept = runs.Run.start(self.out, "here-dev-scratch", plan=asked.key())
+        (self.out / f"{kept.name}.here.log").write_text(log, encoding="utf-8")
         saves = []
         save = kept.save
 
@@ -91,7 +93,7 @@ class Measured(SimpleTestCase):
             mock.patch.object(report, "Scratch", lambda *_args, **_kwargs: target),
             contextlib.redirect_stdout(io.StringIO()),
         ):
-            report.measure_tree(self.out, "0123456789ab", True, PLAN, kept, "here")
+            report.measure_tree(self.out, "0123456789ab", True, asked, kept, "here")
         return kept, saves
 
 
@@ -124,14 +126,11 @@ class FailureTests(Measured):
         self.assertEqual(here["pages"][1]["server"]["p95_ms"], 5.0)
 
     def test_a_server_that_will_not_start_is_recorded(self):
-        class Refusing(FakeTarget):
-            def __enter__(self):
-                raise NotMeasured("the server exited before it was ready")
-
         kept, _ = self.measure(Refusing())
         here = json.loads(kept.path.read_text(encoding="utf-8"))["here"]
 
-        self.assertEqual(here["failures"], [{"step": "start", "error": "the server exited before it was ready"}])
+        self.assertEqual(here["failures"][0]["step"], "start")
+        self.assertIn("exited before it was ready", here["failures"][0]["error"])
 
     def test_the_closing_line_names_each_failure_and_where_the_run_is(self):
         kept, _ = self.measure(FakeTarget())
@@ -140,6 +139,61 @@ class FailureTests(Measured):
 
         self.assertIn("here browser:", said)
         self.assertIn(kept.path.name, said)
+
+
+# The tail of a scratch server's log when an extension needs a newer plugin API than the ref's HQ.
+REFUSED_LOG = """\
+Operations to perform:
+  File "/tmp/checkout/hq/platform/application/plugins.py", line 141, in _validate_manifest
+    raise ImproperlyConfigured(
+django.core.exceptions.ImproperlyConfigured: Plugin 'example.ledger' requires API 5; HQ supports 4.
+"""
+
+
+class Refusing(FakeTarget):
+    def __enter__(self):
+        raise NotMeasured("the server at http://127.0.0.1:9 exited before it was ready")
+
+
+class HostAloneTests(Measured):
+    def test_a_server_refusing_the_extension_set_for_its_plugin_api_starts_the_run_again_alone(self):
+        with self.assertRaisesRegex(report.SetRefused, r"requires API 5; HQ supports 4\."):
+            self.measure(Refusing(), log=REFUSED_LOG)
+
+    def test_any_other_start_failure_is_this_side_s_alone(self):
+        kept, _ = self.measure(Refusing(), log="OSError: [Errno 48] Address already in use\n")
+
+        self.assertEqual(kept.doc["here"]["failures"][0]["step"], "start")
+
+    def test_measured_alone_a_refusal_is_a_failure_and_never_a_loop(self):
+        alone = report.Plan(**{**PLAN.__dict__, "alone": "--host-alone asked for it"})
+
+        kept, _ = self.measure(Refusing(), alone, log=REFUSED_LOG)
+
+        self.assertEqual(kept.doc["here"]["failures"][0]["step"], "start")
+
+    def test_the_closing_line_says_the_host_was_measured_alone_and_why(self):
+        kept, _ = self.measure(FakeTarget())
+        kept.doc["alone"] = (
+            "ba9876543210 refused the extension set: Plugin 'example.ledger' requires API 5; HQ supports 4."
+        )
+        with mock.patch.object(report, "ROOT", self.out):
+            said = report.closing(kept, kept.doc["here"], kept.doc["here"])
+
+        self.assertIn("host measured alone on both sides because ba9876543210 refused", said)
+
+    def test_alone_a_scratch_server_reads_no_extension_set(self):
+        tree = Path("/tmp/checkout")
+        with mock.patch.dict(
+            "os.environ", {"HQ_LOCAL_PLUGINS": "example.ledger.plugin:plugin", "HQ_LOCAL_PYTHONPATH": "/x"}
+        ):
+            composed = targets.scratch_env(tree, trusted=True, alone=False)
+            alone = targets.scratch_env(tree, trusted=True, alone=True)
+
+        self.assertEqual(composed["HQ_LOCAL_PLUGINS"], "example.ledger.plugin:plugin")
+        self.assertNotIn("HQ_LOCAL_PLUGINS", alone)
+        self.assertNotIn("HQ_LOCAL_PYTHONPATH", alone)
+        self.assertEqual(alone["MISE_IGNORED_CONFIG_PATHS"], str(tree / "mise.local.toml"))
 
 
 class KeptTests(SimpleTestCase):

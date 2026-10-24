@@ -88,3 +88,21 @@ class CookieTests(SimpleTestCase):
         ):
             with self.subTest(output=output), self.assertRaises(ValueError):
                 parse.cookie(output)
+
+
+class ApiRefusalTests(SimpleTestCase):
+    def test_the_refusal_hq_raises_is_read_from_a_log(self):
+        log = (
+            '  File "/tmp/checkout/hq/platform/application/plugins.py", line 141, in _validate_manifest\n'
+            "django.core.exceptions.ImproperlyConfigured: Plugin 'example.ledger' requires API 5; HQ supports 4.\n"
+        )
+        self.assertEqual(parse.api_refusal(log), "Plugin 'example.ledger' requires API 5; HQ supports 4.")
+
+    def test_another_failure_is_no_refusal(self):
+        for log in (
+            "",
+            "OSError: [Errno 48] Address already in use",
+            "ImproperlyConfigured: Invalid HQ plugin id 'x'.",
+        ):
+            with self.subTest(log=log):
+                self.assertIsNone(parse.api_refusal(log))

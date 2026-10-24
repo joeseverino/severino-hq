@@ -116,12 +116,29 @@ def probe_counts(output: str) -> dict[str, int | None]:
     raise NotMeasured(f"the query probe printed no counts: {output.strip()[-400:]!r}")
 
 
+# Where a checkout names the extensions its scratch server composes: its
+# gitignored mise.local.toml, and the two variables that file sets.
+LOCAL = "mise.local.toml"
+_LOCAL_SET = ("HQ_LOCAL_PLUGINS", "HQ_LOCAL_PYTHONPATH")
+
+
+def scratch_env(tree: Path, *, trusted: bool, alone: bool) -> dict[str, str]:
+    """What a tree's scratch tasks run under: alone, mise reads no mise.local.toml there and the
+    extension set it names is not inherited either, so the server composes the host alone."""
+
+    env = clean_env(**({"MISE_TRUSTED_CONFIG_PATHS": str(tree)} if trusted else {}))
+    if alone:
+        env = {name: value for name, value in env.items() if name not in _LOCAL_SET}
+        env["MISE_IGNORED_CONFIG_PATHS"] = str(tree / LOCAL)
+    return env
+
+
 class Scratch:
     """`mise run dev:scratch --seed showcase` in ``tree``, on a port of its own."""
 
-    def __init__(self, tree: Path, log: Path, trusted: bool = False) -> None:
+    def __init__(self, tree: Path, log: Path, trusted: bool = False, alone: bool = False) -> None:
         self.tree, self.log = tree, log
-        self.env = clean_env(**({"MISE_TRUSTED_CONFIG_PATHS": str(tree)} if trusted else {}))
+        self.env = scratch_env(tree, trusted=trusted, alone=alone)
         self.port = free_port()
         self.url = f"http://127.0.0.1:{self.port}"
         self.server: subprocess.Popen | None = None

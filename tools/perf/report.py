@@ -13,6 +13,11 @@ each measurement finishes: one that fails is recorded with its error and the
 rest go on, and a server that fails to stop keeps what it served. The table
 goes beside it as <run>.txt.
 
+`--host-alone` measures the host with no extension composed. A ref whose
+server refuses the extension set for the plugin API it supports (its log
+holds HQ's refusal) makes the run start again host alone on both sides, and
+its closing line says so and why.
+
 `--base <ref>` measures the ref first, its own server in a throwaway worktree
 made and removed as `mise run test --at` makes one (tools/gate/at.py), with
 this checkout's harness and page list, and prints each number beside how far
@@ -39,7 +44,7 @@ lazy import django
 lazy from playwright.sync_api import sync_playwright
 
 from tools.gate.at import RefError, git, remove
-from tools.perf import measure, runs, table
+from tools.perf import measure, parse, runs, table
 from tools.perf.targets import COLD_STARTS, Image, NotMeasured, Scratch, clean_env, run
 lazy from hq.platform.core.tests.browser.estate import navigation
 lazy from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, viewport
@@ -48,6 +53,8 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "var" / "perf"
 # The extension set dev:scratch composes, gitignored.
 LOCAL = ROOT / "mise.local.toml"
+# Set when a run starts again host alone, to the refusal that made it.
+ALONE_BECAUSE = "PERF_HOST_ALONE_BECAUSE"
 
 
 def usage(name: str) -> str:
@@ -65,6 +72,8 @@ class Plan:
     requests: int
     image: bool
     extensions: list[str]
+    # Why the host is measured with no extension composed, or nothing when the set is composed.
+    alone: str = ""
 
     @property
     def target(self) -> str:
@@ -82,9 +91,25 @@ class Plan:
         }
 
 
+class SetRefused(Exception):
+    """A tree's server refused the extension set for the plugin API it supports."""
+
+
+def alone_because() -> str:
+    """Why this run measures the host alone, or nothing when it composes the extension set."""
+
+    if because := os.environ.get(ALONE_BECAUSE):
+        return because
+    return "--host-alone asked for it" if usage("host_alone") == "true" else ""
+
+
 def plan() -> Plan:
     """The pages the layout survey walks, the phone's and the wide desktop's viewports, and the task's flags."""
 
+    alone = alone_because()
+    if alone:
+        # The pages are the host's own, as the servers measured will compose them.
+        os.environ["SEVERINO_HQ_PLUGINS"] = ""
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hq.config.settings")
     django.setup()
     return Plan(
@@ -93,6 +118,7 @@ def plan() -> Plan:
         requests=int(usage("requests") or 20),
         image=usage("image") == "true",
         extensions=[spec for spec in os.environ.get("SEVERINO_HQ_PLUGINS", "").split(",") if spec],
+        alone=alone,
     )
 
 
@@ -224,10 +250,18 @@ def measure_tree(tree: Path, commit: str, here: bool, asked: Plan, kept: runs.Ru
     log = OUT / f"{kept.name}.{side}.log"
     print(f"Measuring {commit} ({asked.target}); its server's output is in {log}", flush=True)
     try:
-        target = Image(image_of(tree, commit, here), log) if asked.image else Scratch(tree, log, trusted=not here)
+        target = (
+            Image(image_of(tree, commit, here), log)
+            if asked.image
+            else Scratch(tree, log, trusted=not here, alone=bool(asked.alone))
+        )
         target.__enter__()
-    except Exception as error:  # noqa: BLE001 - a server that will not start is this side's one failure
+    except Exception as error:
         recorder.fail("start", error)
+        said = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
+        refused = None if asked.alone else parse.api_refusal(said)
+        if refused:
+            raise SetRefused(f"{commit} refused the extension set: {refused}") from error
         return report
     try:
         measure_target(target, asked, recorder)
@@ -256,6 +290,8 @@ def failures(doc: dict[str, Any]) -> list[str]:
 def closing(kept: runs.Run, here: runs.Report, base: runs.Report | None) -> str:
     said = f"perf:report {here['commit']}" + (f" beside {base['commit']}" if base else "")
     said += f" ({here['target']})"
+    if kept.doc.get("alone"):
+        said += f", the host measured alone{' on both sides' if base else ''} because {kept.doc['alone']}"
     if reused := kept.doc.get("base_reused_from"):
         said += f", the base kept from run {reused}"
     failed = failures(kept.doc)
@@ -293,9 +329,18 @@ def main() -> int:
         print(f"perf:report --base {ref}: {error}", file=sys.stderr)
         return 2
     stem = runs.name(here_commit, base_commit and base_commit[:12], asked.target, datetime.now(UTC))
-    kept = runs.Run.start(OUT, stem, target=asked.target, plan=asked.key())
-    base = measure_base(base_commit, asked, kept, usage("fresh") == "true") if base_commit else None
-    here = measure_tree(ROOT, here_commit, True, asked, kept, "here")
+    kept = runs.Run.start(OUT, stem, target=asked.target, plan=asked.key(), alone=asked.alone or None)
+    try:
+        base = measure_base(base_commit, asked, kept, usage("fresh") == "true") if base_commit else None
+        here = measure_tree(ROOT, here_commit, True, asked, kept, "here")
+    except SetRefused as refused:
+        kept.doc["refused"] = str(refused)
+        kept.save()
+        print(f"{refused}; measuring the host alone on both sides instead", flush=True)
+        # The page list comes from this process's Django, composed with the set, so the run starts again.
+        os.execve(
+            sys.executable, [sys.executable, "-m", "tools.perf.report"], os.environ | {ALONE_BECAUSE: str(refused)}
+        )
     rendered = table.render(here, base)
     print(rendered)
     # The session log shows this table as printed, beside the run it renders.
