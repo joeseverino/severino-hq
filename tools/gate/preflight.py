@@ -4,9 +4,9 @@ Runs, in order:
 
 1. ``mise run ci``: every gate the pipeline runs (one that cannot run fails);
    or, with --remote, what GitHub ran on this exact commit, waited for and
-   required to pass: CI's newest run and every job its verdict needs, on main
-   the Compose it starts, and every other run and check. The commit must be
-   pushed.
+   required to pass: CI's newest run, which concludes success only when its
+   verdict job (Ready, or Release on main) passed, on main the Compose it
+   starts, and every other run and check. The commit must be pushed.
 2. ``mise run suite:as-image``, the extensions required.
 3. ``hq-host check`` on the deploy host, read-only, as the SSH login: built
    here for the host's platform from HEAD, so the release being checked is
@@ -190,64 +190,7 @@ class GitHub:
         if any(item.get("conclusion") not in PASSING for item in self.checks):
             print("  a check did not pass")
             ok = False
-        return self.ci_jobs() and ok
-
-    def ci_jobs(self) -> bool:
-        """Every job CI's verdict needs ran and passed in its latest attempt,
-        or was skipped because the image its pull request proved was
-        promoted."""
-
-        ci = self.ci()
-        verdict_job = {"pull_request": "ready", "push": "release"}.get(ci["event"]) if ci else None
-        if verdict_job is None:
-            print(f"  CI ran on {ci['event'] if ci else 'nothing'}, which has no verdict job")
-            return False
-        required, promote = required_jobs(self.sha, verdict_job)
-        if not required:
-            print(f"  could not read the jobs CI's {verdict_job} needs from {CI}")
-            return False
-        jobs = self.api.pages(
-            f"repos/{self.repository}/actions/runs/{ci['id']}/jobs?filter=latest&per_page=100", "jobs"
-        )
-        promoted = any(
-            step.get("name") == promote and step.get("conclusion") == "success"
-            for job in jobs
-            for step in job.get("steps") or []
-        )
-        ok = True
-        for name, skippable in required.items():
-            ran = [job for job in jobs if job["name"] == name or job["name"].startswith((f"{name} (", f"{name} / "))]
-            if not ran:
-                print(f"  required job {name}: did not run")
-                ok = False
-            for job in ran:
-                result = job.get("conclusion") or job["status"]
-                if result != "success" and not (result == "skipped" and skippable and promoted):
-                    print(f"  required job {job['name']}: {result}")
-                    ok = False
         return ok
-
-
-def required_jobs(sha: str, verdict_job: str) -> tuple[dict[str, bool], str]:
-    """The jobs CI's verdict job needs, by the name
-    GitHub shows, from ci.yml at this commit, each marked when ci.yml skips it
-    on a push whose pull request already proved the tree; and the name of the
-    step that promotes that proven image."""
-
-    workflow = json.loads(
-        subprocess.run(
-            ["yq", "-o=json"], input=git("show", f"{sha}:{CI}"), capture_output=True, text=True, check=True
-        ).stdout
-    )
-    jobs = workflow["jobs"]
-    needs = jobs.get(verdict_job, {}).get("needs", [])
-    required = {
-        (jobs[job].get("name") or job).split(" (")[0]: "needs.proven.outputs.digest ==" in (jobs[job].get("if") or "")
-        for job in needs
-        if job != "proven"
-    }
-    promote = next((step["name"] for step in jobs["image"]["steps"] if step.get("id") == "promote"), "")
-    return required, promote
 
 
 def github_gates() -> bool:

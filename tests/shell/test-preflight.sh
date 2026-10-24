@@ -223,26 +223,11 @@ run() { # run <id> <workflow file> <event> <status> <conclusion|null> <created>
         "$1" "$2" "$3" "$4" "$5" "$6"
 }
 runs() { page actions/runs 1 workflow_runs "$(list "$@")"; }
-job() { # job <conclusion> <name> [the promotion step's conclusion]
-    printf '{"name":"%s","status":"completed","conclusion":"%s","steps":[{"name":"Promote the image its pull request proved","conclusion":"%s"}]}' \
-        "$2" "$1" "${3:-skipped}"
-}
-jobs() { # jobs <run id> <job...>
-    id="$1"
-    shift
-    page "actions/runs/${id}/jobs" 1 jobs "$(list "$@")"
-}
 check() { printf '{"name":"%s","status":"%s","conclusion":%s}' "$3" "$1" "$2"; }
 checks() { # checks <page> <check...>
     n="$1"
     shift
     page "commits/${sha}/check-runs" "${n}" check_runs "$(list "$@")"
-}
-# The gate jobs a push skips when its pull request proved the tree.
-gates() { list "$(job "$1" Checks)" "$(gates_but_checks "$1")"; } # gates <conclusion>
-gates_but_checks() {
-    list "$(job "$1" "Tests (3.15)")" "$(job "$1" "Browser (layout)")" \
-        "$(job "$1" "Browser (navigation)")" "$(job "$1" "Browser (demo)")" "$(job "$1" Controller)"
 }
 passed='"success"'
 fresh() { rm -rf "${TEST_GH}" && mkdir -p "${TEST_GH}"; }
@@ -252,22 +237,14 @@ pull_request() {
     fresh
     runs "$(run 11 ci.yml pull_request completed "${passed}" 2026-10-19T10:00:00Z)" \
         "$(run 12 deploy.yml workflow_dispatch waiting null 2026-10-19T10:30:00Z)"
-    pr_jobs "$(gates success)"
     checks 1 "$(check completed "${passed}" Checks)" "$(check completed "${passed}" Ready)"
 }
-pr_jobs() { # pr_jobs <the gate jobs>
-    jobs 11 "$(job skipped "Proven on its pull request")" "$1" "$(job success CodeQL)" "$(job success Image)" \
-        "$(job success "Image checks")" "$(job success "Composition / Build HQ")" "$(job success Ready)" \
-        "$(job skipped Release)"
-}
 # A push to main: CI, the Compose its Release started, and the Demo build.
-main_push() { # main_push <the gate jobs> <the promotion step's conclusion>
+main_push() {
     fresh
     runs "$(run 21 ci.yml push completed "${passed}" 2026-10-19T11:00:00Z)" \
         "$(run 22 compose.yml workflow_dispatch completed "${passed}" 2026-10-19T11:20:00Z)" \
         "$(run 23 demo.yml push completed "${passed}" 2026-10-19T11:00:01Z)"
-    jobs 21 "$(job success "Proven on its pull request")" "$1" "$(job success CodeQL)" \
-        "$(job success Image "$2")" "$(job skipped Ready)" "$(job success Release)"
     checks 1 "$(check completed "${passed}" Image)"
 }
 
@@ -279,11 +256,6 @@ remote_refuses() { # remote_refuses <why> [expected output]
     expect 1 "$1" usage_remote=true
     [ -z "${2:-}" ] || says "$2"
 }
-
-pr_jobs "$(list "$(job skipped Checks)" "$(gates_but_checks success)")"
-remote_refuses "a required job that was skipped" "required job Checks: skipped"
-pr_jobs "$(gates_but_checks success)"
-remote_refuses "a required job that never ran" "required job Checks: did not run"
 
 pull_request
 checks 2 "$(check completed '"failure"' "Structural bar")"
@@ -318,13 +290,8 @@ expect 0 "a run that finishes while watched" usage_remote=true
 PREFLIGHT_REMOTE_TIMEOUT=0
 grep -q '^gh run watch 11 ' "${TEST_LOG}" || fail "the running CI was not watched"
 
-main_push "$(gates success)" skipped
-expect 0 "a push to main whose gates and Compose passed" usage_remote=true
-main_push "$(gates skipped)" success
-expect 0 "a push that promoted the image its pull request proved" usage_remote=true
-main_push "$(gates skipped)" skipped
-remote_refuses "a push that skipped its gates and promoted nothing" "required job Checks: skipped"
-main_push "$(gates success)" skipped
+main_push
+expect 0 "a push to main whose CI and Compose passed" usage_remote=true
 runs "$(run 21 ci.yml push completed "${passed}" 2026-10-19T11:00:00Z)" \
     "$(run 22 compose.yml workflow_dispatch in_progress null 2026-10-19T11:20:00Z)"
 remote_refuses "a Compose run still going" "compose.yml is in_progress"
