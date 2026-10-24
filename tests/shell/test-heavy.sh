@@ -1,11 +1,11 @@
 #!/bin/sh
 # Heavy commands take turns: a second one names the first and waits for it, a
 # bound that runs out exits 75 naming the holder, a killed command frees the
-# turn, a heavy command inside a turn runs, a waiting one names the holder
-# again at its interval, a turn prints the load average as it starts and ends,
-# the test task takes it only for tests with a database or a browser, CI takes
-# no lock, and every heavy task carries a bound that, run out, stops what it
-# started and frees the turn.
+# turn, a heavy command inside a turn runs, a file task's body runs once, a
+# waiting one names the holder again at its interval, a turn prints the load
+# average as it starts and ends, the test task takes it only for tests with a
+# database or a browser, CI takes no lock, and every heavy task carries a bound
+# that, run out, stops what it started and frees the turn.
 set -eu
 
 repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
@@ -104,6 +104,25 @@ esac
 # shellcheck disable=SC2016  # expanded by the inner shell
 said="$("${heavy}" sh -c '"$1" echo nested' sh "${heavy}" 2>/dev/null)" || fail "a heavy command inside a turn was refused"
 [ "${said}" = nested ] || fail "the nested command did not run: ${said}"
+
+# A file task takes the turn by running itself again under heavy.sh, and its
+# body goes ahead in the run whose pid heavy-turn.sh exported, so a command
+# inside a turn runs as heavy.sh's own pid: a fork there would start the task
+# again without end. This one counts its starts and gives up past the three a
+# turn takes.
+cat >"${work}/file-task" <<'SH'
+#!/bin/sh
+set -eu
+starts="$(($(cat "$1" 2>/dev/null || echo 0) + 1))"
+echo "${starts}" >"$1"
+[ "${starts}" -le 3 ] || exit 9
+. "${MISE_CONFIG_ROOT}/tools/lib/heavy-turn.sh"
+echo ran >>"$2"
+SH
+chmod +x "${work}/file-task"
+MISE_CONFIG_ROOT="${repo}" "${work}/file-task" "${work}/starts" "${work}/ran" 2>/dev/null ||
+    fail "a file task that takes the turn started itself $(cat "${work}/starts") times"
+[ "$(cat "${work}/ran")" = ran ] || fail "a file task that takes the turn did not run its body once"
 
 # The test task takes the turn itself, only for tests that need it: one with
 # no database and no browser runs while another command holds the turn, one
