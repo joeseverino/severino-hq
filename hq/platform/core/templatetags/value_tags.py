@@ -807,4 +807,4 @@ slotted(
     ("content",),
     frozenset(("url", "css", "tone", "tip", "title", "label", "modal", "entity")),
 )
-slotted("band_fact", "partials/_band_fact.html", ("value", "tone"), frozenset(("icon", "label", "tone")))
+slotted("band_fact", "partials/_band_fact.html", ("value",), frozenset(("icon", "label", "tone")))
