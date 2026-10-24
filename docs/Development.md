@@ -268,6 +268,18 @@ runs the layout gate in two legs side by side (`browser:layout-1`,
 (`browser:layout-chromium-1`, `-2`), which `mise run browser` leaves to CI. One browser test runs as
 `mise run test <label>` once `mise run setup:browser webkit` has installed the engine.
 
+A failure only CI's Linux shows is reproduced with `mise run dev:linux-browser`
+and a gate (`browser:layout-chromium-1`) or test labels, drawn in Chromium
+unless `--engine` names another. It runs them on this checkout inside the
+Playwright image `ci.yml` gives the Browser job, as linux/amd64 with the job's
+options, set up as the toolchain action sets a runner up, and copies a failed
+rule's screenshots to `var/browser-linux/`. It needs a container runtime that
+runs x64 through Rosetta (`colima start --cpu 4 --memory 5 --vz-rosetta`).
+Emulated, the browser draws slower than on a runner, so a rule that reads a
+page against its frames fails more often than in CI: a whole leg's classes
+side by side fail far past CI's list, and two classes named as labels come
+closer to it.
+
 Every page a gate serves runs under the policy HQ sends: a page rendered
 through the test client keeps its response's headers (`gate.answered`), the
 API reference its own derived policy, and a page a test puts together HQ's.
