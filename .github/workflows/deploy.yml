@@ -44,7 +44,6 @@ jobs:
     permissions:
       contents: read
       packages: read
-      deployments: write
     outputs:
       image: ${{ steps.find.outputs.image }}
       deployment: ${{ steps.record.outputs.deployment }}
@@ -76,10 +75,20 @@ jobs:
           echo "image=${tag%:*}@$digest" >> "$GITHUB_OUTPUT"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
           echo "deploying ${tag%:*}@$digest, composed from ${commit:0:12}"
+      # HQ's app, asked for deployments only and for this repository only, so
+      # the job's own token stays read-only and the write lives one step.
+      - &deployments-token
+        name: Mint a token that can only write deployments
+        id: deployments
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HQ_APP_KEY }}
+          permission-deployments: write
       - name: Record the deployment
         id: record
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.deployments.outputs.token }}
           COMMIT: ${{ steps.find.outputs.commit }}
           IMAGE: ${{ steps.find.outputs.image }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -124,12 +133,12 @@ jobs:
     concurrency:
       group: deploy-awaiting-approval
       cancel-in-progress: true
-    permissions:
-      deployments: write
+    permissions: {}
     steps:
+      - *deployments-token
       - name: Approved
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.deployments.outputs.token }}
           DEPLOYMENT: ${{ needs.resolve.outputs.deployment }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -190,12 +199,12 @@ jobs:
     if: always() && needs.resolve.outputs.deployment != ''
     runs-on: ubuntu-26.04
     timeout-minutes: 5
-    permissions:
-      deployments: write
+    permissions: {}
     steps:
+      - *deployments-token
       - name: Set the deployment's status
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.deployments.outputs.token }}
           DEPLOYMENT: ${{ needs.resolve.outputs.deployment }}
           RESULT: ${{ needs.deploy.result }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

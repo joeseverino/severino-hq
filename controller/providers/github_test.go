@@ -328,8 +328,9 @@ func TestGitHubProbe(t *testing.T) {
 }
 
 // The app is registered with exactly what the controller's code asks for,
-// a dependency update run's grant included, plus Actions write for an
-// admission starting the host's composition.
+// a dependency update run's grant included, plus the pipeline's: Actions
+// write for an admission starting the host's composition, and Deployments
+// write for Deploy recording production's deployment.
 func TestTheAppHoldsExactlyWhatHQAsksFor(t *testing.T) {
 	data, err := os.ReadFile("../../deploy/github-apps.json")
 	if err != nil {
@@ -344,7 +345,7 @@ func TestTheAppHoldsExactlyWhatHQAsksFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	wanted := map[string]string{}
-	for _, grant := range []githubapi.AppPermissions{githubRead, githubChecksWrite, githubPullsWrite, githubRenovate, {Actions: githubapi.AppPermissionsActionsWrite}} {
+	for _, grant := range []githubapi.AppPermissions{githubRead, githubChecksWrite, githubPullsWrite, githubRenovate, {Actions: githubapi.AppPermissionsActionsWrite}, {Deployments: githubapi.AppPermissionsDeploymentsWrite}} {
 		encoded, _ := json.Marshal(grant)
 		var names map[string]string
 		_ = json.Unmarshal(encoded, &names)
