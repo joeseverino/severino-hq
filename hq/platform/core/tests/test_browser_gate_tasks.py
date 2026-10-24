@@ -4,6 +4,7 @@ runs. The gates' `--fallback-face` still finds the face it withholds."""
 import ast
 import os
 import tomllib
+from collections import Counter
 from pathlib import Path
 from unittest import mock
 
@@ -48,10 +49,14 @@ def gate_classes() -> dict[str, str]:
     }
 
 
+def browser_tasks() -> dict[str, dict]:
+    return {name: task for name, task in mise_tasks().items() if name.startswith("browser:")}
+
+
 def browser_labels() -> set[str]:
     """Every word the ``browser:*`` tasks run."""
 
-    return {word for name, task in mise_tasks().items() if name.startswith("browser:") for word in body(task).split()}
+    return {word for task in browser_tasks().values() for word in body(task).split()}
 
 
 @tag("source", "tree")
@@ -63,6 +68,20 @@ class BrowserGateTaskTests(SimpleTestCase):
         self.assertTrue(classes)
         unnamed = sorted(name for name, module in classes.items() if name not in labels and module not in labels)
         self.assertEqual(unnamed, [], "no browser:* task runs these")
+        # Once per engine: a WebKit leg names its classes, and a leg in
+        # another engine runs a WebKit leg rather than naming any.
+        named = Counter(
+            name
+            for task in browser_tasks().values()
+            for name, module in classes.items()
+            if {name, module} & set(body(task).split())
+        )
+        self.assertEqual(sorted(name for name, count in named.items() if count > 1), [], "two browser tasks run these")
+        run = Counter(
+            word for name, task in browser_tasks().items() if "chromium" in name for word in body(task).split()
+        )
+        legs = [name for name in browser_tasks() if name.startswith("browser:layout-") and "chromium" not in name]
+        self.assertEqual({leg: run[leg] for leg in legs}, dict.fromkeys(legs, 1), "Chromium runs each layout leg once")
 
     def test_a_browser_gate_s_template_restates_django_s_env(self):
         """A template extends none, so each Django gate template carries the
