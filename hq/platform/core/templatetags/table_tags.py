@@ -3,11 +3,12 @@
 ``{% table_region %}`` wraps the table in its labeled region,
 ``{% table_heading %}`` draws each column heading with its kind, its drop
 rank and its sort control, and ``{% row_toggle %}`` draws the disclosure of a
-row that holds more than it shows. The region marks each cell with what its
-column does, so the stylesheet reads it off the cell. Which columns show is the
-browser's to say, the only thing that knows how wide a table is: tables.js
-lets a ranked column go while its table is wider than its region, before the
-frame is painted, and the row's toggle shows what left.
+row that holds more than it shows. A column's kind is the heading's, which the
+stylesheet reads down the column; the region marks each cell only with what
+the heading cannot say of it. Which columns show is the browser's to say, the
+only thing that knows how wide a table is: tables.js lets a ranked column go
+while its table is wider than its region, before the frame is painted, and
+the row's toggle shows what left.
 """
 
 import inspect
@@ -37,9 +38,8 @@ _SECTIONS = ("thead", "tbody", "tfoot")
 # technology alone, and what the row keeps for its open line or shows only in
 # a narrow box.
 _OFF_LINE = frozenset({"visually-hidden", "row-below", "row-more", "narrow-only"})
-# The kinds a column's body cells say they are, for the stylesheet to set
-# them: a status's and a figure's line is kept, and a control's never wraps.
-_MARKED_KINDS = frozenset({"status", "numeric", "control"})
+# The kinds whose cells keep their line: a status's and a figure's.
+_KEPT_KINDS = frozenset({"status", "numeric"})
 # The characters a line of prose or a status keeps whole; one longer wraps,
 # and its cell holds out for a floor (`data-long`, tables.css).
 LONG = 48
@@ -193,12 +193,12 @@ class _Cells(HTMLParser):
         self.unsaid = self.off_line = None
 
     def _mark_table(self) -> None:
-        """Each cell says what its column does, so the stylesheet reads it off
-        the cell itself and never matches a cell to its heading by place."""
+        """What each cell says of itself that its heading cannot: whether it is
+        blank and whether its whole column is, the line it keeps or the floor
+        it holds out for, and a group's span."""
 
         heads = [row.cells for row in self.rows if row.section == "thead"]
         kinds = _kinds(heads)
-        marked = {index: kind for index, kind in kinds.items() if kind in _MARKED_KINDS}
         named = _naming_column(heads)
         if rank := next(
             (cell.attrs.get("data-drop") for cells in heads[-1:] for cell in cells[named : named + 1]), None
@@ -215,9 +215,9 @@ class _Cells(HTMLParser):
             for index, cell in enumerate(row.cells):
                 marks = [" data-blank"] if body and cell.says_nothing else []
                 if "colspan" not in cell.attrs:
-                    marks += _column_marks(cell, marked.get(index) if body else None, index in empty)
+                    marks += [" data-blank-column"] if index in empty else []
                     long = cell.longest > LONG
-                    kept = marked.get(index) in ("status", "numeric")
+                    kept = kinds.get(index) in _KEPT_KINDS
                     if body and kept and cell.closed and not cell.says_nothing and not long:
                         self.held.append((cell.opened, cell.closed))
                     if body and index != named and kinds.get(index) in ("prose", "status") and long:
@@ -237,22 +237,10 @@ def _classes(attrs: dict[str, str | None]) -> list[str]:
     return (attrs.get("class") or "").split()
 
 
-def _column_marks(cell: _Cell, kind: str | None, blank_column: bool) -> list[str]:
-    """What a cell says of its column: the line it keeps, and whether the
-    whole column is blank. A mark the template wrote stands."""
-
-    marks = []
-    if kind and "data-kind" not in cell.attrs:
-        marks.append(f' data-kind="{kind}"')
-    if blank_column:
-        marks.append(" data-blank-column")
-    return marks
-
-
 def _kinds(heads: list[list[_Cell]]) -> dict[int, str]:
-    """Each column's kind, by place, from the heading that declares it: the
-    cells of a column that keeps its line (a status, a figure) say so too,
-    and a long cell of prose or a status holds out for a floor."""
+    """Each column's kind, by place, from the heading that declares it: what a
+    cell of a column that keeps its line (a status, a figure) says is wrapped
+    whole, and a long cell of prose or a status holds out for a floor."""
 
     return {index: kind for cells in heads for index, cell in enumerate(cells) if (kind := cell.attrs.get("data-kind"))}
 

@@ -47,8 +47,12 @@ SELECTORS = {
     # time, one part of a value told in several ("Up 1 week", "healthy"), a
     # control's label in a row's controls, a page's head or a list's filters.
     "one_line": (
-        ".pill, td time, td .cell-part,"
-        ' :is(td[data-kind="control"], .page-head, .filter-bar, .table-toolbar) :is(.btn, button)'
+        ".pill, td time, td .cell-part, :is(.page-head, .filter-bar, .table-toolbar) :is(.btn, button), "
+        + ", ".join(
+            f'.data-table:has(> thead th:nth-child({place})[data-kind="control"])'
+            f" > tbody > tr > td:nth-child({place}):not([colspan]) :is(.btn, button)"
+            for place in range(1, 17)
+        )
     ),
     # A control one line tall, drawn on its own rather than inside a label
     # that is the control a reader sees.

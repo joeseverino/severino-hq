@@ -199,6 +199,20 @@ class TableTagTests(SimpleTestCase):
         (named,) = elements(_render('{% table_heading "Name" "identifier" %}'), "th")
         self.assertEqual(named.attrs["data-kind"], "identifier")
 
+    def test_a_column_s_kind_is_said_once_on_its_heading(self):
+        """The stylesheet reads a column's kind down from its heading, so no
+        body cell repeats it: the region writes on a cell only what the
+        heading cannot say."""
+
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "State" "status" %}{% table_heading "Act" css="actions-col" %}</tr></thead><tbody>'
+            "<tr><td>a</td><td>Up</td><td><button>Go</button></td></tr></tbody></table>{% endtable_region %}"
+        )
+        html = _render(source)
+        self.assertEqual([heading.attrs["data-kind"] for heading in elements(html, "th")], ["prose", "status", "control"])
+        self.assertEqual([cell for cell in elements(html, "td") if "data-kind" in cell.attrs], [])
+
     def test_a_heading_carries_its_rank(self):
         source = (
             '{% table_heading "Name" %}{% table_heading "A" drop=1 %}{% table_heading "B" drop=3 %}'
