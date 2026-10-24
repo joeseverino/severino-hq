@@ -42,6 +42,13 @@
   text never changes face, and therefore never moves, after it is drawn.
   {% endcomment %}
   <link rel="preload" href="{% static 'fonts/inter/inter-variable-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
+  {% comment %}
+  Nothing is drawn until the content is parsed whole: Chromium may paint a
+  partly parsed page, and a table's later rows, or a toolbar's later parts,
+  would then widen what is already drawn. The target follows `</main>`, since
+  Chromium lets go once the element it names is inserted.
+  {% endcomment %}
+  <link rel="expect" href="#parsed" blocking="render">
   {% stylesheets %}
   <script src="{% static 'js/transitions.js' %}" {% csp_nonce_attr %}></script>
   <script src="{% static 'js/tables.js' %}" {% csp_nonce_attr %}></script>
@@ -260,6 +267,8 @@
 
     {% block content %}{% endblock %}
   </main>
+  {# What the head's expect link waits for: the content above is parsed. #}
+  <template id="parsed"></template>
 
   {% block site_footer %}
     {% if saved_copy and user.is_authenticated %}
