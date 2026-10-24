@@ -708,16 +708,20 @@ class WorktreeTests(SimpleTestCase):
 
             def relay(_command, _sink, _ref, cwd, env):
                 seen["test"] = Path(cwd, "hq", "tests", "test_new.py").read_text(encoding="utf-8")
+                seen["database"] = env.get("SEVERINO_TEST_DATABASE_PATH")
                 Path(env["usage_found_into"]).write_text("[]", encoding="utf-8")
 
             with (
-                mock.patch.dict(os.environ, ASKED, clear=True),
+                mock.patch.dict(
+                    os.environ, {**ASKED, "SEVERINO_TEST_DATABASE_PATH": "var/example.sqlite3"}, clear=True
+                ),
                 mock.patch.object(look, "LENS", ()),
                 mock.patch.object(look, "_relay", relay),
                 mock.patch("sys.stdout", new_callable=io.StringIO),
             ):
                 self.assertEqual(look._look_at("HEAD", "survey", 0.0), ({}, {}, {}))
             self.assertEqual(seen["test"], "new\n")
+            self.assertIsNone(seen["database"], "the base migrates a database of its own")
 
     def test_a_base_that_names_nothing_is_refused(self):
         with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):

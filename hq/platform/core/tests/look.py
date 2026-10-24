@@ -317,7 +317,9 @@ def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Fou
         lens = [str(path.relative_to(checkout)) for path in LENS]
         task.overlay(tree, [*present, *lens], deleted, checkout)
         found, log = tree.parent / "found.json", tree.parent / "look.log"
-        env = {name: value for name, value in os.environ.items() if name not in {f"{PREFIX}base", "VIRTUAL_ENV"}}
+        # The kept test database is migrated for this checkout's code, so the base makes its own in its worktree.
+        left = {f"{PREFIX}base", "VIRTUAL_ENV", "SEVERINO_TEST_DATABASE_PATH"}
+        env = {name: value for name, value in os.environ.items() if name not in left}
         env |= {
             PREFIX + _FINDINGS: str(found),
             PREFIX + _CLOCK: str(clock_at),
