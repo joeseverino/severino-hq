@@ -34,7 +34,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
-lazy from django.urls import NoReverseMatch, Resolver404, URLResolver, get_resolver, resolve, reverse
+lazy from django.urls import NoReverseMatch, Resolver404, resolve, reverse
+
+lazy from hq.platform.application.routes import routed
 
 ROOT = Path(__file__).resolve().parents[4]
 # How mise names a task's argument in the script's environment.
@@ -110,16 +112,10 @@ def _routes() -> dict[str, str]:
     """Every route that takes no argument, by name, at its path."""
 
     found: dict[str, str] = {}
-
-    def walk(patterns: Sequence, namespace: str) -> None:
-        for pattern in patterns:
-            if isinstance(pattern, URLResolver):
-                walk(pattern.url_patterns, f"{namespace}{pattern.namespace}:" if pattern.namespace else namespace)
-            elif pattern.name:
-                with suppress(NoReverseMatch):
-                    found[namespace + pattern.name] = reverse(namespace + pattern.name)
-
-    walk(get_resolver().url_patterns, "")
+    for route in routed():
+        if route.name:
+            with suppress(NoReverseMatch):
+                found[route.name] = reverse(route.name)
     return found
 
 
