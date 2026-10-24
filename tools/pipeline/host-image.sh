@@ -50,7 +50,7 @@ image_job() {
 
 image="ghcr.io/$repository:sha-${ref:0:12}"
 for attempt in $(seq 1 "$polls"); do
-  if digest=$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"') &&
+  if digest=$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}' 2>/dev/null) &&
      [ -n "$digest" ]; then
     found "${image%:*}@$digest"
     exit 0

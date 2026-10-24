@@ -26,7 +26,7 @@ conclusion="$(gh api "repos/$repo/actions/workflows/ci.yml/runs?event=pull_reque
 [ "$conclusion" = success ] || not_proven "#$pr's CI did not pass on its last commit"
 
 image="ghcr.io/$repo:sha-${head::12}"
-digest="$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"' || true)"
+digest="$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}' 2>/dev/null || true)"
 [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || not_proven "#$pr's image is not in the registry"
 pinned="ghcr.io/$repo@$digest"
 

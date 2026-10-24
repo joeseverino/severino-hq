@@ -520,7 +520,7 @@ jobs:
           # push never leaves a claim that this composition was published.
           docker tag "$image" "$FINGERPRINT_TAG"
           docker push "$FINGERPRINT_TAG"
-          digest=$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          digest=$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}')
           echo "image=${image%:*}@$digest" >> "$GITHUB_OUTPUT"
 
       # The artifact production actually runs. Every input to it is now signed

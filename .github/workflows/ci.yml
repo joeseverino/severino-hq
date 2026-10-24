@@ -364,7 +364,7 @@ jobs:
             docker push "${IMAGE%:*}:latest"
           fi
           digest=$(docker buildx imagetools inspect "$IMAGE" \
-            --format '{{json .Manifest.Digest}}' | tr -d '"')
+            --format '{{.Manifest.Digest}}')
           echo "digest=${IMAGE%:*}@$digest" >> "$GITHUB_OUTPUT"
       # An admitted extension wheel carries a signature naming the workflow
       # that produced it, and the composition refuses to install one that does

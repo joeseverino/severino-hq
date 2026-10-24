@@ -16,7 +16,7 @@ cat >"$bin/docker" <<'STUB'
 echo inspect >>"$TEST_CALLS"
 asked=$(grep -c inspect "$TEST_CALLS")
 [ -n "$TEST_PUBLISHED_AFTER" ] && [ "$asked" -gt "$TEST_PUBLISHED_AFTER" ] || { echo "not found" >&2; exit 1; }
-echo "\"sha256:$(printf 'd%.0s' $(seq 64))\""
+echo "sha256:$(printf 'd%.0s' $(seq 64))"
 STUB
 # gh api: CI's run for the commit, and its Image job as TEST_IMAGE_JOB describes it.
 cat >"$bin/gh" <<'STUB'

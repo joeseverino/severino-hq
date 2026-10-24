@@ -68,7 +68,7 @@ jobs:
             exit 1
           fi
           tag="ghcr.io/${GITHUB_REPOSITORY}/composition:${commit}"
-          if ! digest=$(docker buildx imagetools inspect "$tag" --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"') \
+          if ! digest=$(docker buildx imagetools inspect "$tag" --format '{{.Manifest.Digest}}' 2>/dev/null) \
              || [ -z "$digest" ]; then
             echo "::error title=Never composed::No image of HQ was published for ${commit:0:12}. Run Compose for it first."
             exit 1
