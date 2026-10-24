@@ -38,9 +38,9 @@ pre code { background: transparent; padding: 0; color: inherit; }
    table lays out its own identifiers. */
 :is(code, .token, .whole):not(pre *, td *, th *) {
   display: inline-block; max-width: 100%; overflow-wrap: break-word; text-decoration: inherit;
-  /* As wide as what it says: as a grid's item it would stretch to its
-     column, a chip as wide as the longest one beside it. */
-  justify-self: start;
+  /* As wide as what it says: a sized item is not stretched to its column,
+     and still sits where its container aligns its items. */
+  inline-size: fit-content;
   /* Wrapped, it sits on its first line: an inline block's baseline is its
      last, which a row aligned on baselines would lift over the rows above. */
   baseline-source: first;

@@ -259,7 +259,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 }
 .conn-row:last-child { border-bottom: 0; }
 .conn-row code { font-size: var(--text-xs); overflow-wrap: break-word; }
-.conn-row > code, .conn-row > .conn-kind { justify-self: start; }
+.conn-row > .conn-kind { justify-self: start; }
 .conn-row-note { color: var(--muted); font-size: var(--text-xs); }
 .conn-row > .conn-row-note { grid-column: 3; }
 .conn-row > :only-child, .conn-rows > :not(.conn-row) { grid-column: 1 / -1; }

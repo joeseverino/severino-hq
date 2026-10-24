@@ -259,6 +259,58 @@ _PAIRS = (
 }"""
 )
 
+# An identifier is placed where the box it is an item of aligns its items: a
+# grid's justify-items, a column flexbox's align-items across, a row
+# flexbox's align-items down. Its own stretched box is the room it is
+# aligned in, measured by stretching it for the moment of the reading.
+_OVERRULED_ALIGNMENT = (
+    "(chip) => {"
+    + _DESCRIBE
+    + r"""
+  const found = [];
+  const ends = new Set(['end', 'flex-end', 'self-end']);
+  const edgeOf = (said, axis, rtl) => {
+    const value = said.split(' ').filter((word) => !['safe', 'unsafe', 'legacy'].includes(word)).join(' ');
+    if (value === 'center') return 'center';
+    if (axis === 'y') return ends.has(value) ? 'far' : null;
+    if (value === 'right' || (ends.has(value) && !rtl)) return 'far';
+    if (value === 'left' || (ends.has(value) && rtl)) return 'near';
+    return null;
+  };
+  const itemOf = (el) => {
+    let up = el.parentElement;
+    while (up && getComputedStyle(up).display === 'contents') up = up.parentElement;
+    return up;
+  };
+  const span = (r, axis) => (axis === 'x' ? [r.left, r.right] : [r.top, r.bottom]);
+  for (const el of document.querySelectorAll('main ' + chip)) {
+    if (!el.checkVisibility() || ['absolute', 'fixed'].includes(getComputedStyle(el).position)) continue;
+    const box = itemOf(el);
+    const style = box && getComputedStyle(box);
+    if (!style) continue;
+    const grid = /grid$/.test(style.display);
+    const column = /flex$/.test(style.display) && style.flexDirection.startsWith('column');
+    if (!grid && !/flex$/.test(style.display)) continue;
+    const axis = grid || column ? 'x' : 'y';
+    const said = grid ? style.justifyItems : style.alignItems;
+    const edge = edgeOf(said, axis, style.direction === 'rtl');
+    if (!edge) continue;
+    const held = el.getAttribute('style');
+    const r = el.getBoundingClientRect();
+    el.style.setProperty(grid ? 'justify-self' : 'align-self', 'stretch', 'important');
+    el.style.setProperty(axis === 'x' ? 'inline-size' : 'block-size', 'auto', 'important');
+    const room = el.getBoundingClientRect();
+    if (held === null) el.removeAttribute('style'); else el.setAttribute('style', held);
+    const [lo, hi] = span(r, axis), [from, to] = span(room, axis);
+    const off = {center: (lo + hi - from - to) / 2, far: hi - to, near: lo - from}[edge];
+    if (Math.abs(off) > 1) {
+      found.push(`${describe(el)} sits ${off.toFixed(1)}px off where ${describe(box)} aligns its items (${said})`);
+    }
+  }
+  return found;
+}"""
+)
+
 _OVERLAPS = (
     "() => {"
     + _DESCRIBE

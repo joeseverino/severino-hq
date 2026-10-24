@@ -84,6 +84,10 @@ SELECTORS = {
     # code. A code block is text laid out by its own rules, and a table lays
     # out its own identifiers.
     "token": ":is(code, kbd, samp, .token, [data-entity]):not(pre *, .data-table *)",
+    # An identifier drawn as a chip (base.css), as wide as what it says.
+    "chip": ":is(code, .token, .whole):not(pre *)",
+    # Either end of the connection panel: the reader's, then HQ's.
+    "connection_end": ".conn-peer",
     # A name in a table cell that is not the row's own: cut, never broken
     # inside a hyphenated part. Code in a cell is cut to one line on its own,
     # and a label of several words wraps as prose.

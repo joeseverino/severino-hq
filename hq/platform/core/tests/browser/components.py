@@ -7,7 +7,7 @@ from hq.platform.application.money import money
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
 from hq.platform.core.tests.browser.gate import add_css, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
-from hq.platform.core.tests.browser.probes.boxes import _MAP, _SMALL_TARGETS
+from hq.platform.core.tests.browser.probes.boxes import _MAP, _OVERRULED_ALIGNMENT, _SMALL_TARGETS
 from hq.platform.core.tests.browser.probes.palette import _BUTTON_EDGES
 from hq.platform.core.tests.browser.probes.parts import _READINGS, _SPILLED_LABELS, reading_problems
 from hq.platform.core.tests.browser.probes.settle import _KEPT_SELECTORS, _PRESS_EVERY_SHOWN, _SETTLED
@@ -620,3 +620,17 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertIn("Title", shown)
                 self.assertIn("Runs", shown)
                 self.assertEqual(self.page.evaluate(_BROKEN_WORDS), [])
+
+    def test_an_identifier_sits_where_its_end_of_the_connection_aligns_it(self):
+        """The address on each end of the connection is placed with the rest
+        of its end: centered with it when the ends stack on a phone, at the
+        end on HQ's side when they face each other."""
+
+        for width, sides in ((PHONE_SCREEN[0], {"center"}), (WIDE, {"start", "end"})):
+            with self.subTest(width=width):
+                self.open("connection", width)
+                ends = self.page.locator(SELECTORS["connection_end"]).evaluate_all(
+                    "(ends) => ends.map((end) => getComputedStyle(end).justifyItems)"
+                )
+                self.assertEqual(set(ends), sides)
+                self.assertEqual(self.page.evaluate(_OVERRULED_ALIGNMENT, SELECTORS["chip"]), [])
