@@ -25,12 +25,13 @@ SELECTORS = {
     "decision_actions": ".queue-act .attention-actions",
     # A list page's controls: its search, a filter's menu and a box in one, a
     # toggle beside them, a heading that sorts on the server, and the results
-    # they change: the rows, or the empty state that says nothing matches.
+    # they change: the rows, never the line held beneath one, or the empty
+    # state that says nothing matches.
     "table_search": "[data-table-toolbar] input[type=search]",
     "table_filter": "[data-table-toolbar] details[data-menu]",
     "table_filter_box": "input[type=checkbox][name]",
     "table_toggle": "[data-table-toolbar] .table-toggle input",
-    "table_rows": "main .data-table > tbody > tr",
+    "table_rows": "main .data-table > tbody > tr:not(.row-detail)",
     "table_empty": "main [data-empty-state]",
     "sort_link": "main a.table-sort-link",
     # The queue's own filter: a choice of urgency, applied by its button.
