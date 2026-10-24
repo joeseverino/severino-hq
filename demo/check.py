@@ -36,6 +36,8 @@ _MOST_ITEMS = 3
 _MARK = re.compile(r'\sclass="([^"]*)"|\s(data-[\w-]+)')
 # The repository the About dialog links into.
 _SOURCE = "https://github.com/joeseverino/severino-hq"
+# The one link the dialog makes outside the repository: who made it.
+_AUTHOR = "https://jseverino.com"
 
 
 class _Anchors(HTMLParser):
@@ -301,7 +303,7 @@ class DemoSiteTests(unittest.TestCase):
         self.assertEqual(errors[:20], [])
         self.assertEqual(elsewhere, [])
 
-    def test_the_about_links_lead_to_files_in_the_repository(self):
+    def test_the_about_links_lead_to_files_in_the_repository_or_to_its_author(self):
         # The dialog's links and the corner control's own address, which is
         # where it leads without script. Each names a file on main, held here
         # to the checkout the demo was built from.
@@ -314,12 +316,13 @@ class DemoSiteTests(unittest.TestCase):
         inside = [found["href"] for found, dialogs in anchors if "modal-demo-about" in dialogs and "href" in found]
         links = [*marks, *inside]
         self.assertIn(_SOURCE, links)
+        self.assertIn(_AUTHOR, links)
         for link in links:
             with self.subTest(link=link):
-                self.assertTrue(link == _SOURCE or link.startswith(f"{_SOURCE}/blob/main/"), link)
-                file = link.removeprefix(f"{_SOURCE}/blob/main/")
-                if link == _SOURCE:
+                if link in (_SOURCE, _AUTHOR):
                     continue
+                self.assertTrue(link.startswith(f"{_SOURCE}/blob/main/"), link)
+                file = link.removeprefix(f"{_SOURCE}/blob/main/")
                 self.assertTrue((_ROOT / file).is_file(), f"{file} is in the repository")
         # The day it was saved, written the way HQ writes a day.
         self.assertRegex(about.group(0), r'Saved <time datetime="[^"]+" title="[^"]+">[^<]+</time>\.')
