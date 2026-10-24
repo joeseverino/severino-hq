@@ -109,7 +109,7 @@ deploy/        systemd units, tmpfiles rule, remote targets, host.json shape,
 composition/   the composed image
 policy/        the extension admission policy
 demo/          the static demo site built from HQ's own pages
-tasks/         mise tasks by job (mise-tasks/ holds the file tasks)
+mise-tasks/    mise tasks: one TOML file per CI job, and their scripts
 tools/         development and CI programs, never in the image
 tests/         synthetic extension fixtures, the SDK consumer, property
                tests and shell suites
