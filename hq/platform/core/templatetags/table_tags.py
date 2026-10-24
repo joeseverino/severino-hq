@@ -64,10 +64,6 @@ class _Cell:
     line: int = 0
     longest: int = 0
 
-    def say(self, text: str) -> None:
-        self.line += len(" ".join(text.split()))
-        self.longest = max(self.longest, self.line)
-
 
 @dataclass(slots=True)
 class _Row:
@@ -87,8 +83,14 @@ class _Cells(HTMLParser):
         self.section = ""
         self.rows: list[_Row] = []
         self.cell: _Cell | None = None
-        # The classes of each element open inside the cell, by tag.
-        self.open: list[tuple[str, frozenset[str]]] = []
+        # The tag of the cell itself, then of each element open inside it.
+        self.open: list[str] = []
+        # The depth in ``open`` of the outermost element inside the empty
+        # value's mark, and of the outermost off the row's line; None while
+        # none is open. Decided where an element opens, so a piece of text
+        # reads two fields and never walks back up the open elements.
+        self.unsaid: int | None = None
+        self.off_line: int | None = None
         # Where each cell starts, with what is written into it there.
         self.marks: dict[tuple[int, int], list[str]] = {}
         # The content of each cell that keeps its line, from where it starts
@@ -120,6 +122,9 @@ class _Cells(HTMLParser):
             opened = (line + len(above), (0 if above else column) + len(last))
             self.cell = _Cell((line, column), dict(attrs), opened)
             self.rows[-1].cells.append(self.cell)
+            # Its tag is no end tag's, so the cell stays the floor of ``open``.
+            self.open, self.unsaid, self.off_line = [], None, None
+            self._open("", _classes(self.cell.attrs))
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if self.cell is not None:
@@ -127,26 +132,39 @@ class _Cells(HTMLParser):
 
     def _inside(self, tag: str, attrs: list[tuple[str, str | None]], *, void: bool = False) -> None:
         assert self.cell is not None
-        classes = frozenset(_classes(dict(attrs)))
+        classes = _classes(dict(attrs))
         if tag in _LINE_ENDS:
             self.cell.line = 0
         # The line the region wraps a kept cell in is its own mark, read again
         # when the page is: what the cell holds is inside it.
-        if tag != "br" and not {"kept-line", "empty-value"} & classes and not self._within({"empty-value"}):
+        if tag != "br" and self.unsaid is None and "kept-line" not in classes and "empty-value" not in classes:
             self.cell.says_nothing = False
         if not void and tag not in _VOID:
-            self.open.append((tag, classes))
+            self._open(tag, classes)
 
-    def _within(self, names: frozenset[str] | set[str]) -> bool:
-        assert self.cell is not None
-        return any(classes & names for _tag, classes in (("", frozenset(_classes(self.cell.attrs))), *self.open))
+    def _open(self, tag: str, classes: list[str]) -> None:
+        depth = len(self.open)
+        self.open.append(tag)
+        if self.unsaid is None and "empty-value" in classes:
+            self.unsaid = depth
+        if self.off_line is None and not _OFF_LINE.isdisjoint(classes):
+            self.off_line = depth
+
+    def _shut(self, tag: str) -> None:
+        """Close the innermost open ``tag`` in the cell and everything opened inside it."""
+
+        for depth in range(len(self.open) - 1, -1, -1):
+            if self.open[depth] == tag:
+                del self.open[depth:]
+                if self.unsaid is not None and self.unsaid >= depth:
+                    self.unsaid = None
+                if self.off_line is not None and self.off_line >= depth:
+                    self.off_line = None
+                return
 
     def handle_endtag(self, tag: str) -> None:
         if self.cell is not None:
-            for depth in range(len(self.open) - 1, -1, -1):
-                if self.open[depth][0] == tag:
-                    del self.open[depth:]
-                    break
+            self._shut(tag)
         if tag == "table":
             if self.tables == 1:
                 if self.cell is not None:
@@ -161,16 +179,18 @@ class _Cells(HTMLParser):
             self.section = ""
 
     def handle_data(self, data: str) -> None:
-        if self.cell is None or self._within({"empty-value"}):
+        if self.cell is None or self.unsaid is not None:
             return
-        if not self._within(_OFF_LINE):
-            self.cell.say(data)
+        if self.off_line is None:
+            self.cell.line += len(" ".join(data.split()))
+            self.cell.longest = max(self.cell.longest, self.cell.line)
         if not _SAYS_NOTHING.fullmatch(data):
             self.cell.says_nothing = False
 
     def _close(self) -> None:
         self.cell = None
         self.open = []
+        self.unsaid = self.off_line = None
 
     def _mark_table(self) -> None:
         """Each cell says what its column does, so the stylesheet reads it off
