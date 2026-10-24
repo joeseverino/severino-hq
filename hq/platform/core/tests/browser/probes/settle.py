@@ -142,3 +142,33 @@ _PUT_BACK = """() => (window.hqStandIns || []).forEach(([box, stand, drawn]) => 
   stand.remove();
   box.append(drawn);
 })"""
+
+# A probe measures some things on a copy it puts in place and takes away
+# again (a pill's one-line twin, a field's edge, a stand-in). A page script
+# that answers a change in its tree would reshape the page as it is read:
+# tables.js fits a region again when what it holds changes. Every page's
+# MutationObserver is made deaf while a trip of probes runs (`hushed`), so the
+# probes judge the page as a reader has it. The probes still see their own
+# changes, since only the page's observers miss the records.
+_HUSH = "Symbol.for('hq.probing')"
+
+_DEAF_WHILE_PROBED = f"""(() => {{
+  const Heard = window.MutationObserver;
+  window.MutationObserver = class MutationObserver extends Heard {{
+    constructor(callback) {{
+      super((records, observer) => {{ if (!globalThis[{_HUSH}]) callback.call(observer, records, observer); }});
+    }}
+  }};
+}})();"""
+
+
+def hushed(trip):
+    """``trip``, an async function of its args, run with the page's observers
+    deaf. The records its probes make are delivered in the microtask after
+    each change, so one more turn before the hush lifts lets the last go by."""
+
+    return f"""async (args) => {{
+  globalThis[{_HUSH}] = true;
+  try {{ return await ({trip})(args); }}
+  finally {{ await null; globalThis[{_HUSH}] = false; }}
+}}"""

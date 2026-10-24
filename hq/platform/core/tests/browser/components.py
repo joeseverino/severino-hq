@@ -69,6 +69,38 @@ def _plain_selector(selector: str) -> str:
 _SHOWN_BENEATH = "(row, selector) => row.nextElementSibling?.querySelector(selector)?.checkVisibility() ?? false"
 
 
+# A table whose one cell holds a phrase, which a probe measures beside a
+# one-line twin it puts in place and takes away.
+_ANSWERING_TABLE = (
+    '<div class="table-scroll"><table class="data-table"><thead><tr><th>State</th></tr></thead>'
+    '<tbody><tr><td><span class="pill">Example running</span></td></tr></tbody></table></div>'
+)
+
+# A page script that squeezes the phrase in a cell whose content changed
+# until each word breaks, which the survey would find.
+_SQUEEZE_WHAT_CHANGES = """() => new MutationObserver((changes) => changes.forEach(({ target }) => {
+  const phrase = target.closest?.('td')?.querySelector('span');
+  if (!phrase) return;
+  phrase.style.cssText = 'display: inline-block; inline-size: 1ch; white-space: normal; word-break: break-all';
+})).observe(document.querySelector('main'), { childList: true, subtree: true })"""
+
+# A page script that counts what it hears.
+_COUNT_WHAT_IS_HEARD = """() => {
+  window.exampleHeard = 0;
+  new MutationObserver((changes) => { window.exampleHeard += changes.length; })
+    .observe(document.documentElement, { childList: true, subtree: true });
+}"""
+
+# A probe that measures a copy it puts on the page and takes away.
+_MEASURE_A_COPY = """() => {
+  const copy = document.querySelector('main').appendChild(document.createElement('span'));
+  copy.textContent = 'Example';
+  const wide = copy.getBoundingClientRect().width;
+  copy.remove();
+  return wide;
+}"""
+
+
 def others(rows, opened):
     """Every row's height but the one that opened."""
 
@@ -715,3 +747,36 @@ class ComponentLayoutTests(LayoutBrowserTests):
                         arrived = self.page.evaluate(_HEADER_PARTS, SELECTORS["site_header"])
                         self.assertGreater(len(arrived), 2, "the cut left too little of the header to judge")
                         self.assertEqual(arrived, {part: ended[part] for part in arrived})
+
+    @with_script
+    def test_the_survey_finds_the_same_twice_on_a_page_that_answers_changes_to_its_tree(self):
+        """A page script that answers a change in its tree, as tables.js fits
+        a region again when what it holds changes (here the phrase in the
+        changed cell is squeezed), hears nothing of what the probes put in
+        place and take away to measure, so a second survey judges the page
+        the first did. A change from outside the probes is heard and found."""
+
+        self.pages = {**self.pages, "answering-probe": probe(_ANSWERING_TABLE)}
+        self.open("answering-probe", PHONE_SCREEN[0])
+        self.page.evaluate(_SQUEEZE_WHAT_CHANGES)
+        first = self.findings("answering-probe", PHONE_SCREEN[0])
+        self.settle()
+        self.assertEqual(self.findings("answering-probe", PHONE_SCREEN[0]), first)
+        self.page.evaluate("() => document.querySelector('td').append(' ')")
+        self.settle()
+        self.assertIn("broken words", self.findings("answering-probe", PHONE_SCREEN[0]))
+
+    @with_script
+    def test_a_probe_sees_what_it_changes_and_the_page_hears_every_change_but_a_probes(self):
+        """Only the page's observers miss a probe's changes: the probe
+        measures the copy it put in place, and a change made outside a trip of
+        probes is heard."""
+
+        self.pages = {**self.pages, "answering-probe": probe(_ANSWERING_TABLE)}
+        self.open("answering-probe", PHONE_SCREEN[0])
+        self.page.evaluate(_COUNT_WHAT_IS_HEARD)
+        (measured,) = self.read([(_MEASURE_A_COPY, None)])
+        self.assertGreater(measured, 0)
+        self.assertEqual(self.page.evaluate("() => window.exampleHeard"), 0)
+        self.page.evaluate("() => document.querySelector('main').append(document.createElement('span'))")
+        self.page.wait_for_function("() => window.exampleHeard > 0")

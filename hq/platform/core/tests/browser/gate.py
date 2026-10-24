@@ -22,6 +22,7 @@ from hq.platform.core.speculation import rules_document
 from hq.platform.core.test_runner import stall_watch
 from hq.platform.core.tests.browser.probes.palette import _FILL_STEPS, LINE_CONTRAST, lost_fills
 from hq.platform.core.tests.browser.probes.settle import (
+    _DEAF_WHILE_PROBED,
     _FINISH_TRANSITIONS,
     _FONTS_READY,
     _IN_THE_HEAD,
@@ -32,6 +33,7 @@ from hq.platform.core.tests.browser.probes.settle import (
     _STAND_IN,
     _STILL,
     _UNTIL_DRAWN,
+    hushed,
 )
 from hq.platform.core.tests.browser.reading import _in_one_trip, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -289,6 +291,7 @@ class BrowserGate(SimpleTestCase):
         if options["java_script_enabled"]:
             self.context.expose_binding("hqRefused", self.refused_by_policy)
             self.context.add_init_script(_REPORT_REFUSALS)
+            self.context.add_init_script(_DEAF_WHILE_PROBED)
         self.context.route("**/*", self.respond)
         self.page = self.context.new_page()
         self.page.on("console", self.heard)
@@ -350,13 +353,14 @@ class BrowserGate(SimpleTestCase):
         return True
 
     def outcomes(self, probes):
-        """What each of ``probes`` returned or threw, in one round trip:
+        """What each of ``probes`` returned or threw, in one round trip
+        the page's own scripts do not hear (``hushed``):
         ``[(True, value) | (False, error), ...]``."""
 
         if not probes:
             return []
         sources, args = zip(*probes, strict=True)
-        return [tuple(outcome) for outcome in self.page.evaluate(_in_one_trip(sources), list(args))]
+        return [tuple(outcome) for outcome in self.page.evaluate(hushed(_in_one_trip(sources)), list(args))]
 
     def read(self, probes):
         """What each of ``probes`` returned, in one round trip."""
