@@ -8,7 +8,7 @@ from django.db import transaction
 from django.test import Client
 from django.urls import reverse
 
-from hq.platform.core.tests.browser.gate import BrowserGate
+from hq.platform.core.tests.browser.gate import BrowserGate, answered
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 
@@ -58,9 +58,9 @@ class FragmentBrowserTests(BrowserGate):
             following = page.context["next_url"]
             cls.calendar, cls.following = url, following
             answers = {
-                (url, ""): page.content.decode(),
-                (following, "calendar"): client.get(following, headers={"X-Fragment": "calendar"}).content.decode(),
-                (reverse("action_item_count"), ""): client.get(reverse("action_item_count")).content.decode(),
+                (url, ""): answered(page),
+                (following, "calendar"): answered(client.get(following, headers={"X-Fragment": "calendar"})),
+                (reverse("action_item_count"), ""): answered(client.get(reverse("action_item_count"))),
             }
             transaction.set_rollback(True)
         return answers
@@ -79,19 +79,17 @@ class FragmentBrowserTests(BrowserGate):
         part = request.headers.get("x-fragment", "")
         self.asked.append((address, part))
         if parts.path == "/probe/":
-            return route.fulfill(content_type="text/html", body=_FRAGMENT_PROBE)
+            return self.fulfill(route, _FRAGMENT_PROBE)
         if parts.path == "/probe-strip/":
             poll = self.strip.pop(0) if self.strip else ""
-            return route.fulfill(content_type="text/html", body=_PROBE_STRIP.format(poll=poll))
+            return self.fulfill(route, _PROBE_STRIP.format(poll=poll))
         if parts.path == "/probe-slot/":
-            return route.fulfill(content_type="text/html", body="<p>read when opened</p>")
+            return self.fulfill(route, "<p>read when opened</p>")
         if parts.path == "/probe-page/":
-            return route.fulfill(content_type="text/html", body=_FRAGMENT_PROBE)
+            return self.fulfill(route, _FRAGMENT_PROBE)
         if (address, part) in self.pages:
-            return route.fulfill(content_type="text/html", body=self.pages[(address, part)])
-        if parts.path.startswith(settings.STATIC_URL):
-            return super().respond(route)
-        return route.fulfill(status=404, body="Not in the synthetic fixture")
+            return self.fulfill(route, self.pages[(address, part)])
+        return super().respond(route)
 
     def test_a_polled_region_takes_only_what_changed_and_stops_when_told(self):
         self.page.clock.install()

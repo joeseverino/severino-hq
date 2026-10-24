@@ -25,7 +25,7 @@ from django.test import Client, override_settings
 from django.urls import reverse
 lazy from django.db import transaction
 
-from hq.platform.core.tests.browser.gate import BrowserGate
+from hq.platform.core.tests.browser.gate import BrowserGate, answered
 from hq.platform.core.tests.browser.probes.boxes import _SIDEWAYS, _UNPADDED_TILES
 from hq.platform.core.tests.browser.probes.settle import _FINISH_TRANSITIONS, _FONTS_READY, _SETTLED
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -67,7 +67,7 @@ def _fragments(client, page, answers, ask):
             headers = {"HTTP_X_REQUESTED_WITH": "XMLHttpRequest", **({"HTTP_X_FRAGMENT": name} if name else {})}
             response = ask(client, url, **headers)
             if response.status_code == 200:
-                answers[url, name] = response.content.decode()
+                answers[url, name] = answered(response)
                 pending.append(answers[url, name])
 
 
@@ -111,7 +111,7 @@ def render_estate():
             response = ask(client, path)
             if response.status_code != 200:
                 raise AssertionError(f"{path} answered {response.status_code}")
-            answers[path, ""] = response.content.decode()
+            answers[path, ""] = answered(response)
             _fragments(client, answers[path, ""], answers, ask)
         transaction.set_rollback(True)
     return paths, answers
@@ -167,7 +167,7 @@ class ExampleEstateGate(BrowserGate):
             # for a fresh read) acts, and the gate only reads.
             route.fulfill(status=405, body="The layout gate only reads")
         elif (address, part) in self.pages:
-            route.fulfill(content_type="text/html", body=self.pages[address, part])
+            self.fulfill(route, self.pages[address, part])
         elif parts.path.startswith(settings.STATIC_URL):
             super().answer(route)
         else:
@@ -228,6 +228,7 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
                         found |= {f"{check} ({theme})": said for check, said in self.palette().items()}
                     found |= self.opened()
                     found["unanswered"], self.unanswered = self.unanswered, []
+                    found["refused"] = self.refusals_so_far()
                     failed = {check: said for check, said in found.items() if said}
                     if failed:
                         self.fail(json.dumps(failed, indent=1))
@@ -244,8 +245,9 @@ class ExampleEstateDrawnTests(ExampleEstateGate):
             for width in DRAWN_AT:
                 with self.subTest(page=path, width=width):
                     moved = self.moved_once_drawn(f"{ORIGIN}{path}", width, partial(self.finish, path, width))
-                    if moved:
-                        self.fail("\n".join(moved))
+                    failed = [*moved, *self.refusals_so_far()]
+                    if failed:
+                        self.fail("\n".join(failed))
                     self.unanswered = []
 
 
@@ -300,7 +302,7 @@ class ExampleEstateControlTests(BrowserGate):
                 response = client.get(address, secure=True, follow=True, **REQUEST)
                 if response.status_code != 200:
                     raise AssertionError(f"{address} answered {response.status_code}")
-                body = response.content.decode()
+                body = answered(response)
                 path = urlsplit(address).path
                 if path not in cls.default_sort:
                     default = _DEFAULT_SORT.search(body)
@@ -356,7 +358,7 @@ class ExampleEstateControlTests(BrowserGate):
         if request.method != "GET":
             route.fulfill(status=405, body="The control gate only reads")
         elif self.key(request.url) in self.pages:
-            route.fulfill(content_type="text/html", body=self.pages[self.key(request.url)])
+            self.fulfill(route, self.pages[self.key(request.url)])
         elif path.startswith(settings.STATIC_URL):
             super().answer(route)
         else:

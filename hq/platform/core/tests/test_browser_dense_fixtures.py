@@ -45,6 +45,7 @@ from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import Capability, Principal, cli_principal
 from hq.platform.application.services import CONTAINER_KIND
 from hq.platform.core.models import AuditLog
+from hq.platform.core.tests.browser.gate import answered
 from hq.platform.core.tests.test_browser_fixtures import (
     _THROUGH_THE_PROXY,
     CALLER,
@@ -373,8 +374,8 @@ def _asked_on_opening(user):
     if asked.json()["note"] != READ_WAITING or followed.json()["note"] != READ_WAITING:
         raise AssertionError(f"the dashboard's ask was answered {asked.json()} and then {followed.json()}")
     return {
-        reverse("control_plane:visit").strip("/"): asked.content.decode(),
-        urlsplit(status).path.strip("/"): followed.content.decode(),
+        reverse("control_plane:visit").strip("/"): answered(asked),
+        urlsplit(status).path.strip("/"): answered(followed),
     }
 
 

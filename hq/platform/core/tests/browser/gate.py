@@ -12,10 +12,13 @@ from unittest import mock
 from urllib.parse import urlsplit
 
 from django.conf import settings
-from django.test import SimpleTestCase
+from django.test import Client, RequestFactory, SimpleTestCase
 from django.test.testcases import is_pickable
+from django.urls import reverse
+from django.utils.csp import CSP
 lazy from playwright.sync_api import Error as BrowserError
 
+from hq.platform.core.speculation import rules_document
 from hq.platform.core.test_runner import stall_watch
 from hq.platform.core.tests.browser.probes.palette import _FILL_STEPS, LINE_CONTRAST, lost_fills
 from hq.platform.core.tests.browser.probes.settle import (
@@ -97,6 +100,67 @@ def with_script(test):
     return test
 
 
+class Sent(str):
+    """A page's body as HQ answered it, carrying the headers it was answered
+    with, so the browser runs it under the policy it was sent with."""
+
+    headers: dict[str, str]
+
+
+def sent(body, headers):
+    page = Sent(body)
+    page.headers = headers
+    return page
+
+
+def answered_as(page, body):
+    """``body``, answered with the headers ``page`` was."""
+
+    return sent(body, page.headers) if isinstance(page, Sent) else body
+
+
+def answered(response):
+    """A test client's answer as the browser is to receive it: its body and
+    every header but its length, which Playwright counts from the body."""
+
+    return sent(
+        response.content.decode(), {name: value for name, value in response.items() if name != "Content-Length"}
+    )
+
+
+# What carries the policy: Django's two headers, and the endpoint core.middleware
+# names for its reports.
+POLICY_HEADERS = (CSP.HEADER_ENFORCE, CSP.HEADER_REPORT_ONLY, "Reporting-Endpoints")
+
+
+def policy():
+    """The policy headers HQ sends with an answer that took no nonce, read off
+    a real one: what a page put together by a test is answered with."""
+
+    response = Client().get(reverse("health_live"))
+    return {name: value for name, value in response.items() if name in POLICY_HEADERS}
+
+
+def named_by_every_page():
+    """What a signed-in page's headers send the browser to fetch, by path, as
+    HQ's view answers it: the speculation rules."""
+
+    path = reverse("speculation_rules")
+    return {path: answered(rules_document(RequestFactory().get(path)))}
+
+
+# What the page reports of a policy's refusal, with script on: the directive and
+# what it refused. An engine also logs each refusal to the console, which names
+# them too, and is all a page with script off has.
+_REPORT_REFUSALS = """document.addEventListener('securitypolicyviolation', (event) => {
+  window.hqRefused(event.effectiveDirective, event.blockedURI, event.sourceFile, event.lineNumber);
+});"""
+
+# The engine's line for an answer whose status says it failed: an answer the
+# gate gave, which a class holds as its own (the estate's `unanswered`).
+_FAILED_ANSWER = "Failed to load resource: the server responded with a status of"
+
+
 # What Playwright's driver logs while the stall watch is on (its DEBUG and
 # DEBUG_FILE, read once when the driver starts): the browser's launch, with its
 # arguments and its own output, and every call with its steps, a navigation's
@@ -157,6 +221,8 @@ class BrowserGate(SimpleTestCase):
         # Rendered, and rolled back, before the browser starts: Django refuses
         # database access while Playwright's event loop runs on this thread.
         cls.pages = cls.render()
+        cls.policy = policy()
+        cls.served = named_by_every_page()
         try:
             from playwright.sync_api import sync_playwright
         except ImportError as exc:
@@ -174,9 +240,13 @@ class BrowserGate(SimpleTestCase):
 
     def setUp(self):
         self.context = None
+        self.refusals = []
         self.start()
         self.addCleanup(lambda: self.context.close())
         self.addCleanup(self.capture_failure)
+        # First out: a refusal no subtest took fails the test, while it can
+        # still be shot.
+        self.addCleanup(self.kept_the_policy)
 
     def start(self, **options):
         """A fresh browser context, replacing any the test already has."""
@@ -191,8 +261,43 @@ class BrowserGate(SimpleTestCase):
         self.context.set_default_timeout(5000)
         if slow := slow_frames():
             self.context.add_init_script(slow)
+        if options["java_script_enabled"]:
+            self.context.expose_binding("hqRefused", self.refused_by_policy)
+            self.context.add_init_script(_REPORT_REFUSALS)
         self.context.route("**/*", self.respond)
         self.page = self.context.new_page()
+        self.page.on("console", self.heard)
+
+    def where(self):
+        parts = urlsplit(self.page.url)
+        return parts.path + (f"?{parts.query}" if parts.query else "")
+
+    def refused_by_policy(self, _source, directive, blocked, source, line):
+        at = f" at {source}:{line}" if source else ""
+        self.refusals.append(f"{self.where()}: the policy's {directive} refused {blocked or 'inline'}{at}")
+
+    def heard(self, message):
+        if message.type == "error" and not message.text.startswith(_FAILED_ANSWER):
+            self.refusals.append(f"{self.where()}: console error: {message.text}")
+
+    def refusals_so_far(self):
+        """Every policy refusal and console error the pages have had since
+        this was last asked, each naming its page."""
+
+        refusals, self.refusals = self.refusals, []
+        return refusals
+
+    def kept_the_policy(self):
+        if refusals := self.refusals_so_far():
+            self.fail("\n".join(refusals))
+
+    def fulfill(self, route, page, content_type="text/html"):
+        """``page`` as the browser's answer, under the headers HQ sent it with:
+        its own, for a page HQ answered, or HQ's policy, for one put together
+        by a test."""
+
+        headers = page.headers if isinstance(page, Sent) else {"Content-Type": content_type, **self.policy}
+        route.fulfill(headers=headers, body=str(page))
 
     def settle(self):
         """Wait until the page has drawn what it just did and nothing is moving."""
@@ -201,9 +306,12 @@ class BrowserGate(SimpleTestCase):
         self.page.wait_for_function(_STILL)
 
     def holds(self, route):
-        """Whether a script is being held back, and so not answered yet."""
+        """Whether a script the page asks for is being held back, and so not
+        answered yet: what its headers name is not the page's script."""
 
         if self.held is None or route.request.resource_type != "script":
+            return False
+        if urlsplit(route.request.url).path in self.served:
             return False
         self.held.append(route)
         return True
@@ -224,13 +332,21 @@ class BrowserGate(SimpleTestCase):
 
     def respond(self, route):
         if not self.holds(route):
+            self.serve(route)
+
+    def serve(self, route):
+        """What every page asks for, or what this class answers."""
+
+        if (served := self.served.get(urlsplit(route.request.url).path)) is not None:
+            self.fulfill(route, served)
+        else:
             self.answer(route)
 
     def answer(self, route):
         path = urlsplit(route.request.url).path
         name = path.strip("/")
         if name in self.pages:
-            route.fulfill(content_type=mimetypes.guess_type(name)[0] or "text/html", body=self.pages[name])
+            self.fulfill(route, self.pages[name], mimetypes.guess_type(name)[0] or "text/html")
             return
         if path.startswith(settings.STATIC_URL) and (asset := static_file(path.removeprefix(settings.STATIC_URL))):
             content_type, body = asset

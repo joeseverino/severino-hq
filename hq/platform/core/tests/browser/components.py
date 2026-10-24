@@ -168,6 +168,25 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertIn("example", found[1][1])
         self.assertEqual(found[2][1], 3)
 
+    @with_script
+    def test_every_page_runs_under_the_policy_hq_sends(self):
+        """A page HQ answered carries its own policy header into the browser,
+        a page a test put together carries HQ's, and a script written into
+        the page is refused, the refusal naming its directive and its page."""
+
+        name = next(iter(PAGES))
+        response = self.page.goto(f"{ORIGIN}/{name}/", wait_until="load")
+        self.assertEqual(
+            response.headers["content-security-policy"], self.pages[name].headers["Content-Security-Policy"]
+        )
+        self.pages = {**self.pages, "inline-script-probe": probe("<script>document.body.dataset.ran = 'yes';</script>")}
+        self.open("inline-script-probe", WIDE)
+        self.assertIsNone(self.page.evaluate("() => document.body.dataset.ran ?? null"))
+        refusals = self.refusals_so_far()
+        self.assertTrue(
+            [said for said in refusals if "/inline-script-probe/" in said and "script-src" in said], refusals
+        )
+
     def test_a_hit_area_hung_past_a_control_is_no_label_and_a_word_past_it_is(self):
         """The hit area a small control hangs beside itself widens what it
         scrolls, never what it says; a word wider than its control spills."""
@@ -198,18 +217,20 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
         from hq.platform.core.templatetags.value_tags import breakable
 
-        self.open(next(iter(PAGES)), PHONE_SCREEN[0])
+        prose = "example words that wrap over many lines of a cell of its own " * 3
+        self.pages = {
+            **self.pages,
+            "cut-name-probe": probe(
+                '<div class="table-scroll" style="inline-size: 500px"><table class="data-table"><thead><tr>'
+                '<th class="row-gutter">Unit</th><th>Runs</th><th>Result</th></tr></thead><tbody><tr>'
+                f'<td class="row-gutter"><code>{breakable("example-examplehost.path")}</code></td>'
+                f"<td>{prose}</td><td>{prose}</td></tr></tbody></table></div>"
+            ),
+        }
+        self.open("cut-name-probe", PHONE_SCREEN[0])
         widths = self.page.evaluate(
-            """async ([part, name]) => {
-          const prose = 'example words that wrap over many lines of a cell of its own '.repeat(3);
-          const region = document.createElement('div');
-          region.className = 'table-scroll';
-          region.style.setProperty('inline-size', '500px');
-          region.innerHTML = '<table class="data-table"><thead><tr><th class="row-gutter">Unit</th>'
-            + '<th>Runs</th><th>Result</th></tr></thead><tbody><tr><td class="row-gutter"><code>'
-            + name
-            + `</code></td><td>${prose}</td><td>${prose}</td></tr></tbody></table>`;
-          document.querySelector('main').prepend(region);
+            """async ([part, scroll]) => {
+          const region = document.querySelector(scroll);
           await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
           // The part alone, in the face the name is drawn in.
           const style = getComputedStyle(region.querySelector('code').lastElementChild);
@@ -225,7 +246,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
           const inside = heading.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
           return [inside, free.getBoundingClientRect().width];
         }""",
-            ["examplehost.path", str(breakable("example-examplehost.path"))],
+            ["examplehost.path", SELECTORS["table_scroll"]],
         )
         column, part = widths
         self.assertGreaterEqual(column, part)

@@ -6,7 +6,7 @@ from itertools import islice, takewhile
 
 lazy from playwright.sync_api import TimeoutError as LoadTimeout
 
-from hq.platform.core.tests.browser.gate import BrowserGate
+from hq.platform.core.tests.browser.gate import BrowserGate, answered_as
 from hq.platform.core.tests.browser.probes.boxes import (
     _ESCAPES,
     _FIGURE_UNDER_LABEL,
@@ -409,7 +409,7 @@ class LayoutBrowserTests(BrowserGate):
         address = self.page.url.split("#")[0]
 
         def answer(route):
-            route.fulfill(content_type="text/html", body=html)
+            self.fulfill(route, answered_as(self.pages[name], html))
 
         self.page.route(address, answer)
         try:

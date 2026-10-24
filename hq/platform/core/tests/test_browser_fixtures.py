@@ -29,6 +29,7 @@ from hq.platform.application.ui import (
     Kpi,
     stacked_bar_chart,
 )
+from hq.platform.core.tests.browser.gate import answered
 
 SERVICE = "app.example.com"
 MACHINE = "app-host"
@@ -538,5 +539,5 @@ def render_pages(user, pages=None):
             response = client.get(url(), **(request[0] if request else {}))
         if response.status_code != 200:
             raise AssertionError(f"{name} answered {response.status_code}")
-        rendered[name] = response.content.decode()
+        rendered[name] = answered(response)
     return rendered

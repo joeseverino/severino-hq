@@ -8,7 +8,9 @@ from pathlib import Path
 
 from django.contrib.staticfiles import finders
 
-ORIGIN = "http://hq.example.test"
+# Secure, as HQ is only ever served: a page in a secure context prefetches a
+# link on press, and one over plain http is refused it.
+ORIGIN = "https://hq.example.test"
 
 # A face the stylesheet lets the browser skip when it is late (`font-display:
 # optional`). A late face is drawn in the fallback for the page's whole life,

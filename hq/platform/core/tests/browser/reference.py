@@ -8,7 +8,7 @@ from django.db import transaction
 from django.test import Client
 from django.urls import reverse
 
-from hq.platform.core.tests.browser.gate import BrowserGate
+from hq.platform.core.tests.browser.gate import BrowserGate, answered
 from hq.platform.core.tests.browser.probes.palette import _CONTRAST, LARGE_TEXT_CONTRAST, TEXT_CONTRAST
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
@@ -189,11 +189,11 @@ def render_reference():
         client.force_login(get_user_model().objects.create_user(username="operator"))
         page = reverse("api_reference:reference")
         pages = {
-            url.strip("/"): client.get(url).content.decode()
+            url.strip("/"): answered(client.get(url))
             for url in (page, reverse("hq_api:openapi"), reverse("action_item_count"))
         }
         client.post(reverse("theme"), {"theme": "dark"})
-        pages[REFERENCE_DARK] = client.get(page).content.decode()
+        pages[REFERENCE_DARK] = answered(client.get(page))
         transaction.set_rollback(True)
     return pages
 

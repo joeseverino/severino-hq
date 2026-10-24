@@ -243,6 +243,12 @@ also runs `browser:layout` in Chromium (`browser:layout-chromium`), which
 `mise run browser` leaves to CI. One browser test runs as
 `mise run test <label>` once `mise run setup:webkit` has installed the engine.
 
+Every page a gate serves runs under the policy HQ sends: a page rendered
+through the test client keeps its response's headers (`gate.answered`), the
+API reference its own derived policy, and a page a test puts together HQ's.
+A policy refusal or a console error fails the test, naming the page, the
+directive and what it refused.
+
 The gates wait for Inter, but a reader whose copy is late is drawn in
 whatever face the platform has (`font-display: optional`), and each platform
 sets text at its own widths. `--fallback-face` on `browser:layout`,
