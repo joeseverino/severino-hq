@@ -15,9 +15,9 @@ usage = 'arg "<run>" help="The run id, as gh run list prints it"'
 run = 'uv run python -m tools.pipeline.ci_timings "${usage_run}"'
 
 ["ci:caches"]
-description = "Fill the caches CI's jobs restore: every Python group, the Go controller's builds, every npm project's tools"
+description = "Fill the caches CI's jobs restore: every Python group, the Go controller's builds, the npm tools"
 hide = true
-depends = ["setup:openapi", "setup:lint-tools"]
+depends = ["setup:lint-tools"]
 run = [
   "uv sync --all-groups",
   "go -C controller build ./... tool",

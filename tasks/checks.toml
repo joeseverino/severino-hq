@@ -13,20 +13,13 @@ hide = true
 extends = "django"
 run = "uv run python -m mypy"
 
-["setup:openapi"]
-description = "Install the locked contract tools"
-hide = true
-sources = ["tools/openapi/package-lock.json"]
-outputs = ["tools/openapi/node_modules/.package-lock.json"]
-run = "npm --prefix tools/openapi ci"
-
 ["checks:openapi"]
 description = "Both OpenAPI descriptions pass specification lint"
 hide = true
-depends = ["setup:openapi"]
+depends = ["setup:lint-tools"]
 # Specification rules cover wire contracts. HTTP style recommendations do not
 # apply to Django's canonical trailing slashes or the stdin/stdout bridge.
-run = "node tools/openapi/node_modules/@redocly/cli/bin/cli.js lint --extends=spec --format=summary hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json"
+run = "node tools/lint/node_modules/@redocly/cli/bin/cli.js lint --extends=spec --format=summary hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json"
 
 ["checks:deptry"]
 description = "Host code imports only declared runtime dependencies and imports every one, or pyproject.toml says why not"

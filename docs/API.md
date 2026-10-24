@@ -427,7 +427,7 @@ it does; a patch release adds no features. No compatibility
 translation is applied. Resource filters emit individual query parameters;
 `x-hq-query-schema` retains the aggregate schema, including unknown-field policy.
 
-`mise run checks:openapi` installs the locked Redocly from `tools/openapi` and
+`mise run checks:openapi` installs the locked Redocly from `tools/lint` and
 validates every description against the specification.
 
 `manage.py test tests.fuzz.api_properties` generates bounded requests through Django's
