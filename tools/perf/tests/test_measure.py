@@ -1,4 +1,7 @@
-"""A browser visit reads what a page fetched once nothing it asked for is still on its way."""
+"""A browser visit reads what a page fetched once nothing it asked for is still on its way, and no
+page is measured on the browser's first visit."""
+
+from unittest import mock
 
 from django.test import SimpleTestCase
 
@@ -46,3 +49,17 @@ class VisitTests(SimpleTestCase):
 
         self.assertEqual(page.read_while_waiting, 0)
         self.assertGreaterEqual(page.frames, 4)
+
+
+class BrowserCostTests(SimpleTestCase):
+    def test_no_page_is_measured_on_the_browser_s_first_visit(self):
+        visits = []
+
+        def visit(_browser, _url, _cookie, page, _viewport):
+            visits.append(page)
+            return {"script_ms": 16.0 if len(visits) == 1 else 6.0}
+
+        with mock.patch.object(measure, "visit", visit):
+            costs = measure.browser_costs(None, "http://127.0.0.1:9", ("s", "k"), ["/b/", "/a/"], [{"width": 402}])
+
+        self.assertEqual({page: seen["402"]["script_ms"] for page, seen in costs.items()}, {"/b/": 6.0, "/a/": 6.0})

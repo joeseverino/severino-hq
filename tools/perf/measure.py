@@ -182,8 +182,11 @@ def visit(browser: Any, url: str, cookie: tuple[str, str], page_path: str, viewp
 def browser_costs(
     browser: Any, url: str, cookie: tuple[str, str], pages: list[str], viewports: list[dict[str, int]]
 ) -> dict[str, dict[str, Any]]:
-    """Each page at each viewport, by page and then by width."""
+    """Each page at each viewport, by page and then by width, after a visit nothing is read from:
+    a browser's first visit spends several times a later one's script time, which would be counted
+    against whichever page came first, so a page's numbers would hang on what else was asked."""
 
+    visit(browser, url, cookie, pages[0], viewports[0])
     measured: dict[str, dict[str, Any]] = {page: {} for page in pages}
     for viewport in viewports:
         for page in pages:
