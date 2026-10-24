@@ -293,7 +293,7 @@ def closing(kept: runs.Run, here: runs.Report, base: runs.Report | None) -> str:
     said = f"perf:report {here['commit']}" + (f" beside {base['commit']}" if base else "")
     said += f" ({here['target']})"
     if kept.doc.get("alone"):
-        said += f", the host measured alone{' on both sides' if base else ''} because {kept.doc['alone']}"
+        said += f", the host measured alone{' on both sides' if base else ''} because {kept.doc['alone'].rstrip('.')}"
     if reused := kept.doc.get("base_reused_from"):
         said += f", the base kept from run {reused}"
     failed = failures(kept.doc)
@@ -348,9 +348,9 @@ def main() -> int:
     every_page.write_text(rendered + "\n", encoding="utf-8")
     # The session log shows each var/perf/*.txt whole, so the summary is the .txt and the table is not.
     summary = table.summary(here, base, str(every_page.relative_to(ROOT)))
-    kept.path.with_suffix(".txt").write_text(summary + "\n", encoding="utf-8")
-    print(rendered, "", *table.moved(here, base), sep="\n")
-    print("\n" + closing(kept, here, base))
+    said = closing(kept, here, base)
+    kept.path.with_suffix(".txt").write_text(f"{summary}\n\n{said}\n", encoding="utf-8")
+    print(rendered, "", *table.moved(here, base), "", said, sep="\n")
     return 1 if failures(kept.doc) else 0
 
 

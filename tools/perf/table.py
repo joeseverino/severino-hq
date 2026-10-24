@@ -39,7 +39,7 @@ SUMMARY: tuple[tuple[str, Read, int, str], ...] = (
     ("cold start to /health/ready/, median", lambda report: report["cold_start"]["median_ms"] / 1000, 2, "s"),
 )
 # The pages a summary names: those whose server time moved most, or without a base the slowest.
-MOVED = 5
+MOVED = 3
 HEADERS = ("page", "width", *(name for name, _, _ in SERVER), *(name for name, _, _ in BROWSER))
 
 
