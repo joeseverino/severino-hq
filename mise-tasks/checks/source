@@ -1,0 +1,20 @@
+#!/bin/sh
+#MISE description="Run the tests tagged source, which read the repository rather than the running product"
+#MISE extends="django"
+#MISE depends=["setup:lint-tools"]
+#MISE timeout="30m"
+#USAGE arg "[labels]..." var=#true help="Test labels, dotted; only their tagged tests run. Every one by default"
+
+# Tagged "source"; a whole-suite run leaves them out (hq/platform/core/test_runner.py),
+# so no image or composed pass runs them. The stylesheet lint's tests run Stylelint.
+set -eu
+
+# A run of every source test takes the heavy turn; one its labels narrow runs
+# at once (tools/gate/turn.py).
+test_arguments="--tag source ${usage_labels:-}"
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+
+# mise hands the labels over shell-quoted, one word each.
+eval "set -- ${usage_labels:-}"
+exec uv run python manage.py test --tag source --noinput --parallel auto "$@"

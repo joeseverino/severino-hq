@@ -23,13 +23,14 @@ run = "uv run python manage.py makemigrations --check --dry-run"
 ["tests:api-properties"]
 description = "Generated API cases through the real WSGI middleware"
 hide = true
-extends = "django-heavy"
+# One module in one process: a narrow run, outside the heavy turn (tools/gate/turn.py).
+extends = "django"
 run = "uv run python manage.py test tests.fuzz.api_properties --noinput --parallel 1"
 
 # Not a gate: the tests a developer names, as the gates run them.
 # tools/gate/at.py reads what this usage parsed. Only the run knows its tests'
-# weight, so it takes the heavy turn itself, unless they are light; the timeout
-# is the heavy template's.
+# weight, so it takes the heavy turn itself, unless tools/gate/turn.py finds
+# them narrow; the timeout is the heavy template's.
 [test]
 description = "Run the test labels named, as the gates run them, here or on another commit's code"
 extends = "django"

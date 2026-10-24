@@ -156,8 +156,9 @@ with git's refs on stdin.
 
 Two suites at once exhaust a small machine's memory, so the heavy tasks (`fast`,
 `check`, `ci`, `checks`, `tests`, `preflight`, the suites, the browser gates,
-`demo:build`, `docs:screenshot`, and `dev:look` except a look at named pages
-with no `--base`, `--perf` or `--deep`) run under `tools/lib/heavy.sh`,
+`docs:screenshot`, a run of tests that is not narrow, below, and `dev:look`
+except a look at named pages with no `--base`, `--perf` or `--deep`) run under
+`tools/lib/heavy.sh`,
 which holds an exclusive lock on `~/.cache/severino/heavy.lock` (under
 `XDG_CACHE_HOME` when it is set) for as long as the task runs. Every checkout
 and worktree shares that file. A heavy task started while another holds it
@@ -177,10 +178,21 @@ machine and takes no lock.
 A TOML task takes the turn by extending the `heavy` template in `mise.toml`,
 `django-heavy` when it is a Django gate, or `django-browser` when it is a
 browser gate, which names its test classes in `vars.classes`; a file task sources
-`tools/lib/heavy-turn.sh` and sets `#MISE timeout`. `mise run test` decides
-in its run (`tools/gate/at.py`): it loads the labels' tests and takes the turn
-only when one makes a test database or drives a browser, or for `--at`, so a
-run of `SimpleTestCase` labels starts at once. Each heavy
+`tools/lib/heavy-turn.sh` and sets `#MISE timeout`.
+
+Whether a run of tests is heavy is `tools/gate/turn.py`'s to say, from
+manage.py test's arguments: a run is narrow when labels name what it runs, each
+a module or something in one, and none of the tests they load drives a
+browser. No label, a package label or a browser makes it heavy; a test
+database does not. A task whose tests are fixed takes the turn exactly when
+they are heavy (`tests:api-properties` and `demo:build` never do), and
+`tools/gate/tests/test_turn.py` holds every task to that. A task that runs the
+tests it is given (`checks:source`, `suite:as-image`) sets `test_arguments`
+before it sources `heavy-turn.sh`, so `mise run checks:source <module>` starts
+at once while every source test waits; `mise run test` asks the same question
+in its run (`tools/gate/at.py`), and `--at` always takes the turn. `dev:look`
+alone decides by its pages, since its run is always one browser test and only
+the pages say how much it draws. Each heavy
 task has a timeout (30 minutes for a gate, two hours for an aggregate), so a
 hung gate stops and frees the turn. `heavy.sh` runs the command as a process
 group of its own and stops that group when it is stopped, since a `mise run`

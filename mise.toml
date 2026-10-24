@@ -126,16 +126,17 @@ linux-x64 = { asset_pattern = "codeql-bundle-linux64.tar.zst" }
 env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 
 # ------------------------------------------------------------------ heavy
-# A task that loads the machine (a suite, a browser, a demo build, an aggregate
-# of them) runs under tools/lib/heavy.sh: its shell is mise's default behind the
+# A task that loads the machine (a suite, a browser, an aggregate of them) runs
+# under tools/lib/heavy.sh: its shell is mise's default behind the
 # wrapper. Heavy tasks take turns through one lock every checkout shares; one
 # started while another holds the turn names the holder and waits for it, up to
 # SEVERINO_HEAVY_WAIT seconds (two hours by default), then exits 75. A heavy
 # task inside a turn runs in it. CI takes no lock. The timeout stops a
 # hung holder: well above the slowest gate (the suite, a browser gate), and an
 # aggregate's above the gates it runs in turn. A file task sources
-# tools/lib/heavy-turn.sh and sets its timeout in its header; `test` takes the
-# turn in its run, only for tests that need it (tools/gate/at.py). mise's own
+# tools/lib/heavy-turn.sh and sets its timeout in its header. A template takes
+# the turn for every run; a task whose tests are given to it decides per run
+# through tools/gate/turn.py, as a file task (`test` in its run). mise's own
 # task.timeout setting would bound the whole run, development servers
 # included, so each heavy task carries its own.
 [task_templates.heavy]

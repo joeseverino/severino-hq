@@ -3,8 +3,8 @@
 # bound that runs out exits 75 naming the holder, a killed command frees the
 # turn, a heavy command inside a turn runs, a file task's body runs once, a
 # waiting one names the holder again at its interval, a turn prints the load
-# average as it starts and ends, the test task takes it only for tests with a
-# database or a browser, CI takes no lock, and every heavy task carries a bound
+# average as it starts and ends, a run of tests takes it only when it is
+# heavy, CI takes no lock, and every heavy task carries a bound
 # that, run out, stops what it started and frees the turn.
 set -eu
 
@@ -124,15 +124,20 @@ MISE_CONFIG_ROOT="${repo}" "${work}/file-task" "${work}/starts" "${work}/ran" 2>
     fail "a file task that takes the turn started itself $(cat "${work}/starts") times"
 [ "$(cat "${work}/ran")" = ran ] || fail "a file task that takes the turn did not run its body once"
 
-# The test task takes the turn itself, only for tests that need it: one with
-# no database and no browser runs while another command holds the turn, one
-# with a database waits for it.
+# A run of tests takes the turn only when tools/gate/turn.py finds it heavy:
+# the test task and a file task alike run tests a label narrows while another
+# command holds the turn, and wait for it with every test of a tree.
 hold
-SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q test hq.platform.core.tests.test_test_runner.HeavyTurnTests \
-    >"${work}/light" 2>&1 || { cat "${work}/light" >&2; fail "a test run with no database or browser waited for the turn, or failed"; }
+SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q test hq.platform.core.tests.test_test_runner.BrowserTestTests \
+    >"${work}/light" 2>&1 || { cat "${work}/light" >&2; fail "a narrow test run waited for the turn, or failed"; }
+SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q checks:source tools.gate.tests.test_turn.NarrowRunTests \
+    >"${work}/light" 2>&1 || { cat "${work}/light" >&2; fail "a narrow source test run waited for the turn, or failed"; }
 status=0
-SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q test hq.platform.core.tests.test_audit_retention >/dev/null 2>&1 || status=$?
-[ "${status}" -eq 75 ] || fail "a test run with a database exited ${status} while the turn was held, not 75"
+SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q test hq.platform.core.tests >/dev/null 2>&1 || status=$?
+[ "${status}" -eq 75 ] || fail "a test run of a whole package exited ${status} while the turn was held, not 75"
+status=0
+SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q checks:source >/dev/null 2>&1 || status=$?
+[ "${status}" -eq 75 ] || fail "every source test exited ${status} while the turn was held, not 75"
 echo go >"${work}/release"
 wait "${holder}" || fail "the holder failed"
 holder=""

@@ -49,15 +49,6 @@ hide = true
 # finding is suppressed in .github/zizmor.yml with its reason.
 run = ["actionlint -color", "zizmor --offline --strict-collection .github"]
 
-["checks:source"]
-description = "Run the tests tagged source, which read the repository rather than the running product"
-# Tagged "source"; a whole-suite run leaves them out (hq/platform/core/test_runner.py),
-# so no image or composed pass runs them. The stylesheet lint's tests run Stylelint.
-extends = "django-heavy"
-depends = ["setup:lint-tools"]
-usage = 'arg "[labels]..." var=#true help="Test labels, dotted; only their tagged tests run. Every one by default"'
-run = "uv run python manage.py test --tag source --noinput --parallel auto ${usage_labels:-}"
-
 ["checks:deploycheck"]
 description = "Production settings raise no security warning"
 hide = true

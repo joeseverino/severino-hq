@@ -14,6 +14,9 @@
 # and says so; REQUIRE_COMPOSED=1 fails instead.
 set -eu
 
+# The whole suite takes the heavy turn; a run its arguments narrow goes ahead
+# at once (tools/gate/turn.py).
+test_arguments="${usage_arguments:-}"
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh
 

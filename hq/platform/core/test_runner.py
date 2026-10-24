@@ -706,12 +706,6 @@ class SeverinoTestRunner(DiscoverRunner):
             raise RuntimeError(f"No test carries the tag(s) {', '.join(sorted(self.tags))}.{untagged}")
         return suite
 
-    def needs_the_turn(self, suite: unittest.TestSuite) -> bool:
-        """Whether running ``suite`` loads the machine, so it takes the heavy
-        turn (tools/lib/heavy.sh): it makes a test database or drives a browser."""
-
-        return bool(self.get_databases(suite)) or any(map(drives_a_browser, tests_in(suite)))
-
     def get_resultclass(self):
         return super().get_resultclass() or CompositionTextResult
 

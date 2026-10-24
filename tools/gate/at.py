@@ -3,9 +3,8 @@ closing on the line tools/gate/verdict.py prints.
 
 mise parses the task's arguments (its usage in mise-tasks/tests.toml) and this
 reads what it parsed. What `--at` and `--keep` do is the task's help
-(`mise run test --help`). A run takes the heavy turn (tools/lib/heavy.sh) unless its tests
-are light: labels named, and none of the tests they load makes a test database
-or drives a browser. The whole suite is never light, so it is not loaded to say so.
+(`mise run test --help`). A run takes the heavy turn (tools/lib/heavy.sh) unless
+tools/gate/turn.py finds it narrow; a run at a ref builds a worktree, so it always takes it.
 """
 
 import fnmatch
@@ -17,13 +16,9 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Self
 
-import django
-from django.conf import settings
-from django.core.management.commands.test import Command as TestCommand
-from django.test.utils import get_runner
-
 from hq.platform.application.ui import counted
 from hq.platform.core.tests.task import RefError, Usage, changed_tests, commit_of, overlay, usage, worktree
+from tools.gate.turn import narrow
 from tools.gate.verdict import Step, close, run
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -161,32 +156,13 @@ def stop(signum: int, _frame: object) -> None:
     raise SystemExit(128 + signum)
 
 
-def light(argv: list[str]) -> bool:
-    """Whether the tests ``argv`` selects, as manage.py test reads it, run
-    without the heavy turn. Tests that cannot be loaded here are not light."""
-
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hq.config.settings")
-    try:
-        django.setup()
-        options = vars(TestCommand().create_parser("manage.py", "test").parse_args([*TEST[2:], *argv]))
-        labels = options.pop("args")
-        if not labels:
-            return False
-        # One suite, not a parallel run's partition of it, loaded without a word: the run says what it found.
-        runner = get_runner(settings, options["testrunner"])(**(options | {"parallel": 1, "verbosity": 0}))
-        return not runner.needs_the_turn(runner.build_suite(labels))
-    except Exception, SystemExit:  # noqa: BLE001 - manage.py says what stopped it, in the turn
-        return False
-
-
 def take_the_turn(typed: Typed) -> None:
-    """Run again inside the heavy turn, unless this is that run or the tests
-    are light. A run at a ref builds a worktree, so it is never light. The
-    run in the turn inherits mise's parse through the environment."""
+    """Run again inside the heavy turn, unless this is that run or a narrow one.
+    The run in the turn inherits mise's parse through the environment."""
 
     if os.environ.get("SEVERINO_HEAVY_TASK") == str(os.getpid()):
         return
-    if typed.at is not None or not light(typed.args):
+    if typed.at is not None or not narrow(typed.args):
         os.execv(HEAVY, [str(HEAVY), "sh", "-c", IN_TURN, "sh", sys.executable, "-m", "tools.gate.at"])
 
 

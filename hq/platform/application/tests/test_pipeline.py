@@ -828,18 +828,6 @@ class GateReferenceTests(SimpleTestCase):
         self.assertFalse(reads_own_arguments(built))
         self.assertTrue(reads_own_arguments(read_before_clearing))
 
-    def test_a_task_that_runs_the_suite_takes_the_heavy_turn(self):
-        """Two suites at once exhaust a small machine's memory; tools/lib/heavy.sh makes them take turns.
-        A TOML task takes it as its shell, a file task by sourcing tools/lib/heavy-turn.sh."""
-        suites = {name: task for name, task in mise_tasks().items() if "manage.py test" in body(task)}
-        self.assertGreater(len(suites), 3)
-        for name, task in suites.items():
-            with self.subTest(task=name):
-                if task["file"]:
-                    self.assertRegex(body(task), r"(?m)^\. .*tools/lib/heavy-turn\.sh\"?$")
-                else:
-                    self.assertTrue((task["shell"] or "").startswith("tools/lib/heavy.sh "))
-
     def test_a_task_declared_outside_mise_toml_names_no_file_in_its_env(self):
         """mise reads an env file, and renders ``config_root`` inside env, from the
         directory of the file that declares the task: in mise-tasks/ a
