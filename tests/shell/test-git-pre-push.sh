@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Prove git:pre-push lets a host branch go only when every extension checkout
-# with work off main carries its name and is pushed, does nothing without an
-# extension set, and refuses a push it cannot judge.
+# with work off main carries its name and is pushed, and refuses a push it
+# cannot judge. Without an extension set, mise skips it (its skip_if).
 set -euo pipefail
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
@@ -40,7 +40,6 @@ refuses() { if pre_push "$@"; then fail "passed: $*"; fi; }
 set_=example_alpha.plugin:plugin
 missing=$work/example-gone/src
 
-passes "" "$missing"
 passes "$set_" "$ext/src"
 refuses "$set_" ""
 refuses "$set_" "$ext/src:$missing"

@@ -1,6 +1,7 @@
 #!/bin/sh
 #MISE description="Before a host branch is pushed: every extension checkout with work off main carries its name and is pushed first"
 #MISE hide=true
+#MISE skip_if='test -z "${HQ_LOCAL_PLUGINS:-}"'
 # The global pre-push hook runs this with git's refs on stdin. Compose builds
 # an extension from its branch of the host branch's name on GitHub, else from
 # its admitted main, so a host branch pushed before its extension work would be
@@ -8,8 +9,6 @@
 # checkout from HQ_LOCAL_PYTHONPATH as mise resolved it, and refuses a push it
 # cannot judge.
 set -eu
-
-[ -n "${HQ_LOCAL_PLUGINS:-}" ] || exit 0
 
 # The branches pushed, one per line. A tag, or a deletion (all zeros), adds
 # nothing for Compose to verify.
