@@ -18,6 +18,7 @@ when a label does not import at the ref: that run says nothing about the
 tests, so it has a verdict of its own and exits 3.
 """
 
+import argparse
 import fnmatch
 import os
 import shutil
@@ -185,23 +186,20 @@ def unimported(step: Step) -> bool:
     return bool(failed)
 
 
-def split_keep(args: list[str]) -> tuple[list[str], list[str]]:
-    """(kept paths, the rest): each ``--keep <path>`` or ``--keep=<path>`` taken out, its path from the checkout's root."""
+# Only --at and --keep are this task's; every other argument, in the order
+# typed, is the labels and manage.py test's options. Without abbreviation, so
+# a shortened option meant for manage.py is never taken for one of these.
+ARGS = argparse.ArgumentParser(
+    prog="mise run test", usage=USAGE.removeprefix("usage: "), allow_abbrev=False, exit_on_error=False
+)
+ARGS.add_argument("--at", required=True)
+ARGS.add_argument("--keep", action="append", default=[])
 
-    keep, rest = [], []
-    taking = False
-    for arg in args:
-        if taking:
-            keep.append(arg)
-        elif arg.startswith("--keep="):
-            keep.append(arg.removeprefix("--keep="))
-        elif arg != "--keep":
-            rest.append(arg)
-        taking = not taking and arg == "--keep"
-    if taking or not all(keep):
-        raise KeepRefused("--keep needs a path")
-    rooted = (os.path.relpath(path, ROOT) if Path(path).is_absolute() else os.path.normpath(path) for path in keep)
-    return [Path(path).as_posix() for path in rooted], rest
+
+def rooted(path: str) -> str:
+    """A --keep path, from the checkout's root."""
+
+    return Path(os.path.relpath(path, ROOT) if Path(path).is_absolute() else os.path.normpath(path)).as_posix()
 
 
 def stop(signum: int, _frame: object) -> None:
@@ -211,16 +209,19 @@ def stop(signum: int, _frame: object) -> None:
 def main(argv: list[str]) -> int:
     if not argv or not (argv[0] == "--at" or argv[0].startswith("--at=")):
         os.execv(sys.executable, [sys.executable, *TEST, *argv])
-    ref, args = (argv[1:2], argv[2:]) if argv[0] == "--at" else ([argv[0].removeprefix("--at=")], argv[1:])
-    if not ref or not ref[0]:
-        print(USAGE, file=sys.stderr)
+    try:
+        options, args = ARGS.parse_known_args(argv)
+    except argparse.ArgumentError as error:
+        print(f"{USAGE}\n{error}", file=sys.stderr)
+        return 2
+    if not options.at or not all(options.keep):
+        print(f"{USAGE}\n--at and --keep each need a value", file=sys.stderr)
         return 2
     signal.signal(signal.SIGTERM, stop)
     try:
-        keep, args = split_keep(args)
-        return run_at(ref[0], keep, args)
+        return run_at(options.at, [rooted(path) for path in options.keep], args)
     except (RefError, KeepRefused) as error:
-        print(f"test --at {ref[0]}: {error}", file=sys.stderr)
+        print(f"test --at {options.at}: {error}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:
         return 130

@@ -140,7 +140,10 @@ class TestAtRefTests(GateTestCase):
                 self.assertFalse(self.seen.exists())
         with patch("sys.stderr", io.StringIO()) as err:
             self.assertEqual(self.run_main("--at", self.old, "label", "--keep")[0], 2)
-        self.assertIn("--keep needs a path", err.getvalue())
+        self.assertIn("--keep", err.getvalue().splitlines()[-1])
+        with patch("sys.stderr", io.StringIO()) as err:
+            self.assertEqual(self.run_main("--at", self.old, "--keep=", "label")[0], 2)
+        self.assertIn("--keep", err.getvalue().splitlines()[-1])
         self.assert_nothing_left()
 
     def test_a_pass_at_the_ref_names_it(self):
