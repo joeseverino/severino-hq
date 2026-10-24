@@ -31,7 +31,7 @@ from tools.gate.verdict import Step, close, run
 ROOT = Path(__file__).resolve().parents[2]
 # The gates that run whatever changed, side by side: each is quick, and each
 # Django gate opens a database of its own (the django task template).
-TASKS = ("checks:ruff", "checks:mypy", "checks:structural", "tests:django", "tests:migrations", "drift:*")
+TASKS = ("checks:ruff", "checks:mypy", "checks:structural", "checks:css", "tests:django", "tests:migrations", "drift:*")
 # Never part of the Django suite: other languages and vendored trees.
 SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
 ALWAYS = ("architecture", "new_domain")

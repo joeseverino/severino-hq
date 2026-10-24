@@ -65,8 +65,9 @@ package.
 ## Always on
 
 Rules that hold for every change, not a domain in particular; the class docstring
-is the rule. `StyleContractTests` and `SharedPrimitiveStyleTests` (CSS, tokens,
-layers, spacing, color), `TemplateCommentTests` (what a `{# #}` comment left open is),
+is the rule. `checks:css` (Stylelint under `tools/lint/stylelint.config.mjs`:
+tokens, spacing, color), `StyleContractTests` and `SharedPrimitiveStyleTests`
+(CSS, layers), `TemplateCommentTests` (what a `{# #}` comment left open is),
 `CognitiveComplexityTests` (score 20 per function), `FileSizeTests` (no source
 file past 1,000 lines), `OneDefinitionTests` (a module-level name is
 assigned once), `CommentHistoryTests` (comments

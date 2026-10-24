@@ -12,7 +12,6 @@ from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
 from hq.platform.application.tests.markup import select
-from hq.platform.core.stylesheets import stylesheet
 
 STATIC = Path(settings.BASE_DIR) / "static"
 VENDOR = STATIC / "vendor" / "scalar"
@@ -98,17 +97,6 @@ class ReferenceStyleTests(SimpleTestCase):
 
     def setUp(self):
         self.sheet = _uncommented(_source("css", "api-reference.css"))
-
-    def test_it_carries_no_color_size_or_face_of_its_own(self):
-        self.assertEqual(re.findall(r"#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|oklch|color-mix)\(", self.sheet), [])
-        self.assertNotIn("font-family", self.sheet)
-        self.assertEqual(re.findall(r"font-size:\s*[\d.]", self.sheet), [])
-
-    def test_every_token_it_reads_is_one_the_stylesheet_defines(self):
-        tokens = set(re.findall(r"^\s*(--[\w-]+):", stylesheet(), flags=re.MULTILINE))
-        read = set(re.findall(r"var\((--[\w-]+)", self.sheet))
-        self.assertGreater(len(read), 20)
-        self.assertEqual(read - tokens, set())
 
     def test_every_variable_it_sets_is_one_the_bundle_reads(self):
         """A renamed variable would leave the viewer in the vendor's default."""

@@ -44,8 +44,9 @@ run = "actionlint -color"
 ["checks:source"]
 description = "The tests that read the repository, run once on the checkout"
 # Tagged "source"; a whole-suite run leaves them out (hq/platform/core/test_runner.py),
-# so no image or composed pass runs them.
+# so no image or composed pass runs them. The stylesheet lint's tests run Stylelint.
 extends = "django-heavy"
+depends = ["setup:lint-tools"]
 usage = 'arg "[labels]..." var=#true help="Test labels, dotted; only their tagged tests run. Every one by default"'
 run = "uv run python manage.py test --tag source --noinput --parallel auto ${usage_labels:-}"
 
@@ -62,3 +63,8 @@ run = "uv run python manage.py check --deploy --fail-level WARNING"
 description = "No new near-duplicate pair outside tests"
 usage = 'flag "--record" help="Rewrite the baseline from this tree instead of checking it"'
 run = 'uv run python -m tools.structural.bar ${usage_record:+--record}'
+
+["checks:css"]
+description = "Stylelint holds the stylesheets to their contract: color and sizes from tokens, every custom property defined"
+depends = ["setup:lint-tools"]
+run = "node tools/lint/node_modules/stylelint/bin/stylelint.mjs --config tools/lint/stylelint.config.mjs 'static/css/**/*.css'"
