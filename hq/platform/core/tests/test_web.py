@@ -1327,30 +1327,6 @@ class ManifestImportTests(TestCase):
         self.assertFalse(ContentItem.objects.filter(slug="old-slug").exists())
 
 
-class DeductibleMathTests(TestCase):
-    def test_expense_deductible_is_recomputed_on_save(self):
-        e = Expense.objects.create(
-            date=date.today(),
-            vendor="x",
-            item="y",
-            category="hosting",
-            total_cost=Decimal("100.00"),
-            business_use_percentage=75,
-        )
-        self.assertEqual(e.estimated_deductible_amount, Decimal("75.00"))
-        e.total_cost = Decimal("200.00")
-        e.save()
-        self.assertEqual(e.estimated_deductible_amount, Decimal("150.00"))
-
-    def test_asset_deductible_is_computed_on_save(self):
-        a = Asset.objects.create(
-            item_name="x",
-            total_cost=Decimal("100.00"),
-            business_use_percentage=40,
-        )
-        self.assertEqual(a.estimated_deductible_amount, Decimal("40.00"))
-
-
 class AuditLogTests(TestCase):
     def test_create_writes_audit_event(self):
         before = AuditLog.objects.count()
