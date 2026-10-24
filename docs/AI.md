@@ -59,7 +59,7 @@ same gates on it.
 ![The worker reads AGENTS.md and loads the skills, runs its own scratch server and dev:look, runs fast and then check, and CI runs the same aggregates](diagrams/agent-tools.png)
 
 <sup>Diagram source: [`docs/diagrams/agent-tools.mmd`](diagrams/agent-tools.mmd),
-pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram) by `mise run docs:diagrams`.</sup>
+pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram) as `diagram docs/diagrams/`.</sup>
 
 ### What holds the work to the bar
 

@@ -8,8 +8,8 @@ interface adds an adapter, never a second implementation.
 
 <sup>Diagram source:
 [`application-core.mmd`](diagrams/application-core.mmd), pre-rendered with
-[`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram) by
-`mise run docs:diagrams`.</sup>
+[`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram) as
+`diagram docs/diagrams/`.</sup>
 
 ## The boundary
 
