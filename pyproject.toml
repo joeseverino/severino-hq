@@ -9,6 +9,9 @@ dependencies = [
     # Django's own async adapters, which it documents under this name: the ASGI
     # application, the bridge, MCP's tools and hq_call cross with them.
     "asgiref==3.12.1",
+    # Imported by WhiteNoise's compressor, which writes a .br copy beside each
+    # collected asset when it is installed.
+    "brotli==1.2.1",
     "cryptography==50.0.2",
     "django==6.1.2",
     "httpx2==2.13.1",
@@ -38,6 +41,9 @@ extend_exclude = [".*/tests/"]
 [tool.deptry.per_rule_ignores]
 # Runtime dependencies no host code imports, and why each is installed anyway.
 DEP002 = [
+    # WhiteNoise's compressor imports it when collectstatic runs, in the image
+    # build as well, and writes each asset's .br copy with it.
+    "brotli",
     # Django's parallel test runner pickles a failure's traceback with it, in
     # the image as well.
     "tblib",
@@ -74,6 +80,8 @@ tools = [
     # Holds the runtime dependencies to what host code imports (checks:deptry).
     "deptry==0.25.1",
     "django-stubs==6.1.2",
+    # Writes the served font from its source (tools/fonts), and the font tests read it.
+    "fonttools==4.67.0",
     "hypothesis==6.170.0",
     "mypy==2.4.0",
     "openapi-spec-validator==0.9.0",

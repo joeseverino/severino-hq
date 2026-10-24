@@ -785,8 +785,8 @@ STATIC_ROOT = Path(env_str("DJANGO_STATIC_ROOT", str(BASE_DIR / "var" / "static"
 STATIC_LIVE = env_bool("DJANGO_WHITENOISE_AUTOREFRESH", default=DEBUG)
 
 # Collected assets are named by their content (css/app.3f2a1b9c0d4e.css), so
-# core.static can cache them forever, and each has a gzip copy beside it, so
-# nothing is compressed while serving. Live serving keeps plain names: the
+# core.static can cache them forever, and each has a brotli and a gzip copy
+# beside it, so nothing is compressed while serving. Live serving keeps plain names: the
 # source trees it reads have no hashed copies, and it sends no-cache anyway.
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
