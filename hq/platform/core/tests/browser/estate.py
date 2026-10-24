@@ -134,12 +134,15 @@ class ExampleEstateGate(BrowserGate):
     classes below, so two workers run them side by side."""
 
     scripted = True
+    navigation: tuple[str, ...]
 
     @classmethod
+    @override
     def render(cls):
         cls.navigation, answers = estate_once()
         return answers
 
+    @override
     def start(self, **options):
         super().start(**options)
         self.unanswered = []
@@ -269,6 +272,9 @@ class ExampleEstateControlTests(BrowserGate):
     nothing)."""
 
     scripted = True
+    # A list's default sort, and the first word of its first row, by path.
+    default_sort: dict[str, str]
+    word: dict[str, str]
 
     @classmethod
     @override
@@ -312,7 +318,10 @@ class ExampleEstateControlTests(BrowserGate):
         for href in _SORT_LINK.findall(body):
             for deeper in _SORT_LINK.findall(ask(urljoin(path, unescape(href)))):
                 ask(urljoin(path, unescape(deeper)))
-        row = _FIRST_ROW.search(body).group(1)
+        first = _FIRST_ROW.search(body)
+        if first is None:
+            raise AssertionError(f"{path} lists no row to search for")
+        row = first.group(1)
         cls.word[path] = next(unescape(words[0]) for words in _cell_words(row) if words)
         ask(f"{path}?q={cls.word[path]}")
         ask(f"{path}?q={_NOTHING}")

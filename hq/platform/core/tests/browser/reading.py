@@ -71,7 +71,8 @@ def reads(*probes):
         def held(self, name, *found):
             return judge(self, name, *(found or self.read(probes)))
 
-        held.probes = probes
+        # typeshed's _Wrapped declares no attributes, which a function takes.
+        held.probes = probes  # type: ignore[attr-defined]
         return held
 
     return rule

@@ -194,8 +194,10 @@ adding UI; grow a primitive rather than styling a page.
 - A Ruff rule is switched off only in `pyproject.toml`, with the reason beside
   it; a line-level `# noqa` names its code and says why. A method that
   overrides a base-class method carries `@override`.
-- `checks:mypy` holds the seams `pyproject.toml` names (`files`), fully
-  annotated. A `# type: ignore[code]` is for a wrong stub, with the reason.
+- `checks:mypy` holds the seams `pyproject.toml` names (`files`) fully
+  annotated, and the browser test package to attributes and calls that exist,
+  without demanding annotations there. A `# type: ignore[code]` is for a wrong
+  stub, with the reason.
 - A docstring says what the thing is and why it exists. How it works lives in
   the one doc or comment that owns the mechanism, so a long docstring is
   trimmed as its file is touched; no gate measures it.

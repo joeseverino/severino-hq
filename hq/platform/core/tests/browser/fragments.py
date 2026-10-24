@@ -1,5 +1,6 @@
 """Fragments in a real browser: a region fetched, refreshed and polled as fragment.js answers it."""
 
+from typing import override
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -47,8 +48,12 @@ class FragmentBrowserTests(BrowserGate):
     """The fragment primitive, in a browser: what it swaps, keeps and stops."""
 
     scripted = True
+    # The calendar's month, and the month after it.
+    calendar: str
+    following: str
 
     @classmethod
+    @override
     def render(cls):
         with transaction.atomic():
             client = Client()
@@ -65,11 +70,13 @@ class FragmentBrowserTests(BrowserGate):
             transaction.set_rollback(True)
         return answers
 
+    @override
     def start(self, **options):
         super().start(**options)
         self.asked = []
         self.strip = [' data-fragment-poll="1"', ""]
 
+    @override
     def respond(self, route):
         request = route.request
         parts = urlsplit(request.url)

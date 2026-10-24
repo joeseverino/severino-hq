@@ -7,7 +7,7 @@ hide = true
 run = ["uv run ruff check .", "uv run ruff format --check ."]
 
 ["checks:mypy"]
-description = "mypy type-checks the seams pyproject.toml names"
+description = "mypy type-checks the seams pyproject.toml names, and the browser test package's calls"
 hide = true
 # django-stubs loads the host's settings.
 extends = "django"

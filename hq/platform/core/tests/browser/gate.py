@@ -5,18 +5,19 @@ import os
 import re
 import tempfile
 from collections import deque
+from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
-from typing import override
-from unittest import mock
+from typing import Any, cast, override
+from unittest import TestResult, mock
 from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.test import Client, RequestFactory, SimpleTestCase
-from django.test.testcases import is_pickable
+from django.test.testcases import is_pickable  # type: ignore[attr-defined]  # not in django-stubs
 from django.urls import reverse
 from django.utils.csp import CSP
-lazy from playwright.sync_api import Error as BrowserError
+lazy from playwright.sync_api import Browser, BrowserContext, Error as BrowserError, Playwright
 
 from hq.platform.core.speculation import rules_document
 from hq.platform.core.test_runner import stall_watch
@@ -233,6 +234,13 @@ class BrowserGate(SimpleTestCase):
 
     databases = {"default"}
     scripted = False
+    # Set once a class by setUpClass, and a test's context by start.
+    policy: dict[str, str]
+    pages: Mapping[Any, Any]
+    served: dict[str, Sent]
+    playwright: Playwright
+    browser: Browser
+    context: BrowserContext | None
 
     @classmethod
     def render(cls):
@@ -241,6 +249,7 @@ class BrowserGate(SimpleTestCase):
         raise NotImplementedError
 
     @classmethod
+    @override
     def setUpClass(cls):
         super().setUpClass()
         # Rendered, and rolled back, before the browser starts: Django refuses
@@ -259,27 +268,33 @@ class BrowserGate(SimpleTestCase):
         engine = os.environ.get("HQ_BROWSER_ENGINE", "webkit")
         if engine not in {"chromium", "firefox", "webkit"}:
             raise ValueError("HQ_BROWSER_ENGINE must be chromium, firefox, or webkit.")
-        options = {"headless": True}
+        options: dict[str, object] = {"headless": True}
         if channel := os.environ.get("HQ_BROWSER_CHANNEL"):
             options["channel"] = channel
         cls.browser = getattr(cls.playwright, engine).launch(**options)
         cls.addClassCleanup(cls.browser.close)
 
+    @override
     def setUp(self):
         self.context = None
         self.refusals = []
         self.start()
-        self.addCleanup(lambda: self.context.close())
+        self.addCleanup(self.close_context)
         self.addCleanup(self.capture_failure)
         # First out: a refusal no subtest took fails the test, while it can
         # still be shot.
         self.addCleanup(self.kept_the_policy)
 
-    def start(self, **options):
-        """A fresh browser context, replacing any the test already has."""
+    def close_context(self):
+        """Closes the context the test last started, if it has one."""
 
         if self.context is not None:
             self.context.close()
+
+    def start(self, **options):
+        """A fresh browser context, replacing any the test already has."""
+
+        self.close_context()
         test = getattr(self, self._testMethodName, None)
         options.setdefault("java_script_enabled", getattr(test, "scripted", self.scripted))
         # Scripts asked for while this is a list wait in it (moved_once_drawn).
@@ -395,14 +410,17 @@ class BrowserGate(SimpleTestCase):
     def run(self, result=None):
         self.failed = False
         self.failures = None
-        return super().run(result if result is None else _Watched(result, self))
+        # _Watched stands in for the result, passing on what it does not keep.
+        return super().run(result if result is None else cast(TestResult, _Watched(result, self)))
 
     @override
     def __getstate__(self):
         # A parallel worker sends a failed subtest to the parent with its test,
         # once the test has finished, when Django no longer leaves out what
         # cannot be pickled: the browser it drove and its cleanups stay here.
-        return {key: value for key, value in super().__getstate__().items() if is_pickable(value)}
+        # django-stubs leaves out SimpleTestCase.__getstate__, which returns a dict.
+        state = super().__getstate__()
+        return {key: value for key, value in state.items() if is_pickable(value)}  # type: ignore[attr-defined]
 
     def shoot(self, name):
         """The page as it stands, saved as ``name``.png in this test's own

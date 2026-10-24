@@ -3,6 +3,7 @@
 import json
 import re
 from itertools import islice, takewhile
+from typing import override
 
 lazy from playwright.sync_api import TimeoutError as LoadTimeout
 
@@ -98,7 +99,12 @@ class LayoutBrowserTests(BrowserGate):
     run lasts as long as its longest class.
     """
 
+    lists: tuple[str, ...]
+    # The controls that spoke, counted by the sweep that presses them.
+    spoke: int
+
     @classmethod
+    @override
     def render(cls):
         pages, cls.lists = stress_estate()
         return pages
@@ -119,7 +125,7 @@ class LayoutBrowserTests(BrowserGate):
         round trip before the first of them is judged; a probe that threw
         fails its own rule only."""
 
-        read = {}
+        read: dict[int, list] = {}
         for at, rule in enumerate(rules):
             if hasattr(rule, "probes") and at not in read:
                 read |= self.read_ahead(rules, at)
@@ -654,7 +660,7 @@ class LayoutBrowserTests(BrowserGate):
 
     def card_rows(self, key):
         """The cards of one dashboard grid, grouped by the row they sit on."""
-        rows = {}
+        rows: dict[int, list[dict]] = {}
         for box in self.page.locator(SELECTORS[key]).evaluate_all(
             "elements => elements.map(e => { const r = e.getBoundingClientRect(), "
             "edge = e.parentElement.getBoundingClientRect().right; "

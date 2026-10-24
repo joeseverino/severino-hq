@@ -275,7 +275,7 @@ def reading_problems(readings):
     a mark off its lead, leads of two sizes, rows of different counts, second
     lines at different depths."""
 
-    found = []
+    found: list[str] = []
     for reading in readings:
         found.extend(f"under the mark: {line}" for line in reading["under_the_mark"])
         found.extend(f"cut short: {line}" for line in reading["cut"])
@@ -283,7 +283,7 @@ def reading_problems(readings):
             found.append(f"mark {reading['mark']} beside a lead at {reading['lead']}")
     if len({reading["size"] for reading in readings}) > 1:
         found.append(f"leads in {sorted({reading['size'] for reading in readings})}")
-    rows = {}
+    rows: dict[int, list[dict]] = {}
     for reading in readings:
         rows.setdefault(round(reading["top"]), []).append(reading)
     if len({len(row) for row in rows.values()}) > 1:

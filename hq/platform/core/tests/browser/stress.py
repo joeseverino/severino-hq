@@ -81,7 +81,7 @@ def stress_pages(asked):
     asked = set(asked)
     sparse, dense = ({name: page for name, page in family.items() if name in asked} for family in (PAGES, DENSE_PAGES))
     derived = {name: page for name, page in derived_pages().items() if name in asked}
-    pages = {}
+    pages: dict[str, str] = {}
     for seed, chosen, needed in (
         ("sparse", sparse, sparse),
         ("dense", dense, sparse or dense),

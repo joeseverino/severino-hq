@@ -175,9 +175,10 @@ ignore = [".claude/worktrees"]
 
 [tool.mypy]
 # The interpreter it runs on is the one requires-python admits. Every module
-# below is held to the strict flags; an import they follow is read for its
-# types and never reported, so the flags reach nothing else.
-files = ["hq/platform/application/security.py", "hq/platform/application/integration_specs.py", "hq/platform/application/plugins.py", "hq/platform/application/outbound_work.py", "hq/platform/application/capabilities.py", "hq/platform/application/resources.py", "hq/platform/application/sensitivity.py", "hq/platform/application/domains.py", "hq/platform/application/records.py", "hq/domains/control_plane/bridge_actions.py", "hq/domains/control_plane/bridge_application.py", "hq/domains/control_plane/bridge_contract.py", "hq/domains/control_plane/bridge_registry.py", "hq/domains/control_plane/connection_shapes.py", "hq/platform/core/unix_server.py", "hq/domains/control_plane/connection_kinds.py", "hq/domains/control_plane/credential_reads.py", "hq/domains/control_plane/names.py", "hq/domains/control_plane/provider_adapters/cloudflare.py", "hq/domains/control_plane/provider_adapters/declarations.py", "hq/domains/control_plane/provider_adapters/portainer.py", "hq/domains/control_plane/provider_adapters/tailscale.py", "hq/domains/control_plane/provider_adapters/tls.py", "hq/domains/control_plane/provider_spec.py", "hq/domains/control_plane/providers.py", "hq_sdk", "hq/platform/api", "hq/platform/mcp", "tests/sdk_consumer", "tools/credentials.py"]
+# below but the browser test package (its override says why) is held to the
+# strict flags; an import they follow is read for its types and never
+# reported, so the flags reach nothing else.
+files = ["hq/platform/application/security.py", "hq/platform/application/integration_specs.py", "hq/platform/application/plugins.py", "hq/platform/application/outbound_work.py", "hq/platform/application/capabilities.py", "hq/platform/application/resources.py", "hq/platform/application/sensitivity.py", "hq/platform/application/domains.py", "hq/platform/application/records.py", "hq/domains/control_plane/bridge_actions.py", "hq/domains/control_plane/bridge_application.py", "hq/domains/control_plane/bridge_contract.py", "hq/domains/control_plane/bridge_registry.py", "hq/domains/control_plane/connection_shapes.py", "hq/platform/core/unix_server.py", "hq/domains/control_plane/connection_kinds.py", "hq/domains/control_plane/credential_reads.py", "hq/domains/control_plane/names.py", "hq/domains/control_plane/provider_adapters/cloudflare.py", "hq/domains/control_plane/provider_adapters/declarations.py", "hq/domains/control_plane/provider_adapters/portainer.py", "hq/domains/control_plane/provider_adapters/tailscale.py", "hq/domains/control_plane/provider_adapters/tls.py", "hq/domains/control_plane/provider_spec.py", "hq/domains/control_plane/providers.py", "hq_sdk", "hq/platform/api", "hq/platform/mcp", "tests/sdk_consumer", "tools/credentials.py", "hq/platform/core/tests/browser"]
 exclude = "(^|/)(tests\\.py|test_[^/]*\\.py|migrations/)"
 follow_imports = "silent"
 plugins = ["mypy_django_plugin.main"]
@@ -192,6 +193,23 @@ disallow_incomplete_defs = true
 disallow_untyped_decorators = true
 disallow_any_generics = true
 warn_return_any = true
+
+# The browser gate's package is held to calls that exist: its bodies are
+# checked as written, without the annotations the seams above must carry.
+[[tool.mypy.overrides]]
+module = ["hq.platform.core.tests.browser.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_decorators = false
+disallow_any_generics = false
+warn_return_any = false
+
+# Playwright is in the optional browser group, which checks:mypy does not
+# install; it reads as Any whether or not it is installed, so one result holds.
+[[tool.mypy.overrides]]
+module = ["playwright.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
 
 [tool.django-stubs]
 django_settings_module = "hq.config.settings_typecheck"

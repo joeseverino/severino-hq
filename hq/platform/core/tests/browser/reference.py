@@ -2,6 +2,7 @@
 
 import json
 import re
+from typing import Any, override
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -202,17 +203,20 @@ class ReferenceBrowserTests(BrowserGate):
     """The API reference reads as a page of HQ's, at every width and in both themes."""
 
     scripted = True
+    document: dict[str, Any]
 
     @classmethod
+    @override
     def render(cls):
         pages = render_reference()
         cls.document = json.loads(pages[reverse("hq_api:openapi").strip("/")])
         return pages
 
+    @override
     def start(self, **options):
         super().start(**options)
-        self.requests = []
-        self.refused = []
+        self.requests: list[str] = []
+        self.refused: list[str] = []
         self.page.on("request", lambda request: self.requests.append(request.url))
         self.page.on(
             "response",
