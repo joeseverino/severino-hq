@@ -258,7 +258,7 @@ class TableTagTests(SimpleTestCase):
         """After a row is the line its toggle opens: the blocks it keeps
         beneath itself, then under its column's name a column that may leave
         (its blocks taken out of the copy), a narrow part of a column that
-        stays, and a labelled block. A control under no heading is named for
+        stays, and a labeled block. A control under no heading is named for
         a screen reader alone, and a column with nothing to show has no part."""
 
         source = (

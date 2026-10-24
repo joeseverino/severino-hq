@@ -106,7 +106,7 @@ class _Row:
 class _Entry:
     """One part of a row's open line: its column's name, the markup it shows
     (whole elements, or a cell's content with the blocks cut out of it), and
-    how it is shown: a ``column`` that left, a ``narrow`` part, a labelled
+    how it is shown: a ``column`` that left, a ``narrow`` part, a labeled
     block."""
 
     name: str
@@ -307,11 +307,11 @@ class _Cells(HTMLParser):
     def _detail(self, row: _Row, width: int, names: list[str], drops: set[int]) -> None:
         """The row's open line: the blocks it keeps beneath itself, then each
         part under its column's name: a column that may leave, with all its
-        cell holds; a narrow part of a column that stays; a labelled block."""
+        cell holds; a narrow part of a column that stays; a labeled block."""
 
         blocks: list[_Span] = []
         entries: list[_Entry] = []
-        labelled: list[_Entry] = []
+        labeled: list[_Entry] = []
         for index, cell in enumerate(row.cells):
             if "colspan" in cell.attrs or not cell.closed:
                 continue
@@ -325,7 +325,7 @@ class _Cells(HTMLParser):
             for part in below:
                 assert part.end
                 if part.label:
-                    labelled.append(_Entry(part.label, [(part.start, part.end)], "label"))
+                    labeled.append(_Entry(part.label, [(part.start, part.end)], "label"))
                 else:
                     blocks.append((part.start, part.end))
             if index in drops:
@@ -335,8 +335,8 @@ class _Cells(HTMLParser):
                     entries.append(_Entry(name, [(cell.opened, cell.closed)], "column", cut, index, data, unseen))
             elif narrow:
                 entries.append(_Entry(name, narrow, "narrow", unseen=unseen))
-        if blocks or entries or labelled:
-            self.details.append((row.end, width, blocks, entries + labelled))
+        if blocks or entries or labeled:
+            self.details.append((row.end, width, blocks, entries + labeled))
 
     def _span(self, row: _Row, width: int) -> None:
         """A group's heading row spans every column its table declares."""
@@ -431,7 +431,7 @@ def _detail_row(markup: _Markup, width: int, blocks: list[_Span], entries: list[
     the table's width holding the blocks the row keeps beneath itself, then
     the parts it holds back, each named by its column. A column's part shows
     while the column has left (``data-dropped``, tables.js), a narrow part in
-    a narrow box, a labelled block always."""
+    a narrow box, a labeled block always."""
 
     drawn = [markup.content(block, whole=True) for block in blocks]
     listed = []

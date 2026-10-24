@@ -405,7 +405,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 /* A column with nothing in any row is not drawn: the server marks each cell that says nothing (`data-blank`) and every cell of a column where all do (`data-blank-column`), never the naming column. */
 .data-table > * > tr > [data-blank-column] { display: none; }
 .data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--space-3); inset-block-start: calc(var(--row-pad) - var(--space-1)); }
-/* What a row holds back, in the line the server drew beneath it (`table_tags._detail_row`), shown while the row is open: a column's part while its column is gone (`data-dropped`), a narrow part in a narrow box, a labelled block always; it asks its columns for no width (`contain`), so opening moves no column. */
+/* What a row holds back, in the line the server drew beneath it (`table_tags._detail_row`), shown while the row is open: a column's part while its column is gone (`data-dropped`), a narrow part in a narrow box, a labeled block always; it asks its columns for no width (`contain`), so opening moves no column. */
 .row-detail { display: none; }
 @media (scripting: enabled) {
   .data-table > tbody > tr.is-expanded + .row-detail { display: table-row; }

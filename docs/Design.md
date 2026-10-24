@@ -110,7 +110,7 @@ own beneath the row, drawn by the server after the row (`tr.row-detail`,
 `table_tags._detail_row`) and shown while the row is open: the blocks first,
 then each part under its column's name (`dl.row-columns`). A column's part
 shows while the column is gone (`data-dropped`, which `tables.js` sets on it
-as on the cells), a narrow part in a narrow box, a labelled block always; a
+as on the cells), a narrow part in a narrow box, a labeled block always; a
 line with nothing to show is a blank row of no height. The line holds a copy
 of what the row holds back, so the row's own cells stay as they were, and the
 columns are held at their widths for as long as any row is open, so every
