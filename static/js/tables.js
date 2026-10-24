@@ -439,17 +439,6 @@
     });
   }
 
-  function preserveDisclosureState(next, url) {
-    const currentQuery = new URL(window.location.href).searchParams.get("q");
-    const nextQuery = new URL(url, window.location.href).searchParams.get("q");
-    if (!currentQuery || !nextQuery) return;
-    document.querySelectorAll("details[data-preserve-open]").forEach((details) => {
-      const key = details.dataset.preserveOpen;
-      const replacement = next.querySelector(`[data-preserve-open="${key}"]`);
-      if (replacement) replacement.open = details.open;
-    });
-  }
-
   window.addEventListener("resize", markTablesSoon);
   // Whether a value is cut depends on the face it is drawn in, and so does
   // how wide a table is in a region whose width did not change, so both are
@@ -569,7 +558,6 @@
         strict: false,
         busy: document.querySelector("main"),
         before: (next) => {
-          preserveDisclosureState(next, url);
           keepFilterOpen(next);
           pinColumnWidths(next);
         },
