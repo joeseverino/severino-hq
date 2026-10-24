@@ -275,3 +275,53 @@ _STRANDED_MARKS = (
   return [...new Set(found)];
 }"""
 )
+
+# An identifier whose parts are text (`display: contents`, as a table makes
+# them) inside a flex or grid box: each run of text and each seam between them
+# is then an item of the box, so the name stands as side-by-side columns
+# rather than one run that wraps, and its least width is every part's summed.
+# A token that is one box, or text inside a box of its own, is one item.
+_NAMES_IN_TRACKS = (
+    "(part) => {"
+    + _DESCRIBE
+    + r"""
+  const shown = (el) => getComputedStyle(el).display;
+  const tracks = ['flex', 'inline-flex', 'grid', 'inline-grid'];
+  // The box the part's pieces are laid out in: its nearest ancestor that is one.
+  const boxOf = (el) => {
+    let up = el.parentElement;
+    while (up && shown(up) === 'contents') up = up.parentElement;
+    return up;
+  };
+  // The items the part's pieces make: a run of text is one item however many
+  // nodes it spans, and every other piece that draws is one of its own.
+  const items = (el) => {
+    let count = 0, inText = false;
+    const walk = (node) => node.childNodes.forEach((child) => {
+      if (child.nodeType === Node.TEXT_NODE) {
+        if (child.data.trim() && !inText) { count += 1; inText = true; }
+        return;
+      }
+      if (child.nodeType !== Node.ELEMENT_NODE) return;
+      const display = shown(child);
+      if (display === 'contents') { walk(child); return; }
+      if (display === 'none' || ['absolute', 'fixed'].includes(getComputedStyle(child).position)) return;
+      count += 1;
+      inText = false;
+    });
+    walk(el);
+    return count;
+  };
+  const found = [];
+  document.querySelectorAll('main ' + part).forEach((el) => {
+    if (shown(el) !== 'contents') return;
+    // A part inside another counts once, as the outer one's pieces.
+    const holder = el.parentElement.closest(part);
+    if (holder && shown(holder) === 'contents' && boxOf(el) === boxOf(holder)) return;
+    const box = boxOf(el);
+    if (!box || !tracks.includes(shown(box)) || !box.checkVisibility()) return;
+    if (items(el) > 1) found.push(`${describe(box)} lays "${el.textContent.trim().slice(0, 40)}" out as ${items(el)} items`);
+  });
+  return [...new Set(found)];
+}"""
+)

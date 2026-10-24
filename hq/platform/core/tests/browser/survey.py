@@ -65,7 +65,7 @@ from hq.platform.core.tests.browser.probes.text import (
     _SQUEEZED_TITLES,
     _WRAPPED_PHRASES,
 )
-from hq.platform.core.tests.browser.probes.tokens import _STRANDED_MARKS, _TOKEN_BREAKS
+from hq.platform.core.tests.browser.probes.tokens import _NAMES_IN_TRACKS, _STRANDED_MARKS, _TOKEN_BREAKS
 from hq.platform.core.tests.browser.reading import _probe
 from hq.platform.core.tests.browser.selectors import _TOKEN_SELECTORS, SELECTORS
 from hq.platform.core.tests.browser.widths import TARGET_MIN, WIDE, WIDE_REGION
@@ -202,6 +202,7 @@ _GEOMETRY = {
     "summary marks": _SUMMARY_MARKS,
     "tokens": (_TOKEN_BREAKS, _TOKEN_SELECTORS),
     "stranded marks": (_STRANDED_MARKS, SELECTORS["seam"]),
+    "names in tracks": (_NAMES_IN_TRACKS, ".token, .whole, .cut"),
     "values under labels": _UNDER_LABELS_READ,
     "heading asides": (_ASIDE_BESIDE_ITS_HEADING, SELECTORS["heading_aside"]),
     "lone aside words": (_LONE_ASIDE_WORDS, SELECTORS["any_aside"]),

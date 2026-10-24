@@ -314,9 +314,9 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .code-list { display: inline-flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
 .data-table .code-list code { white-space: nowrap; }
 .external-link::after { content: "\00a0\2197"; font-size: .85em; }
-/* A name that is one box leaves a break after it, so its link lays name and arrow out as one row: the name gives way, the arrow stays. */
-.external-link:has(> .token[data-sole]), td .external-link:has(> code:only-child) { display: inline-flex; align-items: baseline; max-width: 100%; }
-:is(.external-link:has(> .token[data-sole]), td .external-link:has(> code:only-child)) > * { min-width: 0; }
+/* A name that is one box leaves a break after it, so its link lays name and arrow out as one row: the name gives way, the arrow stays. In a cell a name's token is text (base.css), whose parts would each be an item of the row, so a table lays out its own names. */
+.external-link:not(td *, th *):has(> .token[data-sole]), td .external-link:has(> code:only-child) { display: inline-flex; align-items: baseline; max-width: 100%; }
+:is(.external-link:not(td *, th *):has(> .token[data-sole]), td .external-link:has(> code:only-child)) > * { min-width: 0; }
 /* A chip that wraps is as wide as its line, so in a link the chip and its token run inline, a chip on each line, and the arrow follows the last. */
 .external-link:not(td *, th *) > code,
 .external-link:not(td *, th *) > code > .token { display: inline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
