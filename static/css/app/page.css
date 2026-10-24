@@ -339,7 +339,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    on none that does not, all of it or none of it, without a width being named. */
 /* Its track is as wide as the bar allows: a short name keeps the control to
    its own width at the bar's end, and a long one is cut to the track. */
-.user-menu { position: relative; grid-area: user; justify-self: end; max-width: 100%; }
+.user-menu { position: relative; grid-area: user; justify-self: stretch; max-width: 100%; }
 /* The badge is one size whatever it counts, so the count arriving after the
    page (a fragment on every page but the two that count it) moves nothing in
    the bar: it is pinned to the corner, outside the flow. */
