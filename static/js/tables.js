@@ -350,6 +350,17 @@
     });
   };
 
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-sort-local]");
+    if (!button) return;
+    const heading = button.closest("th");
+    const table = heading.closest("table");
+    const next = { none: "ascending", ascending: "descending", descending: "none" }[heading.getAttribute("aria-sort")] || "ascending";
+    table.querySelectorAll(":scope > thead th[data-sort-ready]").forEach((other) => other.setAttribute("aria-sort", "none"));
+    heading.setAttribute("aria-sort", next);
+    sortRows(table, heading.cellIndex, next);
+  });
+
   // A table held while its rows are open is fitted again as it would stand
   // with them closed, the width the window now gives it, and held there.
   const settleOpenRows = () => {
