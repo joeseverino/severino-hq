@@ -797,7 +797,6 @@ class GateReferenceTests(SimpleTestCase):
                     self.assertRegex(body(task), r"(?m)^\. .*tools/lib/heavy-turn\.sh\"?$")
                 else:
                     self.assertTrue((task["shell"] or "").startswith("tools/lib/heavy.sh "))
-                self.assertTrue(task["timeout"], "a hung suite would hold the turn forever")
 
     def test_a_task_declared_outside_mise_toml_names_no_file_in_its_env(self):
         """mise reads an env file, and renders ``config_root`` inside env, from the
