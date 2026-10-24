@@ -1,7 +1,11 @@
-"""perf:report reads a task's stdout only where mise prints it unlabeled."""
+"""perf:report reads a task's stdout only where mise prints it unlabeled, and
+tells a server that refuses it from one still starting."""
 
 import ast
 import inspect
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import override
 
 from django.test import SimpleTestCase, tag
 
@@ -43,3 +47,37 @@ class TaskReadTests(SimpleTestCase):
             with self.subTest(line=argument.lineno):
                 self.assertIsInstance(argument, ast.Constant, "name the task read as a literal")
                 self.assertTrue(tasks[argument.value]["raw"], f"{argument.value} is read, so it is raw")
+
+
+def answering(status: int) -> ThreadingHTTPServer:
+    """A loopback server answering every GET with ``status``, serving until shut down."""
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(status)
+            self.end_headers()
+
+        @override
+        def log_message(self, format, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+class ReadinessTests(SimpleTestCase):
+    def wait(self, status: int) -> float:
+        server = answering(status)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        host, port = server.server_address[:2]
+        return targets.wait_ready(f"http://{host}:{port}", targets.FIRST_BOOT_S)
+
+    def test_ready_is_a_200(self):
+        self.assertGreaterEqual(self.wait(200), 0)
+
+    def test_a_refusal_fails_at_once_rather_than_at_the_deadline(self):
+        for status in (400, 403):
+            with self.subTest(status=status), self.assertRaisesRegex(targets.NotMeasured, str(status)):
+                self.wait(status)

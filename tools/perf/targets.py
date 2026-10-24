@@ -70,21 +70,31 @@ def free_port() -> int:
         return probe.getsockname()[1]
 
 
-def answers(url: str) -> bool:
+def readiness(url: str) -> int | None:
+    """The status ``url`` answers its readiness probe with, or None while nothing answers."""
+
     try:
         with urllib.request.urlopen(url + READY, timeout=2) as response:
-            return response.status == 200
+            return response.status
+    except urllib.error.HTTPError as error:
+        with error:
+            return error.code
     except OSError:
-        return False
+        return None
 
 
 def wait_ready(url: str, deadline_s: float, alive=lambda: True) -> float:
-    """Seconds until ``url`` answers ready, polled every 50 ms."""
+    """Seconds until ``url`` answers ready, polled every 50 ms.
+
+    A 4xx is a refusal no wait changes, so it fails at once; a 503 is a server not ready yet."""
 
     started = time.monotonic()
     while time.monotonic() - started < deadline_s:
-        if answers(url):
+        status = readiness(url)
+        if status == 200:
             return time.monotonic() - started
+        if status is not None and 400 <= status < 500:
+            raise NotMeasured(f"the server at {url} refused the readiness probe with {status}")
         if not alive():
             raise NotMeasured(f"the server at {url} exited before it was ready")
         time.sleep(0.05)
@@ -232,6 +242,11 @@ class Image:
         address = self._docker("port", self.name, "8000/tcp").split()[0]
         return f"http://{address}"
 
+    def _gateway(self) -> str:
+        """The address a published port's requests arrive from: Docker's bridge gateway."""
+
+        return self._docker("network", "inspect", "bridge", "--format", "{{(index .IPAM.Config 0).Gateway}}").strip()
+
     def __enter__(self) -> Image:
         try:
             self._docker(
@@ -253,6 +268,10 @@ class Image:
                 "SEVERINO_LOG_LEVEL=WARNING",
                 "--env",
                 "SEVERINO_POSTURE=advanced",
+                # HQ refuses any caller outside its trusted networks, and a
+                # published port's requests come from the bridge, not loopback.
+                "--env",
+                f"SEVERINO_TRUSTED_NETWORKS=127.0.0.0/8,{self._gateway()}/32",
                 self.image,
             )
             self.started = True
