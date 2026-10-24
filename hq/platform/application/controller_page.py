@@ -67,6 +67,26 @@ class ControllerPage:
     queue: tuple[QueuedWork, ...]
     asked: tuple[ForcedRead, ...]
 
+    @property
+    def standing_tone(self) -> str:
+        """Whether it is arriving, as a tone: none before it ever has."""
+
+        if self.standing.silent:
+            return "serious"
+        return "good" if self.standing.known else ""
+
+    @property
+    def failing_tone(self) -> str:
+        return "attention" if self.failing else ""
+
+    @property
+    def overdue_tone(self) -> str:
+        return "serious" if self.overdue else ""
+
+    @property
+    def queue_tone(self) -> str:
+        return "attention" if self.queue else ""
+
 
 def _reading(row: ProviderInventory) -> KindReading:
     if not row.connected:

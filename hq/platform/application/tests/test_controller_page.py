@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 import time
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory, ReadRequest
 
+from ..cadence import ControllerStanding
 from ..controller_page import controller_page
 from .commands import commands_on
 from .markup import select, texts
@@ -48,6 +50,15 @@ class ControllerPageTests(TestCase):
         self.assertIsNone(page.swept_at)
         self.assertEqual(page.readings, ())
         self.assertEqual(page.queue, ())
+        self.assertEqual((page.standing_tone, page.failing_tone, page.overdue_tone, page.queue_tone), ("",) * 4)
+
+    def test_a_silent_controller_is_serious_one_arriving_good_and_late_sweeps_serious(self):
+        page = controller_page()
+        seen = timezone.now()
+
+        self.assertEqual(replace(page, standing=ControllerStanding(seen, silent=True)).standing_tone, "serious")
+        self.assertEqual(replace(page, standing=ControllerStanding(seen, silent=False)).standing_tone, "good")
+        self.assertEqual(replace(page, overdue=True).overdue_tone, "serious")
 
     def test_a_controller_never_seen_is_given_its_start_steps_and_one_that_ran_is_not(self):
         from hq.platform.application import cadence
@@ -71,7 +82,7 @@ class ControllerPageTests(TestCase):
         page = controller_page()
 
         self.assertEqual(next(reading.kind for reading in page.readings), "tailscale.device")
-        self.assertEqual(page.failing, 1)
+        self.assertEqual((page.failing, page.failing_tone), (1, "attention"))
         results = {reading.kind: (reading.ok, reading.result) for reading in page.readings}
         self.assertEqual(results["adguard.rewrite"], (True, "Read"))
         self.assertEqual(results["npm.proxy_host"], (True, "Not connected"))
@@ -110,6 +121,7 @@ class ControllerPageTests(TestCase):
         page = controller_page()
 
         self.assertEqual([(work.resource, work.state) for work in page.queue], [("example-dns", "Waiting")])
+        self.assertEqual(page.queue_tone, "attention")
         self.assertEqual([read.subject for read in page.asked], ["adguard.rewrite"])
 
     def test_the_page_shows_a_controller_that_has_gone_quiet(self):
