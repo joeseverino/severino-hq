@@ -4,15 +4,21 @@ Each step's output reaches the terminal unchanged, and what failed is named by
 what saw it fail: mise's `-c` summary (`[task] exited with status N`), read on
 the way past, names each task, and the test runner writes each failed test,
 the exception it raised and its traceback, into the folder the step names in
-HQ_TEST_REPORTS (hq/platform/core/test_runner.py).
+HQ_TEST_REPORTS (hq/platform/core/test_runner.py). How long each task took is
+read the same way, from the `[task] Finished in` line mise prints after a task
+that passed; a task that failed prints no time. mise turns that line off in a
+task's own environment, so a `mise run` inside a task prints it only when
+asked, as `run` asks.
 
 The line, with every failed task and test on a line of its own, is also
 written to `var/gate/<name>.txt`, whose path is printed above it, for a reader
 whose copy of the output was cut. Each failed test's line there carries the
-exception it raised, and the tracebacks follow the list, so the file alone
-says why.
+exception it raised; the tasks' times follow the list, slowest first, then the
+tracebacks, so the file alone says why and where the time went.
 
-`python -m tools.gate.verdict <name> <command...>` runs one command this way.
+`python -m tools.gate.verdict <name> <command...>` runs one command this way,
+and `... <name> --step <label> <command...> [--step ...]` several in turn,
+each named by its label when nothing in it names what failed.
 """
 
 from __future__ import annotations
@@ -35,6 +41,10 @@ ROOT = Path(__file__).resolve().parents[2]
 REPORTS = "HQ_TEST_REPORTS"
 # A line of mise's `-c` summary.
 TASK = re.compile(r"\[([^\]\s]+)\] exited with status \d+")
+# The line mise prints after a task that passed, its time as Rust prints a
+# Duration: in seconds from one second up, in ms, µs or ns below.
+TIMED = re.compile(r"\[([^\]\s]+)\] Finished in (\d+(?:\.\d+)?)(ns|µs|ms|s)\b")
+UNITS = {"ns": 1e-9, "µs": 1e-6, "ms": 1e-3, "s": 1.0}
 # A traceback kept in the file stops here.
 KEPT_LINES = 60
 # Past this many failing tests the line names the first few and counts the rest.
@@ -62,11 +72,15 @@ class Step:
     code: int = 0
     tasks: list[str] = field(default_factory=list)
     tests: list[FailedTest] = field(default_factory=list)
+    seconds: float = 0.0
+    took: dict[str, float] = field(default_factory=dict)
 
     def read(self, line: str) -> None:
         for task in TASK.findall(line):
             if task not in self.tasks:
                 self.tasks.append(task)
+        for task, amount, unit in TIMED.findall(line):
+            self.took[task] = float(amount) * UNITS[unit]
 
     def failures(self) -> list[str]:
         if self.ok:
@@ -117,8 +131,9 @@ def run(label: str, cmd: list[str], cwd: Path = ROOT) -> Step:
     """Run a command, its output passed through, and gather what failed in it."""
 
     step = Step(label)
+    started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="gate-") as reports:
-        env = {**os.environ, "PYTHONUNBUFFERED": "1", REPORTS: reports}
+        env = {**os.environ, "PYTHONUNBUFFERED": "1", REPORTS: reports, "MISE_TASK_TIMINGS": "1"}
         with subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
             assert proc.stdout
             try:
@@ -132,6 +147,7 @@ def run(label: str, cmd: list[str], cwd: Path = ROOT) -> Step:
                 proc.wait()
                 raise
         step.tests = failed_tests(Path(reports))
+    step.seconds = time.monotonic() - started
     step.code = proc.returncode
     step.ok = step.code == 0
     return step
@@ -145,6 +161,16 @@ def verdict(name: str, started: float, steps: list[Step], passed: str = "", outc
     return f"[{name}] passed in {elapsed}{passed}"
 
 
+def timings(steps: list[Step]) -> list[str]:
+    """How long each task took, slowest first, and each step's whole time when there are several."""
+
+    took = {task: seconds for step in steps for task, seconds in step.took.items()}
+    if len(steps) > 1:
+        took |= {step.label: step.seconds for step in steps}
+    ranked = sorted(took.items(), key=lambda item: -item[1])
+    return ["", "Slowest first:", *(f"{seconds:8.1f}s  {task}" for task, seconds in ranked)] if ranked else []
+
+
 def close(
     name: str, started: float, steps: list[Step], passed: str = "", failed: str = "", outcome: str = "FAILED"
 ) -> None:
@@ -155,22 +181,47 @@ def close(
     path = VERDICTS / f"{re.sub(r'[^\w.-]+', '-', name).strip('-')}.txt"
     path.parent.mkdir(parents=True, exist_ok=True)
     kept = [traceback for step in steps for traceback in step.tracebacks()]
-    path.write_text("\n".join([line, *named, *kept]) + "\n")
+    path.write_text("\n".join([line, *named, *timings(steps), *kept]) + "\n")
     print(f"[{name}] verdict kept in {path}", flush=True)
     print(line, flush=True)
 
 
+USAGE = "usage: python -m tools.gate.verdict <name> (<command...> | --step <label> <command...>...)"
+
+
+def commands(name: str, argv: list[str]) -> list[tuple[str, list[str]]]:
+    """(label, command) for each step: the one command under the gate's name, or each `--step`."""
+
+    if not argv:
+        sys.exit(USAGE)
+    if argv[0] != "--step":
+        return [(name, argv)]
+    words: list[list[str]] = []
+    for word in argv:
+        if word == "--step":
+            words.append([])
+        else:
+            words[-1].append(word)
+    if any(len(step) < 2 for step in words):
+        sys.exit(USAGE)
+    return [(label, cmd) for label, *cmd in words]
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) < 2:
-        sys.exit("usage: python -m tools.gate.verdict <name> <command...>")
-    name, cmd = argv[0], argv[1:]
+    if not argv:
+        sys.exit(USAGE)
+    name, planned = argv[0], commands(argv[0], argv[1:])
     started = time.monotonic()
+    steps = []
     try:
-        step = run(name, cmd)
+        for label, cmd in planned:
+            if len(planned) > 1:
+                print(f"[{name}] {label}", flush=True)
+            steps.append(run(label, cmd))
     except KeyboardInterrupt:
         return 130
-    close(name, started, [step])
-    return 0 if step.ok else 1
+    close(name, started, steps)
+    return 0 if all(step.ok for step in steps) else 1
 
 
 if __name__ == "__main__":

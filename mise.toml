@@ -218,7 +218,7 @@ raw = true
 description = "A throwaway server on loopback: DEBUG on, a new database each start, a port the system picks"
 usage = '''
 flag "--keep" help="Reuse the last scratch database"
-flag "--seed <seed>" help="Fill it with the example estate" {
+flag "--seed <seed>" help="Fill it with the example estate; showcase also serves it at the advanced posture (SEVERINO_POSTURE=advanced)" {
     choices "showcase" "standard"
 }
 flag "--port <port>" help="A fixed port instead of a free one"
@@ -240,9 +240,12 @@ description = "manage.py against this checkout's scratch database, extensions lo
 run = "uv run python manage.py"
 
 # ------------------------------------------------------------- aggregates
+# An aggregate runs under tools.gate.verdict, which ends its output on the
+# tasks and tests that failed and keeps that line, and how long each task took,
+# in var/gate/<name>.txt.
 
 [tasks.fast]
-description = "Inner loop: the quick gates, and the tests the change reaches"
+description = "Inner loop: the tests the change reaches, and the quick gates that read the paths it touched"
 extends = "django-heavy"
 usage = '''
 arg "[base]" env="CHECK_BASE" help="The ref to diff against; default origin/main, then main"
@@ -256,7 +259,6 @@ description = "Does my change work: every Checks gate, the Tests gates on one Py
 # Named by aggregate and glob, so a new gate joins without an edit here. One
 # task at a time: each suite starts a worker per core, and two at once exhaust
 # a small machine's memory. CI runs each job's aggregate, never this task.
-# tools.gate.verdict ends the output on the tasks and tests that failed.
 extends = "heavy"
 timeout = "2h"
 run = "uv run python -m tools.gate.verdict check mise run -c -j 1 checks ::: 'tests:*' ::: suite:as-image"
@@ -266,24 +268,24 @@ description = "Every gate the pipeline runs"
 # Run-form, so one turn covers the whole run.
 extends = "heavy"
 timeout = "2h"
-run = "mise run -c checks ::: tests ::: browser ::: controller ::: scan ::: image"
+run = "uv run python -m tools.gate.verdict ci mise run -c checks ::: tests ::: browser ::: controller ::: scan ::: image"
 
 [tasks.checks]
-description = "CI job Checks"
+description = "Lint, types, structure, dependencies, security and every derived file: each checks:* and drift:* gate"
 # Run-form, so the gates and the installs they depend on run inside one turn.
 extends = "heavy"
 timeout = "2h"
-run = "mise run -c 'checks:*' ::: 'drift:*'"
+run = "uv run python -m tools.gate.verdict checks mise run -c 'checks:*' ::: 'drift:*'"
 
 [tasks.browser]
-description = "CI job Browser, one gate at a time, in WebKit"
+description = "Real-browser invariants of layout, navigation and the demo: each browser:* gate in WebKit, one at a time"
 # Run-form, so one turn covers every browser gate. One at a time: a run-form
 # aggregate starts as many tasks as the jobs setting allows, and each gate
 # starts a browser per core. The Chromium leg is CI's alone.
 extends = "heavy"
 timeout = "2h"
 env = { MISE_TASK_SKIP = "browser:layout-chromium" }
-run = "mise run -c -j 1 'browser:*'"
+run = "uv run python -m tools.gate.verdict browser mise run -c -j 1 'browser:*'"
 
 [tasks.drift]
 description = "Every derived file is what its source generates: each drift:* gate, naming every one behind"
@@ -291,18 +293,18 @@ description = "Every derived file is what its source generates: each drift:* gat
 # The Go types are held by `mise run controller`, which regenerates them
 # against a snapshot.
 extends = "heavy"
-run = "mise run -c 'drift:*'"
+run = "uv run python -m tools.gate.verdict drift mise run -c 'drift:*'"
 
 [tasks.controller]
-description = "CI job Controller"
+description = "The Go controller is formatted, vetted, race-tested and its generated types current: each controller:* gate"
 depends = ["controller:*"]
 
 [tasks.scan]
-description = "Code scanning, as CI's CodeQL job runs it"
+description = "CodeQL's security-and-quality queries over the code find no alert: each scan:* gate"
 depends = ["scan:*"]
 
 [tasks.image]
-description = "CI job Image: build, then every check an image must pass"
+description = "The production image builds, boots healthy and carries what it must and nothing it must not: each image:verify:* gate"
 depends = ["image:verify:*"]
 
 # Whether this checkout can compose its extensions: `mise doctor project` names

@@ -24,6 +24,24 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 type Node = dict[str, Any]
 
 
+# How a shell script reads its own arguments, and how a Python program does.
+SHELL_READS = r'"\$@"|\$\{?[1-9]|\$\{?#(?=[\s"\')}]|$)'
+READS_ARGUMENTS = re.compile(rf"{SHELL_READS}|sys\.argv", re.MULTILINE)
+
+
+def reads_own_arguments(source: str) -> bool:
+    """Whether a file task reads the arguments it was given.
+
+    A shell task's sys.argv is a Python program's it runs, not its own. A bare
+    `set --` empties the arguments, so after it "$@" is a list the script
+    built, the way AGENTS.md passes a list."""
+
+    if not source.startswith("#!/bin/sh"):
+        return bool(READS_ARGUMENTS.search(source))
+    own = re.split(r"(?m)^\s*set --\s*$", source, maxsplit=1)[0]
+    return bool(re.search(SHELL_READS, own, re.MULTILINE))
+
+
 def workflows() -> list[Path]:
     return sorted(WORKFLOWS.glob("*.yml"))
 
@@ -745,16 +763,12 @@ class GateReferenceTests(SimpleTestCase):
         declared mise stops appending arguments to ``run``, so each name it
         declares must reach the task or its script; and a script that reads its
         own arguments needs a usage, or --help describes nothing."""
-        shell_reads = r'"\$@"|\$\{?[1-9]|\$\{?#(?=[\s"\')}]|$)'
-        reads_arguments = re.compile(rf"{shell_reads}|sys\.argv", re.MULTILINE)
         checked = 0
         for name, task in mise_tasks().items():
             if task["file"]:
                 # A file task declares its usage in its own header, which the list does not carry.
-                # A shell task's sys.argv is a Python program's it runs, not its own.
-                reads = re.compile(shell_reads, re.MULTILINE) if body(task).startswith("#!/bin/sh") else reads_arguments
                 with self.subTest(task=name):
-                    if reads.search(body(task)):
+                    if reads_own_arguments(body(task)):
                         self.assertRegex(body(task), r"(?m)^#USAGE ", "takes arguments; declare usage")
                 continue
             run = body(task)
@@ -782,9 +796,17 @@ class GateReferenceTests(SimpleTestCase):
                 elif name not in self.PASSTHROUGH and re.fullmatch(r"[\w/.-]+", run.strip()):
                     for path in scripts:
                         self.assertFalse(
-                            reads_arguments.search(path.read_text()), f"{name} takes arguments; declare usage"
+                            READS_ARGUMENTS.search(path.read_text()), f"{name} takes arguments; declare usage"
                         )
         self.assertGreater(checked, 3)
+
+    def test_a_script_reads_its_arguments_unless_it_built_the_list_itself(self):
+        reads = '#!/bin/sh\nexec tool "$@"\n'
+        built = '#!/bin/sh\nset --\nfor word in a b; do\n    set -- "$@" "$word"\ndone\nexec tool "$@"\n'
+        read_before_clearing = '#!/bin/sh\necho "$1"\nset --\nexec tool "$@"\n'
+        self.assertTrue(reads_own_arguments(reads))
+        self.assertFalse(reads_own_arguments(built))
+        self.assertTrue(reads_own_arguments(read_before_clearing))
 
     def test_a_task_that_runs_the_suite_takes_the_heavy_turn(self):
         """Two suites at once exhaust a small machine's memory; tools/lib/heavy.sh makes them take turns.

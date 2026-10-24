@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="CI job Tests, on every Python the matrix declares"
+#MISE description="The suite, the plugin contract, system checks, migrations and generated API cases: each tests:* gate on every Python the matrix declares"
 #MISE timeout="2h"
 
 # One turn covers every interpreter's suite.
@@ -8,11 +8,11 @@ set -eu
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh
 
-failed=0
-# A pipeline leg names its one interpreter in TEST_PYTHONS.
+# A pipeline leg names its one interpreter in TEST_PYTHONS. Each interpreter's
+# run is a step of one verdict, headed by its Python.
+set --
 for version in ${TEST_PYTHONS:-$PYTHON_VERSIONS}; do
-    echo "[tests] Python $version"
-    UV_PYTHON="$version" UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-.venv}-$version" \
-        mise run -c 'tests:*' || failed=1
+    set -- "$@" --step "Python $version" env UV_PYTHON="$version" \
+        UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-.venv}-$version" mise run -c 'tests:*'
 done
-exit "$failed"
+exec uv run python -m tools.gate.verdict tests "$@"

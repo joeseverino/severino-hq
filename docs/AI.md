@@ -67,14 +67,16 @@ on a laptop and a pass in CI mean the same thing.
 
 | Gate | What it holds |
 | --- | --- |
-| `mise run fast [BASE]` | The tests the changed files reach through the import graph, the architecture tests, Ruff, mypy, the structural gate and every drift gate ([What `fast` runs](Development.md#what-fast-runs)). |
+| `mise run fast [BASE]` | The tests the change reaches and the quick gates that read what it touched, each listed with its paths in `TASKS` (`tools/gate/fast.py`) ([What `fast` runs](Development.md#what-fast-runs)). |
 | `mise run check` | Every Checks gate, the suite as production configures it, and the suite composed with the extensions ([What `check` and `ci` run](Development.md#what-check-and-ci-run)). |
 | `mise run browser` | WebKit layout invariants over a stress estate and the example estate, at phone through desktop widths ([Browser layout](Development.md#browser-layout)). |
 | `mise run drift` | Every derived file is what its source generates; `mise run regen` writes them. |
 | `mise run checks:structural` | No new near-duplicate pair outside tests, and its baseline never grows to pass ([Structural Gate](Structural-Gate.md)). |
 | `mise run checks:source` | The tests tagged `source`, which read the repository rather than run the product. |
 
-`fast` and `check` close on a verdict line naming each failed task and test
+Every aggregate (`fast`, `check`, `checks`, `tests`, `browser`, `drift`, `ci`)
+closes on a verdict line naming each failed task and test, and keeps it in
+`var/gate/<name>.txt` with how long each task took, slowest first
 (`tools/gate/verdict.py`). Heavy tasks take turns on one lock
 (`tools/lib/heavy.sh`), so several agents on one machine never run two suites
 at once ([Heavy gates take turns](Development.md#heavy-gates-take-turns)).

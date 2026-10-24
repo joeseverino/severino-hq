@@ -5,7 +5,8 @@ them, by the import graph of the tree itself (nothing here lists an app), a
 changed task definition to the tests that read the tasks, and a changed file
 that is not Python to the tests that name its path. The
 architecture tests always run. Every other check is a mise task, run here by
-name, so each exists once. A change to what extensions render through
+name, so each exists once, and only when the change touches a path it reads
+(TASKS). A change to what extensions render through
 (templates, static, hq_sdk, the shared page and table layer) also runs the
 extensions' own suites, composed, when HQ_LOCAL_PLUGINS names a set.
 ```mise run check``` stays the gate before a push.
@@ -29,19 +30,30 @@ from pathlib import Path
 from tools.gate.verdict import Step, close, run
 
 ROOT = Path(__file__).resolve().parents[2]
-# The gates that run whatever changed, side by side: each is quick, and each
-# Django gate opens a database of its own (the django task template).
-TASKS = (
-    "checks:ruff",
-    "checks:mypy",
-    "checks:structural",
-    "checks:css",
-    "checks:deptry",
-    "checks:mise-tasks",
-    "tests:django",
-    "tests:migrations",
-    "drift:*",
-)
+# The quick gates, each with the paths a change must touch for it to run, as
+# fnmatch patterns, where `*` crosses directories. Those selected run side by
+# side; each Django gate opens a database of its own (the django task
+# template). A drift gate's paths are its sources and the file it derives.
+PYTHON = ("*.py",)
+TASKS: dict[str, tuple[str, ...]] = {
+    "checks:ruff": PYTHON,
+    "checks:mypy": PYTHON,
+    # The graph fingerprints functions in every language it indexes.
+    "checks:structural": (*PYTHON, "*.go", "*.js", "*.mjs", "*.sh", "mise-tasks/*", "tools/structural/*"),
+    "checks:css": ("static/css/*", "tools/lint/*"),
+    "checks:deptry": ("hq/*.py", "hq_sdk/*.py"),
+    "checks:mise-tasks": ("mise-tasks/*",),
+    "tests:django": PYTHON,
+    "tests:migrations": ("hq/*.py",),
+    "drift:sdk-contract": (*PYTHON, "hq_sdk/*", "docs/Plugins.md"),
+    "drift:api-document": (*PYTHON, "hq/platform/api/hq-api.openapi.json"),
+    "drift:bridge-contract": (*PYTHON, "controller/api/*", "hq/config/controller-connections.json"),
+    "drift:connections-reference": (*PYTHON, "docs/Connections.md"),
+    "drift:font": ("tools/fonts/*", "static/fonts/*", "static/css/*"),
+}
+# What every gate reads: the dependencies, the tool pins and the task
+# definitions. A change to one runs them all.
+EVERY_TASK = ("pyproject.toml", "uv.lock", "mise.toml", "mise.lock", "tasks/*.toml", "tools/pipeline/toolchain.env")
 # Never part of the Django suite: other languages and vendored trees.
 SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
 ALWAYS = ("architecture", "new_domain")
@@ -83,6 +95,17 @@ def defines_tasks(path: str, sources: tuple[str, ...]) -> bool:
 
 def touches_shared_ui(paths: list[str]) -> bool:
     return any(path.startswith(SHARED_UI) or "/templatetags/" in path for path in paths)
+
+
+def selected_tasks(paths: list[str]) -> tuple[str, ...]:
+    """The quick gates a change can have broken: those whose paths it touches, or all when it touches EVERY_TASK."""
+
+    def touched(patterns: tuple[str, ...]) -> bool:
+        return any(fnmatch(path, pattern) for path in paths for pattern in patterns)
+
+    if touched(EVERY_TASK):
+        return tuple(TASKS)
+    return tuple(task for task, patterns in TASKS.items() if touched(patterns))
 
 
 def tasks_command(tasks: tuple[str, ...], parallel: str) -> list[str]:
@@ -353,10 +376,7 @@ def test_labels(
 
 def step(label: str, cmd: list[str]) -> Step:
     print(f"[fast] {label}", flush=True)
-    started = time.monotonic()
-    result = run(label, cmd)
-    print(f"[fast] {label}: {time.monotonic() - started:.1f}s", flush=True)
-    return result
+    return run(label, cmd)
 
 
 def main(argv: list[str]) -> int:
@@ -383,10 +403,13 @@ def main(argv: list[str]) -> int:
         print("\n".join(labels))
         return 0
 
-    steps = [
-        step(" ".join(TASKS), tasks_command(TASKS, parallel)),
-        step("tests", [sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel, *labels]),
-    ]
+    steps = []
+    if tasks := selected_tasks([*changed, *deleted]):
+        print(f"[fast] the quick gates that read what changed: {' '.join(tasks)}")
+        steps.append(step("quick gates", tasks_command(tasks, parallel)))
+    else:
+        print("[fast] no quick gate reads what changed")
+    steps.append(step("tests", [sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel, *labels]))
     if os.environ.get("HQ_LOCAL_PLUGINS") and touches_shared_ui([*changed, *deleted]):
         # suite:as-image hands what follows to manage.py test.
         steps.append(
