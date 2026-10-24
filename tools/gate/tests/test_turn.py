@@ -4,17 +4,18 @@ a whole tree of it, or a browser."""
 import re
 import shlex
 
-from django.test import SimpleTestCase, tag
+from django.test import tag
 
 from hq.platform.core.test_runner import BROWSER_TESTS
 from tests.mise_tasks import body, mise_tasks
+from tools.gate.tests.base import GateTestCase
 from tools.gate.turn import narrow
 
 MODULE = "hq.platform.application.tests.test_pipeline"
 
 
 @tag("source")
-class NarrowRunTests(SimpleTestCase):
+class NarrowRunTests(GateTestCase):
     def test_a_module_or_something_in_one_is_narrow(self):
         for argv in (
             [MODULE],
@@ -43,7 +44,7 @@ class NarrowRunTests(SimpleTestCase):
 
 
 @tag("source")
-class HeavyTaskTests(SimpleTestCase):
+class HeavyTaskTests(GateTestCase):
     def test_a_task_takes_the_heavy_turn_when_its_run_is_heavy(self):
         """Two suites at once exhaust a small machine's memory; tools/lib/heavy.sh makes them take turns.
         tools/gate/turn.py says which runs of tests are heavy: a task whose tests are fixed takes the turn
