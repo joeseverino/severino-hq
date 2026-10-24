@@ -468,7 +468,8 @@ class LayoutBrowserTests(BrowserGate):
           sizes, a styled tick box included, is held to the size.
 
         A target another element is drawn over at its center (an open menu
-        lying on the page) is not reachable there, so it is not measured.
+        lying on the page) is not reachable there, so it is not measured,
+        and neither is a disabled one or one an open modal makes inert.
         A tick box is hit through its labels too. The stylesheet's
         `--target-min` is held to the same size. Held on every page and width
         the layout checks read (`every_layout_check_holds`).
