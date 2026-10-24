@@ -28,9 +28,7 @@ touches. How is in [Derived Facts](docs/Derived-Facts.md) and
 
 ![Derived estate: the controller reads what each credential sees, readings are joined into one relation graph that every surface reads, and every write passes the manages gate](docs/diagrams/derived-estate.png)
 
-<sup>Diagram source: [`docs/diagrams/derived-estate.mmd`](docs/diagrams/derived-estate.mmd),
-pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram)
-as `diagram docs/diagrams/`.</sup>
+<sup>Source: [`docs/diagrams/derived-estate.mmd`](docs/diagrams/derived-estate.mmd), pre-rendered with `diagram`.</sup>
 
 ## Stack
 

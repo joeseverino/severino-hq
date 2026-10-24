@@ -26,8 +26,7 @@ Every agent reads [`AGENTS.md`](../AGENTS.md), the engineering contract
 
 ![A pass: a read-only map, workers in their own worktrees, the main session landing their branches and running the gates, and each lesson turned into a rule the next brief starts from](images/ai/build-loop.png)
 
-<sup>Figure source: [`docs/images/ai/build-loop.fig`](images/ai/build-loop.fig),
-pre-rendered with [`brand`](https://github.com/joeseverino/tools/blob/main/bin/brand) as `brand figure docs/images/ai/build-loop.fig --out docs/images/ai/build-loop.png --scale 1`.</sup>
+<sup>Source: [`docs/images/ai/build-loop.fig`](images/ai/build-loop.fig), pre-rendered with `brand`.</sup>
 
 1. **Map.** A read-only agent measures the change before anything is built:
    what is wrong, grouped by the shared rule or partial that causes it, and
@@ -55,8 +54,7 @@ runs the same gates on it.
 
 ![The worker reads AGENTS.md and loads the skills, runs its own scratch server and dev:look, runs fast and then check, and CI runs the same aggregates](diagrams/agent-tools.png)
 
-<sup>Diagram source: [`docs/diagrams/agent-tools.mmd`](diagrams/agent-tools.mmd),
-pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram) as `diagram docs/diagrams/`.</sup>
+<sup>Source: [`docs/diagrams/agent-tools.mmd`](diagrams/agent-tools.mmd), pre-rendered with `diagram`.</sup>
 
 ### What holds the work to the bar
 
@@ -121,8 +119,7 @@ business rule" ([API](API.md)).
 
 ![An agent's call: its own token, MCP or the machine API, the pause switch, its grant, the operator's policy, then a run, or a hold until a person approves it in the web UI](images/ai/agent-call.png)
 
-<sup>Figure source: [`docs/images/ai/agent-call.fig`](images/ai/agent-call.fig),
-pre-rendered with [`brand`](https://github.com/joeseverino/tools/blob/main/bin/brand) as `brand figure docs/images/ai/agent-call.fig --out docs/images/ai/agent-call.png --scale 1`.</sup>
+<sup>Source: [`docs/images/ai/agent-call.fig`](images/ai/agent-call.fig), pre-rendered with `brand`.</sup>
 
 ### Reads and one write
 

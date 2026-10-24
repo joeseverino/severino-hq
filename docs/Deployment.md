@@ -8,7 +8,7 @@ from a checkout.
 
 ![How changes reach HQ: a host pull request and an extension's admission both lead to Compose, which publishes the signed composition; Deploy waits for approval and the self-hosted runner hands it to hq-host on the host](diagrams/changes-reach-hq.png)
 
-<sup>Diagram source: [`diagrams/changes-reach-hq.mmd`](diagrams/changes-reach-hq.mmd).</sup>
+<sup>Source: [`docs/diagrams/changes-reach-hq.mmd`](diagrams/changes-reach-hq.mmd), pre-rendered with `diagram`.</sup>
 
 ## The pipeline
 

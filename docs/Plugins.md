@@ -226,7 +226,7 @@ conflicts and tests that assume no sibling exists fail before publication.
 
 ![How the public host and its private extensions become one application: extensions import only hq_sdk and release signed wheels; Compose assembles them with the scanned host image and a runtime-supplied extension list](diagrams/host-and-extensions.png)
 
-<sup>Diagram source: [`diagrams/host-and-extensions.mmd`](diagrams/host-and-extensions.mmd).</sup>
+<sup>Source: [`docs/diagrams/host-and-extensions.mmd`](diagrams/host-and-extensions.mmd), pre-rendered with `diagram`.</sup>
 
 Production runs one image carrying every admitted plugin. Plugins build no
 images: each admits itself and publishes its signed bundle, and the host

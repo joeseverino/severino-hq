@@ -6,10 +6,7 @@ interface adds an adapter, never a second implementation.
 
 ![Web, MCP, and CLI converging on one application core and the domain-specific sources of truth](diagrams/application-core.png)
 
-<sup>Diagram source:
-[`application-core.mmd`](diagrams/application-core.mmd), pre-rendered with
-[`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram) as
-`diagram docs/diagrams/`.</sup>
+<sup>Source: [`docs/diagrams/application-core.mmd`](diagrams/application-core.mmd), pre-rendered with `diagram`.</sup>
 
 ## The boundary
 
@@ -36,8 +33,7 @@ writes around the service.
 
 ![A mutation is validated, locked, written, audited, and committed once; any failure rolls the whole operation back](diagrams/operation-lifecycle.png)
 
-<sup>Diagram source:
-[`operation-lifecycle.mmd`](diagrams/operation-lifecycle.mmd).</sup>
+<sup>Source: [`docs/diagrams/operation-lifecycle.mmd`](diagrams/operation-lifecycle.mmd), pre-rendered with `diagram`.</sup>
 
 A browser submit, an API call, an MCP tool call and a CLI command follow the
 same lifecycle. The adapter parses and steps aside. The service validates,
@@ -466,8 +462,7 @@ requests; plain links and forms remain the complete fallback.
 
 ![One typed command declaration deriving JSON Schema, validation, MCP and CLI surfaces, and parity tests](diagrams/emit-once-capabilities.png)
 
-<sup>Diagram source:
-[`emit-once-capabilities.mmd`](diagrams/emit-once-capabilities.mmd).</sup>
+<sup>Source: [`docs/diagrams/emit-once-capabilities.mmd`](diagrams/emit-once-capabilities.mmd), pre-rendered with `diagram`.</sup>
 
 Three registries declare everything an adapter offers. What an extension
 declares in each, and the fields it sets, is in [Plugins](Plugins.md#contract-boundary).
@@ -642,6 +637,8 @@ is an architecture regression.
 
 ![Infrastructure control plane](diagrams/infrastructure-control-plane.png)
 
+<sup>Source: [`docs/diagrams/infrastructure-control-plane.mmd`](diagrams/infrastructure-control-plane.mmd), pre-rendered with `diagram`.</sup>
+
 **HQ owns the topology.** A machine is derived from what a credential reaches
 and what a sweep found, and declared only where nothing can observe it (a
 printer, an offline CA). A certificate states its names and the targets it
@@ -667,7 +664,7 @@ to the registry appears on all of them.
 
 ![Provider registry: one declaration derives the schema, validation, controller contract, forms, service view, and adoption](diagrams/provider-registry.png)
 
-<sup>Diagram source: [`diagrams/provider-registry.mmd`](diagrams/provider-registry.mmd).</sup>
+<sup>Source: [`docs/diagrams/provider-registry.mmd`](diagrams/provider-registry.mmd), pre-rendered with `diagram`.</sup>
 
 Each provider is one module in `hq/domains/control_plane/provider_adapters/`:
 its spec models, kind constants, the functions its declaration names, and the
