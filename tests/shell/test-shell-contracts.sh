@@ -23,6 +23,17 @@ for f in ${sources} .github/workflows/*.yml .github/actions/*/action.yml; do
     done
 done
 
+# A mktemp template ends in its X's.
+#
+# BSD mktemp, the Mac's, fills only trailing X's: one followed by a suffix is
+# a fixed path, which two runs at once both take.
+for f in ${sources}; do
+    grep -nE "mktemp[^|;]*XXX+[^X\"' )]" "${f}" | while IFS= read -r line; do
+        echo "FAIL ${f}:${line%%:*}: a mktemp template with a suffix after its X's" >&2
+        echo x >>"${failure_marker}"
+    done
+done
+
 failures="$(wc -l <"${failure_marker}" | tr -d ' ')"
 if [ "${failures}" -ne 0 ]; then
     echo "Shell contracts failed (${failures})." >&2

@@ -7,22 +7,53 @@ sources="$(tools/gate/shell-sources.sh)"
 # A file that does not parse in the dialect its first line names fails shellcheck.
 # shellcheck disable=SC2086  # one path per word
 shellcheck -x $sources
-# Suites run in parallel (each uses its own temporary directory); a failed
-# suite's output is printed whole, not interleaved.
+# A /bin/sh suite runs under each shell /bin/sh is somewhere: the Mac's, and
+# dash, Linux's (CI's and the hosts'), wherever it is installed. The suite
+# finds its shell in SHELL_UNDER_TEST, to run the script it tests there too.
+# Any other suite runs as its first line says.
+shells=/bin/sh
+[ ! -x /bin/dash ] || shells="${shells} /bin/dash"
 logs="$(mktemp -d)"
 trap 'rm -rf "$logs"' EXIT
+runs="$logs/runs"
+: >"$runs"
 for suite in tests/shell/test-*.sh; do
-    name="${suite##*/}"
-    { status=0; "$suite" >"$logs/$name.log" 2>&1 || status=$?; echo "$status" >"$logs/$name.status"; } &
-done
-wait
-failed=0
-for suite in tests/shell/test-*.sh; do
-    name="${suite##*/}"
-    if [ "$(cat "$logs/$name.status")" != 0 ]; then
-        cat "$logs/$name.log"
-        echo "$name failed" >&2
-        failed=1
+    IFS= read -r first <"$suite"
+    if [ "$first" = "#!/bin/sh" ]; then
+        for shell in $shells; do
+            printf '%s %s\n' "$shell" "$suite" >>"$runs"
+        done
+    else
+        printf '%s %s\n' - "$suite" >>"$runs"
     fi
 done
+
+# Runs go in parallel (each suite uses its own temporary directory); a failed
+# run's output is printed whole, not interleaved.
+while read -r shell suite; do
+    log="$logs/${suite##*/}.${shell##*/}"
+    (
+        status=0
+        if [ "$shell" = - ]; then
+            "$suite" >"$log.log" 2>&1 || status=$?
+        else
+            SHELL_UNDER_TEST="$shell" "$shell" "$suite" >"$log.log" 2>&1 || status=$?
+        fi
+        echo "$status" >"$log.status"
+    ) </dev/null &
+done <"$runs"
+wait
+failed=0
+while read -r shell suite; do
+    log="$logs/${suite##*/}.${shell##*/}"
+    if [ "$(cat "$log.status")" != 0 ]; then
+        cat "$log.log"
+        if [ "$shell" = - ]; then
+            echo "${suite##*/} failed" >&2
+        else
+            echo "${suite##*/} failed under $shell" >&2
+        fi
+        failed=1
+    fi
+done <"$runs"
 exit "$failed"
