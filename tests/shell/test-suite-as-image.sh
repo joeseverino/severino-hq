@@ -8,14 +8,17 @@ task=mise-tasks/suite/as-image
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
 
-# A checkout with what the task reads: the image admits manage.py, not notes/.
+# A checkout with what the task reads: the image admits manage.py, not notes/,
+# and admits built/ only for a stage that is not /app's.
 fixture="${work}/checkout"
-mkdir -p "${fixture}/$(dirname "${task}")" "${fixture}/tools/lib" "${fixture}/notes" "${work}/bin" "${work}/tmp"
+mkdir -p "${fixture}/$(dirname "${task}")" "${fixture}/tools/lib" "${fixture}/notes" "${fixture}/built" "${work}/bin" "${work}/tmp"
 cp "${repo}/${task}" "${fixture}/${task}"
 cp "${repo}/tools/lib/heavy.sh" "${repo}/tools/lib/heavy-turn.sh" "${fixture}/tools/lib/"
 cp "${repo}/tools/lib/export-tree.sh" "${repo}/tools/lib/source-url.sh" "${fixture}/tools/lib/"
-printf '*\n!manage.py\n' >"${fixture}/Dockerfile.dockerignore"
+printf '*\n!built/\n!manage.py\n' >"${fixture}/Dockerfile.dockerignore"
+printf 'FROM scratch\nCOPY --exclude=built . /app\n' >"${fixture}/Dockerfile"
 : >"${fixture}/manage.py"
+: >"${fixture}/built/main.go"
 : >"${fixture}/notes/private.md"
 git -C "${fixture}" init -q
 git -C "${fixture}" remote add origin https://example.com/hq.git
@@ -77,7 +80,7 @@ rm -f "${work}/seen"
 rm -f "${work}/seen"
 cat >"${work}/bin/uv" <<'STUB'
 #!/bin/sh
-[ -f manage.py ] && [ ! -e notes ] && [ ! -e .git ]
+[ -f manage.py ] && [ ! -e notes ] && [ ! -e built ] && [ ! -e .git ]
 STUB
 [ "$(run 0)" = 0 ] || fail "the copy holds more than the image admits"
 

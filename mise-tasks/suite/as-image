@@ -45,6 +45,12 @@ admitted="$(sed -n 's|^!\([^*]*[^/]\)/*$|\1|p' Dockerfile.dockerignore)"
 [ -n "${admitted}" ] || { echo "Dockerfile.dockerignore admits nothing." >&2; exit 1; }
 # shellcheck disable=SC2086  # one pathspec per admitted path
 export_tree "${tree}" ${admitted}
+# What the image's copy of the checkout leaves out of /app, another stage's
+# input only, the suite's copy leaves out too.
+excluded="$(sed -nE 's|^COPY ((--exclude=[^ ]+ )+)\. /app$|\1|p' Dockerfile | tr ' ' '\n' | sed -n 's|^--exclude=||p')"
+for path in ${excluded}; do
+    rm -rf "${tree:?}/${path}"
+done
 
 # The checkout's environment, not a new one in the copy.
 environment="${UV_PROJECT_ENVIRONMENT:-.venv}"

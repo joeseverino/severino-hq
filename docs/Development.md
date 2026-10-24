@@ -136,7 +136,8 @@ Name it once in a gitignored `mise.local.toml` (copy
 extensions' sources are and `HQ_LOCAL_PLUGINS` which to enable. Only the
 composed suite and the dev servers load the set. The composed suite,
 `mise run suite:as-image`, runs as the image does: in a copy of only the files
-`Dockerfile.dockerignore` admits, with `DEBUG` off and `SEVERINO_HQ_SOURCE`
+`Dockerfile.dockerignore` admits, less what the Dockerfile's `COPY --exclude`
+keeps out of `/app`, with `DEBUG` off and `SEVERINO_HQ_SOURCE`
 stamped, so a test that reads a file the image leaves out fails here. Without
 the set it runs the host alone and says so; `REQUIRE_COMPOSED=1` fails
 instead, which is how `mise run preflight` runs it.

@@ -100,7 +100,9 @@ COPY --from=build /install /usr/local
 COPY --from=controller /out/hq-controller /usr/local/bin/hq-controller
 
 WORKDIR /app
-COPY . /app
+# The controller's source is the controller stage's input: its programs are
+# copied in built, and HQ never reads the source.
+COPY --exclude=controller . /app
 # The renderer root runs on the host. It ships in the root-run tree, beside
 # the units that name it, so the manifest below covers it: the host's copy is
 # the signed image's, byte for byte, and checked daily like every script.

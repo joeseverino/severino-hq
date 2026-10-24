@@ -20,7 +20,7 @@ class RendererDeliveryTests(unittest.TestCase):
         dockerfile = DOCKERFILE.read_text()
         copied = "COPY --from=controller /out/hq-secrets /out/hq-host /app/deploy/bin/"
         # After the checkout is copied, so a checkout cannot supply them.
-        self.assertLess(dockerfile.index("COPY . /app"), dockerfile.index(copied))
+        self.assertLess(dockerfile.index(" . /app\n"), dockerfile.index(copied))
         started = [line for line in UNIT.read_text().splitlines() if line.startswith("ExecStart=")]
         self.assertEqual(started, ["ExecStart=/usr/local/lib/severino-hq/deploy/bin/hq-secrets"])
 
