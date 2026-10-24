@@ -13,7 +13,7 @@ run = "uv run --group browser python -m unittest demo.check -v"
 description = "Real-browser layout invariants over the stress estate"
 depends = [{ task = "setup:browser", args = ["webkit"] }]
 extends = "django-heavy"
-usage = 'flag "--fallback-face" help="Withhold Inter, so every page is drawn in the next face of the font stack, the system face of the platform, as a reader whose Inter came late sees it, and a layout that holds only at the widths of Inter fails"'
+usage = 'flag "--fallback-face" help="Draw every page in the system face, as a reader sees it before Inter loads"'
 run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test hq.platform.core.tests.browser.sweeps.ScriptedSparseLayoutTests hq.platform.core.tests.browser.sweeps.ScriptedDenseLayoutTests hq.platform.core.tests.browser.components.ComponentLayoutTests hq.platform.core.tests.browser.sweeps.SettledSparseLayoutTests hq.platform.core.tests.browser.sweeps.UnscriptedSparseLayoutTests hq.platform.core.tests.browser.sweeps.SettledDenseLayoutTests hq.platform.core.tests.browser.sweeps.UnscriptedDenseLayoutTests hq.platform.core.tests.browser.sweeps.LongestValueLayoutTests hq.platform.core.tests.browser.page_errors.PageErrorBrowserTests --noinput --parallel auto"
 
 # The layout gate in Chromium, so a break WebKit happens not to show still
@@ -35,5 +35,5 @@ run = [
 description = "Real-browser invariants over the example estate, the frame around a page and its fragments"
 depends = [{ task = "setup:browser", args = ["webkit"] }]
 extends = "django-heavy"
-usage = 'flag "--fallback-face" help="Withhold Inter, so every page is drawn in the next face of the font stack, the system face of the platform, as a reader whose Inter came late sees it, and a layout that holds only at the widths of Inter fails"'
+usage = 'flag "--fallback-face" help="Draw every page in the system face, as a reader sees it before Inter loads"'
 run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test hq.platform.core.tests.browser.estate.ExampleEstateBrowserTests hq.platform.core.tests.browser.estate.ExampleEstateDrawnTests hq.platform.core.tests.browser.estate.ExampleEstateControlTests hq.platform.core.tests.browser.reference.ReferenceBrowserTests hq.platform.core.tests.browser.fragments.FragmentBrowserTests --noinput --parallel auto"
