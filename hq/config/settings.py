@@ -382,7 +382,6 @@ MIDDLEWARE = [
     # every number is decided before a template sees it.
     "hq.platform.core.middleware.DemoModeMiddleware",
     "hq.platform.core.middleware.LoginRequiredMiddleware",
-    "hq.platform.core.middleware.CurrentUserMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "hq.platform.core.middleware.ProjectionMiddleware",

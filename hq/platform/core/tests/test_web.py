@@ -18,13 +18,12 @@ from urllib.parse import parse_qs, urlsplit
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.contrib.auth.middleware import AuthenticationMiddleware
-from django.contrib.sessions.middleware import SessionMiddleware
+from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.templatetags.static import static
-from django.test import Client, SimpleTestCase, TestCase, override_settings, tag
+from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
 
@@ -47,15 +46,14 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
-from hq.platform.application import readings
+from hq.platform.application import readings, request_context
 from hq.platform.application.action_links import command_url
 from hq.platform.application.dashboard import operating_snapshot
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.application.tests.markup import elements, hrefs, select, text, within
-from hq.platform.core.audit import operation_context
+from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.logging import JsonFormatter, reset_request_id, set_request_id
-from hq.platform.core.middleware import CurrentUserMiddleware, get_current_user, set_current_user
 from hq.platform.core.models import AuditLog
 from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY, HQOIDCAuthenticationBackend
 
@@ -258,14 +256,21 @@ class AuthGateTests(TestCase):
 
 
 class SecurityBoundaryTests(TestCase):
-    def test_current_user_context_never_retains_session_lazy_object(self):
-        request = self.client.request().wsgi_request
-        SessionMiddleware(lambda value: value).process_request(request)
-        AuthenticationMiddleware(lambda value: value).process_request(request)
-        observed = CurrentUserMiddleware(lambda _request: get_current_user())(request)
+    def test_an_audit_row_names_who_the_bound_request_signed_in(self):
+        operator = User.objects.create_user("example-auditor")
+        signed = RequestFactory().get("/")
+        signed.user = operator
+        anonymous = RequestFactory().get("/")
+        anonymous.user = AnonymousUser()
 
-        self.assertIs(observed, request._cached_user)
-        self.assertNotEqual(type(observed).__name__, "SimpleLazyObject")
+        for request, expected in ((signed, operator), (anonymous, None), (None, None)):
+            with self.subTest(request=request):
+                bound = request_context.bind(request)
+                try:
+                    row = record_event(action="example.read", required=True)
+                finally:
+                    request_context.unbind(bound)
+                self.assertEqual(row.user, expected)
 
     def test_json_logs_carry_request_correlation_without_query_strings(self):
         token = set_request_id("request-123")
@@ -297,25 +302,25 @@ class SecurityBoundaryTests(TestCase):
             ready = [asyncio.Event(), asyncio.Event()]
             release = asyncio.Event()
 
-            async def worker(index, user):
-                set_current_user(user)
+            async def worker(index, request):
+                bound = request_context.bind(request)
                 ready[index].set()
                 await release.wait()
                 try:
-                    return get_current_user()
+                    return request_context.current()
                 finally:
-                    set_current_user(None)
+                    request_context.unbind(bound)
 
             tasks = [
-                asyncio.create_task(worker(0, "first-user")),
-                asyncio.create_task(worker(1, "second-user")),
+                asyncio.create_task(worker(0, "first-request")),
+                asyncio.create_task(worker(1, "second-request")),
             ]
             await asyncio.gather(*(event.wait() for event in ready))
             release.set()
             return await asyncio.gather(*tasks)
 
-        self.assertEqual(async_to_sync(exercise)(), ["first-user", "second-user"])
-        self.assertIsNone(get_current_user())
+        self.assertEqual(async_to_sync(exercise)(), ["first-request", "second-request"])
+        self.assertIsNone(request_context.current())
 
 
 @tag("source")
