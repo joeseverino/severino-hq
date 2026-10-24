@@ -7,24 +7,24 @@ from hq.platform.application.money import money
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
 from hq.platform.core.tests.browser.gate import add_css, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
-from hq.platform.core.tests.browser.probes.boxes import _MAP, _OVERRULED_ALIGNMENT, _SMALL_TARGETS
-from hq.platform.core.tests.browser.probes.palette import _BUTTON_EDGES
-from hq.platform.core.tests.browser.probes.parts import _READINGS, _SPILLED_LABELS, reading_problems
-from hq.platform.core.tests.browser.probes.settle import _KEPT_SELECTORS, _PRESS_EVERY_SHOWN, _SETTLED
-from hq.platform.core.tests.browser.probes.shifts import _HEADER_PARTS
+from hq.platform.core.tests.browser.probes.boxes import MAP, OVERRULED_ALIGNMENT, SMALL_TARGETS
+from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
+from hq.platform.core.tests.browser.probes.parts import READINGS, SPILLED_LABELS, reading_problems
+from hq.platform.core.tests.browser.probes.settle import KEPT_SELECTORS, PRESS_EVERY_SHOWN, SETTLE
+from hq.platform.core.tests.browser.probes.shifts import HEADER_PARTS
 from hq.platform.core.tests.browser.probes.tables import (
-    _BLANK_TABLE,
-    _CELLS,
-    _COLUMNS_SHOWN,
-    _PHONE_TABLE,
-    _PRESS_FIRST_ROW_TOGGLE,
-    _ROW_ARRIVES,
-    _ROW_TOGGLE_TABLES,
-    _ROW_TOGGLES,
-    _SORT_BY,
-    _TABLES_THAT_DO_NOT_FIT,
+    BLANK_TABLE,
+    CELLS,
+    COLUMNS_SHOWN,
+    PHONE_TABLE,
+    PRESS_FIRST_ROW_TOGGLE,
+    ROW_ARRIVES,
+    ROW_TOGGLE_TABLES,
+    ROW_TOGGLES,
+    SORT_BY,
+    TABLES_THAT_DO_NOT_FIT,
 )
-from hq.platform.core.tests.browser.probes.text import _BROKEN_WORDS, _BROKEN_WORDS_IN_TEXT, _OVERLAPPING_TEXT
+from hq.platform.core.tests.browser.probes.text import BROKEN_WORDS, BROKEN_WORDS_IN_TEXT, OVERLAPPING_TEXT
 from hq.platform.core.tests.browser.reading import probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
@@ -192,13 +192,13 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 with self.subTest(page=name, width=width):
                     self.open(name, width)
                     # A family first, so the rows it folds show their own toggles.
-                    self.page.locator(SELECTORS["decision_family"]).evaluate_all(_PRESS_EVERY_SHOWN)
+                    self.page.locator(SELECTORS["decision_family"]).evaluate_all(PRESS_EVERY_SHOWN)
                     self.page.locator(SELECTORS["row_toggle"] + ":not([data-fold-toggle])").evaluate_all(
-                        _PRESS_EVERY_SHOWN
+                        PRESS_EVERY_SHOWN
                     )
-                    self.page.evaluate(_SETTLED)
-                    self.assertEqual(self.page.evaluate(_CELLS), [])
-                    self.assertEqual(self.page.evaluate(_TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
+                    self.page.evaluate(SETTLE)
+                    self.assertEqual(self.page.evaluate(CELLS), [])
+                    self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
 
     def test_a_probe_that_throws_hides_no_other(self):
         """Probes read in one round trip each run on their own."""
@@ -246,7 +246,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
           return star.scrollWidth > star.clientWidth;
         }""")
         self.assertTrue(widened)
-        found = self.page.evaluate(_SPILLED_LABELS, "main :is(.example-star, .example-word)")
+        found = self.page.evaluate(SPILLED_LABELS, "main :is(.example-star, .example-word)")
         self.assertEqual([spilled.split(" holds ")[0] for spilled in found], ["button.example-word"])
 
     @with_script
@@ -314,7 +314,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
           document.querySelector('main').append(table);
           popover.showPopover();
         }""")
-        found = [line for line in self.page.evaluate(_CELLS) if "example-" in line]
+        found = [line for line in self.page.evaluate(CELLS) if "example-" in line]
         self.assertEqual([line.split(" runs ")[0] for line in found], ["div.example-box"])
 
     def test_a_word_wider_than_its_chip_may_break_and_a_short_one_in_a_wide_chip_may_not(self):
@@ -342,7 +342,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
           cell.parentElement.closest('table').style.cssText = `table-layout: fixed; inline-size: ${range.getBoundingClientRect().width + 4}px`;
           chip('an exampleword', 'word-break: break-all; inline-size: 10ch');
         }""")
-        found = [line for line in self.page.evaluate(_BROKEN_WORDS) if "abcdef" in line or "example" in line]
+        found = [line for line in self.page.evaluate(BROKEN_WORDS) if "abcdef" in line or "example" in line]
         self.assertEqual(len(found), 1)
         self.assertIn("example", found[0])
 
@@ -369,7 +369,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             ],
         )
 
-        found = [line for line in self.page.evaluate(_BROKEN_WORDS_IN_TEXT, _IDENTIFIER) if "example-" in line]
+        found = [line for line in self.page.evaluate(BROKEN_WORDS_IN_TEXT, _IDENTIFIER) if "example-" in line]
         self.assertEqual(len(found), 1, found)
         self.assertIn("example-loose", found[0])
 
@@ -383,7 +383,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for palette in ("light", "dark"):
             with self.subTest(palette=palette):
                 self.page.emulate_media(color_scheme=palette)
-                self.assertEqual(self.page.evaluate(_BUTTON_EDGES, SELECTORS["pressed"]), [])
+                self.assertEqual(self.page.evaluate(BUTTON_EDGES, SELECTORS["pressed"]), [])
         self.page.evaluate("""() => {
           const button = document.createElement('button');
           button.className = 'example-edged';
@@ -392,7 +392,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
           document.querySelector('main').append(button);
         }""")
         self.assertEqual(
-            self.page.evaluate(_BUTTON_EDGES, SELECTORS["pressed"]), ["button.example-edged wears a field's edge"]
+            self.page.evaluate(BUTTON_EDGES, SELECTORS["pressed"]), ["button.example-edged wears a field's edge"]
         )
 
     def test_a_small_target_under_an_open_menu_is_not_measured_and_one_in_view_is(self):
@@ -427,7 +427,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
           place(menu, '260px', '0');
           document.body.append(menu);
         }""")
-        found = self.page.evaluate(_SMALL_TARGETS, ["main :is(.example-hidden, .example-shown)", TARGET_MIN])
+        found = self.page.evaluate(SMALL_TARGETS, ["main :is(.example-hidden, .example-shown)", TARGET_MIN])
         self.assertEqual({finding.split(" in ")[0] for finding in found}, {"a.example-shown"})
 
     def test_a_modal_dialog_leaves_the_page_beneath_unmeasured_and_its_own_targets_measured(self):
@@ -457,7 +457,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
           pair(dialog, 'example-within');
           dialog.showModal();
         }""")
-        found = self.page.evaluate(_SMALL_TARGETS, [":is(.example-beneath, .example-within)", TARGET_MIN])
+        found = self.page.evaluate(SMALL_TARGETS, [":is(.example-beneath, .example-within)", TARGET_MIN])
         self.assertEqual({finding.split(" in ")[0] for finding in found}, {"a.example-within"})
 
     def test_an_open_menu_over_the_page_text_is_no_overlap_and_text_in_one_layer_is(self):
@@ -486,7 +486,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
           main.append(line('example covered', '300px', '40px'), menu, line('example clashed', '500px', '40px'));
           main.append(line('example under', '500px', '40px'));
         }""")
-        found = self.page.evaluate(_OVERLAPPING_TEXT, SELECTORS["floating"])
+        found = self.page.evaluate(OVERLAPPING_TEXT, SELECTORS["floating"])
         pairs = {tuple(sorted(part.split('"')[1] for part in finding.split(" over "))) for finding in found}
         self.assertNotIn(("example covered", "example covering"), pairs)
         self.assertIn(("example clashed", "example under"), pairs)
@@ -495,7 +495,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
     def test_every_selector_parses(self):
         authored = authored_selectors(stylesheet())
         self.open(next(iter(PAGES)), WIDTHS[-1])
-        kept = {_plain_selector(selector) for selector in self.page.evaluate(_KEPT_SELECTORS, f"/{DIRECTORY}/")}
+        kept = {_plain_selector(selector) for selector in self.page.evaluate(KEPT_SELECTORS, f"/{DIRECTORY}/")}
 
         self.assertEqual([selector for selector in authored if _plain_selector(selector) not in kept], [])
 
@@ -537,7 +537,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         withholds. Whether a value is cut is measured, so script is on.
         """
 
-        self.pages = {**self.pages, "row-toggle-probe": probe(_ROW_TOGGLE_TABLES)}
+        self.pages = {**self.pages, "row-toggle-probe": probe(ROW_TOGGLE_TABLES)}
         shown_at = {
             PHONE_SCREEN[0]: {"dropped", "cut", "folded", "cut-in-a-kept-gutter"},
             1280: {"folded", "cut-in-a-kept-gutter"},
@@ -545,8 +545,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for width, expected in shown_at.items():
             with self.subTest(width=width):
                 self.open("row-toggle-probe", width)
-                self.page.evaluate(_SETTLED)
-                rows = self.page.evaluate(_ROW_TOGGLES)
+                self.page.evaluate(SETTLE)
+                rows = self.page.evaluate(ROW_TOGGLES)
                 self.assertEqual({(row["toggles"], row["beside_name"]) for row in rows}, {(1, True)})
                 self.assertEqual({row["probe"] for row in rows if row["shown"]}, expected)
 
@@ -563,21 +563,21 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for name in ("connections", "services", "containers", "projects"):
             with self.subTest(page=name):
                 self.open(name, PHONE_SCREEN[0])
-                closed = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
+                closed = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
                 self.assertGreaterEqual(closed["headings"], 4)
                 self.assertLess(len(closed["columns"]), closed["headings"])
                 self.assertLessEqual(closed["sideways"], 1)
                 self.assertGreater(closed["toggles"], 0)
 
-                pressed = self.page.evaluate(_PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
-                opened = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
+                pressed = self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
+                opened = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
                 self.assertTrue(opened["details"])
                 self.assertEqual(opened["columns"], closed["columns"])
                 self.assertEqual(others(opened["rows"], pressed), others(closed["rows"], pressed))
                 self.assertLessEqual(opened["sideways"], 1)
 
-                self.page.evaluate(_PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
-                again = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
+                self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
+                again = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
                 self.assertEqual(again["details"], [])
                 self.assertEqual(again["columns"], closed["columns"])
                 self.assertEqual(again["rows"], closed["rows"])
@@ -590,9 +590,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
         before it."""
 
         self.open("containers", PHONE_SCREEN[0])
-        fitted = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
+        fitted = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
         self.assertLess(len(fitted["columns"]), fitted["headings"])
-        self.assertEqual(self.page.evaluate(_ROW_ARRIVES, SELECTORS["table_scroll"]), [])
+        self.assertEqual(self.page.evaluate(ROW_ARRIVES, SELECTORS["table_scroll"]), [])
 
     @with_script
     def test_a_fragment_that_is_not_percent_encoding_breaks_no_table(self):
@@ -610,12 +610,12 @@ class ComponentLayoutTests(LayoutBrowserTests):
     @with_script
     def test_a_wide_table_on_a_desktop_keeps_every_column_and_holds_them_when_a_row_opens(self):
         self.open("connections", 1440)
-        closed = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
+        closed = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
         self.assertEqual(len(closed["columns"]), closed["headings"])
 
         if closed["toggles"]:
-            pressed = self.page.evaluate(_PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
-            opened = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
+            pressed = self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
+            opened = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
             self.assertEqual(opened["columns"], closed["columns"])
             self.assertEqual(others(opened["rows"], pressed), others(closed["rows"], pressed))
 
@@ -633,13 +633,13 @@ class ComponentLayoutTests(LayoutBrowserTests):
             ".map((row) => row.children[0].textContent.trim().replace(/\\s+/g, ' ')))",
             SELECTORS["table_scroll"],
         )
-        up = self.page.evaluate(_SORT_BY, [SELECTORS["table_scroll"], 0])
+        up = self.page.evaluate(SORT_BY, [SELECTORS["table_scroll"], 0])
         self.assertEqual(up["sort"], "ascending")
         self.assertEqual(up["values"], [sorted(group, key=str.lower) for group in came])
-        down = self.page.evaluate(_SORT_BY, [SELECTORS["table_scroll"], 0])
+        down = self.page.evaluate(SORT_BY, [SELECTORS["table_scroll"], 0])
         self.assertEqual(down["sort"], "descending")
         self.assertEqual(down["values"], [sorted(group, key=str.lower, reverse=True) for group in came])
-        back = self.page.evaluate(_SORT_BY, [SELECTORS["table_scroll"], 0])
+        back = self.page.evaluate(SORT_BY, [SELECTORS["table_scroll"], 0])
         self.assertEqual(back["sort"], "none")
         self.assertEqual(back["values"], came)
 
@@ -654,7 +654,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for width in (PHONE_SCREEN[0], 820, 1280, 1440):
             with self.subTest(width=width):
                 self.open("dashboard", width)
-                readings = self.page.locator(SELECTORS["readings"]).evaluate_all(_READINGS)
+                readings = self.page.locator(SELECTORS["readings"]).evaluate_all(READINGS)
                 self.assertGreaterEqual(len(readings), 3)
                 self.assertEqual(reading_problems(readings), [])
 
@@ -669,13 +669,13 @@ class ComponentLayoutTests(LayoutBrowserTests):
             with self.subTest(width=width):
                 self.open("dense/dashboard", width)
                 self.page.locator(SELECTORS["ask_note"]).wait_for(state="visible")
-                self.assertEqual(self.page.evaluate(_OVERLAPPING_TEXT, SELECTORS["floating"]), [])
+                self.assertEqual(self.page.evaluate(OVERLAPPING_TEXT, SELECTORS["floating"]), [])
 
     def test_the_map_scrolls_with_the_page_and_draws_no_empty_lane(self):
         for width in WIDTHS:
             with self.subTest(width=width):
                 self.open("topology", width)
-                found = self.page.evaluate(_MAP, [SELECTORS["map"], SELECTORS["map_lane"], SELECTORS["map_node"]])
+                found = self.page.evaluate(MAP, [SELECTORS["map"], SELECTORS["map_lane"], SELECTORS["map_node"]])
                 self.assertIsNotNone(found)
                 self.assertFalse(found["scrolls"])
                 self.assertEqual(found["empty"], [])
@@ -712,16 +712,16 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
     @with_script
     def test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split(self):
-        self.pages = {**self.pages, "blank-column-probe": probe(_BLANK_TABLE)}
+        self.pages = {**self.pages, "blank-column-probe": probe(BLANK_TABLE)}
         for width in WIDTHS:
             with self.subTest(width=width):
                 self.open("blank-column-probe", width)
-                self.page.evaluate(_SETTLED)
-                shown = self.page.evaluate(_COLUMNS_SHOWN)
+                self.page.evaluate(SETTLE)
+                shown = self.page.evaluate(COLUMNS_SHOWN)
                 self.assertNotIn("Nothing", shown)
                 self.assertIn("Title", shown)
                 self.assertIn("Runs", shown)
-                self.assertEqual(self.page.evaluate(_BROKEN_WORDS), [])
+                self.assertEqual(self.page.evaluate(BROKEN_WORDS), [])
 
     def test_an_identifier_sits_where_its_end_of_the_connection_aligns_it(self):
         """The address on each end of the connection is placed with the rest
@@ -735,7 +735,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
                     "(ends) => ends.map((end) => getComputedStyle(end).justifyItems)"
                 )
                 self.assertEqual(set(ends), sides)
-                self.assertEqual(self.page.evaluate(_OVERRULED_ALIGNMENT, SELECTORS["chip"]), [])
+                self.assertEqual(self.page.evaluate(OVERRULED_ALIGNMENT, SELECTORS["chip"]), [])
 
     def test_the_site_header_stands_where_it_ends_while_it_is_still_arriving(self):
         """A page drawn while its header is still being parsed, cut before any
@@ -748,7 +748,11 @@ class ComponentLayoutTests(LayoutBrowserTests):
         name = next(iter(PAGES))
         whole = self.pages[name]
         cuts = ('<a class="global-search"', '<a class="action-badge"', '<details class="user-menu"')
-        self.pages = {**self.pages, **{f"cut-{at}": whole[: whole.index(cut)] for at, cut in enumerate(cuts)}}
+        # A cut page ends with the element the head's render-blocking link
+        # waits for, as a browser that draws before the content is parsed would
+        # draw it; without it, WebKit holds the page and never matches :target.
+        parsed = '<template id="parsed"></template>'
+        self.pages = {**self.pages, **{f"cut-{at}": whole[: whole.index(cut)] + parsed for at, cut in enumerate(cuts)}}
         for width in (*WIDTHS, 1200):
             for menu in ("", "#sections"):
                 self.page.set_viewport_size(viewport(width))
@@ -769,7 +773,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             "([selector, open]) => document.querySelector(selector).matches(':target') === open",
             arg=[SELECTORS["site_header"], url.endswith("#sections")],
         )
-        return self.page.evaluate(_HEADER_PARTS, SELECTORS["site_header"])
+        return self.page.evaluate(HEADER_PARTS, SELECTORS["site_header"])
 
     @with_script
     def test_the_survey_finds_the_same_twice_on_a_page_that_answers_changes_to_its_tree(self):
