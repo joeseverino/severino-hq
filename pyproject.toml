@@ -66,7 +66,7 @@ line-length = 120
 extend-include = ["deploy/targets/severino-hq-cpanel-controller"]
 
 [tool.ruff.per-file-target-version]
-# The python3 of the hosted runner (RUNNER_IMAGE in tools/pipeline/toolchain.env), stdlib
+# The python3 of the hosted runner (the ubuntu label every workflow names), stdlib
 # only: the jobs and the action that run them set up no toolchain first.
 "tools/pipeline/ci_report.py" = "py312"
 "tools/pipeline/compose_plugins.py" = "py312"
