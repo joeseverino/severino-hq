@@ -27,7 +27,9 @@ MARKER = "perf-queries "
 # A first boot migrates and seeds a new database; a later one finds it made.
 FIRST_BOOT_S = 900
 BOOT_S = 180
-STOP_S = 20
+# A scratch server's worker stops in under a second; its reloader can hang on past it, holding
+# nothing a kill loses, since the database it leaves is SQLite's WAL.
+STOP_S = 5
 COLD_STARTS = 3
 # What the run that started this set for itself, which a server of another
 # checkout must not inherit: the gate's database and settings, the task's
