@@ -156,6 +156,14 @@ _SHOW_POPOVER = """(place) => {
 _HIDE_POPOVER = "(place) => document.querySelectorAll('[popover]')[place].hidePopover()"
 # No region a round of opening brought in is waiting on its answer.
 _ANSWERED = "(busy) => [...document.querySelectorAll(busy)].every((region) => region.lookWaiting)"
+# The rows a reader opens: the folds first, then each row on its own.
+_FOLD_TOGGLES = "main button[data-fold-toggle]"
+_ROW_TOGGLES = "main button[data-row-toggle]:not([data-fold-toggle])"
+_PRESS_SHOWN = "(toggles) => document.querySelectorAll(toggles).forEach((t) => t.checkVisibility() && t.click())"
+# A fold's rows are marked as cut, which shows their toggles, on tables.js's
+# debounce (`markTablesSoon`), a timer the press sets. A timer set after it
+# with no shorter delay fires after it, so this resolves once it has run.
+_AFTER_THE_PAGES_TIMERS = "() => new Promise((done) => setTimeout(done, 250))"
 # Rounds of opening, each after what the last one brought in has arrived.
 _OPEN_ROUNDS = 10
 _EXTENT = "() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]"
@@ -774,15 +782,18 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if _usage("usage_open"):
             self.open_everything(name, width)
         if _usage("usage_expand"):
-            # Only the toggles a reader can press: one a row does not offer is
-            # drawn, but not shown. A fold first, so the rows it holds show
-            # their own toggles before those are pressed.
-            for toggles in ("main button[data-fold-toggle]", "main button[data-row-toggle]:not([data-fold-toggle])"):
-                self.page.evaluate(
-                    "(toggles) => document.querySelectorAll(toggles)"
-                    ".forEach((toggle) => toggle.checkVisibility() && toggle.click())",
-                    toggles,
-                )
+            self.expand_rows()
+
+    def expand_rows(self):
+        """Every row a reader can open, opened: only the toggles a reader can
+        press, since one a row does not offer is drawn but not shown. A fold
+        first, and once the page has marked the rows it shows, so each of them
+        shows its own toggle before those are pressed."""
+
+        self.page.evaluate(_PRESS_SHOWN, _FOLD_TOGGLES)
+        self.page.evaluate(_AFTER_THE_PAGES_TIMERS)
+        self.settle()
+        self.page.evaluate(_PRESS_SHOWN, _ROW_TOGGLES)
 
     def open_everything(self, name, width):
         """Every disclosure open, round after round until none is

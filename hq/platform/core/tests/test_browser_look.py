@@ -123,6 +123,42 @@ class PopoverTests(SimpleTestCase):
         self.assertEqual(page.shown, set())
 
 
+class _Folds:
+    """A page with a fold of rows, as tables.js answers presses: pressing the
+    fold shows its rows, and marks each as cut, which shows its toggle, only
+    once the timer the press set has run."""
+
+    def __init__(self, rows):
+        self.rows, self.folded, self.timer, self.marked, self.opened = rows, False, False, False, set()
+
+    def evaluate(self, script, toggles=None):
+        if script == look._AFTER_THE_PAGES_TIMERS:
+            self.marked = self.marked or self.timer
+        elif script == look._PRESS_SHOWN and toggles == look._FOLD_TOGGLES:
+            self.folded = self.timer = True
+        elif script == look._PRESS_SHOWN and toggles == look._ROW_TOGGLES and self.marked:
+            self.opened |= set(self.rows)
+
+
+class _Expander:
+    expand_rows = look.Look.expand_rows
+
+    def __init__(self, page):
+        self.page = page
+
+    def settle(self):
+        pass
+
+
+@tag("source")
+class ExpandTests(SimpleTestCase):
+    def test_the_rows_a_fold_shows_are_opened_once_the_page_has_marked_them(self):
+        page = _Folds(["example-row-one", "example-row-two"])
+        _Expander(page).expand_rows()
+        self.assertTrue(page.folded)
+        self.assertEqual(page.opened, {"example-row-one", "example-row-two"})
+
+
 class _Dialogs:
     """A page's dialogs as the look's scripts and presses reach them: the
     connection dialog's control sits in a closed menu, and its region loads
