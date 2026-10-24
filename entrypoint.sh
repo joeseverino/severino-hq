@@ -1,18 +1,9 @@
 #!/usr/bin/env sh
-# Severino HQ container entrypoint.
-#
-# - Applies any pending migrations on boot, keeping the database first where
-#   the host says, so a release that fails can put it back.
-# - Then exec's whatever CMD was passed (Uvicorn by default).
-#
-# Static assets and bytecode are the image's, made when it was built.
-#
-# Intentionally minimal: we want boot failures to be loud and obvious.
+# The container's boot: migrations first, keeping the database where the host
+# says so a failed release can put it back, then the image's CMD. Any failure
+# stops the boot.
 
 set -eu
-
-# The 1Password-rendered app env is loaded by hq/config/settings.py (so exec'd
-# processes get it too): nothing to source here.
 
 # Temporary files outlive only the process that made them; whatever a killed
 # process left is removed before anything can mistake it for current.
