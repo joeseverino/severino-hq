@@ -129,7 +129,7 @@ class FastGateTaskSelectionTests(GateTestCase):
         self.assertLessEqual({name for name in tasks if name.startswith("drift:")}, set(fast_gate.TASKS))
 
     def test_a_docs_change_runs_only_the_gate_that_derives_it(self):
-        self.assertEqual(fast_gate.selected_tasks(["docs/AI.md"]), ())
+        self.assertEqual(fast_gate.selected_tasks(["docs/Example.md"]), ())
         self.assertEqual(fast_gate.selected_tasks(["docs/Connections.md"]), ("drift:connections-reference",))
 
     def test_a_python_change_runs_the_python_gates_and_not_the_stylesheet_ones(self):
