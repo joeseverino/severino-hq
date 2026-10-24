@@ -3,13 +3,7 @@
 set -eu
 
 sources="$(tools/gate/shell-sources.sh)"
-# Each parsed by the shell its first line names.
-for f in $sources; do
-    case "$(head -n 1 "$f")" in
-        *bash*) bash -n "$f" ;;
-        *) sh -n "$f" ;;
-    esac
-done
+# A file that does not parse in the dialect its first line names fails shellcheck.
 # shellcheck disable=SC2086  # one path per word
 shellcheck -x $sources
 # Suites run in parallel (each uses its own temporary directory); a failed
