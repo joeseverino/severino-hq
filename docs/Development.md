@@ -336,12 +336,21 @@ declares) also shoots each page with that dialog open
 any menu holding that control, so the page's own wiring opens it, and waits
 for its parts to load; `--eval` and the rule run again there.
 
-`mise run perf:report [--image] [--base <ref>]` measures how light and fast
-HQ is, page by page (server time and queries, bytes, requests, script time and
-layout shift in Chromium, memory, cold start), writes
-`var/perf/<commit>.json` and prints a table; with `--base` each number is
-shown beside how far it moved. It is a report, not a gate, and with `--base`
-it takes about ten minutes.
+`mise run perf:report [--image] [--base <ref>] [--host-alone] [--fresh]`
+measures how light and fast HQ is, page by page: server time, queries, the
+rows its tables hold and its HTML size, then bytes, requests, script time and
+layout shift in Chromium, memory and cold start. Each run is kept as
+`var/perf/<run>.json`, saved after each measurement; a failed one is recorded
+with its error and the rest go on. `<run>.txt`, which the session log shows,
+is the summary, and `<run>.table` has every page. `--base` shows each number
+beside how far it moved and reuses a complete kept report of the ref under
+the same plan unless `--fresh`. A ref that refuses the extension set for its
+plugin API makes the run measure the host alone on both sides, as
+`--host-alone` asks, and its closing line says so. It is a report, not a gate,
+and with `--base` it takes about ten minutes. `mise run perf:ab <base>
+[page]...` answers whether a change moved a page's server time: both refs'
+test clients, alternating, over `--rounds` rounds. `mise run perf:note <label>
+<value> [unit]` keeps a measurement made by hand for the session log.
 
 A look holds still: the page's clock is frozen at the moment the run began
 (its `--base` run shares that instant), so a time a script reads is drawn
