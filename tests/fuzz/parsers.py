@@ -1,40 +1,22 @@
 """Coverage-guided fuzzing of the parsers that read outside input.
 
-The property tests in ``hq/platform/application/tests/test_properties.py`` generate inputs from
-a strategy; this lets a fuzzer grow them from coverage instead, which finds
-the shapes a strategy did not think to describe. The same three parsers:
-image references, package URLs and provenance sources.
+Atheris grows the bytes and Hypothesis's fuzz_one_input turns them into the
+text of the property the suite already runs (``every_parser_answers_any_text``
+in ``hq/platform/application/tests/test_properties.py``):
 
-    pip install atheris
-    DJANGO_SETTINGS_MODULE=hq.config.settings python -m tests.fuzz.parsers -max_total_time=300
-
-``test_one_input`` is also run by the suite over a fixed set of seeds
-(``hq/platform/application/tests/test_fuzz_harness.py``), so the harness cannot rot unnoticed.
+    DJANGO_SETTINGS_MODULE=hq.config.settings DJANGO_SECRET_KEY=fuzz DJANGO_DEBUG=1 \
+    SEVERINO_DATABASE_PATH=var/fuzz.sqlite3 uv run --with atheris -m tests.fuzz.parsers -max_total_time=300
 """
 
 import sys
 
-import atheris
-
-with atheris.instrument_imports():
+if __name__ == "__main__":
+    import atheris
     import django
 
-    django.setup()
+    with atheris.instrument_imports():
+        django.setup()
+        from hq.platform.application.tests.test_properties import every_parser_answers_any_text
 
-    from hq.platform.application.attestations import github_source
-    from hq.platform.application.images import ImageRef
-    from hq.platform.application.osv import query_of
-
-
-def test_one_input(data: bytes) -> None:
-    """Every parser takes any text and answers, or declines; none raises."""
-
-    text = atheris.FuzzedDataProvider(data).ConsumeUnicodeNoSurrogates(4096)
-    ImageRef.parse(text)
-    query_of(text)
-    github_source(text)
-
-
-if __name__ == "__main__":
-    atheris.Setup(sys.argv, test_one_input)
+    atheris.Setup(sys.argv, every_parser_answers_any_text.hypothesis.fuzz_one_input)
     atheris.Fuzz()

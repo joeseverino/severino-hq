@@ -177,18 +177,9 @@ def is_test(path: Path) -> bool:
     return (
         path.suffix == ".py"
         and path.name != "__init__.py"
-        and (path.name.startswith("test") or ("fuzz" in path.parts and not is_fuzz_harness(path)))
+        and (path.name.startswith("test") or "fuzz" in path.parts)
         and all((ROOT / parent / "__init__.py").exists() for parent in path.parents if parent != Path())
     )
-
-
-def is_fuzz_harness(path: Path) -> bool:
-    """An atheris harness: run by its fuzzer, and in the suite through the test that drives it."""
-
-    try:
-        return "import atheris" in (ROOT / path).read_text()
-    except OSError:
-        return False
 
 
 def imports(path: Path, modules: set[str]) -> set[str]:

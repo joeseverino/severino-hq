@@ -216,19 +216,6 @@ class FastGateNestedLayoutTests(GateTestCase):
         self.assertFalse(fast_gate.is_test(Path("tests/fixtures/example_hq_plugin/views.py")))
         self.assertFalse(fast_gate.is_test(Path("tests/fuzz/__init__.py")))
 
-    def test_an_atheris_harness_is_not_a_test_label(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            fuzz = root / "tests" / "fuzz"
-            fuzz.mkdir(parents=True)
-            for package in (root / "tests", fuzz):
-                (package / "__init__.py").write_text("")
-            (fuzz / "harness.py").write_text("import atheris\n")
-            (fuzz / "properties.py").write_text("from hypothesis import given\n")
-            with patch.object(fast_gate, "ROOT", root):
-                self.assertFalse(fast_gate.is_test(Path("tests/fuzz/harness.py")))
-                self.assertTrue(fast_gate.is_test(Path("tests/fuzz/properties.py")))
-
 
 # What a failing `mise run -c` prints at its end, as it prints it.
 FAILING = r"""
