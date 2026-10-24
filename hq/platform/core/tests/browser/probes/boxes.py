@@ -542,8 +542,10 @@ _FIGURE_UNDER_LABEL = r"""([figure, label_, value_]) => {
 
 # A value sits beside its label wherever the box holding both has room for
 # each on one line, and goes under it only where it does not. Measured on the
-# words' first lines, since a grid stretches a box to its track; the room is
-# each one's max-content width, read from a copy laid out beside them.
+# words' first lines, since a grid stretches a box to its track; the room the
+# two take is a copy of their box holding only them, laid out on one line
+# beside it, so whatever the box puts between them counts: a column gap, a
+# margin, the space between two inline boxes.
 _UNDER_ITS_LABEL = r"""(labeled) => {
   const found = [];
   const firstLine = (el) => {
@@ -551,10 +553,14 @@ _UNDER_ITS_LABEL = r"""(labeled) => {
     range.selectNodeContents(el);
     return [...range.getClientRects()].find((rect) => rect.width) || null;
   };
-  const widest = (el) => {
-    const copy = el.cloneNode(true);
-    copy.style.cssText = 'position: absolute; visibility: hidden; display: inline-block; inline-size: max-content; max-inline-size: none';
-    el.parentElement.append(copy);
+  const together = (box, first, second) => {
+    const copy = box.cloneNode(false);
+    for (let node = first; node; node = node.nextSibling) {
+      copy.append(node.cloneNode(true));
+      if (node === second) break;
+    }
+    copy.style.cssText = 'position: absolute; visibility: hidden; inline-size: max-content; max-inline-size: none; padding-inline: 0; border-inline-width: 0';
+    box.after(copy);
     const width = copy.getBoundingClientRect().width;
     copy.remove();
     return width;
@@ -568,7 +574,7 @@ _UNDER_ITS_LABEL = r"""(labeled) => {
     if (level && (b.left >= a.right - 1 || b.right <= a.left + 1)) continue;
     const box = second.parentElement, style = getComputedStyle(box);
     const room = box.clientWidth - parseFloat(style.paddingInlineStart) - parseFloat(style.paddingInlineEnd);
-    const needed = widest(first) + (parseFloat(style.columnGap) || 0) + widest(second);
+    const needed = together(box, first, second);
     if (needed > room) continue;
     const words = (el) => el.textContent.trim().replace(/\s+/g, ' ').slice(0, 40);
     found.push(`"${words(first)}": "${words(second)}" goes under it with ${Math.round(room)}px for the ${Math.round(needed)}px both take`);
