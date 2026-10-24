@@ -49,6 +49,8 @@ jobs:
       digest: ${{ steps.proof.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install Cosign
         uses: ./.github/actions/cosign
       - name: Log in to GHCR
@@ -81,6 +83,8 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/toolchain
         with:
           # The structural bar builds its Go inspector from the controller's
@@ -118,6 +122,8 @@ jobs:
       HQ_TEST_STALL_SECONDS: "180"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/toolchain
         with:
           python: ${{ matrix.python }}
@@ -155,6 +161,8 @@ jobs:
       HQ_TEST_STALL_SECONDS: "180"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/toolchain
       - name: Browser
         # This leg's browser:* gate. GateReferenceTests holds the legs to the
@@ -182,6 +190,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/toolchain
         with:
           go: true
@@ -200,6 +210,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - id: toolchain
         uses: ./.github/actions/toolchain
         with:
@@ -240,6 +252,8 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Initialize CodeQL
         uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
@@ -287,6 +301,8 @@ jobs:
       PROVEN: ${{ needs.proven.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       # Layers cached between runs: most changes touch the application, not
       # its dependencies, so those layers are reused rather than rebuilt.
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -396,6 +412,8 @@ jobs:
       IMAGE: ${{ needs.image.outputs.image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Log in to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:

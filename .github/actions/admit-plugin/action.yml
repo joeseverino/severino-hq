@@ -120,10 +120,13 @@ runs:
 
     - name: Check out the plugin
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
     - name: Check out exact HQ source
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
+        persist-credentials: false
         repository: ${{ steps.host.outputs.repository }}
         ref: ${{ steps.host.outputs.sha }}
         path: host
@@ -148,6 +151,7 @@ runs:
     - name: Check out exact Cordon verifier
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
+        persist-credentials: false
         repository: joeseverino/cordon
         ref: ${{ steps.pins.outputs.cordon-commit }}
         path: cordon
