@@ -1,0 +1,17 @@
+#!/bin/sh
+#MISE description="How light and fast HQ is, page by page: server time and queries, bytes, requests, script time and layout shift in Chromium, memory and cold start; a report that exits 0 whenever it measured"
+#MISE extends="django"
+#MISE depends=["setup:chromium"]
+#MISE env={SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION="0", SEVERINO_HQ_PLUGINS="{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH="{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"}
+#MISE timeout="2h"
+#USAGE flag "--image" help="Measure the built image instead of dev:scratch: the one IMAGE names, else one image:build makes for the commit"
+#USAGE flag "--base <ref>" help="Also measure <ref>, in a temporary worktree removed however the run ends, and print each number beside how far it moved"
+#USAGE flag "--requests <n>" default="20" help="Requests a page for the server's p50 and p95"
+
+# The harness is tools/perf/report.py; its JSON goes to var/perf/<commit>.json.
+set -eu
+
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+
+exec uv run --group browser python -m tools.perf.report
