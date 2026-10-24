@@ -25,7 +25,7 @@ run = [
   "go -C controller vet ./...",
 ]
 
-["docs:screenshot"]
+["demo:screenshot"]
 description = "Retake the README's pictures from the showcase demo"
 depends = [{ task = "setup:browser", args = ["webkit"] }, "demo:build"]
 extends = "heavy"

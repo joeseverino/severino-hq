@@ -156,7 +156,7 @@ with git's refs on stdin.
 
 Two suites at once exhaust a small machine's memory, so the heavy tasks (`fast`,
 `check`, `ci`, `checks`, `tests`, `preflight`, the suites, the browser gates,
-`docs:screenshot`, a run of tests that is not narrow, below, and `dev:look`
+`demo:screenshot`, a run of tests that is not narrow, below, and `dev:look`
 except a look at named pages with no `--base`, `--perf` or `--deep`) run under
 `tools/lib/heavy.sh`,
 which holds an exclusive lock on `~/.cache/severino/heavy.lock` (under
