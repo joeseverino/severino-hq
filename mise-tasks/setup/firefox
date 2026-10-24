@@ -1,10 +1,1 @@
-#!/bin/sh
-#MISE description="Install the Firefox the locked Playwright pins, for dev:look --engine firefox"
-#MISE hide=true
-#MISE sources=["uv.lock"]
-
-# The lock pins Playwright, which pins the browser. A browser removed by hand
-# comes back with `mise run --force setup:firefox`.
-set -eu
-
-uv run --group browser python -m playwright install firefox
+webkit
