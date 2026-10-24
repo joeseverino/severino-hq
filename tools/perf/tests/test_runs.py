@@ -17,6 +17,7 @@ from tools.perf.targets import NotMeasured
 
 PLAN = report.Plan(
     pages=["/", "/contacts/"],
+    walked=["/", "/contacts/", "/hq/"],
     viewports=[{"width": 402, "height": 874}],
     requests=2,
     image=False,
@@ -32,6 +33,7 @@ class FakeTarget:
 
     def __init__(self, *_args, stop_fails: bool = False, **_kwargs) -> None:
         self.stop_fails = stop_fails
+        self.asked = []
 
     def __enter__(self):
         return self
@@ -44,12 +46,14 @@ class FakeTarget:
         return ("sessionid", "k3y")
 
     def memory(self):
+        self.asked.append("memory")
         return 100 * 1024**2
 
     def queries(self, pages):
         return dict.fromkeys(pages, 7)
 
     def cold_start(self):
+        self.asked.append("cold start")
         return 1500.0
 
 
@@ -66,9 +70,15 @@ class Measured(SimpleTestCase):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.out = Path(folder.name)
+        self.passed = []
+
+        def one_pass(_url, _cookie, pages):
+            self.passed.append(pages)
+            return dict.fromkeys(pages, 200)
+
         for patcher in (
             mock.patch.object(report, "OUT", self.out),
-            mock.patch.object(report.measure, "one_pass", lambda _url, _cookie, pages: dict.fromkeys(pages, 200)),
+            mock.patch.object(report.measure, "one_pass", one_pass),
             mock.patch.object(report.measure, "server_times", server_times),
             mock.patch.object(report, "chromium", no_chromium),
         ):
@@ -109,6 +119,20 @@ class FailureTests(Measured):
         self.assertEqual(here["cold_start"]["median_ms"], 1500.0)
         self.assertTrue(here["finished_at"])
 
+    def test_only_the_pages_asked_are_measured_and_memory_is_read_after_a_pass_over_every_page(self):
+        kept, _ = self.measure(FakeTarget())
+        here = kept.doc["here"]
+
+        self.assertEqual([entry["page"] for entry in here["pages"]], PLAN.pages)
+        self.assertEqual(self.passed, [PLAN.walked])
+
+    def test_memory_is_read_on_a_server_started_again_from_what_its_first_boot_compiled(self):
+        target = FakeTarget()
+        self.measure(target)
+
+        self.assertEqual(target.asked[0], "cold start")
+        self.assertIn("memory", target.asked)
+
     def test_each_measurement_is_saved_as_it_finishes(self):
         _, saves = self.measure(FakeTarget())
 
@@ -116,7 +140,11 @@ class FailureTests(Measured):
             doc for doc in saves if doc["here"]["pages"] and doc["here"]["pages"][0]["server"].get("p50_ms")
         ]
         self.assertTrue(server_saved)
-        self.assertNotIn("cold_start", server_saved[0]["here"], "server times reach the file before the run goes on")
+        self.assertNotIn(
+            "queries",
+            server_saved[0]["here"]["pages"][0]["server"],
+            "server times reach the file before the run goes on",
+        )
 
     def test_a_server_that_fails_to_stop_keeps_what_it_served(self):
         kept, _ = self.measure(FakeTarget(stop_fails=True))
@@ -205,7 +233,8 @@ class KeptTests(SimpleTestCase):
     def kept(self, commit: str, plan: dict, *, failures=(), finished="2026-10-24T10:00:00+00:00") -> runs.Run:
         kept = runs.Run.start(self.out, f"{commit}-dev-scratch", plan=plan)
         side = runs.side(commit, plan)
-        side.update(failures=list(failures), finished_at=finished, pages=[{"page": "/", "server": {"p50_ms": 3.0}}])
+        pages = [{"page": page, "server": {"p50_ms": 3.0 + at}} for at, page in enumerate(plan["pages"])]
+        side.update(failures=list(failures), finished_at=finished, pages=pages)
         kept.doc["here"] = side
         kept.save()
         return kept
@@ -236,3 +265,45 @@ class KeptTests(SimpleTestCase):
 
         self.assertIsNone(runs.saved(self.out, "0123456789ab", PLAN.key()))
         self.assertIsNone(runs.saved(self.out, "ba9876543210", other))
+
+    def test_a_report_of_more_pages_stands_in_for_any_of_them_holding_just_those(self):
+        every = PLAN.key() | {"pages": ["/", "/hq/", "/contacts/"]}
+        self.kept("0123456789ab", every)
+        one = PLAN.key() | {"pages": ["/contacts/"]}
+
+        source, found = runs.saved(self.out, "0123456789ab", one)
+
+        self.assertEqual([entry["page"] for entry in found["pages"]], ["/contacts/"])
+        self.assertEqual(found["pages"][0]["server"]["p50_ms"], 5.0)
+        self.assertEqual(found["plan"], one, "kept again, it stands in for the pages it holds and no more")
+        self.assertTrue(source)
+
+    def test_a_report_of_fewer_pages_stands_in_for_nothing_more(self):
+        self.kept("0123456789ab", PLAN.key() | {"pages": ["/contacts/"]})
+
+        self.assertIsNone(runs.saved(self.out, "0123456789ab", PLAN.key()))
+
+    def test_a_report_whose_browser_waited_otherwise_stands_in_for_nothing(self):
+        self.kept("0123456789ab", PLAN.key() | {"browser_waits_for": "networkidle"})
+
+        self.assertIsNone(runs.saved(self.out, "0123456789ab", PLAN.key()))
+
+
+class ChosenTests(SimpleTestCase):
+    EVERY = ["/", "/infrastructure/", "/contacts/"]
+
+    def test_nothing_asked_or_all_is_every_page_the_navigation_lists(self):
+        for asked in ("", "all", "estate/all"):
+            with self.subTest(asked=asked):
+                self.assertEqual(report.chosen(asked, self.EVERY), self.EVERY)
+
+    def test_an_estate_page_is_its_address_as_dev_look_names_it(self):
+        chosen = report.chosen("estate/contacts, estate, estate/assets?kind=disk,estate/contacts/", self.EVERY)
+
+        self.assertEqual(chosen, ["/contacts/", "/", "/assets/?kind=disk"])
+
+    def test_a_page_perf_cannot_serve_is_refused_with_the_pages_it_can(self):
+        with self.assertRaisesRegex(
+            report.UnknownPage, r"No page dense/services\. Pages: estate, estate/infrastructure"
+        ):
+            report.chosen("estate/contacts,dense/services", self.EVERY)

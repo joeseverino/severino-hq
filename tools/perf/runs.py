@@ -95,12 +95,32 @@ def _reports(out: Path) -> Iterator[tuple[str, Report]]:
                 yield path.stem, report
 
 
+def _covers(kept: dict[str, Any], plan: dict[str, Any]) -> bool:
+    """Whether a report kept under ``kept`` was asked all ``plan`` asks: the same of every page, of
+    each page ``plan`` names."""
+
+    def alike(asked: dict[str, Any]) -> dict[str, Any]:
+        return {key: value for key, value in asked.items() if key != "pages"}
+
+    return alike(kept) == alike(plan) and set(plan["pages"]) <= set(kept.get("pages", ()))
+
+
+def _taking(report: Report, plan: dict[str, Any]) -> Report:
+    """``report`` holding only the pages ``plan`` names, in its order, as measured under ``plan``."""
+
+    entries = {entry["page"]: entry for entry in report["pages"]}
+    return {**report, "plan": plan, "pages": [entries[page] for page in plan["pages"]]}
+
+
 def saved(out: Path, commit: str, plan: dict[str, Any]) -> tuple[str, Report] | None:
-    """The latest complete report of ``commit`` measured under ``plan``, and the run it is in."""
+    """The latest complete report of ``commit`` measured under a plan covering ``plan``, holding
+    just its pages, and the run it is in."""
 
     found = [
         (run, report)
         for run, report in _reports(out)
-        if report.get("commit") == commit and report.get("plan") == plan and complete(report)
+        if report.get("commit") == commit and isinstance(report.get("plan"), dict) and complete(report)
+        if _covers(report["plan"], plan)
     ]
-    return max(found, key=lambda pair: pair[1]["finished_at"], default=None)
+    latest = max(found, key=lambda pair: pair[1]["finished_at"], default=None)
+    return latest and (latest[0], _taking(latest[1], plan))

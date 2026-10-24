@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="Whether a change moved a page's server time: this checkout's and a base's Django test client asked page by page, alternating, over many rounds, beside each page's rows, HTML and queries; perf:report says how light and fast HQ is, server and browser"
+#MISE description="Whether a change moved a page's server time: two refs' test clients asked in turn over many rounds"
 #MISE env={SEVERINO_HQ_PLUGINS="{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH="{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"}
 #MISE timeout="1h"
 #USAGE arg "<base>" help="The ref to compare against, in a temporary worktree removed however the run ends"

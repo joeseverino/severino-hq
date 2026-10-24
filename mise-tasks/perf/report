@@ -1,13 +1,14 @@
 #!/bin/sh
-#MISE description="How light and fast HQ is, page by page: server time and queries, bytes, requests, script time and layout shift in Chromium, memory and cold start, kept run by run; perf:ab says whether a change moved a page's server time"
+#MISE description="How light and fast each page is, in the server and in Chromium, with memory and cold start, beside a base's with --base"
 #MISE extends="django"
 #MISE depends=[{task="setup:browser", args=["chromium"]}]
 #MISE env={SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION="0", SEVERINO_HQ_PLUGINS="{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH="{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"}
 #MISE timeout="2h"
+#USAGE arg "[pages]" help="Comma-separated pages as dev:look names them: estate/<path>, or estate/all or all, the default, for every page the navigation lists"
 #USAGE flag "--image" help="Measure the built image instead of dev:scratch: the one IMAGE names, else one image:build makes for the commit"
 #USAGE flag "--base <ref>" help="Also measure <ref>, in a temporary worktree removed however the run ends, and print each number beside how far it moved"
 #USAGE flag "--host-alone" help="Measure the host with no extension composed, on both sides; a base that refuses the extension set for its plugin API is measured so on its own"
-#USAGE flag "--fresh" help="Measure the base even when an earlier run kept a complete report of its commit under the same plan"
+#USAGE flag "--fresh" help="Measure the base even when an earlier run kept a complete report of its commit holding these pages, under the same plan"
 #USAGE flag "--requests <n>" default="20" help="Requests a page for the server's p50 and p95"
 
 # The harness is tools/perf/report.py; each run is kept as var/perf/<run>.json.
