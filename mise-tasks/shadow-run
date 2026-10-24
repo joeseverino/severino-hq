@@ -1,10 +1,11 @@
 #!/bin/sh
 #MISE description="Rehearse a release on the deploy host's real data, touching nothing live"
 #MISE raw=true
+#MISE env={SEVERINO_HQ_DEPLOY_HOST={required="The deploy host's SSH name (tools/dev/mise.local.example.toml)"}}
 #USAGE arg "<image>" help="The image the release waits to deploy, by digest"
 set -eu
 
-host="${SEVERINO_HQ_DEPLOY_HOST:?Set SEVERINO_HQ_DEPLOY_HOST (tools/dev/mise.local.example.toml).}"
+host="$SEVERINO_HQ_DEPLOY_HOST"
 # The reference reaches a remote shell, so it may hold only what one can.
 image="${usage_image:?}"
 case "$image" in
