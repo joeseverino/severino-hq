@@ -28,6 +28,7 @@ import contextlib
 import faulthandler
 import gc
 import io
+import json
 import logging
 import multiprocessing
 import os
@@ -40,6 +41,7 @@ import time
 import traceback
 import unittest
 import unittest.util
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import override
 
@@ -154,6 +156,58 @@ class _LogsOnFailure:
         if err is not None:
             _held_logs.replay(subtest)
         return super().addSubTest(test, subtest, err)
+
+
+# A gate names a folder here, and the run writes each test that failed into
+# it, for the gate's closing line. tools/gate/verdict.py, which runs without
+# the host, names it too; GateVerdictTests runs this record under a gate.
+REPORTS = "HQ_TEST_REPORTS"
+
+
+@dataclass(frozen=True)
+class FailedTest:
+    """A test that failed or errored: its id, the exception's first line, and the traceback the run printed."""
+
+    test: str
+    exception: str
+    traceback: str
+
+
+class FailureRecord:
+    """Each failed test as the result is told of it, a parallel worker's
+    replayed in the parent with its traceback (tblib). A test whose subtests
+    fail is recorded once, by its first."""
+
+    def addError(self, test, err):
+        super().addError(test, err)
+        self._record(test, err, self.errors)
+
+    def addFailure(self, test, err):
+        super().addFailure(test, err)
+        self._record(test, err, self.failures)
+
+    def addSubTest(self, test, subtest, err):
+        super().addSubTest(test, subtest, err)
+        if err is not None:
+            self._record(test, err, self.failures if issubclass(err[0], test.failureException) else self.errors)
+
+    def addUnexpectedSuccess(self, test):
+        super().addUnexpectedSuccess(test)
+        vars(self).setdefault("failed", {}).setdefault(test.id(), FailedTest(test.id(), "unexpected success", ""))
+
+    def _record(self, test, err, printed) -> None:
+        exception = "".join(traceback.format_exception_only(err[0], err[1])).partition("\n")[0]
+        # unittest has just added the traceback it prints, as this test's last entry.
+        vars(self).setdefault("failed", {}).setdefault(test.id(), FailedTest(test.id(), exception, printed[-1][1]))
+
+
+def write_failures(result) -> None:
+    """Write the run's failed tests where the gate running it reads them, when one does."""
+
+    folder = os.environ.get(REPORTS)
+    failed = list(vars(result).get("failed", {}).values())
+    if folder and failed:
+        Path(folder, f"{os.getpid()}.json").write_text(json.dumps([asdict(each) for each in failed]))
 
 
 class _ClassTimes:
@@ -410,7 +464,9 @@ class _StallMarks:
         return super().addSubTest(test, subtest, err)
 
 
-class CompositionTextResult(_StallMarks, _LogsOnFailure, _CompositionIsolation, _ClassTimes, unittest.TextTestResult):
+class CompositionTextResult(
+    FailureRecord, _StallMarks, _LogsOnFailure, _CompositionIsolation, _ClassTimes, unittest.TextTestResult
+):
     def printErrors(self):
         block_on_output()
         super().printErrors()
@@ -669,6 +725,7 @@ class SeverinoTestRunner(DiscoverRunner):
             stopped.add_note("Or a worker exited on a test that did not stop when interrupted: see its stall report.")
             raise
         report_class_times(result, sys.stderr, began_load)
+        write_failures(result)
         return result
 
     def setup_databases(self, **kwargs):

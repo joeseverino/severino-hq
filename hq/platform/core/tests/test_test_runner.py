@@ -2,6 +2,7 @@
 
 import contextlib
 import io
+import json
 import multiprocessing
 import os
 import pickle
@@ -11,6 +12,7 @@ import tempfile
 import threading
 import unittest
 import unittest.mock
+from dataclasses import asdict
 from pathlib import Path
 from typing import override
 
@@ -20,6 +22,7 @@ from hq.config.sandbox import sweep_abandoned
 from hq.platform.core.test_runner import (
     BROWSER_TESTS,
     DEFAULT_STALL_SECONDS,
+    REPORTS,
     SOURCE,
     STALL_SECONDS,
     ClassTimedSuite,
@@ -159,6 +162,86 @@ class ClassTimeTests(SimpleTestCase):
         said = stream.getvalue()
         self.assertIn("load average", said)
         self.assertLess(said.index("example.Slow"), said.index("example.Quick"))
+
+
+def _failing_class():
+    """A failure, an error, a test whose subtests fail, and a pass."""
+
+    class Failing(unittest.TestCase):
+        def test_compares(self):
+            self.assertEqual("expected", "found")
+
+        def test_raises(self):
+            raise LookupError("no example.invalid record")
+
+        def test_subtests(self):
+            for n in range(2):
+                with self.subTest(n=n):
+                    self.assertEqual(n, -1)
+
+        def test_passes(self):
+            pass
+
+    return Failing
+
+
+class FailureRecordTests(SimpleTestCase):
+    """Each failed test reaches the gate running the suite as the result saw
+    it, whether it ran here or in a parallel worker."""
+
+    def run_failing(self, result, subtests=True):
+        tests = list(unittest.defaultTestLoader.loadTestsFromTestCase(_failing_class()))
+        tests = [test for test in tests if subtests or test._testMethodName != "test_subtests"]
+        unittest.TestSuite(tests).run(result)
+        return tests
+
+    def assert_recorded(self, result, subtests=True):
+        failed = {each.test.rsplit(".", 1)[-1]: each for each in vars(result)["failed"].values()}
+        self.assertEqual(set(failed), {"test_compares", "test_raises", *(["test_subtests"] if subtests else [])})
+        self.assertEqual(failed["test_compares"].exception, "AssertionError: 'expected' != 'found'")
+        self.assertEqual(failed["test_raises"].exception, "LookupError: no example.invalid record")
+        self.assertIn('raise LookupError("no example.invalid record")', failed["test_raises"].traceback)
+        if subtests:
+            self.assertEqual(failed["test_subtests"].exception, "AssertionError: 0 != -1")
+
+    def test_a_serial_run_records_each_failed_test_once(self):
+        result = CompositionTextResult(io.StringIO(), True, 0)
+        self.run_failing(result)
+
+        self.assert_recorded(result)
+
+    def test_a_workers_failures_reach_the_parent_with_their_tracebacks(self):
+        # A worker pickles a failed subtest's test, which a class local to a
+        # function cannot be; the parent records a subtest as a serial run does.
+        worker = CompositionRemoteResult()
+        tests = self.run_failing(worker, subtests=False)
+
+        parent = CompositionTextResult(io.StringIO(), True, 0)
+        for event in pickle.loads(pickle.dumps(worker.events)):
+            FileClonedParallelSuite.handle_event(None, parent, tests, event)
+        self.assert_recorded(parent, subtests=False)
+
+    def run_suite(self, folder: str | None):
+        suite = unittest.defaultTestLoader.loadTestsFromTestCase(_failing_class())
+        with unittest.mock.patch.dict(os.environ), contextlib.redirect_stderr(io.StringIO()):
+            os.environ.pop(REPORTS, None)
+            if folder:
+                os.environ[REPORTS] = folder
+            return SeverinoTestRunner(verbosity=0).run_suite(suite)
+
+    def test_the_run_writes_them_where_its_gate_reads_them(self):
+        with tempfile.TemporaryDirectory() as folder:
+            result = self.run_suite(folder)
+
+            written = [json.loads(path.read_text()) for path in Path(folder).iterdir()]
+        self.assertEqual(written, [[asdict(each) for each in vars(result)["failed"].values()]])
+        self.assert_recorded(result)
+
+    def test_a_run_no_gate_runs_writes_nothing(self):
+        with unittest.mock.patch.object(Path, "write_text") as write:
+            self.run_suite(None)
+
+        write.assert_not_called()
 
 
 class _Marks(StallWatch):
