@@ -46,8 +46,12 @@ min-content and at max-content, measured on an offscreen copy of the table;
 a table an open row holds says it is drawn at the held widths, and its
 min and max are measured without the hold.
 `--eval <file.js>` runs the script in that file on each page at each width,
-once it is drawn as asked, and prints what it returns: a function, called with
-nothing, or an expression.
+once it is drawn as asked and before its screenshot, and prints what it
+returns: a function, called with nothing, or an expression.
+`--dialog <id>` (or `all`) opens each dialog the way a reader does, by
+pressing a control that opens it, waits for its parts to load, and shoots the
+window with it open (`<page>-<width>.dialog-<id>.png`); `--eval` and the rule
+run again there.
 `--rule tables` records what each table shows (its columns, the rows that
 open, the gutter, the sort controls) beside each screenshot, for comparing
 two runs.
@@ -91,6 +95,7 @@ from hq.platform.core.tests.look_report import (
     closing,
     unmatched,
 )
+from hq.platform.core.tests.look_tables import COLUMNS, TABLES, columns_line
 from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
 
@@ -99,7 +104,7 @@ OUT = Path(settings.BASE_DIR) / "var" / "look"
 # finding is new for what the change drew rather than for how it was judged:
 # this module and its report, and the rules and probes the survey holds.
 LENS = (
-    *(Path(__file__).resolve().with_name(name) for name in ("look.py", "look_report.py")),
+    *(Path(__file__).resolve().with_name(name) for name in ("look.py", "look_report.py", "look_tables.py")),
     AUDIT.resolve(),
     *sorted((Path(__file__).resolve().parent / "browser").rglob("*.py")),
 )
@@ -108,15 +113,6 @@ LENS = (
 REPORT = Path(settings.BASE_DIR) / "var" / "gate" / "look.txt"
 REFERENCE_PAGES = (REFERENCE, REFERENCE_DARK)
 ESTATE = "estate"
-# A heading's words as a reader hears them, without the marks beside them.
-NAME = r"""
-  const name = (el) => {
-    if (!el) return '';
-    const copy = el.cloneNode(true);
-    copy.querySelectorAll('[aria-hidden=true]').forEach((mark) => mark.remove());
-    return copy.textContent.trim().replace(/\s+/g, ' ');
-  };
-"""
 
 # Request headers the browser sends that are not the view's to read. The
 # answer goes back with its type alone, so it is never asked to be compressed.
@@ -163,149 +159,51 @@ _ANSWERED = "(busy) => [...document.querySelectorAll(busy)].every((region) => re
 _OPEN_ROUNDS = 10
 _EXTENT = "() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]"
 
-# Each table as a reader finds it: which columns show, which are gone and
-# whether for being blank or for want of room, which rows offer to open and
-# have the gutter for it, the sort controls, and what each open row lists.
-_TABLES = (
-    "() => {"
-    + NAME
-    + r"""
-  const blank = (cell) => !cell || (/^[\s\u2013\u2014-]*$/.test(cell.textContent)
-    && !cell.querySelector(':not(.empty-value, .empty-value *, br)'));
-  const seen = (el) => el.checkVisibility();
-  const pad = (el) => Math.round(parseFloat(getComputedStyle(el).paddingInlineStart));
-  const tally = (values) => {
-    const counts = new Map();
-    values.forEach((value) => counts.set(value, (counts.get(value) || 0) + 1));
-    return [...counts].map(([value, count]) => (count > 1 ? `${value} x${count}` : value)).join('; ');
-  };
-  const out = [];
-  document.querySelectorAll('main table').forEach((table, index) => {
-    if (!seen(table)) return;
-    const region = table.closest('.table-scroll');
-    const label = region?.getAttribute('aria-label') || table.caption?.textContent.trim() || '';
-    const rows = [...table.querySelectorAll(':scope > tbody > tr:not([data-row-detail])')].filter(seen);
-    const records = rows.filter((row) => !row.classList.contains('row-group'));
-    const headings = [...(table.tHead?.rows[table.tHead.rows.length - 1]?.cells || [])];
-    const columns = headings.map((heading, column) => {
-      const said = name(heading) || '(unnamed)';
-      if (seen(heading)) return said;
-      const full = records.filter((row) => row.cells.length === headings.length);
-      return (full.length && full.every((row) => blank(row.cells[column])) ? '~' : '-') + said;
-    });
-    const toggles = records.filter((row) => [...row.querySelectorAll('[data-row-toggle]')].some(seen));
-    // The column a shown toggle stands in, else the one that names the row:
-    // the gutter is its inset.
-    const shown = toggles.map((row) => [...row.querySelectorAll('[data-row-toggle]')].find(seen)?.closest('td, th')).find(Boolean);
-    const column = shown ? shown.cellIndex
-      : Math.max(0, headings.findIndex((heading) => !heading.classList.contains('select-column') && !heading.querySelector('input[type=checkbox]')));
-    const gutter = records.map((row) => row.cells[column]).filter(Boolean).map(pad);
-    const headingPad = headings[column] ? pad(headings[column]) : '-';
-    const at = (rows) => (rows.length === records.length ? 'every row' : rows.length ? rows.map((row) => records.indexOf(row) + 1).join(',') : 'none');
-    const open = [...table.querySelectorAll(':scope > tbody > tr[data-row-detail]')].map(
-      (detail) => [...detail.querySelectorAll('.row-columns > dt')].map((term) => term.textContent.trim()).join(', ') || '(below only)',
-    );
-    const r = region?.getBoundingClientRect();
-    const lines = [
-      `[${index + 1}] ${label}${region ? ` region ${Math.round(r.width)}` : ''} table ${Math.round(table.getBoundingClientRect().width)}`
-        + `${region?.classList.contains('is-pane') ? ' pane' : ''}`
-        + ` cap ${getComputedStyle(table).getPropertyValue('--identifier-max').trim()}`,
-      `  columns: ${columns.join(' | ') || '(no headings)'}`,
-      `  widths: ${headings.filter(seen).map((heading) => Math.round(heading.getBoundingClientRect().width)).join(' ')}`,
-      `  rows ${records.length}; toggles: ${at(toggles)}; sort ${[...table.querySelectorAll(':scope > thead .table-sort-link')].filter(seen).length}`,
-      `  inset of the toggle column: heading ${headingPad}; cells ${tally(gutter) || '-'}`,
-    ];
-    if (open.length) lines.push(`  open: ${tally(open)}`);
-    out.push(lines.join('\n'));
-  });
-  return out.join('\n');
-}"""
-)
-
-
-# Each shown table's columns: the width each is drawn at, and the widths it
-# would take at min-content and at max-content, read from copies laid out
-# beside the table (so its container and cascade are the table's own), off
-# screen and removed at once. The drawn table is never restyled.
-_COLUMNS = (
-    "() => {"
-    + NAME
-    + r"""
-  const across = (table) => [...((table.tHead?.rows[table.tHead.rows.length - 1] || table.rows[0])?.cells || [])];
-  const width = (el) => Math.round(el.getBoundingClientRect().width);
-  const laidOut = (table, size) => {
-    const copy = table.cloneNode(true);
-    copy.setAttribute('aria-hidden', 'true');
-    copy.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
-    // Let go of what an open row holds (tables.js), so the copy is sized by
-    // its content.
-    copy.querySelectorAll(':scope > thead > tr > th').forEach((heading) => heading.style.removeProperty('width'));
-    delete copy.dataset.rowsHeld;
-    const style = {
-      position: 'absolute', 'inset-inline-start': '-100000px', 'inset-block-start': '0', visibility: 'hidden',
-      'table-layout': 'auto', 'inline-size': size, 'min-inline-size': '0', 'max-inline-size': 'none',
-    };
-    Object.entries(style).forEach(([property, value]) => copy.style.setProperty(property, value, 'important'));
-    table.after(copy);
-    try {
-      return { table: width(copy), cells: across(copy).map(width) };
-    } finally {
-      copy.remove();
+# Every dialog the page declares, by the id after `modal-` (partials/_modal.html).
+_DIALOGS = """() => [...document.querySelectorAll('dialog.modal[id^="modal-"]')].map((dialog) => dialog.id.slice(6))"""
+# The controls that open a dialog: a link the page's wiring intercepts, or a
+# control that says it opens a dialog and names it.
+_OPENERS = '[data-modal-open="{id}"], [aria-haspopup="dialog"][aria-controls="modal-{id}"]'
+# Which of a dialog's openers a reader can press, as its place among them: one
+# shown, or one inside closed menus they open first, by their summaries. The
+# menus opened are kept to close once the dialog is done; -1 for none.
+_REACH = """(openers) => {
+  window.lookReached = [];
+  const all = [...document.querySelectorAll(openers)];
+  const shown = all.findIndex((opener) => opener.checkVisibility());
+  if (shown >= 0) return shown;
+  for (const [place, opener] of all.entries()) {
+    const closed = [];
+    for (let menu = opener.closest('details:not([open])'); menu; menu = menu.parentElement.closest('details:not([open])')) {
+      closed.unshift(menu);
     }
-  };
-  const shown = [...document.querySelectorAll('main table')].map((table, index) => ({ table, index }))
-    .filter(({ table }) => table.checkVisibility());
-  return shown.map(({ table, index }) => {
-    const region = table.closest('.table-scroll');
-    const least = laidOut(table, 'min-content');
-    const most = laidOut(table, 'max-content');
-    return {
-      index: index + 1,
-      label: region?.getAttribute('aria-label') || table.caption?.textContent.trim() || '',
-      region: region ? width(region) : null,
-      drawn: width(table),
-      // An open row holds the columns at the widths they had (tables.js).
-      held: 'rowsHeld' in table.dataset,
-      min: least.table,
-      max: most.table,
-      columns: across(table).map((cell, column) => ({
-        name: name(cell) || '(unnamed)',
-        shown: cell.checkVisibility(),
-        drawn: width(cell),
-        min: least.cells[column],
-        max: most.cells[column],
-      })),
-    };
-  });
+    const opened = [];
+    for (const menu of closed) {
+      const summary = menu.querySelector(':scope > summary');
+      if (!summary?.checkVisibility()) break;
+      summary.click();
+      opened.push(summary);
+    }
+    if (opened.length && opener.checkVisibility()) {
+      window.lookReached = opened;
+      return place;
+    }
+    opened.reverse().forEach((summary) => summary.click());
+  }
+  return -1;
 }"""
+_LEAVE = "() => window.lookReached.reverse().forEach((summary) => summary.closest('details').open && summary.click())"
+# The dialog open, and no region in it waiting on its answer.
+_DIALOG_READY = """([id, busy]) => {
+  const dialog = document.getElementById(`modal-${id}`);
+  return dialog.open && !dialog.querySelector(busy);
+}"""
+_DIALOG_CLOSED = "(id) => !document.getElementById(`modal-${id}`).open"
+# How far a dialog scrolls within itself, and a place to scroll it to.
+_DIALOG_EXTENT = (
+    "(id) => { const d = document.getElementById(`modal-${id}`); return [d.scrollHeight, d.clientHeight]; }"
 )
-
-
-def _columns(page: str, width: int, table: dict) -> str:
-    """One table's columns on one line: each drawn width, and the widths it
-    would take at min-content and at max-content; a column the table does not
-    show is named as gone. A table an open row holds says that it is drawn
-    at the held widths, which its min and max are not."""
-
-    label = f' "{table["label"]}"' if table["label"] else ""
-    region = f" in {table['region']}" if table["region"] is not None else ""
-    held = (
-        "; held by an open row: drawn at the widths it had before, min and max measured without the hold"
-        if table["held"]
-        else ""
-    )
-    head = (
-        f"{page} table {table['index']}{label} at {width}"
-        f" (drawn {table['drawn']}{region}; min {table['min']}, max {table['max']}{held})"
-    )
-    columns = [
-        f"{column['name']} {column['drawn']} (min {column['min']}, max {column['max']})"
-        if column["shown"]
-        else f"{column['name']} gone"
-        for column in table["columns"]
-    ]
-    return f"{head}: {' · '.join(columns) or '(no headings)'}"
-
+_DIALOG_SCROLL = "([id, top]) => { document.getElementById(`modal-${id}`).scrollTop = top; }"
 
 # The task's one required argument: mise exports it on every run of the task,
 # so a process without it was not started by the task.
@@ -497,8 +395,9 @@ def _address(url: str) -> str:
     return parts.path + (f"?{parts.query}" if parts.query else "")
 
 
-def _shot(name: str, width: int) -> Path:
-    return OUT / f"{re.sub(r'[^A-Za-z0-9._-]+', '-', name).strip('-')}-{width}.png"
+def _shot(name: str, width: int, dialog: str = "") -> Path:
+    shot = OUT / f"{re.sub(r'[^A-Za-z0-9._-]+', '-', name).strip('-')}-{width}.png"
+    return shot.with_name(f"{shot.stem}.dialog-{dialog}.png") if dialog else shot
 
 
 class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
@@ -697,6 +596,9 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.assertTrue(not rule or callable(getattr(self, rule, None)), f"No rule named {rule!r}")
         self.css = _css(_usage("usage_css"))
         self.script = _script(_usage("usage_eval"))
+        self.dialogs = _listed("usage_dialog")
+        unnamed = [dialog for dialog in self.dialogs if not re.fullmatch(r"[\w-]+", dialog)]
+        self.assertFalse(unnamed, f"--dialog takes dialog ids (connection) or all, not {unnamed}")
         return widths, rule
 
     def look(self, name, width, rule) -> list[str]:
@@ -706,18 +608,17 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if refused := self.refused(name, width):
             return self.shoot_failure(name, width, refused)
         self.draw_as_asked(name, width)
+        # Before the shot, so what a script changes is seen.
+        if self.script:
+            self.evaluate_script(name, width)
         self.screenshot(name, width)
         if _usage("usage_columns"):
             self.measure_columns(name, width)
-        if self.script:
-            self.evaluate_script(name, width)
-        if not rule:
-            return []
         self.width = width
-        said = self.judged(name, width, rule)
-        if _usage("usage_open"):
+        said = self.judged(name, width, rule) if rule else []
+        if rule and _usage("usage_open"):
             said += self.with_each_popover(name, width, rule, said)
-        return said
+        return said + self.with_each_dialog(name, width, rule, said)
 
     def judged(self, name, width, rule) -> list[str]:
         """What ``rule`` finds on the page as it stands."""
@@ -745,6 +646,86 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             self.page.evaluate(_HIDE_POPOVER, place)
             found += [f"with {shown} shown: {line}" for line in unmatched(said, beneath)]
         return found
+
+    def with_each_dialog(self, name, width, rule, beneath) -> list[str]:
+        """Each dialog ``--dialog`` names, or every one the page declares for
+        ``all``, opened as a reader opens it and shot
+        (``<page>-<width>.dialog-<id>.png``), with ``--eval`` run and what
+        ``rule`` finds past what it finds on the page ``beneath``."""
+
+        asked = self.dialogs
+        if not asked:
+            return []
+        declared = self.page.evaluate(_DIALOGS)
+        found = []
+        for dialog in declared if asked == ["all"] else asked:
+            if dialog not in declared:
+                print(
+                    f"{name} at {width}: no dialog {dialog!r}; it declares {', '.join(declared) or 'none'}", flush=True
+                )
+                continue
+            if not self.open_dialog(name, width, dialog):
+                continue
+            self.shoot_dialog(name, width, dialog)
+            if self.script:
+                self.evaluate_script(name, width, dialog)
+            if rule:
+                said = self.judged(name, width, rule)
+                found += [f"with #modal-{dialog} open: {line}" for line in unmatched(said, beneath)]
+            self.close_dialog(dialog)
+        return found
+
+    def open_dialog(self, name, width, dialog) -> bool:
+        """``dialog`` opened by pressing a control that opens it, after the
+        menus that hold it, and its parts loaded; with ``--open``, every
+        disclosure in it open too. The page's own wiring opens it, so that is
+        looked at as well. Whether it opened."""
+
+        openers = _OPENERS.format(id=dialog)
+        place = self.page.evaluate(_REACH, openers)
+        if place < 0:
+            print(f"{name} at {width}: no control a reader can reach opens dialog {dialog!r}", flush=True)
+            return False
+        self.page.locator(openers).nth(place).click()
+        try:
+            self.page.wait_for_function(_DIALOG_READY, arg=[dialog, _BUSY])
+        except BrowserError as waited:
+            print(
+                f"{name} at {width}: dialog {dialog!r} did not open loaded ({str(waited).splitlines()[0]})", flush=True
+            )
+            self.close_dialog(dialog)
+            return False
+        self.settle()
+        if _usage("usage_open"):
+            self.open_everything(name, width)
+        return True
+
+    def shoot_dialog(self, name, width, dialog):
+        """The window with ``dialog`` open and, when it scrolls within itself,
+        the same scrolled down a band at a time, overlapping so a sticky head
+        hides nothing (``.band-01.png``)."""
+
+        shot = _shot(name, width, dialog)
+        for stale in OUT.glob(f"{shot.stem}.band-*.png"):
+            stale.unlink()
+        self.page.screenshot(path=shot, animations="disabled")
+        tall, band = self.page.evaluate(_DIALOG_EXTENT, dialog)
+        if tall <= band:
+            return
+        for number, top in enumerate([*range(0, tall - band, band * 3 // 4), tall - band], start=1):
+            self.page.evaluate(_DIALOG_SCROLL, [dialog, top])
+            self.page.screenshot(path=shot.with_name(f"{shot.stem}.band-{number:02}.png"), animations="disabled")
+        self.page.evaluate(_DIALOG_SCROLL, [dialog, 0])
+
+    def close_dialog(self, dialog):
+        """``dialog`` closed with Escape, and the menus opened to reach it
+        closed again, so the next is opened from the page as it was."""
+
+        if not self.page.evaluate(_DIALOG_CLOSED, dialog):
+            self.page.keyboard.press("Escape")
+            self.page.wait_for_function(_DIALOG_CLOSED, arg=dialog)
+        self.page.evaluate(_LEAVE)
+        self.settle()
 
     def refused(self, name, width) -> str:
         """Why ``name`` at ``width`` is not a page to look at, if it is not."""
@@ -836,26 +817,29 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         screenshot (``.columns.txt``): why a column is starved or a table
         overflows, in numbers."""
 
-        said = "\n".join(_columns(name, width, table) for table in self.page.evaluate(_COLUMNS))
+        said = "\n".join(columns_line(name, width, table) for table in self.page.evaluate(COLUMNS))
         said = said or f"{name} at {width}: (no tables)"
         shot = _shot(name, width)
         shot.with_name(shot.stem + ".columns.txt").write_text(said + "\n", encoding="utf-8")
         self.measured.setdefault((name, width), {})["columns"] = said
         print(self.beside_base(name, width, "columns", said), flush=True)
 
-    def evaluate_script(self, name, width):
-        """What ``--eval``'s script returns here, printed and kept beside the
-        screenshot (``.eval.txt``): a computed style or an ancestor chain read
-        in one command. One that throws says so and the look goes on."""
+    def evaluate_script(self, name, width, dialog=""):
+        """What ``--eval``'s script returns here, with ``dialog`` open if one
+        is named, printed and kept beside its screenshot (``.eval.txt``): a
+        computed style or an ancestor chain read in one command. One that
+        throws says so and the look goes on."""
 
+        where = f"{name} with #modal-{dialog} open" if dialog else name
         try:
-            said = _evaluated(name, width, self.page.evaluate(self.script))
+            said = _evaluated(where, width, self.page.evaluate(self.script))
         except BrowserError as threw:
-            said = f"{name} at {width}: --eval threw ({str(threw).splitlines()[0]})"
-        shot = _shot(name, width)
+            said = f"{where} at {width}: --eval threw ({str(threw).splitlines()[0]})"
+        shot = _shot(name, width, dialog)
         shot.with_name(shot.stem + ".eval.txt").write_text(said + "\n", encoding="utf-8")
-        self.measured.setdefault((name, width), {})["eval"] = said
-        print(self.beside_base(name, width, "eval", said), flush=True)
+        kind = f"eval dialog-{dialog}" if dialog else "eval"
+        self.measured.setdefault((name, width), {})[kind] = said
+        print(self.beside_base(name, width, kind, said), flush=True)
 
     def tables(self, name):
         """What each table shows here, printed and kept beside the screenshot
@@ -863,7 +847,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         check: it fails nothing."""
 
         said = f"{name} at {self.width}{' expanded' if _usage('usage_expand') else ''}\n"
-        said += self.page.evaluate(_TABLES) or "(no tables)"
+        said += self.page.evaluate(TABLES) or "(no tables)"
         suffix = "-expanded.tables.txt" if _usage("usage_expand") else ".tables.txt"
         shot = _shot(name, self.width)
         shot.with_name(shot.stem + suffix).write_text(said + "\n", encoding="utf-8")

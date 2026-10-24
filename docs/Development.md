@@ -316,7 +316,12 @@ a measure taken out, so one whose row number moved, whose overflow grew by a
 few pixels, or that names another record is neither new nor fixed, and one grown many times over is new. With `--columns` or `--eval`, each line the
 base measured otherwise is printed under this checkout's, marked with the ref.
 `--css` takes CSS text or a file of it, a relative path read from the
-checkout.
+checkout. `--eval` runs before the screenshot, so what a script changes is
+seen. `--dialog <id>` (`connection`, or `all` for every dialog a page
+declares) also shoots each page with that dialog open
+(`<page>-<width>.dialog-<id>.png`): it presses a control that opens it, after
+any menu holding that control, so the page's own wiring opens it, and waits
+for its parts to load; `--eval` and the rule run again there.
 
 `mise run perf:report [--image] [--base <ref>]` measures how light and fast
 HQ is, page by page (server time and queries, bytes, requests, script time and

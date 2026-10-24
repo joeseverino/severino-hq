@@ -1,6 +1,6 @@
 """dev:look reads what it was asked only from its task, reads --css as a file
-from the checkout, reports page by page, and compares against a base in a
-worktree it always removes."""
+from the checkout, reports page by page, shoots a dialog open as a reader
+opens it, and compares against a base in a worktree it always removes."""
 
 import os
 import subprocess
@@ -10,7 +10,7 @@ from unittest import mock
 
 from django.test import SimpleTestCase, override_settings, tag
 
-from . import look, look_report
+from . import look, look_report, look_tables
 
 ASKED = {"usage_pages": "example"}
 
@@ -119,6 +119,127 @@ class PopoverTests(SimpleTestCase):
             ["with #origin-one shown: cut: a key in origin-one", "with #origin-two shown: cut: a key in origin-two"],
         )
         self.assertEqual(page.shown, set())
+
+
+class _Dialogs:
+    """A page's dialogs as the look's scripts and presses reach them: the
+    connection dialog's control sits in a closed menu, and its region loads
+    only once the dialog is open and the page has had a turn. What each
+    screenshot showed is kept, as the page stood when it was taken."""
+
+    def __init__(self, ids, in_menu=()):
+        self.open = dict.fromkeys(ids, False)
+        self.loaded = dict.fromkeys(ids, False)
+        self.in_menu, self.menu_open, self.shots = set(in_menu), False, []
+        self.keyboard = self
+
+    def named(self, openers):
+        return next(dialog for dialog in self.open if look._OPENERS.format(id=dialog) == openers)
+
+    def evaluate(self, script, arg=None):
+        if script == look._DIALOGS:
+            return list(self.open)
+        if script == look._REACH:
+            if self.named(arg) in self.in_menu:
+                self.menu_open = True
+            return 0
+        if script == look._DIALOG_CLOSED:
+            return not self.open[arg]
+        if script == look._DIALOG_EXTENT:
+            return [600, 600]
+        if script == look._LEAVE:
+            self.menu_open = False
+            return None
+        raise AssertionError(f"a script this page does not know: {script[:40]}")
+
+    def locator(self, openers):
+        dialog = self.named(openers)
+        page = self
+
+        class Opener:
+            def nth(self, _place):
+                return self
+
+            def click(self):
+                if dialog in page.in_menu and not page.menu_open:
+                    raise AssertionError(f"pressed the control for {dialog} inside a closed menu")
+                page.open[dialog] = True
+
+        return Opener()
+
+    def wait_for_function(self, script, arg):
+        # The page's turn: an open dialog's region answers.
+        self.loaded |= {dialog: True for dialog, shown in self.open.items() if shown}
+        dialog = arg[0] if script == look._DIALOG_READY else arg
+        held = self.open[dialog] and self.loaded[dialog] if script == look._DIALOG_READY else not self.open[dialog]
+        if not held:
+            raise AssertionError(f"waited for {dialog} forever")
+
+    def press(self, key):
+        if key == "Escape":
+            self.open = dict.fromkeys(self.open, False)
+            self.loaded = dict.fromkeys(self.loaded, False)
+
+    def screenshot(self, path, animations):
+        shown = [dialog for dialog, state in self.open.items() if state]
+        self.shots.append((path.name, shown, [self.loaded[dialog] for dialog in shown], self.menu_open))
+
+
+class _Opener:
+    """The look's walk over dialogs, with a rule that finds a box on the page
+    beneath and one inside each dialog open."""
+
+    with_each_dialog = look.Look.with_each_dialog
+    open_dialog = look.Look.open_dialog
+    shoot_dialog = look.Look.shoot_dialog
+    close_dialog = look.Look.close_dialog
+    script = ""
+
+    def __init__(self, page, dialogs):
+        self.page, self.dialogs = page, dialogs
+
+    def settle(self):
+        pass
+
+    def judged(self, _name, _width, _rule):
+        return ["frames: a box beneath"] + [f"cut: a key in {d}" for d, shown in self.page.open.items() if shown]
+
+
+@tag("source")
+class DialogTests(SimpleTestCase):
+    def look(self, page, dialogs, rule="survey"):
+        with (
+            tempfile.TemporaryDirectory() as out,
+            mock.patch.object(look, "OUT", Path(out)),
+            mock.patch.dict(os.environ, ASKED),
+        ):
+            return _Opener(page, dialogs).with_each_dialog("estate", 402, rule, ["frames: a box beneath"])
+
+    def test_a_dialog_named_is_shot_open_with_its_parts_loaded_by_pressing_the_control_in_its_menu(self):
+        page = _Dialogs(["connection", "whatif"], in_menu=["connection"])
+        found = self.look(page, ["connection"])
+        self.assertEqual(page.shots, [("estate-402.dialog-connection.png", ["connection"], [True], True)])
+        self.assertEqual(found, ["with #modal-connection open: cut: a key in connection"])
+        # Left as it was found, so the next dialog opens from the page.
+        self.assertEqual((page.open, page.menu_open), ({"connection": False, "whatif": False}, False))
+
+    def test_all_shoots_every_dialog_the_page_declares_each_on_its_own(self):
+        page = _Dialogs(["connection", "whatif"], in_menu=["connection"])
+        self.look(page, ["all"], rule="")
+        self.assertEqual(
+            page.shots,
+            [
+                ("estate-402.dialog-connection.png", ["connection"], [True], True),
+                ("estate-402.dialog-whatif.png", ["whatif"], [True], False),
+            ],
+        )
+
+    def test_a_dialog_the_page_does_not_declare_is_said_and_not_shot(self):
+        page = _Dialogs(["connection"])
+        with mock.patch("builtins.print") as said:
+            self.assertEqual(self.look(page, ["example"]), [])
+        self.assertEqual(page.shots, [])
+        self.assertIn("connection", said.call_args.args[0])
 
 
 @tag("source")
@@ -275,7 +396,7 @@ class ReportTests(SimpleTestCase):
                 {"name": "Owner", "shown": False, "drawn": 0, "min": 0, "max": 0},
             ],
         }
-        line = look._columns("example/services", 1086, table)
+        line = look_tables.columns_line("example/services", 1086, table)
         self.assertNotIn("\n", line)
         head, columns = line.split(": ", 1)
         for fact in ("example/services", "table 2", "Example services", "1086", "1100", "610", "1720"):
@@ -283,7 +404,7 @@ class ReportTests(SimpleTestCase):
         self.assertEqual(
             columns.split(" · "), ["Name 312 (min 180, max 640)", "Status 96 (min 88, max 96)", "Owner gone"]
         )
-        unheld = look._columns("example/services", 402, {**table, "region": None, "label": ""})
+        unheld = look_tables.columns_line("example/services", 402, {**table, "region": None, "label": ""})
         self.assertNotIn(" in ", unheld.split(": ", 1)[0])
         self.assertNotIn("held", line)
 
@@ -292,7 +413,7 @@ class ReportTests(SimpleTestCase):
             "index": 1, "label": "", "region": None, "drawn": 402, "held": True, "min": 402, "max": 402,
             "columns": [{"name": "Name", "shown": True, "drawn": 402, "min": 402, "max": 402}],
         }  # fmt: skip
-        head = look._columns("example/services", 402, table).split(": ", 1)[0]
+        head = look_tables.columns_line("example/services", 402, table).split(": ", 1)[0]
         self.assertIn("held by an open row", head)
 
     def test_findings_and_measures_survive_the_trip_from_the_base_run(self):
