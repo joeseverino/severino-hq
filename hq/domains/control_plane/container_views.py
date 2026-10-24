@@ -7,15 +7,7 @@ from django.views.generic import TemplateView
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.routes import reverse
 lazy from hq.platform.application.container_attention import needs_you
-lazy from hq.platform.application.containers import (
-    BEHIND,
-    CURRENT,
-    UP_TO_DATE,
-    UPDATE_AVAILABLE,
-    VULNERABLE,
-    containers,
-    standing_of,
-)
+lazy from hq.platform.application.containers import BEHIND, VULNERABLE, containers, standing_of, tally
 lazy from hq.platform.application.machines import container_context
 lazy from hq.platform.application.upgrades import plan_for, readiness_of
 
@@ -75,7 +67,6 @@ class ContainerListView(PageMixin, TemplateView):
         # internet may reach it.
         update_now = [group for group in needs if group["standing"].newer]
         no_update = [group for group in needs if not group["standing"].newer]
-        updates = [item.standing.update_state for item in found]
         need_sections = [
             (heading, listed)
             for heading, listed in (
@@ -92,20 +83,7 @@ class ContainerListView(PageMixin, TemplateView):
             need_heading=need_sections[0][0] if len(need_sections) == 1 else "To act on",
             need_running=sum(len(group["containers"]) for group in needs),
             machines=len({item.machine.name for item in found}),
-            vulnerable=sum(1 for group in groups.values() if group["standing"].state == VULNERABLE),
-            vulnerable_containers=sum(1 for item in found if item.standing.state == VULNERABLE),
-            behind=sum(1 for group in groups.values() if group["standing"].state == BEHIND),
-            # Only what a registry answered for is current; silence is not.
-            current=sum(1 for item in found if item.standing.state == CURRENT),
-            # Counted per container and apart from vulnerabilities, so the
-            # three add up to the containers listed.
-            update_available=updates.count(UPDATE_AVAILABLE),
-            up_to_date=updates.count(UP_TO_DATE),
-            update_unknown=len(found) - updates.count(UPDATE_AVAILABLE) - updates.count(UP_TO_DATE),
-            pinned=sum(1 for item in found if item.standing.pinned),
-            # Checked against its source's advisories or its packages against OSV.
-            matched=sum(1 for item in found if item.standing.checkable),
-            unchecked=sum(1 for item in found if not item.standing.checkable),
+            tally=tally(found),
             read_at=min(read) if read else None,
         )
         return context

@@ -11,21 +11,21 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
 {% if containers %}
   <div class="fact-band">
     {% band_fact icon="container" label="Running" %}
-      <strong>{{ containers|length }}</strong>
+      <strong>{{ tally.running|breakable }}</strong>
       <small>on {{ machines|counted:"machine" }}</small>
     {% endband_fact %}
-    {% band_fact icon="shield" label="Known vulnerabilities" %}
-      <strong>{% if vulnerable %}{{ vulnerable_containers|counted:"container" }}{% else %}None serious{% endif %}</strong>
-      <small>{% if vulnerable %}in {{ vulnerable|counted:"image" }}{% endif %}{% if matched < containers|length %}{% if vulnerable %} · {% endif %}{{ unchecked|breakable }} of {{ containers|length }} cannot be checked{% endif %}</small>
-    {% tone %}{% if vulnerable %}serious{% else %}good{% endif %}{% endband_fact %}
-    {% band_fact icon="deploy" label="Updates" %}
-      <strong>{% if update_available %}{{ update_available|counted:"has an update,have an update" }}{% elif up_to_date == containers|length %}All up to date{% elif up_to_date %}{{ up_to_date|breakable }} of {{ containers|length }} up to date{% else %}Unknown{% endif %}</strong>
-      <small>{% if update_available and up_to_date %}{{ up_to_date|breakable }} up to date{% if update_unknown %}, {% endif %}{% endif %}{% if update_unknown and up_to_date != containers|length %}{{ update_unknown|breakable }} unknown{% endif %}{% if update_available or update_unknown %} · {% endif %}{% include "partials/_reading_age.html" with at=read_at only %}</small>
-    {% tone %}{% if update_available %}attention{% elif up_to_date == containers|length %}good{% endif %}{% endband_fact %}
-    {% band_fact icon="lock" label="Locked to an exact build" %}
-      <strong>{{ pinned|breakable }} of {{ containers|length }}</strong>
-      <small>{% if pinned == containers|length %}None change on a pull.{% else %}The rest run a tag, which can point at a different build on the next pull.{% endif %}</small>
-    {% tone %}{% if pinned == containers|length %}good{% endif %}{% endband_fact %}
+    {% band_fact icon="shield" label="Known vulnerabilities" tone=tally.vulnerable_tone %}
+      <strong>{% if tally.vulnerable %}{{ tally.vulnerable|counted:"container" }}{% else %}None serious{% endif %}</strong>
+      <small>{% if tally.vulnerable %}in {{ tally.vulnerable_images|counted:"image" }}{% endif %}{% if tally.unchecked %}{% if tally.vulnerable %} · {% endif %}{{ tally.unchecked|breakable }} of {{ tally.running|breakable }} cannot be checked{% endif %}</small>
+    {% endband_fact %}
+    {% band_fact icon="deploy" label="Updates" tone=tally.updates_tone %}
+      <strong>{% if tally.update_available %}{{ tally.update_available|counted:"has an update,have an update" }}{% elif tally.up_to_date == tally.running %}All up to date{% elif tally.up_to_date %}{{ tally.up_to_date|breakable }} of {{ tally.running|breakable }} up to date{% else %}Unknown{% endif %}</strong>
+      <small>{% if tally.update_available and tally.up_to_date %}{{ tally.up_to_date|breakable }} up to date{% if tally.update_unknown %}, {% endif %}{% endif %}{% if tally.update_unknown and tally.up_to_date != tally.running %}{{ tally.update_unknown|breakable }} unknown{% endif %}{% if tally.update_available or tally.update_unknown %} · {% endif %}{% include "partials/_reading_age.html" with at=read_at only %}</small>
+    {% endband_fact %}
+    {% band_fact icon="lock" label="Locked to an exact build" tone=tally.pinned_tone %}
+      <strong>{{ tally.pinned|breakable }} of {{ tally.running|breakable }}</strong>
+      <small>{% if tally.pinned == tally.running %}None change on a pull.{% else %}The rest run a tag, which can point at a different build on the next pull.{% endif %}</small>
+    {% endband_fact %}
   </div>
 
   {% if need_sections %}

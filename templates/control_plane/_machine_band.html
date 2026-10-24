@@ -12,10 +12,10 @@ for: one band under the head, as a service's and HQ's own page open.
   {% endband_fact %}
   {% endif %}
   {% if machine.containers %}
-  {% band_fact icon="container" label="Containers" %}
+  {% band_fact icon="container" label="Containers" tone=container_counts.tone %}
     <strong>{{ machine.running|breakable }} of {{ machine.containers|length }} running</strong>
-    <small>{% if container_counts.vulnerable %}{{ container_counts.vulnerable|counted:"has known vulnerabilities,have known vulnerabilities" }} · {% endif %}{% if container_counts.update %}{{ container_counts.update|counted:"has an update,have an update" }}{% elif container_counts.up_to_date == standings|length %}All up to date{% elif container_counts.up_to_date %}{{ container_counts.up_to_date|breakable }} up to date{% else %}Updates not checked yet{% endif %}</small>
-  {% tone %}{% if container_counts.vulnerable or container_counts.stopped %}serious{% elif container_counts.update %}attention{% else %}good{% endif %}{% endband_fact %}
+    <small>{% if container_counts.vulnerable %}{{ container_counts.vulnerable|counted:"has known vulnerabilities,have known vulnerabilities" }} · {% endif %}{% if container_counts.update_available %}{{ container_counts.update_available|counted:"has an update,have an update" }}{% elif container_counts.up_to_date == standings|length %}All up to date{% elif container_counts.up_to_date %}{{ container_counts.up_to_date|breakable }} up to date{% else %}Updates not checked yet{% endif %}</small>
+  {% endband_fact %}
   {% endif %}
   {% if serves_links or machine.roles %}
   {% band_fact icon="globe" label="Serves" %}
