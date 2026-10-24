@@ -5,9 +5,9 @@ flowchart TB
     scratch["mise run dev:scratch<br/>loopback server · its own database"]
     look["mise run dev:look<br/>screenshots · the browser gates' rules"]
     fast["mise run fast BASE<br/>tests the change reaches · lint · types · drift"]
-    check["mise run check<br/>every Checks gate · the suite · composed"]
+    check["mise run check<br/>every gate CI runs · lint · test · browser · build · scan"]
     browser["mise run browser<br/>WebKit layout invariants"]
-    ci["CI<br/>the same aggregates, by name"]
+    ci["CI<br/>each job the task of its name"]
 
     worker -->|"reads"| contract
     worker -->|"loads"| rules

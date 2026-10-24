@@ -75,7 +75,7 @@ its source, with what breaks if that step fails.
 ## Verify it yourself
 
 ```sh
-mise run ci
+mise run check
 ```
 
 runs every gate CI runs, at the same pinned versions: lint, types, the suite,
@@ -94,7 +94,7 @@ Scorecard, and the image built and tested from inside.
   `hq-host deploy` requires:
   `cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '^https://github\.com/joeseverino/severino-hq/\.github/workflows/compose\.yml@refs/heads/main$' <image>`.
 - [Scorecard](https://github.com/joeseverino/severino-hq/actions/workflows/scorecard.yml)
-  and CI's CodeQL job publish to code scanning; the ruleset holds a merge on an alert.
+  and CI's scan job publish to code scanning; the ruleset holds a merge on an alert.
 
 ## Repository
 
@@ -109,7 +109,7 @@ deploy/        systemd units, tmpfiles rule, remote targets, host.json shape,
 composition/   the composed image
 policy/        the extension admission policy
 demo/          the static demo site built from HQ's own pages
-mise-tasks/    mise tasks: one TOML file per CI job, and their scripts
+mise-tasks/    mise tasks: one per CI job, its gates in a TOML file of its name, and their scripts
 tools/         development and CI programs, never in the image
 tests/         synthetic extension fixtures, the SDK consumer, property
                tests and shell suites
@@ -122,8 +122,8 @@ docs/          architecture, operations and guides
 mise install
 mise run dev:scratch      # a local server: fresh database, signed-in account, reload
 mise run fast             # what the change reaches
-mise run check            # every Checks gate, the tests, and the suite composed
-mise run preflight        # ready: every CI gate, the composed suite, the host
+mise run check            # every gate CI runs
+mise run check --release  # ready: every CI gate, the composed suite, the host
 ```
 
 Agents work in their own worktrees on `mise run dev:scratch` and pass the same

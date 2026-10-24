@@ -24,7 +24,7 @@ architecture test that names the one place the rule lives.
   inside the checkout; the config must have one simple top-level `output` scalar
   resolving to this file. That shows where the file came from; whether it is
   current is `controller/scripts/check.sh`, which regenerates every generated
-  file and fails on a diff, in CI and `mise run ci`. A marker alone never
+  file and fails on a diff, in CI and `mise run lint`. A marker alone never
   qualifies.
 * Python immutable metadata: a module-level undecorated function has no runtime
   arguments and exactly one return statement. Its returned tree contains only
@@ -75,7 +75,7 @@ loops over Nginx Proxy Manager's records stay gated too.
 
 The inspector is `controller/cmd/structural-inspector`, held by the
 controller's gate like the rest of its module, its own tests among them. The
-adversarial tests of the pairs are `mise run checks:source tools.structural`,
+adversarial tests of the pairs are `mise run lint:source tools.structural`,
 which builds it.
 
 ## Asking the graph
@@ -84,7 +84,7 @@ With the repository indexed in a code knowledge graph, ask:
 
 | Question | Query | Bar |
 | --- | --- | --- |
-| Did I re-implement something? | `mise run checks:structural`, which compares every fingerprint (`f.fp`) at the bar's threshold; the graph's `SIMILAR_TO` edges hold only the pairs at 95% | no new executable pair outside tests; the classifications above |
+| Did I re-implement something? | `mise run lint:structural`, which compares every fingerprint (`f.fp`) at the bar's threshold; the graph's `SIMILAR_TO` edges hold only the pairs at 95% | no new executable pair outside tests; the classifications above |
 | Hidden O(n²)? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.linear_scan_in_loop >= 1 RETURN f.qualified_name, f.linear_scan_in_loop` | every hit bounded by a fixed or small input |
 | Did I tangle the call graph? | `get_architecture(aspects: ["cycles"])` | no new confirmed cycle |
 

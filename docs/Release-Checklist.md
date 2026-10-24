@@ -5,16 +5,14 @@ only by a merged pull request.
 
 ## 1. Before pushing
 
-- [ ] `mise run check` passes, with `mise.local.toml` naming the extension set
-      so the composed pass runs.
+- [ ] `mise run check` passes.
 - [ ] A change to templates or CSS passes `mise run browser` and has been
       walked in a real browser through the workflow it serves.
 - [ ] A changed route, capability, SDK export or connection shape has its
-      derived files regenerated: `mise run regen`.
+      derived files regenerated: `mise run fix`.
 - [ ] A new constraint on a table that holds rows has passed
       `manage.py constraint_preflight --path <database>` against production
       data.
-- [ ] `mise run ci` passes.
 - [ ] The diff names no private identifier, secret or extension.
 
 ## 2. The pull request
@@ -23,9 +21,9 @@ only by a merged pull request.
       dependency updates folded in.
 - [ ] **Ready** passes. When it fails, its summary names each job that did
       not pass, and that job's log the error.
-- [ ] `mise run preflight` (or `mise run preflight --remote` after the push)
-      exits 0: every gate, the composed suite with the extensions required,
-      and the deploy host read-only.
+- [ ] `mise run check --release` (or `mise run check --release --remote` after
+      the push) exits 0: every gate, the composed suite with the extensions
+      required, and the deploy host read-only.
 
 ## 3. Merge and deploy
 

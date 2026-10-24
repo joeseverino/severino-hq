@@ -74,19 +74,20 @@ with every default group omitted.
 
 ## The gates
 
-Every gate is a task named `<job>:<gate>` (`mise run checks:ruff` runs one),
-and each CI job runs the aggregate of its name. A gate is declared in its job's
-file in `mise-tasks/` (`mise-tasks/checks.toml` holds `checks:*`), or beside it
-in `mise-tasks/checks/` when its body is a script; mise finds both there by
+Every gate is a task named `<job>:<gate>` (`mise run lint:ruff` runs one),
+and each CI job is named for the task it runs: `lint`, `test`, `browser`,
+`build` and `scan`, each reaching its job's gates through a wildcard
+(`GateReferenceTests` holds every job id to its task). A gate is declared in its job's
+file in `mise-tasks/` (`mise-tasks/lint.toml` holds `lint:*`), or beside it
+in `mise-tasks/lint/` when its body is a script; mise finds both there by
 default, and `mise.toml` keeps the tools, the environment, the templates, the
-development servers and the aggregates. A task outside `mise.toml` names no
+development servers and the `lint` and `scan` tasks. A task outside `mise.toml` names no
 file in its env: mise reads an env path, and renders `config_root` inside env, from
 the directory of the file that declares the task (`GateReferenceTests`).
 On a pull request CI's **Ready** job needs every other job and fails when one
 did not pass: it is the one check the `main` ruleset requires, so a gate added
 to a job never touches the repository's settings (`VerdictNeedsTests`).
-`mise run check` answers "does
-my change work?"; `mise run ci` answers "will the pipeline accept it?" and
+`mise run check` answers "will the pipeline accept it?" and
 keeps going past a failure to name every gate that failed. `fast` and `check`
 end on a verdict line (`tools/gate/verdict.py`) naming each failed task, as
 mise's `-c` summary names it, and each failed test, as the test runner writes
@@ -112,34 +113,41 @@ through (`templates/`, `static/`, `hq_sdk/`, the shared table, page, UI and
 moment modules, template tags) also runs the extensions' suites, composed, when
 `mise.local.toml` names a set. `--list` prints the selection.
 
-### What `check` and `ci` run
+### What `check` runs
 
-`mise run check` runs every `checks:*` gate, the `tests:*` gates on the default
-Python (the suite as production configures it, with `DJANGO_DEBUG` unset and
-the coverage floor) and the composed suite, one task at a time so no two suites
-share the machine's memory. A setting whose default follows `DEBUG` is held by
-a test that loads the settings both ways.
+`mise run check` runs what CI's gate jobs run, one task at a time so no two
+suites share the machine's memory: `lint` (every `lint:*` gate, the Go
+controller's static half and the derived files among them), `test` (the
+`test:*` gates on every Python in `PYTHON_VERSIONS`, the suite as production
+configures it with `DJANGO_DEBUG` unset and the coverage floor, then the Go
+controller's race tests once), `browser`, `build` (the image build and what an
+image must pass) and `scan` (CodeQL). A setting whose default follows `DEBUG`
+is held by a test that loads the settings both ways. The suite inside an image
+runs once, in Compose, on the composed image production runs.
 
-`mise run ci` adds `tests` on every Python in `PYTHON_VERSIONS`, `browser`,
-`controller`, `scan` (CodeQL) and `image`: the image build and what an image
-must pass. The suite inside an image runs once, in Compose, on the composed
-image production runs.
+`mise run check --release` then runs the composed suite with the extensions
+required and checks the deploy host, read-only, on the committed `HEAD`: exit 0
+means ready to release, and its verdict is kept apart, in
+`var/gate/check-release.txt`. `--remote` reads every check GitHub ran on the
+pushed commit instead of running the gates here, and `--skip-host` leaves the
+host out and exits 2, never 0 ([Deployment](Deployment.md)).
 
-A test tagged `source` runs once, on the checkout, in `checks:source`
-(`mise run checks:source <label>...` runs only the tagged tests those labels
+A test tagged `source` runs once, on the checkout, in `lint:source`
+(`mise run lint:source <label>...` runs only the tagged tests those labels
 name). A whole-suite run leaves the tag out; a run that asks for a tag no test
 carries fails.
 
 ### Derived files
 
-`mise run regen` rewrites every file generated from a source, in the order
+`mise run fix` rewrites every file generated from a source, in the order
 each reads the last: `hq_sdk/contract.json` with the SDK's text examples and
 the table in `docs/Plugins.md`, the machine API's OpenAPI document, the
 controller's contracts from the connection registry and the Go types generated
 from them, `docs/Connections.md` from what the providers declare, and the
-served font cut to the characters HQ prints. `mise run drift` checks each against its source without writing, and
-`fast` runs the ones a change reaches. A rebase conflict in one is settled by
-`regen`, never by hand.
+served font cut to the characters HQ prints, then formats as the lint gates
+read. Each `lint:drift-*` gate checks one against its source without writing,
+and `fast` runs the ones a change reaches. A rebase conflict in one is settled
+by `mise run fix`, never by hand.
 
 ### The extension set
 
@@ -147,14 +155,14 @@ Name it once in a gitignored `mise.local.toml` (copy
 `tools/dev/mise.local.example.toml`): `HQ_LOCAL_PYTHONPATH` says where the
 extensions' sources are and `HQ_LOCAL_PLUGINS` which to enable. Only the
 composed suite and the dev servers load the set. The composed suite,
-`mise run suite:as-image`, runs as the image does: in a copy of only the files
+`mise run test --composed`, runs as the image does: in a copy of only the files
 `Dockerfile.dockerignore` admits, less what the Dockerfile's `COPY --exclude`
 keeps out of `/app`, with `DEBUG` off and `SEVERINO_HQ_SOURCE`
 stamped, in `.venv-image`, which holds only the runtime dependencies, so a
 test that reads a file the image leaves out, or loads a development tool, fails
 here. Without
 the set it runs the host alone and says so; `REQUIRE_COMPOSED=1` fails
-instead, which is how `mise run preflight` runs it.
+instead, which is how `mise run check --release` runs it.
 
 Compose builds each extension from its branch named like the host branch, or
 from its admitted main when it has none, so a host branch pushed ahead of its
@@ -166,8 +174,8 @@ with git's refs on stdin.
 ### Heavy gates take turns
 
 Two suites at once exhaust a small machine's memory, so the heavy tasks (`fast`,
-`check`, `ci`, `checks`, `tests`, `preflight`, the suites, the browser gates,
-`demo:screenshot`, a run of tests that is not narrow, below, and `dev:look`
+`check`, `lint`, `test`, `browser`, `fix`'s derived files, the suites, the
+browser gates, `dev:look --docs`, a run of tests that is not narrow, below, and `dev:look`
 except a look at named pages with no `--base`, `--perf` or `--deep`) run under
 `tools/lib/heavy.sh`,
 which holds an exclusive lock on `~/.cache/severino/heavy.lock` (under
@@ -181,8 +189,8 @@ The wait is bounded by
 `SEVERINO_HEAVY_WAIT` seconds, two hours by default, the longest a heavy task
 may run; past that it exits 75 (`EX_TEMPFAIL`) naming the holder again. A
 waiting task stops nothing: what ends a hung holder is its own timeout, below.
-A heavy task run by one that holds the lock (`ci`
-running `browser`, `check` running `suite:as-image`) runs inside its turn. The
+A heavy task run by one that holds the lock (`check`
+running `browser`, or `test --composed` in a release run) runs inside its turn. The
 lock goes with the process, so a killed gate frees it. CI runs one job per
 machine and takes no lock.
 
@@ -196,10 +204,10 @@ manage.py test's arguments: a run is narrow when labels name what it runs, each
 a module or something in one, and none of the tests they load drives a
 browser. No label, a package label or a browser makes it heavy; a test
 database does not. A task whose tests are fixed takes the turn exactly when
-they are heavy (`tests:api-properties` and `demo:build` never do), and
+they are heavy (`test:api-properties` and `demo:build` never do), and
 `tools/gate/tests/test_turn.py` holds every task to that. A task that runs the
-tests it is given (`checks:source`, `suite:as-image`) sets `test_arguments`
-before it sources `heavy-turn.sh`, so `mise run checks:source <module>` starts
+tests it is given (`lint:source`, `test:composed`) sets `test_arguments`
+before it sources `heavy-turn.sh`, so `mise run lint:source <module>` starts
 at once while every source test waits; `mise run test` asks the same question
 in its run (`tools/gate/at.py`), and `--at` always takes the turn. `dev:look`
 alone decides by its pages, since its run is always one browser test and only
@@ -228,11 +236,11 @@ each pin lives. Beyond those:
   contracts model the host's runner with the current account, which must not
   be root. The readiness tests need `var/` writable.
 - **Every supported Python** (`PYTHON_VERSIONS` in
-  [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env)). `mise run tests` walks
+  [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env)). `mise run test` walks
   the list, each in its own `.venv-<version>`, with uv supplying the
   interpreter.
 - **System tools:** `ssh-keygen`, `sqlite3` and `zstd` for the shell suites.
-- **A container runtime** for the `image` gates. CodeQL wants about 2 GB of
+- **A container runtime** for `build`'s gates. CodeQL wants about 2 GB of
   memory.
 - **Network, the first time:** mise downloads and verifies each tool.
   Scorecard's vulnerability check queries `api.osv.dev` on every run.
@@ -277,12 +285,13 @@ finding names its check, page, width and theme.
 runs the layout gate in two legs side by side (`browser:layout-1`,
 `browser:layout-2`) and runs them in Chromium as well
 (`browser:layout-chromium-1`, `-2`), which `mise run browser` leaves to CI. One browser test runs as
-`mise run test <label>` once `mise run setup:browser webkit` has installed the engine.
+`mise run test <label>` once `mise run setup:browser webkit` has installed the
+engine, and `mise run browser <leg>...` runs the legs named (`layout-1`, `demo`).
 
-A failure only CI's Linux shows is reproduced with `mise run dev:linux-browser`
-and a gate (`browser:layout-chromium-1`) or test labels, drawn in Chromium
+A failure only CI's Linux shows is reproduced with `mise run browser --linux`
+and a leg (`layout-chromium-1`) or test labels, drawn in Chromium
 unless `--engine` names another. It runs them on this checkout inside the
-Playwright image `ci.yml` gives the Browser job, as linux/amd64 with the job's
+Playwright image `ci.yml` gives the browser job, as linux/amd64 with the job's
 options, set up as the toolchain action sets a runner up, and copies a failed
 rule's screenshots to `var/browser-linux/`. It needs a container runtime that
 runs x64 through Rosetta (`colima start --cpu 4 --memory 5 --vz-rosetta`).
@@ -375,7 +384,7 @@ error, uncaught script error and policy refusal the page had, then the
 checks it ran and a verdict naming every page that failed. Those errors are
 judged as a rule's findings are: without a base any fails the run, against
 one only a new one does. With `--perf`, on by default with `--base`,
-`perf:report` then measures the estate pages asked, beside the base's, in the
+`perf` then measures the estate pages asked, beside the base's, in the
 same heavy turn, and its table follows the look's verdict; a page it cannot
 serve is named once. `--base <ref>` looks at the same
 pages at `<ref>` first, in a temporary worktree it removes however the run
@@ -397,7 +406,7 @@ declares) also shoots each page with that dialog open
 any menu holding that control, so the page's own wiring opens it, and waits
 for its parts to load; `--eval` and the rule run again there.
 
-`mise run perf:report <pages>... [--image] [--seed <name>] [--base <ref>]
+`mise run perf <pages>... [--image] [--seed <name>] [--base <ref>]
 [--host-alone] [--fresh] [--requests <n>]` measures how light and fast HQ is,
 page by page: server time, queries, the rows its tables hold and its HTML
 size, then bytes, requests, first and largest contentful paint (first visit
@@ -501,7 +510,7 @@ composition/              the composed image
 policy/                   the extension admission policy
 demo/                     the static demo site built from HQ's own pages
 tools/                    development and CI programs, never in the image (tools/README.md)
-mise-tasks/               every task outside mise.toml: one TOML file per CI job (checks.toml, ...) and operator.toml, and beside each a folder of script tasks
+mise-tasks/               every task outside mise.toml: one TOML file per CI job (lint.toml, ...) and operator.toml, and beside each a folder of script tasks
 tests/                    synthetic extension fixtures, the SDK consumer, property and shell suites
 var/                      ignored local runtime state
 ```
@@ -517,7 +526,7 @@ refuses to start without `SEVERINO_DATABASE_PATH` and `DJANGO_SECRET_KEY`.
 Every mise task that runs Django sets both (each gate a new empty database,
 the scratch tasks this checkout's `var/dev/scratch/`), and the image names its
 own, so `manage.py` runs as `mise run manage -- <command>` or
-`mise run dev:manage -- <command>`. Media, exports and static files default to
+`mise run manage --scratch -- <command>`. Media, exports and static files default to
 `var/media`, `var/exports` and `var/static`; `SEVERINO_MEDIA_ROOT`,
 `SEVERINO_EXPORTS_ROOT` and `DJANGO_STATIC_ROOT` override them. To move a
 database, stop the application, back it up with its WAL contents, and check

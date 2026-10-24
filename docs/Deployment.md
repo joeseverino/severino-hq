@@ -17,11 +17,11 @@ waits on a schedule.
 
 | Workflow | Started by | Does |
 | :--- | :--- | :--- |
-| **CI** (`ci.yml`) | every pull request and push to `main` | Checks, Tests, Browser, Controller, CodeQL and Image (build, boot healthy, publish and sign the host image); on a pull request the image's checks and its composition beside them, then **Ready**, which passes only when every job did; on `main`, **Release**, which starts Compose |
+| **CI** (`ci.yml`) | every pull request and push to `main` | Lint, Test, Browser, Scan and Build (build, boot healthy, publish and sign the host image), each running the task of its name; on a pull request Build verify and the composition beside them, then **Ready**, which passes only when every job did; on `main`, **Release**, which starts Compose |
 | **Compose** (`compose.yml`) | CI on a pull request (verify only); CI's Release on `main`; an extension's admission; a person | the host image plus every admitted extension, verified as one application; on `main`, published and signed |
 | **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits for approval in the `production` environment, then deploys on the self-hosted runner |
 
-Each CI job runs the `mise` aggregate of its name, so the gates are declared
+Each CI job is named for the `mise` task it runs, so the gates are declared
 once, as tasks in their job's file under [`mise-tasks/`](../mise-tasks) ([Development](Development.md)).
 
 Production runs the composed image (`ghcr.io/joeseverino/severino-hq/composition`),
@@ -54,8 +54,8 @@ release that cannot serve and proves the previous one comes back on its schema.
 When a pull request merges, the push to `main` asks
 `tools/pipeline/proven-on-pr.sh` whether the pull request already proved it:
 its last CI run passed, its image carries a `dev.severino.hq.tree` label equal to the
-pushed commit's tree, and it is signed by that run. With all three, Checks,
-Tests and Browser are skipped and Image promotes that image by digest to the
+pushed commit's tree, and it is signed by that run. With all three, Lint,
+Test and Browser are skipped and Build promotes that image by digest to the
 commit's tag. Short of all three, every gate runs again.
 
 ### Where a change stands
@@ -170,7 +170,7 @@ from the tree, and every unit and the deploy call it.
 | `bootstrap` | renders the drop-ins and sudo rule `host.json` decides |
 | `backup` | snapshots and archives HQ's volumes, where docker says they are ([Backup](Backup.md)) |
 | `upgrade ARGS` | moves one compose service to a pinned image, through its own sudo rule ([Container upgrades](#container-upgrades)) |
-| `check` | the host's half of `mise run preflight`, as any account and read-only: the runner's sudo rule, and that `sudo -l` lists it no command HQ does not render (a failure names the command and the grep that finds its file), `verify` (or the drift unit's run since the release was installed), every program a sudo rule names is root's alone, the established units, free disk, and, where sudo lets it read nftables, that a loaded Renovate egress table is the one `hq-host` renders (an absent one waits for the next run, which loads it). Preflight builds it from HEAD for the host's platform and runs it from a temporary directory over SSH, so the release being checked is the one checking. Exits 0 ready, 1 a fault, 3 unverified |
+| `check` | the host's half of `mise run check --release`, as any account and read-only: the runner's sudo rule, and that `sudo -l` lists it no command HQ does not render (a failure names the command and the grep that finds its file), `verify` (or the drift unit's run since the release was installed), every program a sudo rule names is root's alone, the established units, free disk, and, where sudo lets it read nftables, that a loaded Renovate egress table is the one `hq-host` renders (an absent one waits for the next run, which loads it). `check --release` builds it from HEAD for the host's platform and runs it from a temporary directory over SSH, so the release being checked is the one checking. Exits 0 ready, 1 a fault, 3 unverified |
 
 ### Units
 

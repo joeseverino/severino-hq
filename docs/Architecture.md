@@ -449,8 +449,8 @@ record, so a rollback removes all three changes. The backend is replaceable
 without changing table views, query parameters, CLI output or models.
 
 ```bash
-mise run dev:manage -- search_hq projects "certificate automation"
-mise run dev:manage -- rebuild_search_index
+mise run manage --scratch -- search_hq projects "certificate automation"
+mise run manage --scratch -- rebuild_search_index
 ```
 
 `hq.platform.application.tables.TableListMixin` composes indexed search with

@@ -90,8 +90,8 @@ export's parameters, fields, enum members and public methods, without
 annotations so it is identical across the interpreter matrix. A test fails when
 the exports drift from the file, because an extension's binding to a renamed
 field or a new required parameter is a change this repository cannot otherwise
-see. Regenerate it with `mise run regen`, read the diff as the review, and
-decide there whether `PLUGIN_API_VERSION` moves; `mise run drift` fails on
+see. Regenerate it with `mise run fix`, read the diff as the review, and
+decide there whether `PLUGIN_API_VERSION` moves; `mise run lint` fails on
 drift.
 
 What the annotations promise is held from an extension's side by
@@ -518,7 +518,7 @@ set `wide = True` to take the whole row, `change_effect` to the sentence
 saying what changing it causes, or `confirms = True` to close the form as the
 callout a submission is confirmed in.
 
-<!-- sdk_contract: shared UI contract, written by `mise run regen` from hq_sdk/template_contract.py -->
+<!-- sdk_contract: shared UI contract, written by `mise run fix` from hq_sdk/template_contract.py -->
 
 | Frame | Blocks a page fills | What it is |
 | --- | --- | --- |

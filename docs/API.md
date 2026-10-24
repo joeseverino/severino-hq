@@ -427,7 +427,7 @@ it does; a patch release adds no features. No compatibility
 translation is applied. Resource filters emit individual query parameters;
 `x-hq-query-schema` retains the aggregate schema, including unknown-field policy.
 
-`mise run checks:openapi` installs the locked Redocly from `tools/lint` and
+`mise run lint:openapi` installs the locked Redocly from `tools/lint` and
 validates every description against the specification.
 
 `manage.py test tests.fuzz.api_properties` generates bounded requests through Django's
@@ -442,7 +442,7 @@ OpenAPI document after Django initialization. `x-hq-mcp-tools` records MCP-only
 metadata; it does not invent HTTP operations for those tools. Each tool's
 `inputSchema` is generated from one Pydantic model, built from the handler's
 signature, and a call is validated by that same model before entering
-application code; `mise run drift` holds the written document to it. A
+application code; `mise run lint` holds the written document to it. A
 resource tool's `name` takes only the resources the document's paths serve,
 and catalogs consume those paths too. Unknown arguments, mistyped
 values and stringified JSON objects are rejected; validation errors do not

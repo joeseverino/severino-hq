@@ -33,7 +33,7 @@ as HTTP operations.
 ## Gates and pins declared once
 
 Every gate is a `mise` task and every tool pin is in `mise.toml` and
-`mise.lock`; a CI job runs the aggregate of its name, so the pipeline and a
+`mise.lock`; a CI job is named for the task it runs, so the pipeline and a
 local run cannot disagree ([Development](Development.md)).
 
 ## Built-ins weighed against HQ's own helpers

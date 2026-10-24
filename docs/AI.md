@@ -45,8 +45,8 @@ Every agent reads [`AGENTS.md`](../AGENTS.md), the engineering contract
    run side by side
    ([Development](Development.md#development-servers)).
 4. **Integrate.** The main session lands the workers on one branch from the
-   base. A rebase conflict in a derived file is settled by `mise run regen`.
-   Then `mise run check` and `REQUIRE_COMPOSED=1 mise run suite:as-image`, and
+   base. A rebase conflict in a derived file is settled by `mise run fix`.
+   Then `mise run check` and `REQUIRE_COMPOSED=1 mise run test --composed`, and
    `hq-ui-pass` for a change to what a page shows.
 5. **Lessons.** Each `Lesson:` line names what cost time and what would have
    prevented it. The main session changes the rule it points at, so the next
@@ -57,23 +57,23 @@ the same gates on it, and `ship-hq` takes it to production.
 
 ### The tools a worker uses
 
-![The worker reads AGENTS.md and loads the skills, runs its own scratch server and dev:look, runs fast and then check, and CI runs the same aggregates](diagrams/agent-tools.png)
+![The worker reads AGENTS.md and loads the skills, runs its own scratch server and dev:look, runs fast and then check, and each CI job runs the task of its name](diagrams/agent-tools.png)
 
 <sup>Source: [`docs/diagrams/agent-tools.mmd`](diagrams/agent-tools.mmd), pre-rendered with [`diagram`](https://github.com/joeseverino/tools/tree/main/lib/diagram).</sup>
 
 ### What holds the work to the bar
 
 An agent's report is checked against gates, and the gates are the same mise
-tasks a person runs. CI runs each job's aggregate by name
-([`ci.yml`](../.github/workflows/ci.yml) runs `mise run -c checks`), so a pass
+tasks a person runs. Each CI job is named for the task it runs
+([`ci.yml`](../.github/workflows/ci.yml)'s lint job runs `mise run lint`), so a pass
 on a laptop and a pass in CI mean the same thing. `mise tasks` lists the gates
 to start from and `mise run <task> --help` says what each holds; how they
 relate is in [What `fast` runs](Development.md#what-fast-runs),
-[What `check` and `ci` run](Development.md#what-check-and-ci-run),
+[What `check` runs](Development.md#what-check-runs),
 [Browser layout](Development.md#browser-layout) and
 [Structural Gate](Structural-Gate.md).
 
-Every aggregate (`fast`, `check`, `checks`, `tests`, `browser`, `drift`, `ci`)
+Every task that runs gates (`fast`, `check`, `lint`, `test`, `browser`)
 closes on a verdict line naming each failed task and test, and keeps it in
 `var/gate/<name>.txt` with how long each task took, slowest first
 (`tools/gate/verdict.py`). Heavy tasks take turns on one lock

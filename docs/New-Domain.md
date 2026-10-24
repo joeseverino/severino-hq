@@ -65,7 +65,7 @@ package.
 ## Always on
 
 Rules that hold for every change, not a domain in particular; the class docstring
-is the rule. `checks:css` (Stylelint under `tools/lint/stylelint.config.mjs`:
+is the rule. `lint:css` (Stylelint under `tools/lint/stylelint.config.mjs`:
 tokens, spacing, color), `StyleContractTests` and `SharedPrimitiveStyleTests`
 (CSS, layers), `TemplateCommentTests` (what a `{# #}` comment left open is),
 `CognitiveComplexityTests` (score 20 per function), `FileSizeTests` (no source
@@ -86,6 +86,6 @@ what its owner reads; `hq/platform/core/plain_words.py` holds the words and
 what to say instead), `PostButtonTests` (the shared post button),
 `ComposedQueueTests` (a domain's attention items and cards reach the shared queue),
 `TestPlacementTests` (every test module is in its package's `tests/`),
-`RuntimeDependencyTests` (each finding `checks:deptry` ignores is one it
-would report). `checks:deptry` holds host code to importing only its declared
+`RuntimeDependencyTests` (each finding `lint:deptry` ignores is one it
+would report). `lint:deptry` holds host code to importing only its declared
 runtime dependencies, each of them imported, or a reason in `pyproject.toml`.
