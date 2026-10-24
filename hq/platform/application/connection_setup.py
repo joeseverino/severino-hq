@@ -66,7 +66,7 @@ class ProviderSetup:
 def docs_url(page: str, anchor: str = "") -> str:
     """One of HQ's own docs, in the source it names; blank when it names none."""
 
-    source = web_url(str(getattr(settings, "SEVERINO_HQ_SOURCE", "") or ""))
+    source = web_url(settings.SEVERINO_HQ_SOURCE)
     return f"{source}/blob/main/docs/{page}" + (f"#{anchor}" if anchor else "") if source else ""
 
 

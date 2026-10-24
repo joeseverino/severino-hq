@@ -663,7 +663,7 @@ def _expiry_phrase(stamp: str) -> str:
 def _gate_layer(channel: Channel) -> Layer:
     """Whether HQ refuses everything else before it authenticates anything."""
 
-    enforced = bool(getattr(settings, "SEVERINO_ENFORCE_TRUSTED_NETWORK", False))
+    enforced = settings.SEVERINO_ENFORCE_TRUSTED_NETWORK
     if enforced and channel.id == "opaque":
         return Layer(
             "gate",
@@ -709,10 +709,10 @@ def _sign_in_layer(identity: Identity) -> Layer:
 def _session_layer(request, identity: Identity) -> Layer:
     """Whether the cookie carrying this session can leave where it was set."""
 
-    secure = bool(getattr(settings, "SESSION_COOKIE_SECURE", False))
-    http_only = bool(getattr(settings, "SESSION_COOKIE_HTTPONLY", False))
-    same_site = str(getattr(settings, "SESSION_COOKIE_SAMESITE", "") or "")
-    name = str(getattr(settings, "SESSION_COOKIE_NAME", "") or "")
+    secure = bool(settings.SESSION_COOKIE_SECURE)
+    http_only = bool(settings.SESSION_COOKIE_HTTPONLY)
+    same_site = str(settings.SESSION_COOKIE_SAMESITE or "")
+    name = settings.SESSION_COOKIE_NAME
     # The `__Host-` prefix is the only one of these the browser enforces
     # against somebody else. The other three describe the cookie HQ set; this
     # one is a promise no sibling host can have written it.
@@ -751,7 +751,7 @@ def _browser_layer() -> Layer:
     policy is stated here, and violations are reported back.
     """
 
-    policy = dict(getattr(settings, "SECURE_CSP", {}) or {})
+    policy = dict(settings.SECURE_CSP or {})
     trusted_types = "'script'" in (policy.get("require-trusted-types-for") or ())
     scripts = tuple(policy.get("script-src") or ())
     # The nonce alone decides: 'strict-dynamic' makes a CSP3 browser ignore
@@ -792,9 +792,9 @@ def _canonical_layer() -> Layer:
     and telling the browser never to try plain HTTP for this name again.
     """
 
-    redirected = bool(getattr(settings, "SECURE_SSL_REDIRECT", False))
-    hsts = int(getattr(settings, "SECURE_HSTS_SECONDS", 0) or 0)
-    subdomains = bool(getattr(settings, "SECURE_HSTS_INCLUDE_SUBDOMAINS", False))
+    redirected = bool(settings.SECURE_SSL_REDIRECT)
+    hsts = int(settings.SECURE_HSTS_SECONDS or 0)
+    subdomains = bool(settings.SECURE_HSTS_INCLUDE_SUBDOMAINS)
     holds = redirected and hsts > 0
     stated = [
         "plain HTTP redirected" if redirected else "plain HTTP served",

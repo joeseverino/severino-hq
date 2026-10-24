@@ -36,7 +36,7 @@ class DocumentationQuerySet(models.QuerySet):
         clears nothing. Each would put an item in the queue that reviewing
         cannot clear, which is the one thing a queue must never contain.
         """
-        review_days = getattr(settings, "SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180)
+        review_days = settings.SEVERINO_DOC_REVIEW_INTERVAL_DAYS
 
         cutoff = today() - timedelta(days=review_days)
         return self.filter(

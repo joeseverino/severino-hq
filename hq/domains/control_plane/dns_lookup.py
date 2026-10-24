@@ -37,7 +37,7 @@ def connection_specs():
     """Emit the keyless public registries used by lookup capabilities."""
 
     def configured_instance(*, identifier: str, label: str, kind: str, setting: str, abilities: tuple[str, ...]):
-        endpoint = str(getattr(settings, setting, "") or "").strip()
+        endpoint = getattr(settings, setting).strip()
         parsed = urlsplit(endpoint)
         if parsed.scheme != "https" or not parsed.hostname:
             return None
@@ -150,7 +150,7 @@ def _base(name: str) -> str:
     the scheme has to be https and the host has to be present.
     """
 
-    configured = str(getattr(settings, name, "") or "").strip()
+    configured = getattr(settings, name).strip()
     parsed = urlsplit(configured)
     if parsed.scheme != "https" or not parsed.hostname:
         raise LookupUnavailable("That lookup service is not set up.")
@@ -177,7 +177,7 @@ def _get(url: str, *, timeout: int | None = None, accept: str) -> dict:
     of no answer this is.
     """
 
-    seconds = timeout or int(getattr(settings, "SEVERINO_LOOKUP_TIMEOUT_SECONDS", 6))
+    seconds = timeout or settings.SEVERINO_LOOKUP_TIMEOUT_SECONDS
     request = urllib.request.Request(url, headers={"Accept": accept, "User-Agent": "severino-hq"})
     try:
         with _opener.open(request, timeout=seconds) as response:

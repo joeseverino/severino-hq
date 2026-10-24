@@ -548,36 +548,12 @@ class ControllerTimerTests(SimpleTestCase):
         self.assertGreater(cadence.CONTROLLER_SILENT_AFTER, cadence.CONTROLLER_FLOOR)
 
 
-# The cadence knobs an installation may leave unset; the defaults below are what it then gets.
-CADENCE_SETTINGS = (
-    "SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS",
-    "SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS",
-    "SEVERINO_ACTIVE_WINDOW_SECONDS",
-    "SEVERINO_ACTIVITY_THROTTLE_SECONDS",
-    "SEVERINO_SSH_PROBE_INTERVAL_SECONDS",
-    "SEVERINO_READ_REQUEST_SECONDS",
-)
-
-
-class UnconfiguredCadenceTests(TestCase):
-    """With no cadence setting at all: five minutes in use, twelve hours idle."""
+class DefaultCadenceTests(TestCase):
+    """With the shipped cadence settings: a quarter hour of use, a marker rewritten once a minute."""
 
     def setUp(self):
         self.directory = Path(tempfile.mkdtemp())
         self.enterContext(override_settings(SEVERINO_ACTIVITY_MARKER=str(self.directory / "activity")))
-        for name in CADENCE_SETTINGS:
-            if hasattr(settings, name):
-                delattr(settings, name)
-
-    def test_each_interval_has_its_documented_default(self):
-        self.assertEqual(sweep_interval(), timedelta(hours=12))
-        self.assertEqual(cadence.slowest_sweep_interval(), timedelta(hours=12))
-        self.assertEqual(cadence.ssh_probe_interval(), timedelta(hours=1))
-        self.assertEqual(cadence.read_request_lifetime(), timedelta(minutes=15))
-
-        note_activity()
-
-        self.assertEqual(sweep_interval(), timedelta(minutes=5))
 
     def test_use_counts_for_a_quarter_hour(self):
         note_activity()

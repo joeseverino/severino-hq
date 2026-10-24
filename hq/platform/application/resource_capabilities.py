@@ -81,7 +81,7 @@ def kind_converges(kind: str) -> bool:
 
 
 def public_dns_enabled() -> bool:
-    return bool(getattr(settings, "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS", False))
+    return settings.SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS
 
 
 def resource_capabilities(

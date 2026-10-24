@@ -500,7 +500,7 @@ FOLLOWS_HOST = "It calls HQ's own workflows at their main branch, which requirin
 def _host() -> str:
     """``owner/name`` of the repository HQ is built from; "" when it says none."""
 
-    return repository_key(str(getattr(settings, "SEVERINO_HQ_SOURCE", "") or ""))
+    return repository_key(settings.SEVERINO_HQ_SOURCE)
 
 
 def _intended(repo: Repository) -> dict[str, str]:

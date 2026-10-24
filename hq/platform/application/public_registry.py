@@ -89,7 +89,7 @@ def read_every(kind: str) -> timedelta:
 
 
 def _configured() -> bool:
-    endpoint = str(getattr(settings, "SEVERINO_RDAP_ENDPOINT", "") or "").strip()
+    endpoint = settings.SEVERINO_RDAP_ENDPOINT.strip()
     parsed = urlsplit(endpoint)
     return parsed.scheme == "https" and bool(parsed.hostname)
 

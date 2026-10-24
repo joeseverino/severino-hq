@@ -97,7 +97,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
             raise SuspiciousOperation("The ID token was issued for another client.")
         if len(allowed) > 1 and payload.get("azp") != client_id:
             raise SuspiciousOperation("The ID token was authorized for another party.")
-        issuer = getattr(settings, "OIDC_ISSUER", "")
+        issuer = settings.OIDC_ISSUER
         if not issuer or payload.get("iss") != issuer:
             raise SuspiciousOperation("The ID token came from another issuer.")
         return payload
@@ -141,7 +141,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
             digest = remember_avatar(
                 user,
                 str(claims.get("picture") or "").strip(),
-                issuer=getattr(settings, "OIDC_ISSUER", ""),
+                issuer=settings.OIDC_ISSUER,
                 access_token=access_token or "",
             )
         except Exception:  # noqa: BLE001 - a picture must not stop a sign-in
@@ -180,7 +180,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         subject = claims.get("sub")
         if not isinstance(subject, str) or not subject.strip():
             return ""
-        return sign_in_subject(getattr(settings, "OIDC_ISSUER", ""), subject.strip())
+        return sign_in_subject(settings.OIDC_ISSUER, subject.strip())
 
     @override
     def filter_users_by_claims(self, claims):

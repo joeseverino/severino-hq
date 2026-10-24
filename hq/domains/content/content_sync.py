@@ -66,8 +66,8 @@ def fetch_content_index(url: str | None = None, timeout: int = 10) -> dict:
         # explicitly, as every well-behaved HTTP adapter should.
         "User-Agent": "Severino-HQ/1.0 (+https://github.com/joeseverino/severino-hq)",
     }
-    client_id = getattr(settings, "CF_ACCESS_CLIENT_ID", "")
-    client_secret = getattr(settings, "CF_ACCESS_CLIENT_SECRET", "")
+    client_id = settings.CF_ACCESS_CLIENT_ID
+    client_secret = settings.CF_ACCESS_CLIENT_SECRET
     if client_id and client_secret:
         headers["CF-Access-Client-Id"] = client_id
         headers["CF-Access-Client-Secret"] = client_secret
@@ -89,10 +89,10 @@ def fetch_content_index(url: str | None = None, timeout: int = 10) -> dict:
 
 def index_project() -> Project | None:
     """The configured project, else the one whose public URL serves the index."""
-    slug = getattr(settings, "CONTENT_INDEX_PROJECT_SLUG", "")
+    slug = settings.CONTENT_INDEX_PROJECT_SLUG
     if slug:
         return Project.objects.filter(slug=slug).first()
-    host = urlsplit(getattr(settings, "CONTENT_INDEX_URL", "")).hostname
+    host = urlsplit(settings.CONTENT_INDEX_URL).hostname
     if not host:
         return None
     matches = [

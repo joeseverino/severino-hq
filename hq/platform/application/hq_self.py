@@ -34,13 +34,13 @@ lazy from .projection import read_once
 def site_label() -> str:
     """What HQ calls itself: the configured site name."""
 
-    return str(getattr(settings, "SEVERINO_SITE_NAME", "") or "")
+    return settings.SEVERINO_SITE_NAME
 
 
 def site_host() -> str:
     """The name HQ is reached at, as the deployment declares it."""
 
-    return str(getattr(settings, "SEVERINO_SITE_HOST", "") or "")
+    return settings.SEVERINO_SITE_HOST
 
 
 def __getattr__(name: str) -> str:
@@ -78,8 +78,8 @@ def hq_hostnames() -> tuple[str, ...]:
 
     found: list[str] = []
     for candidate in (
-        getattr(settings, "SEVERINO_SITE_HOST", ""),
-        *getattr(settings, "ALLOWED_HOSTS", ()),
+        settings.SEVERINO_SITE_HOST,
+        *settings.ALLOWED_HOSTS,
     ):
         text = str(candidate or "").strip()
         # A wildcard or a leading dot is a pattern, not a name.
@@ -261,7 +261,7 @@ def _own_container() -> Any | None:
     serving = [item for item in near if names.intersection(item.serves)]
     if len(serving) == 1:
         return serving[0]
-    source = str(getattr(settings, "SEVERINO_HQ_SOURCE", "") or "").lower()
+    source = settings.SEVERINO_HQ_SOURCE.lower()
     built = [item for item in serving or near if source and item.standing.source.lower() == source]
     return built[0] if len(built) == 1 else None
 

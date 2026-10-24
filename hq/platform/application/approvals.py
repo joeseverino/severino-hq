@@ -65,12 +65,6 @@ lazy from .agent_access import agents_paused
 lazy from .capabilities import authorize_capability, capability_title, execute_approved, validate_command
 lazy from .resources import InvalidResourceInput, UnsupportedResourceOperation
 
-# How long an unanswered request stands. A day, because the person it is waiting
-# for sleeps and a request that lapses while they do is a nuisance, whereas one
-# that is still clickable a month later is a change nobody is looking at any
-# more being applied on the strength of a decision nobody remembers.
-DEFAULT_WINDOW_HOURS = 24
-
 # How many outstanding requests one actor may hold. A caller that has already
 # asked for ten decisions and been answered none does not need an eleventh: it
 # needs to stop. Without a ceiling, the cheapest way past this module is to fill
@@ -149,7 +143,7 @@ class ApprovalSubject:
 
 
 def _window() -> timedelta:
-    hours = getattr(settings, "SEVERINO_APPROVAL_WINDOW_HOURS", DEFAULT_WINDOW_HOURS)
+    hours = settings.SEVERINO_APPROVAL_WINDOW_HOURS
     return timedelta(hours=hours)
 
 

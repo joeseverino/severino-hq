@@ -177,9 +177,9 @@ def mcp_principal() -> Principal:
     # with the rest it could only be granted by also handing the service
     # account write access to expenses, receipts, projects, assets and content
     # so in practice it stayed off and the index silently fell behind.
-    if getattr(settings, "SEVERINO_MCP_ENABLE_DOC_SYNC", False):
+    if settings.SEVERINO_MCP_ENABLE_DOC_SYNC:
         capabilities.add(Capability.SYNC_DOCUMENTATION)
-    if getattr(settings, "SEVERINO_MCP_ENABLE_WRITES", False):
+    if settings.SEVERINO_MCP_ENABLE_WRITES:
         capabilities.update(record_permissions("write"))
         # Broad writes still imply doc sync; the narrow flag exists to grant it
         # *without* them, not to withhold it from them.
@@ -188,28 +188,26 @@ def mcp_principal() -> Principal:
     # The calendar is personal, so it is neither in READ nor in the broad
     # writes: "put this on my calendar" is its own decision, and granting it
     # grants nothing else.
-    if getattr(settings, "SEVERINO_MCP_ENABLE_CALENDAR", False):
+    if settings.SEVERINO_MCP_ENABLE_CALENDAR:
         capabilities.update({Capability.READ_CALENDAR, Capability.WRITE_CALENDAR})
-    if getattr(settings, "SEVERINO_MCP_ENABLE_PRUNE", False):
+    if settings.SEVERINO_MCP_ENABLE_PRUNE:
         capabilities.add(Capability.PRUNE_DOCUMENTATION)
-    if getattr(settings, "SEVERINO_MCP_ENABLE_WRITES", False) and getattr(
-        settings, "SEVERINO_MCP_ENABLE_DELETES", False
-    ):
+    if settings.SEVERINO_MCP_ENABLE_WRITES and settings.SEVERINO_MCP_ENABLE_DELETES:
         capabilities.update(record_permissions("delete"))
-        if getattr(settings, "SEVERINO_MCP_ENABLE_CALENDAR", False):
+        if settings.SEVERINO_MCP_ENABLE_CALENDAR:
             capabilities.add(Capability.DELETE_CALENDAR)
     # Topology sync needs to declare infrastructure; it never needs to ask a
     # certificate authority for anything, so enabling `hq sync` does not grant
     # the service account certificate renewal.
-    if getattr(settings, "SEVERINO_MCP_ENABLE_INFRASTRUCTURE", False):
+    if settings.SEVERINO_MCP_ENABLE_INFRASTRUCTURE:
         capabilities.add(Capability.MANAGE_INFRASTRUCTURE)
-    if getattr(settings, "SEVERINO_MCP_ENABLE_CERT_RENEWAL", False):
+    if settings.SEVERINO_MCP_ENABLE_CERT_RENEWAL:
         capabilities.add(Capability.REQUEST_CERTIFICATE_RENEWAL)
     # A read, but an outbound one. It leaves the tailnet, spends somebody
     # else's rate limit, and tells a third party what HQ was asked about,
     # none of which a baseline read does, and none of which an unattended
     # caller should start doing because a capability was folded into READ.
-    if getattr(settings, "SEVERINO_MCP_ENABLE_LOOKUP", False):
+    if settings.SEVERINO_MCP_ENABLE_LOOKUP:
         capabilities.add(Capability.LOOK_UP_PUBLIC_RECORDS)
     return Principal("mcp-service-account", "mcp", frozenset(capabilities))
 

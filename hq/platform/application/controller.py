@@ -220,7 +220,7 @@ def _finding_repairs(controller_id: str, now) -> list[str]:
     changed and nothing looked broken.
     """
 
-    if not getattr(settings, "SEVERINO_FINDINGS_AUTO_REMEDY", False):
+    if not settings.SEVERINO_FINDINGS_AUTO_REMEDY:
         return []
 
     queued: list[str] = []

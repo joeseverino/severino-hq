@@ -36,7 +36,7 @@ def deployment_identity_is_set(app_configs=None, **kwargs):
 @checks.register(checks.Tags.security, deploy=True)
 def static_live_needs_debug(app_configs=None, **kwargs):
     """Serving static files from the source trees is a development mode only."""
-    if getattr(settings, "STATIC_LIVE", False) and not settings.DEBUG:
+    if settings.STATIC_LIVE and not settings.DEBUG:
         return [
             checks.Error(
                 "STATIC_LIVE is on while DEBUG is off.",

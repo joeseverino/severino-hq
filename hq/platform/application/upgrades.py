@@ -436,7 +436,7 @@ def _copy_steps(machine: str) -> tuple[Step, ...]:
     release is built for another platform than the machine's."""
 
     image = _running_image()
-    identity = signer(str(getattr(settings, "SEVERINO_HQ_SOURCE", "") or ""))
+    identity = signer(settings.SEVERINO_HQ_SOURCE)
     if not (image and identity):
         fetch = Step(
             "fetch",

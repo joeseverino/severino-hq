@@ -90,7 +90,7 @@ class Identity:
 
 def identity_of(request, device: tailnet.Device | None) -> Identity:
     user = getattr(request, "user", None)
-    backends = tuple(getattr(settings, "AUTHENTICATION_BACKENDS", ()))
+    backends = tuple(settings.AUTHENTICATION_BACKENDS)
     session = getattr(request, "session", None)
     expiry = None
     if session is not None:
@@ -129,5 +129,5 @@ def identity_of(request, device: tailnet.Device | None) -> Identity:
 def _provider_host() -> str:
     """The identity provider, named by where sign-in is actually sent."""
 
-    endpoint = str(getattr(settings, "OIDC_OP_AUTHORIZATION_ENDPOINT", "") or "")
+    endpoint = settings.OIDC_OP_AUTHORIZATION_ENDPOINT
     return urlsplit(endpoint).hostname or ""

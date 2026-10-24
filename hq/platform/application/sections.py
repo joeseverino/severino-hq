@@ -186,7 +186,7 @@ def fiscal_year_start(today=None):
     """
 
     today = today or local_today()
-    start_month = getattr(settings, "SEVERINO_FISCAL_YEAR_START_MONTH", 1)
+    start_month = settings.SEVERINO_FISCAL_YEAR_START_MONTH
     start = today.replace(month=start_month, day=1)
     if start > today:
         start = start.replace(year=today.year - 1)

@@ -738,6 +738,10 @@ SEVERINO_AUDIT_ROUTINE_DAYS = 30
 # How often the in-use marker is rewritten. Every request checks it; only the
 # first in each interval writes.
 SEVERINO_ACTIVITY_THROTTLE_SECONDS = 60
+# How often each source's SSH reachability is probed.
+SEVERINO_SSH_PROBE_INTERVAL_SECONDS = 60 * 60
+# How long a requested read stands before HQ stops forcing it.
+SEVERINO_READ_REQUEST_SECONDS = 15 * 60
 # How often each source's arrival is written to HQ's request-path reading, per
 # process. Every request is counted in memory; 0 records nothing. Nothing under
 # test, so no test's query count depends on which request came first; the

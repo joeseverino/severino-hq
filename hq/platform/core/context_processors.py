@@ -9,8 +9,8 @@ lazy from hq.platform.application.request_channel import channel_for_request
 
 def site(request):
     return {
-        "SITE_NAME": getattr(settings, "SEVERINO_SITE_NAME", "Severino HQ"),
-        "SITE_HOST": getattr(settings, "SEVERINO_SITE_HOST", "localhost"),
+        "SITE_NAME": settings.SEVERINO_SITE_NAME,
+        "SITE_HOST": settings.SEVERINO_SITE_HOST,
     }
 
 
@@ -76,7 +76,7 @@ def nav(request):
 
 
 def auth_config(request):
-    return {"OIDC_ENABLED": getattr(settings, "SEVERINO_OIDC_ENABLED", False)}
+    return {"OIDC_ENABLED": settings.SEVERINO_OIDC_ENABLED}
 
 
 def connection(request):

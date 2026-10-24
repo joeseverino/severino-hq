@@ -84,7 +84,7 @@ def choose_database(records: list[dict[str, Any]]) -> tuple[Database | None, str
     one is a problem to state, never a choice to make.
     """
 
-    named = str(getattr(settings, "CLOUDFLARE_D1_DATABASE_NAME", "") or "").strip()
+    named = settings.CLOUDFLARE_D1_DATABASE_NAME.strip()
     found = {_database_of(record) for record in records}
     if named and found:
         found = {database for database in found if database.name == named}

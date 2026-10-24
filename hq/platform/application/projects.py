@@ -209,7 +209,7 @@ def refresh_project(
         raise RecordNotFound("That project was not found.") from exc
 
     result: dict[str, Any] = {"ok": True, "content": None, "github": None, "github_app": None}
-    if slug == getattr(settings, "CONTENT_INDEX_PROJECT_SLUG", ""):
+    if slug == settings.CONTENT_INDEX_PROJECT_SLUG:
         try:
             with operation_context(
                 interface=principal.interface,

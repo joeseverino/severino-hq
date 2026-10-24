@@ -557,7 +557,7 @@ def connection_security_posture(
     external_custody = sum(len(group.connections) for group in groups if group.spec.secret_store)
     dependencies = sum(len(connection.instance.dependencies) for connection in connections)
 
-    gate = bool(getattr(settings, "SEVERINO_ENFORCE_TRUSTED_NETWORK", False))
+    gate = settings.SEVERINO_ENFORCE_TRUSTED_NETWORK
     admission = _admission(request, gate) if request is not None else None
     tailnet_policy_control = tailnet_policy or _unattested_tailnet_policy()
     edge_control = edge or _unattested_edge()

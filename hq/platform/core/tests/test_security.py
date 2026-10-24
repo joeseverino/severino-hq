@@ -1176,32 +1176,3 @@ class SafeNextTests(SimpleTestCase):
 
     def test_a_form_names_its_destination_in_its_body(self):
         self.assertEqual(self.destination("/expenses/", method="post"), "/expenses/")
-
-
-MCP_SWITCHES = (
-    "SEVERINO_MCP_ENABLE_WRITES",
-    "SEVERINO_MCP_ENABLE_DOC_SYNC",
-    "SEVERINO_MCP_ENABLE_PRUNE",
-    "SEVERINO_MCP_ENABLE_DELETES",
-    "SEVERINO_MCP_ENABLE_INFRASTRUCTURE",
-    "SEVERINO_MCP_ENABLE_CERT_RENEWAL",
-    "SEVERINO_MCP_ENABLE_LOOKUP",
-    "SEVERINO_MCP_ENABLE_CALENDAR",
-)
-
-
-class McpCeilingTests(SimpleTestCase):
-    def test_a_switch_left_unset_is_off(self):
-        from hq.platform.application.security import mcp_principal
-
-        for on in ((), ("SEVERINO_MCP_ENABLE_WRITES",), ("SEVERINO_MCP_ENABLE_WRITES", "SEVERINO_MCP_ENABLE_DELETES")):
-            rest = [name for name in MCP_SWITCHES if name not in on]
-            with self.subTest(on=on):
-                with override_settings(**dict.fromkeys(on, True), **dict.fromkeys(rest, False)):
-                    switched_off = mcp_principal().capabilities
-                with override_settings(**dict.fromkeys(on, True)):
-                    for name in rest:
-                        delattr(settings, name)
-                    unset = mcp_principal().capabilities
-
-                self.assertEqual(unset, switched_off)
