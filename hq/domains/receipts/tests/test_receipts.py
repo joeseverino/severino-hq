@@ -22,6 +22,12 @@ def _receipt(**fields):
     return Receipt.objects.create(file="receipts/example.pdf", content_type="application/pdf", **fields)
 
 
+def _edit_post(**overrides):
+    """A receipt edit the form accepts as it stands: every required field, and no new file."""
+
+    return {"vendor": "Example Host", "amount": "12.00", "notes": "Paid by card", **overrides}
+
+
 class ReceiptLinkTests(TestCase):
     def setUp(self):
         self.client.force_login(get_user_model().objects.create_superuser("receipt-reader"))
@@ -108,8 +114,7 @@ class ReceiptEditTests(TestCase):
         self.receipt.file.save("scan.pdf", ContentFile(b"%PDF-1.4"))
 
     def _edit(self, **fields):
-        data = {"vendor": "Example Host", "amount": "12.00", "notes": "Paid by card", **fields}
-        return self.client.post(reverse("receipts:edit", args=[self.receipt.pk]), data)
+        return self.client.post(reverse("receipts:edit", args=[self.receipt.pk]), _edit_post(**fields))
 
     def test_an_edit_without_a_new_file_saves(self):
         stored = self.receipt.file.name

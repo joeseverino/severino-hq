@@ -1,13 +1,13 @@
 from pathlib import Path
 
 from django import forms
-from django.core.files.uploadedfile import UploadedFile
 from django.urls import reverse
 
 from .models import Receipt
 from .validation import (
     ALLOWED_RECEIPT_CONTENT_TYPES,
     MAX_RECEIPT_BYTES,
+    is_new_upload,
     validate_receipt_file,
 )
 
@@ -74,8 +74,6 @@ class ReceiptUploadForm(forms.ModelForm):
 
     def clean_file(self):
         f = self.cleaned_data["file"]
-        # An edit without an upload cleans to the stored file, which was held
-        # to these rules when it arrived and carries no content type of its own.
-        if isinstance(f, UploadedFile):
+        if is_new_upload(f):
             validate_receipt_file(f)
         return f

@@ -1,6 +1,7 @@
 """Canonical receipt-file policy shared by forms and application services."""
 
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import UploadedFile
 
 from hq.platform.application.labels import human_bytes
 
@@ -40,6 +41,17 @@ FILE_TYPE_LABELS = {
     "image/tiff": "TIFF image",
     "text/plain": "Text file",
 }
+
+
+def is_new_upload(file: object) -> bool:
+    """Whether a receipt's file is one just uploaded, so checked and stored.
+
+    Every request.FILES entry is an UploadedFile. An edit without one cleans to
+    the stored FieldFile, which was held to these rules when it arrived and
+    carries no content type of its own.
+    """
+
+    return isinstance(file, UploadedFile)
 
 
 def validate_receipt_file(upload) -> None:
