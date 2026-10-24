@@ -40,7 +40,7 @@ from .names import HQ, HQ_REVISION, HQ_SOURCE, LAN, LAPTOP, OWNER, PROXY, SSO, c
 # The services the operator starred, to keep at the top of the list.
 FAVORITES = (HQ, "photos.example.com")
 
-__all__ = ("REQUEST", "SSO", "as_production", "build", "build_showcase", "example_owner", "seed", "throwaway_media")
+__all__ = ("REQUEST", "SSO", "as_production", "build", "example_owner", "seed", "throwaway_media")
 
 # A reader's browser on the laptop, forwarded by the proxy, over HTTPS.
 REQUEST = {
@@ -108,14 +108,6 @@ def build(owner):
     seed(owner=owner)
     for hostname in FAVORITES:
         pins.toggle(owner, pins.SERVICE, hostname)
-
-
-def build_showcase():
-    """The estate under its example owner, who is returned."""
-
-    owner = example_owner()
-    build(owner)
-    return owner
 
 
 def seed(owner=None):

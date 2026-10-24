@@ -1,32 +1,6 @@
-# What a developer runs by hand beside the servers: a look at pages, manage.py,
+# What a developer runs by hand beside the servers: manage.py,
 # CI's timings and caches, the docs' pictures and diagrams, an extension's
 # contract check.
-
-["dev:look"]
-extends = "django-heavy"
-depends = [{ task = "setup:browser", args = ["{{usage.engine}}"] }]
-description = "Screenshot HQ pages as the browser gates draw them, judged by a rule if asked (docs/Development.md, Browser layout)"
-usage = '''
-arg "<pages>" help="Comma-separated pages: a gate page (connections, dense/services, derived/<app>/<list>), api/docs, estate/<path>, estate/all, or all"
-flag "--widths <widths>" help="Comma-separated widths in CSS pixels; default the phone, 820 and 1360"
-flag "--rule <rule>" help="What to judge on each page: survey (every check the browser gates hold), tables (print each table) or one layout check by name, such as a_table_fits_its_box_at_every_width. Findings go to var/gate/look.txt"
-flag "--css <css>" help="Extra CSS after app.css, as text or a file: the defect a new rule must catch"
-flag "--base <ref>" help="Also look at <ref> in a temporary worktree and report only findings new or fixed here; implies --rule survey"
-flag "--columns" help="Also print each table's column widths as drawn, at min-content and at max-content"
-flag "--eval <file>" help="Run the script in <file> on each page at each width before the screenshot and print what it returns"
-flag "--dialog <ids>" help="Also shoot each page with these dialogs open, comma-separated ids or all; --rule runs again inside each"
-flag "--slow <ms>" help="Draw as a loaded machine does, each animation frame <ms> late, to reproduce a timing flake"
-flag "--engine <engine>" default="webkit" help="The browser engine to draw in, installed first" {
-  choices "webkit" "chromium" "firefox"
-}
-flag "--dark" help="In the dark palette"
-flag "--fallback-face" help="With Inter withheld, in the next face of the font stack"
-flag "--open" help="With every disclosure open; --rule runs again with one popover of each kind shown"
-flag "--expand" help="With every table row opened"
-flag "--no-script" help="As the server drew it, before any script runs"
-flag "--deep" help="Also every page the estate pages link to: each record and the command forms it opens"
-'''
-run = "HQ_BROWSER_ENGINE=${usage_engine} HQ_BROWSER_FACE=${usage_fallback_face:+fallback} HQ_BROWSER_SLOW=${usage_slow:-${HQ_BROWSER_SLOW:-}} uv run --group browser python manage.py test hq.platform.core.tests.look.Look.test_look --noinput --parallel 1"
 
 [manage]
 description = "Run a manage.py command on a new empty database, host alone, as the gates set it up: mise run manage -- <command>"

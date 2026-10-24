@@ -26,16 +26,17 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.core.management import call_command
 from django.db import connections
-from django.test import Client, override_settings
+from django.test import Client
 lazy from playwright.sync_api import Error as BrowserError
 
+from hq.platform.core import seeds
 from hq.platform.core.speculation import NOT_A_NAVIGATION
 from hq.platform.core.test_runner import stall_watch
 from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, navigation
 from hq.platform.core.tests.browser.gate import BrowserGate, add_css
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.reference import REFERENCE, REFERENCE_DARK, render_reference, wait_for_reference
-from hq.platform.core.tests.browser.stress import ALL_PAGES
+from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
 from hq.platform.core.tests.browser.survey import AUDIT, survey_checks
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN
 from hq.platform.core.tests.look_report import (
@@ -48,7 +49,7 @@ from hq.platform.core.tests.look_report import (
 )
 from hq.platform.core.tests.look_tables import COLUMNS, TABLES, columns_line
 from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
-lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
+lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production
 
 OUT = Path(settings.BASE_DIR) / "var" / "look"
 # What a look against a base runs at the base as this checkout has it, so a
@@ -451,6 +452,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         cls.asked = _pages(_listed("usage_pages"))
         if (rule := cls.rule_asked()) and rule not in _rules():
             raise AssertionError(f"No rule named {rule!r}. Rules: {', '.join(_rules())}")
+        try:
+            seeds.get(_usage("usage_seed"))
+        except LookupError as unknown:
+            raise AssertionError(f"--seed: {unknown}") from None
         # The base next, while nothing of this run's holds memory but Django.
         ref = _usage("usage_base")
         cls.base, cls.base_measured, cls.base_errors = _look_at(ref, rule, cls.clock_at) if ref else (None, {}, {})
@@ -470,11 +475,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     def render(cls):
         pages = cls.asked
         estate = [_estate_name(path) for path in navigation()]
-        stress = [*ALL_PAGES, *derived_pages()]
         cls.addresses = {name: _estate_path(name) for name in {*estate, *filter(_is_estate, pages)}}
-        rendered: dict = {}
-        if set(pages) & set(stress):
-            rendered |= LayoutBrowserTests.render()
+        rendered = stress_pages(pages)
         if set(pages) & set(REFERENCE_PAGES):
             rendered |= render_reference()
         # Last: the stress estates are rolled back, the example estate is
@@ -504,9 +506,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         # request is answered.
         stack.enter_context(mock.patch.dict(os.environ, {"DJANGO_ALLOW_ASYNC_UNSAFE": "1"}))
         stack.enter_context(as_production())
-        stack.enter_context(override_settings(SEVERINO_POSTURE="advanced"))
         client = Client()
-        client.force_login(build_showcase(), backend=SSO)
+        client.force_login(stack.enter_context(seeds.built(_usage("usage_seed"))), backend=SSO)
         cls.answered = {}
         return client
 

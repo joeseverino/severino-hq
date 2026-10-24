@@ -7,12 +7,16 @@ import os
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
-from django.test import SimpleTestCase, override_settings, tag
+from django.test import SimpleTestCase, TestCase, override_settings, tag
+
+from hq.platform.core import seeds
 
 from . import look, look_report, look_tables
+from .browser import stress
 
 ASKED = {"usage_pages": "example"}
 
@@ -79,7 +83,7 @@ class AskedFirstTests(SimpleTestCase):
 
         for kept in ("clock_at", "asked"):
             self.addCleanup(lambda kept=kept: kept in vars(look.Look) and delattr(look.Look, kept))
-        environment = {**ASKED, "usage_base": "HEAD", **asked}
+        environment = {**ASKED, "usage_base": "HEAD", "usage_seed": "showcase", **asked}
         with (
             mock.patch.dict(os.environ, environment, clear=True),
             mock.patch.object(look, "_look_at") as base,
@@ -100,6 +104,29 @@ class AskedFirstTests(SimpleTestCase):
 
     def test_a_page_that_does_not_exist_is_refused_before_the_base_is_looked_at(self):
         self.refused_before_the_base({"usage_pages": "example/no-such-page"}, "No page ['example/no-such-page']")
+
+    def test_a_seed_that_does_not_exist_is_refused_with_the_seeds_that_do_before_the_base_is_looked_at(self):
+        self.refused_before_the_base(
+            {"usage_pages": "estate/projects", "usage_seed": "example-no-such-seed"}, "showcase, standard"
+        )
+
+
+class StressPagesTests(TestCase):
+    def test_a_stress_page_asked_builds_only_the_estates_it_needs_and_renders_only_itself(self):
+        built = []
+
+        @contextmanager
+        def spied(name):
+            built.append(name)
+            with real(name) as owner:
+                yield owner
+
+        real = seeds.built
+        with mock.patch.object(seeds, "built", spied):
+            pages = stress.stress_pages(["machine", "example/not-a-stress-page"])
+        # The dense estate answers what the sparse page asks on opening.
+        self.assertEqual(built, ["sparse", "dense"])
+        self.assertEqual(set(pages) & {*stress.ALL_PAGES, "example/not-a-stress-page"}, {"machine"})
 
 
 class _Popovers:

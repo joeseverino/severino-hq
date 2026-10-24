@@ -7,8 +7,8 @@ from django.db import transaction
 lazy from django.template.loader import render_to_string
 
 from hq.platform.core import seeds
-from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES, render_dense_pages
-from hq.platform.core.tests.test_browser_derived_fixtures import render_derived_pages
+from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES, _asked_on_opening
+from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 from hq.platform.core.tests.test_browser_fixtures import PAGES, render_pages
 lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.pages import Page, PageAction
@@ -71,20 +71,37 @@ def speaking_heads():
     }
 
 
+def stress_pages(asked):
+    """The pages of the three stress estates and the probes beside them that
+    ``asked`` names, by name: an estate is built only for a page of its own
+    asked, and rolled back once rendered, so nothing else sees it. A sparse or
+    dense page asks for its readings on opening, and hears what the dense
+    estate answers, so that one is built for either."""
+
+    asked = set(asked)
+    sparse, dense = ({name: page for name, page in family.items() if name in asked} for family in (PAGES, DENSE_PAGES))
+    derived = {name: page for name, page in derived_pages().items() if name in asked}
+    pages = {}
+    for seed, chosen, needed in (
+        ("sparse", sparse, sparse),
+        ("dense", dense, sparse or dense),
+        ("derived", derived, derived),
+    ):
+        if needed:
+            with transaction.atomic(), seeds.built(seed) as owner:
+                pages |= render_pages(owner, chosen)
+                # Asked once every page is drawn, so each is drawn before anything was asked.
+                pages |= _asked_on_opening(owner) if seed == "dense" else {}
+                transaction.set_rollback(True)
+    probes = speaking_heads() | shared_parts() if asked & {*SPEAKING_HEADS, *SHARED_PARTS} else {}
+    return pages | {name: page for name, page in probes.items() if name in asked}
+
+
 @cache
 def stress_estate():
     """Every page of the three stress estates, the derived lists' names, and
     the probes beside them: ``(pages, lists)``. Rendered once a process, so a
-    worker handed a second layout class does not build the estates again;
-    each estate is rolled back once rendered, so nothing else sees it."""
+    worker handed a second layout class does not build the estates again."""
 
-    with transaction.atomic(), seeds.built("sparse") as owner:
-        pages = render_pages(owner)
-        transaction.set_rollback(True)
-    with transaction.atomic(), seeds.built("dense") as owner:
-        pages |= render_dense_pages(owner)
-        transaction.set_rollback(True)
-    with transaction.atomic(), seeds.built("derived") as owner:
-        lists = render_derived_pages(owner)
-        transaction.set_rollback(True)
-    return MappingProxyType(pages | lists | speaking_heads() | shared_parts()), tuple(lists)
+    lists = tuple(derived_pages())
+    return MappingProxyType(stress_pages([*ALL_PAGES, *lists, *SPEAKING_HEADS, *SHARED_PARTS])), lists

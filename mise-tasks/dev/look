@@ -1,0 +1,71 @@
+#!/bin/sh
+#MISE description="Screenshot HQ pages as the browser gates draw them, judged by a rule if asked (docs/Development.md, Browser layout)"
+#MISE extends="django"
+#MISE depends=[{task="setup:browser", args=["{{usage.engine}}"]}]
+#MISE timeout="30m"
+#USAGE arg "<pages>" help="Comma-separated pages: a gate page (connections, dense/services, derived/<app>/<list>), api/docs, estate/<path>, estate/all, or all"
+#USAGE flag "--widths <widths>" help="Comma-separated widths in CSS pixels; default the phone, 820 and 1360"
+#USAGE flag "--rule <rule>" help="What to judge on each page: survey (every check the browser gates hold), tables (print each table) or one layout check by name, such as a_table_fits_its_box_at_every_width. Findings go to var/gate/look.txt"
+#USAGE flag "--css <css>" help="Extra CSS after app.css, as text or a file: the defect a new rule must catch"
+#USAGE flag "--base <ref>" help="Also look at <ref> in a temporary worktree and report only findings and errors new or fixed here; implies --rule survey and --perf"
+#USAGE flag "--perf" negate="--no-perf" help="Then measure the estate pages asked with perf:report, beside --base's; on by default with --base"
+#USAGE flag "--seed <name>" default="showcase" help="The data set the estate pages are drawn on, by its name in hq.platform.core.seeds"
+#USAGE flag "--columns" help="Also print each table's column widths as drawn, at min-content and at max-content"
+#USAGE flag "--eval <file>" help="Run the script in <file> on each page at each width before the screenshot and print what it returns"
+#USAGE flag "--dialog <ids>" help="Also shoot each page with these dialogs open, comma-separated ids or all; --rule runs again inside each"
+#USAGE flag "--slow <ms>" help="Draw as a loaded machine does, each animation frame <ms> late, to reproduce a timing flake"
+#USAGE flag "--engine <engine>" default="webkit" help="The browser engine to draw in, installed first" {
+#USAGE   choices "webkit" "chromium" "firefox"
+#USAGE }
+#USAGE flag "--dark" help="In the dark palette"
+#USAGE flag "--fallback-face" help="With Inter withheld, in the next face of the font stack"
+#USAGE flag "--open" help="With every disclosure open; --rule runs again with one popover of each kind shown, and shoots it"
+#USAGE flag "--expand" help="With every table row opened"
+#USAGE flag "--no-script" help="As the server drew it, before any script runs"
+#USAGE flag "--deep" help="Also every page the estate pages link to: each record and the command forms it opens"
+
+# The look is hq/platform/core/tests/look.py; perf:report measures after it,
+# in the same heavy turn.
+set -eu
+
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+
+looked=0
+HQ_BROWSER_ENGINE="${usage_engine:?}" HQ_BROWSER_FACE="${usage_fallback_face:+fallback}" \
+    HQ_BROWSER_SLOW="${usage_slow:-${HQ_BROWSER_SLOW:-}}" \
+    uv run --group browser python manage.py test hq.platform.core.tests.look.Look.test_look --noinput --parallel 1 ||
+    looked=$?
+
+case "${usage_perf:-}" in
+    true) measure=1 ;;
+    false) measure="" ;;
+    *) measure="${usage_base:+1}" ;;
+esac
+[ -n "${measure}" ] || exit "${looked}"
+
+# perf:report serves the example estate alone, so it measures the estate pages asked.
+served=""
+set -f
+old_ifs="${IFS}"
+IFS=,
+for page in ${usage_pages:?}; do
+    page="${page#"${page%%[! ]*}"}"
+    case "${page}" in
+        estate | estate/*) served="${served:+${served},}${page}" ;;
+        all)
+            served="${served:+${served},}${page}"
+            echo "perf:report measures the example estate's pages of all, not the stress or reference pages"
+            ;;
+        '') ;;
+        *) echo "perf:report does not measure ${page}: it serves the example estate's pages alone" ;;
+    esac
+done
+IFS="${old_ifs}"
+set +f
+[ -n "${served}" ] || exit "${looked}"
+
+measured=0
+mise run perf:report "${served}" ${usage_base:+--base "${usage_base}"} || measured=$?
+[ "${looked}" -ne 0 ] && exit "${looked}"
+exit "${measured}"

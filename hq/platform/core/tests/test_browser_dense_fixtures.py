@@ -53,7 +53,6 @@ from hq.platform.core.tests.test_browser_fixtures import (
     _asked_through_the_proxy,
     _dashboard,
     _healthy,
-    render_pages,
 )
 
 # Hyphenated on purpose: a browser breaks a name at a hyphen, and a name that
@@ -759,8 +758,3 @@ DENSE_PAGES = {
         ExitStack,
     ),
 }
-
-
-def render_dense_pages(user):
-    # Asked after every page is drawn, so each is drawn before anything was asked.
-    return render_pages(user, DENSE_PAGES) | _asked_on_opening(user)
