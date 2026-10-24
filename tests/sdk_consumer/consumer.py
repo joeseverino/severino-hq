@@ -10,7 +10,9 @@ fails the gate the day one of those stops being an error.
 
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Any, assert_type
+from typing import Any, assert_type, override
+
+from django.urls import reverse_lazy
 
 from hq_sdk import (
     capabilities,
@@ -193,6 +195,27 @@ class Things(tables.TableListMixin, pages.PageMixin):
     table_default_sort = "name"
     # An identifier beside a wide prose column takes what it leaves.
     table_room = "shared"
+
+
+class AThing(pages.PageMixin):
+    # A record's page: its list as the trail's first crumb, the record's own after it.
+    page_trail = ("Things", reverse_lazy("example:things"))
+
+    @override
+    def trail_label(self, record: Any) -> str | None:
+        return str(record)
+
+
+class WronglyTrailed(pages.PageMixin):
+    page_trail = "Things"  # type: ignore[assignment]
+
+    @override
+    def trail_label(self, record: Any) -> int:  # type: ignore[override]
+        return 1
+
+
+def a_trail(page: AThing) -> None:
+    assert_type(page.get_page_trail(), tuple[tuple[str, str], ...])
 
 
 class WronglyDeclared(tables.TableListMixin):

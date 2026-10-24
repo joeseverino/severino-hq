@@ -14,7 +14,7 @@ from hq.platform.application import related
 from hq.platform.application.documentation import document_link
 from hq.platform.application.expenses import costs_by_category
 from hq.platform.application.moments import when_day
-from hq.platform.application.pages import PageAction, PageMixin, record_trail
+from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.projection import years_of
 from hq.platform.application.references import ReferencePickerMixin, referenced_by_row, resolve_many
 from hq.platform.application.security import web_principal
@@ -84,13 +84,16 @@ EXPENSES_TRAIL = ("Expenses", reverse_lazy("expenses:list"))
 class ExpensePage(PageMixin):
     """A page about one expense, or a new one: its trail runs back to the list."""
 
+    page_trail = EXPENSES_TRAIL
+
     @override
-    def get_page_trail(self):
-        return record_trail(EXPENSES_TRAIL, getattr(self, "object", None), str)
+    def trail_label(self, record):
+        return str(record)
 
 
 class ExpenseDetailView(PageMixin, DetailView):
     model = Expense
+    page_trail = EXPENSES_TRAIL
     template_name = "expenses/expense_detail.html"
     context_object_name = "expense"
     queryset = Expense.objects.select_related(
@@ -122,10 +125,6 @@ class ExpenseDetailView(PageMixin, DetailView):
     @override
     def get_page_lede(self):
         return f"{when_day(self.object.date)} · {self.object.get_category_display()}"
-
-    @override
-    def get_page_trail(self):
-        return (EXPENSES_TRAIL,)
 
     @override
     def get_page_actions(self):

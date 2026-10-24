@@ -840,6 +840,17 @@
           "page_title": {
             "kind": "attribute",
             "type": "str"
+          },
+          "page_trail": {
+            "kind": "attribute",
+            "type": "NoneType"
+          },
+          "trail_label": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "record"
+            ]
           }
         }
       },
