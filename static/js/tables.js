@@ -168,8 +168,9 @@
 
   // A list whose server sorts it has links in its headings; any other table
   // whose rows are worth sorting has buttons that sort the rows on the page.
-  // Both are drawn by the server (`table_heading`). A press sorts
-  // ascending, the next descending, the third puts the rows back as they came.
+  // Both are drawn by the server (`table_heading`), in an extension's table
+  // too (hand_drawn_tables). A press sorts ascending, the next descending,
+  // the third puts the rows back as they came.
   // Rows keep to their own section, a section's heading row stays on top of
   // it, and an open row takes the line beneath it along.
   const UNIT_SECONDS = { second: 1, minute: 60, hour: 3600, day: 86400, week: 604800, month: 2629800, year: 31557600 };
@@ -349,81 +350,12 @@
     });
   };
 
-  // A table drawn through the table tags has its sort controls in the HTML
-  // (`table_heading local_sort=…`), and its headings declare a kind. One drawn
-  // by hand, as an extension's template still does, gets them here.
-  const HAND_DRAWN = ".table-scroll > .data-table:not(:has(> thead th[data-kind]))";
-  function markSortable() {
-  let rowsTimer = null;
-    document.querySelectorAll(HAND_DRAWN).forEach((table) => {
-      if (table.parentElement.hasAttribute("data-chart") || table.parentElement.parentElement?.classList.contains("chart-data")) return;
-      const headings = [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
-      if (!headings.length || table.querySelector(":scope > thead a.table-sort-link")) return;
-      if (table.querySelector(":scope > thead > tr:only-child") === null) return;
-      if (table.querySelector(":scope > tbody > tr > [rowspan]")) return;
-      const records = table.querySelectorAll(":scope > tbody > tr:not(.row-group):not(.row-detail)");
-      if (records.length < 2) return;
-      headings.forEach((heading) => {
-        if ("sortReady" in heading.dataset || heading.colSpan > 1) return;
-        const name = headingName(heading);
-        if (!name || heading.querySelector("input, button, a, select")) return;
-        heading.dataset.sortReady = "";
-        heading.setAttribute("aria-sort", "none");
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "table-sort-link";
-        button.dataset.sortLocal = "";
-        button.append(...heading.childNodes);
-        const mark = document.createElement("span");
-        mark.className = "sort-indicator";
-        mark.setAttribute("aria-hidden", "true");
-        button.append(mark);
-        button.setAttribute("aria-label", `Sort by ${name}`);
-        heading.append(button);
-      });
-    });
-  }
-
-  document.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-sort-local]");
-    if (!button) return;
-    const heading = button.closest("th");
-    const table = heading.closest("table");
-    const next = { none: "ascending", ascending: "descending", descending: "none" }[heading.getAttribute("aria-sort")] || "ascending";
-    table.querySelectorAll(":scope > thead th[data-sort-ready]").forEach((other) => other.setAttribute("aria-sort", "none"));
-    heading.setAttribute("aria-sort", next);
-    sortRows(table, heading.cellIndex, next);
-  });
-
-  let rowsTimer = null;
-  // A window that changes size changes what shows, so widths held for the old
-  // size are let go and taken again, and each open row lists what is held
-  // back now, which may be nothing if its columns came back.
-  const settleOpenRows = () => {
-    document.querySelectorAll(".data-table[data-rows-held]").forEach((table) => {
-      releaseColumns(table);
-      const open = [...table.querySelectorAll(":scope > tbody > tr.is-expanded")];
-      open.forEach((row) => {
-        row.classList.remove("is-expanded");
-        closeDetail(row);
-      });
-      // Fitted as it stands with every row closed, which is what is held.
-      refit(table);
-      if (!open.length) return;
-      holdColumns(table);
-      open.forEach((row) => {
-        openDetail(row);
-        row.classList.add("is-expanded");
-      });
-    });
-  };
-
   const markTables = () => {
     settleOpenRows();
-    markSortable();
     markCuts();
   };
   const markTablesSoon = () => {
+  let rowsTimer = null;
     window.clearTimeout(rowsTimer);
     rowsTimer = window.setTimeout(markTables, 120);
   };

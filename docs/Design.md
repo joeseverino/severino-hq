@@ -135,9 +135,11 @@ same control, looking the same, drawn as a button (`local_sort=rows|sortable`,
 or a row count where rows come in groups), and `tables.js` sorts the rows on
 the page: ascending, descending, then as they came. Amounts, dates and lengths
 of time sort as what they are; a cell may say its own value with `data-sort`.
-Sections keep their own rows. A table drawn by hand, with no declared
-headings, gets its buttons from `tables.js`.
-*Gate:* `test_any_table_sorts_by_a_heading`.
+Sections keep their own rows. No table is drawn by hand, an extension's
+included: `hand_drawn_tables` in `plugin_testing` refuses one, and the host's
+suite runs it over every installed extension's templates.
+*Gate:* `test_any_table_sorts_by_a_heading`,
+`test_every_table_is_declared_through_the_tags`.
 
 **A table is laid out before any script runs.** A long identifier is one
 line, cut with an ellipsis at a share of its region's width

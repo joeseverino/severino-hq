@@ -63,8 +63,8 @@ def markup() -> tuple[set[str], set[str], str]:
         source = library.read_text(encoding="utf-8")
         # A tag library writes markup too: its attributes are rendered.
         text.append(source)
-        for value in re.findall(r'\bclass="([\w\s-]*)"', source):
-            classes.update(value.split())
+        for value in re.findall(r'\bclass="([\w\s{}-]*)"', source):
+            classes.update(value.replace("{}", " ").split())
     return classes, ids, "\n".join(text)
 
 

@@ -3,92 +3,36 @@
 import re
 from pathlib import Path
 
-from django.template import Context, RequestContext, Template, TemplateSyntaxError, engines
-from django.template.base import TextNode
-from django.template.defaulttags import IfNode
+from django.template import Context, RequestContext, Template, TemplateSyntaxError
 from django.test import RequestFactory, SimpleTestCase, tag
 from django.urls import reverse
 
+from hq.platform.application import plugins
+from hq.platform.application.plugin_testing import hand_drawn_tables, table_problems
 from hq.platform.application.routes import routed
 from hq.platform.application.tables import TableColumn, TableListMixin, ranked, typed
 from hq.platform.application.tests.markup import all_elements, elements, select, with_class, within
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
-from hq.platform.core.templatetags import table_tags
 
 from .test_web import _AuthedTestCase
 
 TEMPLATES = Path(__file__).resolve().parents[4] / "templates"
 
-_OPEN, _CLOSE = "\x00region\x00", "\x00/region\x00"
-_HEADING, _DROPPED_HEADING = "\x00heading\x00", "\x00heading-drops\x00"
-_TABLE = re.compile(r'<table\b[^>]*\bclass="[^"]*\bdata-table\b')
-_HEAD = re.compile(r"<thead\b.*?</thead>", re.DOTALL)
-_HAND_HEADING = re.compile(r"<th[\s>]")
 # A list's columns: the name, a column kept at every width, and one that may leave.
 _LIST_COLUMNS = (TableColumn("Name"), TableColumn("Note", css="key-col"), TableColumn("When"))
 
 
-def _func(node) -> object:
-    return getattr(node, "func", None)
+def _template_roots() -> list[Path]:
+    """The host's templates and each installed extension's, so the composed
+    suite reads the extensions as well."""
 
+    from django.apps import apps
 
-def _heading_marker(node) -> str:
-    """A heading, marked when it is given a literal drop rank."""
-
-    drop = node.kwargs.get("drop")
-    literal = getattr(getattr(drop, "var", None), "literal", None)
-    return _DROPPED_HEADING if literal else _HEADING
-
-
-def _flatten(nodelist, out: list[str]) -> list[str]:
-    """The template's markup in source order, every branch included, with the
-    table tags standing as markers."""
-
-    for node in nodelist:
-        if isinstance(node, TextNode):
-            out.append(node.s)
-        elif isinstance(node, table_tags.RegionNode):
-            out.append(_OPEN)
-            _flatten(node.nodelist, out)
-            out.append(_CLOSE)
-        elif _func(node) is table_tags.table_heading:
-            out.append(_HEADING if "select_all" in node.kwargs else _heading_marker(node))
-        elif isinstance(node, IfNode):
-            for _condition, branch in node.conditions_nodelists:
-                _flatten(branch, out)
-        else:
-            for attribute in node.child_nodelists:
-                _flatten(getattr(node, attribute, None) or (), out)
-    return out
-
-
-def table_problems(source: str) -> list[str]:
-    """What keeps a template's tables off the contract: a table outside its region,
-    a heading written by hand, a region written by hand, a dropped name column."""
-
-    markup = "".join(_flatten(engines["django"].from_string(source).template.nodelist, []))
-    problems = []
-    if re.search(r'class="[^"]*\btable-scroll\b', markup):
-        problems.append("a scroll region written by hand")
-    for table in _TABLE.finditer(markup):
-        before = markup[: table.start()]
-        if before.count(_OPEN) <= before.count(_CLOSE):
-            problems.append("a data table outside {% table_region %}")
-        body = markup[table.start() : markup.find("</table>", table.start())]
-        for head in _HEAD.findall(body):
-            if _HAND_HEADING.search(head):
-                problems.append("a heading not drawn by {% table_heading %}")
-            first = re.search(f"{_HEADING}|{_DROPPED_HEADING}", head)
-            if first and first.group() == _DROPPED_HEADING:
-                problems.append("a drop rank on the column that names each row")
-    return problems
-
-
-def _templates() -> dict[str, str]:
-    return {
-        path.relative_to(TEMPLATES).as_posix(): path.read_text(encoding="utf-8")
-        for path in sorted(TEMPLATES.rglob("*.html"))
-    }
+    installed = set(plugins.installed_plugin_apps())
+    return [
+        TEMPLATES,
+        *(Path(config.path) / "templates" for config in apps.get_app_configs() if config.name in installed),
+    ]
 
 
 # What tables.js marks as it fits a table to its region, before the frame
@@ -254,6 +198,62 @@ class TableTagTests(SimpleTestCase):
             for each in found
             if each.tag == "th" and any(each.ancestors[-1] is cell.ancestors[-1] for cell in blank)
         }
+        self.assertEqual(marked, {"dash", "empty", "empty value", "line break"})
+        self.assertEqual(len(blank), 4, "a table inside a cell is that cell's content")
+
+    def test_a_column_with_nothing_in_any_row_is_marked_in_every_row(self):
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Pick" select_all=True %}'
+            '{% table_heading "Name" %}{% table_heading "Empty" %}{% table_heading "Some" %}</tr></thead><tbody>'
+            '<tr class="row-group"><th colspan="4">Group</th></tr>'
+            '<tr><td data-col="pick"></td><td data-col="name">—</td><td data-col="empty">—</td><td data-col="some">Said</td></tr>'
+            '<tr><td data-col="pick"></td><td data-col="name">—</td><td data-col="empty"> </td><td data-col="some">–</td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        marked = [each for each in all_elements(_render(source)) if "data-blank-column" in each.attrs]
+        # Never the name's, though it says nothing: a column of tick-boxes stands before it.
+        self.assertEqual(
+            [each.attrs.get("data-col") or each.text.strip() for each in marked], ["Empty", "empty", "empty"]
+        )
+
+    def test_what_a_kept_line_says_is_one_part_the_stylesheet_can_hold(self):
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "State" "status" %}{% table_heading "Note" %}</tr></thead><tbody>'
+            '<tr><td>a</td><td data-col="said">Ask me first <span class="muted">for\nthis</span></td><td>b</td></tr>'
+            '<tr><td>c</td><td data-col="blank">—</td><td>d</td></tr>'
+            '<tr><td colspan="3">Nothing else</td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        kept = with_class(_render(source), "kept-line")
+        self.assertEqual([each.ancestors[-1].attrs.get("data-col") for each in kept], ["said"])
+        self.assertEqual(kept[0].words, "Ask me first for this")
+
+    def test_only_a_long_cell_of_prose_or_a_status_holds_out_for_a_floor(self):
+        long = "A sentence long enough to stand <em>several</em> lines tall in a narrow column"
+        lines = "Two lines, each of them short<br>and the second one as short"
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "State" "status" %}{% table_heading "Note" %}</tr></thead><tbody>'
+            f'<tr><td>{long}</td><td data-col="status">{long}</td><td data-col="long">{long}</td></tr>'
+            f'<tr><td>b</td><td>Up</td><td data-col="lines">{lines}</td></tr>'
+            '<tr><td>c</td><td>Up</td><td data-col="blank"><span class="empty-value">——————————————————</span></td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        marked = [each.attrs.get("data-col") for each in elements(_render(source), "td") if "data-long" in each.attrs]
+        self.assertEqual(marked, ["status", "long"])
+
+    def test_a_status_too_long_to_keep_wraps(self):
+        long = "Ask me first for container stack and tailnet policy changes"
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "State" "status" %}</tr></thead><tbody>'
+            f'<tr><td>a</td><td data-col="long">{long}</td></tr><tr><td>b</td><td data-col="short">Up</td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        kept = with_class(_render(source), "kept-line")
+        self.assertEqual([each.ancestors[-1].attrs.get("data-col") for each in kept], ["short"])
+
     def test_a_row_that_holds_something_back_has_its_line_beneath(self):
         """After a row is the line its toggle opens: the blocks it keeps
         beneath itself, then under its column's name a column that may leave
@@ -312,62 +312,6 @@ class TableTagTests(SimpleTestCase):
             '<tr><td colspan="2">Nothing else</td></tr></tbody></table>{% endtable_region %}'
         )
         self.assertEqual(with_class(_render(source), "row-detail"), [])
-
-        self.assertEqual(marked, {"dash", "empty", "empty value", "line break"})
-        self.assertEqual(len(blank), 4, "a table inside a cell is that cell's content")
-
-    def test_a_column_with_nothing_in_any_row_is_marked_in_every_row(self):
-        source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Pick" select_all=True %}'
-            '{% table_heading "Name" %}{% table_heading "Empty" %}{% table_heading "Some" %}</tr></thead><tbody>'
-            '<tr class="row-group"><th colspan="4">Group</th></tr>'
-            '<tr><td data-col="pick"></td><td data-col="name">—</td><td data-col="empty">—</td><td data-col="some">Said</td></tr>'
-            '<tr><td data-col="pick"></td><td data-col="name">—</td><td data-col="empty"> </td><td data-col="some">–</td></tr>'
-            "</tbody></table>{% endtable_region %}"
-        )
-        marked = [each for each in all_elements(_render(source)) if "data-blank-column" in each.attrs]
-        # Never the name's, though it says nothing: a column of tick-boxes stands before it.
-        self.assertEqual(
-            [each.attrs.get("data-col") or each.text.strip() for each in marked], ["Empty", "empty", "empty"]
-        )
-
-    def test_what_a_kept_line_says_is_one_part_the_stylesheet_can_hold(self):
-        source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
-            '{% table_heading "State" "status" %}{% table_heading "Note" %}</tr></thead><tbody>'
-            '<tr><td>a</td><td data-col="said">Ask me first <span class="muted">for\nthis</span></td><td>b</td></tr>'
-            '<tr><td>c</td><td data-col="blank">—</td><td>d</td></tr>'
-            '<tr><td colspan="3">Nothing else</td></tr>'
-            "</tbody></table>{% endtable_region %}"
-        )
-        kept = with_class(_render(source), "kept-line")
-        self.assertEqual([each.ancestors[-1].attrs.get("data-col") for each in kept], ["said"])
-        self.assertEqual(kept[0].words, "Ask me first for this")
-
-    def test_only_a_long_cell_of_prose_or_a_status_holds_out_for_a_floor(self):
-        long = "A sentence long enough to stand <em>several</em> lines tall in a narrow column"
-        lines = "Two lines, each of them short<br>and the second one as short"
-        source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
-            '{% table_heading "State" "status" %}{% table_heading "Note" %}</tr></thead><tbody>'
-            f'<tr><td>{long}</td><td data-col="status">{long}</td><td data-col="long">{long}</td></tr>'
-            f'<tr><td>b</td><td>Up</td><td data-col="lines">{lines}</td></tr>'
-            '<tr><td>c</td><td>Up</td><td data-col="blank"><span class="empty-value">——————————————————</span></td></tr>'
-            "</tbody></table>{% endtable_region %}"
-        )
-        marked = [each.attrs.get("data-col") for each in elements(_render(source), "td") if "data-long" in each.attrs]
-        self.assertEqual(marked, ["status", "long"])
-
-    def test_a_status_too_long_to_keep_wraps(self):
-        long = "Ask me first for container stack and tailnet policy changes"
-        source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
-            '{% table_heading "State" "status" %}</tr></thead><tbody>'
-            f'<tr><td>a</td><td data-col="long">{long}</td></tr><tr><td>b</td><td data-col="short">Up</td></tr>'
-            "</tbody></table>{% endtable_region %}"
-        )
-        kept = with_class(_render(source), "kept-line")
-        self.assertEqual([each.ancestors[-1].attrs.get("data-col") for each in kept], ["short"])
 
     def test_a_rank_on_the_column_that_names_the_row_is_refused(self):
         source = (
