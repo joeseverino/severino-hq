@@ -18,21 +18,12 @@ class Probe(BrowserGate):
     Its parts are not named test_, so discovery runs none of them on its own.
     """
 
-    def setUp(self):
+    def start(self, **options):
+        # BrowserGate.setUp runs as it is, cleanups and all, with this in
+        # place of the browser it starts.
         self.page = threading.Lock()
         self.on = None
         self.shots = []
-        # The cleanups BrowserGate.setUp registers, in its order: each a method
-        # of the test, so a pickle of them refers back to it.
-        self.addCleanup(self.close_context)
-        self.addCleanup(self.capture_failure)
-        self.addCleanup(self.kept_the_policy)
-
-    def close_context(self):
-        pass
-
-    def kept_the_policy(self):
-        pass
 
     def shoot(self, name):
         self.shots.append((name, self.on))
