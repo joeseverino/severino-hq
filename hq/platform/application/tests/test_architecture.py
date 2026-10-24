@@ -382,6 +382,10 @@ class StyleContractTests(SimpleTestCase):
         are the idioms that put one name in two rules on purpose. Breakpoint
         and container variants are the same rule at another size and are not
         counted either.
+
+        Stylelint's no-duplicate-selectors does not replace it: it judges one
+        file and one at-rule block at a time, so a selector in two sheets or
+        in two `@layer` blocks of one sheet passes it.
         """
 
         import collections
