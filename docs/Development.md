@@ -164,10 +164,8 @@ so a holder that has stalled shows as that rather than as this task hanging.
 The wait is bounded by
 `SEVERINO_HEAVY_WAIT` seconds, two hours by default, the longest a heavy task
 may run; past that it exits 75 (`EX_TEMPFAIL`) naming the holder again. A
-holder whose processes together use under 1% of a core for
-`SEVERINO_HEAVY_IDLE` seconds (ten minutes by default) is hung: the waiting
-task names it, how long it has been idle and the `kill` that stops it, and
-exits 75 then. It stops nothing itself. A heavy task run by one that holds the lock (`ci`
+waiting task stops nothing: what ends a hung holder is its own timeout, below.
+A heavy task run by one that holds the lock (`ci`
 running `browser`, `check` running `suite:as-image`) runs inside its turn. The
 lock goes with the process, so a killed gate frees it. CI runs one job per
 machine and takes no lock.
@@ -181,7 +179,9 @@ group of its own and stops that group when it is stopped, since a `mise run`
 inside another task signals only the pid it started; the command never holds
 the lock itself, so the turn ends with `heavy.sh`. `tests/shell/test-heavy.sh`
 holds both: every heavy task has a timeout, and one that hangs past it, run by
-hand or from inside another task, frees the turn.
+hand or from inside another task, frees the turn. A timeout says only that a
+gate ran out; `HQ_TEST_STALL_SECONDS` below a gate's timeout says which test
+stalled and where.
 
 To see who holds it without starting anything:
 
