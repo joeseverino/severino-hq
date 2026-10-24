@@ -25,6 +25,8 @@ which are decisions. Its configuration is
 [`.github/renovate.json`](../.github/renovate.json), each rule with its reason
 beside it; [`.github/workflows/renovate.yml`](../.github/workflows/renovate.yml)
 runs it every six hours under HQ's GitHub App, narrowed to this repository,
+with the global configuration the host's runs take,
+[`deploy/renovate/config.json`](../deploy/renovate/config.json),
 and Renovate moves that workflow's own action and image too.
 
 - **One weekly pull request**, `deps: update dependencies`, opened on Monday:

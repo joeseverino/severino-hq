@@ -452,11 +452,12 @@ class RenovateTests(SimpleTestCase):
             for rule in config["packageRules"]
             for command in rule.get("postUpgradeTasks", {}).get("commands", [])
         ]
-        (allowed,) = [
-            json.loads(step["env"]["RENOVATE_ALLOWED_COMMANDS"])
+        (global_configuration,) = [
+            step["with"]["configurationFile"]
             for step in every_step(WORKFLOWS / "renovate.yml")
-            if "RENOVATE_ALLOWED_COMMANDS" in step.get("env", {})
+            if step.get("uses", "").startswith("renovatebot/github-action@")
         ]
+        allowed = json.loads((ROOT / global_configuration).read_text())["allowedCommands"]
         self.assertTrue(commands)
         for command in commands:
             with self.subTest(command=command):
