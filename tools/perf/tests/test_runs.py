@@ -12,6 +12,7 @@ from unittest import mock
 
 from django.test import SimpleTestCase
 
+from hq.platform.core import seeds
 from tools.perf import report, runs, targets
 from tools.perf.targets import NotMeasured
 
@@ -21,6 +22,7 @@ PLAN = report.Plan(
     viewports=[{"width": 402, "height": 874}],
     requests=2,
     image=False,
+    seed="showcase",
     extensions=[],
 )
 
@@ -34,11 +36,13 @@ class FakeTarget:
     def __init__(self, *_args, stop_fails: bool = False, **_kwargs) -> None:
         self.stop_fails = stop_fails
         self.asked = []
+        self.stopped = False
 
     def __enter__(self):
         return self
 
     def __exit__(self, *_exc):
+        self.stopped = True
         if self.stop_fails:
             raise RuntimeError("the server outlived its stop")
 
@@ -57,8 +61,26 @@ class FakeTarget:
         return 1500.0
 
 
-def server_times(_url, _cookie, pages, _requests):
-    return {page: {"status": 200, "p50_ms": 4.0, "p95_ms": 5.0} for page in pages}
+class ServerTimes:
+    """Every server answering 4 ms each round, and here 6 ms beside a base; each call's servers
+    kept, and what each target had been asked before it."""
+
+    def __init__(self) -> None:
+        self.asked: list[list[str]] = []
+        self.targets: list[FakeTarget] = []
+        self.before: list[list[str]] = []
+
+    def __call__(self, servers, pages, rounds):
+        self.asked.append(list(servers))
+        self.before = [step for target in self.targets for step in target.asked]
+        ms = {"base": 4.0, "here": 6.0 if "base" in servers else 4.0}
+        return {
+            side: {
+                page: {"status": 200, "p50_ms": ms[side], "p95_ms": 5.0, "times_ms": [ms[side]] * rounds}
+                for page in pages
+            }
+            for side in servers
+        }
 
 
 def no_chromium():
@@ -71,6 +93,7 @@ class Measured(SimpleTestCase):
         self.addCleanup(folder.cleanup)
         self.out = Path(folder.name)
         self.passed = []
+        self.server_times = ServerTimes()
 
         def one_pass(_url, _cookie, pages):
             self.passed.append(pages)
@@ -79,18 +102,22 @@ class Measured(SimpleTestCase):
         for patcher in (
             mock.patch.object(report, "OUT", self.out),
             mock.patch.object(report.measure, "one_pass", one_pass),
-            mock.patch.object(report.measure, "server_times", server_times),
+            mock.patch.object(report.measure, "server_times", self.server_times),
             mock.patch.object(report, "chromium", no_chromium),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
 
-    def measure(self, target: FakeTarget, asked: report.Plan = PLAN, log: str = "") -> tuple[runs.Run, list[dict]]:
-        """A run measuring ``target`` as its here side, its server's log saying ``log``, and the
-        document as each save left it."""
+    def measure(
+        self, target: FakeTarget, asked: report.Plan = PLAN, log: str = "", base: FakeTarget | None = None
+    ) -> tuple[runs.Run, list[dict]]:
+        """A run measuring ``target`` as its here side, beside ``base`` when given, its server's log
+        saying ``log``, and the document as each save left it."""
 
         kept = runs.Run.start(self.out, "here-dev-scratch", plan=asked.key())
         (self.out / f"{kept.name}.here.log").write_text(log, encoding="utf-8")
+        self.server_times.targets = [base, target] if base else [target]
+        served = iter(self.server_times.targets)
         saves = []
         save = kept.save
 
@@ -100,10 +127,12 @@ class Measured(SimpleTestCase):
 
         kept.save = snapshot
         with (
-            mock.patch.object(report, "Scratch", lambda *_args, **_kwargs: target),
+            mock.patch.object(report, "Scratch", lambda *_args, **_kwargs: next(served)),
+            mock.patch.object(report, "worktree", lambda _commit: contextlib.nullcontext(self.out)),
+            mock.patch.object(report, "ROOT", self.out),
             contextlib.redirect_stdout(io.StringIO()),
         ):
-            report.measure_tree(self.out, "0123456789ab", True, asked, kept, "here")
+            report.measure_run("ba9876543210" * 3 if base else None, "0123456789ab", asked, kept, fresh=False)
         return kept, saves
 
 
@@ -124,7 +153,8 @@ class FailureTests(Measured):
         here = kept.doc["here"]
 
         self.assertEqual([entry["page"] for entry in here["pages"]], PLAN.pages)
-        self.assertEqual(self.passed, [PLAN.walked])
+        self.assertTrue(self.passed)
+        self.assertTrue(all(walked == PLAN.walked for walked in self.passed))
 
     def test_memory_is_read_on_a_server_started_again_from_what_its_first_boot_compiled(self):
         target = FakeTarget()
@@ -136,14 +166,10 @@ class FailureTests(Measured):
     def test_each_measurement_is_saved_as_it_finishes(self):
         _, saves = self.measure(FakeTarget())
 
-        server_saved = [
-            doc for doc in saves if doc["here"]["pages"] and doc["here"]["pages"][0]["server"].get("p50_ms")
-        ]
-        self.assertTrue(server_saved)
+        timed = [doc for doc in saves if doc["here"]["pages"][0]["server"].get("p50_ms")]
+        self.assertTrue(timed)
         self.assertNotIn(
-            "queries",
-            server_saved[0]["here"]["pages"][0]["server"],
-            "server times reach the file before the run goes on",
+            "queries", timed[0]["here"]["pages"][0]["server"], "server times reach the file before the run goes on"
         )
 
     def test_a_server_that_fails_to_stop_keeps_what_it_served(self):
@@ -181,6 +207,67 @@ django.core.exceptions.ImproperlyConfigured: Plugin 'example.ledger' requires AP
 class Refusing(FakeTarget):
     def __enter__(self):
         raise NotMeasured("the server at http://127.0.0.1:9 exited before it was ready")
+
+
+class BesideABaseTests(Measured):
+    def test_both_servers_are_up_together_and_asked_for_server_time_in_one_call(self):
+        base, here = FakeTarget(), FakeTarget()
+
+        kept, _ = self.measure(here, base=base)
+
+        self.assertEqual(self.server_times.asked, [["base", "here"]])
+        self.assertTrue(base.stopped and here.stopped)
+        server = kept.doc["here"]["pages"][0]["server"]
+        self.assertEqual((server["moved_ms"], server["spread_ms"]), (2.0, 0.0))
+        self.assertEqual(kept.doc["base"]["pages"][0]["server"]["p50_ms"], 4.0)
+
+    def test_server_time_is_asked_while_both_servers_are_as_their_first_boot_left_them(self):
+        base, here = FakeTarget(), FakeTarget()
+
+        self.measure(here, base=base)
+
+        self.assertEqual(self.server_times.before, [], "no cold start or memory read before server time")
+        self.assertIn("cold start", base.asked)
+        self.assertIn("cold start", here.asked)
+
+    def test_a_kept_base_stands_in_for_all_but_server_time_which_is_asked_of_its_server_again(self):
+        seen = {"first": {}, "repeat": {}, "script_ms": 1.0, "long_tasks": 0, "long_task_ms": 0, "cls": 0}
+        for patcher in (
+            mock.patch.object(report, "chromium", contextlib.nullcontext),
+            mock.patch.object(
+                report.measure, "browser_costs", lambda _b, _u, _c, pages, _v: {page: {"402": seen} for page in pages}
+            ),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        previous, _ = self.measure(FakeTarget(), base=FakeTarget())
+        base = FakeTarget()
+        kept_before = previous.doc["base"]["cold_start"]
+
+        kept, _ = self.measure(FakeTarget(), base=base)
+
+        self.assertEqual(kept.doc["base_reused_from"], previous.name)
+        self.assertNotIn("cold start", base.asked, "the kept report's cold start stands")
+        self.assertEqual(kept.doc["base"]["cold_start"], kept_before)
+        self.assertEqual(self.server_times.asked[-1], ["base", "here"])
+
+    def test_a_base_that_will_not_start_leaves_here_measured_alone(self):
+        here = FakeTarget()
+
+        kept, _ = self.measure(here, base=Refusing())
+
+        self.assertEqual(kept.doc["base"]["failures"][0]["step"], "start")
+        self.assertEqual(self.server_times.asked, [["here"]])
+        self.assertNotIn("moved_ms", kept.doc["here"]["pages"][0]["server"])
+
+    def test_the_closing_line_counts_and_names_the_pages_that_moved_past_their_spread(self):
+        kept, _ = self.measure(FakeTarget(), base=FakeTarget())
+        kept.doc["here"]["pages"][1]["server"]["spread_ms"] = 9.0
+        with mock.patch.object(report, "ROOT", self.out):
+            said = report.closing(kept, kept.doc["here"], kept.doc["base"])
+
+        self.assertIn("1 of 2 pages moved past their spread (/)", said)
+        self.assertIn("showcase", said)
 
 
 class HostAloneTests(Measured):
@@ -257,6 +344,11 @@ class KeptTests(SimpleTestCase):
         self.assertIsNotNone(found)
         self.assertEqual(found[1]["pages"][0]["server"]["p50_ms"], 3.0)
 
+    def test_a_report_of_another_data_set_stands_in_for_nothing(self):
+        self.kept("0123456789ab", PLAN.key())
+
+        self.assertIsNone(runs.saved(self.out, "0123456789ab", PLAN.key() | {"seed": "scale"}))
+
     def test_another_plan_a_failure_or_an_unfinished_run_stands_in_for_nothing(self):
         other = copy.deepcopy(PLAN.key()) | {"requests": 20}
         self.kept("0123456789ab", other)
@@ -304,6 +396,38 @@ class ChosenTests(SimpleTestCase):
 
     def test_a_page_perf_cannot_serve_is_refused_with_the_pages_it_can(self):
         with self.assertRaisesRegex(
-            report.UnknownPage, r"No page dense/services\. Pages: estate, estate/infrastructure"
+            report.Unservable, r"No page dense/services\. Pages: estate, estate/infrastructure"
         ):
             report.chosen("estate/contacts,dense/services", self.EVERY)
+
+
+class SeedTests(SimpleTestCase):
+    def test_a_set_a_server_can_be_seeded_with_is_taken(self):
+        for name in seeds.SEEDS:
+            with self.subTest(name=name):
+                self.assertEqual(report.seed_of(name), name)
+
+    def test_a_set_no_server_can_be_seeded_with_is_refused_with_those_it_can(self):
+        with (
+            mock.patch.dict(seeds.SEEDS, {"scale": seeds.SEEDS["scale"]}, clear=True),
+            self.assertRaisesRegex(report.Unservable, r"No data set 'dense'.*Sets: scale$"),
+        ):
+            report.seed_of("dense")
+
+    def test_a_scratch_server_is_seeded_with_the_set_asked(self):
+        started = []
+
+        def popen(command, **_kwargs):
+            started.append(command)
+            return mock.Mock(poll=lambda: None, pid=0)
+
+        with (
+            mock.patch.object(targets.subprocess, "Popen", popen),
+            mock.patch.object(targets, "wait_ready", lambda *_args: 0.0),
+            mock.patch.object(targets, "stop_group", lambda _process: None),
+            tempfile.TemporaryDirectory() as folder,
+            targets.Scratch(Path(folder), Path(folder) / "log", "scale"),
+        ):
+            pass
+
+        self.assertEqual(started[0][started[0].index("--seed") + 1], "scale")

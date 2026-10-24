@@ -1,11 +1,14 @@
-"""`mise run perf:report [pages] [--image] [--base <ref>]`: how light and fast HQ is.
+"""`mise run perf:report [pages] [--image] [--seed <name>] [--base <ref>]`: how light and fast HQ is.
 
 Measures the pages asked, named as dev:look names the example estate's, by
 default every page its navigation lists (`estate.navigation`), on this
-checkout's `dev:scratch`, or its built image, so a change's cost is a number.
-What it measures and its flags are in docs/Development.md. A report, never a
-gate: it exits 0 when every measurement finished, 1 when any failed, 2 for a
-ref that names no commit or a page it cannot serve.
+checkout's `dev:scratch`, or its built image, seeded with a named data set, so
+a change's cost is a number. With a base, both servers stay up and are asked
+for server time in turn, so a page's move is told from noise
+(`measure.server_times`). What it measures and its flags are in
+docs/Development.md. A report, never a gate: it exits 0 when every measurement
+finished, 1 when any failed, 2 for a ref that names no commit, or a page or set
+it cannot serve.
 """
 
 import copy
@@ -16,18 +19,20 @@ import sys
 import tempfile
 import time
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 lazy import django
+lazy from django.test import override_settings
 lazy from playwright.sync_api import sync_playwright
 
 from tools.gate.at import RefError, git, remove
 from tools.perf import measure, parse, runs, table
 from tools.perf.targets import COLD_STARTS, Image, NotMeasured, Scratch, clean_env, run
+lazy from hq.platform.core import seeds
 lazy from hq.platform.core.tests.browser.estate import navigation
 lazy from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, viewport
 lazy from hq.platform.core.tests.look import ESTATE, _estate_name, _estate_path, _is_estate
@@ -56,6 +61,8 @@ class Plan:
     viewports: list[dict[str, int]]
     requests: int
     image: bool
+    # The data set every server measured is seeded with.
+    seed: str
     extensions: list[str]
     # Why the host is measured with no extension composed, or nothing when the set is composed.
     alone: str = ""
@@ -72,20 +79,21 @@ class Plan:
             "pages": self.pages,
             "widths": [shown["width"] for shown in self.viewports],
             "requests": self.requests,
+            "seed": self.seed,
             "extensions": self.extensions,
             "browser_waits_for": measure.SETTLED,
         }
 
 
-class UnknownPage(Exception):
-    """A page asked for that perf:report cannot serve."""
+class Unservable(Exception):
+    """A page or data set asked for that perf:report cannot serve."""
 
 
 def chosen(asked: str, every: list[str]) -> list[str]:
-    """The addresses of the pages ``asked`` names, comma-separated as dev:look takes them: the
-    example estate's (``estate/<address>``), or ``all`` or ``estate/all`` for ``every`` page its
-    navigation lists, which nothing asked means too. The servers measured are seeded with that
-    estate, so a page of another dev:look estate is refused."""
+    """The addresses of the pages ``asked`` names, comma-separated as dev:look takes them:
+    ``estate/<address>``, or ``all`` or ``estate/all`` for ``every`` page the navigation lists,
+    which nothing asked means too. ``estate`` names the set the servers are seeded with, so a page
+    of a dev:look stress estate is refused."""
 
     pages = []
     for name in [part.strip() for part in asked.split(",") if part.strip()] or ["all"]:
@@ -95,7 +103,7 @@ def chosen(asked: str, every: list[str]) -> list[str]:
             pages.append(_estate_path(name))
         else:
             known = ", ".join(_estate_name(page) for page in every)
-            raise UnknownPage(f"No page {name}. Pages: {known}, {ESTATE}/all or all, or {ESTATE}/<any address>")
+            raise Unservable(f"No page {name}. Pages: {known}, {ESTATE}/all or all, or {ESTATE}/<any address>")
     return list(dict.fromkeys(pages))
 
 
@@ -111,6 +119,15 @@ def alone_because() -> str:
     return "--host-alone asked for it" if usage("host_alone") == "true" else ""
 
 
+def seed_of(asked: str) -> str:
+    """The data set ``asked`` names. A stress set registers beside its builder in the test tree,
+    which no server imports, so the sets a server can be seeded with are the registry's own."""
+
+    if asked not in seeds.SEEDS:
+        raise Unservable(f"No data set {asked!r} a server can be seeded with. Sets: {', '.join(seeds.SEEDS)}")
+    return asked
+
+
 def plan() -> Plan:
     """The pages asked, the phone's and the wide desktop's viewports, and the task's flags."""
 
@@ -120,7 +137,10 @@ def plan() -> Plan:
         os.environ["SEVERINO_HQ_PLUGINS"] = ""
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hq.config.settings")
     django.setup()
-    every = navigation()
+    seed = seed_of(usage("seed"))
+    # The pages the set's navigation reaches, under the settings it is shown with.
+    with override_settings(**seeds.get(seed).settings):
+        every = navigation()
     pages = chosen(usage("pages"), every)
     return Plan(
         pages=pages,
@@ -128,6 +148,7 @@ def plan() -> Plan:
         viewports=[viewport(PHONE_SCREEN[0]), viewport(WIDE)],
         requests=int(usage("requests") or 20),
         image=usage("image") == "true",
+        seed=seed,
         extensions=[spec for spec in os.environ.get("SEVERINO_HQ_PLUGINS", "").split(",") if spec],
         alone=alone,
     )
@@ -220,69 +241,92 @@ class Recorder:
         self.save()
 
 
-def measure_target(target: Scratch | Image, asked: Plan, recorder: Recorder) -> None:
-    """Every number for one started target, in the order that keeps each clean: the cold starts
-    first, so the server measured runs from the bytecode its first boot wrote, as a checkout that has
-    run before does (a base's new worktree compiles every module on that boot), then memory before
-    any page.
+@dataclass
+class Live:
+    """One side's server, up and signed in."""
 
-    Signing in and the first pass are what every later measurement stands on, so their failure raises."""
+    recorder: Recorder
+    target: Scratch | Image
+    cookie: tuple[str, str] = ("", "")
+    stopped: bool = False
 
-    report = recorder.report
-    pages = asked.pages
-    entries = {page: {"page": page, "server": {}, "browser": {}} for page in pages}
-    report["pages"] = list(entries.values())
+    def entry(self, page: str) -> dict[str, Any]:
+        return next(entry for entry in self.recorder.report["pages"] if entry["page"] == page)
+
+    def stop(self) -> None:
+        if self.stopped:
+            return
+        self.stopped = True
+        try:
+            self.target.__exit__(None, None, None)
+        except Exception as error:  # noqa: BLE001 - what was measured stands whether or not the server stops cleanly
+            self.recorder.fail("stop", error)
+
+
+def first_pass(server: Live, asked: Plan) -> None:
+    """Every page the navigation lists and the pages asked, once: what memory is read after, and
+    what every later measurement stands on, so its failure raises."""
+
+    with server.recorder.timed("first pass"):
+        answered = measure.one_pass(server.target.url, server.cookie, asked.walked)
+    if 200 not in answered.values():
+        raise NotMeasured(f"no page answered 200 to the session dev_session minted: {answered}")
+
+
+def measure_costs(server: Live, asked: Plan) -> None:
+    """Every number for one side but its server time, measured before it, in the order that keeps
+    each clean: the cold starts first, so the server measured runs from the bytecode its first boot
+    wrote, as a checkout that has run before does (a base's new worktree compiles every module on
+    that boot), then memory before any page."""
+
+    report, target, recorder = server.recorder.report, server.target, server.recorder
     memory = report["memory"] = {"idle_bytes": None, "after_pass_bytes": None, "measured": target.measured}
 
     def cold_start() -> None:
         starts = [round(target.cold_start(), 1) for _ in range(COLD_STARTS)]
         report["cold_start"] = {"runs_ms": starts, "median_ms": sorted(starts)[len(starts) // 2]}
 
-    print(f"  cold start, {COLD_STARTS} times", flush=True)
-    recorder.attempt("cold start", cold_start)
-    with recorder.timed("sign in"):
-        cookie = target.session()
-    recorder.attempt("memory idle", lambda: memory.update(idle_bytes=target.memory()))
-    with recorder.timed("first pass"):
-        answered = measure.one_pass(target.url, cookie, asked.walked)
-    if 200 not in answered.values():
-        raise NotMeasured(f"no page answered 200 to the session dev_session minted: {answered}")
-    recorder.attempt("memory after a pass", lambda: memory.update(after_pass_bytes=target.memory()))
-
-    def server() -> None:
-        for page, numbers in measure.server_times(target.url, cookie, pages, asked.requests).items():
-            entries[page]["server"].update(numbers)
-
     def browser() -> None:
         with chromium() as launched:
-            costs = measure.browser_costs(launched, target.url, cookie, pages, asked.viewports)
+            costs = measure.browser_costs(launched, target.url, server.cookie, asked.pages, asked.viewports)
         for page, seen in costs.items():
-            entries[page]["browser"] = seen
+            server.entry(page)["browser"] = seen
 
     def queries() -> None:
-        for page, count in target.queries(pages).items():
-            entries[page]["server"]["queries"] = count
+        for page, count in target.queries(asked.pages).items():
+            server.entry(page)["server"]["queries"] = count
 
-    print(f"  server time over {asked.requests} requests a page", flush=True)
-    recorder.attempt("server time", server)
+    print(f"Measuring {report['commit']}: cold start, {COLD_STARTS} times", flush=True)
+    recorder.attempt("cold start", cold_start)
+    recorder.attempt("memory idle", lambda: memory.update(idle_bytes=target.memory()))
+    try:
+        first_pass(server, asked)
+    except NotMeasured as error:
+        recorder.fail("first pass", error)
+        return
+    recorder.attempt("memory after a pass", lambda: memory.update(after_pass_bytes=target.memory()))
     print("  in Chromium", flush=True)
     recorder.attempt("browser", browser)
     recorder.attempt("queries", queries)
 
 
-def measure_tree(tree: Path, commit: str, here: bool, asked: Plan, kept: runs.Run, side: str) -> runs.Report:
-    """One tree's report, kept under ``side`` in its run as each measurement finishes."""
+def serve(tree: Path, commit: str, here: bool, asked: Plan, kept: runs.Run, side: str, stack: ExitStack) -> Live | None:
+    """One tree's server, started, signed in and walked once, its report under ``side``, and
+    stopped when ``stack`` closes if not before. None where it would not start or sign in,
+    recorded as a failure."""
 
-    report = kept.doc[side] = runs.side(commit, asked.key())
-    recorder = Recorder(report, kept.save)
+    if side not in kept.doc:
+        kept.doc[side] = runs.side(commit, asked.key())
+        kept.doc[side]["pages"] = [{"page": page, "server": {}, "browser": {}} for page in asked.pages]
+    recorder = Recorder(kept.doc[side], kept.save)
     kept.save()
     log = OUT / f"{kept.name}.{side}.log"
-    print(f"Measuring {commit} ({asked.target}); its server's output is in {log}", flush=True)
+    print(f"Starting {commit} ({asked.target}, {asked.seed}); its server's output is in {log}", flush=True)
     try:
         target = (
-            Image(image_of(tree, commit, here), log)
+            Image(image_of(tree, commit, here), log, asked.seed)
             if asked.image
-            else Scratch(tree, log, trusted=not here, alone=bool(asked.alone))
+            else Scratch(tree, log, asked.seed, trusted=not here, alone=bool(asked.alone))
         )
         with recorder.timed("start"):
             target.__enter__()
@@ -292,19 +336,46 @@ def measure_tree(tree: Path, commit: str, here: bool, asked: Plan, kept: runs.Ru
         refused = None if asked.alone else parse.api_refusal(said)
         if refused:
             raise SetRefused(f"{commit} refused the extension set: {refused}") from error
-        return report
+        return None
+    server = Live(recorder, target)
+    stack.callback(server.stop)
     try:
-        measure_target(target, asked, recorder)
+        with recorder.timed("sign in"):
+            server.cookie = target.session()
+        first_pass(server, asked)
     except NotMeasured as error:
         recorder.fail("sign in and first pass", error)
-    finally:
-        try:
-            target.__exit__(None, None, None)
-        except Exception as error:  # noqa: BLE001 - what was measured stands whether or not the server stops cleanly
-            recorder.fail("stop", error)
-    report["finished_at"] = runs.now()
-    kept.save()
-    return report
+        return None
+    return server
+
+
+def measure_server(live: dict[str, Live], asked: Plan) -> None:
+    """Every live side's server time, its servers asked in turn, and beside a base each page's
+    move from the base's with its spread, kept in this checkout's report."""
+
+    together = " in turn" if len(live) > 1 else ""
+    print(f"Server time over {asked.requests} rounds of every page, asking {', '.join(live)}{together}", flush=True)
+    started = time.monotonic()
+    try:
+        found = measure.server_times(
+            {side: (server.target.url, server.cookie) for side, server in live.items()}, asked.pages, asked.requests
+        )
+    except Exception as error:  # noqa: BLE001 - recorded on every side it was asked of, and the run goes on
+        for server in live.values():
+            server.recorder.fail("server time", error)
+        return
+    for side, pages in found.items():
+        for page, numbers in pages.items():
+            live[side].entry(page)["server"].update(numbers)
+    if {"base", "here"} <= found.keys():
+        for page in asked.pages:
+            difference = measure.moved(found["base"][page]["times_ms"], found["here"][page]["times_ms"])
+            live["here"].entry(page)["server"].update(difference or {})
+    took = round(time.monotonic() - started, 1)
+    for server in live.values():
+        server.recorder.report.setdefault("took_s", {})["server time"] = took
+        server.recorder.save()
+    print(f"  server time: {took}s", flush=True)
 
 
 def failures(doc: dict[str, Any]) -> list[str]:
@@ -317,15 +388,28 @@ def failures(doc: dict[str, Any]) -> list[str]:
     ]
 
 
+def verdict(here: runs.Report) -> str:
+    """How many pages' server time moved from the base's past its spread, and which."""
+
+    compared = [entry for entry in here["pages"] if entry["server"].get("moved_ms") is not None]
+    moved = [entry["page"] for entry in compared if measure.past_spread(entry["server"])]
+    said = f"{len(moved)} of {len(compared)} pages moved past their spread"
+    return said + (f" ({', '.join(moved)})" if moved else "")
+
+
 def closing(kept: runs.Run, here: runs.Report, base: runs.Report | None) -> str:
     said = f"perf:report {here['commit']}" + (f" beside {base['commit']}" if base else "")
-    said += f" ({here['target']})"
+    said += f" ({here['target']}, {kept.doc['plan']['seed']})"
     if kept.doc.get("alone"):
         said += f", the host measured alone{' on both sides' if base else ''} because {kept.doc['alone'].rstrip('.')}"
     if reused := kept.doc.get("base_reused_from"):
-        said += f", the base kept from run {reused}"
+        said += f", the base's browser, memory and cold start kept from run {reused}"
+    if base:
+        said += f": {verdict(here)};"
+    else:
+        said += ":"
     failed = failures(kept.doc)
-    said += f": {len(failed)} failed, the rest kept ({'; '.join(failed)})" if failed else ": every measurement finished"
+    said += f" {len(failed)} failed, the rest kept ({'; '.join(failed)})" if failed else " every measurement finished"
     return said + f"; kept in {kept.path.relative_to(ROOT)}"
 
 
@@ -333,20 +417,46 @@ def stop(signum: int, _frame: object) -> None:
     raise SystemExit(128 + signum)
 
 
-def measure_base(commit: str, asked: Plan, kept: runs.Run, fresh: bool) -> runs.Report:
-    """The base's report: the pages asked of a complete one kept under the same plan, unless
-    ``fresh``, else measured now."""
+def kept_base(commit: str, asked: Plan, kept: runs.Run) -> bool:
+    """Whether the base's numbers but its server time come from a complete report of these pages
+    kept under the same plan, taken into this run."""
 
-    short = commit[:12]
-    if not fresh and (found := runs.saved(OUT, short, asked.key())):
-        source, report = found
-        print(f"Base {short}: a complete report of these pages, kept by run {source} (--fresh measures it)")
-        kept.doc["base"] = copy.deepcopy(report)
-        kept.doc["base_reused_from"] = source
-        kept.save()
-        return kept.doc["base"]
-    with worktree(commit) as tree:
-        return measure_tree(tree, short, False, asked, kept, "base")
+    if not (found := runs.saved(OUT, commit, asked.key())):
+        return False
+    source, report = found
+    print(f"Base {commit}: its browser, memory and cold start from run {source} (--fresh measures them)")
+    kept.doc["base"] = copy.deepcopy(report)
+    kept.doc["base_reused_from"] = source
+    kept.save()
+    return True
+
+
+def measure_run(base_commit: str | None, here_commit: str, asked: Plan, kept: runs.Run, fresh: bool) -> None:
+    """Both servers started, their server time asked of both in turn, then each side's other
+    numbers; every server stopped and the base's worktree gone however the block ends."""
+
+    with ExitStack() as stack:
+        live = {}
+        measuring = {"here"}
+        if base_commit:
+            short = base_commit[:12]
+            if fresh or not kept_base(short, asked, kept):
+                measuring.add("base")
+            live["base"] = serve(stack.enter_context(worktree(base_commit)), short, False, asked, kept, "base", stack)
+        live["here"] = serve(ROOT, here_commit, True, asked, kept, "here", stack)
+        serving = {side: server for side, server in live.items() if server}
+        # First, while every server is as its first boot and one pass left it, so neither has a
+        # history the other lacks.
+        if serving:
+            measure_server(serving, asked)
+        # One server at a time, so the other's work is not in its numbers.
+        for side, server in serving.items():
+            if side in measuring:
+                measure_costs(server, asked)
+            server.stop()
+    for side in live:
+        kept.doc[side]["finished_at"] = runs.now()
+    kept.save()
 
 
 def main() -> int:
@@ -354,7 +464,7 @@ def main() -> int:
     ref = usage("base")
     try:
         asked = plan()
-    except UnknownPage as error:
+    except Unservable as error:
         print(f"perf:report: {error}", file=sys.stderr)
         return 2
     here_commit = commit_of(ROOT)
@@ -366,8 +476,7 @@ def main() -> int:
     stem = runs.name(here_commit, base_commit and base_commit[:12], asked.target, datetime.now(UTC))
     kept = runs.Run.start(OUT, stem, target=asked.target, plan=asked.key(), alone=asked.alone or None)
     try:
-        base = measure_base(base_commit, asked, kept, usage("fresh") == "true") if base_commit else None
-        here = measure_tree(ROOT, here_commit, True, asked, kept, "here")
+        measure_run(base_commit, here_commit, asked, kept, usage("fresh") == "true")
     except SetRefused as refused:
         kept.doc["refused"] = str(refused)
         kept.save()
@@ -376,6 +485,7 @@ def main() -> int:
         os.execve(
             sys.executable, [sys.executable, "-m", "tools.perf.report"], os.environ | {ALONE_BECAUSE: str(refused)}
         )
+    here, base = kept.doc["here"], kept.doc.get("base")
     rendered = table.render(here, base)
     every_page = kept.path.with_suffix(".table")
     every_page.write_text(rendered + "\n", encoding="utf-8")

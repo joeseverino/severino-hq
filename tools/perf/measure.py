@@ -10,8 +10,9 @@ browser is Chromium: WebKit reports neither layout shifts nor long tasks.
 """
 
 import http.client
+import statistics
 import time
-from contextlib import closing
+from contextlib import ExitStack, closing
 from typing import Any, NamedTuple
 from urllib.parse import urlsplit
 
@@ -96,28 +97,63 @@ def one_pass(url: str, cookie: tuple[str, str], pages: list[str]) -> dict[str, i
         return {page: server.get(page).status for page in pages}
 
 
-def server_times(url: str, cookie: tuple[str, str], pages: list[str], requests: int) -> dict[str, dict[str, Any]]:
-    """Each page's status, the median and 95th percentile of its server time over ``requests``, and
-    the records its tables hold and its HTML's size, so a page drawing more rows at one ref than at
-    another is told apart from code that got slower."""
+def server_times(
+    servers: dict[str, tuple[str, tuple[str, str]]], pages: list[str], rounds: int
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """By server, then page: its status, the median and 95th percentile of its server time over
+    ``rounds``, every time in the order asked, and the records its tables hold and its HTML's size,
+    so a page drawing more rows on one side than the other is told apart from code that got slower.
 
-    measured = {}
-    with closing(Server(url, cookie)) as server:
+    Each round walks every page, asking each server in turn, and which goes first alternates round
+    by round, so a machine busy for a moment weighs on every side alike."""
+
+    with ExitStack() as stack:
+        opened = {name: stack.enter_context(closing(Server(url, cookie))) for name, (url, cookie) in servers.items()}
         for page in pages:
             for _ in range(WARM):
-                server.get(page)
-            answers = [server.get(page) for _ in range(requests)]
-            times = [answer.took_ms for answer in answers if answer.took_ms is not None]
-            p50, p95 = parse.percentiles(times) if times else (None, None)
-            last = answers[-1]
-            measured[page] = {
-                "status": last.status,
-                "p50_ms": p50,
-                "p95_ms": p95,
-                "rows": parse.data_rows(last.body.decode("utf-8", errors="replace")),
-                "html_bytes": len(last.body),
-            }
-    return measured
+                for server in opened.values():
+                    server.get(page)
+        times: dict[str, dict[str, list[float | None]]] = {name: {page: [] for page in pages} for name in opened}
+        last: dict[tuple[str, str], Answer] = {}
+        order = list(opened)
+        for turn in range(rounds):
+            for page in pages:
+                for name in order if turn % 2 == 0 else order[::-1]:
+                    last[name, page] = answer = opened[name].get(page)
+                    times[name][page].append(answer.took_ms)
+    return {name: {page: _numbers(times[name][page], last[name, page]) for page in pages} for name in opened}
+
+
+def _numbers(times: list[float | None], last: Answer) -> dict[str, Any]:
+    known = [took for took in times if took is not None]
+    p50, p95 = parse.percentiles(known) if known else (None, None)
+    return {
+        "status": last.status,
+        "p50_ms": p50,
+        "p95_ms": p95,
+        "times_ms": times,
+        "rows": parse.data_rows(last.body.decode("utf-8", errors="replace")),
+        "html_bytes": len(last.body),
+    }
+
+
+def moved(base: list[float | None], here: list[float | None]) -> dict[str, float] | None:
+    """The median of the round-by-round difference in server time, and its interquartile range: a
+    difference inside its spread is noise. None where no round has both times."""
+
+    differences = [mine - theirs for theirs, mine in zip(base, here, strict=True) if None not in (mine, theirs)]
+    if not differences:
+        return None
+    quartiles = statistics.quantiles(differences, n=4) if len(differences) > 1 else [0.0, 0.0, 0.0]
+    return {"moved_ms": round(statistics.median(differences), 2), "spread_ms": round(quartiles[2] - quartiles[0], 2)}
+
+
+def past_spread(server: dict[str, Any]) -> bool:
+    """Whether a page's server time moved from the base's past its spread. The whole interquartile
+    range, since a run judges every page at once: past half of it, about one page in forty does by
+    chance."""
+
+    return server.get("moved_ms") is not None and abs(server["moved_ms"]) > server["spread_ms"]
 
 
 def _script_seconds(session: Any) -> float:

@@ -1,6 +1,7 @@
 """perf:report's table: a row per page and width, a total, and each number beside its base's."""
 
 import copy
+import re
 
 from django.test import SimpleTestCase
 
@@ -12,6 +13,7 @@ RECORDED = {
     "target": "dev:scratch",
     "measured_at": "2026-10-24T02:38:20+00:00",
     "requests": 5,
+    "plan": {"seed": "showcase"},
     "widths": [402, 1360],
     "pages": [
         {
@@ -66,22 +68,37 @@ RECORDED = {
 
 def rows(rendered: str) -> dict[tuple[str, str], dict[str, str]]:
     """Each table row by (page, width), its cells by header: a page's later
-    widths carry the page named on its first."""
+    widths carry the page named on its first. A cell but the page is right
+    aligned under its header, and a blank one is left out."""
 
     lines = rendered.splitlines()
     start = next(index for index, line in enumerate(lines) if line.startswith("page "))
+    head = lines[start]
+    names = re.split(r" {2,}", head.strip())
+    ends, at = [], 0
+    for name in names:
+        at = head.index(name, at) + len(name)
+        ends.append(at)
     found, page = {}, ""
     for line in lines[start + 1 :]:
         if not line.strip():
             break
-        # Two spaces separate cells; a cell with a base's difference holds one.
-        cells = [cell.strip() for cell in line.split("  ") if cell.strip()]
         if not line.startswith(" "):
-            page = cells.pop(0)
-        server = len(cells) == len(table.HEADERS) - 1
-        headers = [name for name in table.HEADERS[1:] if server or name not in {name for name, _, _ in table.SERVER}]
-        found[page, cells[0]] = dict(zip(headers, cells, strict=True))
+            page = line.split("  ")[0]
+        cells = {name: line[:end].rsplit("  ", 1)[-1].strip() for name, end in zip(names[1:], ends[1:], strict=True)}
+        found[page, cells["width"]] = {name: cell for name, cell in cells.items() if cell}
     return found
+
+
+def compared() -> tuple[dict, dict]:
+    """RECORDED beside a base: its home page's server time moved 2 ms with a spread of 1, its
+    other page's a little, inside its spread."""
+
+    report, base = copy.deepcopy(RECORDED), copy.deepcopy(RECORDED)
+    base["commit"] = "0123456789ab"
+    report["pages"][0]["server"] |= {"moved_ms": 2.0, "spread_ms": 1.0}
+    report["pages"][1]["server"] |= {"moved_ms": 0.4, "spread_ms": 1.0}
+    return report, base
 
 
 class TableTests(SimpleTestCase):
@@ -141,6 +158,14 @@ class TableTests(SimpleTestCase):
         self.assertIn("MB", next(line for line in rendered.splitlines() if line.startswith("memory idle")))
         self.assertIn("+2.0", next(line for line in rendered.splitlines() if line.startswith("memory idle")))
 
+    def test_beside_a_base_a_page_whose_server_time_moved_past_its_spread_is_marked_and_noise_is_not(self):
+        found = rows(table.render(*compared()))
+
+        self.assertEqual(found["/", "402"]["moved ms"], "2.00")
+        self.assertEqual(found["/", "402"]["spread ms"], "1.00")
+        self.assertEqual(found["/", "402"].get("moved"), "moved")
+        self.assertIsNone(found["/domains/ (302)", "402"].get("moved"))
+
     def test_a_page_the_base_lacks_has_no_difference(self):
         base = copy.deepcopy(RECORDED)
         base["pages"] = base["pages"][:1]
@@ -163,18 +188,21 @@ class SummaryTests(SimpleTestCase):
         rows = [line for line in lines if line.startswith("/") or line.startswith(" ")]
         self.assertFalse([line for line in rows if line.split()[1:2] in (["402"], ["1360"])], "no page's width row")
 
-    def test_beside_a_base_it_names_the_pages_whose_server_time_moved_most_first(self):
-        base = copy.deepcopy(RECORDED)
-        base["commit"] = "0123456789ab"
-        base["pages"][0]["server"]["p50_ms"] = 36.21
-        base["pages"][1]["server"]["p50_ms"] = 1.48
+    def test_beside_a_base_it_names_the_pages_whose_server_time_moved_past_its_spread_furthest_first(self):
+        report, base = compared()
+        report["pages"].append(copy.deepcopy(report["pages"][0]) | {"page": "/far/"})
+        report["pages"][-1]["server"] |= {"moved_ms": -9.0, "spread_ms": 1.0}
 
-        listed = table.moved(RECORDED, base)
+        listed = table.moved(report, base)
 
-        self.assertIn("moved most", listed[0])
-        self.assertTrue(listed[2].startswith("/domains/"), listed)
-        self.assertIn("+6.0", listed[2])
-        self.assertTrue(listed[3].startswith("/ "), listed)
+        self.assertIn("past its spread", listed[0])
+        self.assertEqual([line.split()[0] for line in listed[2:]], ["/far/", "/"])
+
+    def test_beside_a_base_where_nothing_moved_past_its_spread_it_says_so(self):
+        report, base = compared()
+        report["pages"][0]["server"]["spread_ms"] = 9.0
+
+        self.assertEqual(table.moved(report, base), ["No page's server time moved past its spread."])
 
     def test_without_a_base_it_names_the_slowest_pages(self):
         listed = table.moved(RECORDED)

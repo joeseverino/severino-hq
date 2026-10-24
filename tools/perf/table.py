@@ -3,13 +3,18 @@
 A row is a page at one width: the server's numbers on its first width's row,
 the browser's on each. A total row sums each column over every page, so a
 change's whole effect reads as one number per column. With a base, each number
-is followed by how far it moved from the base's. The summary is the totals,
-memory, cold start and the pages that moved most, which is what a reader of the
-session log needs; the table it summarizes is kept beside it.
+is followed by how far it moved from the base's, and the server's time by the
+median of its round-by-round difference from the base's and that difference's
+spread: a page whose difference stands past its spread is marked moved.
+The summary is the totals, memory, cold start and the pages whose server time
+moved, which is what a reader of the session log needs; the table it
+summarizes is kept beside it.
 """
 
 from collections.abc import Callable
 from typing import Any
+
+from tools.perf.measure import past_spread
 
 Report = dict[str, Any]
 Read = Callable[[dict[str, Any]], float | None]
@@ -22,6 +27,12 @@ SERVER: tuple[tuple[str, Read, int], ...] = (
     ("rows", lambda server: server.get("rows"), 0),
     ("HTML KB", lambda server: _kilobytes(server["html_bytes"]), 1),
 )
+# Beside a base, the server time's round-by-round difference from the base's, and a mark past its spread.
+PAIRED: tuple[tuple[str, Read, int], ...] = (
+    ("moved ms", lambda server: server.get("moved_ms"), 2),
+    ("spread ms", lambda server: server.get("spread_ms"), 2),
+)
+PAST = "moved"
 # The browser's, read from a page's `browser[width]`.
 BROWSER: tuple[tuple[str, Read, int], ...] = (
     ("first KB", lambda seen: _kilobytes(seen["first"]["bytes"]), 1),
@@ -38,9 +49,16 @@ SUMMARY: tuple[tuple[str, Read, int, str], ...] = (
     ("memory after a pass over every page", lambda report: report["memory"]["after_pass_bytes"] / 1024**2, 1, "MB"),
     ("cold start to /health/ready/, median", lambda report: report["cold_start"]["median_ms"] / 1000, 2, "s"),
 )
-# The pages a summary names: those whose server time moved most, or without a base the slowest.
-MOVED = 3
-HEADERS = ("page", "width", *(name for name, _, _ in SERVER), *(name for name, _, _ in BROWSER))
+# The pages a summary names without a base: the slowest.
+SLOWEST = 3
+
+
+def server_headers(compared: bool) -> list[str]:
+    return [name for name, _, _ in (*SERVER, *(PAIRED if compared else ()))] + ([PAST] if compared else [])
+
+
+def headers(compared: bool) -> list[str]:
+    return ["page", "width", *server_headers(compared), *(name for name, _, _ in BROWSER)]
 
 
 def _kilobytes(size: float) -> float:
@@ -85,12 +103,16 @@ def _read(read: Read, source: dict[str, Any] | None) -> float | None:
 def _server(entry: dict[str, Any], base: dict[str, Any] | None, compared: bool) -> list[str]:
     """A page's server numbers, each beside how far it moved from ``base``'s when ``compared``."""
 
-    before = (base or {}).get("server")
-    return [cell(_read(read, entry.get("server")), _read(read, before), places, compared) for _, read, places in SERVER]
+    server, before = entry.get("server"), (base or {}).get("server")
+    cells = [cell(_read(read, server), _read(read, before), places, compared) for _, read, places in SERVER]
+    if compared:
+        cells += [_number(_read(read, server), places) for _, read, places in PAIRED]
+        cells.append(PAST if past_spread(server or {}) else "")
+    return cells
 
 
 def _row(entry: dict[str, Any], base: dict[str, Any] | None, width: str, first: bool, compared: bool) -> list[str]:
-    server = _server(entry, base, compared) if first else [""] * len(SERVER)
+    server = _server(entry, base, compared) if first else [""] * len(server_headers(compared))
     base = base or {}
     seen, seen_before = entry.get("browser", {}).get(width), base.get("browser", {}).get(width)
     browser = [cell(_read(read, seen), _read(read, seen_before), places, compared) for _, read, places in BROWSER]
@@ -119,6 +141,7 @@ def _totals(report: Report, base: Report | None, width: str, first: bool) -> lis
         else ""
         for _, read, places in SERVER
     ]
+    server += [""] * (len(server_headers(compared)) - len(SERVER))
     browser = [
         cell(_total(mine, read, "browser", width), _total(theirs, read, "browser", width), places, compared)
         for _, read, places in BROWSER
@@ -149,9 +172,9 @@ def _summary(report: Report, base: Report | None) -> list[str]:
 
 
 def _title(report: Report, base: Report | None) -> str:
-    title = f"{report['commit']} ({report['target']}, {report['requests']} requests a page)"
+    title = f"{report['commit']} ({report['target']}, {report['plan']['seed']}, {report['requests']} requests a page)"
     if base:
-        title += f", beside {base['commit']}"
+        title += f", beside {base['commit']}, the two servers asked in turn"
     if memory := (report.get("memory") or {}).get("measured"):
         title += f"; memory is {memory}"
     return title
@@ -160,7 +183,7 @@ def _title(report: Report, base: Report | None) -> str:
 def _table(report: Report, base: Report | None, every_page: bool) -> list[str]:
     compared = base is not None
     theirs = _pages(base) if base else {}
-    rows = [list(HEADERS)]
+    rows = [headers(compared)]
     for entry in report["pages"] if every_page else []:
         for index, width in enumerate(_widths(report)):
             rows.append(_row(entry, theirs.get(entry["page"]), width, index == 0, compared))
@@ -169,26 +192,29 @@ def _table(report: Report, base: Report | None, every_page: bool) -> list[str]:
     return aligned(rows)
 
 
-def _p50(entry: dict[str, Any] | None) -> float | None:
-    return _read(SERVER[0][1], (entry or {}).get("server"))
+def _p50(entry: dict[str, Any]) -> float | None:
+    return _read(SERVER[0][1], entry.get("server"))
 
 
 def moved(report: Report, base: Report | None = None) -> list[str]:
-    """The MOVED pages whose server p50 moved most from the base's, or without one the slowest, with
-    every server number beside the base's."""
+    """Beside a base, the pages whose server time moved past its spread, the furthest first; without
+    one the SLOWEST pages; each with every server number."""
 
-    theirs = _pages(base) if base else {}
-    scored = []
-    for entry in report["pages"]:
-        mine, before = _p50(entry), _p50(theirs.get(entry["page"]))
-        if mine is not None and (base is None or before is not None):
-            scored.append((mine if base is None else abs(mine - before), entry))
-    if not scored:
+    if base is None:
+        timed = [entry for entry in report["pages"] if _p50(entry) is not None]
+        picked = sorted(timed, key=lambda entry: -_p50(entry))[:SLOWEST]
+        heading = "The slowest pages by server p50:"
+    else:
+        past = [entry for entry in report["pages"] if past_spread(entry.get("server") or {})]
+        picked = sorted(past, key=lambda entry: -abs(entry["server"]["moved_ms"]))
+        heading = "The pages whose server time moved past its spread:"
+        if not picked:
+            return ["No page's server time moved past its spread."]
+    if not picked:
         return []
-    picked = [entry for _, entry in sorted(scored, key=lambda pair: -pair[0])[:MOVED]]
-    rows = [["page", *(name for name, _, _ in SERVER)]]
+    theirs = _pages(base) if base else {}
+    rows = [["page", *server_headers(base is not None)]]
     rows += [[_page(entry), *_server(entry, theirs.get(entry["page"]), base is not None)] for entry in picked]
-    heading = "The pages whose server p50 moved most:" if base else "The slowest pages by server p50:"
     return [heading, *aligned(rows)]
 
 

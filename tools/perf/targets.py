@@ -1,8 +1,8 @@
 """The servers a report measures, each started, signed in to and stopped by its own block.
 
-`Scratch` is a checkout's `mise run dev:scratch`, seeded with the showcase
-estate; `Image` is a built image, run as image:verify:healthy runs it and
-seeded the same way. Each signs in with `manage.py dev_session`, the session
+`Scratch` is a checkout's `mise run dev:scratch`, seeded with a named data set
+(hq/platform/core/seeds.py); `Image` is a built image, run as
+image:verify:healthy runs it and seeded the same way. Each signs in with `manage.py dev_session`, the session
 dev:scratch hands a developer, and stops everything it started however the
 block ends: a server runs in a process group of its own, which goes whole.
 """
@@ -25,10 +25,10 @@ READY = "/health/ready/"
 USER = "operator"
 
 
-def showcase() -> dict[str, str]:
-    """The settings the showcase set is shown under, from its one declaration."""
+def shown_under(seed: str) -> dict[str, str]:
+    """The settings ``seed`` is shown under, from its one declaration."""
 
-    return dict(seeds.get("showcase").settings)
+    return dict(seeds.get(seed).settings)
 
 
 PROBE = Path(__file__).with_name("queries_probe.py")
@@ -145,10 +145,10 @@ def scratch_env(tree: Path, *, trusted: bool, alone: bool) -> dict[str, str]:
 
 
 class Scratch:
-    """`mise run dev:scratch --seed showcase` in ``tree``, on a port of its own."""
+    """`mise run dev:scratch --seed <seed>` in ``tree``, on a port of its own."""
 
-    def __init__(self, tree: Path, log: Path, trusted: bool = False, alone: bool = False) -> None:
-        self.tree, self.log = tree, log
+    def __init__(self, tree: Path, log: Path, seed: str, trusted: bool = False, alone: bool = False) -> None:
+        self.tree, self.log, self.seed = tree, log, seed
         self.env = scratch_env(tree, trusted=trusted, alone=alone)
         self.port = free_port()
         self.url = f"http://127.0.0.1:{self.port}"
@@ -175,7 +175,7 @@ class Scratch:
     def __enter__(self) -> Scratch:
         self.log.write_text("", encoding="utf-8")
         try:
-            self._start("--seed", "showcase")
+            self._start("--seed", self.seed)
             wait_ready(self.url, FIRST_BOOT_S, self._alive)
         except BaseException:
             self.stop()
@@ -253,10 +253,10 @@ def _group_alive(group: int) -> bool:
 
 
 class Image:
-    """A built image, run as image:verify:healthy runs it, seeded with the showcase estate."""
+    """A built image, run as image:verify:healthy runs it, seeded with a named data set."""
 
-    def __init__(self, image: str, log: Path) -> None:
-        self.image, self.log = image, log
+    def __init__(self, image: str, log: Path, seed: str) -> None:
+        self.image, self.log, self.seed = image, log, seed
         self.name = f"severino-hq-perf-{os.getpid()}-{int(time.time())}"
         self.url = ""
         self.started = False
@@ -270,13 +270,15 @@ class Image:
         return self._docker("exec", *flags, self.name, "python", "manage.py", *args)
 
     def _seed(self) -> None:
-        """The showcase set, owned by the operator, as dev:scratch --seed showcase makes it."""
+        """The set, owned by the operator, as dev:scratch --seed makes it."""
 
         password = {"DJANGO_SUPERUSER_PASSWORD": os.urandom(12).hex()}
         if "seed" in self._manage("help", "--commands").split():
-            self._manage("seed", "showcase", "--owner", USER, env=password)
+            self._manage("seed", self.seed, "--owner", USER, env=password)
             return
-        # An image older than the seed registry, measured as the base.
+        # An image older than the seed registry, measured as the base, holds the showcase alone.
+        if self.seed != "showcase":
+            raise NotMeasured(f"{self.image} is older than the seed registry, so it seeds no {self.seed}")
         self._manage(
             "createsuperuser", "--noinput", "--username", USER, "--email", "operator@example.invalid", env=password
         )
@@ -310,7 +312,7 @@ class Image:
                 "DJANGO_CSRF_COOKIE_SECURE=0",
                 "--env",
                 "SEVERINO_LOG_LEVEL=WARNING",
-                *(f"--env={name}={value}" for name, value in showcase().items()),
+                *(f"--env={name}={value}" for name, value in shown_under(self.seed).items()),
                 # HQ refuses any caller outside its trusted networks, and a
                 # published port's requests come from the bridge, not loopback.
                 "--env",
