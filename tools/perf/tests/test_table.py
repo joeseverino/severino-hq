@@ -127,6 +127,20 @@ class TableTests(SimpleTestCase):
         self.assertEqual(found["/", "402"]["rows"], "50 +25")
         self.assertEqual(found["/", "402"]["HTML KB"], "40.0 +20.0")
 
+    def test_each_visit_s_paint_times_sit_beside_its_bytes_and_a_report_without_them_shows_a_dash(self):
+        report = copy.deepcopy(RECORDED)
+        seen = report["pages"][0]["browser"]["402"]
+        seen["first"] |= {"fcp_ms": 212.4, "lcp_ms": 388.0}
+        seen["repeat"] |= {"fcp_ms": 61.6, "lcp_ms": None}
+
+        found = rows(table.render(report))
+
+        self.assertEqual(found["/", "402"]["first FCP ms"], "212")
+        self.assertEqual(found["/", "402"]["first LCP ms"], "388")
+        self.assertEqual(found["/", "402"]["repeat FCP ms"], "62")
+        self.assertEqual(found["/", "402"]["repeat LCP ms"], "-")
+        self.assertEqual(found["/", "1360"]["first FCP ms"], "-")
+
     def test_the_total_sums_every_page(self):
         found = rows(table.render(RECORDED))
 

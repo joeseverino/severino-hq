@@ -37,8 +37,12 @@ PAST = "moved"
 BROWSER: tuple[tuple[str, Read, int], ...] = (
     ("first KB", lambda seen: _kilobytes(seen["first"]["bytes"]), 1),
     ("first req", lambda seen: seen["first"]["requests"], 0),
+    ("first FCP ms", lambda seen: seen["first"]["fcp_ms"], 0),
+    ("first LCP ms", lambda seen: seen["first"]["lcp_ms"], 0),
     ("repeat KB", lambda seen: _kilobytes(seen["repeat"]["bytes"]), 1),
     ("repeat req", lambda seen: seen["repeat"]["requests"], 0),
+    ("repeat FCP ms", lambda seen: seen["repeat"]["fcp_ms"], 0),
+    ("repeat LCP ms", lambda seen: seen["repeat"]["lcp_ms"], 0),
     ("script ms", lambda seen: seen["script_ms"], 1),
     ("long tasks", lambda seen: seen["long_tasks"], 0),
     ("CLS", lambda seen: seen["cls"], 3),

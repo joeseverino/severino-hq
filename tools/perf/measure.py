@@ -4,7 +4,7 @@ The server's time is what it says it spent, the `app` metric of the
 Server-Timing header every response carries (hq/platform/core/middleware.py),
 so the client's own overhead is not in it. The browser's numbers are the
 platform's own: Resource Timing for bytes and requests, PerformanceObserver
-for layout shift and long tasks, and Chromium's Performance.getMetrics for the
+for first and largest contentful paint, layout shift and long tasks, and Chromium's Performance.getMetrics for the
 main thread's script time, the one figure with no web API. That is why the
 browser is Chromium: WebKit reports neither layout shifts nor long tasks.
 """
@@ -27,12 +27,20 @@ SETTLE_S = 30
 _FRAMES = "() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
 # Asked of each page before its timed requests, so a first request's caching is not its cost.
 WARM = 2
-# Installed before any of a page's own script: layout shift as Core Web Vitals
+# Installed before any of a page's own script, in every document a visit
+# loads: first contentful paint, the largest contentful paint so far (the
+# latest candidate the browser reported), layout shift as Core Web Vitals
 # scores it (the largest session of shifts, each under a second from the last
 # and the session under five, leaving out any that follows input) and the
 # main thread's long tasks.
 OBSERVE = """(() => {
-  const perf = { cls: 0, longTasks: 0, longTaskMs: 0 };
+  const perf = { fcp: null, lcp: null, cls: 0, longTasks: 0, longTaskMs: 0 };
+  new PerformanceObserver((list) => {
+    for (const paint of list.getEntriesByName('first-contentful-paint')) perf.fcp = paint.startTime;
+  }).observe({ type: 'paint', buffered: true });
+  new PerformanceObserver((list) => {
+    for (const candidate of list.getEntries()) perf.lcp = candidate.startTime;
+  }).observe({ type: 'largest-contentful-paint', buffered: true });
   let session = 0, first = 0, last = 0;
   new PerformanceObserver((list) => {
     for (const shift of list.getEntries()) {
@@ -55,12 +63,18 @@ OBSERVE = """(() => {
   }).observe({ type: 'longtask', buffered: true });
   Object.defineProperty(window, '__hqPerf', { value: perf });
 })();"""
-# What the document and everything it fetched cost the network: an entry
-# answered from the cache transferred nothing.
+# What the document and everything it fetched cost the network, an entry
+# answered from the cache transferring nothing, and when it painted.
 FETCHED = """() => {
   const entries = [...performance.getEntriesByType('navigation'), ...performance.getEntriesByType('resource')];
   const fetched = entries.filter((entry) => entry.transferSize > 0);
-  return { bytes: fetched.reduce((sum, entry) => sum + entry.transferSize, 0), requests: fetched.length };
+  const paint = (ms) => (ms === null ? null : Math.round(ms * 10) / 10);
+  return {
+    bytes: fetched.reduce((sum, entry) => sum + entry.transferSize, 0),
+    requests: fetched.length,
+    fcp_ms: paint(window.__hqPerf.fcp),
+    lcp_ms: paint(window.__hqPerf.lcp),
+  };
 }"""
 
 
@@ -174,8 +188,9 @@ class InFlight:
         self.count += by
 
 
-def _visit(page: Any, address: str, waiting: InFlight) -> dict[str, int]:
-    """What loading ``address`` fetched, read once it has loaded and nothing it asked for is pending."""
+def _visit(page: Any, address: str, waiting: InFlight) -> dict[str, float | None]:
+    """What loading ``address`` fetched and when it painted, read once it has loaded and nothing it
+    asked for is pending."""
 
     page.goto(address, wait_until="load")
     deadline = time.monotonic() + SETTLE_S
