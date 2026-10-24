@@ -1,8 +1,8 @@
 name: CI
 
 # Every gate a change passes, as one graph. On a pull request the image is
-# also checked and composed with the extensions (compose.yml), and Ready posts
-# HQ's review from the results: the one check the ruleset requires. On main,
+# also checked and composed with the extensions (compose.yml), and Ready
+# passes only when every job did: the one check the ruleset requires. On main,
 # Release starts Compose once the gates pass; Deploy (deploy.yml) is never
 # reached from a pull request.
 #
@@ -81,30 +81,6 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # HQ's review opens the moment a pull request's checks start, so the one
-      # row the merge box waits on is HQ's from the first second. Ready moves
-      # it to its verdict. A fork's pull request has no secrets, and no review.
-      - name: Mint a token for HQ's review
-        id: app
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
-          private-key: ${{ secrets.HQ_APP_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
-          permission-checks: write
-      - name: Open HQ's review
-        if: steps.app.outputs.token != ''
-        env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          CHECK_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: >-
-          python3 -m tools.pipeline.ci_report check "Severino HQ · Review" "$HEAD_SHA" in_progress "Checking"
-          "CI, CodeQL and the build of HQ are running. This becomes the verdict when they finish."
       - uses: ./.github/actions/toolchain
         with:
           # The structural bar builds its Go inspector from the controller's
@@ -463,49 +439,45 @@ jobs:
   ready:
     name: Ready
     needs: [proven, checks, tests, browser, controller, codeql, image, image-checks, compose]
-    # Moves HQ's review to its verdict from the results of every job above:
-    # ready to merge, or held, why and what fixes it. That review is the one
-    # check the ruleset requires, accepted only from HQ's app, so a gate added
-    # or removed here never touches the repository's settings.
+    # The one check the ruleset requires, accepted only from GitHub Actions:
+    # it passes when every job above passed, so a gate added or removed here
+    # never touches the repository's settings.
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      # To read this run's jobs, and a failed job's log.
-      actions: read
+    timeout-minutes: 5
+    permissions: {}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # A fork's pull request has no secrets, so it gets the plain answer and
-      # no verdict from HQ's app.
-      - name: Mint a token for HQ's verdict
-        id: app
-        if: github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
-          private-key: ${{ secrets.HQ_APP_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
-          permission-checks: write
       - name: Say a fork's pull request is not composed
         if: github.event.pull_request.head.repo.full_name != github.repository
         run: |
           message="A fork's pull request cannot read the extensions, so it is not built or composed here; main composes it before anything is published."
           echo "::notice title=Not composed::$message"
           echo "$message" >> "$GITHUB_STEP_SUMMARY"
-      - name: HQ's verdict
+      - name: Every gate passed
         env:
           RESULTS: ${{ toJSON(needs) }}
           # A same-repository pull request is composed, so these must pass,
           # not be skipped.
           REQUIRED: ${{ github.event.pull_request.head.repo.full_name == github.repository && 'image image-checks compose' || '' }}
-          GH_TOKEN: ${{ github.token }}
-          APP_TOKEN: ${{ steps.app.outputs.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          THIS_RUN: ${{ github.run_id }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: python3 -m tools.pipeline.ci_report verdict
+        # Each job's result, in this run's summary; a job that did not pass
+        # fails this one. Skipped passes, unless the job is required: a gate
+        # skips itself only where it does not apply.
+        run: &verdict |
+          set -euo pipefail
+          {
+            echo "| Job | Result |"
+            echo "| --- | --- |"
+            jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"' <<<"$RESULTS"
+          } >> "$GITHUB_STEP_SUMMARY"
+          unmet="$(jq -r --arg required "$REQUIRED" '
+            ($required | split(" ")) as $must | to_entries[]
+            | select(.value.result != "success" and (.value.result != "skipped" or (.key | IN($must[]))))
+            | "\(.key): \(.value.result)"' <<<"$RESULTS")"
+          if [ -n "$unmet" ]; then
+            echo "$unmet"
+            echo "::error title=Not passing::$(echo "$unmet" | paste -sd, -)"
+            exit 1
+          fi
 
   # On main, CI starts the build of HQ for this commit once every gate has
   # passed, and names the commit, so what Compose builds is exactly what CI
@@ -519,15 +491,13 @@ jobs:
     if: ${{ !cancelled() && github.event_name == 'push' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
-    permissions:
-      contents: read
+    permissions: {}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Every gate passed
         env:
           RESULTS: ${{ toJSON(needs) }}
           REQUIRED: image
-        run: python3 -m tools.pipeline.ci_report verdict
+        run: *verdict
       - name: Mint a token to start Compose
         id: compose
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0

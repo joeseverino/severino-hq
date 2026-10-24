@@ -11,7 +11,6 @@ from django.test import tag
 
 from tools.gate import preflight
 from tools.gate.tests.base import GateTestCase
-from tools.pipeline import ci_report
 
 SHA = "a" * 40
 REPOSITORY = "example-owner/example-repo"
@@ -24,7 +23,7 @@ class FakeApi:
         self.finish_after = finish_after
         self.reads = 0
 
-    def __call__(self, args, env, stdin):
+    def __call__(self, args):
         path = args[-1]
         if "/check-runs" in path:
             return json.dumps([{"check_runs": []}])
@@ -45,7 +44,7 @@ class FakeApi:
 class SettleTests(GateTestCase):
     def github(self, finish_after: int) -> preflight.GitHub:
         github = preflight.GitHub(SHA, REPOSITORY)
-        github.api = ci_report.GitHub(None, REPOSITORY, run=FakeApi(finish_after))
+        github.api = preflight.API(FakeApi(finish_after))
         return github
 
     def test_a_watch_gh_refuses_is_waited_between_and_then_refused_in_its_words(self):

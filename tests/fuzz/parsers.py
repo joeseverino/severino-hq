@@ -2,8 +2,8 @@
 
 The property tests in ``hq/platform/application/tests/test_properties.py`` generate inputs from
 a strategy; this lets a fuzzer grow them from coverage instead, which finds
-the shapes a strategy did not think to describe. The same four parsers:
-image references, package URLs, provenance sources and failure logs.
+the shapes a strategy did not think to describe. The same three parsers:
+image references, package URLs and provenance sources.
 
     pip install atheris
     DJANGO_SETTINGS_MODULE=hq.config.settings python -m tests.fuzz.parsers -max_total_time=300
@@ -24,7 +24,6 @@ with atheris.instrument_imports():
     from hq.platform.application.attestations import github_source
     from hq.platform.application.images import ImageRef
     from hq.platform.application.osv import query_of
-    from tools.pipeline.ci_report import diagnose
 
 
 def test_one_input(data: bytes) -> None:
@@ -34,8 +33,6 @@ def test_one_input(data: bytes) -> None:
     ImageRef.parse(text)
     query_of(text)
     github_source(text)
-    found = diagnose(text)
-    assert set(found) == {"id", "title", "fix"}
 
 
 if __name__ == "__main__":

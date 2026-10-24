@@ -351,6 +351,13 @@ class LeastPrivilegeTests(SimpleTestCase):
             with self.subTest(workflow=path.name):
                 self.assertNotIn("pull_request_target", code(path.read_text()))
 
+    def test_no_workflow_writes_a_check_of_its_own(self):
+        # A job's result is its check, and the deployment says where a commit
+        # stands: the ruleset requires Ready, from GitHub Actions.
+        for path in workflows():
+            with self.subTest(workflow=path.name):
+                self.assertIsNone(re.search(r"check-runs|permission-checks|checks: write", code(path.read_text())))
+
     def test_only_a_job_that_signs_or_publishes_holds_an_identity_token(self):
         # The actions whose only work is to present the job's OIDC identity.
         presenters = ("actions/deploy-pages@", "ossf/scorecard-action@", "./.github/actions/cosign")
@@ -580,13 +587,16 @@ class DeployTests(SimpleTestCase):
         direct = {need.strip(" -[]") for line in named for need in line.split(",")} - {""}
         return direct.union(*(self.needs(need) for need in direct)) if direct else set()
 
+    def environment(self, job: str) -> list[str]:
+        return block(self.jobs[job], "environment", 4)
+
     def test_every_job_on_the_homelab_waits_for_an_approval(self):
         homelab = [name for name, job in self.jobs.items() if "self-hosted" in job]
         self.assertTrue(homelab)
         for name in homelab:
             with self.subTest(job=name):
                 gated = {name, *self.needs(name)}
-                self.assertTrue(any(block(self.jobs[job], "environment", 4) == ["production"] for job in gated))
+                self.assertTrue(any("name: production" in self.environment(job) for job in gated))
         for path in workflows():
             if path.name != "deploy.yml":
                 with self.subTest(workflow=path.name):
@@ -601,6 +611,19 @@ class DeployTests(SimpleTestCase):
                 with self.subTest(absent=absent):
                     self.assertNotIn(absent, code(job))
             self.assertIn("| sudo /usr/local/lib/severino-hq/deploy/bin/hq-host deploy ", job)
+
+    def test_the_deployment_is_recorded_for_the_commit_deployed_and_no_job_records_its_own(self):
+        """A job's own deployment names the commit main was at when the run started,
+        and succeeds once approved: Resolve records the one for the resolved commit."""
+        environments = [name for name in self.jobs if self.environment(name)]
+        self.assertTrue(environments)
+        for name in environments:
+            with self.subTest(job=name):
+                self.assertIn("deployment: false", self.environment(name))
+        (record,) = [step for step in steps(self.jobs["resolve"]) if '/deployments"' in code(step)]
+        self.assertIn("COMMIT: ${{ steps.find.outputs.commit }}", record)
+        self.assertIn('--arg ref "$COMMIT"', record)
+        self.assertIn("ref: $ref", record)
 
     def test_a_candidate_is_never_deployed(self):
         text = code(workflow("deploy.yml"))

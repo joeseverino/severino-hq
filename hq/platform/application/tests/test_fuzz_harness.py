@@ -11,7 +11,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from unittest import mock
 
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase
 
 ROOT = Path(__file__).resolve().parents[4]
 SEEDS = (
@@ -19,7 +19,6 @@ SEEDS = (
     b"ghcr.io/example/app:v1.2.0@sha256:" + b"a" * 64,
     b"pkg:deb/debian/openssl@3.0.11?distro=debian-12&upstream=openssl",
     b"git@github.com:example/app.git",
-    b"denied: permission_denied: write_package",
     bytes(range(256)),
 )
 
@@ -43,9 +42,6 @@ def _harness():
     return module
 
 
-# The harness fuzzes the pipeline's diagnosis too, a tool of the checkout the
-# image does not carry.
-@tag("source")
 class FuzzHarnessTests(SimpleTestCase):
     def test_every_seed_is_answered_without_raising(self):
         harness = _harness()

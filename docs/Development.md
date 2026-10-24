@@ -83,6 +83,9 @@ loads both, and `mise.toml` keeps the tools, the environment, the templates,
 the development servers and the aggregates. A task in `tasks/` names no file
 in its env: mise reads an env path, and renders `config_root` inside env, from
 the directory of the file that declares the task (`GateReferenceTests`).
+On a pull request CI's **Ready** job needs every other job and fails when one
+did not pass: it is the one check the `main` ruleset requires, so a gate added
+to a job never touches the repository's settings (`VerdictNeedsTests`).
 `mise run check` answers "does
 my change work?"; `mise run ci` answers "will the pipeline accept it?" and
 keeps going past a failure to name every gate that failed. `fast` and `check`

@@ -67,7 +67,8 @@ ruleset before they can publish anything.
    refuses an image that drops an extension production runs unless it is named
    there. How an extension is admitted is in [Plugins](Plugins.md#composition).
 4. Create the `production` environment with yourself as a required reviewer.
-5. Add a `main` ruleset requiring the **Severino HQ · Review** check.
+5. Add a `main` ruleset requiring the **Ready** check, with GitHub Actions
+   as its expected source.
 
 **Check:** the repository's secrets list `HQ_APP_KEY`, `HQ_APP_CLIENT_ID` and
 `COMPOSITION_EXTENSIONS`.

@@ -20,7 +20,8 @@ repository must change. Three kinds exist:
 | The host repository extensions are checked against | `HOST_REPOSITORY` in `.github/workflows/plugin-checks.yml` | an extension's checks |
 | The failure-log recipient (an age public key) | `FAILURE_LOG_RECIPIENT` in [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env) | `tools/pipeline/seal-failure-logs.sh` ([Deployment](Deployment.md#when-a-run-fails)) |
 | The runner label, `severino-hq` | `runs-on` of the Deploy job in `.github/workflows/deploy.yml` | Deploy |
-| The check names, **Severino HQ · Review** and **Severino HQ · Production** | the `ci_report check` calls in the workflows and the admission action | the ruleset's required check |
+| The required check, **Ready** | the `ready` job's name in `.github/workflows/ci.yml` | the ruleset's required check |
+| The extension check, **Severino HQ · Production** | the admission action and the controller (`controller/providers/github_delivery.go`) | an extension's commit |
 | The site name | `SEVERINO_SITE_NAME` (default in `hq/config/settings.py`) | page titles and the header |
 
 ### Host paths
@@ -42,12 +43,12 @@ fork changes them in every place listed.
 
 | Value | Where | Read by |
 | :--- | :--- | :--- |
-| `HQ_APP_KEY`, `HQ_APP_CLIENT_ID` | repository secrets, set by `mise run wire-github-app` | CI, Compose, Deploy: HQ's checks and reading admissions |
+| `HQ_APP_KEY`, `HQ_APP_CLIENT_ID` | repository secrets, set by `mise run wire-github-app` | CI's Release and Compose: reading admissions and starting the next workflow |
 | `COMPOSITION_EXTENSIONS` | repository secret: JSON in the shape of [`composition/extensions.json`](../composition/extensions.json) | Compose: which extensions to compose, and whose signatures to trust |
 | The `production` environment, with required reviewers | repository environments | Deploy's approval |
 | The `admission` environment on each extension, `main` only, holding `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` | each extension's settings, set by `mise run wire-github-app` | an admission starting Compose |
 | HQ's GitHub App: no webhook, the permissions in [`deploy/github-apps.json`](../deploy/github-apps.json), installed on the host and every extension | the account's app settings | everything above, and the controller |
-| A `main` ruleset requiring **Severino HQ · Review**, with code scanning holding a merge on a CodeQL alert | repository rules | merges |
+| A `main` ruleset requiring **Ready** from GitHub Actions, with code scanning holding a merge on a CodeQL alert | repository rules | merges |
 | A self-hosted runner with the `severino-hq` label | the host ([Install](Install.md#6-install-the-runner-and-write-hostjson)) | Deploy |
 
 ### `host.json`

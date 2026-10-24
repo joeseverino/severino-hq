@@ -165,5 +165,5 @@ class OneParserTests(SimpleTestCase):
             offenders,
             [],
             "parse through hq.platform.application.timestamps.moment, or "
-            "tools/pipeline/ci_report.github_instant outside the app",
+            "tools/pipeline/ci_timings.when outside the app",
         )

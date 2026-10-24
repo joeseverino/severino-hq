@@ -3,8 +3,7 @@
 Each reads text HQ did not write: an image reference a container reports, a
 package URL an SBOM lists, a provenance source a build attests. Examples
 cover the shapes seen so far; these generate thousands of inputs each, so a
-shape nobody thought of fails here rather than in a sweep. The diagnosis of a
-failed run's log has its own, in tools/pipeline/tests.
+shape nobody thought of fails here rather than in a sweep.
 
 Hypothesis is a development tool (the tools dependency group), not part of the
 image, so inside the image these are skipped and the suite runs them on every

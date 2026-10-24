@@ -914,8 +914,9 @@ func TestGitHubDeliveryWithoutASourceRepositoryReadsNothing(t *testing.T) {
 	}
 }
 
-// The workflows and scripts that report delivery name the check and the
-// comment marker the controller writes.
+// The admission opens the check the controller moves on, under the same name,
+// and the Deploy runs it reads wait for approval on the production
+// environment, which is what a run's "waiting" status is.
 func TestDeliveryNamesAgreeWithThePipeline(t *testing.T) {
 	read := func(path string) string {
 		t.Helper()
@@ -925,14 +926,11 @@ func TestDeliveryNamesAgreeWithThePipeline(t *testing.T) {
 		}
 		return string(data)
 	}
-	for _, path := range []string{".github/workflows/deploy.yml", ".github/actions/admit-plugin/action.yml", "tools/pipeline/ci_report.py"} {
-		if !strings.Contains(read(path), githubCheckName) {
-			t.Errorf("%s does not name the check %q", path, githubCheckName)
-		}
+	if !strings.Contains(read(".github/actions/admit-plugin/action.yml"), githubCheckName) {
+		t.Errorf("the admission does not name the check %q", githubCheckName)
 	}
-	marker := strings.Replace(githubDeliveryMark, "%s", "{}", 1)
-	if !strings.Contains(read("tools/pipeline/ci_report.py"), `DELIVERY_MARK = "`+marker+`"`) {
-		t.Errorf("ci_report.py does not write the marker %q", marker)
+	if !strings.Contains(read(githubDeploy), "environment:\n      name: production\n") {
+		t.Errorf("%s has no job that waits on the production environment", githubDeploy)
 	}
 }
 

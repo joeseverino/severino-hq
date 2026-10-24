@@ -19,14 +19,13 @@ fail() { echo "FAIL $1" >&2; failures=$((failures + 1)); }
 # The fixture repository: the real task and its verdict helper, CI's
 # workflow, the units, and hq-host's source.
 repo="${work}/repo"
-mkdir -p "${repo}/tools/gate" "${repo}/tools/pipeline" "${repo}/controller/cmd/hq-host" "${repo}/.github/workflows"
+mkdir -p "${repo}/tools/gate" "${repo}/controller/cmd/hq-host" "${repo}/.github/workflows"
 cd "${repo_dir}"
 cp -R deploy .gitignore "${repo}/"
 cp .github/workflows/ci.yml "${repo}/.github/workflows/"
 cp controller/cmd/hq-host/main.go "${repo}/controller/cmd/hq-host/"
 cp tools/__init__.py "${repo}/tools/"
 cp tools/gate/__init__.py tools/gate/preflight.py tools/gate/verdict.py "${repo}/tools/gate/"
-cp tools/pipeline/__init__.py tools/pipeline/ci_report.py "${repo}/tools/pipeline/"
 # Hermetic: the fixture is a throwaway repository, so no signing and no hooks.
 git_() {
     git -C "${repo}" -c user.name=test -c user.email=test@example.com \
@@ -248,14 +247,13 @@ gates_but_checks() {
 passed='"success"'
 fresh() { rm -rf "${TEST_GH}" && mkdir -p "${TEST_GH}"; }
 # A pull request whose run of CI passed whole, beside an earlier release that
-# waits for approval and the Production check that reports it.
+# waits for approval.
 pull_request() {
     fresh
     runs "$(run 11 ci.yml pull_request completed "${passed}" 2026-10-19T10:00:00Z)" \
         "$(run 12 deploy.yml workflow_dispatch waiting null 2026-10-19T10:30:00Z)"
     pr_jobs "$(gates success)"
-    checks 1 "$(check completed "${passed}" Checks)" "$(check completed "${passed}" "Severino HQ · Review")" \
-        "$(check in_progress null "Severino HQ · Production")"
+    checks 1 "$(check completed "${passed}" Checks)" "$(check completed "${passed}" Ready)"
 }
 pr_jobs() { # pr_jobs <the gate jobs>
     jobs 11 "$(job skipped "Proven on its pull request")" "$1" "$(job success CodeQL)" "$(job success Image)" \

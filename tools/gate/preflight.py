@@ -32,19 +32,18 @@ import sys
 import tarfile
 import tempfile
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from tools.gate.verdict import Step, close, run
-from tools.pipeline.ci_report import GitHub as API, GitHubError
 
 ROOT = Path(__file__).resolve().parents[2]
 
 CI = ".github/workflows/ci.yml"
 COMPOSE = ".github/workflows/compose.yml"
 DEPLOY = ".github/workflows/deploy.yml"
-# Deploy and the Production check wait for an approval this gate comes before.
-PRODUCTION = "Severino HQ · Production"
+# Deploy waits for an approval this gate comes before.
 PASSING = {"success", "skipped", "neutral"}
 # What `uname -m` says, as Go names it.
 ARCHITECTURES = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}
@@ -80,12 +79,24 @@ def gh(*args: str) -> str:
     return subprocess.run(["gh", *args], cwd=ROOT, check=True, capture_output=True, text=True).stdout
 
 
+class API:
+    """GitHub's REST API, read through gh as its own login."""
+
+    def __init__(self, call: Callable[[list[str]], str] = lambda args: gh(*args)):
+        self._call = call
+
+    def pages(self, path: str, key: str | None = None) -> list:
+        """Every item of a listing, from every page."""
+        pages = json.loads(self._call(["api", "--paginate", "--slurp", path]))
+        return [item for page in pages for item in (page[key] if key else page)]
+
+
 class GitHub:
     """What GitHub ran on one commit, read until all of it has finished."""
 
     def __init__(self, sha: str, repository: str):
         self.sha, self.repository = sha, repository
-        self.api = API(None, repository)
+        self.api = API()
         self.runs: list[dict] = []
         self.checks: list[dict] = []
 
@@ -98,13 +109,9 @@ class GitHub:
             if item["path"] != DEPLOY and item["created_at"] > newest.get(item["path"], {}).get("created_at", ""):
                 newest[item["path"]] = item
         self.runs = sorted(newest.values(), key=lambda item: item["path"])
-        self.checks = [
-            check
-            for check in self.api.pages(
-                f"repos/{self.repository}/commits/{self.sha}/check-runs?filter=latest&per_page=100", "check_runs"
-            )
-            if check["name"] != PRODUCTION
-        ]
+        self.checks = self.api.pages(
+            f"repos/{self.repository}/commits/{self.sha}/check-runs?filter=latest&per_page=100", "check_runs"
+        )
 
     def ci(self) -> dict | None:
         return next((item for item in self.runs if item["path"] == CI), None)
@@ -253,9 +260,6 @@ def github_gates() -> bool:
     deadline = time.monotonic() + int(os.environ.get("PREFLIGHT_REMOTE_TIMEOUT", "3600"))
     try:
         return github.settle(deadline, int(os.environ.get("PREFLIGHT_REMOTE_POLL", "30"))) and github.passed()
-    except GitHubError as error:
-        print(f"GitHub could not be read: {error}", file=sys.stderr)
-        return False
     except subprocess.CalledProcessError as error:
         print(f"GitHub could not be read: {error.stderr or error}", file=sys.stderr)
         return False

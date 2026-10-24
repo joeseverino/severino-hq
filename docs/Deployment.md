@@ -17,7 +17,7 @@ waits on a schedule.
 
 | Workflow | Started by | Does |
 | :--- | :--- | :--- |
-| **CI** (`ci.yml`) | every pull request and push to `main` | Checks, Tests, Browser, Controller, CodeQL and Image (build, boot healthy, publish and sign the host image); on a pull request the image's checks and its composition beside them, then **Ready**, which writes HQ's review from their results; on `main`, **Release**, which starts Compose |
+| **CI** (`ci.yml`) | every pull request and push to `main` | Checks, Tests, Browser, Controller, CodeQL and Image (build, boot healthy, publish and sign the host image); on a pull request the image's checks and its composition beside them, then **Ready**, which passes only when every job did; on `main`, **Release**, which starts Compose |
 | **Compose** (`compose.yml`) | CI on a pull request (verify only); CI's Release on `main`; an extension's admission; a person | the host image plus every admitted extension, verified as one application; on `main`, published and signed |
 | **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits for approval in the `production` environment, then deploys on the self-hosted runner |
 
@@ -58,23 +58,26 @@ pushed commit's tree, and it is signed by that run. With all three, Checks,
 Tests and Browser are skipped and Image promotes that image by digest to the
 commit's tag. Short of all three, every gate runs again.
 
-### Where HQ says it stands
+### Where a change stands
 
-HQ's GitHub App posts one check, linked to the run behind it:
+GitHub's own records say it:
 
-- **Severino HQ · Review** on a pull request: *Checking*, then *Ready to
-  merge* or *Held* with why and what fixes it. It is the one check the
-  ruleset requires, and only HQ's app can post it.
-- **Severino HQ · Production** on a commit to `main`: *Building HQ*, *Waiting
-  for approval*, then *Live in production* or *Not deployed* with the reason,
-  and one comment on the merged pull request.
-- **Severino HQ · Production** on an extension's commit: posted by its
-  admission, and marked live by the controller once production runs it, when
-  its connection manages `github.delivery`.
-
-Why a run failed comes from `deploy/diagnoses.json`: `tools/pipeline/ci_report.py`
-matches the failed job's log against it and prints only the catalog's words.
-A new failure is added there once, and named with its fix every time after.
+- **Ready** on a pull request is the one check the `main` ruleset requires,
+  expected from GitHub Actions. It fails when a job it needs did not pass, and
+  its summary lists each job's result.
+- A **deployment** to the `production` environment, on the commit Deploy was
+  handed: *queued* while it waits for approval, *in progress* once approved,
+  then *success* when it passed its health check, *failure* when it did not
+  (production still runs the previous image), or *inactive* when it was not
+  approved or a newer release took its place. GitHub shows it on the commit,
+  the merged pull request and the environment's page. Resolve records it
+  itself: the environment's job sets `deployment: false`, since the
+  deployment GitHub would record names the commit `main` was at when the run
+  started and succeeds once approved.
+- **Severino HQ · Production** on an extension's commit: opened by its
+  admission and moved on by HQ's controller, through HQ's GitHub App, until
+  production runs it, when its connection manages `github.delivery`. That is
+  HQ reporting on what it runs, not a CI verdict.
 
 ### When a run fails
 
@@ -87,7 +90,7 @@ Every log is public, so each failure is reported at two levels:
 
 | Where | Says | Holds |
 | :--- | :--- | :--- |
-| the run's log and HQ's check | the failed step, its diagnosis and fix, failing host test ids, counts | nothing that names an extension or the host |
+| the run's log and summary | the failed step and its error, failing host test ids, counts | nothing that names an extension or the host |
 | the sealed `failure-logs` artifact | what the log withheld: the composed suite's output, a refused composition's reason, a container's log | readable only with the operator's identity |
 | the host, `/var/log/severino-hq/` | the pull, sync, install and failed-health output, root-only | the host's own detail |
 
@@ -113,7 +116,7 @@ use mints an hour-long token for only what it does:
 | :--- | :--- | :--- |
 | the controller | an SSH Key item in the vault, rendered for openssl only | what each read or report needs |
 | an extension's admission | `HQ_APP_KEY` on its `admission` environment, `main` only | Actions write here: start Compose |
-| Compose, Deploy and CI | `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` repository secrets | Actions and Contents read; Checks write |
+| Compose and CI's Release | `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` repository secrets | Actions and Contents read the extensions; Actions write here: start the next workflow |
 
 `mise run wire-github-app` reads the key from 1Password and sets those
 secrets on this repository and each extension's `admission` environment,
@@ -413,4 +416,8 @@ you sign in; the audit log records the sign-in.
 | CSRF errors on sign-in | `DJANGO_CSRF_TRUSTED_ORIGINS` lacks the full origin, scheme and host, or `DJANGO_BEHIND_TLS_PROXY` is not `1` |
 | Compose fails in "Resolve the host image" | CI for that commit failed, so the host image was never published |
 | an extension merged and nothing deployed | its admission did not dispatch Compose, or found nothing new: run Compose |
-| the Deploy step failed | the detail is in `/var/log/severino-hq/` on the host |
+| the Deploy step failed | production still runs the previous image; the detail is in `/var/log/severino-hq/` on the host |
+| a deploy refuses an image that drops an extension | the composition does not say it was meant: name the extension in `retired` in `COMPOSITION_EXTENSIONS` and run Compose, or restore it to the set |
+| a push says `permission_denied: write_package` | the package does not give this repository write: in its settings, under Manage Actions access, give it the Write role |
+| minting HQ's token says `Bad credentials` or `could not create installation access token` | the key or client ID in the secrets is not the app's: run `mise run wire-github-app` |
+| a step as HQ's app says `Resource not accessible by integration` | the installation lacks a permission: compare it with `deploy/github-apps.json` and accept the change |
