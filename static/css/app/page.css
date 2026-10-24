@@ -220,8 +220,6 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   border-block-end: 1px solid var(--line);
   backdrop-filter: saturate(160%) blur(8px);
 }
-/* Named for screen readers; to the eye a row of section links already says it. */
-.page-nav-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .page-nav-list {
   display: flex;
   align-items: center;
