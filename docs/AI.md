@@ -7,17 +7,22 @@ uses to read and change HQ, and the limits on what it can do through them.
 
 ## Building HQ with agents
 
-### The agent and its skills
+### The agents and their skills
 
-The worker and its procedures live in a Claude Code plugin of their own, kept
-out of this repository while they change from week to week. What each does:
+The agents and their procedures live in a Claude Code plugin of their own,
+kept out of this repository while they change from week to week. What each
+does:
 
 | Part | What it is |
 | --- | --- |
-| `hq-worker` | The worker. It builds one bounded piece of HQ or of an extension, in a worktree of its own, in the background, and reports back. Its report ends with a `Worktree:` line and one `Lesson:` line for each thing that cost it time. |
+| `orchestrate` | The main session's procedure: it writes each brief (goal, base commit, the files the worker owns, the gates that say done), launches the agents, lands each finished worktree onto the pass's branch with one command, and turns every lesson into a rule that same turn. |
+| `auditor` | A read-only agent, enforced by its tools. It measures and maps before workers are briefed, with file and line evidence from the code, the code graph, the vault and HQ's live state. |
+| `hq-worker` | The worker. It builds one bounded piece of HQ or of an extension, in a worktree of its own, in the background, and reports back. Its report ends with what is done and not done, the gates it ran, and one `Lesson:` line for each thing that cost it time. |
+| `hq-pass` | What a pass on HQ adds to `orchestrate`: workers start from the base branch's checkout, and an extension's piece gets a worktree of the same branch name in its own repository. |
 | `hq-house-rules` | Preloaded by the worker. Fewer, stronger tests; `mise run fast <base>` as the gate; scratch scripts in the worktree's gitignored `var/`. |
-| `hq-pass` | Run by the main session: briefs, launch, and integrating several workers into one host branch. |
 | `hq-ui-pass` | For any change to what a page shows: look at every page it reaches with `mise run dev:look`, fix the shared primitive, and look again until `mise run dev:look all --rule survey` exits 0. |
+| `ship-hq` | From a gated branch to production: push and open the pull request, read a CI failure's annotations and sealed logs on the first round, merge, and confirm the Deploy job is green. |
+| [Vault MCP](https://github.com/joeseverino/severino-vault-mcp) | The operator's Obsidian vault over MCP: runbooks, each project's queue of open work and decisions, and the session log a later session picks up from. |
 
 Every agent reads [`AGENTS.md`](../AGENTS.md), the engineering contract
 (`CLAUDE.md` is a link to it). The skills add to it and never restate it.
@@ -28,7 +33,7 @@ Every agent reads [`AGENTS.md`](../AGENTS.md), the engineering contract
 
 <sup>Source: [`docs/images/ai/build-loop.fig`](images/ai/build-loop.fig), pre-rendered with `brand`.</sup>
 
-1. **Map.** A read-only agent measures the change before anything is built:
+1. **Map.** The auditor measures the change before anything is built:
    what is wrong, grouped by the shared rule or partial that causes it, and
    which files each worker will own, so no two workers edit the same file.
 2. **Brief and launch.** Each worker is an `hq-worker`. Its brief quotes the
@@ -47,8 +52,8 @@ Every agent reads [`AGENTS.md`](../AGENTS.md), the engineering contract
    prevented it. The main session changes the rule it points at, so the next
    brief starts from the fixed rule.
 
-The main session integrates every piece into one host pull request, and CI
-runs the same gates on it.
+The main session integrates every piece into one host pull request, CI runs
+the same gates on it, and `ship-hq` takes it to production.
 
 ### The tools a worker uses
 
@@ -97,14 +102,13 @@ and the test rules in `hq-house-rules`.
 Part of the setup is the operator's own and stays out of this public
 repository:
 
-- The agent and its skills, described above, while they change.
+- The agents and their skills, described above, while they change.
 - Claude Code's local settings and agent worktrees, which `.gitignore` leaves
   out of the repository.
 - `CLAUDE.local.md`, the operator's notes on deployment and the private
   extensions, which `.gitignore` also excludes.
-- The hooks that check every shell command an agent runs, the read-only agent
-  that maps a pass, a worker for other repositories, and the rules shared
-  across all of them. These live in a private repository, because they carry
+- The hooks that check every shell command an agent runs, a worker for other
+  repositories, and the rules shared across all of them. These live in a private repository, because they carry
   one operator's machine, accounts and other projects.
 
 HQ's own rules do not depend on that private setup: the contract and the
