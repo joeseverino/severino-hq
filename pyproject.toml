@@ -6,6 +6,9 @@ requires-python = ">=3.15,<3.16"
 # [tool.deptry.per_rule_ignores] with the reason it is installed anyway.
 dependencies = [
     "argon2-cffi==25.1.0",
+    # Django's own async adapters, which it documents under this name: the ASGI
+    # application, the bridge, MCP's tools and hq_call cross with them.
+    "asgiref==3.12.1",
     "cryptography==50.0.2",
     "django==6.1.2",
     "httpx2==2.13.1",
@@ -32,16 +35,29 @@ dependencies = [
 [tool.deptry]
 known_first_party = ["hq", "hq_sdk"]
 extend_exclude = [".*/tests/"]
-# DEP003, a transitive dependency imported directly, and DEP004, a development
-# dependency imported by host code, are not held.
-ignore = ["DEP003", "DEP004"]
-
 [tool.deptry.per_rule_ignores]
 # Runtime dependencies no host code imports, and why each is installed anyway.
 DEP002 = [
     # Django's parallel test runner pickles a failure's traceback with it, in
     # the image as well.
     "tblib",
+]
+# Transitive dependencies host code imports, each where its version belongs to
+# the dependency that installs it.
+DEP003 = [
+    # pydantic's core, pinned exactly by pydantic: core_schema is where pydantic
+    # keeps the schema and error types it does not re-export. A pin of our own
+    # would stop the weekly update whenever pydantic-core releases first.
+    "pydantic_core",
+    # hq/platform/core/oidc.py catches the error mozilla-django-oidc raises from
+    # its own requests calls; the client is the library's choice.
+    "requests",
+]
+# Development dependencies host code imports.
+DEP004 = [
+    # hq/config/urls.py mounts the toolbar only when SEVERINO_DEBUG_TOOLBAR is
+    # on, which development alone sets; the image installs no toolbar.
+    "debug_toolbar",
 ]
 
 [tool.uv]

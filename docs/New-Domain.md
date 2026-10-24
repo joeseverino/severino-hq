@@ -81,6 +81,6 @@ what its owner reads; `hq/platform/core/plain_words.py` holds the words and
 what to say instead), `PostButtonTests` (the shared post button),
 `ComposedQueueTests` (a domain's attention items and cards reach the shared queue),
 `TestPlacementTests` (every test module is in its package's `tests/`),
-`RuntimeDependencyTests` (each runtime dependency `checks:deptry` ignores as
-unimported is one it would report). `checks:deptry` holds every runtime
-dependency to an import in host code, or a reason in `pyproject.toml`.
+`RuntimeDependencyTests` (each finding `checks:deptry` ignores is one it
+would report). `checks:deptry` holds host code to importing only its declared
+runtime dependencies, each of them imported, or a reason in `pyproject.toml`.

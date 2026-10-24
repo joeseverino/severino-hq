@@ -1457,6 +1457,7 @@ source = { virtual = "." }
 default-groups = ["dev", "tools"]
 dependencies = [
     { name = "argon2-cffi" },
+    { name = "asgiref" },
     { name = "cryptography" },
     { name = "django" },
     { name = "httpx2" },
@@ -1500,6 +1501,7 @@ tools = [
 [package.metadata]
 requires-dist = [
     { name = "argon2-cffi", specifier = "==25.1.0" },
+    { name = "asgiref", specifier = "==3.12.1" },
     { name = "cryptography", specifier = "==50.0.2" },
     { name = "django", specifier = "==6.1.2" },
     { name = "httpx2", specifier = "==2.13.1" },

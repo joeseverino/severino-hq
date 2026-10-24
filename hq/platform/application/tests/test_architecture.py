@@ -1907,21 +1907,21 @@ class TestPlacementTests(SimpleTestCase):
 
 @tag("source")
 class RuntimeDependencyTests(SimpleTestCase):
-    """checks:deptry holds every runtime dependency to host code's imports, less
-    the DEP002 ignores in pyproject.toml. deptry says nothing of an ignore that
-    has gone stale, so this holds each to a dependency it would report."""
+    """checks:deptry holds every dependency to host code's imports, less the
+    per-rule ignores in pyproject.toml. deptry says nothing of an ignore that
+    has gone stale, so this holds each to a finding it would report."""
 
-    def test_every_unused_dependency_deptry_ignores_is_one_it_would_report(self):
+    def test_every_finding_deptry_ignores_is_one_it_would_report(self):
         import json
         import subprocess
         import sys
         import tomllib
 
         root = Path(__file__).resolve().parents[4]
-        ignored = tomllib.loads((root / "pyproject.toml").read_text())["tool"]["deptry"]["per_rule_ignores"]["DEP002"]
+        ignored = tomllib.loads((root / "pyproject.toml").read_text())["tool"]["deptry"]["per_rule_ignores"]
         with TemporaryDirectory() as scratch:
             report = Path(scratch) / "deptry.json"
-            # A --per-rule-ignores replaces the table, so DEP002 runs with no ignore.
+            # A --per-rule-ignores replaces the table, so every rule runs with no ignore.
             subprocess.run(
                 [
                     sys.executable,
@@ -1938,6 +1938,9 @@ class RuntimeDependencyTests(SimpleTestCase):
                 capture_output=True,
                 check=False,
             )
-            reported = {each["module"] for each in json.loads(report.read_text()) if each["error"]["code"] == "DEP002"}
+            findings = json.loads(report.read_text())
 
-        self.assertEqual(sorted(reported), sorted(ignored))
+        reported = {
+            rule: sorted({each["module"] for each in findings if each["error"]["code"] == rule}) for rule in ignored
+        }
+        self.assertEqual(reported, {rule: sorted(modules) for rule, modules in ignored.items()})
