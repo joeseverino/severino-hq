@@ -60,6 +60,10 @@ ALERT_PAGES: Mapping[ReadingPart, str] = {
     DEPENDABOT: "dependabot",
     LEAKED_CREDENTIALS: "secret-scanning",
 }
+# The tone of the head's combined check state.
+_CHECKS_TONES = {"failure": "serious", "success": "good", "pending": "attention"}
+# The tone of a deployment's state; any other state of one is still going.
+_DEPLOY_TONES = {"success": "good", "failure": "serious", "error": "serious"}
 # The branches Renovate opens its pull requests from.
 UPDATE_BRANCH = "renovate/"
 
@@ -143,6 +147,12 @@ class Repository:
         return self.record.get("checks", {}).get("state") == "failure"
 
     @property
+    def checks_tone(self) -> str:
+        """The head's checks as a tone: none while nothing runs on it."""
+
+        return _CHECKS_TONES.get(self.record.get("checks", {}).get("state"), "")
+
+    @property
     def failing_runs(self) -> tuple[ActionLink, ...]:
         """A link to each workflow run that failed on the default branch's head,
         as far as the reading holds them: its newest run of each workflow."""
@@ -184,6 +194,16 @@ class Repository:
             for level, n in counts.items():
                 totals[level] = totals.get(level, 0) + n
         return sorted(((n, level) for level, n in totals.items()), key=lambda item: _severity_rank(item[1]))
+
+    @property
+    def alerts_tone(self) -> str:
+        """The open alerts as a tone: none where GitHub offers no alerts."""
+
+        if self.serious_alerts:
+            return "serious"
+        if self.open_alerts:
+            return "attention"
+        return "good" if self.record.get("alerts") else ""
 
     @property
     def update_pulls(self) -> list[dict[str, Any]]:
@@ -282,6 +302,20 @@ class Repository:
             (item for item in self.record.get("deployments") or () if item.get("environment") == "production"),
             None,
         )
+
+    @property
+    def production_tone(self) -> str:
+        """Production's last deploy as a tone: none where there is none."""
+
+        if not self.production:
+            return ""
+        return _DEPLOY_TONES.get(self.production.get("state"), "attention")
+
+    @property
+    def verified_tone(self) -> str:
+        """``production_verified`` as a tone: none where the deploy ran no check."""
+
+        return {True: "good", False: "serious"}.get(self.production_verified, "")
 
     @property
     def deployed_cleanly(self) -> bool:

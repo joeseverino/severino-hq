@@ -388,3 +388,35 @@ class WorkflowRunTests(SimpleTestCase):
 
     def test_a_run_s_address_is_a_web_address_or_nothing(self):
         self.assertEqual(workflow_run({"url": "javascript:alert(1)", "conclusion": "success"}).url, "")
+
+
+class ToneTests(SimpleTestCase):
+    def test_checks_are_serious_failing_good_passing_attention_running_and_toneless_when_none_run(self):
+        tones = {state: repository(checks={"state": state}).checks_tone for state in ("failure", "success", "pending")}
+
+        self.assertEqual(tones, {"failure": "serious", "success": "good", "pending": "attention"})
+        self.assertEqual(repository().checks_tone, "")
+
+    def test_production_is_good_deployed_serious_failed_attention_otherwise_and_toneless_undeployed(self):
+        def tone(state):
+            return repository(deployments=[{"environment": "production", "state": state}]).production_tone
+
+        self.assertEqual(
+            [tone(state) for state in ("success", "failure", "error", "in_progress", "inactive")],
+            ["good", "serious", "serious", "attention", "attention"],
+        )
+        self.assertEqual(repository(deployments=[{"environment": "staging", "state": "success"}]).production_tone, "")
+
+    def test_a_deploy_verified_is_good_one_that_failed_its_checks_serious_one_that_ran_none_toneless(self):
+        def tone(*conclusions):
+            verified = [{"name": "Verify", "conclusion": conclusion} for conclusion in conclusions]
+            return repository(deployments=[{"environment": "production", "verified": verified}]).verified_tone
+
+        self.assertEqual((tone("success"), tone("success", "failure"), tone()), ("good", "serious", ""))
+
+    def test_alerts_are_serious_by_a_serious_one_attention_by_any_good_when_clear_and_toneless_unoffered(self):
+        def tone(**counts):
+            return repository(alerts={"dependabot": counts}).alerts_tone
+
+        self.assertEqual((tone(high=1, low=2), tone(low=1), tone(low=0)), ("serious", "attention", "good"))
+        self.assertEqual(repository().alerts_tone, "")

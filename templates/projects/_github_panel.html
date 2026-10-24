@@ -11,11 +11,11 @@ The page reads a stored reading; nothing here calls GitHub.
       <small class="one-line" title="{{ repo.head.message }}">{{ repo.head.message|breakable }}</small>
       <small>{% if repo.head.author %}{{ repo.head.author|breakable }}{% endif %}{% if repo.head.date %} · {{ repo.head.date|ago_short }}{% endif %}</small>
     {% endband_fact %}
-    {% band_fact icon="check-circle" label="Checks" %}
+    {% band_fact icon="check-circle" label="Checks" tone=repo.checks_tone %}
       <strong>{% if repo.checks.state == 'failure' %}Failing{% elif repo.checks.state == 'pending' %}Running{% elif repo.checks.state == 'success' %}Passing{% else %}None{% endif %}</strong>
       <small>{% if repo.checks.failing %}{{ repo.checks.failing|join:", "|breakable }}{% elif repo.checks.total %}{{ repo.checks.total|breakable }} on this commit{% if repo.checks.running %}, {{ repo.checks.running|breakable }} still running{% endif %}{% else %}Nothing runs on this commit.{% endif %}</small>
-    {% tone %}{% if repo.checks.state == 'failure' %}serious{% elif repo.checks.state == 'success' %}good{% elif repo.checks.state == 'pending' %}attention{% endif %}{% endband_fact %}
-    {% band_fact icon="deploy" label="Production" %}
+    {% endband_fact %}
+    {% band_fact icon="deploy" label="Production" tone=repo.production_tone %}
       {% if repo.production %}
         {% with state=repo.production.state %}
         {% comment %}GitHub's deployment states, as what happened.{% endcomment %}
@@ -26,15 +26,15 @@ The page reads a stored reading; nothing here calls GitHub.
       {% else %}
         <strong>None</strong><small>No deployments on GitHub.</small>
       {% endif %}
-    {% tone %}{% if repo.production.state == 'success' %}good{% elif repo.production.state == 'failure' or repo.production.state == 'error' %}serious{% elif repo.production %}attention{% endif %}{% endband_fact %}
-    {% band_fact icon="shield" label="Security" %}
+    {% endband_fact %}
+    {% band_fact icon="shield" label="Security" tone=repo.alerts_tone %}
       {% if repo.alerts %}
         <strong>{% if repo.open_alerts %}{% entity repo.alerts_url|outside label=repo.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repo.alerts_url|outside label="Clear" %}{% endif %}</strong>
         <small>{% for n, level in repo.severities %}{{ n|breakable }} {{ level|breakable:forloop }}{% if not forloop.last %} {% endif %}{% empty %}No open alerts.{% endfor %}</small>
       {% else %}
         <strong>Not available</strong><small>GitHub does not offer security alerts for this repository's plan.</small>
       {% endif %}
-    {% tone %}{% if repo.serious_alerts %}serious{% elif repo.open_alerts %}attention{% elif repo.alerts %}good{% endif %}{% endband_fact %}
+    {% endband_fact %}
   {% with rules=repo.rules environment=repo.production_environment %}
       <dl class="github-facts">
         <div id="updates-state" data-updates-state><dt>Dependency updates</dt><dd>{% if project.dependency_updates %}On{% with pulls=repo.update_pulls|length %}, {% if pulls %}<a href="#updates">{{ pulls|counted:"open update,open updates" }}</a>{% else %}none open{% endif %}{% endwith %}{% else %}Off{% endif %}
