@@ -3,15 +3,14 @@
 #MISE hide=true
 
 # Each file through stdin: `mise fmt --check` also judges the gitignored
-# mise.local.toml. mise reads every .toml under mise-tasks/ as a task file, so
-# find lists each one; the list goes through a file so a failed find stops the
-# check rather than passing it with nothing read.
+# mise.local.toml, and never reads a task file.
 set -eu
+# shellcheck source=tools/lib/mise-files.sh
+. ./tools/lib/mise-files.sh
 
 files="$(mktemp)"
 trap 'rm -f "${files}"' EXIT
-echo mise.toml >"${files}"
-find mise-tasks -name '*.toml' >>"${files}"
+mise_files "${files}"
 status=0
 while IFS= read -r file; do
     # shellcheck disable=SC2094  # diff only reads the file it compares against
