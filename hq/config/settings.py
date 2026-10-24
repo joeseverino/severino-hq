@@ -471,17 +471,16 @@ if not _DATABASE_PATH:
 
 DATABASES = {
     "default": {
-        # Django's SQLite backend, switching each connection to WAL so that
-        # processes opening a new file together wait for each other.
-        "ENGINE": "hq.platform.core.sqlite",
+        "ENGINE": "django.db.backends.sqlite3",
         "NAME": _DATABASE_PATH,
         "OPTIONS": {
-            # No foreign_keys pragma: Django turns it on for every connection,
-            # and no journal_mode: the engine sets it. synchronous=FULL so a
-            # power cut cannot undo a save HQ already reported; NORMAL in WAL
-            # mode can lose the last commits, and HQ commits too rarely for the
-            # wait to matter. temp_store=MEMORY: HQ's sorts are small.
-            "init_command": "PRAGMA synchronous=FULL;PRAGMA temp_store=MEMORY;",
+            # No foreign_keys pragma: Django turns it on for every connection.
+            # WAL lets readers carry on through a write; it persists in the
+            # file, so on a WAL file the pragma changes nothing. synchronous=FULL
+            # so a power cut cannot undo a save HQ already reported; NORMAL in
+            # WAL mode can lose the last commits, and HQ commits too rarely for
+            # the wait to matter. temp_store=MEMORY: HQ's sorts are small.
+            "init_command": "PRAGMA journal_mode=WAL;PRAGMA synchronous=FULL;PRAGMA temp_store=MEMORY;",
             "transaction_mode": "IMMEDIATE",
             # How long a writer waits for another writer before giving up.
             # WAL lets readers carry on through a write, but writers are still
