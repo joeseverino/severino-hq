@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 from demo.serve import serving
+from hq.platform.core.tests.browser.uncaught import Uncaught
 
 # Where demo:build saved it. This file doesn't import Django.
 OUT = Path(os.environ.get("HQ_DEMO_OUT") or Path(__file__).resolve().parents[1] / "var" / "demo")
@@ -282,7 +283,7 @@ class DemoSiteTests(unittest.TestCase):
             page = browser.new_page()
             errors, elsewhere = [], []
             at = [""]
-            page.on("pageerror", lambda error: errors.append(f"{at[0]}: {error}"))
+            uncaught = Uncaught(page, lambda: at[0])
             page.on("console", lambda message: message.type == "error" and errors.append(f"{at[0]}: {message.text}"))
             page.on("request", lambda request: request.url.startswith(self.origin) or elsewhere.append(request.url))
             for path in dict.fromkeys([*_VISITED, *_sample()]):
@@ -295,6 +296,7 @@ class DemoSiteTests(unittest.TestCase):
                     switch = page.locator('form[action="/demo/"] [role="switch"]')
                     self.assertEqual(switch.get_attribute("aria-checked"), "true")
                     self.assertTrue(switch.is_disabled(), "Demo data can't be turned off")
+            errors += uncaught.so_far()
             browser.close()
         self.assertEqual(errors[:20], [])
         self.assertEqual(elsewhere, [])

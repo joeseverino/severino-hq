@@ -2,12 +2,16 @@
 for a fetch that was cancelled, which it writes even when the page handled the
 rejection."""
 
+import ast
+from pathlib import Path
 from types import SimpleNamespace
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.source import parsed, source_files
 from hq.platform.core.tests.browser.uncaught import Uncaught
 
+ROOT = Path(__file__).resolve().parents[4]
 POLL = "https://hq.example.test/health/live/?t=3871"
 
 
@@ -75,3 +79,20 @@ class UncaughtTests(SimpleTestCase):
         self.page.emit("pageerror", thrown("TypeError", "example", "TypeError: example\n    at plant (/x.js:1:2)"))
         self.assertEqual(self.uncaught.so_far(), ["/example/: uncaught TypeError: example at plant (/x.js:1:2)"])
         self.assertEqual(self.uncaught.so_far(), [])
+
+
+@tag("source", "tree")
+class OneListenerTests(SimpleTestCase):
+    def test_every_check_hears_what_a_page_throws_through_uncaught(self):
+        """A listener of its own would answer an engine's misreport its own way, or not at all."""
+
+        listening = sorted(
+            str(path.relative_to(ROOT))
+            for path in source_files(ROOT, "*.py")
+            for node in ast.walk(parsed(path))
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"on", "once", "expect_event", "wait_for_event"}
+            and any(isinstance(arg, ast.Constant) and arg.value == "pageerror" for arg in node.args)
+        )
+        self.assertEqual(listening, ["hq/platform/core/tests/browser/uncaught.py"])
