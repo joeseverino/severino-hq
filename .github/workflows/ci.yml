@@ -117,9 +117,6 @@ jobs:
     env:
       # `mise run tests` walks this list; a leg is one interpreter.
       TEST_PYTHONS: ${{ matrix.python }}
-      # A test held this long prints its id and every stack, well inside the
-      # job's timeout (docs/Development.md).
-      HQ_TEST_STALL_SECONDS: "180"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -155,10 +152,6 @@ jobs:
       fail-fast: false
       matrix:
         gate: [layout, layout-chromium, navigation, demo]
-    env:
-      # A test or class fixture held this long prints its id, every stack and
-      # Playwright's log, with time left before the job's timeout.
-      HQ_TEST_STALL_SECONDS: "180"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
