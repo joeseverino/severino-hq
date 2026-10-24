@@ -11,11 +11,14 @@ template.
 
 import ast
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from functools import cache
 from pathlib import Path
 
 from django import forms
 from django.conf import settings
+from django.db import models
 from django.template.base import Lexer, TokenType, filter_re
 from django.test import SimpleTestCase, tag
 from django.utils.html import format_html
@@ -76,12 +79,47 @@ _TAG = re.compile(r"<(/?)([A-Za-z][\w-]*)")
 
 # A form's field is markup: Django renders a bound field as its widget and
 # gives it `__html__`. A template read without its context cannot see a
-# value's type, so it knows a field by how the template gets or uses it: a
-# loop over a form or one of a form's field lists, or a read of an attribute
-# only a field has. A name used as a field in one place is a field everywhere
-# in that template.
+# value's type, so it knows a field by what BoundField itself answers: a loop
+# over a form or one of a form's field lists, a read of an attribute only a
+# bound field has, or a template it includes that uses the name as one. A
+# method of the field that returns markup (`as_hidden`, `label_tag`) prints
+# markup. A name used as a field in one place is a field everywhere in that
+# template.
 _FIELD_LOOP = re.compile(r"for\s+(\w+)\s+in\s+form(?:\.\w+)?")
-_FIELD_READ = re.compile(r"\b(\w+)\.(?:id_for_label|errors|auto_id|html_name|widget_type|label_tag|is_hidden)\b")
+_READ = re.compile(r"\b(\w+)\.(\w+)")
+_INCLUDE = re.compile(r"""include\s+["']([^"']+)["'](?:\s+with\s+(.*?))?(\s+only)?$""")
+_BINDING = re.compile(r"(\w+)=(\w+)(?=\s|$)")
+
+
+@cache
+def bound_field_reads() -> frozenset[str]:
+    """The attributes a bound field answers and no string, dict, form field
+    or model field does. A one-word name (`value`, `data`, `errors`) is as
+    likely any object's, so only a compound one marks a field."""
+
+    field = _ExampleForm()["name"]
+    others = {*dir(str), *dir(dict), *dir(forms.Field), *dir(models.Field)}
+    names = {*dir(type(field)), *vars(field)} - others
+    return frozenset(name for name in names if not name.startswith("_") and "_" in name)
+
+
+@cache
+def bound_field_renders() -> frozenset[str]:
+    """The methods of a bound field that, called with nothing, return markup."""
+
+    field = _ExampleForm()["name"]
+    found = set()
+    for name in bound_field_reads():
+        member = getattr(field, name)
+        if not callable(member):
+            continue
+        try:
+            result = member()
+        except TypeError:
+            continue
+        if hasattr(result, "__html__"):
+            found.add(name)
+    return frozenset(found)
 
 
 @dataclass(frozen=True)
@@ -175,25 +213,64 @@ def holds_a_literal(contents: str) -> bool:
     return literal and bool(HOLDING.intersection(filters(contents)))
 
 
-def form_fields(source: str) -> set[str]:
-    """The names ``source`` gets as a form's fields or uses as one."""
+def _included_fields(contents: str, included: Mapping[str, set[str]]) -> set[str]:
+    """The names an include tag hands a template that uses them as fields:
+    each bound with `with`, and the rest of the context unless `only`."""
 
+    found = _INCLUDE.fullmatch(contents.strip())
+    if not found:
+        return set()
+    theirs = included.get(found[1], set())
+    bindings = dict(_BINDING.findall(found[2] or ""))
+    names = {value for key, value in bindings.items() if key in theirs}
+    if not found[3]:
+        names |= theirs - bindings.keys()
+    return names
+
+
+def form_fields(source: str, included: Mapping[str, set[str]] | None = None) -> set[str]:
+    """The names ``source`` gets as a form's fields or uses as one, with
+    ``included`` naming the fields of each template it may include."""
+
+    reads = bound_field_reads()
     names = set()
     for token in Lexer(source).tokenize():
         if token.token_type == TokenType.BLOCK and (loop := _FIELD_LOOP.fullmatch(token.contents.strip())):
             names.add(loop[1])
+        if token.token_type == TokenType.BLOCK:
+            names |= _included_fields(token.contents, included or {})
         if token.token_type in (TokenType.BLOCK, TokenType.VAR):
-            names.update(found[1] for found in _FIELD_READ.finditer(token.contents))
+            names.update(found[1] for found in _READ.finditer(token.contents) if found[2] in reads)
     return names
+
+
+def template_fields(sources: Mapping[str, str]) -> dict[str, set[str]]:
+    """The field names of each template, by template name, through the
+    templates it includes."""
+
+    fields: dict[str, set[str]] = {name: set() for name in sources}
+    changed = True
+    while changed:
+        changed = False
+        for name, source in sources.items():
+            found = form_fields(source, fields)
+            if found != fields[name]:
+                fields[name] = found
+                changed = True
+    return fields
 
 
 def is_markup(contents: str, fields=frozenset()) -> bool:
     """Whether a printed variable is markup before any filter: a field of
-    ``fields``, a block's parent, or a form's error list."""
+    ``fields`` or what one renders, a block's parent, or a form's error list."""
 
     printed = contents.split("|")[0].strip()
+    base, _, attribute = printed.rpartition(".")
     return (
-        printed in MARKUP or printed in fields or ("." in printed and printed.rpartition(".")[2] in MARKUP_ATTRIBUTES)
+        printed in MARKUP
+        or printed in fields
+        or (bool(base) and attribute in MARKUP_ATTRIBUTES)
+        or (base in fields and attribute in bound_field_renders())
     )
 
 
@@ -239,12 +316,13 @@ def _block(contents: str) -> tuple[str, str]:
     return (words[0], words[1] if len(words) > 1 else "") if words else ("", "")
 
 
-def read(source: str, plain_blocks=frozenset()) -> Reading:
-    """``source`` read as HTML, a block named in ``plain_blocks`` standing where text belongs."""
+def read(source: str, plain_blocks=frozenset(), included=None) -> Reading:
+    """``source`` read as HTML, a block named in ``plain_blocks`` standing
+    where text belongs, ``included`` naming each template's fields."""
 
     markup = _Markup()
     reading = Reading()
-    fields = form_fields(source)
+    fields = form_fields(source, included)
     commented = False
     blocks: list[str] = []
     for token in Lexer(source).tokenize():
@@ -274,28 +352,28 @@ def read(source: str, plain_blocks=frozenset()) -> Reading:
     return reading
 
 
-def unheld(source: str, path: str = "", plain_blocks=frozenset()) -> list[Site]:
+def unheld(source: str, path: str = "", plain_blocks=frozenset(), included=None) -> list[Site]:
     """Each value ``source`` prints as text without holding its names."""
 
-    return [Site(path, token.lineno, token.contents) for token in read(source, plain_blocks).unheld]
+    return [Site(path, token.lineno, token.contents) for token in read(source, plain_blocks, included).unheld]
 
 
-def held_literals(source: str, path: str = "", plain_blocks=frozenset()) -> list[Site]:
+def held_literals(source: str, path: str = "", plain_blocks=frozenset(), included=None) -> list[Site]:
     """Each word ``source`` writes itself and hands to a hold, which leaves it as it is."""
 
-    return [Site(path, token.lineno, token.contents) for token in read(source, plain_blocks).literals]
+    return [Site(path, token.lineno, token.contents) for token in read(source, plain_blocks, included).literals]
 
 
-def held_markup(source: str, path: str = "", plain_blocks=frozenset()) -> list[Site]:
+def held_markup(source: str, path: str = "", plain_blocks=frozenset(), included=None) -> list[Site]:
     """Each value ``source`` knows is markup and hands to a hold."""
 
-    return [Site(path, token.lineno, token.contents) for token in read(source, plain_blocks).markup]
+    return [Site(path, token.lineno, token.contents) for token in read(source, plain_blocks, included).markup]
 
 
-def misplaced(source: str, path: str = "", plain_blocks=frozenset()) -> list[Site]:
+def misplaced(source: str, path: str = "", plain_blocks=frozenset(), included=None) -> list[Site]:
     """Each value ``source`` prints as markup where text belongs."""
 
-    return [Site(path, token.lineno, token.contents) for token in read(source, plain_blocks).misplaced]
+    return [Site(path, token.lineno, token.contents) for token in read(source, plain_blocks, included).misplaced]
 
 
 # A value drawn in a box (a held name, an entity, a cell's line; a moment
@@ -424,6 +502,45 @@ class UnheldTests(SimpleTestCase):
 
         self.assertEqual(held_markup(source), [])
 
+    def test_what_a_field_renders_is_markup_whatever_the_loop_names_it(self):
+        source = "{% for item in material %}{{ item.label_tag }}{{ item }}{{ item.as_hidden }}{% endfor %}"
+
+        self.assertEqual(self.values(source), [])
+
+    def test_a_name_an_included_template_uses_as_a_field_is_markup(self):
+        included = template_fields(
+            {
+                "partials/_form_field.html": '<label for="{{ field.id_for_label }}">x</label>{{ field }}',
+                "partials/_other.html": '<label for="{{ field.id_for_label }}">x</label>{{ field }}',
+            }
+        )
+        source = (
+            '{% for field in material %}{% include "partials/_form_field.html" %}{{ field }}{% endfor %}'
+            '{% for entry in identity %}{% include "partials/_form_field.html" with field=entry %}'
+            "{{ entry }}{% endfor %}"
+        )
+
+        self.assertEqual(unheld(source, included=included), [])
+
+    def test_an_include_that_hands_on_no_field_names_none(self):
+        included = template_fields({"partials/_form_field.html": "{{ field.id_for_label }}"})
+        source = (
+            '{% for field in setup.fields %}{% include "partials/_form_field.html" only %}<code>{{ field }}</code>'
+            '{% include "partials/_form_field.html" with field=other %}{% endfor %}'
+        )
+
+        self.assertEqual([site.value for site in unheld(source, included=included)], ["field"])
+
+    def test_the_field_reads_are_what_a_bound_field_answers(self):
+        field = _ExampleForm()["name"]
+
+        for name in bound_field_reads():
+            with self.subTest(name=name):
+                self.assertTrue(hasattr(field, name))
+                self.assertFalse(hasattr("", name) or hasattr({}, name))
+        self.assertLessEqual({"id_for_label", "html_name"}, bound_field_reads())
+        self.assertLessEqual({"as_hidden", "label_tag"}, bound_field_renders())
+
     def test_an_svg_drawing_passes(self):
         self.assertEqual(self.values("<svg><text>{{ mark.label }}</text></svg><p>{{ b }}</p>"), ["b"])
 
@@ -533,14 +650,23 @@ class TemplateValueTests(SimpleTestCase):
         root = Path(settings.BASE_DIR)
         self.sources = {str(path.relative_to(root)): path.read_text(encoding="utf-8") for path in template_paths()}
         self.plain = plain_blocks(self.sources.values())
+        self.included = template_fields(
+            {str(Path(path).relative_to("templates")): source for path, source in self.sources.items()}
+        )
 
     def test_every_value_printed_as_text_holds_its_names(self):
-        found = [site for path, source in self.sources.items() for site in unheld(source, path, self.plain)]
+        found = [
+            site for path, source in self.sources.items() for site in unheld(source, path, self.plain, self.included)
+        ]
 
         self.assertEqual([str(site) for site in found], [])
 
     def test_no_word_the_template_writes_is_handed_to_a_hold(self):
-        found = [site for path, source in self.sources.items() for site in held_literals(source, path, self.plain)]
+        found = [
+            site
+            for path, source in self.sources.items()
+            for site in held_literals(source, path, self.plain, self.included)
+        ]
 
         self.assertEqual(
             [str(site) for site in found],
@@ -550,7 +676,11 @@ class TemplateValueTests(SimpleTestCase):
         )
 
     def test_no_markup_is_handed_to_a_hold(self):
-        found = [site for path, source in self.sources.items() for site in held_markup(source, path, self.plain)]
+        found = [
+            site
+            for path, source in self.sources.items()
+            for site in held_markup(source, path, self.plain, self.included)
+        ]
 
         self.assertEqual(
             [str(site) for site in found],
@@ -559,7 +689,9 @@ class TemplateValueTests(SimpleTestCase):
         )
 
     def test_no_markup_is_printed_where_text_belongs(self):
-        found = [site for path, source in self.sources.items() for site in misplaced(source, path, self.plain)]
+        found = [
+            site for path, source in self.sources.items() for site in misplaced(source, path, self.plain, self.included)
+        ]
 
         self.assertEqual([str(site) for site in found], [])
 
