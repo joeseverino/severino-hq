@@ -161,11 +161,16 @@ done <"${work}/files"
 # with it, and a waiter takes the turn: run by hand, where mise signals the
 # task's process group, and from inside another task, where it signals only
 # the pid it started. The waiter's own bound is the timeout and a margin.
+# heavy.sh runs under each shell /bin/sh is somewhere: dash, Linux's, grants
+# no job control without a terminal, and a CI runner has none.
 bound="${work}/bound"
 mkdir -p "${bound}"
-cat >"${bound}/mise.toml" <<TOML
+mkfifo "${bound}/never"
+for shell in /bin/sh /bin/dash; do
+    [ -x "${shell}" ] || continue
+    cat >"${bound}/mise.toml" <<TOML
 [task_templates.heavy]
-shell = "${heavy} sh -o errexit -c"
+shell = "${shell} ${heavy} sh -o errexit -c"
 timeout = "1s"
 
 [tasks.hang]
@@ -175,19 +180,19 @@ run = 'echo \$\$ >ready; read -r _ <never'
 [tasks.outer]
 run = "mise run hang"
 TOML
-mkfifo "${bound}/never"
-for task in hang outer; do
-    rm -f "${bound}/ready"
-    mkfifo "${bound}/ready"
-    MISE_TRUSTED_CONFIG_PATHS="${bound}" mise -C "${bound}" run "${task}" >/dev/null 2>&1 &
-    run=$!
-    read -r hung <"${bound}/ready"
-    SEVERINO_HEAVY_WAIT=30 "${heavy}" true 2>/dev/null || fail "run as ${task}, a hung heavy task kept the turn past its timeout"
-    status=0
-    wait "${run}" || status=$?
-    [ "${status}" -ne 0 ] || fail "run as ${task}, a heavy task stopped at its timeout passed"
-    if kill -0 "${hung}" 2>/dev/null; then
-        fail "run as ${task}, the hung command outlived its task's timeout"
-    fi
-    hung=""
+    for task in hang outer; do
+        rm -f "${bound}/ready"
+        mkfifo "${bound}/ready"
+        MISE_TRUSTED_CONFIG_PATHS="${bound}" mise -C "${bound}" run "${task}" >/dev/null 2>&1 &
+        run=$!
+        read -r hung <"${bound}/ready"
+        SEVERINO_HEAVY_WAIT=30 "${heavy}" true 2>/dev/null || fail "run as ${task} under ${shell}, a hung heavy task kept the turn past its timeout"
+        status=0
+        wait "${run}" || status=$?
+        [ "${status}" -ne 0 ] || fail "run as ${task} under ${shell}, a heavy task stopped at its timeout passed"
+        if kill -0 "${hung}" 2>/dev/null; then
+            fail "run as ${task} under ${shell}, the hung command outlived its task's timeout"
+        fi
+        hung=""
+    done
 done

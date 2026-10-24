@@ -47,22 +47,21 @@ inside_turn() {
     return 1
 }
 
-# bounded <command...>: runs the command as a job, a process group of its own
-# (set -m), and stops that whole group when this script is stopped. A mise
-# task's timeout signals its process group, but a mise run from inside a task
-# signals only the pid it started, so without the job a bound fired there
-# would leave what the command started running. The command never holds the
-# lock's descriptor: the turn lasts exactly as long as this script, which the
-# timeout's SIGKILL ends whatever the command does. A command inside a turn
-# runs as this pid (heavy-turn.sh knows its own run by it), in the turn's
-# group, so the turn's bound reaches it.
+# bounded <command...>: runs the command as a process group of its own, and
+# stops that whole group when this script is stopped. A mise task's timeout
+# signals its process group, but a mise run from inside a task signals only
+# the pid it started, so without the group a bound fired there would leave
+# what the command started running. Perl's setpgrp makes the group: set -m is
+# the shell's to refuse, and dash, Linux's /bin/sh, does without a terminal.
+# Until perl has made it, the trap reaches perl by its pid. The command never
+# holds the lock's descriptor: the turn lasts exactly as long as this script,
+# which the timeout's SIGKILL ends whatever the command does. A command inside
+# a turn runs as this pid (heavy-turn.sh knows its own run by it), in the
+# turn's group, so the turn's bound reaches it.
 bounded() {
-    set -m
-    "$@" 9>&- &
+    perl -e 'setpgrp; exec { $ARGV[0] } @ARGV; warn "heavy: $ARGV[0]: $!\n"; exit 127' -- "$@" 9>&- &
     job=$!
-    # Job control has done its part; off, the shell reports no job's end.
-    set +m
-    trap 'kill -s TERM -- "-${job}" 2>/dev/null || true' HUP INT TERM
+    trap 'kill -s TERM -- "-${job}" 2>/dev/null || kill -s TERM "${job}" 2>/dev/null || true' HUP INT TERM
     ended=0
     wait "${job}" || ended=$?
     # A trapped signal ends the wait early; the job is reaped once it exits.
