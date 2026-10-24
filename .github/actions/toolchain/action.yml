@@ -61,8 +61,7 @@ runs:
         . ./tools/pipeline/toolchain.env
         mise="$("$GITHUB_ACTION_PATH/mise-version.sh" mise.toml)"
         {
-          # shellcheck disable=SC2086  # the version list is meant to split
-          echo "oldest-python=$(printf '%s\n' $PYTHON_VERSIONS | head -1)"
+          echo "oldest-python=${PYTHON_VERSIONS%% *}"
           echo "mise=$mise"
         } >> "$GITHUB_OUTPUT"
 

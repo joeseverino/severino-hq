@@ -144,8 +144,8 @@ runs:
         set -euo pipefail
         cd host
         . ./tools/pipeline/toolchain.env
-        # shellcheck disable=SC2086  # the version list is meant to split
-        echo "python=$(printf '%s\n' $PYTHON_VERSIONS | tail -1)" >> "$GITHUB_OUTPUT"
+        # The oldest, which the images run and so the one a wheel is installed on.
+        echo "python=${PYTHON_VERSIONS%% *}" >> "$GITHUB_OUTPUT"
         echo "cordon-commit=$CORDON_COMMIT" >> "$GITHUB_OUTPUT"
 
     - name: Check out exact Cordon verifier
