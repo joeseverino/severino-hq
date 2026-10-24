@@ -7,7 +7,7 @@ from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
 from hq.platform.application.tests.markup import elements
-from hq.platform.core.stylesheets import DIRECTORY, SHEETS, STATIC, sheet_paths
+from hq.platform.core.stylesheets import DIRECTORY, SHEETS, STATIC, sheet_paths, stylesheet
 
 LAYER_ORDER = re.compile(r"@layer\s+([\w\s,.-]+);")
 LAYER_BLOCK = re.compile(r"@layer\s+([\w.-]+)\s*\{")
@@ -23,6 +23,8 @@ CELL = re.compile(r"(?<![\w.#-])(?:td|th)(?![\w-])")
 HELD_WIDTH = re.compile(r"(?:^|;)\s*min-width\s*:(?!\s*0(?:px)?\s*(?:;|$))", re.MULTILINE)
 NOWRAP = re.compile(r"white-space\s*:\s*nowrap")
 CLIPPED = re.compile(r"overflow(?:-x)?\s*:\s*(?:hidden|clip)")
+# The one-pixel clip that keeps text for a screen reader alone.
+CLIP_RECIPE = re.compile(r"clip-path\s*:\s*inset\(50%\)")
 TABLE_PRIMITIVES = frozenset({"tables.css", "figures.css"})
 FONT_FACE = re.compile(r"@font-face\s*\{[^{}]*\}")
 FETCHED = re.compile(r"\burl\(|@import\b")
@@ -97,6 +99,18 @@ class SheetTests(SimpleTestCase):
                     found.append(f"{path.name}: {' '.join(selector.split())}")
 
         self.assertEqual(found, [], "a cell's line is held only by the table primitives")
+
+    def test_text_for_a_screen_reader_alone_is_hidden_by_the_one_class(self):
+        """What only a screen reader hears is `.visually-hidden`
+        (cadence.css), never the same recipe restated under another selector,
+        so a change to how it is clipped is made once."""
+
+        found = [
+            " ".join(selector.split())
+            for selector, body in RULE.findall(_uncommented(stylesheet()))
+            if CLIP_RECIPE.search(body) and selector.strip() != ".visually-hidden"
+        ]
+        self.assertEqual(found, [])
 
     def test_a_sheet_fetches_nothing_but_its_faces(self):
         """An image or sheet a rule fetches arrives after the page is drawn and

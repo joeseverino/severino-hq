@@ -204,21 +204,9 @@
     max-height: none !important;
     max-width: none !important;
   }
-  /* An uncut value breaks inside its column rather than running under the
-     next, whatever kept it whole: inside a word only where the word alone is
-     longer than its line. A table whose columns are sized around the open row
-     widens a column to its longest word; free text (`cell-data`) breaks
-     anywhere, open or not. */
-  .data-table tr.is-expanded :is(td, th):not(.cell-data),
-  .data-table tr.is-expanded :is(td, th) *:not(.visually-hidden, .visually-hidden *, .cell-data, .cell-data *) {
-    overflow-wrap: break-word !important;
-  }
-  /* With its columns held (tables.js) no column widens, so the same breaks
-     are `anywhere`: only those count toward a box's min-content, and a box
-     sized to its content (a part, a code chip) would otherwise hold out for
-     its longest word, wider than the column it is held in. */
-  .data-table[data-rows-held] tr.is-expanded :is(td, th),
-  .data-table[data-rows-held] tr.is-expanded :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *) {
+  /* An uncut value breaks inside its held column (tables.js) rather than under the next: `anywhere` breaks count toward min-content, so a box sized to its content (a part, a code chip) does not hold out for its longest word, wider than the column. */
+  .data-table tr.is-expanded :is(td, th),
+  .data-table tr.is-expanded :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *) {
     overflow-wrap: anywhere !important;
   }
 

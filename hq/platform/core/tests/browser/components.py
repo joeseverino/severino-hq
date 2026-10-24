@@ -65,6 +65,10 @@ def _plain_selector(selector: str) -> str:
     return re.sub(r'(\[[^\]=]+?[~|^$*]?=)([^"\]]+)\]', r'\1"\2"]', plain)
 
 
+# Whether what `selector` names in the line beneath a row is shown.
+_SHOWN_BENEATH = "(row, selector) => row.nextElementSibling?.querySelector(selector)?.checkVisibility() ?? false"
+
+
 def others(rows, opened):
     """Every row's height but the one that opened."""
 
@@ -106,15 +110,18 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 for row in rows.all():
                     self.assertTrue(row.locator(SELECTORS["decision_title"]).is_visible())
                     self.assertTrue(row.locator(SELECTORS["decision_dismiss"]).is_visible())
-                    # Held by its node: opening the row moves it to the line beneath.
-                    steps = row.locator(SELECTORS["decision_steps"]).element_handles()
-                    if not steps:
+                    # The row's steps are in its line beneath, drawn by the server.
+                    if not row.locator(SELECTORS["decision_steps"]).count():
                         continue
-                    self.assertFalse(steps[0].is_visible())
+
+                    def steps_shown(row=row):
+                        return row.evaluate(_SHOWN_BENEATH, SELECTORS["decision_steps"])
+
+                    self.assertFalse(steps_shown())
                     row.locator(SELECTORS["row_toggle"]).click()
-                    self.assertTrue(steps[0].is_visible())
+                    self.assertTrue(steps_shown())
                     row.locator(SELECTORS["row_toggle"]).click()
-                    self.assertFalse(steps[0].is_visible())
+                    self.assertFalse(steps_shown())
                     opened += 1
                 self.assertGreater(opened, 0)
 
@@ -516,7 +523,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
         and the ones marked key, and fits the screen; it does not stack into
         cards and is not swiped through. What left is listed when a row is
         opened, beneath that row, and opening it changes no column's width and
-        no other row's height: the reader's place in the table holds.
+        no other row's height: the reader's place in the table holds. Closed
+        again, the line beneath names nothing.
         """
 
         for name in ("connections", "services", "containers", "projects"):
@@ -538,7 +546,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.page.evaluate(_PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
                 again = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
                 self.assertEqual(again["details"], [])
-                self.assertFalse(again["held"])
                 self.assertEqual(again["columns"], closed["columns"])
                 self.assertEqual(again["rows"], closed["rows"])
 

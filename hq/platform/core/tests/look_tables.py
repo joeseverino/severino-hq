@@ -52,8 +52,8 @@ TABLES = (
     const gutter = records.map((row) => row.cells[column]).filter(Boolean).map(pad);
     const headingPad = headings[column] ? pad(headings[column]) : '-';
     const at = (rows) => (rows.length === records.length ? 'every row' : rows.length ? rows.map((row) => records.indexOf(row) + 1).join(',') : 'none');
-    const open = [...table.querySelectorAll(':scope > tbody > tr[data-row-detail]')].map(
-      (detail) => [...detail.querySelectorAll('.row-columns > dt')].map((term) => term.textContent.trim()).join(', ') || '(below only)',
+    const open = [...table.querySelectorAll(':scope > tbody > tr[data-row-detail]')].filter(seen).map(
+      (detail) => [...detail.querySelectorAll('.row-columns > dt')].filter(seen).map((term) => term.textContent.trim()).join(', ') || '(below only)',
     );
     const r = region?.getBoundingClientRect();
     const lines = [

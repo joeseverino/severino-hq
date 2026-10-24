@@ -104,13 +104,17 @@ the top, and no page sets its table's cells otherwise.
 `only_a_table_scrolls_sideways`, the row height budget, and the page
 crawl, which fails any `.data-table` outside `.table-scroll`.
 
-**Opening a row moves nothing.** What an open row was holding back, the
-columns that left and the `narrow-more` parts, is listed in a line of its own
-beneath the row, each part under its column's name. It is the row's own
-content moved there and moved back, never a copy, so a control in it is still
-the one control. The row's own cells stay as they were, and the columns are
-held at their widths for as long as any row is open, so every other row keeps
-its place. Every row that can open has its toggle drawn by the server
+**Opening a row moves nothing.** What a row holds back, the columns that
+left, the `narrow-more` parts and the `row-below` blocks, is in a line of its
+own beneath the row, drawn by the server after the row (`tr.row-detail`,
+`table_tags._detail_row`) and shown while the row is open: the blocks first,
+then each part under its column's name (`dl.row-columns`). A column's part
+shows while the column is gone (`data-dropped`, which `tables.js` sets on it
+as on the cells), a narrow part in a narrow box, a labelled block always; a
+line with nothing to show is a blank row of no height. The line holds a copy
+of what the row holds back, so the row's own cells stay as they were, and the
+columns are held at their widths for as long as any row is open, so every
+other row keeps its place. Every row that can open has its toggle drawn by the server
 (`{% row_toggle %}`), and it shows only where the row holds something back
 now: a column that left with something in it, a `narrow-more` or `row-below`
 part, a fold, or a value `tables.js` found cut (`data-cut`). The toggle

@@ -101,8 +101,8 @@ class TableContractTests(SimpleTestCase):
     maxDiff = None
 
     def test_every_table_is_declared_through_the_tags(self):
-        problems = {name: found for name, source in _templates().items() if (found := table_problems(source))}
-        self.assertEqual(problems, {}, "Draw these tables with {% table_region %} and {% table_heading %}.")
+        problems = [problem for root in _template_roots() for problem in hand_drawn_tables(root)]
+        self.assertEqual(problems, [], "Draw these tables with {% table_region %} and {% table_heading %}.")
 
     def test_a_hand_drawn_table_is_refused(self):
         bare = '<table class="data-table"><thead><tr><th>Name</th></tr></thead></table>'
@@ -210,7 +210,9 @@ class TableTagTests(SimpleTestCase):
             "<tr><td>a</td><td>Up</td><td><button>Go</button></td></tr></tbody></table>{% endtable_region %}"
         )
         html = _render(source)
-        self.assertEqual([heading.attrs["data-kind"] for heading in elements(html, "th")], ["prose", "status", "control"])
+        self.assertEqual(
+            [heading.attrs["data-kind"] for heading in elements(html, "th")], ["prose", "status", "control"]
+        )
         self.assertEqual([cell for cell in elements(html, "td") if "data-kind" in cell.attrs], [])
 
     def test_a_heading_carries_its_rank(self):
@@ -252,6 +254,65 @@ class TableTagTests(SimpleTestCase):
             for each in found
             if each.tag == "th" and any(each.ancestors[-1] is cell.ancestors[-1] for cell in blank)
         }
+    def test_a_row_that_holds_something_back_has_its_line_beneath(self):
+        """After a row is the line its toggle opens: the blocks it keeps
+        beneath itself, then under its column's name a column that may leave
+        (its blocks taken out of the copy), a narrow part of a column that
+        stays, and a labelled block. A control under no heading is named for
+        a screen reader alone, and a column with nothing to show has no part."""
+
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
+            '{% table_heading "Note" drop=1 %}{% table_heading "State" "status" css="key-col" %}'
+            '{% table_heading "Blank" drop=2 %}{% table_heading "Act" hidden=True css="actions-col" drop=3 %}'
+            "</tr></thead><tbody>"
+            '<tr data-probe="rich"><td class="row-gutter">A <span class="narrow-more">from <b>here</b></span>'
+            '<div class="row-below">tall</div>{% row_toggle %}</td>'
+            '<td class="cell-data">Said <ul class="row-below" data-label="Also">x</ul></td>'
+            '<td>Up <span class="narrow-more">since</span></td><td>–</td><td><button>Go</button></td></tr>'
+            '<tr data-probe="plain"><td class="row-gutter">B{% row_toggle %}</td><td>–</td><td>Up</td><td>–</td>'
+            "<td>–</td></tr>"
+            "</tbody></table>{% endtable_region %}"
+        )
+        found = all_elements(_render(source))
+        rows = [each for each in found if each.tag == "tr" and any(up.tag == "tbody" for up in each.ancestors)]
+        self.assertEqual(
+            [row.attrs.get("data-probe", row.attrs.get("class")) for row in rows], ["rich", "row-detail", "plain"]
+        )
+        detail = rows[1]
+        beneath = [each for each in found if detail in each.ancestors]
+        (cell,) = [each for each in beneath if each.tag == "td"]
+        self.assertEqual(cell.attrs["colspan"], "5")
+        self.assertEqual([each.words for each in beneath if "row-below" in each.classes], ["tall", "x"])
+        terms = [each for each in beneath if each.tag == "dt"]
+        self.assertEqual([each.words for each in terms], ["Name", "Note", "State", "Act", "Also"])
+        self.assertEqual(
+            [each.attrs.get("data-column") or each.attrs.keys() & {"data-narrow", "data-label"} for each in terms],
+            [{"data-narrow"}, "1", {"data-narrow"}, "4", {"data-label"}],
+        )
+        self.assertEqual([each.classes for each in terms], [frozenset()] * 5)
+        values = [each for each in beneath if each.tag == "dd"]
+        self.assertEqual([each.words for each in values], ["from here", "Said", "since", "Go", "x"])
+        self.assertIn("cell-data", values[1].classes)
+
+    def test_a_control_under_no_heading_is_named_for_a_screen_reader_alone(self):
+        source = (
+            '{% table_region "Queue" %}<table class="data-table"><tbody>'
+            '<tr><td class="row-gutter">{% row_toggle %}</td><td>What</td><td><a class="narrow-more" href="/x">Fix</a></td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        (term,) = [element for element in all_elements(_render(source)) if element.tag == "dt"]
+        self.assertEqual(term.words, "Actions")
+        self.assertIn("visually-hidden", term.classes)
+
+    def test_a_row_with_nothing_held_back_has_no_line_beneath(self):
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "Note" drop=1 %}</tr></thead><tbody><tr><td>a</td><td>–</td></tr>'
+            '<tr><td colspan="2">Nothing else</td></tr></tbody></table>{% endtable_region %}'
+        )
+        self.assertEqual(with_class(_render(source), "row-detail"), [])
+
         self.assertEqual(marked, {"dash", "empty", "empty value", "line break"})
         self.assertEqual(len(blank), 4, "a table inside a cell is that cell's content")
 

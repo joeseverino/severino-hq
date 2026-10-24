@@ -11,6 +11,7 @@ while its table is wider than its region, before the frame is painted, and
 the row's toggle shows what left.
 """
 
+import html
 import inspect
 import re
 from dataclasses import dataclass, field
@@ -20,7 +21,7 @@ from typing import Any
 
 from django import template
 from django.template.base import token_kwargs
-from django.utils.html import format_html
+from django.utils.html import escape, format_html
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.tables import check_drop, column_kind
@@ -50,6 +51,28 @@ _TAG_NAME = re.compile(r"<\w+")
 _LINE_ENDS = frozenset({"br", "div", "p", "li", "dt", "dd"})
 
 
+# The tags of a control: a cell holding one and no heading is named "Actions".
+_CONTROLS = frozenset({"a", "button", "select", "input"})
+# What a row holds back for its open line: a part of a column that stays in a
+# narrow box, and a block kept beneath the row at any width.
+_PARTS = frozenset({"narrow-more", "row-below"})
+
+
+_Position = tuple[int, int]
+_Span = tuple[_Position, _Position]
+
+
+@dataclass(slots=True)
+class _Part:
+    """An element a cell holds back for the row's open line: its class, its
+    label, and its span from its start tag to its end tag."""
+
+    kind: str
+    label: str | None
+    start: _Position
+    end: _Position | None = None
+
+
 @dataclass(slots=True)
 class _Cell:
     start: tuple[int, int]
@@ -63,6 +86,11 @@ class _Cell:
     # spaces collapsed.
     line: int = 0
     longest: int = 0
+    # Its words, kept for a heading, which names the column's part of the
+    # open line.
+    text: list[str] = field(default_factory=list)
+    controls: bool = False
+    parts: list[_Part] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -70,6 +98,29 @@ class _Row:
     section: str
     group: bool
     cells: list[_Cell] = field(default_factory=list)
+    # Where its end tag is, after which its open line goes.
+    end: tuple[int, int] | None = None
+
+
+@dataclass(slots=True)
+class _Entry:
+    """One part of a row's open line: its column's name, the markup it shows
+    (whole elements, or a cell's content with the blocks cut out of it), and
+    how it is shown: a ``column`` that left, a ``narrow`` part, a labelled
+    block."""
+
+    name: str
+    spans: list[_Span]
+    how: str
+    cut: list[_Span] = field(default_factory=list)
+    column: int = -1
+    data: bool = False
+    # Named for a screen reader alone: a column with no heading.
+    unseen: bool = False
+
+    @property
+    def whole(self) -> bool:
+        return self.how != "column"
 
 
 class _Cells(HTMLParser):
@@ -86,16 +137,21 @@ class _Cells(HTMLParser):
         # The tag of the cell itself, then of each element open inside it.
         self.open: list[str] = []
         # The depth in ``open`` of the outermost element inside the empty
-        # value's mark, and of the outermost off the row's line; None while
-        # none is open. Decided where an element opens, so a piece of text
-        # reads two fields and never walks back up the open elements.
+        # value's mark, of the outermost off the row's line, and of the
+        # outermost part held back for the open line; None while none is
+        # open. Decided where an element opens, so a piece of text reads two
+        # fields and never walks back up the open elements.
         self.unsaid: int | None = None
         self.off_line: int | None = None
+        self.part: int | None = None
         # Where each cell starts, with what is written into it there.
         self.marks: dict[tuple[int, int], list[str]] = {}
         # The content of each cell that keeps its line, from where it starts
         # to its cell's end tag.
         self.held: list[tuple[tuple[int, int], tuple[int, int]]] = []
+        # Each row's open line: where it goes, how many columns it spans, the
+        # blocks it shows whole and the parts it names.
+        self.details: list[tuple[_Position, int, list[_Span], list[_Entry]]] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         own = self.tables == 1
@@ -123,8 +179,8 @@ class _Cells(HTMLParser):
             self.cell = _Cell((line, column), dict(attrs), opened)
             self.rows[-1].cells.append(self.cell)
             # Its tag is no end tag's, so the cell stays the floor of ``open``.
-            self.open, self.unsaid, self.off_line = [], None, None
-            self._open("", _classes(self.cell.attrs))
+            self.open, self.unsaid, self.off_line, self.part = [], None, None, None
+            self._open("", _classes(self.cell.attrs), {})
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if self.cell is not None:
@@ -132,23 +188,31 @@ class _Cells(HTMLParser):
 
     def _inside(self, tag: str, attrs: list[tuple[str, str | None]], *, void: bool = False) -> None:
         assert self.cell is not None
-        classes = _classes(dict(attrs))
+        given = dict(attrs)
+        classes = _classes(given)
         if tag in _LINE_ENDS:
             self.cell.line = 0
+        if tag in _CONTROLS:
+            self.cell.controls = True
         # The line the region wraps a kept cell in is its own mark, read again
         # when the page is: what the cell holds is inside it.
         if tag != "br" and self.unsaid is None and "kept-line" not in classes and "empty-value" not in classes:
             self.cell.says_nothing = False
         if not void and tag not in _VOID:
-            self._open(tag, classes)
+            self._open(tag, classes, given)
 
-    def _open(self, tag: str, classes: list[str]) -> None:
+    def _open(self, tag: str, classes: list[str], attrs: dict[str, str | None]) -> None:
         depth = len(self.open)
         self.open.append(tag)
         if self.unsaid is None and "empty-value" in classes:
             self.unsaid = depth
         if self.off_line is None and not _OFF_LINE.isdisjoint(classes):
             self.off_line = depth
+        if self.part is None and depth and not _PARTS.isdisjoint(classes):
+            assert self.cell is not None
+            self.part = depth
+            kind = "below" if "row-below" in classes else "narrow"
+            self.cell.parts.append(_Part(kind, attrs.get("data-label"), self.getpos()))
 
     def _shut(self, tag: str) -> None:
         """Close the innermost open ``tag`` in the cell and everything opened inside it."""
@@ -160,6 +224,10 @@ class _Cells(HTMLParser):
                     self.unsaid = None
                 if self.off_line is not None and self.off_line >= depth:
                     self.off_line = None
+                if self.part is not None and self.part >= depth:
+                    assert self.cell is not None
+                    self.cell.parts[-1].end = self.getpos()
+                    self.part = None
                 return
 
     def handle_endtag(self, tag: str) -> None:
@@ -175,12 +243,16 @@ class _Cells(HTMLParser):
             if tag in ("td", "th"):
                 self.cell.closed = self.getpos()
             self._close()
+        if self.tables == 1 and tag == "tr" and self.rows:
+            self.rows[-1].end = self.getpos()
         if self.tables == 1 and tag in _SECTIONS:
             self.section = ""
 
     def handle_data(self, data: str) -> None:
         if self.cell is None or self.unsaid is not None:
             return
+        if self.section == "thead":
+            self.cell.text.append(data)
         if self.off_line is None:
             self.cell.line += len(" ".join(data.split()))
             self.cell.longest = max(self.cell.longest, self.cell.line)
@@ -190,12 +262,12 @@ class _Cells(HTMLParser):
     def _close(self) -> None:
         self.cell = None
         self.open = []
-        self.unsaid = self.off_line = None
+        self.unsaid = self.off_line = self.part = None
 
     def _mark_table(self) -> None:
         """What each cell says of itself that its heading cannot: whether it is
         blank and whether its whole column is, the line it keeps or the floor
-        it holds out for, and a group's span."""
+        it holds out for, and a group's span; and each row's open line."""
 
         heads = [row.cells for row in self.rows if row.section == "thead"]
         kinds = _kinds(heads)
@@ -207,23 +279,64 @@ class _Cells(HTMLParser):
         records = [row for row in self.rows if row.section == "tbody" and not row.group]
         empty = _empty_columns(heads, named, records)
         width = _width(heads, records)
+        names = [" ".join("".join(cell.text).split()) for cell in heads[-1]] if heads else []
+        drops = {index for index, cell in enumerate(heads[-1]) if cell.attrs.get("data-drop")} if heads else set()
         for row in self.rows:
             if row.group:
                 self._span(row, width)
                 continue
-            body = row.section == "tbody"
-            for index, cell in enumerate(row.cells):
-                marks = [" data-blank"] if body and cell.says_nothing else []
-                if "colspan" not in cell.attrs:
-                    marks += [" data-blank-column"] if index in empty else []
-                    long = cell.longest > LONG
-                    kept = kinds.get(index) in _KEPT_KINDS
-                    if body and kept and cell.closed and not cell.says_nothing and not long:
-                        self.held.append((cell.opened, cell.closed))
-                    if body and index != named and kinds.get(index) in ("prose", "status") and long:
-                        marks.append(" data-long")
-                if marks:
-                    self.marks[cell.start] = marks
+            self._mark_cells(row, kinds, named, empty)
+            if row.section == "tbody" and row.end:
+                self._detail(row, width, names, drops - empty)
+
+    def _mark_cells(self, row: _Row, kinds: dict[int, str], named: int, empty: set[int]) -> None:
+        body = row.section == "tbody"
+        for index, cell in enumerate(row.cells):
+            marks = [" data-blank"] if body and cell.says_nothing else []
+            if "colspan" not in cell.attrs:
+                marks += [" data-blank-column"] if index in empty else []
+                long = cell.longest > LONG
+                kept = kinds.get(index) in _KEPT_KINDS
+                if body and kept and cell.closed and not cell.says_nothing and not long:
+                    self.held.append((cell.opened, cell.closed))
+                if body and index != named and kinds.get(index) in ("prose", "status") and long:
+                    marks.append(" data-long")
+            if marks:
+                self.marks[cell.start] = marks
+
+    def _detail(self, row: _Row, width: int, names: list[str], drops: set[int]) -> None:
+        """The row's open line: the blocks it keeps beneath itself, then each
+        part under its column's name: a column that may leave, with all its
+        cell holds; a narrow part of a column that stays; a labelled block."""
+
+        blocks: list[_Span] = []
+        entries: list[_Entry] = []
+        labelled: list[_Entry] = []
+        for index, cell in enumerate(row.cells):
+            if "colspan" in cell.attrs or not cell.closed:
+                continue
+            name = names[index] if index < len(names) else ""
+            # A column of controls under no heading is still named, for a
+            # screen reader alone.
+            unseen = not name and cell.controls
+            name = name or ("Actions" if unseen else "")
+            below = [part for part in cell.parts if part.end and part.kind == "below"]
+            narrow = [(part.start, part.end) for part in cell.parts if part.end and part.kind == "narrow"]
+            for part in below:
+                assert part.end
+                if part.label:
+                    labelled.append(_Entry(part.label, [(part.start, part.end)], "label"))
+                else:
+                    blocks.append((part.start, part.end))
+            if index in drops:
+                if not cell.says_nothing:
+                    cut = [(part.start, part.end) for part in below if part.end]
+                    data = "cell-data" in _classes(cell.attrs)
+                    entries.append(_Entry(name, [(cell.opened, cell.closed)], "column", cut, index, data, unseen))
+            elif narrow:
+                entries.append(_Entry(name, narrow, "narrow", unseen=unseen))
+        if blocks or entries or labelled:
+            self.details.append((row.end, width, blocks, entries + labelled))
 
     def _span(self, row: _Row, width: int) -> None:
         """A group's heading row spans every column its table declares."""
@@ -274,6 +387,66 @@ def _empty_columns(heads: list[list[_Cell]], named: int, body: list[_Row]) -> se
 
 
 _VOID = frozenset({"area", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"})
+_END_TAG = re.compile(r"</\s*\w+\s*>")
+_TAGS = re.compile(r"<[^>]*>")
+
+
+class _Markup:
+    """The region's markup by the parser's positions, which count lines by
+    newline alone."""
+
+    def __init__(self, markup: str) -> None:
+        self.markup = markup
+        self.lines = [0] + [found.end() for found in re.finditer("\n", markup)]
+
+    def at(self, position: _Position) -> int:
+        row, column = position
+        return self.lines[row - 1] + column
+
+    def after(self, end_tag: _Position) -> int:
+        """The offset past the end tag at ``end_tag``."""
+
+        at = self.at(end_tag)
+        found = _END_TAG.match(self.markup, at)
+        return found.end() if found else at
+
+    def content(self, span: _Span, cut: list[_Span] = [], *, whole: bool = False) -> str:  # noqa: B006 (never written)
+        """The markup from ``span``'s start to its end tag, which a ``whole``
+        element includes, with the elements in ``cut`` taken out."""
+
+        parts, last = [], self.at(span[0])
+        for start, end in sorted(cut, key=lambda each: self.at(each[0])):
+            parts.append(self.markup[last : self.at(start)])
+            last = self.after(end)
+        parts.append(self.markup[last : self.after(span[1]) if whole else self.at(span[1])])
+        return "".join(parts)
+
+
+def _says_something(markup: str) -> bool:
+    return not _SAYS_NOTHING.fullmatch(html.unescape(_TAGS.sub("", markup)))
+
+
+def _detail_row(markup: _Markup, width: int, blocks: list[_Span], entries: list[_Entry]) -> str:
+    """A row's open line, drawn after it and shown while it is open: a cell
+    the table's width holding the blocks the row keeps beneath itself, then
+    the parts it holds back, each named by its column. A column's part shows
+    while the column has left (``data-dropped``, tables.js), a narrow part in
+    a narrow box, a labelled block always."""
+
+    drawn = [markup.content(block, whole=True) for block in blocks]
+    listed = []
+    for entry in entries:
+        shown = "".join(markup.content(span, entry.cut, whole=entry.whole) for span in entry.spans)
+        if entry.how == "column" and not _says_something(shown):
+            continue
+        how = f' data-column="{entry.column}"' if entry.how == "column" else f" data-{entry.how}"
+        term = ' class="visually-hidden"' if entry.unseen else ""
+        css = ' class="cell-data"' if entry.data else ""
+        listed.append(f"<dt{how}{term}>{escape(entry.name)}</dt><dd{how}{css}>{shown}</dd>")
+    if not drawn and not listed:
+        return ""
+    columns = f'<dl class="row-columns">{"".join(listed)}</dl>' if listed else ""
+    return f'<tr class="row-detail" data-row-detail><td colspan="{width}">{"".join(drawn)}{columns}</td></tr>'
 
 
 def mark_cells(markup: str) -> str:
@@ -285,26 +458,24 @@ def mark_cells(markup: str) -> str:
     every column its headings declare (``colspan``). What a cell of a column
     that keeps its line says is one ``.kept-line``, so the stylesheet can hold
     the line whole up to the column's share of its region and let it wrap past
-    that."""
+    that. After each row that holds something back is its open line
+    (``_detail_row``), so opening a row moves nothing of the row itself."""
 
     cells = _Cells()
     cells.feed(markup)
     cells.close()
-    if not cells.marks and not cells.held:
+    if not cells.marks and not cells.held and not cells.details:
         return markup
-    # The parser counts lines by newline alone.
-    lines = [0] + [found.end() for found in re.finditer("\n", markup)]
-
-    def at(row: int, column: int) -> int:
-        return lines[row - 1] + column
-
+    text = _Markup(markup)
     # The marks go straight after the tag's name: `<td` or `<th`.
-    inserts = [(_TAG_NAME.match(markup, at(*start)).end(), "".join(marks)) for start, marks in cells.marks.items()]
+    inserts = [(_TAG_NAME.match(markup, text.at(start)).end(), "".join(marks)) for start, marks in cells.marks.items()]
     for opened, closed in cells.held:
-        inserts += [(at(*opened), '<span class="kept-line">'), (at(*closed), "</span>")]
+        inserts += [(text.at(opened), '<span class="kept-line">'), (text.at(closed), "</span>")]
+    for end, width, blocks, entries in cells.details:
+        inserts.append((text.after(end), _detail_row(text, width, blocks, entries)))
     parts, last = [], 0
-    for offset, text in sorted(inserts, key=lambda insert: insert[0]):
-        parts += [markup[last:offset], text]
+    for offset, insert in sorted(inserts, key=lambda each: each[0]):
+        parts += [markup[last:offset], insert]
         last = offset
     parts.append(markup[last:])
     return "".join(parts)
@@ -336,7 +507,6 @@ def _region(
     if room not in _ROOMS:
         raise ValueError(f"A region's room is one of {sorted(_ROOMS)}, not {room!r}.")
     classes = [
-        "table-scroll",
         *([css] if css else []),
         *(["is-pane"] if pane else []),
         *([f"is-{room}"] if room else []),
@@ -360,8 +530,8 @@ class RegionNode(template.Node):
         )
         content = self.nodelist.render(context)
         return format_html(
-            '<div class="{}" role="region" aria-label="{}"{}{}>{}</div>',
-            region["css"],
+            '<div class="table-scroll{}" role="region" aria-label="{}"{}{}>{}</div>',
+            f" {region['css']}" if region["css"] else "",
             region["label"],
             mark_safe(' tabindex="0"') if region["scrolls"] else "",
             mark_safe(" data-chart") if region["chart"] else "",

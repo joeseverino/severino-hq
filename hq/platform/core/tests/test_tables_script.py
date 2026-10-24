@@ -1,6 +1,7 @@
 """tables.js reads layout only in the places named here: the fit, which asks
-whether a table is wider than its region before the frame is laid out, and the
-places that hold a table still once a reader has acted on it."""
+whether a table is wider than its region before the frame is laid out, the
+cut it marks, and the places that hold a table still once a reader has acted
+on it."""
 
 import re
 from pathlib import Path
@@ -10,13 +11,12 @@ from django.test import SimpleTestCase, tag
 SCRIPT = Path(__file__).resolve().parents[4] / "static" / "js" / "tables.js"
 
 # Where tables.js may read layout, and what each read is for. A function that
-# only these call (`droppedCells` for `openDetail`) is part of its caller.
+# only these call is part of its caller.
 MEASURES_IN = {
     "overflows": "whether a table is wider than its region, the one question the fit asks",
     "widthOf": "the width a region is fitted at, so a table is fitted again only when it changes",
     "isCut": "a row whose value is cut short, which only a layout knows; markCut marks it and moves nothing",
     "holdColumns": "every column at the width the reader saw while a row is open",
-    "openDetail": "the open row's line beneath: what its row left out, each part under its own column",
     "pinColumnWidths": "the columns of a table a sort, search or page turn swaps in",
 }
 

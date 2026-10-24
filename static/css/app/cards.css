@@ -267,32 +267,30 @@ a.kpi:hover { background: var(--surface-2); }
      offers nothing: its toggle shows once the meaning is cut short, or the
      row holds something else back. */
   .queue-table > tbody > tr:not(.is-expanded, [data-cut]):not(:has(.queue-later, .narrow-more, .queue-more > :not(.queue-meaning))) > .queue-mark > [data-row-toggle]:not([data-fold-toggle]) { display: none; }
+/* The buttons past the first two wait in the line at any width, so in a whole
+   box the line keeps them and lets the first two stay in the row. */
+@container style(--box: whole) {
+  .queue-table .row-columns:has(> dd[data-narrow] > .queue-later) { display: grid; }
+  .queue-table .row-columns > dd[data-narrow]:has(> .queue-later) { display: flex; }
+  .queue-table .row-columns > dd[data-narrow] > .narrow-more:not(.queue-later) { display: none; }
+}
   @container style(--box: whole) {
     .queue-table > tbody > tr:not(.is-expanded, [data-cut]):not(:has(.queue-later, .queue-more > :not(.queue-meaning))) > .queue-mark > [data-row-toggle]:not([data-fold-toggle]) { display: none; }
   }
   @container style(--box: narrow) {
     .queue-table .queue-act:not(:has(> :not(.narrow-more, .queue-buttons), .queue-buttons > :not(.narrow-more))) { padding: 0; }
-    /* Opened, such a row's buttons are in its line, so the cell holds nothing
-       and is not drawn. */
-    .queue-table > tbody > tr.is-expanded > .queue-act:not(:has(.btn)) { display: none; }
     /* On a phone the title has the row: Dismiss is a mark at its end, still
        named by its word. */
     .queue-table :is(.queue-row:not([data-dismissed]), .queue-family) .queue-dismiss { width: 2rem; max-width: none; padding: 0; justify-content: center; font-size: 0; }
     .queue-table :is(.queue-row:not([data-dismissed]), .queue-family) .queue-dismiss::before { content: "\00d7" / ""; font-size: var(--text-lg); line-height: 1; }
   }
 }
-/* The opened line: on the title's edge and the table's full width, what the
-   row means in full, what was read and what to do, then one place for every
-   button the row holds, each the line's width on a phone. There a button asks
-   the line for no width of its own (`contain: inline-size`): a part in its
-   label is one box, cut at the button's edge (figures.css), and asking for
-   its whole length would widen the table past its box. */
-.queue-table .row-detail > td { padding-inline: calc(var(--row-gutter) + var(--space-6)) var(--space-6); padding-bottom: var(--space-8); }
+/* The opened line (table_tags._detail_row): the meaning in full, then one place for every button the row holds, each the line's width on a phone, where a button asks the line for no width (`contain: inline-size`) so a long label never widens the table. */
+.queue-table .row-detail > td { padding-inline: calc(var(--row-gutter) + var(--space-6)) var(--space-6); }
+.queue-table .row-detail > td > * { margin-bottom: var(--space-8); }
 .queue-meaning { max-width: var(--measure); margin: 0; font-size: var(--text-sm); line-height: 1.6; color: var(--ink-2); overflow-wrap: anywhere; }
 .queue-more > :first-child { margin-top: 0; }
-.queue-table .row-detail .row-columns { display: block; margin-top: var(--space-6); padding: 0; background: none; }
-.queue-table .row-detail .row-columns:first-child { margin-top: 0; }
-.queue-table .row-detail .row-columns > dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.queue-table .row-detail .row-columns { grid-template-columns: minmax(0, 1fr); padding: 0; background: none; }
 .queue-table .row-detail .row-columns > dd { display: flex; flex-wrap: wrap; gap: var(--space-4); }
 .queue-table .row-detail .row-columns > dd > .attention-actions { display: contents; }
 @container style(--box: narrow) {

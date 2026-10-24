@@ -200,9 +200,9 @@ _UNPADDED_CELLS = (
 )
 
 # The first table on a page as a phone lays it out: whether it runs past its
-# box, how wide each showing column is, how tall each record's row is, and how
-# many rows show their toggle. The line an open row adds is made by tables.js,
-# so no template renders it and it is found by attribute.
+# box, how wide each showing column is, how tall each record's row is, how
+# many rows show their toggle, and what the open rows' lines beneath name.
+# The line is the server's (`table_tags._detail_row`), found by attribute.
 _PHONE_TABLE = """(scroll) => {
   const box = document.querySelector('main ' + scroll);
   const table = box && box.querySelector('table');
@@ -216,8 +216,7 @@ _PHONE_TABLE = """(scroll) => {
     rows: [...table.querySelectorAll('tbody > tr:not([data-row-detail]):not(:has(> th[scope="rowgroup"]))')]
       .map((row) => Math.round(row.getBoundingClientRect().height)),
     toggles: [...table.querySelectorAll('tbody button[aria-expanded]')].filter((el) => el.checkVisibility()).length,
-    details: [...table.querySelectorAll('tr[data-row-detail] dt')].map((term) => term.textContent),
-    held: table.hasAttribute('data-rows-held'),
+    details: [...table.querySelectorAll('tr[data-row-detail] dt')].filter((term) => term.checkVisibility()).map((term) => term.textContent),
   };
 }"""
 
@@ -434,7 +433,7 @@ _ROW_TOGGLE_TABLES = """
 <td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
 </tbody></table>{% endtable_region %}"""
 
-_ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr')].map((row) => ({
+_ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr:not([data-row-detail])')].map((row) => ({
   probe: row.dataset.probe,
   toggles: row.querySelectorAll('button[aria-expanded]').length,
   shown: [...row.querySelectorAll('button[aria-expanded]')].some((toggle) => toggle.checkVisibility()),

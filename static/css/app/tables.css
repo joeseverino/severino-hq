@@ -617,10 +617,18 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    them do (`data-blank-column`), never the column that names the row. */
 .data-table > * > tr > [data-blank-column] { display: none; }
 .data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--space-3); inset-block-start: calc(var(--row-pad) - var(--space-1)); }
-/* What an open row was holding back, in a line of its own beneath it: each
-   part under its column's name. Beneath the row and the table's full width, so
-   opening one moves nothing else: the row's own cells stay as they were, and
-   tables.js holds the columns at their widths while any row is open. */
+/* What a row holds back, in the line the server drew beneath it (`table_tags._detail_row`), shown while the row is open: a column's part while its column is gone (`data-dropped`), a narrow part in a narrow box, a labelled block always; it asks its columns for no width (`contain`), so opening moves no column. */
+.row-detail { display: none; }
+@media (scripting: enabled) {
+  .data-table > tbody > tr.is-expanded + .row-detail { display: table-row; }
+}
+.row-detail > td > * { contain: inline-size; margin-block: 0 var(--row-pad); }
+.row-columns > [data-column]:not([data-dropped]) { display: none; }
+.row-columns:not(:has(> dd[data-dropped], > dd[data-label], > dd[data-narrow])) { display: none; }
+@container style(--box: whole) {
+  .row-columns > [data-narrow] { display: none; }
+  .row-columns:not(:has(> dd[data-dropped], > dd[data-label])) { display: none; }
+}
 .row-columns { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-3) var(--space-6); margin: 0; }
 .row-columns dt { color: var(--muted); font-size: var(--text-2xs); }
 /* A value under its column's name has the line to itself: what it holds out
@@ -642,9 +650,8 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 }
 @media (scripting: none) { .row-fold { display: none; } }
 .data-table tr.is-expanded:has(+ .row-detail) > * { border-bottom: 0; }
-/* What an opened row adds is one panel under the row's name: its left edge on
-   the name's, each part's name in one column and its value beside it. */
-.data-table .row-detail > td { padding-top: 0; padding-left: calc(var(--space-6) + 1.5rem); }
+/* An opened row adds one panel under the row's name: each part's name in one column, its value beside it. */
+.data-table .row-detail > td { padding-block: 0; padding-left: calc(var(--space-6) + 1.5rem); }
 .row-detail > td > .row-columns {
   grid-template-columns: 7rem minmax(0, 1fr); align-items: baseline; gap: var(--space-5) var(--space-6);
   padding: var(--space-5) var(--space-6); border-radius: var(--radius); background: var(--bg-tint);
