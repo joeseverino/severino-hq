@@ -254,7 +254,7 @@ arg "[base]" env="CHECK_BASE" help="The ref to diff against; default origin/main
 flag "--list" help="Print the selected test modules and run nothing"
 flag "--parallel <workers>" env="CHECK_PARALLEL" default="auto" help="Test workers per suite; 1 rules out an order or isolation failure"
 '''
-run = 'uv run python -m tools.gate.fast ${usage_list:+--list} --parallel "$usage_parallel" ${usage_base:+"$usage_base"}'
+run = "uv run python -m tools.gate.fast"
 
 [tasks.check]
 description = "Does my change work: every Checks gate, the Tests gates on one Python, and the suite composed"

@@ -302,9 +302,13 @@ Each is invented or shared by every network:
 `hq/platform/core/tests/test_example_estate_values.py` fails on an address or
 host name outside the reserved and shared ranges it names.
 
-`mise run dev:look -- <pages>` is the same browser for looking rather than
+`mise run dev:look <pages>...` is the same browser for looking rather than
 gating: it saves a full-page screenshot of each page at each width under
 `var/look/`, which each run empties first so every shot there is its own.
+A page is named as `estate/<path>`, a path (`/infrastructure/containers/`) or
+a route name (`control_plane:containers`), one per argument; an unknown one is
+refused before anything runs, with the nearest routes named, and a page that
+answers anything but 200 fails the run.
 The look keeps its test database in `var/dev-look/` through Django's
 `--keepdb`, so a second run creates nothing; a run that did not finish makes
 the next one start fresh, a look with `--base` keeps none, and an edited
@@ -334,7 +338,7 @@ one only a new one does. With `--perf`, on by default with `--base`,
 same heavy turn, and its table follows the look's verdict; a page it cannot
 serve is named once. `--base <ref>` looks at the same
 pages at `<ref>` first, in a temporary worktree it removes however the run
-ends and judges by this checkout's rules, its output relayed line by line
+ends, with this checkout's test files laid over it as `test --at` does, and judges by this checkout's rules, its output relayed line by line
 after the ref as it runs, writes what is new on this checkout and what
 it fixed to `var/gate/look.txt` under the commits both ran at, and prints a
 line for each new finding and the verdict. Every probe reports all it finds,
@@ -352,14 +356,14 @@ declares) also shoots each page with that dialog open
 any menu holding that control, so the page's own wiring opens it, and waits
 for its parts to load; `--eval` and the rule run again there.
 
-`mise run perf:report [pages] [--image] [--seed <name>] [--base <ref>]
+`mise run perf:report <pages>... [--image] [--seed <name>] [--base <ref>]
 [--host-alone] [--fresh] [--requests <n>]` measures how light and fast HQ is,
 page by page: server time, queries, the rows its tables hold and its HTML
 size, then bytes, requests, first and largest contentful paint (first visit
 and repeat), script time and layout shift in Chromium, memory
-and cold start. `pages` names the example estate's pages as `dev:look` does
-(`estate/infrastructure`, any address as `estate/<path>`), by default every
-page its navigation lists. `--seed` names the data set the servers are seeded
+and cold start. `pages` names the example estate's pages as `dev:look` does,
+or `all` for every page its navigation lists; a page asked that answers
+anything but 200 fails the run. `--seed` names the data set the servers are seeded
 with, as `dev:scratch --seed` does (default showcase); the stress sets live in
 the test tree, so no server can serve them. Each run is kept as
 `var/perf/<run>.json`, saved after each measurement; a failed one is recorded

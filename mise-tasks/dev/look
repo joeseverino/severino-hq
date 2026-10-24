@@ -3,7 +3,7 @@
 #MISE extends="django"
 #MISE depends=[{task="setup:browser", args=["{{usage.engine}}"]}]
 #MISE timeout="30m"
-#USAGE arg "<pages>" help="Comma-separated pages: a gate page (connections, dense/services, derived/<app>/<list>), api/docs, estate/<path>, estate/all, or all"
+#USAGE arg "<pages>" var=#true help="Pages: a gate page (connections, dense/services, derived/<app>/<list>), api/docs, estate/<path>, a path (/infrastructure/containers/), a route name (control_plane:containers), estate/all, or all"
 #USAGE flag "--widths <widths>" help="Comma-separated widths in CSS pixels; default the phone, 820 and 1360"
 #USAGE flag "--rule <rule>" help="What to judge on each page: survey (every check the browser gates hold), tables (print each table) or one layout check by name, such as a_table_fits_its_box_at_every_width. Findings go to var/gate/look.txt"
 #USAGE flag "--css <css>" help="Extra CSS after app.css, as text or a file: the defect a new rule must catch"
@@ -33,9 +33,11 @@ set -eu
 # page, every page linked, a base or a measure takes the heavy turn.
 light_run=1
 [ -z "${usage_base:-}" ] && [ "${usage_perf:-}" != true ] && [ "${usage_deep:-}" != true ] || light_run=""
-case ",$(printf '%s' "${usage_pages:?}" | tr -d ' ')," in
-    *,all,* | *,estate/all,*) light_run="" ;;
-esac
+# mise hands the pages over shell-quoted, one word each.
+eval "set -- ${usage_pages:?}"
+for page do
+    case "${page}" in all | estate/all) light_run="" ;; esac
+done
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh
 
@@ -70,27 +72,20 @@ esac
 [ -n "${measure}" ] || exit "${looked}"
 
 # perf:report serves the example estate alone, so it measures the estate pages asked.
-served=""
-set -f
-old_ifs="${IFS}"
-IFS=,
-for page in ${usage_pages:?}; do
-    page="${page#"${page%%[! ]*}"}"
+for page do
+    shift
     case "${page}" in
-        estate | estate/*) served="${served:+${served},}${page}" ;;
+        estate | estate/* | /* | *:*) set -- "$@" "${page}" ;;
         all)
-            served="${served:+${served},}${page}"
+            set -- "$@" all
             echo "perf:report measures the example estate's pages of all, not the stress or reference pages"
             ;;
-        '') ;;
         *) echo "perf:report does not measure ${page}: it serves the example estate's pages alone" ;;
     esac
 done
-IFS="${old_ifs}"
-set +f
-[ -n "${served}" ] || exit "${looked}"
+[ "$#" -gt 0 ] || exit "${looked}"
 
 measured=0
-mise run perf:report "${served}" --seed "${usage_seed:?}" ${usage_base:+--base "${usage_base}"} || measured=$?
+mise run perf:report "$@" --seed "${usage_seed:?}" ${usage_base:+--base "${usage_base}"} || measured=$?
 [ "${looked}" -ne 0 ] && exit "${looked}"
 exit "${measured}"

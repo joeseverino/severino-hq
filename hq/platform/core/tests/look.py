@@ -192,7 +192,7 @@ def _asked() -> Usage:
     if not given.given(_ASKED):
         raise RuntimeError(
             f"dev:look reads what it was asked from its task's environment, and {PREFIX}{_ASKED} is not set:"
-            " run it as `mise run dev:look -- <pages>`, never as a test label through manage"
+            " run it as `mise run dev:look <pages>...`, never as a test label through manage"
         )
     return given
 
