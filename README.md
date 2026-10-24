@@ -44,7 +44,7 @@ touches. How is in [Derived Facts](docs/Derived-Facts.md) and
 | Host | one Linux machine: systemd runs the container, the controller and the scheduled work |
 | Toolchain | [mise](https://mise.jdx.dev) pins every tool by checksum and runs every gate as a task, the same on a laptop, in an agent's worktree and in CI; uv locks Python; Renovate moves the pins |
 | Delivery | GitHub Actions: CI, Compose (host plus extensions, signed with Sigstore), Deploy on a self-hosted runner after approval |
-| Tests | Django's runner in parallel, Playwright on WebKit for layout, Go tests, shell suites, CodeQL, Scorecard, Trivy |
+| Tests | Django's runner in parallel, Playwright on WebKit for layout and navigation, and on Chromium in CI, Go tests, shell suites, CodeQL, Scorecard, Trivy |
 
 ## Security
 
@@ -78,16 +78,16 @@ its source, with what breaks if that step fails.
 mise run ci
 ```
 
-runs every gate CI runs, at the same pinned versions: lint, types, the suite
-on every supported Python, the browser layout gate, the controller, CodeQL,
+runs every gate CI runs, at the same pinned versions: lint, types, the suite,
+the browser gates in WebKit, the controller, CodeQL,
 Scorecard, and the image built and tested from inside.
 
 - The host/extension boundary is tested in both directions:
   `python -m hq_sdk.validation` rejects an extension importing anything but
   `hq_sdk`, and `hq/platform/application/tests/test_plugins.py` fails when a
   host file names an installed extension.
-- Architecture rules (no view writes a model, one table engine, no inline
-  script, function complexity) are tests in
+- Architecture rules (no view writes a model, MCP reads no model, one table
+  engine, function complexity) are tests in
   `hq/platform/application/tests/test_architecture.py`, listed in
   [New Domain](docs/New-Domain.md).
 - A composition's signature checks against Compose on `main`, the identity
@@ -104,12 +104,15 @@ hq_sdk/        the supported import surface for extensions
 controller/    Go: the controller, hq-host and hq-secrets
 templates/     server-rendered pages and shared partials
 static/        CSS, scripts and pinned vendor bundles
-deploy/        systemd units, tmpfiles rule, remote targets, host.json shape
+deploy/        systemd units, tmpfiles rule, remote targets, host.json shape,
+               the GitHub App permissions CI's writes use
 composition/   the composed image
 policy/        the extension admission policy
 demo/          the static demo site built from HQ's own pages
+tasks/         mise tasks by job (mise-tasks/ holds the file tasks)
 tools/         development and CI programs, never in the image
-tests/         synthetic extension fixtures and property tests
+tests/         synthetic extension fixtures, the SDK consumer, property
+               tests and shell suites
 docs/          architecture, operations and guides
 ```
 
@@ -119,7 +122,7 @@ docs/          architecture, operations and guides
 mise install
 mise run dev:scratch      # a local server: fresh database, signed-in account, reload
 mise run fast             # what the change reaches
-mise run check            # every Checks and Tests gate, and the suite composed
+mise run check            # every Checks gate, the tests, and the suite composed
 mise run preflight        # ready: every CI gate, the composed suite, the host
 ```
 
