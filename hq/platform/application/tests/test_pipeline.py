@@ -167,6 +167,31 @@ class CacheWriterTests(SimpleTestCase):
                 where = " ".join([*job_condition, condition(step)])
                 self.assertRegex(where, r"github\.event\.repository\.default_branch|github\.event_name == 'push'")
 
+    def test_an_action_saves_a_cache_only_for_a_job_on_the_default_branch(self):
+        """A composite action saves on the default branch, or when its caller
+        passes ``save: true``, which only a job that runs on a push does."""
+        saves = [
+            (path.parent.name, " ".join(step.split()))
+            for path in composite_actions()
+            for step in re.split(r"(?m)^    - ", path.read_text())[1:]
+            if "uses: actions/cache/save@" in step
+        ]
+        self.assertTrue(saves)
+        for action, step in saves:
+            with self.subTest(action=action):
+                self.assertRegex(step, r"if: .*(github\.event\.repository\.default_branch|inputs\.save == 'true')")
+        callers = [
+            (path.name, block(job, "if", 4))
+            for path in workflows()
+            for job in jobs(path.read_text()).values()
+            for step in steps(job)
+            if re.search(r"(?m)^\s+save: true\s*$", step)
+        ]
+        self.assertTrue(callers)
+        for name, job_condition in callers:
+            with self.subTest(file=name):
+                self.assertRegex(" ".join(job_condition), r"github\.event_name == 'push'")
+
 
 BROWSER_SETUP = frozenset({"setup:webkit", "setup:chromium"})
 
