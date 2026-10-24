@@ -121,6 +121,7 @@ docs/          architecture, operations and guides
 ```sh
 mise install
 mise run dev:scratch      # a local server: fresh database, signed-in account, reload
+mise run dev:look <page>  # screenshots of a page at every width the browser gates draw
 mise run fast             # what the change reaches
 mise run check            # every gate CI runs
 mise run check --release  # ready: every CI gate, the composed suite, the host
