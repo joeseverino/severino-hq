@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from django import forms
+from django.core.files.uploadedfile import UploadedFile
 from django.urls import reverse
 
 from .models import Receipt
@@ -73,5 +74,8 @@ class ReceiptUploadForm(forms.ModelForm):
 
     def clean_file(self):
         f = self.cleaned_data["file"]
-        validate_receipt_file(f)
+        # An edit without an upload cleans to the stored file, which was held
+        # to these rules when it arrived and carries no content type of its own.
+        if isinstance(f, UploadedFile):
+            validate_receipt_file(f)
         return f
