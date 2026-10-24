@@ -22,7 +22,7 @@ waits on a schedule.
 | **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits for approval in the `production` environment, then deploys on the self-hosted runner |
 
 Each CI job runs the `mise` aggregate of its name, so the gates are declared
-once, as tasks in their job's file under [`tasks/`](../tasks) ([Development](Development.md)).
+once, as tasks in their job's file under [`mise-tasks/`](../mise-tasks) ([Development](Development.md)).
 
 Production runs the composed image (`ghcr.io/joeseverino/severino-hq/composition`),
 never the host image alone. How Compose admits, fingerprints and assembles

@@ -1,4 +1,4 @@
-"""Every task of this checkout as mise reads it, one list: mise.toml's and those of every file its task_config includes."""
+"""Every task of this checkout as mise reads it, one list: mise.toml's and those under mise-tasks/."""
 
 import functools
 import json

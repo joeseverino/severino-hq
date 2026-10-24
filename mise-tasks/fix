@@ -7,9 +7,11 @@ set -eu
 
 uv run ruff check --fix .
 uv run ruff format .
-includes="$(yq -p toml -oy '.task_config.includes[] | select(test("\.toml$"))' mise.toml)"
-# shellcheck disable=SC2086  # each include is a glob for the shell to expand
-for file in mise.toml ${includes}; do
+files="$(mktemp)"
+trap 'rm -f "${files}"' EXIT
+echo mise.toml >"${files}"
+find mise-tasks -name '*.toml' >>"${files}"
+while IFS= read -r file; do
     formatted="$(mise fmt --stdin <"${file}")"
     printf '%s\n' "${formatted}" >"${file}"
-done
+done <"${files}"

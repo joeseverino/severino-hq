@@ -76,11 +76,11 @@ with every default group omitted.
 
 Every gate is a task named `<job>:<gate>` (`mise run checks:ruff` runs one),
 and each CI job runs the aggregate of its name. A gate is declared in its job's
-file under `tasks/` (`tasks/checks.toml` holds `checks:*`), or under
-`mise-tasks/` when its body is a script; `task_config.includes` in `mise.toml`
-loads both, and `mise.toml` keeps the tools, the environment, the templates,
-the development servers and the aggregates. A task in `tasks/` names no file
-in its env: mise reads an env path, and renders `config_root` inside env, from
+file in `mise-tasks/` (`mise-tasks/checks.toml` holds `checks:*`), or beside it
+in `mise-tasks/checks/` when its body is a script; mise finds both there by
+default, and `mise.toml` keeps the tools, the environment, the templates, the
+development servers and the aggregates. A task outside `mise.toml` names no
+file in its env: mise reads an env path, and renders `config_root` inside env, from
 the directory of the file that declares the task (`GateReferenceTests`).
 On a pull request CI's **Ready** job needs every other job and fails when one
 did not pass: it is the one check the `main` ruleset requires, so a gate added
@@ -466,8 +466,7 @@ composition/              the composed image
 policy/                   the extension admission policy
 demo/                     the static demo site built from HQ's own pages
 tools/                    development and CI programs, never in the image (tools/README.md)
-tasks/                    the TOML tasks, one file per CI job (checks.toml, tests.toml, ...) and operator.toml
-mise-tasks/               tasks whose body is a script, declared in its own #MISE header
+mise-tasks/               every task outside mise.toml: one TOML file per CI job (checks.toml, ...) and operator.toml, and beside each a folder of script tasks
 tests/                    synthetic extension fixtures, the SDK consumer, property and shell suites
 var/                      ignored local runtime state
 ```
