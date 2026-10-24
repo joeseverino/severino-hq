@@ -238,7 +238,7 @@ field at its length, money at the largest a household records, and the
 longest label of every choice, so a new list or field is measured at its
 worst the day it exists (`dev:look derived/<app>/<name>` shows one).
 The example estate (`hq/platform/core/example_estate/`, the homelab the demo
-and `seed_demo` show) is read by `hq.platform.core.tests.browser.estate` on
+and `manage.py seed showcase` show) is read by `hq.platform.core.tests.browser.estate` on
 every page the navigation declares, with script on and deferred parts loaded,
 at 402, 820, 1360 and 1680 pixels and at `WIDE_TABLES`, in the light palette
 and the dark. `WIDE_TABLES` is read from the stylesheet: the narrowest

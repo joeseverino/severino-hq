@@ -19,9 +19,18 @@ import urllib.request
 from pathlib import Path
 
 from tools.perf import parse
+lazy from hq.platform.core import seeds
 
 READY = "/health/ready/"
 USER = "operator"
+
+
+def showcase() -> dict[str, str]:
+    """The settings the showcase set is shown under, from its one declaration."""
+
+    return dict(seeds.get("showcase").settings)
+
+
 PROBE = Path(__file__).with_name("queries_probe.py")
 MARKER = "perf-queries "
 # A first boot migrates and seeds a new database; a later one finds it made.
@@ -260,6 +269,19 @@ class Image:
         flags = [f"--env={name}={value}" for name, value in (env or {}).items()]
         return self._docker("exec", *flags, self.name, "python", "manage.py", *args)
 
+    def _seed(self) -> None:
+        """The showcase set, owned by the operator, as dev:scratch --seed showcase makes it."""
+
+        password = {"DJANGO_SUPERUSER_PASSWORD": os.urandom(12).hex()}
+        if "seed" in self._manage("help", "--commands").split():
+            self._manage("seed", "showcase", "--owner", USER, env=password)
+            return
+        # An image older than the seed registry, measured as the base.
+        self._manage(
+            "createsuperuser", "--noinput", "--username", USER, "--email", "operator@example.invalid", env=password
+        )
+        self._manage("seed_demo")
+
     def _published(self) -> str:
         address = self._docker("port", self.name, "8000/tcp").split()[0]
         return f"http://{address}"
@@ -288,8 +310,7 @@ class Image:
                 "DJANGO_CSRF_COOKIE_SECURE=0",
                 "--env",
                 "SEVERINO_LOG_LEVEL=WARNING",
-                "--env",
-                "SEVERINO_POSTURE=advanced",
+                *(f"--env={name}={value}" for name, value in showcase().items()),
                 # HQ refuses any caller outside its trusted networks, and a
                 # published port's requests come from the bridge, not loopback.
                 "--env",
@@ -299,16 +320,7 @@ class Image:
             self.started = True
             self.url = self._published()
             wait_ready(self.url, FIRST_BOOT_S)
-            self._manage(
-                "createsuperuser",
-                "--noinput",
-                "--username",
-                USER,
-                "--email",
-                "operator@example.invalid",
-                env={"DJANGO_SUPERUSER_PASSWORD": os.urandom(12).hex()},
-            )
-            self._manage("seed_demo")
+            self._seed()
         except BaseException:
             self.stop()
             raise

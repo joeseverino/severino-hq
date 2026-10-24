@@ -1,9 +1,9 @@
 """One side of `perf:ab`: a tree's own Django rendering pages through its test client.
 
 Never imported: its text is run as `manage.py shell -c` in the tree measured
-(this checkout, or a worktree of the ref), so every page is that code's. It migrates
-the new database its environment names, signs up the operator, seeds the
-example estate as dev:scratch does, and prints READY with the pages the tree's
+(this checkout, or a worktree of the ref), so every page is that code's. It seeds the
+new database its environment names with the showcase set, as dev:scratch
+does, and prints READY with the pages the tree's
 navigation lists. Then it answers each line on stdin, a JSON object naming a
 page, with one line: MARKER and a JSON object of the page's status, the time
 its Server-Timing header says the server spent (and the time the client saw),
@@ -18,7 +18,7 @@ import sys
 import time
 
 from django.contrib.auth import get_user_model
-from django.core.management import call_command
+from django.core.management import call_command, get_commands
 from django.db import connection
 from django.test import Client
 from django.test.utils import CaptureQueriesContext
@@ -58,12 +58,22 @@ def answer(client: Client, ask: dict) -> dict:
     return said
 
 
-def main() -> None:
+def seeded() -> object:
+    """The showcase set, owned by the operator, as dev:scratch --seed showcase makes it."""
+
+    user = os.environ["PERF_USER"]
+    if "seed" in get_commands():
+        call_command("seed", "showcase", owner=user, verbosity=0)
+        return get_user_model()._default_manager.get_by_natural_key(user)
+    # A tree older than the seed registry, measured as the base.
     call_command("migrate", interactive=False, verbosity=0)
-    operator = get_user_model()._default_manager.create_superuser(
-        os.environ["PERF_USER"], "operator@example.invalid", None
-    )
+    operator = get_user_model()._default_manager.create_superuser(user, "operator@example.invalid", None)
     call_command("seed_demo", verbosity=0, stdout=io.StringIO())
+    return operator
+
+
+def main() -> None:
+    operator = seeded()
     client = Client(HTTP_HOST="127.0.0.1", raise_request_exception=False)
     client.force_login(operator)
     print(READY + json.dumps(navigation()), flush=True)

@@ -25,11 +25,11 @@ as HQ; no page is made for the demo alone.
 
 | Estate | Where | What it is for |
 | --- | --- | --- |
-| The example estate | `hq/platform/core/example_estate/` | The one homelab HQ is shown with: this demo, a dev database (`manage.py seed_demo`), the rendered-page and export tests, and the layout gate's realistic pass, which reads every page the navigation reaches. The checks and the demo read the same data. |
+| The example estate | `hq/platform/core/example_estate/` | The one homelab HQ is shown with: this demo, a dev database (`manage.py seed showcase`, every set named in `hq/platform/core/seeds.py`), the rendered-page and export tests, and the layout gate's realistic pass, which reads every page the navigation reaches. The checks and the demo read the same data. |
 | The stress estate | `build_estate()` in `hq/platform/core/tests/test_browser_fixtures.py` | Long names, many rows, every state at once: it breaks things on purpose so the layout gate tests layouts at their worst. The demo never uses it. |
 
-The example estate lives in `hq/`, not here, because `seed_demo` and the suite
-run inside the image, which `demo/` is not copied into. `seed_demo` refuses a
+The example estate lives in `hq/`, not here, because `seed` and the suite
+run inside the image, which `demo/` is not copied into. `seed` refuses a
 database that already holds records rather than merging into it.
 
 Everything in the seeds is `example.*` and private address ranges; tailnet

@@ -218,8 +218,8 @@ raw = true
 description = "A throwaway server on loopback: DEBUG on, a new database each start, a port the system picks"
 usage = '''
 flag "--keep" help="Reuse the last scratch database"
-flag "--seed <seed>" help="Fill it with the example estate; showcase also serves it at the advanced posture (SEVERINO_POSTURE=advanced)" {
-    choices "showcase" "standard"
+flag "--seed <seed>" help="Fill it with a named data set (hq/platform/core/seeds.py): the example estate as showcase (advanced posture) or standard, empty, or scale (years of records)" {
+    choices "showcase" "standard" "empty" "scale"
 }
 flag "--port <port>" help="A fixed port instead of a free one"
 flag "--plan" help="Print what it would run under and exit"

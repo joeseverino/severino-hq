@@ -38,7 +38,7 @@ from typing import IO, Any
 
 from tools.gate.at import RefError, git, remove
 from tools.perf import parse, table
-from tools.perf.targets import USER, NotMeasured, clean_env, stop_group
+from tools.perf.targets import USER, NotMeasured, clean_env, showcase, stop_group
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "var" / "perf"
@@ -100,8 +100,7 @@ def side_env(folder: Path, alone: bool) -> dict[str, str]:
         SEVERINO_EXPORTS_ROOT=str(folder / "exports"),
         SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION="0",
         SEVERINO_LOG_LEVEL="WARNING",
-        # As dev:scratch serves the showcase estate.
-        SEVERINO_POSTURE="advanced",
+        **showcase(),
         SEVERINO_HQ_PLUGINS="" if alone else os.environ.get("SEVERINO_HQ_PLUGINS", ""),
         PYTHONPATH="" if alone else os.environ.get("PYTHONPATH", ""),
         PERF_USER=USER,
