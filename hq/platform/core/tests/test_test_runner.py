@@ -1,6 +1,8 @@
 """What a suite run selects, and what it leaves behind."""
 
+import contextlib
 import io
+import multiprocessing
 import os
 import pickle
 import subprocess
@@ -16,6 +18,7 @@ from django.test import SimpleTestCase
 
 from hq.config.sandbox import sweep_abandoned
 from hq.platform.core.test_runner import (
+    DEFAULT_STALL_SECONDS,
     SOURCE,
     STALL_SECONDS,
     ClassTimedSuite,
@@ -23,6 +26,7 @@ from hq.platform.core.test_runner import (
     CompositionTextResult,
     FileClonedParallelSuite,
     SeverinoTestRunner,
+    Stalled,
     StallWatch,
     block_on_output,
     excluded_tags,
@@ -214,28 +218,57 @@ class StallWatchTests(SimpleTestCase):
 
         self.assertIn("waiting_on_the_browser", self.written(watch))
 
-    def test_a_mark_left_unfollowed_is_reported(self):
-        reported = threading.Event()
-
-        class Signalled(StallWatch):
-            @override
-            def report(self, label):
-                super().report(label)
-                reported.set()
-
-        watch = self.watch(0.01, Signalled)
-        with watch.watching():
+    def test_a_mark_left_unfollowed_fails_what_it_marked_after_its_report(self):
+        watch = self.watch(0.01)
+        with self.assertRaises(Stalled), watch.watching():
             watch.mark("example.Tests.test_stuck")
-            self.assertTrue(reported.wait(timeout=60))
+            threading.Event().wait(60)
         self.assertIn("example.Tests.test_stuck", self.written(watch))
+
+    def test_a_test_that_will_not_stop_ends_its_process(self):
+        ended = threading.Event()
+
+        class Ending(StallWatch):
+            @override
+            def end(self, label):
+                ended.set()
+
+        watch = self.watch(0.01, Ending)
+        watch.grace = 0.05
+        with watch.watching():
+            watch.mark("example.Tests.test_swallows")
+            while not ended.is_set():
+                with contextlib.suppress(Stalled):
+                    self.assertTrue(ended.wait(60))
+
+    def test_a_worker_that_ends_stops_its_parent_and_exits_failed(self):
+        watch = self.watch(60)
+        watch.workers = multiprocessing.Value("i", 2)
+        with unittest.mock.patch.object(os, "_exit") as exited:
+            watch.end("example.Tests.test_swallows")
+        self.assertLess(watch.workers.value, 0)
+        self.assertNotEqual(exited.call_args.args[0], 0)
+
+    def test_a_pause_holds_no_deadline_and_restarts_the_bound(self):
+        watch = self.watch(600)
+        with watch.watching():
+            watch.mark("example.Tests.test_waits")
+            with watch.paused():
+                self.assertIsNone(watch._deadline)
+            self.assertIsNotNone(watch._deadline)
+            self.assertEqual(watch._label, "example.Tests.test_waits")
 
     def test_a_process_that_only_replays_results_is_not_watched(self):
         watch = self.watch(0.01)
         watch.mark("example.Tests.test_it")
         self.assertIsNone(watch._thread)
 
-    def test_unset_nothing_is_watched(self):
+    def test_unset_the_default_bound_watches(self):
         with unittest.mock.patch.dict(os.environ, {STALL_SECONDS: ""}):
+            self.assertEqual(StallWatch.from_environment().seconds, DEFAULT_STALL_SECONDS)
+
+    def test_zero_watches_nothing(self):
+        with unittest.mock.patch.dict(os.environ, {STALL_SECONDS: "0"}):
             watch = StallWatch.from_environment()
         with watch.watching():
             watch.mark("example.Tests.test_it")
@@ -263,3 +296,16 @@ class StallWatchTests(SimpleTestCase):
             [mark.rsplit(".", 1)[-1] for mark in watch.marks],
             ["Slow setUpClass", "test_it", "Slow tearDownClass", "Quick setUpClass", "test_it", "Quick tearDownClass"],
         )
+
+    def test_a_subtest_that_ends_is_progress(self):
+        class Pages(unittest.TestCase):
+            def test_each(self):
+                for page in ("first", "second"):
+                    with self.subTest(page=page):
+                        pass
+
+        watch = _Marks()
+        with unittest.mock.patch("hq.platform.core.test_runner.stall_watch", watch):
+            ClassTimedSuite(unittest.defaultTestLoader.loadTestsFromTestCase(Pages)).run(CompositionRemoteResult())
+
+        self.assertTrue(any("second" in mark for mark in watch.marks), watch.marks)

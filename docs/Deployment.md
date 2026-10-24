@@ -329,7 +329,7 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `SEVERINO_TEST_MARKERS` | development | the directory a test run keeps the controller's markers in |
 | `SEVERINO_TEST_BUILDS` | development | the directory a test run builds programs into |
 | `SEVERINO_TEST_LEAK_LEDGER` | development | the file parallel test workers record leaked resources in |
-| `HQ_TEST_STALL_SECONDS` | development | seconds a test process may spend on one test or class fixture before it prints what it is running, every stack and the browser's log; unset, nothing is watched |
+| `HQ_TEST_STALL_SECONDS` | development | seconds a test process may go without progress before it prints what it is running, every stack and the browser's log, and fails that test; 300 when unset, `0` turns it off |
 | `HQ_API_RECORD_EXAMPLES` | development | `1`, with `--parallel 1`, writes the API responses a run receives to `openapi-examples.json` |
 
 ## Network exposure

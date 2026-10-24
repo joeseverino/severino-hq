@@ -179,9 +179,8 @@ group of its own and stops that group when it is stopped, since a `mise run`
 inside another task signals only the pid it started; the command never holds
 the lock itself, so the turn ends with `heavy.sh`. `tests/shell/test-heavy.sh`
 holds both: every heavy task has a timeout, and one that hangs past it, run by
-hand or from inside another task, frees the turn. A timeout says only that a
-gate ran out; `HQ_TEST_STALL_SECONDS` below a gate's timeout says which test
-stalled and where.
+hand or from inside another task, frees the turn. A test that stalls frees it
+well before that: the stall bound below fails it within minutes.
 
 To see who holds it without starting anything:
 
@@ -281,12 +280,17 @@ What the browser gates read from the environment:
 | `HQ_BROWSER_FACE` | development | `fallback` draws the browser gates with Inter withheld, in the stack's next face (`--fallback-face`) |
 | `HQ_BROWSER_SLOW` | development | milliseconds each animation frame comes late in the browser gates, idle callbacks waiting three times their timeout (`dev:look --slow`) |
 
-A run that stalls says where. With `HQ_TEST_STALL_SECONDS=<s>`, each test
-process (every parallel worker) prints a stall report once a test or a class
-fixture has run that long: what it was running, every thread's and greenlet's
-stack, and in a browser gate the end of Playwright's own log (the browser's
-launch and output, each call and navigation). The run carries on; CI sets it
-below a job's time limit, so a hang there is read from the job's log.
+A test that stalls fails and says where. Each test process (every parallel
+worker) watches for progress: a test, a class fixture or a subtest starting, a
+subtest ending, a page in `dev:look`. Once none has come for
+`HQ_TEST_STALL_SECONDS` (300 unless the environment says otherwise; `0` turns
+it off, for a debugger), it prints a stall report: what it was running, every
+thread's and greenlet's stack, and in a browser gate the end of Playwright's
+own log (the browser's launch and output, each call and navigation). Then the
+test or fixture fails with `Stalled` and the run goes on. One that does not
+stop within 30 seconds of that ends its process, and a parallel worker that
+ends stops the whole run, so a hang never holds the heavy turn or a CI job
+until its timeout.
 
 The example estate's values have the shapes and lengths real providers give
 (both tailnet addresses and a MagicDNS name per device, long image tags, a

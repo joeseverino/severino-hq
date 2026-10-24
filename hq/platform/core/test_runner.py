@@ -29,7 +29,9 @@ import faulthandler
 import gc
 import io
 import logging
+import multiprocessing
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -176,16 +178,33 @@ def block_on_output() -> None:
             continue
 
 
-# Seconds a test process may go without starting a test or a class fixture
-# before it reports where it is. CI sets it below its job's time limit, so a
-# run that stalls there leaves its stacks in the log before it is cancelled.
-# Unset, nothing is watched: a run at a terminal is watched by the person at it.
+# Seconds a test process may go without progress (a test, a class fixture or a
+# subtest starting, or a subtest ending) before the test it is in fails: past
+# the slowest legitimate step on a loaded laptop, and short enough that a hung
+# test frees the machine's heavy turn within minutes. The environment
+# overrides it; 0 turns the watch off.
 STALL_SECONDS = "HQ_TEST_STALL_SECONDS"
+DEFAULT_STALL_SECONDS = 300.0
 
-# After the report is due, how long the watch's own thread has to write it
-# before faulthandler's C watchdog dumps the stacks without it: the thread
-# needs the interpreter, which a call that never releases it does not give up.
+# How long a stalled test has to end once interrupted before its process exits,
+# and how long the watch's own thread has to act before faulthandler's C
+# watchdog ends the process without it: the thread needs the interpreter, which
+# a call that never releases it does not give up.
 _FALLBACK_GRACE = 30.0
+
+# What interrupts the test's thread: a real signal, so a blocking call in it
+# returns with EINTR and the handler runs there.
+_INTERRUPT = signal.SIGALRM
+
+
+class Stalled(Exception):
+    """Raised in a test that made no progress for the stall bound.
+
+    An ``Exception``, so unittest records it as the error of the test or class
+    fixture it ends, Django's fixtures roll back, and the run goes on. Code
+    under test that swallows it leaves the test stalled, and the process exits
+    after the grace.
+    """
 
 
 def suspended_greenlets(stream) -> None:
@@ -202,32 +221,43 @@ def suspended_greenlets(stream) -> None:
 
 
 class StallWatch:
-    """Report where a test process is stuck when a test or a class fixture
-    runs longer than ``seconds``.
+    """Fail the test or class fixture a test process is in once it has made no
+    progress for ``seconds``, saying where it is stuck.
 
     A daemon thread waits for the deadline that each ``mark`` moves. When it
     passes, the thread writes what was running, whatever the evidence
     callbacks add (the browser's own log, from ``BrowserGate``), and every
-    thread's stack (``faulthandler.dump_traceback``), once per mark, and the
-    run carries on: a dump never ends a test, the job's own limit does.
-    ``faulthandler.dump_traceback_later`` stands behind it, for a call that
-    holds the interpreter so the thread cannot run.
+    thread's stack, then interrupts the thread that runs the tests, whose
+    handler raises ``Stalled`` there. The test fails and the run goes on. If no
+    mark follows within ``grace``, the test could not be stopped, and the
+    process exits; a parallel worker first tells Django's parent, which then
+    stops the run rather than wait for results that will never come.
+    ``faulthandler.dump_traceback_later`` stands behind the thread, for a call
+    that holds the interpreter so the thread cannot run.
     """
 
-    def __init__(self, seconds: float | None, stream=None):
+    def __init__(self, seconds: float | None, stream=None, grace: float = _FALLBACK_GRACE):
         self.seconds = seconds
         self.stream = stream
+        self.grace = grace
         self.evidence: list = []
+        # A parallel worker's share of the run's worker counter: negative, it
+        # stops Django's parent (ParallelTestSuite.run).
+        self.workers = None
         self._ready = threading.Condition()
         self._watching = 0
         self._label: str | None = None
         self._deadline: float | None = None
+        self._marks = 0
         self._thread: threading.Thread | None = None
+        self._main: int | None = None
+        self._previous = None
+        self._due: str | None = None
 
     @classmethod
     def from_environment(cls) -> StallWatch:
         value = os.environ.get(STALL_SECONDS, "").strip()
-        return cls(float(value) if value else None)
+        return cls(float(value) if value else DEFAULT_STALL_SECONDS)
 
     @property
     def enabled(self) -> bool:
@@ -244,6 +274,8 @@ class StallWatch:
         with self._ready:
             saved = (self._label, self._deadline)
             self._watching += 1
+            if self._watching == 1:
+                self._take_interrupt()
             if self._thread is None:
                 self._thread = threading.Thread(target=self._wait, name="stall-watch", daemon=True)
                 self._thread.start()
@@ -253,9 +285,29 @@ class StallWatch:
             with self._ready:
                 self._watching -= 1
                 self._label, self._deadline = saved if self._watching else (None, None)
+                if not self._watching:
+                    self._give_back_interrupt()
                 self._ready.notify()
             if self._deadline is None:
                 faulthandler.cancel_dump_traceback_later()
+
+    def _take_interrupt(self) -> None:
+        # Only the main thread may set a handler, and only its handlers run.
+        if threading.current_thread() is threading.main_thread():
+            self._main = threading.get_ident()
+            self._previous = signal.signal(_INTERRUPT, self._interrupted)
+
+    def _give_back_interrupt(self) -> None:
+        if self._main is not None:
+            signal.signal(_INTERRUPT, self._previous)
+            self._main = self._previous = self._due = None
+
+    def _interrupted(self, signum, frame) -> None:
+        label, self._due = self._due, None
+        if label is not None:
+            raise Stalled(f"{label} made no progress for {self.seconds:g}s; its stall report is above")
+        if callable(self._previous):
+            self._previous(signum, frame)
 
     def mark(self, label: str) -> None:
         """``label`` starts now; it has ``seconds`` to finish or be followed."""
@@ -265,8 +317,32 @@ class StallWatch:
         with self._ready:
             self._label = label
             self._deadline = time.monotonic() + self.seconds
+            self._marks += 1
             self._ready.notify()
-        faulthandler.dump_traceback_later(self.seconds + _FALLBACK_GRACE, exit=False)
+        self._backstop(self.seconds + self.grace)
+
+    @staticmethod
+    def _backstop(seconds: float) -> None:
+        """Arm faulthandler's watchdog, which dumps every stack and exits the
+        process. To the process's own stderr: a test may have swapped
+        ``sys.stderr`` for a stream with no descriptor."""
+
+        faulthandler.dump_traceback_later(seconds, exit=True, file=sys.__stderr__)
+
+    @contextlib.contextmanager
+    def paused(self):
+        """No deadline while the block runs: a wait on a child process that
+        has a watch of its own. What was running has the whole bound again
+        once it ends."""
+
+        with self._ready:
+            label, self._deadline = self._label, None
+        faulthandler.cancel_dump_traceback_later()
+        try:
+            yield
+        finally:
+            if label is not None:
+                self.mark(label)
 
     def report(self, label: str) -> None:
         """Write what has stalled, the evidence for it, and every thread's stack."""
@@ -283,25 +359,55 @@ class StallWatch:
         stream.write(f"=== end of stall report: {label} ===\n")
         stream.flush()
 
+    def stop(self, label: str, marks: int) -> None:
+        """Fail what stalled, or end the process if it does not stop."""
+
+        # Armed before the interrupt, so the end of the watch, which the
+        # interrupt can bring about, always comes after it and cancels it.
+        self._backstop(self.grace + _FALLBACK_GRACE)
+        if self._main is not None:
+            self._due = label
+            signal.pthread_kill(self._main, _INTERRUPT)
+        with self._ready:
+            moved = self._ready.wait_for(lambda: self._marks != marks or not self._watching, timeout=self.grace)
+        if not moved:
+            self.end(label)
+
+    def end(self, label: str) -> None:
+        """Exit the process: what stalled did not stop when interrupted."""
+
+        stream = self.stream or sys.stderr
+        stream.write(f"=== {label} did not stop {self.grace:g}s after it was interrupted: the process exits ===\n")
+        stream.flush()
+        if self.workers is not None:
+            with self.workers.get_lock():
+                self.workers.value = -1
+        os._exit(1)
+
     def _wait(self) -> None:
         while True:
             with self._ready:
                 while self._deadline is None or (left := self._deadline - time.monotonic()) > 0:
                     self._ready.wait(None if self._deadline is None else left)
-                label, self._deadline = self._label, None
+                label, marks, self._deadline = self._label or "", self._marks, None
             faulthandler.cancel_dump_traceback_later()
-            self.report(label or "between tests")
+            self.report(label)
+            self.stop(label, marks)
 
 
 stall_watch = StallWatch.from_environment()
 
 
 class _StallMarks:
-    """Restart the stall watch as each test begins."""
+    """Restart the stall watch as each test begins and each subtest ends."""
 
     def startTest(self, test):
         stall_watch.mark(test.id())
         return super().startTest(test)
+
+    def addSubTest(self, test, subtest, err):
+        stall_watch.mark(f"{test.id()} after {subtest.id().removeprefix(test.id()).strip()}")
+        return super().addSubTest(test, subtest, err)
 
 
 class CompositionTextResult(_StallMarks, _LogsOnFailure, _CompositionIsolation, _ClassTimes, unittest.TextTestResult):
@@ -409,6 +515,7 @@ def _init_worker_on_file_databases(counter, *args, **kwargs):
     """
 
     DatabaseCreation.setup_worker_connection = _use_the_file_clone
+    stall_watch.workers = counter
     return _init_worker(counter, *args, **kwargs)
 
 
@@ -537,7 +644,13 @@ class SeverinoTestRunner(DiscoverRunner):
     @override
     def run_suite(self, suite, **kwargs):
         began_load = os.getloadavg()
-        result = super().run_suite(suite, **kwargs)
+        try:
+            result = super().run_suite(suite, **kwargs)
+        except multiprocessing.TimeoutError as stopped:
+            # Django's parent stops on a negative worker count, which a worker
+            # also sets when it exits on a stall (StallWatch.end).
+            stopped.add_note("Or a worker exited on a test that did not stop when interrupted: see its stall report.")
+            raise
         report_class_times(result, sys.stderr, began_load)
         return result
 

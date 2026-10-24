@@ -80,6 +80,7 @@ from django.test import Client, override_settings
 lazy from playwright.sync_api import Error as BrowserError
 
 from hq.platform.core.speculation import NOT_A_NAVIGATION
+from hq.platform.core.test_runner import stall_watch
 from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, navigation
 from hq.platform.core.tests.browser.gate import BrowserGate, add_css
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
@@ -358,7 +359,8 @@ def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured]:
         if script := _usage("usage_eval"):
             env["usage_eval"] = str(Path(settings.BASE_DIR, script).resolve())
         print(f"Looking at {ref} first, in {tree}", flush=True)
-        with log.open("w", encoding="utf-8") as sink:
+        # The run there is watched by its own stall watch.
+        with log.open("w", encoding="utf-8") as sink, stall_watch.paused():
             # The command this run was started with, run there by its own environment.
             subprocess.run(
                 ["uv", "run", "--group", "browser", "python", *sys.argv],
@@ -565,6 +567,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         found: Found = {}
         for name in self.asked:
             for width in widths:
+                stall_watch.mark(f"dev:look {name} at {width}")
                 said = found[name, width] = self.look(name, width, rule)
                 report = _shot(name, width).with_suffix(".txt")
                 if said:
@@ -580,6 +583,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
         seen = {urlsplit(self.addresses[name]).path for name in self.asked if _is_estate(name)}
         for name in [name for name in self.asked if _is_estate(name)]:
+            stall_watch.mark(f"dev:look following the links of {name}")
             self.visit(self.addresses[name], width)
             for address in self.page.evaluate(_LINKS, NOT_A_NAVIGATION):
                 path = urlsplit(address).path
@@ -667,6 +671,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
                     f"{name} at {width}: no dialog {dialog!r}; it declares {', '.join(declared) or 'none'}", flush=True
                 )
                 continue
+            stall_watch.mark(f"dev:look {name} at {width} with #modal-{dialog} open")
             if not self.open_dialog(name, width, dialog):
                 continue
             self.shoot_dialog(name, width, dialog)
