@@ -129,8 +129,8 @@ a path (an architecture test, a glob) fails when its path matches nothing.
   `tests/sdk_consumer/consumer.py` ([Plugins](docs/Plugins.md)).
 - Derived files are never edited by hand: `mise run regen` writes them (the
   API's and the controller's OpenAPI documents, the connection registry,
-  `hq_sdk/contract.json`, `docs/Connections.md`, the Go types) and
-  `mise run drift` names any that is behind.
+  `hq_sdk/contract.json`, `docs/Connections.md`, the Go types, the served
+  font) and `mise run drift` names any that is behind.
 - List views use `TableListMixin`; direct view mutations and MCP model access
   are rejected by architecture tests.
 - A link to a command's form is built by

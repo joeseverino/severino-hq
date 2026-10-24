@@ -12,6 +12,7 @@ run = [
   "uv run python manage.py bridge_contract",
   "cd controller && go generate ./...",
   "uv run python manage.py connections_reference",
+  "uv run python -m tools.fonts.subset",
 ]
 
 ["drift:sdk-contract"]
@@ -33,3 +34,7 @@ run = "uv run python manage.py bridge_contract --check"
 description = "docs/Connections.md is what the providers declare"
 extends = "django"
 run = "uv run python manage.py connections_reference --check"
+
+["drift:font"]
+description = "The served font is its source cut to the characters HQ prints and the features its stylesheets use"
+run = "uv run python -m tools.fonts.subset --check"
