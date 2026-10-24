@@ -10,28 +10,50 @@ depends = [{ task = "setup:browser", args = ["webkit"] }, "demo:build"]
 extends = "heavy"
 run = "uv run --group browser python -m unittest demo.check -v"
 
-["browser:layout"]
-description = "Real-browser layout invariants over the stress estate"
+# The layout invariants over the stress estate, in two legs that CI runs side
+# by side, the classes split so each leg holds about half their time in CI,
+# in WebKit and in Chromium.
+["browser:layout-1"]
+description = "Real-browser layout invariants over the stress estate, leg 1 of 2"
 hide = true
 depends = [{ task = "setup:browser", args = ["webkit"] }]
 extends = "django-heavy"
 usage = 'flag "--fallback-face" help="Draw every page in the system face, as a reader sees it before Inter loads"'
-run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test hq.platform.core.tests.browser.sweeps.ScriptedSparseLayoutTests hq.platform.core.tests.browser.sweeps.ScriptedDenseLayoutTests hq.platform.core.tests.browser.components.ComponentLayoutTests hq.platform.core.tests.browser.sweeps.SettledSparseLayoutTests hq.platform.core.tests.browser.sweeps.UnscriptedSparseLayoutTests hq.platform.core.tests.browser.sweeps.SettledDenseLayoutTests hq.platform.core.tests.browser.sweeps.UnscriptedDenseLayoutTests hq.platform.core.tests.browser.sweeps.LongestValueLayoutTests hq.platform.core.tests.browser.page_errors.PageErrorBrowserTests --noinput --parallel auto"
+run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test hq.platform.core.tests.browser.sweeps.ScriptedSparseLayoutTests hq.platform.core.tests.browser.components.ComponentLayoutTests hq.platform.core.tests.browser.sweeps.LongestValueLayoutTests hq.platform.core.tests.browser.sweeps.UnscriptedDenseLayoutTests --noinput --parallel auto"
 
-# The layout gate in Chromium, so a break WebKit happens not to show still
-# fails. CI runs it as a leg of its own; `mise run browser` leaves it out, since
-# HQ is read in Safari. It runs browser:layout, so the two name one set of
-# classes, and installs Chromium as a step rather than as a dependency, which
-# a skipped task would still run.
-["browser:layout-chromium"]
-description = "browser:layout in Chromium: a CI leg, which mise run browser leaves out"
+["browser:layout-2"]
+description = "Real-browser layout invariants over the stress estate, leg 2 of 2"
+hide = true
+depends = [{ task = "setup:browser", args = ["webkit"] }]
+extends = "django-heavy"
+usage = 'flag "--fallback-face" help="Draw every page in the system face, as a reader sees it before Inter loads"'
+run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test hq.platform.core.tests.browser.sweeps.ScriptedDenseFirstLayoutTests hq.platform.core.tests.browser.sweeps.ScriptedDenseSecondLayoutTests hq.platform.core.tests.browser.sweeps.UnscriptedSparseLayoutTests hq.platform.core.tests.browser.sweeps.SettledDenseLayoutTests hq.platform.core.tests.browser.sweeps.SettledSparseLayoutTests hq.platform.core.tests.browser.page_errors.PageErrorBrowserTests --noinput --parallel auto"
+
+# The layout legs in Chromium, so a break WebKit happens not to show still
+# fails. CI runs them as legs of their own; `mise run browser` leaves them out,
+# since HQ is read in Safari. Each runs its WebKit leg, so the two name one set
+# of classes, and installs Chromium as a step rather than as a dependency,
+# which a skipped task would still run.
+["browser:layout-chromium-1"]
+description = "browser:layout-1 in Chromium: a CI leg, which mise run browser leaves out"
 hide = true
 env = { HQ_BROWSER_ENGINE = "chromium" }
 run = [
   { task = "setup:browser", args = [
     "chromium",
   ] },
-  "mise run --skip-deps browser:layout",
+  "mise run --skip-deps browser:layout-1",
+]
+
+["browser:layout-chromium-2"]
+description = "browser:layout-2 in Chromium: a CI leg, which mise run browser leaves out"
+hide = true
+env = { HQ_BROWSER_ENGINE = "chromium" }
+run = [
+  { task = "setup:browser", args = [
+    "chromium",
+  ] },
+  "mise run --skip-deps browser:layout-2",
 ]
 
 ["browser:navigation"]

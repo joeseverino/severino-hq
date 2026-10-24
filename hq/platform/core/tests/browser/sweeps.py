@@ -98,7 +98,7 @@ class UnscriptedDenseLayoutTests(UnscriptedLayoutTests):
 
 class ScriptedLayoutTests(LayoutBrowserTests):
     """Every page once its script has run. The sweep is split between the
-    classes below, so two workers run it side by side."""
+    classes below, so workers run it side by side."""
 
     scripted = True
 
@@ -136,10 +136,20 @@ class ScriptedSparseLayoutTests(ScriptedLayoutTests):
         self.sweep(PAGES)
 
 
-class ScriptedDenseLayoutTests(ScriptedLayoutTests):
-    def test_every_dense_page_and_head_keeps_the_layout_rules_once_its_script_has_run(self):
-        self.sweep((*DENSE_PAGES, *SPEAKING_HEADS))
+# The dense pages in two halves, every other page, each a class of its own:
+# swept together they are the longest class a layout leg runs.
+FIRST_DENSE, SECOND_DENSE = tuple(DENSE_PAGES)[::2], tuple(DENSE_PAGES)[1::2]
+
+
+class ScriptedDenseFirstLayoutTests(ScriptedLayoutTests):
+    def test_the_first_dense_pages_and_every_head_keep_the_layout_rules_once_their_script_has_run(self):
+        self.sweep((*FIRST_DENSE, *SPEAKING_HEADS))
         self.assertGreater(self.spoke, len(SPEAKING_HEADS), "no page in the fixture has a control that speaks")
+
+
+class ScriptedDenseSecondLayoutTests(ScriptedLayoutTests):
+    def test_the_second_dense_pages_keep_the_layout_rules_once_their_script_has_run(self):
+        self.sweep(SECOND_DENSE)
 
 
 class SettledLayoutTests(LayoutBrowserTests):

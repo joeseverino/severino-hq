@@ -250,8 +250,9 @@ breakpoint its wide rules need, so the columns that keep their line are
 measured with the least room; the stress estate is held there too. A
 finding names its check, page, width and theme.
 `HQ_BROWSER_ENGINE=chromium` or `firefox` runs both in another engine; CI
-also runs `browser:layout` in Chromium (`browser:layout-chromium`), which
-`mise run browser` leaves to CI. One browser test runs as
+runs the layout gate in two legs side by side (`browser:layout-1`,
+`browser:layout-2`) and runs them in Chromium as well
+(`browser:layout-chromium-1`, `-2`), which `mise run browser` leaves to CI. One browser test runs as
 `mise run test <label>` once `mise run setup:browser webkit` has installed the engine.
 
 Every page a gate serves runs under the policy HQ sends: a page rendered
@@ -264,7 +265,7 @@ example estate fails page by page, every other gate at the end of its test.
 
 The gates wait for Inter, but a reader whose copy is late is drawn in
 whatever face the platform has (`font-display: optional`), and each platform
-sets text at its own widths. `--fallback-face` on `browser:layout`,
+sets text at its own widths. `--fallback-face` on a layout leg,
 `browser:navigation` and `dev:look` (`HQ_BROWSER_FACE=fallback` for a
 `mise run test` label) withholds Inter's face, so every page is drawn in the
 next face of the stylesheet's stack (`--font`), the platform's system face,

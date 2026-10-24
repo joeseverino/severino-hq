@@ -290,7 +290,7 @@ description = "Real-browser invariants of layout, navigation and the demo: each 
 # starts a browser per core. The Chromium leg is CI's alone.
 extends = "heavy"
 timeout = "2h"
-env = { MISE_TASK_SKIP = "browser:layout-chromium" }
+env = { MISE_TASK_SKIP = "browser:layout-chromium-1,browser:layout-chromium-2" }
 run = "uv run python -m tools.gate.verdict browser mise run -c -j 1 'browser:*'"
 
 [tasks.drift]
