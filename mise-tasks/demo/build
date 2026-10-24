@@ -7,6 +7,10 @@
 #USAGE }
 set -eu
 
+# One process renders the pages through the test client, a few seconds and a
+# fraction of a suite's memory, so it runs beside heavy work rather than
+# waiting for its turn.
+light_run=1
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh
 
