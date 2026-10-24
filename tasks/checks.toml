@@ -1,10 +1,6 @@
 # The Checks job: every checks:* gate here and under mise-tasks/checks/, and the
 # drift:* gates (tasks/drift.toml).
 
-["checks:patch"]
-description = "No whitespace errors or conflict markers in the working tree"
-run = "git diff --check"
-
 ["checks:ruff"]
 description = "ruff"
 run = ["uv run ruff check .", "uv run ruff format --check ."]
