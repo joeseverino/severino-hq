@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from django.test import tag
 
+from hq.platform.core.tests.task import Usage
 from tools.gate import at
 from tools.gate.tests.base import UNITTEST, GateTestCase
 
@@ -82,7 +83,6 @@ class TestAtRefTests(GateTestCase):
         return code, out.buffer.getvalue().decode()
 
     def assert_nothing_left(self):
-        self.assertEqual(list(Path(self.root, "var", "test-at").glob("*")), [])
         self.assertEqual(len(self.git("worktree", "list").splitlines()), 1)
 
     def test_the_refs_code_runs_under_this_trees_tests_and_its_status_comes_back(self):
@@ -231,9 +231,10 @@ class TestTypedTests(GateTestCase):
         environ = {"usage_at": "HEAD", "usage_keep": "'x y' z", "usage_arguments": "a.b -k 'it'\\''s'"}
 
         self.assertEqual(
-            at.Typed.from_mise(environ), at.Typed(at="HEAD", keep=["x y", "z"], args=["a.b", "-k", "it's"])
+            at.Typed.from_usage(Usage.from_environment(environ)),
+            at.Typed(at="HEAD", keep=["x y", "z"], args=["a.b", "-k", "it's"]),
         )
 
     def test_without_at_there_is_no_ref(self):
-        self.assertIsNone(at.Typed.from_mise({"usage_arguments": "a.b"}).at)
-        self.assertEqual(at.Typed.from_mise({"usage_at": ""}).at, "")
+        self.assertIsNone(at.Typed.from_usage(Usage.from_environment({"usage_arguments": "a.b"})).at)
+        self.assertEqual(at.Typed.from_usage(Usage.from_environment({"usage_at": ""})).at, "")

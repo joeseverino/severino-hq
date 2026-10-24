@@ -43,10 +43,10 @@ def _repository(folder: Path) -> Path:
 class AskedTests(SimpleTestCase):
     def test_a_run_without_the_tasks_environment_is_refused_rather_than_read_as_nothing_asked(self):
         with mock.patch.dict(os.environ, clear=True), self.assertRaisesMessage(RuntimeError, "mise run dev:look"):
-            look._usage("usage_rule")
+            look._asked()
         with mock.patch.dict(os.environ, ASKED, clear=True):
-            self.assertEqual(look._usage("usage_rule"), "")
-            self.assertEqual(look._listed("usage_pages"), ["example"])
+            self.assertEqual(look._asked().text("rule"), "")
+            self.assertEqual(look._asked().repeated("pages"), ("example",))
 
     def test_css_is_text_or_a_file_a_relative_path_names_in_the_checkout(self):
         with tempfile.TemporaryDirectory() as checkout, override_settings(BASE_DIR=checkout):
@@ -103,7 +103,17 @@ class AskedFirstTests(SimpleTestCase):
         self.assertNotIn("look", rules)
 
     def test_a_page_that_does_not_exist_is_refused_before_the_base_is_looked_at(self):
-        self.refused_before_the_base({"usage_pages": "example/no-such-page"}, "No page ['example/no-such-page']")
+        self.refused_before_the_base({"usage_pages": "example/no-such-page"}, "No page example/no-such-page")
+
+    def test_pages_are_read_as_mise_hands_a_variadic_argument_each_by_its_name(self):
+        self.addCleanup(lambda: "asked" in vars(look.Look) and delattr(look.Look, "asked"))
+        environment = {"usage_pages": "machine control_plane:containers 'estate/contacts'", "usage_seed": "showcase"}
+        with (
+            mock.patch.dict(os.environ, environment, clear=True),
+            mock.patch.object(look.LayoutBrowserTests, "setUpClass"),
+        ):
+            look.Look.setUpClass()
+        self.assertEqual(look.Look.asked, ["machine", "estate/infrastructure/containers", "estate/contacts"])
 
     def test_a_seed_that_does_not_exist_is_refused_with_the_seeds_that_do_before_the_base_is_looked_at(self):
         self.refused_before_the_base(
@@ -619,15 +629,6 @@ class BandTests(SimpleTestCase):
         self.assertEqual(look._bands(400, 900), [])
 
 
-@tag("source")
-class EstateAddressTests(SimpleTestCase):
-    def test_an_estate_page_keeps_its_query_and_its_path_its_slash(self):
-        self.assertEqual(look._estate_path("estate/audit/?awaiting=1"), "/audit/?awaiting=1")
-        self.assertEqual(look._estate_path("estate/audit?awaiting=1"), "/audit/?awaiting=1")
-        self.assertEqual(look._estate_path("estate/audit"), "/audit/")
-        self.assertEqual(look._estate_path("estate"), "/")
-
-
 class _Pages:
     """The look's walk over pages, with each look keeping what had been said
     by the time it began."""
@@ -689,15 +690,6 @@ class ProgressTests(SimpleTestCase):
 
 @tag("source")
 class WorktreeTests(SimpleTestCase):
-    def test_the_base_worktree_is_removed_however_the_look_ends(self):
-        with tempfile.TemporaryDirectory() as folder:
-            checkout = _repository(Path(folder))
-            with self.assertRaises(KeyError), look._worktree(checkout, "HEAD") as tree:
-                self.assertTrue((tree / "page.txt").is_file())
-                raise KeyError("the look broke")
-            self.assertFalse(tree.parent.exists())
-            self.assertNotIn(str(tree), _git("worktree", "list", "--porcelain", cwd=checkout))
-
     def test_a_report_names_the_commit_it_was_looked_at(self):
         with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
             checkout = _repository(Path(folder))
@@ -707,12 +699,50 @@ class WorktreeTests(SimpleTestCase):
             self.assertEqual(look._commit("HEAD"), f"{head} with uncommitted changes")
             self.assertIn("unknown", look._commit("example-missing"))
 
-    def test_a_ref_that_names_nothing_is_said_and_leaves_nothing(self):
-        with tempfile.TemporaryDirectory() as folder:
+    def test_the_base_is_looked_at_under_this_trees_test_files(self):
+        with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
             checkout = _repository(Path(folder))
+            Path(checkout, "hq", "tests").mkdir(parents=True)
+            Path(checkout, "hq", "tests", "test_new.py").write_text("new\n", encoding="utf-8")
+            seen = {}
+
+            def relay(_command, _sink, _ref, cwd, env):
+                seen["test"] = Path(cwd, "hq", "tests", "test_new.py").read_text(encoding="utf-8")
+                Path(env["usage_found_into"]).write_text("[]", encoding="utf-8")
+
             with (
-                self.assertRaisesMessage(AssertionError, "--base example-missing"),
-                look._worktree(checkout, "example-missing"),
+                mock.patch.dict(os.environ, ASKED, clear=True),
+                mock.patch.object(look, "LENS", ()),
+                mock.patch.object(look, "_relay", relay),
+                mock.patch("sys.stdout", new_callable=io.StringIO),
             ):
-                self.fail("a worktree of nothing")
-            self.assertEqual(_git("worktree", "list", "--porcelain", cwd=checkout).count("worktree "), 1)
+                self.assertEqual(look._look_at("HEAD", "survey", 0.0), ({}, {}, {}))
+            self.assertEqual(seen["test"], "new\n")
+
+    def test_a_base_that_names_nothing_is_refused(self):
+        with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
+            _repository(Path(folder))
+            with (
+                mock.patch.dict(os.environ, ASKED, clear=True),
+                self.assertRaisesMessage(AssertionError, "--base example-missing"),
+            ):
+                look._look_at("example-missing", "survey", 0.0)
+
+
+class _Unanswered:
+    """A look whose estate page answered 404, closing with no rule and no base."""
+
+    close = look.Look.close
+
+    def __init__(self):
+        self.base, self.base_errors, self.errors = None, {}, {("estate/example", 402): []}
+        self.unanswered = {"estate/example": 404}
+
+
+@tag("source")
+class UnansweredTests(SimpleTestCase):
+    def test_a_page_that_does_not_answer_200_fails_the_look_naming_the_page_and_its_status(self):
+        with mock.patch.dict(os.environ, ASKED, clear=True), mock.patch("sys.stdout", new_callable=io.StringIO) as said:
+            failed = _Unanswered().close("", {})
+        self.assertEqual(failed, ["estate/example answered 404, not 200"])
+        self.assertIn("estate/example answered 404, not 200", said.getvalue().splitlines())

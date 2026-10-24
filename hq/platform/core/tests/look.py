@@ -11,13 +11,10 @@ import json
 import os
 import re
 import shutil
-import signal
 import subprocess
 import sys
-import tempfile
 import time
-from collections.abc import Iterator
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack
 from pathlib import Path
 from typing import override
 from unittest import mock
@@ -32,6 +29,7 @@ lazy from playwright.sync_api import Error as BrowserError
 from hq.platform.core import seeds
 from hq.platform.core.speculation import NOT_A_NAVIGATION
 from hq.platform.core.test_runner import stall_watch
+from hq.platform.core.tests import task
 from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, navigation
 from hq.platform.core.tests.browser.gate import BrowserGate, add_css
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
@@ -48,18 +46,15 @@ from hq.platform.core.tests.look_report import (
     unmatched,
 )
 from hq.platform.core.tests.look_tables import COLUMNS, TABLES, columns_line
+from hq.platform.core.tests.task import PREFIX, Usage, estate_name, estate_path, is_estate, usage
 from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production
 
 OUT = Path(settings.BASE_DIR) / "var" / "look"
-# What a look against a base runs at the base as this checkout has it, so a
-# finding is new for what the change drew rather than for how it was judged:
-# this module and its report, and the rules and probes the survey holds.
-LENS = (
-    *(Path(__file__).resolve().with_name(name) for name in ("look.py", "look_report.py", "look_tables.py")),
-    AUDIT.resolve(),
-    *sorted((Path(__file__).resolve().parent / "browser").rglob("*.py")),
-)
+# What a look against a base runs at the base as this checkout has it beside
+# this tree's test files, so a finding is new for what the change drew rather
+# than for how it was judged: the probes the survey runs.
+LENS = (AUDIT.resolve(),)
 # A look against a base writes its whole report here and prints only its new
 # findings and its verdict, so a long report is never cut short where it is read.
 REPORT = Path(settings.BASE_DIR) / "var" / "gate" / "look.txt"
@@ -67,7 +62,6 @@ REFERENCE_PAGES = (REFERENCE, REFERENCE_DARK)
 # What the console errors, uncaught errors and policy refusals a page had are
 # reported as: judged as a rule's findings are, so only a new one fails against a base.
 _ERRORS = "the error check"
-ESTATE = "estate"
 
 # Request headers the browser sends that are not the view's to read. The
 # answer goes back with its type alone, so it is never asked to be compressed.
@@ -182,30 +176,31 @@ _DIALOG_SCROLL = "([id, top]) => { document.getElementById(`modal-${id}`).scroll
 
 # The task's one required argument: mise exports it on every run of the task,
 # so a process without it was not started by the task.
-_ASKED = "usage_pages"
+_ASKED = "pages"
 # Where a look at the base writes what it found, for the run that asked for it:
 # a usage variable of the task's no person sets, given only by that run.
-_FINDINGS = "usage_found_into"
+_FINDINGS = "found_into"
 # The instant the run that asked began, in seconds, handed to its base the
 # same way: both draw with the clock frozen there.
-_CLOCK = "usage_clock_at"
+_CLOCK = "clock_at"
 
 
-def _usage(variable: str) -> str:
-    """What the task was given: mise exports each argument and flag of a
-    task's usage as ``usage_<name>``, lower case, and an unset flag as nothing
-    at all. Without the task's environment every flag would read as unset."""
+def _asked() -> Usage:
+    """What the task was given. Without the task's environment every flag would read as unset."""
 
-    if _ASKED not in os.environ:
+    given = usage()
+    if not given.given(_ASKED):
         raise RuntimeError(
-            f"dev:look reads what it was asked from its task's environment, and {_ASKED} is not set:"
+            f"dev:look reads what it was asked from its task's environment, and {PREFIX}{_ASKED} is not set:"
             " run it as `mise run dev:look -- <pages>`, never as a test label through manage"
         )
-    return os.environ.get(variable, "")
+    return given
 
 
 def _listed(name: str) -> list[str]:
-    return [part.strip() for part in _usage(name).split(",") if part.strip()]
+    """A flag that takes a comma-separated list."""
+
+    return [part.strip() for part in _asked().text(name).split(",") if part.strip()]
 
 
 def _css(given: str) -> str:
@@ -286,34 +281,6 @@ def _commit(ref: str) -> str:
     return said
 
 
-def _stop(signum, _frame):
-    raise SystemExit(128 + signum)
-
-
-@contextmanager
-def _worktree(checkout: Path, ref: str) -> Iterator[Path]:
-    """A detached worktree of ``ref`` in a temporary folder, removed with the
-    folder however the block ends: a termination is raised as an exit, so it
-    unwinds through here too."""
-
-    folder = Path(tempfile.mkdtemp(prefix="hq-look-base-"))
-    tree = folder / "checkout"
-    git = ["git", "-C", str(checkout), "worktree"]
-    previous = signal.signal(signal.SIGTERM, _stop)
-    try:
-        made = subprocess.run(
-            [*git, "add", "--detach", "--quiet", str(tree), ref], capture_output=True, text=True, check=False
-        )
-        if made.returncode:
-            raise AssertionError(f"--base {ref}: {made.stderr.strip()}")
-        yield tree
-    finally:
-        subprocess.run([*git, "remove", "--force", str(tree)], capture_output=True, check=False)
-        shutil.rmtree(folder, ignore_errors=True)
-        subprocess.run([*git, "prune"], capture_output=True, check=False)
-        signal.signal(signal.SIGTERM, previous)
-
-
 def _relay(command: list[str], sink, ref: str, **options) -> None:
     """Run ``command``, each line it writes kept in ``sink`` and said here as
     it arrives, after ``ref``, so the base's pass reads apart from this one's
@@ -334,28 +301,32 @@ def _relay(command: list[str], sink, ref: str, **options) -> None:
 
 def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Found]:
     """What this run finds, measures and hears go wrong, looked for at ``ref``: the same
-    task's run, in a worktree of it, through this checkout's copy of the
-    lens (`LENS`) so both are judged alike. Its environment is this run's, but for a
+    task's run, in a worktree of it with this checkout's test files and lens
+    (`LENS`) laid over it as `test --at` lays them, so a base older than a test
+    file still looks and both are judged alike. Its environment is this run's, but for a
     database of its own, this run's clock, and the CSS already read and the
     script's absolute path, since a relative path names this checkout."""
 
-    checkout = Path(settings.BASE_DIR)
-    with _worktree(checkout, ref) as tree:
-        for lens in LENS:
-            copy = tree / lens.relative_to(checkout.resolve())
-            copy.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(lens, copy)
+    checkout = Path(settings.BASE_DIR).resolve()
+    try:
+        commit = task.commit_of(ref, checkout)
+        present, deleted = task.changed_tests(commit, checkout)
+    except task.RefError as error:
+        raise AssertionError(f"--base {ref}: {error}") from None
+    with task.worktree(commit, checkout) as tree:
+        lens = [str(path.relative_to(checkout)) for path in LENS]
+        task.overlay(tree, [*present, *lens], deleted, checkout)
         found, log = tree.parent / "found.json", tree.parent / "look.log"
-        env = {name: value for name, value in os.environ.items() if name not in {"usage_base", "VIRTUAL_ENV"}}
+        env = {name: value for name, value in os.environ.items() if name not in {f"{PREFIX}base", "VIRTUAL_ENV"}}
         env |= {
-            _FINDINGS: str(found),
-            _CLOCK: str(clock_at),
+            PREFIX + _FINDINGS: str(found),
+            PREFIX + _CLOCK: str(clock_at),
             "SEVERINO_DATABASE_PATH": str(tree.parent / "look.sqlite3"),
-            "usage_rule": rule,
-            "usage_css": _css(_usage("usage_css")),
+            f"{PREFIX}rule": rule,
+            f"{PREFIX}css": _css(_asked().text("css")),
         }
-        if script := _usage("usage_eval"):
-            env["usage_eval"] = str(Path(settings.BASE_DIR, script).resolve())
+        if script := _asked().text("eval"):
+            env[f"{PREFIX}eval"] = str(Path(settings.BASE_DIR, script).resolve())
         print(f"Looking at {ref} first, in {tree}", flush=True)
         # The run there is watched by its own stall watch.
         with log.open("w", encoding="utf-8") as sink, stall_watch.paused():
@@ -365,23 +336,6 @@ def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Fou
             said = log.read_text(encoding="utf-8").splitlines()[-40:]
             raise AssertionError(f"The look at {ref} did not finish:\n" + "\n".join(said))
         return _read_found(found)
-
-
-def _estate_name(path: str) -> str:
-    return "/".join(filter(None, (ESTATE, path.strip("/"))))
-
-
-def _is_estate(name: str) -> bool:
-    return name == ESTATE or name.startswith(f"{ESTATE}/")
-
-
-def _estate_path(name: str) -> str:
-    """The address an estate page is asked by: its path ends in a slash, and
-    its query, if any, follows untouched."""
-
-    path, _, query = name.removeprefix(ESTATE).partition("?")
-    rest = path.strip("/")
-    return (f"/{rest}/" if rest else "/") + (f"?{query}" if query else "")
 
 
 def _address(url: str) -> str:
@@ -426,19 +380,16 @@ def _rules() -> list[str]:
     )
 
 
-def _pages(asked: list[str]) -> list[str]:
-    """The pages ``asked`` names, ``all`` and ``estate/all`` spelled out,
-    each one checked to be a page dev:look can draw."""
+def _pages(asked: tuple[str, ...]) -> list[str]:
+    """The pages ``asked`` names, ``all`` and ``estate/all`` spelled out, an
+    estate page by its name; one dev:look cannot draw is refused."""
 
-    estate = [_estate_name(path) for path in navigation()]
-    known = [*ALL_PAGES, *derived_pages(), *REFERENCE_PAGES, *estate]
-    named = {"all": known, f"{ESTATE}/all": estate}
-    pages = list(dict.fromkeys(page for name in asked for page in named.get(name, [name])))
-    # Any address of the example estate is a page, not only its navigation's.
-    unknown = sorted(name for name in set(pages) - set(known) if not _is_estate(name))
-    if unknown:
-        raise AssertionError(f"No page {unknown}. Pages: {', '.join(known)}, or estate/<any address>")
-    return pages
+    gate = [*ALL_PAGES, *derived_pages(), *REFERENCE_PAGES]
+    try:
+        found = task.pages(asked, navigation(), gate)
+    except task.PageRefused as refused:
+        raise AssertionError(str(refused)) from None
+    return [page if page in gate else estate_name(page) for page in found]
 
 
 class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
@@ -447,17 +398,17 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     @classmethod
     def setUpClass(cls):
-        cls.clock_at = float(_usage(_CLOCK) or round(time.time()))
+        cls.clock_at = float(_asked().text(_CLOCK) or round(time.time()))
         # What was asked is checked before the base is looked at, which takes a while.
-        cls.asked = _pages(_listed("usage_pages"))
+        cls.asked = _pages(_asked().repeated("pages"))
         if (rule := cls.rule_asked()) and rule not in _rules():
             raise AssertionError(f"No rule named {rule!r}. Rules: {', '.join(_rules())}")
         try:
-            seeds.get(_usage("usage_seed"))
+            seeds.get(_asked().text("seed"))
         except LookupError as unknown:
             raise AssertionError(f"--seed: {unknown}") from None
         # The base next, while nothing of this run's holds memory but Django.
-        ref = _usage("usage_base")
+        ref = _asked().text("base")
         cls.base, cls.base_measured, cls.base_errors = _look_at(ref, rule, cls.clock_at) if ref else (None, {}, {})
         super().setUpClass()
 
@@ -469,19 +420,19 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     @classmethod
     def rule_asked(cls):
-        return _usage("usage_rule") or ("survey" if _usage("usage_base") else "")
+        return _asked().text("rule") or ("survey" if _asked().text("base") else "")
 
     @classmethod
     def render(cls):
         pages = cls.asked
-        estate = [_estate_name(path) for path in navigation()]
-        cls.addresses = {name: _estate_path(name) for name in {*estate, *filter(_is_estate, pages)}}
+        estate = [estate_name(path) for path in navigation()]
+        cls.addresses = {name: estate_path(name) for name in {*estate, *filter(is_estate, pages)}}
         rendered = stress_pages(pages)
         if set(pages) & set(REFERENCE_PAGES):
             rendered |= render_reference()
         # Last: the stress estates are rolled back, the example estate is
         # committed, and both sign in as the same owner.
-        cls.estate_client = cls.serve_estate() if any(map(_is_estate, pages)) else None
+        cls.estate_client = cls.serve_estate() if any(map(is_estate, pages)) else None
         return rendered
 
     @classmethod
@@ -507,7 +458,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         stack.enter_context(mock.patch.dict(os.environ, {"DJANGO_ALLOW_ASYNC_UNSAFE": "1"}))
         stack.enter_context(as_production())
         client = Client()
-        client.force_login(stack.enter_context(seeds.built(_usage("usage_seed"))), backend=SSO)
+        client.force_login(stack.enter_context(seeds.built(_asked().text("seed"))), backend=SSO)
         cls.answered = {}
         return client
 
@@ -560,30 +511,31 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         super().visit(path, width)
 
     def open(self, name, width):
-        if _is_estate(name):
+        if is_estate(name):
             self.visit(self.addresses[name], width)
             return
         self.on_estate = False
         super().open(name, width)
-        if name in REFERENCE_PAGES and not _usage("usage_no_script"):
+        if name in REFERENCE_PAGES and not _asked().switch("no_script"):
             wait_for_reference(self.page)
 
     def test_look(self):
         widths, rule = self.asked_for()
         # A page's own policy refuses a stylesheet it did not name; `--css` is one.
-        self.start(java_script_enabled=not _usage("usage_no_script"), bypass_csp=bool(self.css))
-        if _usage("usage_dark"):
+        self.start(java_script_enabled=not _asked().switch("no_script"), bypass_csp=bool(self.css))
+        if _asked().switch("dark"):
             self.page.emulate_media(color_scheme="dark")
         # One run's shots alone, so none left by an earlier run is read as this one's.
         shutil.rmtree(OUT, ignore_errors=True)
         OUT.mkdir(parents=True)
         self.errors: Found = {}
-        if _usage("usage_deep"):
+        self.unanswered: dict[str, int | None] = {}
+        if _asked().switch("deep"):
             self.follow(widths[0])
         print(f"Screenshots in {OUT}", flush=True)
         self.measured: Measured = {}
         found = self.look_at_every_page(widths, rule)
-        if into := _usage(_FINDINGS):
+        if into := _asked().text(_FINDINGS):
             _write_found(Path(into), found, self.measured, self.errors)
         if failed := self.close(rule, found):
             self.fail("\n".join(failed))
@@ -593,7 +545,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         a line and each verdict last, the rule's report kept in ``REPORT``;
         the verdicts that failed."""
 
-        ref = _usage("usage_base")
+        ref = _asked().text("base")
         base_errors = self.base_errors if self.base is not None else None
         report, printed, errors_failed = closing(_ERRORS, self.errors, base_errors, ref)
         failed = [printed[-1]] if errors_failed else []
@@ -604,8 +556,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             REPORT.write_text(f"{head}\n{judged}\n{report}\n", encoding="utf-8")
             printed = [f"Page by page: {REPORT}", *said, *printed]
             failed = [said[-1]] * rule_failed + failed
-        print(*printed, sep="\n", flush=True)
-        return failed
+        # A page that did not answer was not looked at, here or at a base, so it fails either way.
+        unanswered = [f"{name} answered {status}, not 200" for name, status in self.unanswered.items()]
+        print(*printed, *unanswered, sep="\n", flush=True)
+        return failed + unanswered
 
     def look_at_every_page(self, widths, rule) -> Found:
         """Each page at each width, said as it starts, so a look that hangs
@@ -631,8 +585,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     def follow(self, width):
         """Every page the estate pages asked for link to, one per address."""
 
-        seen = {urlsplit(self.addresses[name]).path for name in self.asked if _is_estate(name)}
-        for name in [name for name in self.asked if _is_estate(name)]:
+        seen = {urlsplit(self.addresses[name]).path for name in self.asked if is_estate(name)}
+        for name in [name for name in self.asked if is_estate(name)]:
             stall_watch.mark(f"dev:look following the links of {name}")
             self.visit(self.addresses[name], width)
             for address in self.page.evaluate(_LINKS, NOT_A_NAVIGATION):
@@ -640,7 +594,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
                 if path in seen or path.startswith(settings.STATIC_URL):
                     continue
                 seen.add(path)
-                followed = _estate_name(address)
+                followed = estate_name(address)
                 self.addresses[followed] = address
                 self.asked.append(followed)
         # Each page followed from is looked at again at this width, and says them then.
@@ -650,12 +604,12 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         """The widths and rule the task was given, each checked, and the CSS it
         adds."""
 
-        widths = [int(width) for width in _listed("usage_widths")] or [PHONE_SCREEN[0], 820, 1360]
+        widths = [int(width) for width in _listed("widths")] or [PHONE_SCREEN[0], 820, 1360]
         rule = self.rule_asked()
         self.assertTrue(not rule or callable(getattr(self, rule, None)), f"No rule named {rule!r}")
-        self.css = _css(_usage("usage_css"))
-        self.script = _script(_usage("usage_eval"))
-        self.dialogs = _listed("usage_dialog")
+        self.css = _css(_asked().text("css"))
+        self.script = _script(_asked().text("eval"))
+        self.dialogs = _listed("dialog")
         unnamed = [dialog for dialog in self.dialogs if not re.fullmatch(r"[\w-]+", dialog)]
         self.assertFalse(unnamed, f"--dialog takes dialog ids (connection) or all, not {unnamed}")
         return widths, rule
@@ -671,11 +625,11 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if self.script:
             self.evaluate_script(name, width)
         self.screenshot(name, width)
-        if _usage("usage_columns"):
+        if _asked().switch("columns"):
             self.measure_columns(name, width)
         self.width = width
         said = self.judged(name, width, rule) if rule else []
-        if rule and _usage("usage_open"):
+        if rule and _asked().switch("open"):
             said += self.with_each_popover(name, width, rule, said)
         return said + self.with_each_dialog(name, width, rule, said)
 
@@ -776,7 +730,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             self.close_dialog(dialog)
             return False
         self.settle()
-        if _usage("usage_open"):
+        if _asked().switch("open"):
             self.open_everything(name, width)
         return True
 
@@ -813,8 +767,11 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             self.open(name, width)
         except BrowserError as refused:
             return f"not a page ({str(refused).splitlines()[0]})"
-        if _is_estate(name) and (said := self.answered.get(_address(self.page.url))) != (200, ""):
-            return f"answered {said}, not looked at"
+        if is_estate(name) and (said := self.answered.get(_address(self.page.url), (None, ""))) != (200, ""):
+            status, refusal = said
+            if status != 200:
+                self.unanswered[name] = status
+            return f"answered {status}{f', refused as a guess ({refusal})' if refusal else ''}, not looked at"
         if not self.page.locator("main").count():
             return "not a page of HQ's (no main), not looked at"
         return ""
@@ -824,9 +781,9 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
         if self.css:
             add_css(self.page, self.css)
-        if _usage("usage_open"):
+        if _asked().switch("open"):
             self.open_everything(name, width)
-        if _usage("usage_expand"):
+        if _asked().switch("expand"):
             self.expand_rows()
 
     def expand_rows(self):
@@ -892,7 +849,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
         if self.base is None:
             return said
-        return beside(_usage("usage_base"), said, self.base_measured.get((name, width), {}).get(kind))
+        return beside(_asked().text("base"), said, self.base_measured.get((name, width), {}).get(kind))
 
     def measure_columns(self, name, width):
         """Every table's column widths here, printed and kept beside the
@@ -928,9 +885,9 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         (``.tables.txt``), so two runs can be compared line by line. Not a
         check: it fails nothing."""
 
-        said = f"{name} at {self.width}{' expanded' if _usage('usage_expand') else ''}\n"
+        said = f"{name} at {self.width}{' expanded' if _asked().switch('expand') else ''}\n"
         said += self.page.evaluate(TABLES) or "(no tables)"
-        suffix = "-expanded.tables.txt" if _usage("usage_expand") else ".tables.txt"
+        suffix = "-expanded.tables.txt" if _asked().switch("expand") else ".tables.txt"
         shot = _shot(name, self.width)
         shot.with_name(shot.stem + suffix).write_text(said + "\n", encoding="utf-8")
         print(said, flush=True)

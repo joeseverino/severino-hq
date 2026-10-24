@@ -15,9 +15,10 @@ from pathlib import Path
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.github_posture import WIRED_SECRETS
+from hq.platform.core.tests.task import Usage
 from tests.mise_tasks import body, mise_tasks
 from tools import credentials
-from tools.credentials import Call, OnePassword, Programs, Refused, Session, Usage
+from tools.credentials import Call, OnePassword, Programs, Refused, Session
 
 ROOT = Path(__file__).resolve().parents[2]
 BOOTSTRAP = "bootstrap-secret-0123456789"
@@ -376,10 +377,6 @@ class WireGithubAppTests(SimpleTestCase):
 
 @tag("source")
 class TaskTests(SimpleTestCase):
-    def test_a_repeated_flag_reads_back_as_mise_quotes_it(self):
-        self.assertEqual(Usage({"tag": "'a b' 'c'\\''d'"}).repeated("tag"), ("a b", "c'd"))
-        self.assertEqual(Usage({}).repeated("tag"), ())
-
     def test_the_task_runs_as_printed(self):
         """Through mise, from another directory: the plan, on stderr, with nothing created."""
 

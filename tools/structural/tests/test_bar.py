@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.core.tests.task import Usage
 from tools.structural import bar, classify
 
 PACKAGE = f"github:DeusData/{bar.TOOL}"
@@ -61,7 +62,7 @@ class CompareTests(SimpleTestCase):
                 stack.enter_context(patch.object(bar, name, value))
             err = stack.enter_context(patch("sys.stderr", new_callable=io.StringIO))
             stack.enter_context(patch("sys.stdout", new_callable=io.StringIO))
-            return bar.main([]), err.getvalue()
+            return bar.main(Usage({})), err.getvalue()
 
     def test_a_pair_the_baseline_does_not_list_fails_and_is_named(self):
         code, err = self.bar(OUTSIDE + INSIDE, baseline=[])

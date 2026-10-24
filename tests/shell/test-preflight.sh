@@ -25,6 +25,11 @@ cp -R deploy .gitignore "${repo}/"
 cp .github/workflows/ci.yml "${repo}/.github/workflows/"
 cp controller/cmd/hq-host/main.go "${repo}/controller/cmd/hq-host/"
 cp tools/__init__.py "${repo}/tools/"
+mkdir -p "${repo}/hq/platform/core/tests"
+for package in hq hq/platform hq/platform/core hq/platform/core/tests; do
+    cp "${package}/__init__.py" "${repo}/${package}/"
+done
+cp hq/platform/core/tests/task.py "${repo}/hq/platform/core/tests/"
 cp tools/gate/__init__.py tools/gate/preflight.py tools/gate/verdict.py "${repo}/tools/gate/"
 # Hermetic: the fixture is a throwaway repository, so no signing and no hooks.
 git_() {

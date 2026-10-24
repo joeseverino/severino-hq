@@ -10,13 +10,9 @@ or drives a browser. The whole suite is never light, so it is not loaded to say 
 
 import fnmatch
 import os
-import shlex
-import shutil
 import signal
-import subprocess
 import sys
 import time
-from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Self
@@ -27,6 +23,7 @@ from django.core.management.commands.test import Command as TestCommand
 from django.test.utils import get_runner
 
 from hq.platform.application.ui import counted
+from hq.platform.core.tests.task import RefError, Usage, changed_tests, commit_of, overlay, usage, worktree
 from tools.gate.verdict import Step, close, run
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -47,26 +44,8 @@ HEAVY = ROOT / "tools" / "lib" / "heavy.sh"
 IN_TURN = 'SEVERINO_HEAVY_TASK=$$; export SEVERINO_HEAVY_TASK; exec "$@"'
 
 
-class RefError(Exception):
-    """The ref names no commit, or its worktree cannot be made."""
-
-
 class KeepRefused(Exception):
     """A --keep names no support file this tree changed from the ref."""
-
-
-def git(*args: str) -> list[str]:
-    done = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True)
-    if done.returncode:
-        raise RefError(done.stderr.strip() or f"git {args[0]} exited {done.returncode}")
-    return [line for line in done.stdout.splitlines() if line]
-
-
-def is_test_file(path: str) -> bool:
-    """A file the suite runs or builds its cases from, rather than the code under test."""
-
-    parts = Path(path).parts
-    return "tests" in parts[:-1]
 
 
 def is_test_module(path: str, labels: list[str]) -> bool:
@@ -77,15 +56,6 @@ def is_test_module(path: str, labels: list[str]) -> bool:
     return fnmatch.fnmatch(Path(path).name, TEST_MODULE) or any(
         label == module or label.startswith(f"{module}.") for label in named
     )
-
-
-def changed_tests(commit: str) -> tuple[list[str], list[str]]:
-    """(present, deleted) test files where this tree, uncommitted work included, differs from the commit."""
-
-    present = set(git("diff", "--name-only", "--no-renames", "--diff-filter=ACMT", commit))
-    present |= set(git("ls-files", "--others", "--exclude-standard"))
-    deleted = git("diff", "--name-only", "--no-renames", "--diff-filter=D", commit)
-    return sorted(filter(is_test_file, present)), sorted(filter(is_test_file, deleted))
 
 
 @dataclass
@@ -127,37 +97,16 @@ def layout(present: list[str], deleted: list[str], keep: list[str], labels: list
     )
 
 
-def overlay(tree: Path, present: list[str], deleted: list[str]) -> None:
-    for path in present:
-        (tree / path).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(ROOT / path, tree / path)
-    for path in deleted:
-        (tree / path).unlink(missing_ok=True)
-
-
-def remove(tree: Path) -> None:
-    """The worktree and git's record of it; what a half-made one leaves goes with the directory."""
-
-    subprocess.run(["git", "worktree", "remove", "--force", str(tree)], cwd=ROOT, capture_output=True)
-    shutil.rmtree(tree, ignore_errors=True)
-
-
 def run_at(ref: str, keep: list[str], args: list[str]) -> int:
     started = time.monotonic()
-    commit = git("rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}")[0]
+    commit = commit_of(ref, ROOT)
     name = f"test at {ref} ({commit[:12]})"
-    laid = layout(*changed_tests(commit), keep, [arg for arg in args if not arg.startswith("-")])
-    scratch = ROOT / "var" / "test-at"
-    scratch.mkdir(parents=True, exist_ok=True)
-    tree = scratch / f"{commit[:12]}-{os.getpid()}"
-    try:
-        git("worktree", "add", "--detach", "--quiet", str(tree), commit)
-        overlay(tree, laid.present, laid.deleted)
+    laid = layout(*changed_tests(commit, ROOT), keep, [arg for arg in args if not arg.startswith("-")])
+    with worktree(commit, ROOT) as tree:
+        overlay(tree, laid.present, laid.deleted, ROOT)
         # The ref's own environment: uv refuses this one's, and says so, once it is outside it.
         os.environ.pop("VIRTUAL_ENV", None)
         step = run(name, [*UV_RUN, *TEST, *args], cwd=tree)
-    finally:
-        remove(tree)
     said = laid.summary()
     if unimported(step):
         close(
@@ -194,13 +143,11 @@ class Typed:
     args: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_mise(cls, environ: Mapping[str, str]) -> Self:
-        """mise exports each usage value, a repeated one shell-quoted and joined."""
-
+    def from_usage(cls, given: Usage) -> Self:
         return cls(
-            at=environ.get("usage_at"),
-            keep=shlex.split(environ.get("usage_keep", "")),
-            args=shlex.split(environ.get("usage_arguments", "")),
+            at=given.text("at") if given.given("at") else None,
+            keep=list(given.repeated("keep")),
+            args=list(given.repeated("arguments")),
         )
 
 
@@ -270,6 +217,6 @@ def main(typed: Typed) -> int:
 
 
 if __name__ == "__main__":
-    typed = Typed.from_mise(os.environ)
+    typed = Typed.from_usage(usage())
     take_the_turn(typed)
     sys.exit(main(typed))

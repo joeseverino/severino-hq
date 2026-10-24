@@ -79,7 +79,7 @@ run = "uv run python manage.py check --deploy --fail-level WARNING"
 description = "No new near-duplicate pair outside tests"
 hide = true
 usage = 'flag "--record" help="Rewrite the baseline from this tree instead of checking it"'
-run = 'uv run python -m tools.structural.bar ${usage_record:+--record}'
+run = "uv run python -m tools.structural.bar"
 
 ["checks:css"]
 description = "Stylelint holds the stylesheets to their contract: color and sizes from tokens, every custom property defined"

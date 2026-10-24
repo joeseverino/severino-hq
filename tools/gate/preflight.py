@@ -36,6 +36,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from hq.platform.core.tests.task import usage
 from tools.gate.verdict import Step, close, run
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -304,7 +305,8 @@ def main() -> int:
     else:
         summary.add("passed", Step(f"committed tree at {head}"))
 
-    if os.environ.get("usage_remote"):  # noqa: SIM112  mise names a flag usage_<flag>
+    asked = usage()
+    if asked.switch("remote"):
         summary.check("every GitHub check on this commit", github_gates)
     else:
         summary.command("every gate the pipeline runs", ["mise", "run", "-c", "ci"])
@@ -313,7 +315,7 @@ def main() -> int:
     )
 
     destination = os.environ.get("SEVERINO_HQ_DEPLOY_HOST", "")
-    if os.environ.get("usage_skip_host"):  # noqa: SIM112  mise names a flag usage_<flag>
+    if asked.switch("skip_host"):
         summary.add("SKIPPED", Step("deploy host (--skip-host)"))
     elif not destination:
         summary.add("FAILED", Step("deploy host: SEVERINO_HQ_DEPLOY_HOST is not set"))

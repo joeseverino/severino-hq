@@ -14,7 +14,6 @@ fingerprinted function at all, since that graph indexed nothing.
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import subprocess
@@ -22,6 +21,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from hq.platform.core.tests.task import Usage, usage
 from tools.structural.classify import similar_pairs
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -86,11 +86,7 @@ def build_inspector(directory: Path) -> Path:
     return program
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="checks:structural")
-    parser.add_argument("--record", action="store_true", help="rewrite the baseline from this tree")
-    args = parser.parse_args(argv)
-
+def main(asked: Usage) -> int:
     project = "structural-bar"
     # Under /tmp: the daemon's socket lives in the store, and a socket's path
     # must fit 104 bytes, which macOS's per-user temporary directory overruns.
@@ -105,7 +101,7 @@ def main(argv: list[str]) -> int:
             print(f"the structural bar cannot trust the graph: {refused}", file=sys.stderr)
             return 1
 
-    if args.record:
+    if asked.switch("record"):
         BASELINE.write_text(HEADER + "".join(f"{line}\n" for line in current))
         print("structural baseline recorded")
         return 0
@@ -126,4 +122,4 @@ def compare(current: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main(usage()))

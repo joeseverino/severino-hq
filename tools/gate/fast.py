@@ -16,7 +16,6 @@ Run as `mise run fast`; `mise run fast --help` says what it takes.
 
 from __future__ import annotations
 
-import argparse
 import ast
 import os
 import re
@@ -27,6 +26,7 @@ import tomllib
 from fnmatch import fnmatch
 from pathlib import Path
 
+from hq.platform.core.tests.task import Usage, usage
 from tools.gate.verdict import Step, close, run
 from tools.structural.classify import TEST
 
@@ -385,17 +385,12 @@ def step(label: str, cmd: list[str]) -> Step:
     return run(label, cmd)
 
 
-def main(argv: list[str]) -> int:
+def main(asked: Usage) -> int:
     started = time.monotonic()
-    # The task's usage spec reads CHECK_BASE and CHECK_PARALLEL behind its own arguments.
-    parser = argparse.ArgumentParser(prog="fast")
-    parser.add_argument("base", nargs="?")
-    parser.add_argument("--list", action="store_true")
-    parser.add_argument("--parallel", default="auto")
-    args = parser.parse_args(argv)
-    parallel = args.parallel
-    list_only = args.list
-    base = merge_base(args.base)
+    # The task's usage reads CHECK_BASE and CHECK_PARALLEL behind its own arguments.
+    parallel = asked.text("parallel", "auto")
+    list_only = asked.switch("list")
+    base = merge_base(asked.text("base") or None)
     changed, deleted = changed_files(base)
     files = python_files()
     reached, touched = affected(changed, deleted, files)
@@ -430,4 +425,4 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main(usage()))

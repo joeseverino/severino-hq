@@ -1,14 +1,14 @@
-"""`mise run perf:report [pages] [--image] [--seed <name>] [--base <ref>]`: how light and fast HQ is.
+"""`mise run perf:report <pages>... [--image] [--seed <name>] [--base <ref>]`: how light and fast HQ is.
 
-Measures the pages asked, named as dev:look names the example estate's, by
-default every page its navigation lists (`estate.navigation`), on this
+Measures the pages asked, named as dev:look names the example estate's
+(`hq.platform.core.tests.task.pages`), or all for every page its navigation lists, on this
 checkout's `dev:scratch`, or its built image, seeded with a named data set, so
 a change's cost is a number. With a base, both servers stay up and are asked
 for server time in turn, so a page's move is told from noise
 (`measure.server_times`). What it measures and its flags are in
 docs/Development.md. A report, never a gate: it exits 0 when every measurement
-finished, 1 when any failed, 2 for a ref that names no commit, or a page or set
-it cannot serve.
+finished, 1 when any failed or a page answered anything but 200, 2 for a ref
+that names no commit, or a page or set it cannot serve.
 """
 
 import copy
@@ -16,7 +16,6 @@ import os
 import shutil
 import signal
 import sys
-import tempfile
 import time
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
@@ -29,13 +28,13 @@ lazy import django
 lazy from django.test import override_settings
 lazy from playwright.sync_api import sync_playwright
 
-from tools.gate.at import RefError, git, remove
+from hq.platform.core.tests import task
+from hq.platform.core.tests.task import ESTATE, PageRefused, RefError, estate_name, usage, worktree
 from tools.perf import measure, parse, runs, table
 from tools.perf.targets import COLD_STARTS, Image, NotMeasured, Scratch, clean_env, run
 lazy from hq.platform.core import seeds
 lazy from hq.platform.core.tests.browser.estate import navigation
 lazy from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, viewport
-lazy from hq.platform.core.tests.look import ESTATE, _estate_name, _estate_path, _is_estate
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "var" / "perf"
@@ -43,12 +42,6 @@ OUT = ROOT / "var" / "perf"
 LOCAL = ROOT / "mise.local.toml"
 # Set when a run starts again host alone, to the refusal that made it.
 ALONE_BECAUSE = "PERF_HOST_ALONE_BECAUSE"
-
-
-def usage(name: str) -> str:
-    """A task argument, as mise exports it: ``usage_<name>``, nothing for an unset flag."""
-
-    return os.environ.get(f"usage_{name}", "")
 
 
 @dataclass(frozen=True)
@@ -89,24 +82,6 @@ class Unservable(Exception):
     """A page or data set asked for that perf:report cannot serve."""
 
 
-def chosen(asked: str, every: list[str]) -> list[str]:
-    """The addresses of the pages ``asked`` names, comma-separated as dev:look takes them:
-    ``estate/<address>``, or ``all`` or ``estate/all`` for ``every`` page the navigation lists,
-    which nothing asked means too. ``estate`` names the set the servers are seeded with, so a page
-    of a dev:look stress estate is refused."""
-
-    pages = []
-    for name in [part.strip() for part in asked.split(",") if part.strip()] or ["all"]:
-        if name in ("all", f"{ESTATE}/all"):
-            pages += every
-        elif _is_estate(name):
-            pages.append(_estate_path(name))
-        else:
-            known = ", ".join(_estate_name(page) for page in every)
-            raise Unservable(f"No page {name}. Pages: {known}, {ESTATE}/all or all, or {ESTATE}/<any address>")
-    return list(dict.fromkeys(pages))
-
-
 class SetRefused(Exception):
     """A tree's server refused the extension set for the plugin API it supports."""
 
@@ -116,7 +91,7 @@ def alone_because() -> str:
 
     if because := os.environ.get(ALONE_BECAUSE):
         return because
-    return "--host-alone asked for it" if usage("host_alone") == "true" else ""
+    return "--host-alone asked for it" if usage().switch("host_alone") else ""
 
 
 def seed_of(asked: str) -> str:
@@ -137,17 +112,21 @@ def plan() -> Plan:
         os.environ["SEVERINO_HQ_PLUGINS"] = ""
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hq.config.settings")
     django.setup()
-    seed = seed_of(usage("seed"))
-    # The pages the set's navigation reaches, under the settings it is shown with.
+    asked = usage()
+    seed = seed_of(asked.text("seed"))
+    # The pages the set's navigation reaches, and those asked, under the settings it is shown with.
     with override_settings(**seeds.get(seed).settings):
         every = navigation()
-    pages = chosen(usage("pages"), every)
+        try:
+            chosen = task.pages(asked.repeated("pages"), every)
+        except PageRefused as refused:
+            raise Unservable(f"{refused} perf:report serves the {ESTATE}'s pages alone.") from None
     return Plan(
-        pages=pages,
-        walked=list(dict.fromkeys([*every, *pages])),
+        pages=chosen,
+        walked=list(dict.fromkeys([*every, *chosen])),
         viewports=[viewport(PHONE_SCREEN[0]), viewport(WIDE)],
-        requests=int(usage("requests") or 20),
-        image=usage("image") == "true",
+        requests=int(asked.text("requests")),
+        image=asked.switch("image"),
         seed=seed,
         extensions=[spec for spec in os.environ.get("SEVERINO_HQ_PLUGINS", "").split(",") if spec],
         alone=alone,
@@ -176,20 +155,13 @@ def chromium() -> Iterator[Any]:
 
 
 @contextmanager
-def worktree(commit: str) -> Iterator[Path]:
-    """A detached worktree of ``commit`` outside this checkout, so mise reads only its config, with this
-    checkout's mise.local.toml, so its server composes the same extensions; gone however the block ends."""
+def base_tree(commit: str) -> Iterator[Path]:
+    """A worktree of ``commit`` with this checkout's mise.local.toml, so its server composes the same extensions."""
 
-    folder = Path(tempfile.mkdtemp(prefix="hq-perf-base-"))
-    tree = folder / "checkout"
-    try:
-        git("worktree", "add", "--detach", "--quiet", str(tree), commit)
+    with worktree(commit) as tree:
         if LOCAL.is_file():
             shutil.copy2(LOCAL, tree / LOCAL.name)
         yield tree
-    finally:
-        remove(tree)
-        shutil.rmtree(folder, ignore_errors=True)
 
 
 def image_of(tree: Path, commit: str, here: bool) -> str:
@@ -271,6 +243,9 @@ def first_pass(server: Live, asked: Plan) -> None:
         answered = measure.one_pass(server.target.url, server.cookie, asked.walked)
     if 200 not in answered.values():
         raise NotMeasured(f"no page answered 200 to the session dev_session minted: {answered}")
+    for page, status in answered.items():
+        if status != 200:
+            server.recorder.fail(f"page {estate_name(page)}", NotMeasured(f"{page} answered {status}, not 200"))
 
 
 def measure_costs(server: Live, asked: Plan) -> None:
@@ -442,7 +417,7 @@ def measure_run(base_commit: str | None, here_commit: str, asked: Plan, kept: ru
             short = base_commit[:12]
             if fresh or not kept_base(short, asked, kept):
                 measuring.add("base")
-            live["base"] = serve(stack.enter_context(worktree(base_commit)), short, False, asked, kept, "base", stack)
+            live["base"] = serve(stack.enter_context(base_tree(base_commit)), short, False, asked, kept, "base", stack)
         live["here"] = serve(ROOT, here_commit, True, asked, kept, "here", stack)
         serving = {side: server for side, server in live.items() if server}
         # First, while every server is as its first boot and one pass left it, so neither has a
@@ -461,7 +436,7 @@ def measure_run(base_commit: str | None, here_commit: str, asked: Plan, kept: ru
 
 def main() -> int:
     signal.signal(signal.SIGTERM, stop)
-    ref = usage("base")
+    ref = usage().text("base")
     try:
         asked = plan()
     except Unservable as error:
@@ -469,14 +444,14 @@ def main() -> int:
         return 2
     here_commit = commit_of(ROOT)
     try:
-        base_commit = git("rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}")[0] if ref else None
+        base_commit = task.commit_of(ref) if ref else None
     except RefError as error:
         print(f"perf:report --base {ref}: {error}", file=sys.stderr)
         return 2
     stem = runs.name(here_commit, base_commit and base_commit[:12], asked.target, datetime.now(UTC))
     kept = runs.Run.start(OUT, stem, target=asked.target, plan=asked.key(), alone=asked.alone or None)
     try:
-        measure_run(base_commit, here_commit, asked, kept, usage("fresh") == "true")
+        measure_run(base_commit, here_commit, asked, kept, usage().switch("fresh"))
     except SetRefused as refused:
         kept.doc["refused"] = str(refused)
         kept.save()

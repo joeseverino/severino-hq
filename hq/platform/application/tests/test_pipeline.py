@@ -42,6 +42,15 @@ def reads_own_arguments(source: str) -> bool:
     return bool(re.search(SHELL_READS, own, re.MULTILINE))
 
 
+def forwards(source: str, name: str) -> bool:
+    """Whether ``source`` reads the task argument ``name``: as the variable mise
+    sets, or through the dev tools' reader of them (hq/platform/core/tests/task.py)."""
+
+    return f"usage_{name}" in source or bool(
+        re.search(rf"\.(?:text|switch|repeated|given)\(\s*[\"']{name}[\"']", source)
+    )
+
+
 def workflows() -> list[Path]:
     return sorted(WORKFLOWS.glob("*.yml"))
 
@@ -791,8 +800,15 @@ class GateReferenceTests(SimpleTestCase):
                 if declared:
                     checked += 1
                     reached = run + "".join(path.read_text() for path in scripts)
-                    dropped = [word for word in declared if f"usage_{word.replace('-', '_')}" not in reached]
+                    dropped = [word for word in declared if not forwards(reached, word.replace("-", "_"))]
                     self.assertEqual(dropped, [], f"{name} declares arguments it never forwards")
+                    # mise parsed them already: a second parser is a second declaration that drifts from the usage.
+                    parsing = [
+                        path.name
+                        for path in scripts
+                        if re.search(r"(?m)^\s*(?:import|from) argparse\b", path.read_text())
+                    ]
+                    self.assertEqual(parsing, [], f"{name} parses its own flags; read mise's parse through task.Usage")
                 elif name not in self.PASSTHROUGH and re.fullmatch(r"[\w/.-]+", run.strip()):
                     for path in scripts:
                         self.assertFalse(

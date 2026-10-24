@@ -128,7 +128,7 @@ class Measured(SimpleTestCase):
         kept.save = snapshot
         with (
             mock.patch.object(report, "Scratch", lambda *_args, **_kwargs: next(served)),
-            mock.patch.object(report, "worktree", lambda _commit: contextlib.nullcontext(self.out)),
+            mock.patch.object(report, "base_tree", lambda _commit: contextlib.nullcontext(self.out)),
             mock.patch.object(report, "ROOT", self.out),
             contextlib.redirect_stdout(io.StringIO()),
         ):
@@ -379,26 +379,6 @@ class KeptTests(SimpleTestCase):
         self.kept("0123456789ab", PLAN.key() | {"browser_waits_for": "networkidle"})
 
         self.assertIsNone(runs.saved(self.out, "0123456789ab", PLAN.key()))
-
-
-class ChosenTests(SimpleTestCase):
-    EVERY = ["/", "/infrastructure/", "/contacts/"]
-
-    def test_nothing_asked_or_all_is_every_page_the_navigation_lists(self):
-        for asked in ("", "all", "estate/all"):
-            with self.subTest(asked=asked):
-                self.assertEqual(report.chosen(asked, self.EVERY), self.EVERY)
-
-    def test_an_estate_page_is_its_address_as_dev_look_names_it(self):
-        chosen = report.chosen("estate/contacts, estate, estate/assets?kind=disk,estate/contacts/", self.EVERY)
-
-        self.assertEqual(chosen, ["/contacts/", "/", "/assets/?kind=disk"])
-
-    def test_a_page_perf_cannot_serve_is_refused_with_the_pages_it_can(self):
-        with self.assertRaisesRegex(
-            report.Unservable, r"No page dense/services\. Pages: estate, estate/infrastructure"
-        ):
-            report.chosen("estate/contacts,dense/services", self.EVERY)
 
 
 class SeedTests(SimpleTestCase):

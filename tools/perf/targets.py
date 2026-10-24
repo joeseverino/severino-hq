@@ -18,6 +18,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from hq.platform.core.tests.task import PREFIX
 from tools.perf import parse
 lazy from hq.platform.core import seeds
 
@@ -70,7 +71,7 @@ def clean_env(**extra: str) -> dict[str, str]:
     kept = {
         name: value
         for name, value in os.environ.items()
-        if name not in _OURS and not name.startswith(("usage_", "MISE_TASK_"))
+        if name not in _OURS and not name.startswith((PREFIX, "MISE_TASK_"))
     }
     return kept | extra
 

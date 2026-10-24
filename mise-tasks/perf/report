@@ -4,7 +4,7 @@
 #MISE depends=[{task="setup:browser", args=["chromium"]}]
 #MISE env={SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION="0", SEVERINO_HQ_PLUGINS="{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH="{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"}
 #MISE timeout="2h"
-#USAGE arg "[pages]" help="Comma-separated pages as dev:look names them: estate/<path>, or estate/all or all, the default, for every page the navigation lists"
+#USAGE arg "<pages>" var=#true help="Pages as dev:look names them: estate/<path>, a path (/infrastructure/containers/), a route name (control_plane:containers), or estate/all or all for every page the navigation lists"
 #USAGE flag "--image" help="Measure the built image instead of dev:scratch: the one IMAGE names, else one image:build makes for the commit"
 #USAGE flag "--seed <name>" default="showcase" help="The data set every server measured is seeded with, as dev:scratch --seed names it (hq/platform/core/seeds.py)"
 #USAGE flag "--base <ref>" help="Also measure <ref>, in a temporary worktree removed however the run ends: each number beside how far it moved, and each page's server time asked of both servers in turn, marked where it moved past its spread"

@@ -15,6 +15,7 @@ from unittest.mock import patch
 from django.test import tag
 
 from hq.config.sandbox import PREFIX, sweep_abandoned
+from hq.platform.core.tests.task import Usage
 from tests.mise_tasks import mise_tasks
 from tools.gate import fast as fast_gate, verdict as gate_verdict
 from tools.gate.tests.base import UNITTEST, GateTestCase
@@ -383,7 +384,7 @@ class GateVerdictTests(GateTestCase):
                 patch.object(fast_gate, "step", side_effect=[*steps, *[gate_verdict.Step("more")] * 3]),
                 patch("sys.stdout", new_callable=io.StringIO) as out,
             ):
-                code = fast_gate.main([])
+                code = fast_gate.main(Usage({}))
             self.assertEqual(code, 0 if expected == "passed in" else 1)
             self.assertIn(expected, out.getvalue().splitlines()[-1])
 
