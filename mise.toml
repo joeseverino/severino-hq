@@ -82,7 +82,7 @@ crane = { version = "0.22.1", lazy = true }
 
 # The code graph the structural bar indexes with. Linux takes the portable
 # (static) build so the runner needs no matching libc. Lazy: only
-# checks:structural runs it, and installs it first (tools/structural/bar.py).
+# checks:structural runs it, and its first run of the command installs it.
 [tools."github:DeusData/codebase-memory-mcp"]
 version = "0.12.0"
 lazy = true

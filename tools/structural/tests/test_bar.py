@@ -13,6 +13,7 @@ from django.test import SimpleTestCase, tag
 
 from tools.structural import bar
 
+PACKAGE = f"github:DeusData/{bar.TOOL}"
 COLUMNS = ["a.file_path", "b.file_path", "a.name", "b.name"]
 # Two functions alike enough for the graph, outside tests, and one pair inside them.
 SOURCE = {
@@ -33,10 +34,11 @@ def answer(rows: list[list[str]]) -> list[dict]:
 
 @tag("source")
 class GraphToolTests(SimpleTestCase):
-    def test_the_bar_installs_the_tool_mise_pins_and_runs_its_binary(self):
-        """A lazy tool installs only when asked by name, and resolves by its binary."""
+    def test_the_command_the_bar_runs_installs_the_release_mise_pins(self):
+        """A lazy tool from a github: backend installs on first use only of
+        the commands its lazy_bins names."""
         declared = tomllib.loads((bar.ROOT / "mise.toml").read_text(encoding="utf-8"))["tools"]
-        self.assertIn(bar.TOOL, declared[bar.PACKAGE].get("lazy_bins", []))
+        self.assertIn(bar.TOOL, declared[PACKAGE].get("lazy_bins", []))
 
 
 class CompareTests(SimpleTestCase):
@@ -52,7 +54,6 @@ class CompareTests(SimpleTestCase):
             for name, value in {
                 "ROOT": root,
                 "BASELINE": root / "baseline.txt",
-                "graph_binary": lambda: "graph",
                 "cli": lambda *_: {},
                 "build_inspector": lambda store: store / "inspector",
                 "graph_pages": lambda *_: answer(rows),
