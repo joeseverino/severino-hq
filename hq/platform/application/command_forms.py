@@ -7,6 +7,7 @@ from typing import Any, ClassVar, override
 from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
+from django.utils.datastructures import MultiValueDict
 
 from .capabilities import CapabilitySpec
 from .command_targets import CommandTargetOption
@@ -155,7 +156,7 @@ class CapabilityCommandForm(forms.Form):
         super().__init__(*args, **kwargs)
         if "idempotency_key" in self.fields and not self.is_bound:
             self.fields["idempotency_key"].initial = f"command:{secrets.token_urlsafe(18)}"
-        if not self.is_bound or not hasattr(self.data, "getlist"):
+        if not self.is_bound or not isinstance(self.data, MultiValueDict):
             return
         allowed = set(self.fields) | {"csrfmiddlewaretoken"}
         unknown = sorted(set(self.data) - allowed)
