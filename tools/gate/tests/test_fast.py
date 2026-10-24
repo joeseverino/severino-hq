@@ -16,7 +16,8 @@ from django.test import tag
 from hq.config.sandbox import PREFIX, sweep_abandoned
 from tests.mise_tasks import mise_tasks
 from tools.gate import fast as fast_gate, verdict as gate_verdict
-from tools.gate.tests.base import GateTestCase
+from tools.gate.tests.base import UNITTEST, GateTestCase
+from tools.gate.verdict import FailedTest
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -189,14 +190,15 @@ class FastGateNestedLayoutTests(GateTestCase):
                 self.assertTrue(fast_gate.is_test(Path("tests/fuzz/properties.py")))
 
 
-# What a failing `mise run -c` and a failing test run print, as they print it.
+# What a failing `mise run -c` prints at its end, as it prints it.
 FAILING = r"""
 import sys
 sys.stdout.write("..F")
 sys.stdout.flush()
-sys.stderr.write("\nFAIL: test_z (hq.x.tests.test_y.Case.test_z)\n")
-sys.stderr.write("ERROR: setUpClass (hq.x.tests.test_w.Other)\n")
-print("[checks] [checks:ruff] exited with status 1")
+print("\nFinished in 1.0s")
+print("ERROR 2 task(s) failed:")
+print("[checks] exited with status 1")
+print("[checks:ruff] exited with status 1")
 sys.exit(1)
 """
 
@@ -215,7 +217,6 @@ class Case(unittest.TestCase):
         self.assertEqual("expected", "found")
 
     def test_raises(self):
-        \"\"\"A description the runner prints under the header.\"\"\"
         missing()
 """
 
@@ -238,19 +239,18 @@ class GateVerdictTests(GateTestCase):
             check=False,
         )
 
-    def test_the_last_line_names_the_failed_task_and_tests_after_the_output_unchanged(self):
+    def test_the_last_line_names_the_tasks_mise_says_failed_after_the_output_unchanged(self):
         result = self.gate(sys.executable, "-c", FAILING)
         self.assertEqual(result.returncode, 1)
         *output, last = result.stdout.splitlines()
         self.assertIn("..F", output)
-        self.assertIn("FAIL: test_z (hq.x.tests.test_y.Case.test_z)", output)
+        self.assertIn("[checks:ruff] exited with status 1", output)
         self.assertTrue(last.startswith("[check] FAILED"), last)
-        for named in ("checks:ruff", "hq.x.tests.test_y.Case.test_z", "hq.x.tests.test_w.Other.setUpClass"):
-            self.assertIn(named, last)
+        self.assertIn("checks; checks:ruff", last)
 
     def test_the_verdict_is_kept_whole_in_the_file_it_names(self):
         tests = [f"hq.x.tests.test_y.Case.test_{n}" for n in range(gate_verdict.SHOWN + 2)]
-        failed = gate_verdict.Step("tests", ok=False, tasks=["checks:ruff"], tests=tests)
+        failed = gate_verdict.Step("tests", ok=False, tasks=["checks:ruff"], tests=[FailedTest(test) for test in tests])
         with patch("sys.stdout", new_callable=io.StringIO) as out:
             gate_verdict.close("test at main", 0.0, [failed])
         *_, named, last = out.getvalue().splitlines()
@@ -261,12 +261,13 @@ class GateVerdictTests(GateTestCase):
         self.assertIn("and 2 more", last)
         self.assertEqual(every, ["checks:ruff", *tests])
 
-    def test_the_kept_verdict_says_why_each_test_failed(self):
-        """The runner's own report, so the file is read as a real failure prints."""
+    def test_the_last_line_names_the_tests_the_runner_says_failed_and_the_file_says_why(self):
         with tempfile.TemporaryDirectory() as folder:
             Path(folder, "test_example.py").write_text(RUNNER_FAILURES)
-            result = self.gate(sys.executable, "-m", "unittest", "discover", "-s", folder, "-t", folder)
+            result = self.gate(sys.executable, "-c", UNITTEST, "discover", "-s", folder, "-t", folder)
         self.assertEqual(result.returncode, 1)
+        last = result.stdout.splitlines()[-1]
+        self.assertIn("tests: test_example.Case.test_compares, test_example.Case.test_raises", last)
         kept = Path(gate_verdict.VERDICTS, "check.txt").read_text().splitlines()
         self.assertIn("test_example.Case.test_compares: AssertionError: 'expected' != 'found'", kept)
         self.assertIn("test_example.Case.test_raises: LookupError: no example.invalid record", kept)
@@ -274,13 +275,13 @@ class GateVerdictTests(GateTestCase):
         self.assertTrue(any("missing()" in line for line in traceback), traceback)
 
     def test_a_pass_says_passed(self):
-        result = self.gate(sys.executable, "-c", "print('FAIL: test_z (a.B.test_z)')")
+        result = self.gate(sys.executable, "-c", "print('[checks:ruff] exited with status 1')")
         self.assertEqual(result.returncode, 0)
         self.assertTrue(result.stdout.splitlines()[-1].startswith("[check] passed in"))
 
     def test_fast_names_each_failed_step_and_keeps_its_pass_line(self):
         ruff = gate_verdict.Step("tasks", ok=False, tasks=["checks:ruff"])
-        tests = gate_verdict.Step("tests", ok=False, tests=["hq.x.tests.test_y.Case.test_z"])
+        tests = gate_verdict.Step("tests", ok=False, tests=[FailedTest("hq.x.tests.test_y.Case.test_z")])
         integrity = gate_verdict.Step("patch integrity", ok=False)
         for steps, expected in (
             ([ruff, tests, integrity], ": checks:ruff; tests: hq.x.tests.test_y.Case.test_z; patch integrity"),

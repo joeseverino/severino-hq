@@ -32,7 +32,7 @@ Every gate and server is a mise task. These are the ones to start from;
 | Task | What it is |
 | --- | --- |
 | `mise run fast` | The inner loop: the quick gates and the tests the change reaches. |
-| `mise run test <label>...` | `manage.py test` on the labels named, in parallel, as the gates run it; options after the labels reach it as typed. |
+| `mise run test <label>...` | `manage.py test` on the labels named, in parallel, as the gates run it; options after the labels reach it as typed. It closes on a verdict line as `fast` does, kept in `var/gate/test.txt`. |
 | `mise run test --at <ref> [--keep <path>]... <label>...` | The same on `<ref>`'s code with this tree's test files laid over it (every `tests/` directory and the browser gates' modules, uncommitted work included): does a new test fail on the old code, was a failure already there. `--keep` leaves a support file (a test file that is not `test*.py` and not named by a label) as the ref has it, for a check whose logic lives in a gate, probe or helper; the closing line counts the test modules and names each support file laid over or kept. A label that does not import at `<ref>` is its own verdict, `DOES NOT IMPORT`, exit 3: no test ran on that code. The throwaway worktree goes on every exit. |
 | `mise run fix` | Write Ruff's fixes and format and `mise fmt`'s, so the lint gates have nothing to report. |
 | `mise doctor project` | Whether this checkout can compose its extensions, with the fix for each gap. |
@@ -89,10 +89,11 @@ to a job never touches the repository's settings (`VerdictNeedsTests`).
 `mise run check` answers "does
 my change work?"; `mise run ci` answers "will the pipeline accept it?" and
 keeps going past a failure to name every gate that failed. `fast` and `check`
-end on a verdict line (`tools/gate/verdict.py`) naming each failed task and
-test, kept with every name in full in `var/gate/<gate>.txt`, whose path the
-line above it prints; there each failed test carries the exception it raised,
-and its traceback follows the list. The suite runs one worker per core (per performance core on Apple
+end on a verdict line (`tools/gate/verdict.py`) naming each failed task, as
+mise's `-c` summary names it, and each failed test, as the test runner writes
+it into the folder `HQ_TEST_REPORTS` names, kept with every name in full in
+`var/gate/<gate>.txt`, whose path the line above it prints; there each failed
+test carries the exception it raised, and its traceback follows the list. The suite runs one worker per core (per performance core on Apple
 silicon); `DJANGO_TEST_PROCESSES` overrides it, and `mise run fast --parallel 1`
 rules parallelism out when a failure looks order- or isolation-dependent.
 

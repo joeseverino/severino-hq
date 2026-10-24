@@ -12,7 +12,9 @@ from unittest.mock import patch
 from django.test import tag
 
 from tools.gate import at
-from tools.gate.tests.base import GateTestCase
+from tools.gate.tests.base import UNITTEST, GateTestCase
+
+CHECKOUT = Path(__file__).resolve().parents[3]
 
 # Stands in for manage.py test: records what it ran on, then exits with the status it is given.
 PROBE = """
@@ -154,9 +156,12 @@ class TestAtRefTests(GateTestCase):
         self.assert_nothing_left()
 
     def run_unittest_at_old(self, test: str) -> tuple[int, str]:
-        """The label run by the real test loader, so its report reads as a real one does."""
+        """The label run by the real test loader, so its failures read as a real run's do."""
         self.write("tests/test_app.py", test)
-        with patch.object(at, "UV_RUN", [sys.executable, "-m", "unittest"]):
+        # A package, so `tests` is this one rather than the checkout's the runner is imported from.
+        self.write("tests/__init__.py", "")
+        os.environ["PYTHONPATH"] = str(CHECKOUT)
+        with patch.object(at, "UV_RUN", [sys.executable, "-c", UNITTEST]):
             return self.run_main("--at", self.old, "tests.test_app")
 
     def test_a_label_that_does_not_import_at_the_ref_is_not_a_failing_test(self):
@@ -209,10 +214,14 @@ class TestAtRefTests(GateTestCase):
 class TestHereTests(GateTestCase):
     def test_without_at_what_follows_the_labels_reaches_manage_py_test_as_typed(self):
         typed = ["hq.example.tests", "--parallel", "1", "-k", "example"]
-        with patch.object(at.os, "execv", side_effect=SystemExit) as execv, self.assertRaises(SystemExit):
-            at.main(typed)
+        with (
+            patch.object(at, "run", return_value=at.Step("test", ok=False, code=1)) as run,
+            patch("sys.stdout", io.StringIO()) as out,
+        ):
+            code = at.main(typed)
 
-        program, argv = execv.call_args.args
-        self.assertEqual(program, sys.executable)
-        self.assertEqual(argv[1:3], ["manage.py", "test"])
+        self.assertEqual(code, 1)
+        argv = run.call_args.args[1]
+        self.assertEqual(argv[:3], [sys.executable, "manage.py", "test"])
         self.assertEqual(argv[-len(typed) :], typed)
+        self.assertTrue(out.getvalue().splitlines()[-1].startswith("[test] FAILED"))

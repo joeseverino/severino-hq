@@ -1,4 +1,5 @@
-"""The test task: manage.py test on the labels named, here or at another ref.
+"""The test task: manage.py test on the labels named, here or at another ref,
+closing on the line tools/gate/verdict.py prints.
 
     mise run test <label>... [manage.py test options]
     mise run test --at <ref> [--keep <path>]... <label>... [manage.py test options]
@@ -31,7 +32,7 @@ import signal
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import django
@@ -190,14 +191,11 @@ def unimported(step: Step) -> bool:
     """Whether a label's module raised on import at the ref; its name then stands for the module the loader tried."""
 
     failed = [
-        test
-        for test in step.tests
-        if test.startswith(FAILED_IMPORT) and any(line.startswith(IMPORT_ERROR) for line in step.reports.get(test, ()))
+        each for each in step.tests if each.test.startswith(FAILED_IMPORT) and each.exception.startswith(IMPORT_ERROR)
     ]
-    for test in failed:
-        module = test.removeprefix(FAILED_IMPORT)
-        step.tests[step.tests.index(test)] = module
-        step.reports[module] = step.reports.pop(test, [])
+    step.tests = [
+        replace(each, test=each.test.removeprefix(FAILED_IMPORT)) if each in failed else each for each in step.tests
+    ]
     return bool(failed)
 
 
@@ -232,8 +230,8 @@ def light(argv: list[str]) -> bool:
         labels = options.pop("args")
         if not labels:
             return False
-        # One suite, not a parallel run's partition of it.
-        runner = get_runner(settings, options["testrunner"])(**(options | {"parallel": 1}))
+        # One suite, not a parallel run's partition of it, loaded without a word: the run says what it found.
+        runner = get_runner(settings, options["testrunner"])(**(options | {"parallel": 1, "verbosity": 0}))
         return not runner.needs_the_turn(runner.build_suite(labels))
     except Exception, SystemExit:  # noqa: BLE001 - manage.py says what stopped it, in the turn
         return False
@@ -253,9 +251,20 @@ def take_the_turn(argv: list[str]) -> None:
         os.execv(HEAVY, [str(HEAVY), "sh", "-c", IN_TURN, "sh", sys.executable, "-m", "tools.gate.at", *argv])
 
 
+def run_here(argv: list[str]) -> int:
+    started = time.monotonic()
+    try:
+        step = run("test", [sys.executable, *TEST, *argv])
+    except KeyboardInterrupt:
+        return 130
+    close("test", started, [step])
+    return step.code
+
+
 def main(argv: list[str]) -> int:
+    signal.signal(signal.SIGTERM, stop)
     if not is_at(argv):
-        os.execv(sys.executable, [sys.executable, *TEST, *argv])
+        return run_here(argv)
     try:
         options, args = ARGS.parse_known_args(argv)
     except argparse.ArgumentError as error:
@@ -264,7 +273,6 @@ def main(argv: list[str]) -> int:
     if not options.at or not all(options.keep):
         print(f"{USAGE}\n--at and --keep each need a value", file=sys.stderr)
         return 2
-    signal.signal(signal.SIGTERM, stop)
     try:
         return run_at(options.at, [rooted(path) for path in options.keep], args)
     except (RefError, KeepRefused) as error:
