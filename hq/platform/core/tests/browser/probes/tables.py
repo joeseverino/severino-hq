@@ -187,8 +187,10 @@ _UNPADDED_CELLS = (
     "(selector) => {"
     + _DESCRIBE
     + """
+  // A dialog or popover placed in a band and shown lays out in the top
+  // layer, not in the band.
   return [...document.querySelectorAll(selector)]
-    .filter((el) => el.getBoundingClientRect().width > 0)
+    .filter((el) => el.getBoundingClientRect().width > 0 && !el.matches(':modal, :popover-open'))
     .filter((el) => {
       const style = getComputedStyle(el);
       return parseFloat(style.paddingLeft) < 4 || parseFloat(style.paddingTop) < 4;

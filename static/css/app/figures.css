@@ -589,16 +589,16 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 /* The links chooser opens as a dialog; "Edit" is its trigger. */
 .ext-edit { margin-left: auto; color: var(--muted); font-size: var(--text-xs); }
 .ext-edit:hover { color: var(--ink); }
-/* One row per choice, each the same height, with the label and its subtitle in
-   fixed columns so the ticks line up whatever the words are. */
+/* One row per choice: the tick, the label whole on its line while it fits,
+   then its subtitle at the end, wrapping in whatever room the label leaves. */
 .ext-choices { list-style: none; margin: 0 0 var(--space-6); padding: 0; display: grid; gap: var(--space-1); max-height: 15rem; overflow-y: auto; }
 .ext-choices label {
-  display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  display: grid; grid-template-columns: auto auto 1fr; align-items: center;
   gap: var(--space-4); font-size: var(--text-sm); padding: var(--space-2) var(--space-3); border-radius: 6px; cursor: pointer;
 }
 .ext-choices label:hover { background: var(--bg-tint); }
 .ext-choice-label { overflow-wrap: anywhere; }
-.ext-choice-sub { font-size: var(--text-xs); white-space: nowrap; }
+.ext-choice-sub { font-size: var(--text-xs); text-align: end; }
 .ext-chooser-actions { display: flex; align-items: center; gap: var(--space-4); }
 .ext-chooser-status { font-size: var(--text-xs); }
 .icon { width: 1em; height: 1em; flex: none; }
