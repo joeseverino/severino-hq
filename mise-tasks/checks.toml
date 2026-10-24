@@ -1,5 +1,5 @@
 # The Checks job: every checks:* gate here and under mise-tasks/checks/, and the
-# drift:* gates (tasks/drift.toml).
+# drift:* gates (drift.toml).
 
 ["checks:ruff"]
 description = "Ruff lints the Python and holds it to its format"

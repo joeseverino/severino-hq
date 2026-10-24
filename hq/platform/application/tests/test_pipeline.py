@@ -842,7 +842,7 @@ class GateReferenceTests(SimpleTestCase):
 
     def test_a_task_declared_outside_mise_toml_names_no_file_in_its_env(self):
         """mise reads an env file, and renders ``config_root`` inside env, from the
-        directory of the file that declares the task: in tasks/ or mise-tasks/ a
+        directory of the file that declares the task: in mise-tasks/ a
         checkout path would point beneath that directory instead."""
         declared_elsewhere = {
             name: task for name, task in mise_tasks().items() if Path(task["config_sources"][0]) != ROOT / "mise.toml"

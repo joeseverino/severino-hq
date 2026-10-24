@@ -23,7 +23,6 @@ import re
 import subprocess
 import sys
 import time
-import tomllib
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -58,7 +57,14 @@ TASKS: dict[str, tuple[str, ...]] = {
 UNREAD = {"checks:structural": TEST}
 # What every gate reads: the dependencies, the tool pins and the task
 # definitions. A change to one runs them all.
-EVERY_TASK = ("pyproject.toml", "uv.lock", "mise.toml", "mise.lock", "tasks/*.toml", "tools/pipeline/toolchain.env")
+EVERY_TASK = (
+    "pyproject.toml",
+    "uv.lock",
+    "mise.toml",
+    "mise.lock",
+    "mise-tasks/*.toml",
+    "tools/pipeline/toolchain.env",
+)
 # Never part of the Django suite: other languages and vendored trees.
 SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
 ALWAYS = ("architecture", "new_domain")
@@ -89,17 +95,10 @@ SHARED_UI = (
 )
 
 
-def task_sources() -> tuple[str, ...]:
-    """Where mise reads this checkout's tasks: mise.toml and what its task_config includes."""
+def defines_tasks(path: str) -> bool:
+    """A file mise reads this checkout's tasks from: mise.toml, or one in mise-tasks/, mise's default task directory."""
 
-    config = tomllib.loads((ROOT / "mise.toml").read_text(encoding="utf-8"))
-    return ("mise.toml", *config.get("task_config", {}).get("includes", ()))
-
-
-def defines_tasks(path: str, sources: tuple[str, ...]) -> bool:
-    """A file mise reads tasks from: one a source names or matches, or one inside a source directory."""
-
-    return any(fnmatch(path, source) or fnmatch(path, f"{source}/*") for source in sources)
+    return path == "mise.toml" or path.startswith("mise-tasks/")
 
 
 def touches_shared_ui(paths: list[str]) -> bool:
@@ -319,11 +318,10 @@ def affected(changed: list[str], deleted: list[str], files: list[Path]) -> tuple
     seen: set[str] = set()
     seeds: set[str] = set()
     touched: set[str] = set()
-    sources = task_sources()
     for path in [*changed, *deleted]:
         if path.endswith(".py"):
             seeds.add(module_name(Path(path)))
-        elif defines_tasks(path, sources):
+        elif defines_tasks(path):
             seeds.add(TASK_READER)
         pkg = owner(path, apps)
         if pkg:

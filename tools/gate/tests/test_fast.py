@@ -95,8 +95,8 @@ class FastGateMappingTests(GateTestCase):
             self.assertEqual(chosen, ["test_arguments", "test_segments", "test_string"])
 
     def test_a_task_definition_change_selects_the_tests_that_read_the_tasks(self):
-        """A task moved between mise.toml, tasks/ and mise-tasks/ is read through tests.mise_tasks, by no path."""
-        for changed in ("mise.toml", "tasks/browser.toml", "mise-tasks/suite/as-image"):
+        """A task moved between mise.toml and mise-tasks/ is read through tests.mise_tasks, by no path."""
+        for changed in ("mise.toml", "mise-tasks/browser.toml", "mise-tasks/suite/as-image"):
             with self.subTest(changed=changed):
                 self.assertIn("hq.platform.core.tests.test_browser_gate_tasks", self.labels(changed))
         self.assertNotIn("hq.platform.core.tests.test_browser_gate_tasks", self.labels("docs/Development.md"))
@@ -147,7 +147,7 @@ class FastGateTaskSelectionTests(GateTestCase):
         self.assertIn("checks:structural", fast_gate.selected_tasks(both))
 
     def test_a_change_to_what_every_gate_reads_runs_them_all(self):
-        for changed in ("uv.lock", "tasks/checks.toml"):
+        for changed in ("uv.lock", "mise-tasks/checks.toml"):
             with self.subTest(changed=changed):
                 self.assertEqual(fast_gate.selected_tasks([changed]), tuple(fast_gate.TASKS))
 

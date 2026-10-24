@@ -7,7 +7,7 @@ name: CI
 # reached from a pull request.
 #
 # The gates themselves are declared once, as mise tasks in their job's file
-# under tasks/ (or mise-tasks/): each job below runs the aggregate of its name,
+# under mise-tasks/: each job below runs the aggregate of its name,
 # and `mise run ci` runs the same list on a developer's machine. A gate is
 # added there, never here.
 #
@@ -92,7 +92,7 @@ jobs:
           go: true
           npm: true
       - name: Checks
-        # Every gate named checks:* (tasks/checks.toml, mise-tasks/checks/)
+        # Every gate named checks:* (mise-tasks/checks.toml, mise-tasks/checks/)
         # and drift:*. Each runs to the end, and the last lines of this step
         # name every one that failed.
         run: mise run -c checks
@@ -127,7 +127,7 @@ jobs:
           # The live bridge tests build the controller.
           go: true
       - name: Tests
-        # Every gate named tests:* (tasks/tests.toml, mise-tasks/tests/).
+        # Every gate named tests:* (mise-tasks/tests.toml, mise-tasks/tests/).
         run: mise run tests
 
   # Real-browser layout invariants over synthetic example.* pages
@@ -159,7 +159,7 @@ jobs:
       - uses: ./.github/actions/toolchain
       - name: Browser
         # This leg's browser:* gate. GateReferenceTests holds the legs to the
-        # gates tasks/browser.toml declares, so the matrix cannot fall behind it.
+        # gates mise-tasks/browser.toml declares, so the matrix cannot fall behind it.
         env:
           GATE: browser:${{ matrix.gate }}
         run: mise run "$GATE"
@@ -189,7 +189,7 @@ jobs:
         with:
           go: true
       - name: Controller
-        # Every gate named controller:* (tasks/controller.toml).
+        # Every gate named controller:* (mise-tasks/controller.toml).
         run: mise run -c controller
 
   # The one writer of the caches the jobs above restore, on every push to main
@@ -328,7 +328,7 @@ jobs:
       # On main only: a pull request's image is checked by Image checks,
       # alongside its composition.
       - name: Every check an image must pass
-        # Every gate named image:verify:* (tasks/image.toml), against the image just built.
+        # Every gate named image:verify:* (mise-tasks/image.toml), against the image just built.
         if: env.PROVEN == '' && github.event_name == 'push'
         env:
           IMAGE: ${{ steps.build.outputs.image }}
@@ -417,7 +417,7 @@ jobs:
         run: docker pull --quiet "$IMAGE"
       - uses: ./.github/actions/toolchain
       - name: Every check an image must pass
-        # Every gate named image:verify:* (tasks/image.toml).
+        # Every gate named image:verify:* (mise-tasks/image.toml).
         run: mise run -c image
 
   # A pull request's composition: this image plus every admitted extension,

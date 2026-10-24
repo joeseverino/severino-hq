@@ -29,7 +29,7 @@ naming every failed task and test.
   `regen` for derived files.
 
 A CI job runs the aggregate of its name, so a gate goes in its job's file under
-`tasks/` (`tasks/checks.toml` for `checks:*`), never in a workflow.
+`mise-tasks/` (`mise-tasks/checks.toml` for `checks:*`), never in a workflow.
 
 The composed suite (`suite:as-image`, run as the image runs it) is where the
 host and its extensions first meet, which CI cannot reach. The machine's own
