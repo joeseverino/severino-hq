@@ -54,21 +54,23 @@ def reaches_out() -> None:
 
 
 _NO_BREAK = re.compile(r"[\u00a0\u202f]|&nbsp;|&#160;|&#x0*a0;", re.IGNORECASE)
+_JOINER = re.compile(r"\u2060|&#8288;|&#x0*2060;", re.IGNORECASE)
 
 
 def plain(text: str | bytes) -> str:
-    """Text with the host's no-break spaces read as spaces.
+    """Text with the host's no-break spaces read as spaces, and its word joiners as nothing.
 
-    The host keeps a number with its unit ("2\u00a0weeks") and may change
-    where it does. A test comparing words it chose against what a page or a
-    value says reads both through this, so that choice is never its to pin:
+    The host keeps a number with its unit ("2\u00a0weeks") or its sign
+    ("\u2212\u2060$5.00") and may change where it does. A test comparing
+    words it chose against what a page or a value says reads both through
+    this, so that choice is never its to pin:
 
         self.assertIn("Renewed for 2 weeks", plain(response.content))
     """
 
     if isinstance(text, bytes):
         text = text.decode("utf-8")
-    return _NO_BREAK.sub(" ", text)
+    return _JOINER.sub("", _NO_BREAK.sub(" ", text))
 
 
 # Entering the substituting scope is a test affordance, not part of the

@@ -562,7 +562,10 @@ deployment reads `hq_sdk.site.host()`, never a setting.
 
 An amount is written by `{{ amount|money }}` in a template and
 `hq_sdk.money.money` in Python: "$1,234.50", a true minus sign before the
-dollar, `money:"whole"` or `cents=False` for a figure that is scanned. An
+dollar, `money:"whole"` or `cents=False` for a figure that is scanned, and
+`plus=True` for a change signed either way. A debt is a negative value: no
+extension writes a sign of its own, since the host holds the sign to its
+figure so a line never ends between them. An
 overview says what it is built from with `hq_sdk.pages.built_from(plugin.id)`,
 a link to the project that names the extension's repository. An extension's
 suite checks its templates for a `{# #}` comment left open with

@@ -11,6 +11,7 @@ from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, override_settings, tag
 
 from hq_sdk import contract, template_contract, text_contract, validation
+from hq_sdk.money import money
 from hq_sdk.pages import PageAction, PageDialog, page_context
 from hq_sdk.site import host
 from hq_sdk.testing import plain
@@ -206,9 +207,11 @@ class PageDialogTests(SimpleTestCase):
 
 
 class TextHelperTests(SimpleTestCase):
-    def test_plain_reads_no_break_spaces_as_spaces(self):
+    def test_plain_reads_no_break_spaces_as_spaces_and_drops_word_joiners(self):
         self.assertEqual(plain("2\xa0weeks, 3 days"), "2 weeks, 3 days")
         self.assertEqual(plain(b"2&nbsp;weeks 2&#160;days 2\xc2\xa0hours"), "2 weeks 2 days 2 hours")
+        self.assertEqual(plain(money(-5)), "\u2212$5.00")
+        self.assertEqual(plain(b"\xe2\x88\x92&#8288;$5"), "\u2212$5")
 
     @override_settings(SEVERINO_SITE_HOST="hq.example.com")
     def test_the_site_host_is_the_deployments(self):
