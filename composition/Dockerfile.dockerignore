@@ -2,7 +2,5 @@
 # toolchain its installer's uv comes from: nothing else.
 *
 !build/composition/
-!.github/actions/toolchain/install-mise.sh
-!.github/actions/toolchain/mise-version.sh
 !mise.lock
 !mise.toml

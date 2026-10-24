@@ -1,5 +1,6 @@
 """The toolchain gate holds mise.lock to every pinned tool, mise's Go to
-go.mod, and the images to taking their build tools from the lock."""
+go.mod, and the images to taking their build tools from the lock and mise
+from its image at min_version."""
 
 from django.test import SimpleTestCase
 
@@ -7,12 +8,25 @@ from tools.pipeline import toolchain_lock as toolchain
 
 DIGEST = "sha256:" + "a" * 64
 BASE = f"FROM python:3.15-slim-trixie@{DIGEST} AS tools\n"
+MISE = "2026.10.18"
 
 
 class ImageTests(SimpleTestCase):
+    def foreign(self, text):
+        return toolchain.foreign_images({"Dockerfile": text}, MISE)
+
     def test_stages_of_the_python_base_pass(self):
         text = BASE + "FROM tools AS build\nCOPY --from=tools /opt/bin/uv /usr/local/bin/uv\nFROM ${HQ_IMAGE}\n"
-        self.assertEqual(toolchain.foreign_images({"Dockerfile": text}), [])
+        self.assertEqual(self.foreign(text), [])
+
+    def test_mise_from_its_image_at_min_version_by_digest_passes(self):
+        text = BASE + f"COPY --from=ghcr.io/jdx/mise:{MISE}@{DIGEST} /usr/local/bin/mise /usr/local/bin/mise\n"
+        self.assertEqual(self.foreign(text), [])
+
+    def test_mise_from_another_release_or_without_a_digest_fails(self):
+        for ref in (f"ghcr.io/jdx/mise:2026.10.4@{DIGEST}", f"ghcr.io/jdx/mise:{MISE}", f"ghcr.io/jdx/mise@{DIGEST}"):
+            with self.subTest(ref=ref):
+                self.assertTrue(self.foreign(f"{BASE}COPY --from={ref} /usr/local/bin/mise /usr/local/bin/mise\n"))
 
     def test_a_tool_taken_from_its_own_image_fails(self):
         for text in (
@@ -21,7 +35,7 @@ class ImageTests(SimpleTestCase):
             f"FROM golang:1.27.2-trixie@{DIGEST} AS controller\n",
         ):
             with self.subTest(text=text):
-                self.assertTrue(toolchain.foreign_images({"Dockerfile": text}))
+                self.assertTrue(self.foreign(text))
 
 
 class GoTests(SimpleTestCase):

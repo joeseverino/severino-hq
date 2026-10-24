@@ -3,8 +3,9 @@
 Every pinned tool is locked for every platform a gate runs on, and the images
 install their build tools from the same lock. The controller
 builds with mise's Go, a release of the language version go.mod names. An
-image takes nothing from another image but the Python it runs on, so no build
-tool has a second pin.
+image takes nothing from another image but the Python it runs on and mise from
+its own image, by digest, at the release min_version names, so no build tool
+has a second pin.
 """
 
 from __future__ import annotations
@@ -21,6 +22,10 @@ PLATFORMS = ("linux-x64", "macos-arm64")
 IMAGES = ("Dockerfile", "composition/Dockerfile")
 # The OS and interpreter the app runs on: a base, not a build tool.
 BASE_IMAGE = "python:"
+# The installer of every other build tool. Renovate moves its tag and digest
+# and min_version together.
+MISE_IMAGE = "ghcr.io/jdx/mise"
+MISE_PINNED = re.compile(r"ghcr\.io/jdx/mise:(?P<tag>[^@\s]+)@sha256:[0-9a-f]{64}")
 STAGE = re.compile(r"^FROM\s+(\S+)(?:\s+AS\s+(\S+))?", re.MULTILINE | re.IGNORECASE)
 COPY_FROM = re.compile(r"--from=(\S+)")
 GO_MOD = "controller/go.mod"
@@ -45,16 +50,25 @@ def missing(config: dict, lock: dict) -> list[str]:
     return found
 
 
-def foreign_images(images: dict[str, str]) -> list[str]:
+def foreign_image(ref: str, mise: str) -> str | None:
+    pinned = MISE_PINNED.fullmatch(ref)
+    if pinned and pinned["tag"] == mise:
+        return None
+    if ref.startswith(MISE_IMAGE):
+        return f"takes {ref}; mise comes from {MISE_IMAGE}:{mise}, the min_version release, by digest"
+    return f"takes {ref} from an image; a build tool installs from mise.lock"
+
+
+def foreign_images(images: dict[str, str], mise: str) -> list[str]:
     found = []
     for name, text in images.items():
         stages = STAGE.findall(text)
         own = {alias for _, alias in stages if alias}
-        found.extend(
-            f"{name} takes {ref} from an image; a build tool installs from mise.lock"
-            for ref in [ref for ref, _ in stages] + COPY_FROM.findall(text)
-            if ref not in own and not ref.startswith(("$", BASE_IMAGE))
-        )
+        refs = [ref for ref, _ in stages] + COPY_FROM.findall(text)
+        problems = [
+            foreign_image(ref, mise) for ref in refs if ref not in own and not ref.startswith(("$", BASE_IMAGE))
+        ]
+        found.extend(f"{name} {problem}" for problem in problems if problem)
     return found
 
 
@@ -76,7 +90,8 @@ def main() -> int:
     lock = tomllib.loads((ROOT / "mise.lock").read_text(encoding="utf-8"))
     unlocked = missing(config, lock)
     images = {name: (ROOT / name).read_text(encoding="utf-8") for name in IMAGES}
-    drift = go_drift(config, (ROOT / GO_MOD).read_text(encoding="utf-8")) + foreign_images(images)
+    drift = go_drift(config, (ROOT / GO_MOD).read_text(encoding="utf-8"))
+    drift += foreign_images(images, config["min_version"])
     for line in unlocked + drift:
         print(line, file=sys.stderr)
     if unlocked:

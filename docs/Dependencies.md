@@ -6,7 +6,7 @@ Where every pin lives, and how to move one.
 
 | What | Pinned in | Held by |
 | :--- | :--- | :--- |
-| Tools: Go, uv, CodeQL, Scorecard and the rest | [`mise.toml`](../mise.toml), checksums in [`mise.lock`](../mise.lock). The images install Go and uv from the same lock, with a mise whose release signature they check, at `min_version` | `checks:toolchain`; CodeQL also `checks:codeql-bundle`, the bundle the pinned action runs |
+| Tools: Go, uv, CodeQL, Scorecard and the rest | [`mise.toml`](../mise.toml), checksums in [`mise.lock`](../mise.lock). The images install Go and uv from the same lock, with mise copied from its image at `min_version`, by digest | `checks:toolchain`; CodeQL also `checks:codeql-bundle`, the bundle the pinned action runs |
 | Python packages | `pyproject.toml`, resolved with hashes in `uv.lock` | `checks:lockfile`, `checks:audit` |
 | Go and its modules | the release in `mise.toml`, of the language version `controller/go.mod` names; modules in `go.sum` | `checks:toolchain`, `controller:check` |
 | The Python base image, every stage's start | `Dockerfile` and `composition/Dockerfile`, by digest | `image:build`; `checks:toolchain` refuses any other image |

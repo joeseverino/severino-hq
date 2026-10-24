@@ -85,11 +85,16 @@
       "description": "Playwright and the image the browser jobs run in move as one update: a test holds them to one version.",
       "matchPackageNames": ["playwright", "mcr.microsoft.com/playwright/python"],
       "groupName": "playwright"
+    },
+    {
+      "description": "min_version and the mise image the image builds copy move as one update: checks:toolchain holds the image's tag to min_version.",
+      "matchPackageNames": ["jdx/mise", "ghcr.io/jdx/mise"],
+      "groupName": "mise"
     }
   ],
   "customManagers": [
     {
-      "description": "The mise release CI and the image builds install, which min_version decides; mise's own manager reads only the tools.",
+      "description": "The mise release CI installs, which min_version decides; mise's own manager reads only the tools.",
       "customType": "regex",
       "managerFilePatterns": ["/^mise\\.toml$/"],
       "matchStrings": ["min_version = \"(?<currentValue>[^\"]+)\""],

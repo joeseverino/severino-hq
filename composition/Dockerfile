@@ -12,17 +12,14 @@
 ARG HQ_IMAGE=scratch
 # uv at the release mise.toml pins, installed by mise from mise.lock, which
 # refuses a download whose checksum differs from it (as the host image's
-# tools stage does).
+# tools stage does, with the same mise).
 FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS tools
-RUN apt-get update && apt-get install -y --no-install-recommends curl minisign \
-    && rm -rf /var/lib/apt/lists/*
+COPY --from=ghcr.io/jdx/mise:2026.10.18@sha256:fc31de7b93d195613deb600d42c65a164b0205716ade38132aadeabac3838248 /usr/local/bin/mise /usr/local/bin/mise
 ENV MISE_LOCKED=1 \
     MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
-COPY .github/actions/toolchain/mise-version.sh .github/actions/toolchain/install-mise.sh ./bin/
 COPY mise.toml mise.lock ./
-RUN bin/install-mise.sh mise.toml /usr/local/bin/mise \
-    && mise install uv \
+RUN mise install uv \
     && install -D "$(mise which uv)" /opt/bin/uv
 
 # The installer uses the same Python ABI as HQ.
