@@ -316,6 +316,13 @@ base measured otherwise is printed under this checkout's, marked with the ref.
 `--css` takes CSS text or a file of it, a relative path read from the
 checkout.
 
+`mise run perf:report [--image] [--base <ref>]` measures how light and fast
+HQ is, page by page (server time and queries, bytes, requests, script time and
+layout shift in Chromium, memory, cold start), writes
+`var/perf/<commit>.json` and prints a table; with `--base` each number is
+shown beside how far it moved. It is a report, not a gate, and with `--base`
+it takes about ten minutes.
+
 A look holds still: the page's clock is frozen at the moment the run began
 (its `--base` run shares that instant), so a time a script reads is drawn
 alike in both, and each screenshot is taken with animations finished. A page
