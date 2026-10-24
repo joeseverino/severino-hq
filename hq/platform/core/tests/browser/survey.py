@@ -25,8 +25,8 @@ from hq.platform.core.tests.browser.probes.palette import (
     BUTTON_EDGES,
     CONTRAST,
     FAINT_LINES,
-    FIELD_EDGES,
     FIELD_CONTRAST,
+    FIELD_EDGES,
     LARGE_TEXT_CONTRAST,
     LINE_CONTRAST,
     TEXT_CONTRAST,
@@ -50,11 +50,11 @@ from hq.platform.core.tests.browser.probes.tables import (
     EMPTY_COLUMNS,
     PAST_THE_GUTTER,
     ROW_HEIGHTS,
+    ROW_LINES,
     TABLES,
     TABLES_THAT_DO_NOT_FIT,
     UNPADDED_CELLS,
     UNSEEN_COLUMNS,
-    ROW_LINES,
 )
 from hq.platform.core.tests.browser.probes.text import (
     ASIDE_BESIDE_ITS_HEADING,
@@ -67,7 +67,7 @@ from hq.platform.core.tests.browser.probes.text import (
 )
 from hq.platform.core.tests.browser.probes.tokens import NAMES_IN_TRACKS, STRANDED_MARKS, TOKEN_BREAKS
 from hq.platform.core.tests.browser.reading import _probe
-from hq.platform.core.tests.browser.selectors import TOKEN_SELECTORS, SELECTORS
+from hq.platform.core.tests.browser.selectors import SELECTORS, TOKEN_SELECTORS
 from hq.platform.core.tests.browser.widths import TARGET_MIN, WIDE, WIDE_REGION
 
 AUDIT = Path(__file__).parents[2] / "browser_audit.js"

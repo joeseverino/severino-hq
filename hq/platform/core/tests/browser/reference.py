@@ -293,9 +293,7 @@ class ReferenceBrowserTests(BrowserGate):
                 self.visit(WIDE)
                 painted[scheme] = self.page.evaluate(_REFERENCE_PAINT)
                 self.assert_painted_as_hq(painted[scheme], f"{scheme}-mode")
-                report = self.page.evaluate(
-                    CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_TEXT_CONTRAST]
-                )
+                report = self.page.evaluate(CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_TEXT_CONTRAST])
                 self.assertGreater(report["sampled"], 0)
                 self.assertEqual(report["found"], [])
         self.assertNotEqual(painted["light"]["page"], painted["dark"]["page"])

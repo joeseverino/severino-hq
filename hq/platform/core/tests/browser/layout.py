@@ -41,10 +41,10 @@ from hq.platform.core.tests.browser.probes.tables import (
     NAME_EDGES,
     PAST_THE_GUTTER,
     ROW_HEIGHTS,
+    ROW_LINES,
     TABLES,
     TABLES_THAT_DO_NOT_FIT,
     UNPADDED_CELLS,
-    ROW_LINES,
 )
 from hq.platform.core.tests.browser.probes.text import (
     ASIDE_BESIDE_ITS_HEADING,
@@ -54,28 +54,28 @@ from hq.platform.core.tests.browser.probes.text import (
 )
 from hq.platform.core.tests.browser.probes.tokens import SCRAP, SCRAPS, STRANDED_MARKS, TOKEN_BREAKS
 from hq.platform.core.tests.browser.reading import reads, taken
-from hq.platform.core.tests.browser.selectors import TOKEN_SELECTORS, SELECTORS
+from hq.platform.core.tests.browser.selectors import SELECTORS, TOKEN_SELECTORS
 from hq.platform.core.tests.browser.stress import ROUTE_PAGES, stress_estate
 from hq.platform.core.tests.browser.survey import (
-    AS_FINDINGS,
     _AUDIT,
     _CONTRAST_READ,
     _CUT_NAMES_READ,
     _CUT_WITH_ROOM_READ,
     _EMPTY_FRAMES_READ,
-    EVIDENCE_READ,
     _FORM_ROWS_READ,
     _FRAMES_READ,
     _LINES_READ,
     _PHRASES_READ,
-    ROUTE_ENDS_READ,
     _SIDEWAYS_READ,
     _SMALL_TARGETS_READ,
     _SPILLED_CELLS,
     _SPILLED_CONTROLS,
     _SPLIT_NAMES_READ,
-    SUMMARIES_READ,
     _UNDER_LABELS_READ,
+    AS_FINDINGS,
+    EVIDENCE_READ,
+    ROUTE_ENDS_READ,
+    SUMMARIES_READ,
 )
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, SPARSE_WIDTHS, WIDTHS
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES

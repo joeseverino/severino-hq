@@ -40,7 +40,7 @@ from hq.platform.core.tests.browser.probes.settle import (
 from hq.platform.core.tests.browser.reading import _in_one_trip, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, slow_frames, static_file
-from hq.platform.core.tests.browser.survey import AS_FINDINGS, _PALETTE, _as_is, geometry_probes
+from hq.platform.core.tests.browser.survey import _PALETTE, AS_FINDINGS, _as_is, geometry_probes
 from hq.platform.core.tests.browser.uncaught import Uncaught
 from hq.platform.core.tests.browser.widths import viewport
 
