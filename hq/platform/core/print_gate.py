@@ -4,9 +4,9 @@
 Django prints a ``{{ value }}``, ``{% cycle %}``, ``{% firstof %}`` and the
 translation tags through ``render_value_in_context``, which each module looks
 up in its own globals, and an escaped ``simple_tag``'s result through
-``conditional_escape`` in ``template.library``. ``install`` gates those names,
-and marks each node that prints through them while it renders, so the gate
-knows the template and line that printed.
+``conditional_escape`` in ``template.library``. ``install`` gates those names.
+A value printed is one type check; only a refused one looks up the stack for
+the node printing it, which carries the template and line that printed.
 
 A template is held when its origin lies in a template directory of HQ or of an
 installed extension app. Every other template is a third party's: Django's
@@ -16,8 +16,8 @@ directory at all.
 """
 
 import functools
+import inspect
 import os
-from contextvars import ContextVar
 from pathlib import Path
 
 from django.apps import apps
@@ -38,8 +38,8 @@ PRINTING = (
     i18n.BlockTranslateNode,
     library.SimpleNode,
 )
-# The node printing now, which carries its template's origin and its line.
-_node: ContextVar[base.Node] = ContextVar("hq_print_node")
+# The code of each printing node's render, by which a refusal finds its node.
+_RENDERS = frozenset(node.render.__code__ for node in PRINTING)
 
 
 @functools.cache
@@ -59,18 +59,15 @@ def _ours() -> tuple[str, ...]:
     return tuple(f"{Path(directory)}{os.sep}" for directory in directories)
 
 
-def _printing(render):
-    """``render`` of a node that prints, marking the node while it does."""
+def _printing() -> base.Node | None:
+    """The innermost node printing now: the ``self`` of the nearest printing
+    node's ``render`` on the stack, or None for a print outside any node."""
 
-    @functools.wraps(render)
-    def marked(self, context):
-        token = _node.set(self)
-        try:
-            return render(self, context)
-        finally:
-            _node.reset(token)
-
-    return marked
+    # Past this function and the gate that calls it.
+    frame = inspect.currentframe().f_back.f_back
+    while frame is not None and frame.f_code not in _RENDERS:
+        frame = frame.f_back
+    return None if frame is None else frame.f_locals["self"]
 
 
 def _gated(write):
@@ -81,7 +78,7 @@ def _gated(write):
         reason = refusal(value)
         if reason is not None:
             # The template that holds the print, not the root of its extends chain.
-            node = _node.get(None)
+            node = _printing()
             origin = getattr(node, "origin", None)
             if origin is not None and origin.name.startswith(_ours()):
                 value = refused(reason, f"{origin.template_name or origin.name}:{node.token.lineno}")
@@ -96,8 +93,6 @@ def install() -> None:
 
     if getattr(base.render_value_in_context, "hq_print_gate", False):
         return
-    for node in PRINTING:
-        node.render = _printing(node.render)
     gated = _gated(base.render_value_in_context)
     for module in (base, defaulttags, i18n):
         module.render_value_in_context = gated

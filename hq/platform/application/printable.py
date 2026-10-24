@@ -37,7 +37,8 @@ class Unprintable(TypeError):
 def refusal(value: object) -> str | None:
     """Why ``value`` cannot be printed as it is, or None when it can."""
 
-    if hasattr(value, "__html__") or isinstance(value, (str, Promise)):
+    # Text first: nearly every value a page prints is a str.
+    if isinstance(value, (str, Promise)) or hasattr(value, "__html__"):
         return None
     if isinstance(value, bool):
         return "a flag"

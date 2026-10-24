@@ -174,6 +174,14 @@ class PrintGateTests(SimpleTestCase):
         unplaced = base.VariableNode(base.FilterExpression("value", base.Parser([])))
         self.assertEqual(unplaced.render(Context({"value": True})), "True")
 
+    def test_a_printing_node_renders_through_django_s_own_render(self):
+        """The gate costs a printed value one type check: nothing wraps a
+        node's render, which runs for every value whether or not it is refused."""
+
+        for node in print_gate.PRINTING:
+            with self.subTest(node.__qualname__):
+                self.assertFalse(hasattr(node.render, "__wrapped__"))
+
     def test_installing_twice_gates_once(self):
         printing = base.render_value_in_context
         renders = [node.render for node in print_gate.PRINTING]
