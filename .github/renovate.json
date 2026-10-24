@@ -112,15 +112,6 @@
       "versioningTemplate": "npm"
     },
     {
-      "description": "The Trivy release the image scans run.",
-      "customType": "regex",
-      "managerFilePatterns": ["/^tools/pipeline/toolchain\\.env$/"],
-      "matchStrings": ["TRIVY_VERSION=(?<currentValue>\\S+)"],
-      "depNameTemplate": "aquasecurity/trivy",
-      "datasourceTemplate": "github-releases",
-      "versioningTemplate": "semver"
-    },
-    {
       "description": "The Cordon commit admission signs and verifies with, followed on its main branch.",
       "customType": "regex",
       "managerFilePatterns": ["/^tools/pipeline/toolchain\\.env$/"],

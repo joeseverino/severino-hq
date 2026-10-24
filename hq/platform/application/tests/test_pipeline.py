@@ -625,6 +625,8 @@ class PublicLogTests(SimpleTestCase):
         self.assertTrue(scans)
         for scan in scans:
             self.assertIn("format: json", scan)
+            # The Trivy mise.toml pins, never one the action downloads.
+            self.assertIn("skip-setup-trivy: true", scan)
 
     def test_withheld_output_leaves_the_runner_only_sealed(self):
         uploads = [step for step in self.steps if "actions/upload-artifact@" in step]
