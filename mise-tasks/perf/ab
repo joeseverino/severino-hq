@@ -1,0 +1,17 @@
+#!/bin/sh
+#MISE description="Whether a change moved a page's server time: this checkout's and a base's Django test client asked page by page, alternating, over many rounds, beside each page's rows, HTML and queries; perf:report says how light and fast HQ is, server and browser"
+#MISE env={SEVERINO_HQ_PLUGINS="{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH="{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"}
+#MISE timeout="1h"
+#USAGE arg "<base>" help="The ref to compare against, in a temporary worktree removed however the run ends"
+#USAGE arg "[page]..." help="The pages to ask; by default every page both refs' navigation lists"
+#USAGE flag "--here <ref>" help="Compare this ref, in a worktree too, rather than this checkout as it stands"
+#USAGE flag "--rounds <n>" default="30" help="Rounds of asking every page of both sides"
+#USAGE flag "--host-alone" help="Compose no extension on either side; a ref that refuses the extension set for its plugin API runs so on its own"
+
+# The harness is tools/perf/ab.py.
+set -eu
+
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+
+exec uv run python -m tools.perf.ab

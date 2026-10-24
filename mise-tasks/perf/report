@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="How light and fast HQ is, page by page: server time and queries, bytes, requests, script time and layout shift in Chromium, memory and cold start; a report that exits 0 whenever it measured"
+#MISE description="How light and fast HQ is, page by page: server time and queries, bytes, requests, script time and layout shift in Chromium, memory and cold start, kept run by run; perf:ab says whether a change moved a page's server time"
 #MISE extends="django"
 #MISE depends=[{task="setup:browser", args=["chromium"]}]
 #MISE env={SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION="0", SEVERINO_HQ_PLUGINS="{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH="{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"}
