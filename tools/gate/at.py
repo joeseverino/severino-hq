@@ -1,22 +1,25 @@
 """The test task: manage.py test on the labels named, here or at another ref,
 closing on the line tools/gate/verdict.py prints.
 
-What `--at` and `--keep` do is in docs/Development.md's task table. A run
-takes the heavy turn (tools/lib/heavy.sh) unless its tests are light: labels
-named, and none of the tests they load makes a test database or drives a
-browser. The whole suite is never light, so it is not loaded to say so.
+mise parses the task's arguments (its usage in tasks/tests.toml) and this
+reads what it parsed. What `--at` and `--keep` do is in docs/Development.md's
+task table. A run takes the heavy turn (tools/lib/heavy.sh) unless its tests
+are light: labels named, and none of the tests they load makes a test database
+or drives a browser. The whole suite is never light, so it is not loaded to say so.
 """
 
-import argparse
 import fnmatch
 import os
+import shlex
 import shutil
 import signal
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, replace
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import Self
 
 import django
 from django.conf import settings
@@ -42,7 +45,6 @@ HEAVY = ROOT / "tools" / "lib" / "heavy.sh"
 # process as the run that goes ahead, as tools/lib/heavy-turn.sh does a file
 # task's, and execs this module in it, keeping the pid.
 IN_TURN = 'SEVERINO_HEAVY_TASK=$$; export SEVERINO_HEAVY_TASK; exec "$@"'
-USAGE = "usage: mise run test --at <ref> [--keep <path>]... <label>... [manage.py test options]"
 
 
 class RefError(Exception):
@@ -182,14 +184,24 @@ def unimported(step: Step) -> bool:
     return bool(failed)
 
 
-# Only --at and --keep are this task's; every other argument, in the order
-# typed, is the labels and manage.py test's options. Without abbreviation, so
-# a shortened option meant for manage.py is never taken for one of these.
-ARGS = argparse.ArgumentParser(
-    prog="mise run test", usage=USAGE.removeprefix("usage: "), allow_abbrev=False, exit_on_error=False
-)
-ARGS.add_argument("--at", required=True)
-ARGS.add_argument("--keep", action="append", default=[])
+@dataclass(frozen=True)
+class Typed:
+    """The task's arguments as mise parsed them: ``at`` is None without --at,
+    and ``args`` is the labels and manage.py test's options in the order typed."""
+
+    at: str | None = None
+    keep: list[str] = field(default_factory=list)
+    args: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_mise(cls, environ: Mapping[str, str]) -> Self:
+        """mise exports each usage value, a repeated one shell-quoted and joined."""
+
+        return cls(
+            at=environ.get("usage_at"),
+            keep=shlex.split(environ.get("usage_keep", "")),
+            args=shlex.split(environ.get("usage_arguments", "")),
+        )
 
 
 def rooted(path: str) -> str:
@@ -220,18 +232,15 @@ def light(argv: list[str]) -> bool:
         return False
 
 
-def is_at(argv: list[str]) -> bool:
-    return bool(argv) and (argv[0] == "--at" or argv[0].startswith("--at="))
-
-
-def take_the_turn(argv: list[str]) -> None:
+def take_the_turn(typed: Typed) -> None:
     """Run again inside the heavy turn, unless this is that run or the tests
-    are light. A run at a ref builds a worktree, so it is never light."""
+    are light. A run at a ref builds a worktree, so it is never light. The
+    run in the turn inherits mise's parse through the environment."""
 
     if os.environ.get("SEVERINO_HEAVY_TASK") == str(os.getpid()):
         return
-    if is_at(argv) or not light(argv):
-        os.execv(HEAVY, [str(HEAVY), "sh", "-c", IN_TURN, "sh", sys.executable, "-m", "tools.gate.at", *argv])
+    if typed.at is not None or not light(typed.args):
+        os.execv(HEAVY, [str(HEAVY), "sh", "-c", IN_TURN, "sh", sys.executable, "-m", "tools.gate.at"])
 
 
 def run_here(argv: list[str]) -> int:
@@ -244,27 +253,23 @@ def run_here(argv: list[str]) -> int:
     return step.code
 
 
-def main(argv: list[str]) -> int:
+def main(typed: Typed) -> int:
     signal.signal(signal.SIGTERM, stop)
-    if not is_at(argv):
-        return run_here(argv)
-    try:
-        options, args = ARGS.parse_known_args(argv)
-    except argparse.ArgumentError as error:
-        print(f"{USAGE}\n{error}", file=sys.stderr)
-        return 2
-    if not options.at or not all(options.keep):
-        print(f"{USAGE}\n--at and --keep each need a value", file=sys.stderr)
+    if typed.at is None:
+        return run_here(typed.args)
+    if not typed.at or not all(typed.keep):
+        print("mise run test: --at and --keep each need a value", file=sys.stderr)
         return 2
     try:
-        return run_at(options.at, [rooted(path) for path in options.keep], args)
+        return run_at(typed.at, [rooted(path) for path in typed.keep], typed.args)
     except (RefError, KeepRefused) as error:
-        print(f"test --at {options.at}: {error}", file=sys.stderr)
+        print(f"test --at {typed.at}: {error}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:
         return 130
 
 
 if __name__ == "__main__":
-    take_the_turn(sys.argv[1:])
-    sys.exit(main(sys.argv[1:]))
+    typed = Typed.from_mise(os.environ)
+    take_the_turn(typed)
+    sys.exit(main(typed))

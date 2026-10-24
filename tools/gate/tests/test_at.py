@@ -75,10 +75,10 @@ class TestAtRefTests(GateTestCase):
         self.git("commit", "--quiet", "--no-verify", "-m", message)
         return self.git("rev-parse", "HEAD")
 
-    def run_main(self, *argv: str) -> tuple[int, str]:
+    def run_main(self, *args: str, at_ref: str, keep: tuple[str, ...] = ()) -> tuple[int, str]:
         out = io.TextIOWrapper(io.BytesIO(), write_through=True)
         with patch("sys.stdout", out):
-            code = at.main(list(argv))
+            code = at.main(at.Typed(at=at_ref, keep=list(keep), args=list(args)))
         return code, out.buffer.getvalue().decode()
 
     def assert_nothing_left(self):
@@ -86,7 +86,7 @@ class TestAtRefTests(GateTestCase):
         self.assertEqual(len(self.git("worktree", "list").splitlines()), 1)
 
     def test_the_refs_code_runs_under_this_trees_tests_and_its_status_comes_back(self):
-        code, out = self.run_main("--at", self.old, str(self.seen), "3")
+        code, out = self.run_main(str(self.seen), "3", at_ref=self.old)
 
         self.assertEqual(code, 3)
         seen = json.loads(self.seen.read_text())
@@ -101,7 +101,7 @@ class TestAtRefTests(GateTestCase):
         self.assert_nothing_left()
 
     def test_support_is_laid_over_and_named_and_test_modules_are_counted(self):
-        code, out = self.run_main("--at", self.old, str(self.seen), "1")
+        code, out = self.run_main(str(self.seen), "1", at_ref=self.old)
 
         self.assertEqual(code, 1)
         self.assertEqual(json.loads(self.seen.read_text())["support"], "new browser\n")
@@ -110,7 +110,7 @@ class TestAtRefTests(GateTestCase):
         self.assertNotIn("kept at the ref", verdict)
 
     def test_kept_support_runs_as_the_ref_has_it_and_the_line_says_so(self):
-        code, out = self.run_main("--at", self.old, "--keep", "hq/core/tests/browser/estate.py", str(self.seen), "0")
+        code, out = self.run_main(str(self.seen), "0", at_ref=self.old, keep=("hq/core/tests/browser/estate.py",))
 
         self.assertEqual(code, 0)
         seen = json.loads(self.seen.read_text())
@@ -123,12 +123,12 @@ class TestAtRefTests(GateTestCase):
 
     def test_a_module_a_label_names_is_a_test_module_whatever_its_name(self):
         label = "hq.core.tests.browser.estate.EstateTests"
-        code, out = self.run_main(f"--at={self.old}", str(self.seen), "0", label)
+        code, out = self.run_main(str(self.seen), "0", label, at_ref=self.old)
 
         self.assertEqual(code, 0)
         self.assertIn("4 test modules from this tree", out.strip().splitlines()[-1])
         with patch("sys.stderr", io.StringIO()) as err:
-            code, _ = self.run_main("--at", self.old, "--keep=hq/core/tests/browser/estate.py", label)
+            code, _ = self.run_main(label, at_ref=self.old, keep=("hq/core/tests/browser/estate.py",))
         self.assertEqual(code, 2)
         self.assertIn("is a test module", err.getvalue())
         self.assert_nothing_left()
@@ -136,20 +136,17 @@ class TestAtRefTests(GateTestCase):
     def test_a_keep_that_names_no_changed_support_is_refused(self):
         for keep in ("tests/test_app.py", "app.py", "hq/core/tests/browser/missing.py"):
             with self.subTest(keep=keep), patch("sys.stderr", io.StringIO()) as err:
-                code, _ = self.run_main("--at", self.old, "--keep", keep, str(self.seen), "0")
+                code, _ = self.run_main(str(self.seen), "0", at_ref=self.old, keep=(keep,))
                 self.assertEqual(code, 2)
                 self.assertIn(keep, err.getvalue())
                 self.assertFalse(self.seen.exists())
         with patch("sys.stderr", io.StringIO()) as err:
-            self.assertEqual(self.run_main("--at", self.old, "label", "--keep")[0], 2)
-        self.assertIn("--keep", err.getvalue().splitlines()[-1])
-        with patch("sys.stderr", io.StringIO()) as err:
-            self.assertEqual(self.run_main("--at", self.old, "--keep=", "label")[0], 2)
+            self.assertEqual(self.run_main("label", at_ref=self.old, keep=("",))[0], 2)
         self.assertIn("--keep", err.getvalue().splitlines()[-1])
         self.assert_nothing_left()
 
     def test_a_pass_at_the_ref_names_it(self):
-        code, out = self.run_main(f"--at={self.old}", str(self.seen), "0")
+        code, out = self.run_main(str(self.seen), "0", at_ref=self.old)
 
         self.assertEqual(code, 0)
         self.assertIn(f"at {self.old} ", out.strip().splitlines()[-1])
@@ -162,7 +159,7 @@ class TestAtRefTests(GateTestCase):
         self.write("tests/__init__.py", "")
         os.environ["PYTHONPATH"] = str(CHECKOUT)
         with patch.object(at, "UV_RUN", [sys.executable, "-c", UNITTEST]):
-            return self.run_main("--at", self.old, "tests.test_app")
+            return self.run_main("tests.test_app", at_ref=self.old)
 
     def test_a_label_that_does_not_import_at_the_ref_is_not_a_failing_test(self):
         code, out = self.run_unittest_at_old(
@@ -192,22 +189,22 @@ class TestAtRefTests(GateTestCase):
 
     def test_an_interrupted_run_leaves_no_worktree(self):
         with patch.object(at, "run", side_effect=KeyboardInterrupt):
-            code, _ = self.run_main("--at", self.old, "label")
+            code, _ = self.run_main("label", at_ref=self.old)
 
         self.assertEqual(code, 130)
         self.assert_nothing_left()
 
     def test_a_ref_that_names_no_commit_is_refused(self):
         with patch("sys.stderr", io.StringIO()) as err:
-            code, _ = self.run_main("--at", "no-such-ref", "label")
+            code, _ = self.run_main("label", at_ref="no-such-ref")
 
         self.assertEqual(code, 2)
         self.assertIn("no-such-ref", err.getvalue())
         self.assert_nothing_left()
 
-    def test_at_needs_a_ref(self):
+    def test_an_empty_ref_is_refused(self):
         with patch("sys.stderr", io.StringIO()):
-            self.assertEqual(self.run_main("--at")[0], 2)
+            self.assertEqual(self.run_main("label", at_ref="")[0], 2)
 
 
 @tag("source")
@@ -218,10 +215,25 @@ class TestHereTests(GateTestCase):
             patch.object(at, "run", return_value=at.Step("test", ok=False, code=1)) as run,
             patch("sys.stdout", io.StringIO()) as out,
         ):
-            code = at.main(typed)
+            code = at.main(at.Typed(args=typed))
 
         self.assertEqual(code, 1)
         argv = run.call_args.args[1]
         self.assertEqual(argv[:3], [sys.executable, "manage.py", "test"])
         self.assertEqual(argv[-len(typed) :], typed)
         self.assertTrue(out.getvalue().splitlines()[-1].startswith("[test] FAILED"))
+
+
+@tag("source")
+class TestTypedTests(GateTestCase):
+    def test_the_arguments_are_read_as_mise_exports_them(self):
+        # As mise exports `--at HEAD --keep 'x y' --keep z a.b -k "it's"`.
+        environ = {"usage_at": "HEAD", "usage_keep": "'x y' z", "usage_arguments": "a.b -k 'it'\\''s'"}
+
+        self.assertEqual(
+            at.Typed.from_mise(environ), at.Typed(at="HEAD", keep=["x y", "z"], args=["a.b", "-k", "it's"])
+        )
+
+    def test_without_at_there_is_no_ref(self):
+        self.assertIsNone(at.Typed.from_mise({"usage_arguments": "a.b"}).at)
+        self.assertEqual(at.Typed.from_mise({"usage_at": ""}).at, "")
