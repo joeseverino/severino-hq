@@ -352,10 +352,14 @@
      toner on paper. */
   h1, h2, h3, .section-head h2, .page-head h1 { color: var(--print-ink) !important; }
   .data-table th, .data-table td { border-bottom: 0.5pt solid var(--print-rule); padding: 4pt 6pt; }
-  .data-table thead th { background: none; border-bottom: 1pt solid var(--print-ink); }
+  /* The heading is pinned to a viewport that does not exist on paper. */
+  .data-table thead th {
+    background: none;
+    border-bottom: 1pt solid var(--print-ink);
+    position: static;
+    box-shadow: none;
+  }
   .table-scroll { overflow: visible; }
-  /* A heading pinned to a viewport that does not exist on paper. */
-  .data-table thead th { position: static; box-shadow: none; }
 
   /* Disclosures print closed, silently dropping their contents, and those
      are the numbers behind every drawing. */

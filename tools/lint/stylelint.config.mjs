@@ -42,6 +42,9 @@ export default {
     // CSS resolves an undefined custom property to an invalid value without
     // an error, so a typo'd token degrades to a browser default.
     "no-unknown-custom-properties": true,
+    // A selector's rule is written once per file and at-rule block. The test
+    // beside StyleContractTests holds it across sheets and `@layer` blocks.
+    "no-duplicate-selectors": true,
     // Color lives in tokens, so a theme is a set of token overrides; a literal
     // anywhere else stays a light-mode value on a dark page.
     "color-no-hex": true,

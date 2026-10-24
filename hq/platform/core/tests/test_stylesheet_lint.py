@@ -35,6 +35,7 @@ REFUSED = [
     (APP, ".facts dt { text-transform: uppercase; }", "rule-selector-property-disallowed-list"),
     (APP, ".band-label, .x { text-transform: uppercase; }", "rule-selector-property-disallowed-list"),
     (APP, ".kpi .label { text-transform: uppercase; }", "rule-selector-property-disallowed-list"),
+    (APP, ".a { color: var(--ink); } .a { color: var(--muted); }", "no-duplicate-selectors"),
     (REFERENCE, ".a { color: #fff; }", "color-no-hex"),
     (REFERENCE, ".a { background: color-mix(in srgb, var(--bg), var(--ink)); }", "function-disallowed-list"),
     (REFERENCE, ".a { font-family: serif; }", "property-disallowed-list"),
@@ -52,12 +53,14 @@ PASSED = [
 ]
 
 
-def lint(sheet: str, rules: list[str]) -> list[list[str]]:
-    """What Stylelint reports for each rule, the rules read as one file named `sheet`."""
+def lint(sheet: str, css: str) -> list[str]:
+    """The rules Stylelint reports for `css`, read as one file named `sheet`.
+
+    Each case is its own file, so no case shares a selector with another."""
 
     result = subprocess.run(
         ["node", str(STYLELINT), "--config", str(CONFIG), "--formatter", "json", "--stdin-filename", sheet],
-        input="\n".join(rules),
+        input=css,
         capture_output=True,
         text=True,
         cwd=ROOT,
@@ -65,10 +68,7 @@ def lint(sheet: str, rules: list[str]) -> list[list[str]]:
     )
     # Stylelint writes the report to stderr when it finds a problem.
     report = json.loads(result.stdout or result.stderr)
-    reported: list[list[str]] = [[] for _ in rules]
-    for warning in (warning for file in report for warning in file["warnings"]):
-        reported[warning["line"] - 1].append(warning["rule"])
-    return reported
+    return [warning["rule"] for file in report for warning in file["warnings"]]
 
 
 @tag("source")
@@ -77,15 +77,11 @@ class StylesheetLintTests(SimpleTestCase):
         self.assertTrue(STYLELINT.exists(), "`mise run setup:lint-tools` installs Stylelint")
 
     def test_each_break_of_the_contract_is_refused(self):
-        for sheet in (APP, REFERENCE):
-            cases = [(css, rule) for name, css, rule in REFUSED if name == sheet]
-            for (css, rule), reported in zip(cases, lint(sheet, [css for css, _ in cases]), strict=True):
-                with self.subTest(sheet=sheet, css=css):
-                    self.assertIn(rule, reported)
+        for sheet, css, rule in REFUSED:
+            with self.subTest(sheet=sheet, css=css):
+                self.assertIn(rule, lint(sheet, css))
 
     def test_what_the_contract_allows_passes(self):
-        for sheet in (APP, TOKENS):
-            cases = [css for name, css in PASSED if name == sheet]
-            for css, reported in zip(cases, lint(sheet, cases), strict=True):
-                with self.subTest(sheet=sheet, css=css):
-                    self.assertEqual(reported, [])
+        for sheet, css in PASSED:
+            with self.subTest(sheet=sheet, css=css):
+                self.assertEqual(lint(sheet, css), [])
