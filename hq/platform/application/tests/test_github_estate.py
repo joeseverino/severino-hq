@@ -9,7 +9,7 @@ from hq.domains.control_plane.observations.github import PARTS, REPOSITORY_KIND
 
 from ..dashboard import work_queue
 from ..freshness import stale_after
-from ..github_estate import ALERT_PAGES, Repository, attention, repository_for
+from ..github_estate import ALERT_PAGES, Repository, attention, repository_for, workflow_run
 from ..item_help import RUN
 
 
@@ -358,3 +358,33 @@ class AlertPageTests(SimpleTestCase):
         for alerts, url in cases:
             with self.subTest(alerts=alerts):
                 self.assertEqual(repository(url=ALPHA, alerts=alerts).alerts_url, url)
+
+
+class WorkflowRunTests(SimpleTestCase):
+    def test_a_run_says_what_it_came_to_where_and_how_long_ago(self):
+        run = workflow_run(
+            {
+                "name": "CI",
+                "url": "https://github.com/example/alpha/actions/runs/7",
+                "conclusion": "timed_out",
+                "status": "completed",
+                "branch": "main",
+                "sha": "abcdef1234",
+                "created_at": "2026-01-01T00:00:00Z",
+            }
+        )
+
+        self.assertEqual((run.state, run.tone), ("Timed out", "serious"))
+        self.assertTrue(run.tip.startswith("Timed out\nmain · abcdef1 · "))
+        self.assertTrue(run.said.startswith("timed out, main, "))
+
+    def test_a_run_still_going_asks_for_attention(self):
+        run = workflow_run({"name": "CI", "status": "in_progress"})
+
+        self.assertEqual((run.state, run.tone, run.tip), ("In progress", "attention", "In progress"))
+
+    def test_a_finished_run_with_no_verdict_has_no_tone(self):
+        self.assertEqual(workflow_run({"status": "completed", "conclusion": "skipped"}).tone, "")
+
+    def test_a_run_s_address_is_a_web_address_or_nothing(self):
+        self.assertEqual(workflow_run({"url": "javascript:alert(1)", "conclusion": "success"}).url, "")

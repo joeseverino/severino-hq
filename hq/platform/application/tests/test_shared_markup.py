@@ -147,6 +147,37 @@ class BandFactTests(SimpleTestCase):
 
 
 class OutsideLinkTests(SimpleTestCase):
+    PARTIAL = "partials/_outside_link.html"
+
+    def test_markup_links_out_the_way_a_name_does(self):
+        html = _render(
+            '{% outside_link url=url css="chip" tone="good" tip="Success" %}<b>deploy</b>{% endoutside_link %}'
+            "{% entity url|declared_link:name %}",
+            url="https://example.com/run",
+            name="deploy",
+        )
+
+        chip, name = elements(html, "a")
+        for link in (chip, name):
+            self.assertEqual(link.attrs["target"], "_blank")
+            self.assertEqual(set(link.attrs["rel"].split()), {"noopener", "noreferrer"})
+        self.assertEqual(chip.classes, {"chip", "tone-good"})
+        self.assertEqual(chip.attrs["data-tip"], "Success")
+        self.assertEqual(name.attrs["title"], "Opens example.com")
+
+    def test_markup_whose_address_is_not_a_web_page_is_drawn_unlinked(self):
+        html = _render("{% outside_link url=url %}<b>deploy</b>{% endoutside_link %}", url="javascript:alert(1)")
+
+        self.assertEqual(elements(html, "a"), [])
+        self.assertEqual(texts(html, "b"), ["deploy"])
+
+    def test_a_dialog_s_trigger_keeps_its_dialog(self):
+        html = _render('{% outside_link url="https://example.com/about" modal="about" %}About{% endoutside_link %}')
+
+        (link,) = elements(html, "a")
+        self.assertEqual(link.attrs["data-modal-open"], "about")
+        self.assertEqual(link.attrs["aria-controls"], "modal-about")
+
     def test_a_page_outside_hq_opens_in_a_new_tab_without_a_way_back(self):
         html = _render("{% entity url|declared_link:name %}", url="https://example.com/a", name="example-repo")
 
@@ -182,6 +213,8 @@ class SharedMarkupTemplateTests(SimpleTestCase):
         found = _written_by_hand(r'class="band-fact[" {]', BandFactTests.PARTIAL)
         self.assertEqual(found, [], "write {% band_fact %} instead")
 
-    def test_only_the_entity_tag_writes_an_outside_link(self):
-        found = _written_by_hand(r'class="external-link', "")
-        self.assertEqual(found, [], "write {% entity url|declared_link:label %} instead")
+    def test_only_the_outside_link_partial_writes_an_outside_link(self):
+        # An anchor to a web address, or one that leaves in a new tab.
+        outside = r'<a\b[^>]*(?:href="https?:|rel="noopener|target="_blank"|class="external-link)'
+        found = _written_by_hand(outside, OutsideLinkTests.PARTIAL)
+        self.assertEqual(found, [], "write {% entity url|declared_link:label %} or {% outside_link %} instead")

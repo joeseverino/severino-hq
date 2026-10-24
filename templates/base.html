@@ -269,7 +269,7 @@
       link to the demo's README, so no page is made for the copy alone.
       {% endcomment %}
       <footer class="demo-foot">
-        <a class="demo-about" href="https://github.com/joeseverino/severino-hq/blob/main/demo/README.md" data-modal-open="demo-about" aria-haspopup="dialog" aria-controls="modal-demo-about"><span class="demo-about-dot" aria-hidden="true"></span>About this demo</a>
+        {% outside_link url="https://github.com/joeseverino/severino-hq/blob/main/demo/README.md" css="demo-about" modal="demo-about" %}<span class="demo-about-dot" aria-hidden="true"></span>About this demo{% endoutside_link %}
       </footer>
     {% endif %}
   {% endblock %}

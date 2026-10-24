@@ -83,12 +83,23 @@ _PADDED_CUTS = (
     + r"""
   const found = [];
   const range = document.createRange();
+  // What ::after draws after the value (a link's arrow), which no range or
+  // child holds: its text, measured in its own font.
+  const pen = document.createElement('canvas').getContext('2d');
+  const generated = (el) => {
+    const after = getComputedStyle(el, '::after');
+    const text = after.content.match(/^"(.*)"$/s);
+    if (!text || after.display === 'none' || after.position === 'absolute') return 0;
+    pen.font = after.font;
+    return pen.measureText(text[1]).width;
+  };
   for (const el of document.querySelectorAll(selector)) {
     const style = getComputedStyle(el);
     if (!/grid/.test(style.display) || !el.firstElementChild || !el.checkVisibility()) continue;
     // Its words, and the boxes it holds (a chip's padding is the chip's).
     range.selectNodeContents(el);
-    const value = Math.max(range.getBoundingClientRect().right, ...[...el.children].map((child) => child.getBoundingClientRect().right));
+    const value = Math.max(range.getBoundingClientRect().right, ...[...el.children].map((child) => child.getBoundingClientRect().right))
+      + generated(el);
     const end = el.getBoundingClientRect().right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth);
     const gap = end - value;
     if (gap > 2) found.push(`${describe(el)} "${el.textContent.trim()}": ${Math.round(gap)}px of floor past its end`);

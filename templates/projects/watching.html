@@ -19,10 +19,10 @@ would be a page about anybody.
       <p>{% entity profile.url|declared_link:profile.login label="@"|add:profile.login %}{% if profile.bio %} · {{ profile.bio|breakable }}{% endif %}</p>
     </div>
     <dl class="gh-stats">
-      <div><dt>Followers</dt><dd><a href="{{ profile.url }}?tab=followers" rel="noopener">{{ profile.followers|breakable }}</a></dd></div>
-      <div><dt>Following</dt><dd><a href="{{ profile.url }}?tab=following" rel="noopener">{{ profile.following|breakable }}</a></dd></div>
-      <div><dt>Public repos</dt><dd><a href="{{ profile.url }}?tab=repositories" rel="noopener">{{ profile.public_repos|breakable }}</a></dd></div>
-      <div><dt>Starred</dt><dd><a href="{{ profile.url }}?tab=stars" rel="noopener">{{ profile.starred|breakable }}</a></dd></div>
+      <div><dt>Followers</dt><dd>{% entity profile.url|add:"?tab=followers"|declared_link:profile.followers %}</dd></div>
+      <div><dt>Following</dt><dd>{% entity profile.url|add:"?tab=following"|declared_link:profile.following %}</dd></div>
+      <div><dt>Public repos</dt><dd>{% entity profile.url|add:"?tab=repositories"|declared_link:profile.public_repos %}</dd></div>
+      <div><dt>Starred</dt><dd>{% entity profile.url|add:"?tab=stars"|declared_link:profile.starred %}</dd></div>
     </dl>
   </section>
 
@@ -43,7 +43,7 @@ would be a page about anybody.
               {% for item in repo.advisories|slice:":2" %}
                 <div><span class="pill{% if item.severity == 'critical' or item.severity == 'high' %} pill-serious{% elif item.severity == 'medium' %} pill-attention{% endif %}">{{ item.severity|default:"advisory"|breakable }}</span> {% entity item.url|declared_link:item.id %}{% if item.summary %} {{ item.summary|truncatechars:90|breakable }}{% endif %}{% if item.published %} <span class="muted nowrap">{{ item.published|ago_short }}</span>{% endif %}</div>
               {% empty %}{% empty_value %}{% endfor %}
-              {% if repo.advisories|length > 2 %}<a class="muted" href="{{ repo.url }}/security/advisories" rel="noopener">and {{ repo.advisories|length|add:"-2"|breakable }} more</a>{% endif %}
+              {% if repo.advisories|length > 2 %}<span class="muted">and {% entity repo.url|add:"/security/advisories"|declared_link:"more" label=repo.advisories|length|add:"-2"|stringformat:"s"|add:" more" %}</span>{% endif %}
             </td>
             <td class="nowrap">{% if repo.starred %}{{ repo.starred|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
           </tr>

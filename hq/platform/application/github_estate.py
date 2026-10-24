@@ -23,10 +23,12 @@ from hq.domains.control_plane.observations.github import (
 
 from .containers import SERIOUS
 from .derivations import reached, whole
+from .display_words import display
 from .entity_links import web_url
 from .expiry import days_until
 from .freshness import Freshness, freshness
 from .item_help import cannot_help, commands
+from .moments import ago
 from .projection import read_once
 from .timestamps import moment
 from .ui import Insight, counted
@@ -60,6 +62,50 @@ ALERT_PAGES: Mapping[ReadingPart, str] = {
 }
 # The branches Renovate opens its pull requests from.
 UPDATE_BRANCH = "renovate/"
+
+
+@display
+class WorkflowRun:
+    """A workflow's newest run, as its chip on a repository's panel shows it."""
+
+    name: str
+    url: str
+    # What it came to, or where it is while it has not finished: "Success".
+    state: str
+    # The run's color: good, serious, attention, or none while it says nothing.
+    tone: str
+    # Shown on hover: what it came to, then its branch, commit and age.
+    tip: str
+    # Read out after its name: what it came to, its branch, and its age.
+    said: str
+
+
+def workflow_run(run: Mapping[str, Any]) -> WorkflowRun:
+    """One run of the reading's ``runs``, as its chip says it."""
+
+    conclusion, status = str(run.get("conclusion") or ""), str(run.get("status") or "")
+    if conclusion == "success":
+        tone = "good"
+    elif conclusion in ("failure", "timed_out"):
+        tone = "serious"
+    elif status != "completed":
+        tone = "attention"
+    else:
+        tone = ""
+    word = (conclusion or status).replace("_", " ")
+    state = word.capitalize()
+    branch = str(run.get("branch") or "")
+    created = moment(str(run.get("created_at") or ""))
+    age = ago(created) if created else ""
+    where = " · ".join(part for part in (branch, str(run.get("sha") or "")[:7], age) if part)
+    return WorkflowRun(
+        name=str(run.get("name") or "Workflow"),
+        url=web_url(run.get("url")),
+        state=state,
+        tone=tone,
+        tip=f"{state}\n{where}" if where else state,
+        said=", ".join(part for part in (word, branch, age) if part),
+    )
 
 
 def _severity_rank(level: str) -> int:
@@ -111,6 +157,12 @@ class Repository:
                     ActionLink("failing-run", f"{name} run", "read", url, reason=f"{name} failed on this commit.")
                 )
         return tuple(found)
+
+    @property
+    def workflow_runs(self) -> tuple[WorkflowRun, ...]:
+        """Each workflow's newest run, as the repository's panel shows it."""
+
+        return tuple(workflow_run(run) for run in self.record.get("runs") or ())
 
     @property
     def serious_alerts(self) -> int:

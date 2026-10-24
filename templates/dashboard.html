@@ -53,7 +53,7 @@ the row is gone once every step is done.
 {% endcomment %}
 {% if getting_started %}
 <section class="card dash-start" aria-labelledby="dash-start-title">
-  {% section_head id="dash-start-title" %}Get started{% aside %}<span class="count">{{ getting_started_left|breakable }} left{% if install_guide %} · <a href="{{ install_guide }}" rel="noopener">Install guide</a>{% endif %}</span>{% endsection_head %}
+  {% section_head id="dash-start-title" %}Get started{% aside %}<span class="count">{{ getting_started_left|breakable }} left{% if install_guide %} · {% entity install_guide|declared_link:"Install guide" %}{% endif %}</span>{% endsection_head %}
   <ol class="step-list">
     {% for step in getting_started %}
       <li{% if step.done %} class="is-done"{% endif %}>
@@ -160,10 +160,10 @@ is said here, over the ones most recently changed, and nowhere else on the page.
   <ul class="ext-links" id="dashboard-links" data-fragment data-fragment-name="links">
     {% for l in external_links %}
       <li>
-        <a href="{{ l.href }}" target="_blank" rel="noopener" title="{{ l.sub }}">
+        {% outside_link url=l.href title=l.sub %}
           <span class="ext-label">{{ l.label|breakable }}</span>
           <span class="ext-arrow" aria-hidden="true">↗</span>
-        </a>
+        {% endoutside_link %}
       </li>
     {% endfor %}
   </ul>

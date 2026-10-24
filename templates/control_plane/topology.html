@@ -81,7 +81,7 @@
               data-topology-body="{{ item.body_url }}"
             >
               <span class="topology-node-title" title="{{ item.node.label }} · {{ item.node.subtitle }}{% if item.node.summary %} · {{ item.node.summary }}{% endif %}">
-                <strong>{% if item.link.url %}<a class="topology-node-link" href="{{ item.link.url }}" data-entity="{{ item.link.kind_label }}"{% if item.link.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.link.label|breakable }}</a>{% else %}<span data-entity="{{ item.link.kind_label }}">{{ item.link.label|breakable }}</span>{% endif %}</strong>
+                <strong>{% if item.link.url and item.link.external %}{% outside_link url=item.link.url css="topology-node-link" entity=item.link.kind_label %}{{ item.link.label|breakable }}{% endoutside_link %}{% elif item.link.url %}<a class="topology-node-link" href="{{ item.link.url }}" data-entity="{{ item.link.kind_label }}">{{ item.link.label|breakable }}</a>{% else %}<span data-entity="{{ item.link.kind_label }}">{{ item.link.label|breakable }}</span>{% endif %}</strong>
                 <small>{{ item.node.subtitle|breakable }}</small>
                 {% if item.node.summary %}<small data-topology-node-summary>{{ item.node.summary|breakable }}</small>{% endif %}
               </span>

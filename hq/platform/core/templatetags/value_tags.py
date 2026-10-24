@@ -7,6 +7,7 @@ lazy from dataclasses import replace
 
 from django import template
 from django.template.base import token_kwargs
+from django.template.loader import render_to_string
 from django.utils import dateformat, timezone
 from django.utils.html import conditional_escape, format_html
 from django.utils.safestring import mark_safe
@@ -41,6 +42,9 @@ lazy from hq.platform.application.where_it_runs import named_links as _named_lin
 lazy from hq.platform.core.oidc import SIGNED_IN_SESSION_KEY
 
 register = template.Library()
+
+# The one form a link to a page outside HQ takes, whichever tag writes it.
+OUTSIDE_LINK = "partials/_outside_link.html"
 
 
 @register.filter
@@ -565,13 +569,11 @@ def entity(context, link, code=False, label="", mark=""):
     if link.url and not link.external and _is_this_page(context, link.url):
         return format_html('<span data-entity="{}">{}</span>', link.kind_label, label)
     if link.url and link.external:
-        return format_html(
-            '<a href="{}" data-entity="{}" class="external-link" target="_blank" '
-            'rel="noopener noreferrer" title="Opens {}">{}</a>',
-            link.url,
-            link.kind_label,
-            urlsplit(link.url).hostname,
-            label,
+        return mark_safe(
+            render_to_string(
+                OUTSIDE_LINK,
+                {"url": link.url, "arrow": True, "entity": link.kind_label, "content": label},
+            ).strip()
         )
     if link.url:
         return format_html(
@@ -692,6 +694,13 @@ def readout(value):
 
 
 @register.filter
+def host(url):
+    """The host a web address names: what an outside link says it opens."""
+
+    return urlsplit(str(url or "")).hostname or ""
+
+
+@register.filter
 def web_url(value):
     """An href from data someone else wrote: http(s) or nothing."""
 
@@ -761,7 +770,7 @@ class SlotsNode(template.Node):
             name = attribute.removeprefix("nodelist_")
             if part or name not in values:
                 values[name] = part
-        return context.template.engine.get_template(self.partial).render(context.new(values))
+        return context.template.engine.get_template(self.partial).render(context.new(values)).strip()
 
 
 def slotted(name: str, partial: str, parts: tuple[str, ...], options: frozenset[str]) -> None:
@@ -790,4 +799,10 @@ def slotted(name: str, partial: str, parts: tuple[str, ...], options: frozenset[
 
 
 slotted("section_head", "partials/_section_head.html", ("heading", "aside"), frozenset(("id", "lede")))
+slotted(
+    "outside_link",
+    OUTSIDE_LINK,
+    ("content",),
+    frozenset(("url", "css", "tone", "tip", "title", "label", "modal", "entity")),
+)
 slotted("band_fact", "partials/_band_fact.html", ("value", "tone"), frozenset(("icon", "label", "tone")))

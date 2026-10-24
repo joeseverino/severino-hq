@@ -3,7 +3,7 @@
 <dl class="kv">
   {% if item.topic %}<dt>Description</dt><dd>{{ item.topic|breakable }}</dd>{% endif %}
   {% if item.tag_list %}<dt>Tags</dt><dd>{% for t in item.tag_list %}<span class="tag">{{ t|breakable }}</span>{% endfor %}</dd>{% endif %}
-  {% if item.published_url %}<dt>Published URL</dt><dd>{% if item.published_url|web_url %}<a href="{{ item.published_url|web_url }}" rel="noopener noreferrer">{{ item.published_url|breakable }}</a>{% else %}{{ item.published_url|breakable }}{% endif %}</dd>{% endif %}
+  {% if item.published_url %}<dt>Published URL</dt><dd>{% entity item.published_url|declared_link:item.published_url %}</dd>{% endif %}
   {% if item.published_at %}<dt>{% if item.is_published %}Published{% else %}Planned date{% endif %}</dt><dd>{{ item.published_at|when }}</dd>{% endif %}
   <dt>Added to HQ</dt><dd class="muted">{{ item.created_at|when }}</dd>
   <dt>Updated</dt><dd class="muted">{{ item.updated_at|when }}</dd>

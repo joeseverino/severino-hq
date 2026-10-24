@@ -18,7 +18,7 @@ A check met everywhere is a word in one closing line.
             <p>{{ gap.check.why|breakable }} <span class="muted">{{ gap.check.fix|breakable }}</span></p>
           </div>
           <div class="posture-gap-repos">
-            {% for repo in gap.repos %}<a class="workflow-chip" href="{{ repo.url }}/settings" rel="noopener">{{ repo.short|breakable }}</a>{% endfor %}
+            {% for repo in gap.repos %}{% outside_link url=repo.url|add:"/settings" css="workflow-chip" %}{{ repo.short|breakable }}{% endoutside_link %}{% endfor %}
             <small class="muted">{{ gap.repos|length }} of {{ gap.of|counted:"repository,repositories" }}</small>
           </div>
         </li>
@@ -31,7 +31,7 @@ A check met everywhere is a word in one closing line.
     {% for row in repositories %}{% with posture=row.posture %}
       <li>
         <div class="posture-repo-name">
-          {% if row.project %}<a href="{{ row.project.get_absolute_url }}">{{ posture.subject.short|breakable }}</a>{% else %}<a href="{{ posture.subject.url }}" rel="noopener">{{ posture.subject.short|breakable }}</a>{% endif %}
+          {% if row.project %}<a href="{{ row.project.get_absolute_url }}">{{ posture.subject.short|breakable }}</a>{% else %}{% entity posture.subject.url|declared_link:posture.subject.short %}{% endif %}
           <small class="muted">{% if posture.subject.private %}Private{% else %}Public{% endif %}</small>
         </div>
         <strong class="posture-score {% if posture.unmet %}is-unmet{% else %}is-met{% endif %}">{{ posture.met|breakable }} of {{ posture.measured|breakable }}</strong>

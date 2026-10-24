@@ -13,7 +13,7 @@ says it.
 {% endcomment %}
 {% block row %}
   {% if row.moment %}
-    <td class="cell-data row-gutter">{% if row.moment.external %}<a href="{{ row.moment.url }}" rel="noopener"><strong>{{ row.moment.title|breakable }}</strong></a>{% else %}<strong>{{ row.moment.title|breakable }}</strong>{% endif %}{% row_toggle %}</td>
+    <td class="cell-data row-gutter">{% if row.moment.external %}<strong>{% entity row.moment.url|declared_link:row.moment.title %}</strong>{% else %}<strong>{{ row.moment.title|breakable }}</strong>{% endif %}{% row_toggle %}</td>
     <td class="muted date-col">{{ row.at|when }}</td>
     <td>{{ row.moment.actor|breakable }}</td>
     <td><span class="pill">{{ row.moment.source|breakable }}</span></td>

@@ -76,7 +76,7 @@ The page reads a stored reading; nothing here calls GitHub.
       {% for pull in pulls %}
         <li>
           <span class="github-mark">{% include "partials/_icon.html" with name="pull" %}</span>
-          <a href="{{ pull.url }}" rel="noopener">{{ pull.title|breakable }}</a>
+          {% entity pull.url|declared_link:pull.title %}
           <span class="muted">#{{ pull.number|breakable }} · {{ pull.author|breakable }} · {{ pull.updated_at|ago_short }}</span>
           {% if pull.draft %}<span class="pill">Draft</span>{% endif %}
         </li>
@@ -85,12 +85,12 @@ The page reads a stored reading; nothing here calls GitHub.
   {% endif %}
   {% endwith %}
 
-  {% if repo.runs %}
+  {% if repo.workflow_runs %}
     <h3 class="section-heading">Workflows</h3>
     {% comment %}Chips that wrap, not cells: a grid strands a last row. Detail on hover.{% endcomment %}
     <p class="workflow-chips">
-      {% for run in repo.runs %}
-        <a class="workflow-chip{% if run.conclusion == 'success' %} tone-good{% elif run.conclusion == 'failure' or run.conclusion == 'timed_out' %} tone-serious{% elif run.status != 'completed' %} tone-attention{% endif %}" href="{{ run.url }}" rel="noopener" data-tip="{% if run.conclusion %}{{ run.conclusion|capfirst }}{% else %}{{ run.status|capfirst }}{% endif %}&#10;{{ run.branch }} · {{ run.sha|slice:':7' }} · {{ run.created_at|ago_short }}">{% include "partials/_icon.html" with name="check-circle" %}{{ run.name|breakable }}<span class="visually-hidden">: {% if run.conclusion %}{{ run.conclusion|breakable }}{% else %}{{ run.status|breakable }}{% endif %}, {{ run.branch|breakable }}, {{ run.created_at|ago_short }}</span></a>
+      {% for run in repo.workflow_runs %}
+        {% outside_link url=run.url css="workflow-chip" tone=run.tone tip=run.tip %}{% include "partials/_icon.html" with name="check-circle" %}{{ run.name|breakable }}<span class="visually-hidden">: {{ run.said|breakable }}</span>{% endoutside_link %}
       {% endfor %}
     </p>
   {% endif %}
