@@ -43,6 +43,7 @@ from hq.platform.core.tests.browser.probes.parts import (
     _SUMMARY_MARKS,
     reading_problems,
 )
+from hq.platform.core.tests.browser.probes.shifts import _LAYOUT_SHIFTS
 from hq.platform.core.tests.browser.probes.tables import (
     _CELLS,
     _CELLS_OFF_THE_FIRST_LINE,
@@ -208,6 +209,10 @@ _GEOMETRY = {
     "titles": (_SQUEEZED_TITLES, [SELECTORS["page_title"], SELECTORS["page_actions"], SELECTORS["page_head"]]),
     # Every box and every line of text, not only a card's or code's.
     "gutter": (_PAST_THE_GUTTER, ["*", True]),
+    # Whatever moved by itself since the page began to load, read from the
+    # browser's record of it, so nothing a script does after the first frame
+    # goes unseen.
+    "layout shifts": (_LAYOUT_SHIFTS, SELECTORS["vendored"]),
     "audit": _AUDIT,
 }
 

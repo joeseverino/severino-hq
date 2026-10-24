@@ -91,8 +91,8 @@ def _templates() -> dict[str, str]:
     }
 
 
-# What tables.js marks as it fits a table to its region: in a ResizeObserver,
-# so in the frame the table is laid out, before that frame is painted.
+# What tables.js marks as it fits a table to its region, before the frame
+# that draws the table is laid out.
 FITTED = {"dropped", "narrow"}
 
 

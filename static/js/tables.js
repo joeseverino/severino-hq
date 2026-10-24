@@ -22,10 +22,11 @@
   // wider, what keeps its line whole gives way too (`data-tight`); as the
   // region grows they come back, the last to leave first, each only if the
   // table still fits. A row's toggle shows what left. Only the browser
-  // knows how wide a table is, and a ResizeObserver tells it in the frame it
-  // is laid out, before that frame is painted: this script loads in the head
-  // without `defer`, so every region is watched from the moment it is parsed
-  // and nothing moves once a page is drawn.
+  // knows how wide a table is, so a table is measured as its rows arrive,
+  // in the microtask after the parser or a script adds them, before the
+  // frame that would draw them: this script loads in the head without
+  // `defer`, so every region is fitted from the moment it is parsed and
+  // nothing moves once a page is drawn.
   const REGION = ".table-scroll";
   const headingsOf = (table) => [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
   // The order the table's columns leave in, by place.
@@ -59,8 +60,8 @@
     gaveWay.set(table, steps);
   };
   const overflows = (table) => table.offsetWidth > table.parentElement.clientWidth;
-  // A hidden region has no width to fit.
-  const shown = (region) => region.clientWidth > 0;
+  // A hidden region has none.
+  const widthOf = (region) => region.clientWidth;
   // A table that overflows gives way until it fits. One that fits takes back
   // what left, the last first, while it still fits; a region that only
   // narrowed has nothing to give back, so that is not tried.
@@ -85,33 +86,50 @@
     }
   };
   const tableIn = (region) => region.querySelector(":scope > .data-table");
-  // A table whose columns are held while a row is open is fitted as it lets
-  // them go.
+  // The width each region was last fitted at.
+  const regionWidths = new WeakMap();
+  // A region's table fitted at the width the region has now. One whose
+  // content changed (`changed`) may take back what left; otherwise only a
+  // change of width fits again. A table whose columns are held while a row
+  // is open, or pinned while it is swapped in, is fitted as it lets them go.
+  const fitIn = (region, changed = false) => {
+    const table = tableIn(region);
+    if (!table || "rowsHeld" in table.dataset || pinned.has(table)) return;
+    const width = widthOf(region);
+    const before = regionWidths.get(region);
+    if (width === before && !changed) return;
+    regionWidths.set(region, width);
+    if (width > 0) fit(table, changed || before === undefined || width > before);
+  };
   const refit = (table) => {
-    if (table && shown(table.parentElement) && !("rowsHeld" in table.dataset)) fit(table);
+    if (table?.parentElement?.matches(REGION)) fitIn(table.parentElement, true);
   };
   // The region is an inline-size container, so its width never follows the
-  // table's: it is the one thing watched, and only a change of its width
-  // fits again. What changes a table's content (its faces arriving, a swap,
-  // a fold, a row closing) fits it where it happens.
-  const regionWidths = new WeakMap();
-  const fitted = new ResizeObserver((entries) => entries.forEach(({ target: region, contentBoxSize }) => {
-    if (!region.isConnected) {
-      fitted.unobserve(region);
-      return;
-    }
-    const width = contentBoxSize[0].inlineSize;
-    const before = regionWidths.get(region);
-    if (width === before) return;
-    regionWidths.set(region, width);
-    const table = tableIn(region);
-    if (table && width > 0 && !("rowsHeld" in table.dataset)) fit(table, before === undefined || width > before);
+  // table's. Chromium counts what a ResizeObserver's callback moves as a
+  // layout shift, even before the frame is painted, and a table that grows
+  // taller there resizes its region again in the same frame, which the
+  // browser reports as an error. So every region is fitted before the frame
+  // is laid out: in the microtask after the parser or a script changes the
+  // page, since what it adds may be the region's rows or a scrollbar that
+  // narrows it, and in the window's resize event, which runs before layout.
+  // What holds a region's width otherwise (a region shown, a fold, a row
+  // closing, its faces arriving) fits it where it happens, and the observer
+  // answers only a width none of those saw.
+  const fitted = new ResizeObserver((entries) => entries.forEach(({ target: region }) => {
+    if (region.isConnected) fitIn(region);
+    else fitted.unobserve(region);
   }));
-  new MutationObserver((changes) => changes.forEach(({ addedNodes }) => addedNodes.forEach((node) => {
-    if (!(node instanceof Element)) return;
-    if (node.matches(REGION)) fitted.observe(node);
-    node.querySelectorAll(REGION).forEach((region) => fitted.observe(region));
-  }))).observe(document.documentElement, { childList: true, subtree: true });
+  const watched = new WeakSet();
+  const fitEvery = (changed = new Set()) => document.querySelectorAll(REGION).forEach((region) => {
+    if (!watched.has(region)) {
+      watched.add(region);
+      fitted.observe(region);
+    }
+    fitIn(region, changed.has(region));
+  });
+  new MutationObserver((changes) => fitEvery(new Set(changes.map(({ target }) => target.closest?.(REGION)))))
+    .observe(document.documentElement, { childList: true, subtree: true });
+  window.addEventListener("resize", () => fitEvery());
 
   // A row can say more than it shows: a clamped name, an ellipsis, a list
   // folded behind "+5 more". Such a row's toggle shows all of it, every
@@ -486,7 +504,6 @@
         button.setAttribute("aria-label", `Sort by ${name}`);
         heading.append(button);
       });
-      refit(table);
     });
   }
 
@@ -561,7 +578,7 @@
   // how wide a table is in a region whose width did not change, so both are
   // asked again when the faces are in.
   document.fonts?.ready.then(() => {
-    document.querySelectorAll(REGION).forEach((region) => refit(tableIn(region)));
+    document.querySelectorAll(REGION).forEach((region) => fitIn(region, true));
     markTables();
   });
 
@@ -751,9 +768,6 @@
   });
 
   document.addEventListener("DOMContentLoaded", () => {
-    // Every row is in now, which a region watched since it was parsed may
-    // not have held when it was first fitted.
-    document.querySelectorAll(REGION).forEach((region) => refit(tableIn(region)));
     initializeSelection();
     markTables();
     landOnRow();

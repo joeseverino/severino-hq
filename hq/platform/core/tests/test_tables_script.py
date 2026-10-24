@@ -1,5 +1,5 @@
 """tables.js reads layout only in the places named here: the fit, which asks
-whether a table is wider than its region before the frame is painted, and the
+whether a table is wider than its region before the frame is laid out, and the
 places that hold a table still once a reader has acted on it."""
 
 import re
@@ -13,7 +13,7 @@ SCRIPT = Path(__file__).resolve().parents[4] / "static" / "js" / "tables.js"
 # only these call (`droppedCells` for `openDetail`) is part of its caller.
 MEASURES_IN = {
     "overflows": "whether a table is wider than its region, the one question the fit asks",
-    "shown": "whether a region has a width to fit at all",
+    "widthOf": "the width a region is fitted at, so a table is fitted again only when it changes",
     "isCut": "a row whose value is cut short, which only a layout knows; markCut marks it and moves nothing",
     "holdColumns": "every column at the width the reader saw while a row is open",
     "openDetail": "the open row's line beneath: what its row left out, each part under its own column",
