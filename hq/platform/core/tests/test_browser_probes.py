@@ -20,6 +20,7 @@ from hq.platform.core.tests.browser import (
     stress,
     survey,
     sweeps,
+    uncaught,
     widths,
 )
 from hq.platform.core.tests.browser.probes import (
@@ -56,6 +57,7 @@ MODULES = (
     stress,
     survey,
     sweeps,
+    uncaught,
     widths,
     boxes,
     cut_names,

@@ -41,6 +41,7 @@ from hq.platform.core.tests.browser.reading import _in_one_trip, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, slow_frames, static_file
 from hq.platform.core.tests.browser.survey import _AS_FINDINGS, _PALETTE, _as_is, geometry_probes
+from hq.platform.core.tests.browser.uncaught import Uncaught
 from hq.platform.core.tests.browser.widths import viewport
 
 
@@ -222,21 +223,6 @@ _REPORT_REFUSALS = """document.addEventListener('securitypolicyviolation', (even
 # gate gave, which a class holds as its own (the estate's `unanswered`).
 _FAILED_ANSWER = "Failed to load resource: the server responded with a status of"
 
-# WebKit's line for a fetch that failed, a load the gate's next navigation
-# cancelled among them, which it logs as a script error whether or not the
-# script handles the rejection; Playwright passes it on as an uncaught error.
-# A rejection no script handles WebKit reports on a line of its own
-# ("Unhandled Promise Rejection"), which the gate still holds.
-_FAILED_FETCH = "Fetch API cannot load "
-
-
-def first_frame(stack):
-    """Where an uncaught error was thrown, from its stack as Playwright gives
-    it in every engine (V8's form: a line per frame, each starting ``at``)."""
-
-    frames = (line.strip() for line in (stack or "").splitlines())
-    return next((f" {frame}" for frame in frames if frame.startswith("at ")), "")
-
 
 # What Playwright's driver logs while the stall watch is on (its DEBUG and
 # DEBUG_FILE, read once when the driver starts): the browser's launch, with its
@@ -328,6 +314,7 @@ class BrowserGate(SimpleTestCase):
     @override
     def setUp(self):
         self.context = None
+        self.uncaught = None
         self.refusals = []
         self.start()
         self.addCleanup(self.close_context)
@@ -337,9 +324,11 @@ class BrowserGate(SimpleTestCase):
         self.addCleanup(self.kept_the_policy)
 
     def close_context(self):
-        """Closes the context the test last started, if it has one."""
+        """Closes the context the test last started, if it has one, keeping
+        what its page threw for the test to report."""
 
         if self.context is not None:
+            self.refusals += self.uncaught.so_far() if self.uncaught else []
             self.context.close()
 
     def start(self, **options):
@@ -361,7 +350,7 @@ class BrowserGate(SimpleTestCase):
         self.context.route("**/*", self.respond)
         self.page = self.context.new_page()
         self.page.on("console", self.heard)
-        self.page.on("pageerror", self.threw)
+        self.uncaught = Uncaught(self.page, self.where_and_width)
 
     def where(self):
         parts = urlsplit(self.page.url)
@@ -375,21 +364,15 @@ class BrowserGate(SimpleTestCase):
         if message.type == "error" and not message.text.startswith(_FAILED_ANSWER):
             self.refusals.append(f"{self.where()}: console error: {message.text}")
 
-    def threw(self, error):
-        # An error the engine raises with no Error object (a ResizeObserver
-        # loop) has a message and no name or stack.
-        said = f"{error.name}: {error.message}" if error.name else error.message
-        if said.startswith(_FAILED_FETCH):
-            return
-        width = self.page.viewport_size["width"]
-        self.refusals.append(f"{self.where()} at {width}px: uncaught {said}{first_frame(error.stack)}")
+    def where_and_width(self):
+        return f"{self.where()} at {self.page.viewport_size['width']}px"
 
     def refusals_so_far(self):
         """Every policy refusal, console error and uncaught script error the
         pages have had since this was last asked, each naming its page."""
 
         refusals, self.refusals = self.refusals, []
-        return refusals
+        return refusals + (self.uncaught.so_far() if self.uncaught else [])
 
     def kept_the_policy(self):
         if refusals := self.refusals_so_far():
