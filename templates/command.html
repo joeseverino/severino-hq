@@ -74,7 +74,7 @@ button named for what it does. How it is built belongs to the API reference.
   <form method="post" class="form command-form" data-command-form{% if hydrates_target %} data-command-hydrate-target{% endif %} data-submit-busy data-submit-label="Working…">
     {% csrf_token %}
     {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
-    {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
+    {% include "partials/_form_errors.html" %}
     {% for field in form.primary_fields %}
       {% if chosen_target and field.name == "__target" %}
         <div class="field command-target">

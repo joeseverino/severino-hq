@@ -2,7 +2,7 @@
 {% block page %}
 <form method="post" class="form">
   {% csrf_token %}
-  {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
+  {% include "partials/_form_errors.html" %}
   {{ form }}
   <p class="muted">Deductible estimate = cost × business use. Updated when you save.</p>
   <div class="form-actions">

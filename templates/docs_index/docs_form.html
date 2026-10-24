@@ -2,7 +2,7 @@
 {% block page %}
 <form method="post" class="form">
   {% csrf_token %}
-  {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
+  {% include "partials/_form_errors.html" %}
   {{ form }}
   <div class="form-actions">
     <button type="submit" class="primary">{% if object %}Save changes{% else %}Save document{% endif %}</button>

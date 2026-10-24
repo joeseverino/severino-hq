@@ -2,7 +2,7 @@
 {% block page %}
 <form method="post" class="form">
   {% csrf_token %}
-  {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
+  {% include "partials/_form_errors.html" %}
   {% for field in form %}
     {% if field.name == "interval" or field.name == "repeat_until" %}
       <div data-when="repeat">{{ field.as_field_group }}</div>
