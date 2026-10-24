@@ -1,7 +1,9 @@
 """The browser gate every real-browser test is built on: one browser, pages served locally, a failure saved."""
 
+import io
 import mimetypes
 import os
+import pickle
 import re
 import tempfile
 from collections import deque
@@ -14,7 +16,6 @@ from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.test import Client, RequestFactory, SimpleTestCase
-from django.test.testcases import is_pickable  # type: ignore[attr-defined]  # not in django-stubs
 from django.urls import reverse
 from django.utils.csp import CSP
 lazy from playwright.sync_api import Browser, BrowserContext, Error as BrowserError, Playwright
@@ -51,6 +52,49 @@ def failure_name(params):
     keys = [*first, *sorted(key for key in params if key not in first)]
     name = "-".join(str(params[key]) for key in keys)
     return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")[:150] or "subtest"
+
+
+# What a running test holds that holds the test itself; the parent has no use
+# for either, and Django sends them as None.
+_HOLDS_THE_TEST = ("_outcome", "_subtest")
+
+
+class _Beside(pickle.Pickler):
+    """A pickler that writes ``test`` as a reference wherever it meets it."""
+
+    def __init__(self, file, test):
+        super().__init__(file)
+        self.test = test
+
+    @override
+    def persistent_id(self, obj):
+        return "test" if obj is self.test else None
+
+
+class _Back(pickle.Unpickler):
+    def __init__(self, file, test):
+        super().__init__(file)
+        self.test = test
+
+    @override
+    def persistent_load(self, pid):
+        return self.test
+
+
+def pickles_beside(test, value):
+    """Whether ``value`` survives a pickle that carries ``test`` as well.
+
+    In that pickle a reference back to the test is the test already written,
+    so here it stands as one rather than pickling the test again.
+    """
+
+    sent = io.BytesIO()
+    try:
+        _Beside(sent, test).dump(value)
+        _Back(io.BytesIO(sent.getvalue()), test).load()
+    except Exception:  # noqa: BLE001  # any failure to pickle leaves the value out
+        return False
+    return True
 
 
 class _Watched:
@@ -415,12 +459,15 @@ class BrowserGate(SimpleTestCase):
 
     @override
     def __getstate__(self):
-        # A parallel worker sends a failed subtest to the parent with its test,
-        # once the test has finished, when Django no longer leaves out what
-        # cannot be pickled: the browser it drove and its cleanups stay here.
-        # django-stubs leaves out SimpleTestCase.__getstate__, which returns a dict.
-        state = super().__getstate__()
-        return {key: value for key, value in state.items() if is_pickable(value)}  # type: ignore[attr-defined]
+        # A parallel worker pickles a failed subtest, and its test with it, as
+        # the subtest fails and again once the test has finished; what cannot
+        # be pickled (the browser it drove) stays here. Django's own filter
+        # pickles each value afresh, so one that refers back to the test (a
+        # bound method among its cleanups) re-enters this without end.
+        kept = {key: value for key, value in vars(self).items() if key not in _HOLDS_THE_TEST}
+        return {key: value for key, value in kept.items() if pickles_beside(self, value)} | dict.fromkeys(
+            _HOLDS_THE_TEST
+        )
 
     def shoot(self, name):
         """The page as it stands, saved as ``name``.png in this test's own

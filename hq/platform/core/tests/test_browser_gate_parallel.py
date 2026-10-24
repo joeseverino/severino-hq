@@ -22,9 +22,17 @@ class Probe(BrowserGate):
         self.page = threading.Lock()
         self.on = None
         self.shots = []
-        # The cleanups BrowserGate.setUp registers, in its order.
-        self.addCleanup(lambda: None)
+        # The cleanups BrowserGate.setUp registers, in its order: each a method
+        # of the test, so a pickle of them refers back to it.
+        self.addCleanup(self.close_context)
         self.addCleanup(self.capture_failure)
+        self.addCleanup(self.kept_the_policy)
+
+    def close_context(self):
+        pass
+
+    def kept_the_policy(self):
+        pass
 
     def shoot(self, name):
         self.shots.append((name, self.on))
@@ -54,7 +62,14 @@ class ParallelBrowserGateTests(SimpleTestCase):
 
         # What the worker sends the parent once the test has finished.
         sent = pickle.loads(pickle.dumps(result.events))
-        self.assertIn("addSubTest", [event[0] for event in sent])
+        failed = [event for event in sent if event[0] == "addSubTest"]
+        self.assertEqual(len(failed), 1)
+        _, _, subtest, (kind, error, _) = failed[0]
+        # The failure as the subtest raised it, under the test that ran it.
+        self.assertIs(kind, AssertionError)
+        self.assertEqual(str(error), "on purpose")
+        self.assertEqual(subtest.test_case.id(), probe.id())
+        self.assertNotIn("addError", [event[0] for event in sent])
         self.assertEqual(
             probe.shots, [(failure_name({"page": "example/one", "width": 402, "rule": "overflow"}), "example/one")]
         )
