@@ -307,12 +307,6 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
    default, so a stylesheet that fails to load leaves every section plainly
    visible instead of none of them. */
 @media (max-width: 1080px) {
-  /* The sections move behind the toggle, which takes the last track;
-     open, they hang from the header on no track of their own. */
-  .site-header {
-    grid-template-areas: "brand demo search badge user toggle";
-    grid-template-columns: auto 1fr var(--control-size) var(--control-size) auto var(--control-size);
-  }
   .nav-toggle-open { display: inline-flex; }
   .site-header:target .nav-toggle-open,
   .nav-is-open .nav-toggle-open { display: none; }
@@ -393,12 +387,12 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
 
 }
 
-/* The nav row is nowrap, so below roughly 830px the four grid tracks do not
-   fit; the nav gets its own row here rather than overlapping the search. */
 @media (max-width: 860px) {
-  .site-header { grid-template-columns: auto 1fr repeat(4, var(--control-size)); gap: var(--space-4) var(--space-6); padding: var(--space-5) var(--space-7); }
   /* The person's control is a square mark like search and the bell beside it:
-     the name is in its menu, and a phone's one row has no room to repeat it. */
+     the name is in its menu, and a phone's one row has no room to repeat it.
+     Its track is squared here, beside the rules that square it, which sit in
+     the components layer to beat page.css. */
+  .site-header { --header-user: var(--control-size); gap: var(--space-4) var(--space-6); padding: var(--space-5) var(--space-7); }
   .user-menu > summary { width: var(--control-size); padding: 0; }
   .user-menu .user-name { display: none; }
   .brand { font-size: var(--text-md); }

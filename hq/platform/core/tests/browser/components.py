@@ -658,21 +658,25 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertEqual(self.page.evaluate(_OVERRULED_ALIGNMENT, SELECTORS["chip"]), [])
 
     def test_the_site_header_stands_where_it_ends_while_it_is_still_arriving(self):
-        """A page drawn while its header is still being parsed, cut before the
-        search as a slow connection cuts it, puts every part of the header that
-        has arrived where the whole header puts it, with its sections menu
-        closed and open."""
+        """A page drawn while its header is still being parsed, cut before any
+        of its last three controls as a slow connection cuts it, puts every
+        part of the header that has arrived where the whole header puts it,
+        with its sections menu closed and open, on a phone, where the sections
+        hang from a toggle, where they stand in the bar beside a collapsed
+        search, and where the search is a field."""
 
         name = next(iter(PAGES))
         whole = self.pages[name]
-        self.pages = {**self.pages, "header-cut": whole[: whole.index('<a class="global-search"')]}
-        for width in WIDTHS:
+        cuts = ('<a class="global-search"', '<a class="action-badge"', '<details class="user-menu"')
+        self.pages = {**self.pages, **{f"cut-{at}": whole[: whole.index(cut)] for at, cut in enumerate(cuts)}}
+        for width in (*WIDTHS, 1200):
             for menu in ("", "#sections"):
-                with self.subTest(width=width, menu=menu or "closed"):
-                    self.page.set_viewport_size(viewport(width))
-                    self.page.goto(f"{ORIGIN}/header-cut/{menu}", wait_until="load")
-                    arrived = self.page.evaluate(_HEADER_PARTS, SELECTORS["site_header"])
-                    self.page.goto(f"{ORIGIN}/{name}/{menu}", wait_until="load")
-                    ended = self.page.evaluate(_HEADER_PARTS, SELECTORS["site_header"])
-                    self.assertGreater(len(arrived), 2, "the cut left too little of the header to judge")
-                    self.assertEqual(arrived, {part: ended[part] for part in arrived})
+                self.page.set_viewport_size(viewport(width))
+                self.page.goto(f"{ORIGIN}/{name}/{menu}", wait_until="load")
+                ended = self.page.evaluate(_HEADER_PARTS, SELECTORS["site_header"])
+                for at, cut in enumerate(cuts):
+                    with self.subTest(width=width, menu=menu or "closed", cut=cut):
+                        self.page.goto(f"{ORIGIN}/cut-{at}/{menu}", wait_until="load")
+                        arrived = self.page.evaluate(_HEADER_PARTS, SELECTORS["site_header"])
+                        self.assertGreater(len(arrived), 2, "the cut left too little of the header to judge")
+                        self.assertEqual(arrived, {part: ended[part] for part in arrived})

@@ -601,7 +601,6 @@ td > .subtle-link:not(:only-child) { display: inline-block; }
 
 @media (max-width: 640px) {
   .glance-panel-head { column-gap: var(--space-3); }
-  .user-menu { flex-shrink: 1000; min-width: var(--control-size); }
 }
 
 /* A description under a row's name: two lines at most, and never wider than

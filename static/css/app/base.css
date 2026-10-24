@@ -152,12 +152,17 @@ pre ::selection { color: var(--code-ink); }
    Each part has a track of its own and the row is a control tall, so a page
    drawn while its header is still arriving already puts each part where it
    ends: the brand and the sections hold the start, the demo mark's
-   track takes what is left, the mark at its end, and every track past it is as wide as its control
-   whether or not the control has come. */
+   track takes what is left, the mark at its end, and every track past it is
+   as wide as its control whether or not the control has come. The person's
+   track is sized by the room the bar has, never by their name, which is cut
+   short past it; every breakpoint names it, so none can size it by content.
+   Each width's tracks are here; on a phone the person's track is squared
+   where its control is, beside the rule that hides the name. */
 .site-header {
+  --header-user: minmax(var(--control-size), calc(4 * var(--control-size)));
   display: grid;
   grid-template-areas: "brand nav demo search badge user";
-  grid-template-columns: auto auto 1fr minmax(150px, 210px) var(--control-size) auto;
+  grid-template-columns: auto auto 1fr minmax(150px, 210px) var(--control-size) var(--header-user);
   grid-template-rows: var(--control-size);
   align-items: center;
   column-gap: var(--space-7);
@@ -252,9 +257,17 @@ pre ::selection { color: var(--code-ink); }
 .search-key { padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--muted-2); font: inherit; font-size: var(--text-3xs); line-height: 1.6; }
 
 @media (max-width: 1280px) {
-  .site-header { grid-template-columns: auto auto 1fr var(--control-size) var(--control-size) auto; }
+  .site-header { grid-template-columns: auto auto 1fr var(--control-size) var(--control-size) var(--header-user); }
   .global-search { justify-content: center; padding: 0; }
   .search-label, .search-key { display: none; }
+}
+/* The sections move behind the toggle, which takes the last track; open, they
+   hang from the header on no track of their own. */
+@media (max-width: 1080px) {
+  .site-header {
+    grid-template-areas: "brand demo search badge user toggle";
+    grid-template-columns: auto 1fr var(--control-size) var(--control-size) var(--header-user) var(--control-size);
+  }
 }
 
 .inline { display: inline-flex; align-items: center; gap: var(--space-3); }
