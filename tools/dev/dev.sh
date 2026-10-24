@@ -102,11 +102,11 @@ elif [ ! -f "$state/secret.env" ]; then
     export DJANGO_SECRET_KEY
 fi
 
-uv run python manage.py migrate --noinput
+uv run python manage.py migrate --noinput --verbosity 0
 if [ "$profile" = scratch ]; then
     if [ ! -f "$state/login" ]; then
         password=$(openssl rand -hex 12)
-        DJANGO_SUPERUSER_PASSWORD=$password uv run python manage.py createsuperuser \
+        DJANGO_SUPERUSER_PASSWORD=$password uv run python manage.py createsuperuser --verbosity 0 \
             --noinput --username operator --email operator@example.invalid
         (umask 077 && echo "operator $password" > "$state/login")
         if [ -n "${usage_seed:-}" ]; then
