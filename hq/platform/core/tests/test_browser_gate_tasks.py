@@ -8,23 +8,23 @@ from unittest import mock
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.core.browser_tests import in_the_face
+from hq.platform.core.tests.browser.serving import in_the_face
+from hq.platform.core.tests.browser_modules import browser_modules
 from tests.mise_tasks import body, mise_tasks
 
 ROOT = Path(__file__).resolve().parents[4]
-MODULES = ("hq.platform.core.browser_tests", "hq.platform.core.estate_browser_tests")
 BASE = "BrowserGate"
 
 
-def gate_classes(root: Path) -> dict[str, str]:
+def gate_classes() -> dict[str, str]:
     """Each class built on the browser gate that holds tests, its own or inherited, as ``module.Class``, by module.
 
     A class that holds only rules for others to run runs nothing when named.
     """
 
     defined: dict[str, tuple[str, ast.ClassDef]] = {}
-    for module in MODULES:
-        tree = ast.parse((root / (module.replace(".", "/") + ".py")).read_text())
+    for module, path in browser_modules().items():
+        tree = ast.parse(path.read_text())
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef):
                 defined[node.name] = (module, node)
@@ -56,7 +56,7 @@ def browser_labels() -> set[str]:
 @tag("source")
 class BrowserGateTaskTests(SimpleTestCase):
     def test_every_browser_test_class_is_named_by_a_browser_task(self):
-        classes = gate_classes(ROOT)
+        classes = gate_classes()
         labels = browser_labels()
 
         self.assertTrue(classes)

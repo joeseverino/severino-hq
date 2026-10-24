@@ -6,10 +6,10 @@
 With `--at`, the labels run in a throwaway worktree of the ref with this
 tree's test files laid over it, so one command says whether a new test fails
 on the old code, or whether a failure was already there. Test files are those
-under a `tests` directory and the browser gates' modules; everything else is
-the ref's. The worktree goes on every exit, and the exit status is the test
-run's, except when a label does not import at the ref: that run says nothing
-about the tests, so it has a verdict of its own and exits 3.
+under a `tests` directory; everything else is the ref's. The worktree goes on
+every exit, and the exit status is the test run's, except when a label does
+not import at the ref: that run says nothing about the tests, so it has a
+verdict of its own and exits 3.
 """
 
 import os
@@ -48,7 +48,7 @@ def is_test_file(path: str) -> bool:
     """A file the suite runs or builds its cases from, rather than the code under test."""
 
     parts = Path(path).parts
-    return "tests" in parts[:-1] or parts[-1].endswith("browser_tests.py")
+    return "tests" in parts[:-1]
 
 
 def changed_tests(commit: str) -> tuple[list[str], list[str]]:

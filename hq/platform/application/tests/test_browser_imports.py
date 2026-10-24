@@ -15,6 +15,8 @@ from tests.mise_tasks import body, mise_tasks
 
 ROOT = Path(__file__).resolve().parents[4]
 GROUP = "browser"
+# The browser gates' package: every module in it runs under the browser group.
+BROWSER_GATES = ROOT / "hq" / "platform" / "core" / "tests" / "browser"
 # What a browser-group run executes: the labels that open the arguments of
 # `-m unittest` or `manage.py test`, or the module of `python -m <module>`,
 # when it is this checkout's. A plain `manage.py` runs the command it is given.
@@ -100,7 +102,9 @@ class BrowserImportTests(SimpleTestCase):
         offenders = sorted(
             f"{path.relative_to(ROOT)}: {', '.join(sorted(found))}"
             for path in source_files(ROOT, "*.py")
-            if path not in exempt and (found := imported(parsed(path)) & forbidden)
+            if path not in exempt
+            and not path.is_relative_to(BROWSER_GATES)
+            and (found := imported(parsed(path)) & forbidden)
         )
         self.assertEqual(
             offenders, [], f"only the {GROUP} group installs these; a module its tasks run may import them"

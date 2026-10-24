@@ -327,10 +327,6 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `SEVERINO_TEST_BUILDS` | development | the directory a test run builds programs into |
 | `SEVERINO_TEST_LEAK_LEDGER` | development | the file parallel test workers record leaked resources in |
 | `HQ_TEST_STALL_SECONDS` | development | seconds a test process may spend on one test or class fixture before it prints what it is running, every stack and the browser's log; unset, nothing is watched |
-| `HQ_BROWSER_ENGINE` | development | the browser gates' engine: `webkit` by default, `chromium` or `firefox` |
-| `HQ_BROWSER_CHANNEL` | development | a Playwright browser channel for that engine |
-| `HQ_BROWSER_FACE` | development | `fallback` draws the browser gates with Inter withheld, in the stack's next face (`--fallback-face`) |
-| `HQ_BROWSER_SLOW` | development | milliseconds each animation frame comes late in the browser gates, idle callbacks waiting three times their timeout (`dev:look --slow`) |
 | `HQ_API_RECORD_EXAMPLES` | development | `1`, with `--parallel 1`, writes the API responses a run receives to `openapi-examples.json` |
 
 ## Network exposure

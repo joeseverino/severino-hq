@@ -103,7 +103,6 @@ ignore = [
 # Test classes hold fixtures as plain class attributes. A test imports inside
 # the test; converting the suite to lazy imports is its own pass.
 "**/tests/**" = ["RUF012", "PLC0415"]
-"hq/platform/core/browser_tests.py" = ["RUF012", "PLC0415"]
 "demo/check.py" = ["PLC0415"]
 # Django's AppConfig.create reads every name an apps module binds
 # (inspect.getmembers), which reifies a lazy import before the app registry is

@@ -152,7 +152,7 @@ jobs:
         run: mise run tests
 
   # Real-browser layout invariants over synthetic example.* pages
-  # (hq/platform/core/browser_tests.py). Every request the page makes is answered in
+  # (hq/platform/core/tests/browser/). Every request the page makes is answered in
   # process; the browser reaches nothing. One job per browser:* gate, side by
   # side.
   browser:
@@ -186,7 +186,7 @@ jobs:
         env:
           GATE: browser:${{ matrix.gate }}
         run: mise run "$GATE"
-      # A failed rule saves the page as it stood (browser_tests.py writes each
+      # A failed rule saves the page as it stood (tests/browser/gate.py writes each
       # into its own hq-browser-failure-* folder in the runner's temp).
       - name: Failure screenshots
         if: ${{ failure() }}

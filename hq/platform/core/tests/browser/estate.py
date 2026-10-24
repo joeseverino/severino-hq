@@ -1,7 +1,7 @@
 """The layout gate over the example estate: every page the navigation reaches,
 and a record's page of each kind it lists.
 
-``browser_tests.LayoutBrowserTests`` holds its invariants over the stress
+``layout.LayoutBrowserTests`` holds its invariants over the stress
 estate, which is built to break layouts and covers the pages it was built for.
 This holds the same invariants over the homelab the demo shows
 (``hq/platform/core/example_estate``), on every page a person reaches from the
@@ -25,21 +25,12 @@ from django.test import Client, override_settings
 from django.urls import reverse
 lazy from django.db import transaction
 
-from hq.platform.core.browser_tests import (
-    _FINISH_TRANSITIONS,
-    _FONTS_READY,
-    _SETTLED,
-    _SIDEWAYS,
-    _UNPADDED_TILES,
-    ORIGIN,
-    PHONE_SCREEN,
-    SELECTORS,
-    WIDE,
-    WIDE_TABLES,
-    WIDTHS,
-    BrowserGate,
-    viewport,
-)
+from hq.platform.core.tests.browser.gate import BrowserGate
+from hq.platform.core.tests.browser.probes.boxes import _SIDEWAYS, _UNPADDED_TILES
+from hq.platform.core.tests.browser.probes.settle import _FINISH_TRANSITIONS, _FONTS_READY, _SETTLED
+from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser.serving import ORIGIN
+from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, WIDE_TABLES, WIDTHS, viewport
 lazy from hq.platform.application.domains import domain_navigation
 lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
 lazy from hq.platform.core.example_estate.names import MACHINE, SERVICES

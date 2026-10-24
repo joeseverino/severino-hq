@@ -34,7 +34,7 @@ _SOURCE = "https://github.com/joeseverino/severino-hq"
 _ROOT = Path(__file__).resolve().parents[1]
 # The pages of a list demo/build.py saves, from its first (its _MOST_PAGES_OF_A_LIST).
 _MOST_PAGES_OF_A_LIST = 6
-# The widths HQ's browser gate reads (browser_tests.WIDTHS), and a small phone's.
+# The widths HQ's browser gate reads (WIDTHS in core/tests/browser/widths.py), and a small phone's.
 _WIDTHS = (390, 402, 820, 1360)
 # Each control About this demo is drawn over at some scroll stop: where its
 # box meets the control's, the point at the middle of the two is the chip's.

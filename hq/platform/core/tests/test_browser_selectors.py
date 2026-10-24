@@ -14,11 +14,11 @@ from pathlib import Path
 from django.conf import settings
 from django.test import SimpleTestCase, tag
 
-from hq.platform.core import browser_tests
 from hq.platform.core.stylesheets import stylesheet
+from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser_modules import browser_modules
 
 ROOT = Path(settings.BASE_DIR)
-GATE = ROOT / "hq/platform/core" / "browser_tests.py"
 AUDIT = ROOT / "hq/platform/core" / "browser_audit.js"
 # Host templates and the public example extension: the markup this repository
 # can see. Installed extensions ship their own templates.
@@ -125,7 +125,7 @@ class BrowserGateSelectorTests(SimpleTestCase):
     def test_every_gate_selector_names_rendered_markup(self):
         missing = sorted(
             f"{key}: {kind} {name}"
-            for key, selector in browser_tests.SELECTORS.items()
+            for key, selector in SELECTORS.items()
             for kind, name in tokens(selector)
             if not rendered(kind, name)
         )
@@ -138,15 +138,23 @@ class BrowserGateSelectorTests(SimpleTestCase):
         or an id belongs in SELECTORS.
         """
 
-        tree = ast.parse(GATE.read_text(encoding="utf-8"))
+        # The example estate's gate is outside this rule: it presses the
+        # estate's controls through literal selectors of its own.
+        trees = [
+            ast.parse(path.read_text(encoding="utf-8"))
+            for module, path in browser_modules().items()
+            if module != "hq.platform.core.tests.browser.estate"
+        ]
         registry = next(
             node.value
+            for tree in trees
             for node in tree.body
             if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "SELECTORS" for t in node.targets)
         )
         allowed = {id(node) for node in ast.walk(registry)}
         queried = {
             id(call.args[0])
+            for tree in trees
             for call in ast.walk(tree)
             if isinstance(call, ast.Call)
             and isinstance(call.func, ast.Attribute)
@@ -154,7 +162,7 @@ class BrowserGateSelectorTests(SimpleTestCase):
             and call.args
         }
         offences = []
-        for node in ast.walk(tree):
+        for node in (node for tree in trees for node in ast.walk(tree)):
             if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
                 continue
             if id(node) in allowed:

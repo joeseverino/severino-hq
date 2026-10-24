@@ -32,9 +32,8 @@ ROOT = Path(__file__).resolve().parents[2]
 # The gates that run whatever changed, side by side: each is quick, and each
 # Django gate opens a database of its own (the django task template).
 TASKS = ("checks:ruff", "checks:mypy", "checks:structural", "tests:django", "tests:migrations", "drift:*")
-# Never part of the Django suite: other languages, vendored trees, the browser
-# pass that `mise run check` also leaves to `mise run browser`.
-SKIP_PARTS = {"node_modules", "controller", "browser_tests", ".venv", "staticfiles"}
+# Never part of the Django suite: other languages and vendored trees.
+SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
 ALWAYS = ("architecture", "new_domain")
 # The module every test that reads the tasks goes through; a change to a task
 # definition reaches those tests as a change to it would.

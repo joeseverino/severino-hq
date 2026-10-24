@@ -6,7 +6,7 @@ from unittest import mock
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.core.browser_tests import slow_frames
+from hq.platform.core.tests.browser.serving import slow_frames
 
 
 @tag("source")

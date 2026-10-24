@@ -194,8 +194,7 @@ each pin lives. Beyond those:
 ### Browser layout
 
 `mise run browser` installs the WebKit the locked Playwright pins (HQ is read
-in Safari) and runs `hq.platform.core.browser_tests` and
-`hq.platform.core.estate_browser_tests`. It renders the
+in Safari) and runs the package `hq.platform.core.tests.browser`. It renders the
 dashboard, service, connections, machine, topology and project pages over a
 synthetic `example.*` estate at phone through desktop widths, with JavaScript
 off and on, and checks that nothing escapes the page sideways, a table fits
@@ -220,7 +219,7 @@ field at its length, money at the largest a household records, and the
 longest label of every choice, so a new list or field is measured at its
 worst the day it exists (`dev:look derived/<app>/<name>` shows one).
 The example estate (`hq/platform/core/example_estate/`, the homelab the demo
-and `seed_demo` show) is read by `hq.platform.core.estate_browser_tests` on
+and `seed_demo` show) is read by `hq.platform.core.tests.browser.estate` on
 every page the navigation declares, with script on and deferred parts loaded,
 at 402, 820, 1360 and 1680 pixels and at `WIDE_TABLES`, in the light palette
 and the dark. `WIDE_TABLES` is read from the stylesheet: the narrowest
@@ -248,6 +247,15 @@ label, or `--slow <ms>` on `dev:look`, draws every page that way: each
 animation frame comes that many milliseconds late, and an idle callback waits
 three times its timeout. `HQ_BROWSER_SLOW=150 mise run browser:navigation`
 reproduces such a flake without loading the machine.
+
+What the browser gates read from the environment:
+
+| Variable | Set by | Does |
+| :--- | :--- | :--- |
+| `HQ_BROWSER_ENGINE` | development | the browser gates' engine: `webkit` by default, `chromium` or `firefox` |
+| `HQ_BROWSER_CHANNEL` | development | a Playwright browser channel for that engine |
+| `HQ_BROWSER_FACE` | development | `fallback` draws the browser gates with Inter withheld, in the stack's next face (`--fallback-face`) |
+| `HQ_BROWSER_SLOW` | development | milliseconds each animation frame comes late in the browser gates, idle callbacks waiting three times their timeout (`dev:look --slow`) |
 
 A run that stalls says where. With `HQ_TEST_STALL_SECONDS=<s>`, each test
 process (every parallel worker) prints a stall report once a test or a class

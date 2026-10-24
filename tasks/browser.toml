@@ -14,7 +14,7 @@ description = "Real-browser layout invariants over the stress estate"
 depends = ["setup:webkit"]
 extends = "django-heavy"
 usage = 'flag "--fallback-face" help="Withhold Inter, so every page is drawn in the next face of the font stack, the system face of the platform, as a reader whose Inter came late sees it, and a layout that holds only at the widths of Inter fails"'
-run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test hq.platform.core.browser_tests.ScriptedSparseLayoutTests hq.platform.core.browser_tests.ScriptedDenseLayoutTests hq.platform.core.browser_tests.ComponentLayoutTests hq.platform.core.browser_tests.SettledSparseLayoutTests hq.platform.core.browser_tests.UnscriptedSparseLayoutTests hq.platform.core.browser_tests.SettledDenseLayoutTests hq.platform.core.browser_tests.UnscriptedDenseLayoutTests hq.platform.core.browser_tests.LongestValueLayoutTests --noinput --parallel auto"
+run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test hq.platform.core.tests.browser.sweeps.ScriptedSparseLayoutTests hq.platform.core.tests.browser.sweeps.ScriptedDenseLayoutTests hq.platform.core.tests.browser.components.ComponentLayoutTests hq.platform.core.tests.browser.sweeps.SettledSparseLayoutTests hq.platform.core.tests.browser.sweeps.UnscriptedSparseLayoutTests hq.platform.core.tests.browser.sweeps.SettledDenseLayoutTests hq.platform.core.tests.browser.sweeps.UnscriptedDenseLayoutTests hq.platform.core.tests.browser.sweeps.LongestValueLayoutTests --noinput --parallel auto"
 
 # The layout gate in Chromium, so a break WebKit happens not to show still
 # fails. CI runs it as a leg of its own; `mise run browser` leaves it out, since
@@ -31,4 +31,4 @@ description = "Real-browser invariants over the example estate, the frame around
 depends = ["setup:webkit"]
 extends = "django-heavy"
 usage = 'flag "--fallback-face" help="Withhold Inter, so every page is drawn in the next face of the font stack, the system face of the platform, as a reader whose Inter came late sees it, and a layout that holds only at the widths of Inter fails"'
-run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test hq.platform.core.estate_browser_tests hq.platform.core.browser_tests.ReferenceBrowserTests hq.platform.core.browser_tests.FragmentBrowserTests --noinput --parallel auto"
+run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test hq.platform.core.tests.browser.estate.ExampleEstateBrowserTests hq.platform.core.tests.browser.estate.ExampleEstateDrawnTests hq.platform.core.tests.browser.estate.ExampleEstateControlTests hq.platform.core.tests.browser.reference.ReferenceBrowserTests hq.platform.core.tests.browser.fragments.FragmentBrowserTests --noinput --parallel auto"

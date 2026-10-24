@@ -40,10 +40,10 @@ class TestAtRefTests(GateTestCase):
         self.write("app.py", "VALUE = 1\n")
         self.write("tests/test_app.py", "old\n")
         self.write("tests/test_gone.py", "gone\n")
-        self.write("hq/core/estate_browser_tests.py", "old browser\n")
+        self.write("hq/core/tests/browser/estate.py", "old browser\n")
         self.old = self.commit("old")
         self.write("app.py", "VALUE = 2\n")
-        self.write("hq/core/estate_browser_tests.py", "new browser\n")
+        self.write("hq/core/tests/browser/estate.py", "new browser\n")
         self.commit("new")
         # Uncommitted work counts: a test being written, one edited, one removed.
         self.write("tests/test_app.py", "edited\n")
@@ -91,7 +91,7 @@ class TestAtRefTests(GateTestCase):
         self.assertEqual(seen["changed"], "edited\n")
         self.assertIn("tests/test_new.py", seen["tests"])
         self.assertNotIn("tests/test_gone.py", seen["tests"])
-        self.assertEqual(Path(self.root, "hq/core/estate_browser_tests.py").read_text(), "new browser\n")
+        self.assertEqual(Path(self.root, "hq/core/tests/browser/estate.py").read_text(), "new browser\n")
         verdict = out.strip().splitlines()[-1]
         self.assertIn(self.old[:12], verdict)
         self.assertIn("FAILED", verdict)

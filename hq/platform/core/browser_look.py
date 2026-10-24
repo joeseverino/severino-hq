@@ -75,19 +75,6 @@ from django.db import connections
 from django.test import Client, override_settings
 lazy from playwright.sync_api import Error as BrowserError
 
-from hq.platform.core.browser_tests import (
-    ALL_PAGES,
-    PHONE_SCREEN,
-    REFERENCE,
-    REFERENCE_DARK,
-    BrowserGate,
-    LayoutBrowserTests,
-    add_css,
-    render_reference,
-    survey_checks,
-    wait_for_reference,
-)
-from hq.platform.core.estate_browser_tests import ExampleEstateBrowserTests, navigation
 from hq.platform.core.look_report import (
     Found,
     Measured,
@@ -97,6 +84,13 @@ from hq.platform.core.look_report import (
     unmatched,
 )
 from hq.platform.core.speculation import NOT_A_NAVIGATION
+from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, navigation
+from hq.platform.core.tests.browser.gate import BrowserGate, add_css
+from hq.platform.core.tests.browser.layout import LayoutBrowserTests
+from hq.platform.core.tests.browser.reference import REFERENCE, REFERENCE_DARK, render_reference, wait_for_reference
+from hq.platform.core.tests.browser.stress import ALL_PAGES
+from hq.platform.core.tests.browser.survey import survey_checks
+from hq.platform.core.tests.browser.widths import PHONE_SCREEN
 from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
 
@@ -104,9 +98,9 @@ OUT = Path(settings.BASE_DIR) / "var" / "look"
 # What a look against a base runs at the base as this checkout has it, so a
 # finding is new for what the change drew rather than for how it was judged:
 # this module and its report, and the rules and probes the survey holds.
-LENS = tuple(
-    Path(__file__).resolve().with_name(name)
-    for name in ("browser_look.py", "look_report.py", "browser_tests.py", "browser_audit.js")
+LENS = (
+    *(Path(__file__).resolve().with_name(name) for name in ("browser_look.py", "look_report.py", "browser_audit.js")),
+    *sorted((Path(__file__).resolve().parent / "tests" / "browser").rglob("*.py")),
 )
 # A look against a base writes its whole report here and prints only its new
 # findings and its verdict, so a long report is never cut short where it is read.
@@ -447,7 +441,9 @@ def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured]:
     checkout = Path(settings.BASE_DIR)
     with _worktree(checkout, ref) as tree:
         for lens in LENS:
-            shutil.copyfile(lens, tree / lens.relative_to(checkout.resolve()))
+            copy = tree / lens.relative_to(checkout.resolve())
+            copy.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(lens, copy)
         found, log = tree.parent / "found.json", tree.parent / "look.log"
         env = {name: value for name, value in os.environ.items() if name not in {"usage_base", "VIRTUAL_ENV"}}
         env |= {

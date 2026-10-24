@@ -1988,7 +1988,7 @@ class FileSizeTests(SimpleTestCase):
     ROOT = Path(__file__).resolve().parents[4]
     # The fewest files each language's walk can find in a checkout or the image.
     FLOOR = {"*.py": 100, "*.go": 50, "*.js": 4, "*.css": 4}
-    NOT_WRITTEN_HERE = ("_tests.py", "_test.go", ".gen.go", ".min.js")
+    NOT_WRITTEN_HERE = ("_test.go", ".gen.go", ".min.js")
 
     def _counted(self, path: Path) -> bool:
         return (

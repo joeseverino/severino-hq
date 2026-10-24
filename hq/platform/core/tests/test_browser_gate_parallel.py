@@ -8,7 +8,7 @@ import threading
 from django.test import SimpleTestCase
 from django.test.runner import RemoteTestResult
 
-from hq.platform.core.browser_tests import BrowserGate, failure_name
+from hq.platform.core.tests.browser.gate import BrowserGate, failure_name
 
 
 class Probe(BrowserGate):

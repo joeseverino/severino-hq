@@ -7,8 +7,8 @@ from pathlib import Path
 
 from django.test import SimpleTestCase
 
-from hq.platform.core import browser_tests
 from hq.platform.core.test_runner import StallWatch
+from hq.platform.core.tests.browser import gate
 
 
 class _Driver:
@@ -33,8 +33,8 @@ class DriverLogTests(SimpleTestCase):
             def addClassCleanup(cls, function, *args):
                 test.addCleanup(function, *args)
 
-        with unittest.mock.patch.object(browser_tests, "stall_watch", watch):
-            browser_tests.start_driver(Owner, _Driver)
+        with unittest.mock.patch.object(gate, "stall_watch", watch):
+            gate.start_driver(Owner, _Driver)
         return watch
 
     def test_a_watched_run_shows_the_drivers_log_in_its_report(self):

@@ -48,7 +48,7 @@ Only looking does, and it is done before the change is handed on.
    files. `--base <your base>` prints only what your change broke and what it
    fixed, for reading a long list.
 6. **Guard.** A kind of problem that has turned up before becomes a rule in
-   `hq/platform/core/browser_tests.py` that measures everything of its kind a
+   `hq/platform/core/tests/browser/` that measures everything of its kind a
    reader sees, every element on the whole page and on every page the estate
    draws, never a selector list of where the defect turned up. It lands with
    proof it can fail, on a page the change touched and on at least one it did

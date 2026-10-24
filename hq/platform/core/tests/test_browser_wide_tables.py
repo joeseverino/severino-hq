@@ -2,7 +2,7 @@
 
 from django.test import SimpleTestCase
 
-from hq.platform.core.browser_tests import wide_tables
+from hq.platform.core.tests.browser.widths import wide_tables
 
 
 def css(pad="clamp(14px, 2.2vw, 28px)", card_space="--space-9", space=18, border=1):

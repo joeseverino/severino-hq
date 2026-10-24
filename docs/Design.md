@@ -14,7 +14,7 @@ to the list where its rules belong in the cascade, and every check of the
 stylesheet reads it through that list.
 
 Each rule names its gate where one enforces it. A lower-case gate without
-`test_` is a rule of `LayoutBrowserTests` (`hq/platform/core/browser_tests.py`), held on
+`test_` is a rule of `LayoutBrowserTests` (`hq/platform/core/tests/browser/layout.py`), held on
 every page at every width it applies to, each a subtest named for the rule,
 the page and the width.
 
@@ -52,7 +52,7 @@ in a comment. Content uses the window up to `--content-max`; prose keeps
 restyles its contents once the container is measured and runs their
 transitions from nothing, so every button fades in on load.
 *Gates:* the overflow sweep at a phone's width (402), 820 and 1360
-(`WIDTHS` in `browser_tests.py`); `test_viewport_breakpoints_only_go_down`, a ceiling that
+(`WIDTHS` in `tests/browser/widths.py`); `test_viewport_breakpoints_only_go_down`, a ceiling that
 only falls.
 
 **A table fits its box, at every width.** No screen width is asked anywhere
