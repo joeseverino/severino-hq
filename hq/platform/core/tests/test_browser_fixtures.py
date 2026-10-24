@@ -11,7 +11,6 @@ from contextlib import ExitStack, contextmanager
 from datetime import date, time, timedelta
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import Client, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -29,6 +28,7 @@ from hq.platform.application.ui import (
     Kpi,
     stacked_bar_chart,
 )
+from hq.platform.core import seeds
 from hq.platform.core.tests.browser.gate import answered
 
 SERVICE = "app.example.com"
@@ -50,12 +50,10 @@ def _healthy(key, kind, spec):
     )
 
 
-def build_estate():
-    """One machine, the service it serves, the credentials that reach it."""
+def build_estate(user):
+    """One machine, the service it serves, the credentials that reach it,
+    owned by ``user``."""
 
-    user = get_user_model().objects.create_user(
-        username="example", password="not-a-real-password", first_name="Example"
-    )
     for index in range(6):
         Project.objects.create(
             name=f"Example project with a long descriptive name {index}",
@@ -184,7 +182,9 @@ def build_estate():
     )
     _calendar()
     _records()
-    return user
+
+
+seeds.register("sparse", seeds.Seed(build_estate))
 
 
 def _tailnet():

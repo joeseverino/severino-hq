@@ -20,7 +20,6 @@ from datetime import timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from django.contrib.auth import get_user_model
 from django.test import Client, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -44,6 +43,7 @@ from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import Capability, Principal, cli_principal
 from hq.platform.application.services import CONTAINER_KIND
+from hq.platform.core import seeds
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.browser.gate import answered
 from hq.platform.core.tests.test_browser_fixtures import (
@@ -379,12 +379,9 @@ def _asked_on_opening(user):
     }
 
 
-def build_dense_estate():
-    """The dense estate, and the user its pages are rendered for."""
+def build_dense_estate(user):
+    """The dense estate, owned by ``user``."""
 
-    user = get_user_model().objects.create_user(
-        username="example-dense", password="not-a-real-password", first_name="Example"
-    )
     for index in range(8):
         Project.objects.create(
             name=f"An-example-project-with-a-deliberately-long-hyphenated-name-{index}",
@@ -468,7 +465,9 @@ def build_dense_estate():
     _unmanaged()
     _tailnet_policy()
     _held()
-    return user
+
+
+seeds.register("dense", seeds.Seed(build_dense_estate))
 
 
 # A record whose history and queued work fill the records list, its own page

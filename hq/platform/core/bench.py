@@ -675,12 +675,13 @@ def _operations(scale: float, user, resources: list[ManagedResource]) -> None:
     )
 
 
-def seed(scale: float = 1.0) -> Seeded:
-    """Fill the current database; ``scale`` multiplies every count."""
+def seed(scale: float = 1.0, owner: Any = None) -> Seeded:
+    """Fill the current database; ``scale`` multiplies every count. Its
+    operator is ``owner``, or a superuser it signs up when none is given."""
 
     rng = random.Random(20261004)
     today = timezone.localdate()
-    user = get_user_model().objects.create_superuser("bench", "bench@example.com")
+    user = owner or get_user_model().objects.create_superuser("bench", "bench@example.com")
     projects = _projects(rng, scale)
     assets = _assets(rng, scale, today, projects)
     records = _documentation(scale, today, projects, assets)

@@ -6,9 +6,10 @@ from types import MappingProxyType
 from django.db import transaction
 lazy from django.template.loader import render_to_string
 
-from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES, build_dense_estate, render_dense_pages
-from hq.platform.core.tests.test_browser_derived_fixtures import build_derived_estate, render_derived_pages
-from hq.platform.core.tests.test_browser_fixtures import PAGES, build_estate, render_pages
+from hq.platform.core import seeds
+from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES, render_dense_pages
+from hq.platform.core.tests.test_browser_derived_fixtures import render_derived_pages
+from hq.platform.core.tests.test_browser_fixtures import PAGES, render_pages
 lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.pages import Page, PageAction
 lazy from hq.platform.core.templatetags.stylesheet_tags import stylesheets
@@ -78,12 +79,12 @@ def stress_estate():
     each estate is rolled back once rendered, so nothing else sees it."""
 
     with transaction.atomic():
-        pages = render_pages(build_estate())
+        pages = render_pages(seeds.build("sparse"))
         transaction.set_rollback(True)
     with transaction.atomic():
-        pages |= render_dense_pages(build_dense_estate())
+        pages |= render_dense_pages(seeds.build("dense"))
         transaction.set_rollback(True)
     with transaction.atomic():
-        lists = render_derived_pages(build_derived_estate())
+        lists = render_derived_pages(seeds.build("derived"))
         transaction.set_rollback(True)
     return MappingProxyType(pages | lists | speaking_heads() | shared_parts()), tuple(lists)

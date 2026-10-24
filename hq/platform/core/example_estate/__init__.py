@@ -1,7 +1,7 @@
 """The example estate: a small, well-run homelab, the one HQ is shown with.
 
-It seeds the public demo, a dev database (``manage.py seed_demo``), the
-rendered-page and export tests, and the layout gate's realistic pass. The
+It is the showcase and standard data sets (``hq.platform.core.seeds``), and
+seeds the rendered-page and export tests. The
 gate's stress estate (``test_browser_fixtures.build_estate``) breaks things on
 purpose so layouts are tested at their worst. This one is the opposite: an
 HQ that has run for months. Every record is read, every service is set up,
@@ -40,7 +40,7 @@ from .names import HQ, HQ_REVISION, HQ_SOURCE, LAN, LAPTOP, OWNER, PROXY, SSO, c
 # The services the operator starred, to keep at the top of the list.
 FAVORITES = (HQ, "photos.example.com")
 
-__all__ = ("REQUEST", "SSO", "as_production", "build_showcase", "seed", "throwaway_media")
+__all__ = ("REQUEST", "SSO", "as_production", "build", "build_showcase", "example_owner", "seed", "throwaway_media")
 
 # A reader's browser on the laptop, forwarded by the proxy, over HTTPS.
 REQUEST = {
@@ -94,16 +94,28 @@ def throwaway_media():
         yield
 
 
-def build_showcase():
-    """Seed the estate and return the user its pages are rendered for."""
+def example_owner():
+    """The user a page is rendered for when no operator signed up: the estate's owner."""
 
-    user = get_user_model().objects.create_user(username="example", email=OWNER, password=None, first_name="Example")
-    # Their sign-in names their GitHub account, as the identity provider says it.
-    record_claimed_accounts(user, {GITHUB: "example"})
-    seed(owner=user)
+    return get_user_model().objects.create_user(username="example", email=OWNER, password=None, first_name="Example")
+
+
+def build(owner):
+    """The estate, owned by ``owner``: its records, their sign-in naming their
+    GitHub account as the identity provider says it, and their favorites."""
+
+    record_claimed_accounts(owner, {GITHUB: "example"})
+    seed(owner=owner)
     for hostname in FAVORITES:
-        pins.toggle(user, pins.SERVICE, hostname)
-    return user
+        pins.toggle(owner, pins.SERVICE, hostname)
+
+
+def build_showcase():
+    """The estate under its example owner, who is returned."""
+
+    owner = example_owner()
+    build(owner)
+    return owner
 
 
 def seed(owner=None):

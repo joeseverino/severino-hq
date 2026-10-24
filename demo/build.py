@@ -1,7 +1,8 @@
 """Builds the public demo: HQ's pages for the example data, saved as a static site.
 
 Runs as a test (``mise run demo:build``) so it gets a throwaway database. It
-seeds the showcase (``hq/platform/core/example_estate``), signs in with demo data on, asks for
+seeds a data set by its name in ``HQ_DEMO_SEED`` (``hq.platform.core.seeds``,
+the showcase when unnamed), signs in with demo data on, asks for
 each page the way a production request arrives, follows every link from the
 dashboard and saves each page to ``HQ_DEMO_OUT``. GET requests change nothing
 in HQ, so crawling is safe.
@@ -37,12 +38,12 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import Client, TestCase, override_settings
 lazy from django.contrib.staticfiles.storage import staticfiles_storage
 
-from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
+from hq.platform.core import seeds
+from hq.platform.core.example_estate import REQUEST, SSO, as_production
 from hq.platform.core.example_estate.names import HQ, HQ_SOURCE
 from hq.platform.core.middleware import DEMO_SESSION_KEY
 
@@ -263,21 +264,6 @@ def _hashed_static():
         yield root
 
 
-def _fresh_install():
-    """What someone sees after installing HQ: one signed-in user, nothing else."""
-
-    return get_user_model().objects.create_user(username="example", email="example@example.com", first_name="Example")
-
-
-# The showcase by default, under Advanced HQ Posture. HQ_DEMO_SEED=standard is
-# the same estate without it, and empty a fresh install.
-_SEEDS = {
-    "showcase": (build_showcase, {"SEVERINO_POSTURE": "advanced"}),
-    "standard": (build_showcase, {}),
-    "empty": (_fresh_install, {}),
-}
-
-
 def _inject(page: str, response, *, address: str = "") -> bytes:
     """A page as the demo serves it: HQ's policy for its route, the address a
     saved copy stands for, and the demo's scripts, after the charset."""
@@ -318,16 +304,16 @@ class DemoBuild(TestCase):
         if OUT.exists():
             shutil.rmtree(OUT)
         OUT.mkdir(parents=True)
-        seed, seeded_settings = _SEEDS[os.environ.get("HQ_DEMO_SEED") or "showcase"]
         # A saved copy: what a page says about the reader is an example, not
         # the reader's, and each page says what the copy is.
         with (
             as_production(),
-            override_settings(SEVERINO_RENDERED_COPY=True, **seeded_settings),
+            override_settings(SEVERINO_RENDERED_COPY=True),
+            seeds.built(os.environ.get("HQ_DEMO_SEED") or "showcase") as owner,
             _hashed_static() as collected,
         ):
             client = _Browser(**REQUEST)
-            client.force_login(seed(), backend=SSO)
+            client.force_login(owner, backend=SSO)
             # Demo data on for every page; demo.js keeps the switch from turning it off.
             session = client.session
             session[DEMO_SESSION_KEY] = True

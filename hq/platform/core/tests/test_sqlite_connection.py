@@ -76,5 +76,8 @@ class CreatorTests(SimpleTestCase):
 
     def test_the_dev_server_migrates_before_it_serves(self):
         self.assert_migrates_before_serving(
-            "tools/dev/dev.sh", r"uv run python manage\.py migrate\b", r"exec uv run python -m uvicorn\b"
+            # A new scratch database is migrated by the seed that fills it.
+            "tools/dev/dev.sh",
+            r"\s*(\S+=\S+ )?uv run python manage\.py (migrate|seed)\b",
+            r"exec uv run python -m uvicorn\b",
         )

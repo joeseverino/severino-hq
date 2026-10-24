@@ -38,6 +38,7 @@ from hq.platform.application.references import ReferenceField
 from hq.platform.application.routes import routed
 from hq.platform.application.tables import TableListMixin
 from hq.platform.application.tests.markup import elements
+from hq.platform.core import seeds
 from hq.platform.core.tests.test_browser_fixtures import render_pages
 
 # Words a record really says, run to the field's length so a column must wrap them.
@@ -335,16 +336,15 @@ def list_views():
     return found
 
 
-def build_derived_estate():
-    """Rows for every list, and the user their pages are rendered for."""
+def build_derived_estate(user):
+    """Rows for every list, owned by ``user``."""
 
-    user = get_user_model().objects.create_user(
-        username="example-derived", password="not-a-real-password", first_name="Example"
-    )
     fill = _Fill(user)
     for view in list_views().values():
         fill.rows_for(view.model)
-    return user
+
+
+seeds.register("derived", seeds.Seed(build_derived_estate))
 
 
 def derived_pages():
@@ -361,7 +361,7 @@ class DerivedEstateTests(TestCase):
     def test_every_list_page_shows_the_rows_derived_for_it(self):
         """A list a derived row cannot be shown on would be measured empty."""
 
-        for name, html in render_derived_pages(build_derived_estate()).items():
+        for name, html in render_derived_pages(seeds.build("derived")).items():
             with self.subTest(page=name):
                 cells = [cell.words for cell in elements(html, "td")]
                 self.assertTrue(any(_DERIVED.search(said) for said in cells), "no derived row is shown")

@@ -102,24 +102,23 @@ elif [ ! -f "$state/secret.env" ]; then
     export DJANGO_SECRET_KEY
 fi
 
-uv run python manage.py migrate --noinput --verbosity 0
+if [ "$profile" = scratch ] && [ ! -f "$state/login" ]; then
+    # A new database: migrated, its operator signed up and the data set
+    # written in one process, with the settings the set is shown under.
+    password=$(openssl rand -hex 12)
+    DJANGO_SUPERUSER_PASSWORD=$password uv run python manage.py seed "${usage_seed:-empty}" \
+        --owner operator --env-file "$state/seed.env" --verbosity 0
+    (umask 077 && echo "operator $password" > "$state/login")
+else
+    [ -z "${usage_seed:-}" ] || die "--seed fills a new database, and --keep keeps the last one as it was seeded."
+    uv run python manage.py migrate --noinput --verbosity 0
+fi
 if [ "$profile" = scratch ]; then
-    if [ ! -f "$state/login" ]; then
-        password=$(openssl rand -hex 12)
-        DJANGO_SUPERUSER_PASSWORD=$password uv run python manage.py createsuperuser --verbosity 0 \
-            --noinput --username operator --email operator@example.invalid
-        (umask 077 && echo "operator $password" > "$state/login")
-        if [ -n "${usage_seed:-}" ]; then
-            uv run python manage.py seed_demo
-        fi
-    fi
-    if [ "${usage_seed:-}" = showcase ]; then
-        export SEVERINO_POSTURE=advanced
-    fi
+    set -a
+    . "$state/seed.env"
+    set +a
     echo "Sign in as: $(cat "$state/login")" >&2
 fi
-
-uv run python manage.py collectstatic --noinput --verbosity 0
 
 # Uvicorn watches with watchfiles (the dev group), the reloader that reads
 # --reload-include and --reload-exclude. A template edit restarts it too: with

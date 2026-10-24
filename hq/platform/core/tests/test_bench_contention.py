@@ -4,7 +4,7 @@ from collections import Counter
 
 from django.test import SimpleTestCase
 
-from hq.platform.core.management.commands.bench_contention import WRITE, Tally, _percentile
+from hq.platform.core.management.commands.bench_contention import WRITE, RoleTimings, _percentile
 
 
 class WriteTests(SimpleTestCase):
@@ -27,7 +27,7 @@ class WriteTests(SimpleTestCase):
 
 class TallyTests(SimpleTestCase):
     def test_it_keeps_the_five_slowest_with_what_each_was(self):
-        tally = Tally()
+        tally = RoleTimings()
         for took in range(10):
             tally.add(float(took), [], Counter(), what=f"/page/{took}/")
 

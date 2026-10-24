@@ -21,7 +21,7 @@ from typing import override
 from urllib.parse import parse_qsl, urljoin, urlsplit
 
 from django.conf import settings
-from django.test import Client, override_settings
+from django.test import Client
 from django.urls import reverse
 lazy from django.db import transaction
 
@@ -32,7 +32,8 @@ from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, WIDE_TABLES, WIDTHS, viewport
 lazy from hq.platform.application.domains import domain_navigation
-lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
+lazy from hq.platform.core import seeds
+lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production
 lazy from hq.platform.core.example_estate.names import MACHINE, SERVICES
 lazy from hq.platform.core.example_estate.network import ZONE_KEY
 
@@ -103,9 +104,9 @@ def render_estate():
         return client.get(url, secure=True, follow=True, **REQUEST, **headers)
 
     answers = {}
-    with transaction.atomic(), as_production(), override_settings(SEVERINO_POSTURE="advanced"):
+    with transaction.atomic(), as_production(), seeds.built("showcase") as owner:
         client = Client()
-        client.force_login(build_showcase(), backend=SSO)
+        client.force_login(owner, backend=SSO)
         paths = navigation() + records()
         for path in paths:
             response = ask(client, path)
@@ -294,9 +295,9 @@ class ExampleEstateControlTests(BrowserGate):
     def render(cls):
         cls.default_sort, cls.word = {}, {}
         answers = {}
-        with transaction.atomic(), as_production(), override_settings(SEVERINO_POSTURE="advanced"):
+        with transaction.atomic(), as_production(), seeds.built("showcase") as owner:
             client = Client()
-            client.force_login(build_showcase(), backend=SSO)
+            client.force_login(owner, backend=SSO)
 
             def ask(address):
                 response = client.get(address, secure=True, follow=True, **REQUEST)

@@ -14,7 +14,8 @@ from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application import analytics, approvals, github_profile
 from hq.platform.application.linked_accounts import GITHUB, linked_login
-from hq.platform.core.example_estate import build_showcase, throwaway_media
+from hq.platform.core import seeds
+from hq.platform.core.example_estate import throwaway_media
 from hq.platform.core.example_estate.agents import AGENT
 from hq.platform.core.models import AuditLog
 
@@ -23,7 +24,7 @@ class ExampleEstateTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         with throwaway_media():
-            cls.user = build_showcase()
+            cls.user = seeds.build("standard")
 
     def test_every_published_item_has_visits_and_the_site_a_full_quarter(self):
         self.assertTrue(analytics.coverage_summary(days=28)["complete"])
