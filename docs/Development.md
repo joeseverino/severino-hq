@@ -316,10 +316,11 @@ tests, not judged. `mise run dev:look --deep --rule survey estate/all` walks
 the whole estate. What a rule finds is written beside the screenshot
 (`<page>-<width>.txt`) as each page is looked at, so a run stopped part way
 keeps what it found, and page by page to `var/gate/look.txt` once the run
-ends; the run prints only the checks it ran and a verdict naming every page
-that failed. `--base <ref>` looks at the same pages at
-`<ref>` first, in a temporary worktree it removes however the run ends and
-judges by this checkout's rules, writes what is new on this checkout and what
+ends; the run prints each page and width as it starts, the checks it ran,
+and a verdict naming every page that failed. `--base <ref>` looks at the same
+pages at `<ref>` first, in a temporary worktree it removes however the run
+ends and judges by this checkout's rules, its output relayed line by line
+after the ref as it runs, writes what is new on this checkout and what
 it fixed to `var/gate/look.txt` under the commits both ran at, and prints a
 line for each new finding and the verdict. Every probe reports all it finds,
 and findings are matched as a multiset by page, width, check and a key with

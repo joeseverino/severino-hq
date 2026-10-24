@@ -334,6 +334,24 @@ def _worktree(checkout: Path, ref: str) -> Iterator[Path]:
         signal.signal(signal.SIGTERM, previous)
 
 
+def _relay(command: list[str], sink, ref: str, **options) -> None:
+    """Run ``command``, each line it writes kept in ``sink`` and said here as
+    it arrives, after ``ref``, so the base's pass reads apart from this one's
+    and a hang there names its page. The command is killed if this run ends
+    first."""
+
+    with subprocess.Popen(
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, **options
+    ) as run:
+        try:
+            for line in run.stdout:
+                sink.write(line)
+                print(f"{ref}: {line}", end="", flush=True)
+        except BaseException:
+            run.kill()
+            raise
+
+
 def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured]:
     """What this run finds and measures, looked for at ``ref``: the same
     task's run, in a worktree of it, through this checkout's copy of the
@@ -362,14 +380,7 @@ def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured]:
         # The run there is watched by its own stall watch.
         with log.open("w", encoding="utf-8") as sink, stall_watch.paused():
             # The command this run was started with, run there by its own environment.
-            subprocess.run(
-                ["uv", "run", "--group", "browser", "python", *sys.argv],
-                cwd=tree,
-                env=env,
-                stdout=sink,
-                stderr=subprocess.STDOUT,
-                check=False,
-            )
+            _relay(["uv", "run", "--group", "browser", "python", *sys.argv], sink, ref, cwd=tree, env=env)
         if not found.is_file():
             said = log.read_text(encoding="utf-8").splitlines()[-40:]
             raise AssertionError(f"The look at {ref} did not finish:\n" + "\n".join(said))
@@ -561,13 +572,15 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             self.fail(printed[-1])
 
     def look_at_every_page(self, widths, rule) -> Found:
-        """Each page at each width, its findings kept beside its screenshot,
-        and said once it has been looked at when no rule asks for a report."""
+        """Each page at each width, said as it starts, so a look that hangs
+        names where; its findings kept beside its screenshot, and said once it
+        has been looked at when no rule asks for a report."""
 
         found: Found = {}
         for name in self.asked:
             for width in widths:
                 stall_watch.mark(f"dev:look {name} at {width}")
+                print(f"Looking at {name} at {width}", flush=True)
                 said = found[name, width] = self.look(name, width, rule)
                 report = _shot(name, width).with_suffix(".txt")
                 if said:

@@ -2,8 +2,10 @@
 from the checkout, reports page by page, shoots a dialog open as a reader
 opens it, and compares against a base in a worktree it always removes."""
 
+import io
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -472,6 +474,42 @@ class EstateAddressTests(SimpleTestCase):
         self.assertEqual(look._estate_path("estate/audit?awaiting=1"), "/audit/?awaiting=1")
         self.assertEqual(look._estate_path("estate/audit"), "/audit/")
         self.assertEqual(look._estate_path("estate"), "/")
+
+
+class _Pages:
+    """The look's walk over pages, with each look keeping what had been said
+    by the time it began."""
+
+    look_at_every_page = look.Look.look_at_every_page
+
+    def __init__(self, asked, said):
+        self.asked, self.said, self.began = asked, said, []
+
+    def look(self, name, width, _rule):
+        self.began.append(((name, width), self.said.getvalue()))
+        return []
+
+
+@tag("source")
+class ProgressTests(SimpleTestCase):
+    def test_each_page_and_width_is_said_before_it_is_looked_at(self):
+        with (
+            tempfile.TemporaryDirectory() as folder,
+            mock.patch.object(look, "OUT", Path(folder)),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as said,
+        ):
+            pages = _Pages(["example/one", "example/two"], said)
+            pages.look_at_every_page([402, 1360], "survey")
+        for (name, width), before in pages.began:
+            self.assertEqual(before.splitlines()[-1], f"Looking at {name} at {width}")
+        self.assertEqual(len(pages.began), 4)
+
+    def test_the_base_pass_is_said_line_by_line_after_its_ref_and_kept_whole_in_its_log(self):
+        sink = io.StringIO()
+        with mock.patch("sys.stdout", new_callable=io.StringIO) as said:
+            look._relay([sys.executable, "-c", "print('Looking at example at 402'); print('done')"], sink, "base")
+        self.assertEqual(said.getvalue(), "base: Looking at example at 402\nbase: done\n")
+        self.assertEqual(sink.getvalue(), "Looking at example at 402\ndone\n")
 
 
 @tag("source")
