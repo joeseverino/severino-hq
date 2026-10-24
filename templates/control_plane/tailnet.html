@@ -37,9 +37,7 @@
     </dl>
   {% endif %}
 
-  <div class="section-head">
-    <h2>Grants</h2>
-  </div>
+  {% section_head %}Grants{% endsection_head %}
   {% table_region "Grants" %}
     <table class="data-table">
       <thead><tr>{% table_heading "From" gutter=True local_sort=tailnet.grants|sortable %}{% table_heading "To" local_sort=tailnet.grants|sortable %}{% table_heading "Ports" "identifier" drop=1 local_sort=tailnet.grants|sortable %}</tr></thead>

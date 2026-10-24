@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 lazy from dataclasses import replace
 
 from django import template
+from django.template.base import token_kwargs
 from django.utils import dateformat, timezone
 from django.utils.html import conditional_escape, format_html
 from django.utils.safestring import mark_safe
@@ -729,3 +730,51 @@ def rendered_copy() -> datetime | None:
     is the moment it was rendered; None for a running HQ."""
 
     return timezone.now() if settings.SEVERINO_RENDERED_COPY else None
+
+
+class SlotsNode(template.Node):
+    """A block tag drawn by its partial, each part it encloses handed over as
+    the variable it is named for (``slotted``)."""
+
+    def __init__(self, partial: str, parts: dict[str, template.NodeList], options: dict) -> None:
+        self.partial = partial
+        self.options = options
+        self.child_nodelists = tuple(f"nodelist_{name}" for name in parts)
+        for name, nodelist in parts.items():
+            setattr(self, f"nodelist_{name}", nodelist)
+
+    def render(self, context) -> str:
+        values = {name: value.resolve(context) for name, value in self.options.items()}
+        for attribute in self.child_nodelists:
+            # Rendered by the page's own template, so escaped already.
+            values[attribute.removeprefix("nodelist_")] = mark_safe(getattr(self, attribute).render(context).strip())
+        return context.template.engine.get_template(self.partial).render(context.new(values))
+
+
+def slotted(name: str, partial: str, parts: tuple[str, ...], options: frozenset[str]) -> None:
+    """Register ``{% name option=value %}first{% second %}...{% endname %}``:
+    markup a page would otherwise write by hand, drawn by ``partial`` with
+    each part as the variable it is named for. The first part follows the
+    opening tag; the others may be left out, and come in ``parts``' order."""
+
+    end = f"end{name}"
+
+    def compile_(parser, token) -> SlotsNode:
+        bits = token.split_contents()
+        given = token_kwargs(bits[1:], parser)
+        if len(given) != len(bits) - 1 or not set(given) <= options:
+            raise template.TemplateSyntaxError(f"{name} takes {', '.join(sorted(options))} as name=value")
+        found = {part: template.NodeList() for part in parts}
+        ahead = list(parts)
+        while True:
+            found[ahead.pop(0)] = parser.parse((*ahead, end))
+            marker = parser.next_token().contents
+            if marker == end:
+                return SlotsNode(partial, found, given)
+            ahead = ahead[ahead.index(marker) :]
+
+    register.tag(name, compile_)
+
+
+slotted("section_head", "partials/_section_head.html", ("heading", "aside"), frozenset(("id", "lede")))
+slotted("band_fact", "partials/_band_fact.html", ("value", "tone"), frozenset(("icon", "label")))

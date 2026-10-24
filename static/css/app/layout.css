@@ -147,6 +147,10 @@
 /* What sits beside the heading takes the next line when the two do not fit. */
 .section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); margin-bottom: var(--space-6); }
 .section-head h2 { margin: 0; flex: 1; }
+/* A heading with a line under it holds what sits beside it to its first line. */
+.section-head:has(> hgroup) { align-items: flex-start; }
+.section-head > hgroup { flex: 1; min-width: 0; margin: 0; }
+.section-lede { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
 /* A line about the section at the head's end: a count with its unit, a
    window, a source. Wrapped, its lines are as even as its words allow, so
    none is left with one. */

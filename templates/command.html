@@ -6,9 +6,7 @@ button named for what it does. How it is built belongs to the API reference.
 {% endcomment %}
 {% if result %}
 <section class="card command-result command-result-good" aria-labelledby="command-result-title">
-  <div class="section-head">
-    <h2 id="command-result-title">Done</h2>
-  </div>
+  {% section_head id="command-result-title" %}Done{% endsection_head %}
   {% if result.replayed %}<p class="muted command-result-note">This was already done earlier. Nothing ran again.</p>{% endif %}
   {% comment %}
   The answer in the shape a person reads: the facts the result states and the

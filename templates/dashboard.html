@@ -42,9 +42,7 @@ the header.
 {% endcomment %}
 {% if needs_you %}
 <section class="card dash-needs tone-serious" aria-labelledby="dash-needs-title" data-triage-routes data-dismiss="{% url 'action_items_set_aside' %}" data-restore="{% url 'action_items_bring_back' %}">
-  <div class="section-head">
-    <h2 id="dash-needs-title">Needs you</h2>
-  </div>
+  {% section_head id="dash-needs-title" %}Needs you{% endsection_head %}
   {% include "partials/_queue_glance.html" with items=needs_you only %}
 </section>
 {% endif %}
@@ -55,10 +53,7 @@ the row is gone once every step is done.
 {% endcomment %}
 {% if getting_started %}
 <section class="card dash-start" aria-labelledby="dash-start-title">
-  <div class="section-head">
-    <h2 id="dash-start-title">Get started</h2>
-    <span class="count">{{ getting_started_left|breakable }} left{% if install_guide %} · <a href="{{ install_guide }}" rel="noopener">Install guide</a>{% endif %}</span>
-  </div>
+  {% section_head id="dash-start-title" %}Get started{% aside %}<span class="count">{{ getting_started_left|breakable }} left{% if install_guide %} · <a href="{{ install_guide }}" rel="noopener">Install guide</a>{% endif %}</span>{% endsection_head %}
   <ol class="step-list">
     {% for step in getting_started %}
       <li{% if step.done %} class="is-done"{% endif %}>
@@ -99,24 +94,20 @@ is said here, over the ones most recently changed, and nowhere else on the page.
   {% partialdef calendar inline %}
   {% if not calendar.empty %}
   <section class="card calendar-month is-compact" id="dashboard-calendar" data-fragment data-fragment-name="calendar" data-fragment-links data-fragment-history="replace" aria-labelledby="dashboard-calendar-title">
-    <div class="section-head">
-      <h2 id="dashboard-calendar-title"><a href="{% url 'calendar:month' %}?month={{ calendar.month|date:'Y-m' }}">{{ calendar.month|date:"F Y" }}</a></h2>
+    {% section_head id="dashboard-calendar-title" %}<a href="{% url 'calendar:month' %}?month={{ calendar.month|date:'Y-m' }}">{{ calendar.month|date:"F Y" }}</a>{% aside %}
       <nav class="calendar-nav" aria-label="Change month">
         <a href="{{ calendar_paging.previous }}" rel="prev" aria-label="Previous month">&lsaquo;</a>
         {% if not calendar.is_current %}<a class="calendar-now" href="{{ calendar_paging.today }}">Today</a>{% endif %}
         <a href="{{ calendar_paging.next }}" rel="next" aria-label="Next month">&rsaquo;</a>
       </nav>
-    </div>
+    {% endsection_head %}
     {% include "calendars/_month_grid.html" %}
   </section>
   {% endif %}
   {% endpartialdef %}
 
   <section class="card">
-    <div class="section-head">
-      <h2>Projects</h2>
-      {% if active_project_count %}<span class="count">{{ active_project_count|breakable }} active{% if projects_needing_output %} · {{ projects_needing_output|counted:"has no writeup or doc,have no writeup or doc" }}{% endif %}</span>{% endif %}
-    </div>
+    {% section_head %}Projects{% aside %}{% if active_project_count %}<span class="count">{{ active_project_count|breakable }} active{% if projects_needing_output %} · {{ projects_needing_output|counted:"has no writeup or doc,have no writeup or doc" }}{% endif %}</span>{% endif %}{% endsection_head %}
     {% if active_projects %}
       <ul class="list-rows">
         {% for p in active_projects %}
@@ -138,10 +129,7 @@ is said here, over the ones most recently changed, and nowhere else on the page.
 
   {% if content_rows or published_rows %}
   <section class="card">
-    <div class="section-head">
-      <h2>Publishing</h2>
-      {% if draft_content_count %}<span class="count">{{ draft_content_count|counted:"draft" }}</span>{% endif %}
-    </div>
+    {% section_head %}Publishing{% aside %}{% if draft_content_count %}<span class="count">{{ draft_content_count|counted:"draft" }}</span>{% endif %}{% endsection_head %}
     {% if content_rows %}
       {% include "partials/_record_list.html" with rows=content_rows %}
       <p class="section-foot"><a href="{% url 'content:list' %}?status=draft">Drafts &rarr;</a></p>

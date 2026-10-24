@@ -13,13 +13,7 @@ band of page spent on the absence of news.
 {% endcomment %}
 {% if timeline.items %}
 <section class="timeline{% if not plain %} card{% endif %}" aria-label="{{ timeline.title }}">
-  <div class="section-head timeline-head">
-    <div>
-      <h2>{{ timeline.title|breakable }}</h2>
-      {% if timeline.description %}<p class="timeline-description">{{ timeline.description|breakable }}</p>{% endif %}
-    </div>
-    {% if timeline.items %}<span class="count">{{ timeline.items|length|counted:"event" }}</span>{% endif %}
-  </div>
+  {% section_head lede=timeline.description %}{{ timeline.title|breakable }}{% aside %}<span class="count">{{ timeline.items|length|counted:"event" }}</span>{% endsection_head %}
   {% if timeline.items %}
     <ol class="timeline-list">
       {% for item in timeline.items %}

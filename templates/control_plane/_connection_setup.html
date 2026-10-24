@@ -13,10 +13,7 @@ connected is in one place.
 {% endcomment %}
 {% load value_tags %}
 <section class="card connection-setup" aria-labelledby="connection-setup-heading">
-  <div class="section-head">
-    <h2 id="connection-setup-heading">{% if again %}Connect another account{% else %}Connect a service{% endif %}</h2>
-    <span class="count">{% if again %}{{ setups|length|counted:"service" }} connected{% else %}{{ count|breakable }} not connected yet{% endif %}</span>
-  </div>
+  {% section_head id="connection-setup-heading" %}{% if again %}Connect another account{% else %}Connect a service{% endif %}{% aside %}<span class="count">{% if again %}{{ setups|length|counted:"service" }} connected{% else %}{{ count|breakable }} not connected yet{% endif %}</span>{% endsection_head %}
   <p class="muted">Each connection is a 1Password item the controller is given. Open one to see what to make.{% if guide %} <a href="{{ guide }}" rel="noopener">How connections work</a>{% endif %}</p>
   <ul class="setup-list">
     {% for setup in setups %}
