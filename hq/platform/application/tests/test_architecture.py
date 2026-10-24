@@ -1620,8 +1620,14 @@ class FileSizeTests(SimpleTestCase):
     """No source file is longer than ``LIMIT`` lines.
 
     A file grows freely below it; one past it is split by responsibility.
-    Every language HQ writes is held to it. Tests, migrations, generated code
-    and vendored copies are not counted.
+    Every language HQ writes is held to it. Migrations, generated code and
+    vendored copies are not counted.
+
+    Python test files are held to it through ``file_size_baseline.txt``, the
+    files already over it with the length each had when listed. The baseline
+    shrinks as workers split the files they touch: a listed file may not grow,
+    one now under the ceiling leaves the list, and no new test file passes the
+    ceiling.
     """
 
     LIMIT = 1000
@@ -1647,6 +1653,37 @@ class FileSizeTests(SimpleTestCase):
             }
         over = {path: lines for path, lines in sizes.items() if lines > self.LIMIT}
         self.assertEqual(over, {}, "split these by responsibility")
+
+    def _baseline(self) -> dict[str, int]:
+        lines = Path(__file__).with_name("file_size_baseline.txt").read_text(encoding="utf-8").splitlines()
+        entries = [line.rsplit(" ", 1) for line in lines if line and not line.startswith("#")]
+        return {path: int(figure) for path, figure in entries}
+
+    def _test_file_sizes(self) -> dict[str, int]:
+        found = [
+            path
+            for path in source_files(self.ROOT, "test*.py")
+            if "tests" in path.relative_to(self.ROOT).parts[:-1]
+            and not {"migrations", "node_modules", "vendor"} & set(path.relative_to(self.ROOT).parts)
+        ]
+        self.assertGreater(len(found), 100, "the test-file walk found almost nothing; its root is wrong")
+        return {str(path.relative_to(self.ROOT)): len(path.read_text(encoding="utf-8").splitlines()) for path in found}
+
+    def test_test_files_hold_the_ceiling_through_a_baseline_that_only_shrinks(self):
+        sizes = self._test_file_sizes()
+        baseline = self._baseline()
+        problems = []
+        for path, listed in sorted(baseline.items()):
+            if path not in sizes:
+                problems.append(f"{path}: listed at {listed} but gone; remove its line")
+            elif sizes[path] <= self.LIMIT:
+                problems.append(f"{path}: {sizes[path]} lines, under {self.LIMIT}; remove its line")
+            elif sizes[path] > listed:
+                problems.append(f"{path}: {sizes[path]} lines, listed at {listed}; a listed file does not grow")
+        for path, lines in sorted(sizes.items()):
+            if lines > self.LIMIT and path not in baseline:
+                problems.append(f"{path}: {lines} lines, over {self.LIMIT} and not listed; split it by behavior")
+        self.assertEqual(problems, [], "split the test file by the behavior it holds")
 
 
 @tag("source")

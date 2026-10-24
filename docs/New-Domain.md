@@ -69,7 +69,7 @@ is the rule. `checks:css` (Stylelint under `tools/lint/stylelint.config.mjs`:
 tokens, spacing, color), `StyleContractTests` and `SharedPrimitiveStyleTests`
 (CSS, layers), `TemplateCommentTests` (what a `{# #}` comment left open is),
 `CognitiveComplexityTests` (score 20 per function), `FileSizeTests` (no source
-file past 1,000 lines), `OneDefinitionTests` (a module-level name is
+file past 1,000 lines; a test file over it is listed in a baseline that only shrinks), `OneDefinitionTests` (a module-level name is
 assigned once), `PageTrailTests` (a view declares `page_trail` and `trail_label`, not a
 `get_page_trail` that restates them), `SettingsReadTests` (a setting is read as `settings.NAME`, never with a
 default), `OperationQueueTests` (an operation is queued through
