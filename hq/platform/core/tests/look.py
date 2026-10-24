@@ -75,7 +75,15 @@ from django.db import connections
 from django.test import Client, override_settings
 lazy from playwright.sync_api import Error as BrowserError
 
-from hq.platform.core.look_report import (
+from hq.platform.core.speculation import NOT_A_NAVIGATION
+from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, navigation
+from hq.platform.core.tests.browser.gate import BrowserGate, add_css
+from hq.platform.core.tests.browser.layout import LayoutBrowserTests
+from hq.platform.core.tests.browser.reference import REFERENCE, REFERENCE_DARK, render_reference, wait_for_reference
+from hq.platform.core.tests.browser.stress import ALL_PAGES
+from hq.platform.core.tests.browser.survey import AUDIT, survey_checks
+from hq.platform.core.tests.browser.widths import PHONE_SCREEN
+from hq.platform.core.tests.look_report import (
     Found,
     Measured,
     beside,
@@ -83,14 +91,6 @@ from hq.platform.core.look_report import (
     closing,
     unmatched,
 )
-from hq.platform.core.speculation import NOT_A_NAVIGATION
-from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, navigation
-from hq.platform.core.tests.browser.gate import BrowserGate, add_css
-from hq.platform.core.tests.browser.layout import LayoutBrowserTests
-from hq.platform.core.tests.browser.reference import REFERENCE, REFERENCE_DARK, render_reference, wait_for_reference
-from hq.platform.core.tests.browser.stress import ALL_PAGES
-from hq.platform.core.tests.browser.survey import survey_checks
-from hq.platform.core.tests.browser.widths import PHONE_SCREEN
 from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
 
@@ -99,8 +99,9 @@ OUT = Path(settings.BASE_DIR) / "var" / "look"
 # finding is new for what the change drew rather than for how it was judged:
 # this module and its report, and the rules and probes the survey holds.
 LENS = (
-    *(Path(__file__).resolve().with_name(name) for name in ("browser_look.py", "look_report.py", "browser_audit.js")),
-    *sorted((Path(__file__).resolve().parent / "tests" / "browser").rglob("*.py")),
+    *(Path(__file__).resolve().with_name(name) for name in ("look.py", "look_report.py")),
+    AUDIT.resolve(),
+    *sorted((Path(__file__).resolve().parent / "browser").rglob("*.py")),
 )
 # A look against a base writes its whole report here and prints only its new
 # findings and its verdict, so a long report is never cut short where it is read.

@@ -10,7 +10,7 @@ from unittest import mock
 
 from django.test import SimpleTestCase, override_settings, tag
 
-from hq.platform.core import browser_look, look_report
+from . import look, look_report
 
 ASKED = {"usage_pages": "example"}
 
@@ -37,37 +37,37 @@ def _repository(folder: Path) -> Path:
 class AskedTests(SimpleTestCase):
     def test_a_run_without_the_tasks_environment_is_refused_rather_than_read_as_nothing_asked(self):
         with mock.patch.dict(os.environ, clear=True), self.assertRaisesMessage(RuntimeError, "mise run dev:look"):
-            browser_look._usage("usage_rule")
+            look._usage("usage_rule")
         with mock.patch.dict(os.environ, ASKED, clear=True):
-            self.assertEqual(browser_look._usage("usage_rule"), "")
-            self.assertEqual(browser_look._listed("usage_pages"), ["example"])
+            self.assertEqual(look._usage("usage_rule"), "")
+            self.assertEqual(look._listed("usage_pages"), ["example"])
 
     def test_css_is_text_or_a_file_a_relative_path_names_in_the_checkout(self):
         with tempfile.TemporaryDirectory() as checkout, override_settings(BASE_DIR=checkout):
             Path(checkout, "var").mkdir()
             Path(checkout, "var", "defect.css").write_text("main { inline-size: 200vw }", encoding="utf-8")
-            self.assertEqual(browser_look._css("var/defect.css"), "main { inline-size: 200vw }")
-            self.assertEqual(browser_look._css("main { color: red }"), "main { color: red }")
-            self.assertEqual(browser_look._css(""), "")
+            self.assertEqual(look._css("var/defect.css"), "main { inline-size: 200vw }")
+            self.assertEqual(look._css("main { color: red }"), "main { color: red }")
+            self.assertEqual(look._css(""), "")
             with self.assertRaisesMessage(AssertionError, "no file"):
-                browser_look._css("var/missing.css")
+                look._css("var/missing.css")
 
     def test_eval_is_a_file_a_relative_path_names_in_the_checkout(self):
         with tempfile.TemporaryDirectory() as checkout, override_settings(BASE_DIR=checkout):
             Path(checkout, "var").mkdir()
             Path(checkout, "var", "probe.js").write_text("() => document.title", encoding="utf-8")
-            self.assertEqual(browser_look._script("var/probe.js"), "() => document.title")
-            self.assertEqual(browser_look._script(""), "")
+            self.assertEqual(look._script("var/probe.js"), "() => document.title")
+            self.assertEqual(look._script(""), "")
             with self.assertRaisesMessage(AssertionError, "names no file"):
-                browser_look._script("var/missing.js")
+                look._script("var/missing.js")
 
     def test_what_eval_returned_reads_under_its_page_and_width(self):
-        lines = browser_look._evaluated("example/one", 402, {"inlineSize": "372px", "chain": ["td", "tr"]}).splitlines()
+        lines = look._evaluated("example/one", 402, {"inlineSize": "372px", "chain": ["td", "tr"]}).splitlines()
         self.assertEqual(lines[0], "example/one at 402:")
         self.assertTrue(all(line.startswith("  ") for line in lines[1:]))
         self.assertIn('"372px"', "\n".join(lines))
-        self.assertEqual(browser_look._evaluated("example/one", 402, "a\nb"), "example/one at 402:\n  a\n  b")
-        self.assertEqual(browser_look._evaluated("example/one", 402, None), "example/one at 402:\n  null")
+        self.assertEqual(look._evaluated("example/one", 402, "a\nb"), "example/one at 402:\n  a\n  b")
+        self.assertEqual(look._evaluated("example/one", 402, None), "example/one at 402:\n  null")
 
 
 class _Popovers:
@@ -78,10 +78,10 @@ class _Popovers:
         self.ids, self.refused, self.shown = ids, set(refused), set()
 
     def evaluate(self, script, place=None):
-        if script == browser_look._POPOVERS:
+        if script == look._POPOVERS:
             return len(self.ids)
         popover = self.ids[place]
-        if script == browser_look._SHOW_POPOVER:
+        if script == look._SHOW_POPOVER:
             if popover in self.refused:
                 return None
             self.shown.add(popover)
@@ -94,7 +94,7 @@ class _Lens:
     """The look's walk over popovers, with a rule that finds a box on the page
     beneath, one inside a popover, and two popovers lying over each other."""
 
-    with_each_popover = browser_look.Look.with_each_popover
+    with_each_popover = look.Look.with_each_popover
 
     def __init__(self, page):
         self.page = page
@@ -275,7 +275,7 @@ class ReportTests(SimpleTestCase):
                 {"name": "Owner", "shown": False, "drawn": 0, "min": 0, "max": 0},
             ],
         }
-        line = browser_look._columns("example/services", 1086, table)
+        line = look._columns("example/services", 1086, table)
         self.assertNotIn("\n", line)
         head, columns = line.split(": ", 1)
         for fact in ("example/services", "table 2", "Example services", "1086", "1100", "610", "1720"):
@@ -283,7 +283,7 @@ class ReportTests(SimpleTestCase):
         self.assertEqual(
             columns.split(" · "), ["Name 312 (min 180, max 640)", "Status 96 (min 88, max 96)", "Owner gone"]
         )
-        unheld = browser_look._columns("example/services", 402, {**table, "region": None, "label": ""})
+        unheld = look._columns("example/services", 402, {**table, "region": None, "label": ""})
         self.assertNotIn(" in ", unheld.split(": ", 1)[0])
         self.assertNotIn("held", line)
 
@@ -292,15 +292,15 @@ class ReportTests(SimpleTestCase):
             "index": 1, "label": "", "region": None, "drawn": 402, "held": True, "min": 402, "max": 402,
             "columns": [{"name": "Name", "shown": True, "drawn": 402, "min": 402, "max": 402}],
         }  # fmt: skip
-        head = browser_look._columns("example/services", 402, table).split(": ", 1)[0]
+        head = look._columns("example/services", 402, table).split(": ", 1)[0]
         self.assertIn("held by an open row", head)
 
     def test_findings_and_measures_survive_the_trip_from_the_base_run(self):
         measured = {("example/one", 402): {"columns": "example/one table 1 at 402", "eval": "example/one at 402:\n  1"}}
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder, "found.json")
-            browser_look._write_found(path, self.FOUND, measured)
-            found, read = browser_look._read_found(path)
+            look._write_found(path, self.FOUND, measured)
+            found, read = look._read_found(path)
         self.assertEqual(found, self.FOUND)
         self.assertEqual(read[("example/one", 402)], measured[("example/one", 402)])
         self.assertEqual(read[("example/two", 402)], {})
@@ -321,22 +321,22 @@ class ReportTests(SimpleTestCase):
 @tag("source")
 class BandTests(SimpleTestCase):
     def test_a_tall_page_is_cut_into_window_sized_bands_that_cover_it_once(self):
-        bands = browser_look._bands(2000, 900)
+        bands = look._bands(2000, 900)
         self.assertEqual(bands, [(0, 900), (900, 900), (1800, 200)])
         self.assertEqual(sum(height for _, height in bands), 2000)
 
     def test_a_page_the_window_holds_is_not_cut(self):
-        self.assertEqual(browser_look._bands(900, 900), [])
-        self.assertEqual(browser_look._bands(400, 900), [])
+        self.assertEqual(look._bands(900, 900), [])
+        self.assertEqual(look._bands(400, 900), [])
 
 
 @tag("source")
 class EstateAddressTests(SimpleTestCase):
     def test_an_estate_page_keeps_its_query_and_its_path_its_slash(self):
-        self.assertEqual(browser_look._estate_path("estate/audit/?awaiting=1"), "/audit/?awaiting=1")
-        self.assertEqual(browser_look._estate_path("estate/audit?awaiting=1"), "/audit/?awaiting=1")
-        self.assertEqual(browser_look._estate_path("estate/audit"), "/audit/")
-        self.assertEqual(browser_look._estate_path("estate"), "/")
+        self.assertEqual(look._estate_path("estate/audit/?awaiting=1"), "/audit/?awaiting=1")
+        self.assertEqual(look._estate_path("estate/audit?awaiting=1"), "/audit/?awaiting=1")
+        self.assertEqual(look._estate_path("estate/audit"), "/audit/")
+        self.assertEqual(look._estate_path("estate"), "/")
 
 
 @tag("source")
@@ -344,7 +344,7 @@ class WorktreeTests(SimpleTestCase):
     def test_the_base_worktree_is_removed_however_the_look_ends(self):
         with tempfile.TemporaryDirectory() as folder:
             checkout = _repository(Path(folder))
-            with self.assertRaises(KeyError), browser_look._worktree(checkout, "HEAD") as tree:
+            with self.assertRaises(KeyError), look._worktree(checkout, "HEAD") as tree:
                 self.assertTrue((tree / "page.txt").is_file())
                 raise KeyError("the look broke")
             self.assertFalse(tree.parent.exists())
@@ -354,17 +354,17 @@ class WorktreeTests(SimpleTestCase):
         with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
             checkout = _repository(Path(folder))
             head = _git("rev-parse", "--short", "HEAD", cwd=checkout).strip()
-            self.assertEqual(browser_look._commit("HEAD"), head)
+            self.assertEqual(look._commit("HEAD"), head)
             (checkout / "page.txt").write_text("changed\n", encoding="utf-8")
-            self.assertEqual(browser_look._commit("HEAD"), f"{head} with uncommitted changes")
-            self.assertIn("unknown", browser_look._commit("example-missing"))
+            self.assertEqual(look._commit("HEAD"), f"{head} with uncommitted changes")
+            self.assertIn("unknown", look._commit("example-missing"))
 
     def test_a_ref_that_names_nothing_is_said_and_leaves_nothing(self):
         with tempfile.TemporaryDirectory() as folder:
             checkout = _repository(Path(folder))
             with (
                 self.assertRaisesMessage(AssertionError, "--base example-missing"),
-                browser_look._worktree(checkout, "example-missing"),
+                look._worktree(checkout, "example-missing"),
             ):
                 self.fail("a worktree of nothing")
             self.assertEqual(_git("worktree", "list", "--porcelain", cwd=checkout).count("worktree "), 1)
