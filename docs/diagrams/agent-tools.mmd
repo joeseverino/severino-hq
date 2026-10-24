@@ -1,7 +1,7 @@
 flowchart TB
     contract["AGENTS.md<br/>the engineering contract"]
-    worker[".claude/agents/hq-worker.md<br/>one piece · its own worktree · background"]
-    rules[".claude/skills/<br/>hq-house-rules · hq-pass · hq-ui-pass"]
+    worker["hq-worker<br/>one piece · its own worktree · background"]
+    rules["its skills<br/>hq-house-rules · hq-pass · hq-ui-pass"]
     scratch["mise run dev:scratch<br/>loopback server · its own database"]
     look["mise run dev:look<br/>screenshots · the browser gates' rules"]
     fast["mise run fast BASE<br/>tests the change reaches · lint · types · drift"]

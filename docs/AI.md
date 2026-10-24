@@ -7,21 +7,19 @@ uses to read and change HQ, and the limits on what it can do through them.
 
 ## Building HQ with agents
 
-### What the repository ships
+### The agent and its skills
 
-Claude Code loads a project's agents and skills from its `.claude/`
-directory. HQ commits those two parts and ignores the rest of `.claude/`
-([`.gitignore`](../.gitignore)), so anyone who clones the repository gets the
-same worker and the same procedures.
+The worker and its procedures live in a Claude Code plugin of their own, kept
+out of this repository while they change from week to week. What each does:
 
-| File | What it is |
+| Part | What it is |
 | --- | --- |
-| [`.claude/agents/hq-worker.md`](../.claude/agents/hq-worker.md) | The worker. It builds one bounded piece of HQ or of an extension, in a worktree of its own (`isolation: worktree`), in the background, and reports back. It first moves its worktree to the brief's `Base SHA:`. Its report ends with a `Worktree:` line and one `Lesson:` line for each thing that cost it time. |
-| [`.claude/skills/hq-house-rules/`](../.claude/skills/hq-house-rules/SKILL.md) | Preloaded by the worker, and never invoked by hand. Fewer, stronger tests; `mise run fast <base>` as the gate; scratch scripts in the worktree's gitignored `var/`. |
-| [`.claude/skills/hq-pass/`](../.claude/skills/hq-pass/SKILL.md) | `/hq-pass`, run by the main session: briefs, launch, and integrating several workers into one host branch. |
-| [`.claude/skills/hq-ui-pass/`](../.claude/skills/hq-ui-pass/SKILL.md) | `/hq-ui-pass`, for any change to what a page shows: look at every page it reaches with `mise run dev:look`, fix the shared primitive, and look again until `mise run dev:look all --rule survey` exits 0. |
+| `hq-worker` | The worker. It builds one bounded piece of HQ or of an extension, in a worktree of its own, in the background, and reports back. Its report ends with a `Worktree:` line and one `Lesson:` line for each thing that cost it time. |
+| `hq-house-rules` | Preloaded by the worker. Fewer, stronger tests; `mise run fast <base>` as the gate; scratch scripts in the worktree's gitignored `var/`. |
+| `hq-pass` | Run by the main session: briefs, launch, and integrating several workers into one host branch. |
+| `hq-ui-pass` | For any change to what a page shows: look at every page it reaches with `mise run dev:look`, fix the shared primitive, and look again until `mise run dev:look all --rule survey` exits 0. |
 
-Every agent also reads [`AGENTS.md`](../AGENTS.md), the engineering contract
+Every agent reads [`AGENTS.md`](../AGENTS.md), the engineering contract
 (`CLAUDE.md` is a link to it). The skills add to it and never restate it.
 
 ### How a pass runs
@@ -34,9 +32,8 @@ Every agent also reads [`AGENTS.md`](../AGENTS.md), the engineering contract
    what is wrong, grouped by the shared rule or partial that causes it, and
    which files each worker will own, so no two workers edit the same file.
 2. **Brief and launch.** Each worker is an `hq-worker`. Its brief quotes the
-   decisions it must follow from the plan and names its `Base SHA:`
-   ([hq-pass](../.claude/skills/hq-pass/SKILL.md), step 1). Every worker starts
-   from the pass's base (step 2).
+   decisions it must follow from the plan and names its `Base SHA:`, the
+   pass's base, which every worker starts from.
 3. **Build.** A worker changes only its own files, commits on its own branch,
    and runs its own server: `mise run dev:scratch` serves on loopback only,
    with a database of that checkout's own, so servers in different worktrees
@@ -45,14 +42,13 @@ Every agent also reads [`AGENTS.md`](../AGENTS.md), the engineering contract
 4. **Integrate.** The main session lands the workers on one branch from the
    base. A rebase conflict in a derived file is settled by `mise run regen`.
    Then `mise run check` and `REQUIRE_COMPOSED=1 mise run suite:as-image`, and
-   `/hq-ui-pass` for a change to what a page shows (step 3).
+   `hq-ui-pass` for a change to what a page shows.
 5. **Lessons.** Each `Lesson:` line names what cost time and what would have
    prevented it. The main session changes the rule it points at, so the next
    brief starts from the fixed rule.
 
-The main session integrates every piece into one host pull request
-([hq-house-rules](../.claude/skills/hq-house-rules/SKILL.md)), and CI runs the
-same gates on it.
+The main session integrates every piece into one host pull request, and CI
+runs the same gates on it.
 
 ### The tools a worker uses
 
@@ -104,8 +100,9 @@ and the test rules in `hq-house-rules`.
 Some of the setup belongs to the operator rather than to HQ, and is kept out
 of this public repository:
 
+- The agent and its skills, described above, while they change.
 - Claude Code's local settings and agent worktrees, which `.gitignore` leaves
-  out of `.claude/`.
+  out of the repository.
 - `CLAUDE.local.md`, the operator's notes on deployment and the private
   extensions, which `.gitignore` also excludes.
 - The hooks that check every shell command an agent runs, the read-only agent
