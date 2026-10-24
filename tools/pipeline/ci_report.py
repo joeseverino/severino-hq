@@ -3,14 +3,12 @@
     python3 -m tools.pipeline.ci_report check NAME SHA STATUS TITLE SUMMARY [CONCLUSION]
     python3 -m tools.pipeline.ci_report verdict
     python3 -m tools.pipeline.ci_report report
-    python3 -m tools.pipeline.ci_report failed-step JOB_NAME
     gh run view RUN --log-failed | python3 -m tools.pipeline.ci_report diagnose
 
 ``check`` opens or moves one of HQ's checks. ``verdict`` is CI's: ready, or
 held with why and what fixes it. ``report`` is Deploy's: live, or not
-deployed and why, plus one comment on the merged pull request. ``failed-step``
-names the steps that failed in one job of this run. ``diagnose`` prints the
-catalog entry a log matches, as JSON.
+deployed and why, plus one comment on the merged pull request. ``diagnose``
+prints the catalog entry a log matches, as JSON.
 
 It runs on the hosted runner's own ``python3`` with the standard library and
 ``gh`` only: the jobs that post a check carry no toolchain step, so a review
@@ -141,7 +139,6 @@ class Job:
     conclusion: str
     seconds: int | None
     url: str
-    steps: tuple[Mapping[str, Any], ...] = ()
 
     @classmethod
     def of(cls, raw: Mapping[str, Any]) -> Job:
@@ -155,7 +152,6 @@ class Job:
             conclusion=raw.get("conclusion") or "pending",
             seconds=seconds,
             url=raw.get("html_url") or "",
-            steps=tuple(raw.get("steps") or ()),
         )
 
 
@@ -168,17 +164,6 @@ def jobs(gh: GitHub, run: str, attempt: str | None = None) -> list[Job]:
     """Every job of a run, or of one attempt of it."""
     scope = f"runs/{run}/attempts/{attempt}" if attempt else f"runs/{run}"
     return [Job.of(raw) for raw in gh.pages(f"repos/{gh.repo}/actions/{scope}/jobs?per_page=100", "jobs")]
-
-
-def failed_steps(gh: GitHub, run: str, attempt: str, job_name: str) -> list[str]:
-    """The steps that failed in one job; a called workflow's job is "Caller / JOB"."""
-    return [
-        step["name"]
-        for job in jobs(gh, run, attempt)
-        if job.name == job_name or job.name.endswith(f" / {job_name}")
-        for step in job.steps
-        if step.get("conclusion") == "failure"
-    ]
 
 
 class LogUnreadable(RuntimeError):
@@ -549,14 +534,6 @@ def _run_report(_: argparse.Namespace) -> int:
     return 0
 
 
-def _run_failed_step(args: argparse.Namespace) -> int:
-    gh = GitHub(_env("GH_TOKEN"), _env("GITHUB_REPOSITORY"))
-    steps = failed_steps(gh, _env("GITHUB_RUN_ID"), os.environ.get("GITHUB_RUN_ATTEMPT") or "1", args.job)
-    for step in steps:
-        print(step)
-    return 0
-
-
 def _run_diagnose(_: argparse.Namespace) -> int:
     print(json.dumps(diagnose(sys.stdin.read())))
     return 0
@@ -575,9 +552,6 @@ def parser() -> argparse.ArgumentParser:
     check.set_defaults(run=_run_check)
     commands.add_parser("verdict", help="CI's verdict, from RESULTS and REQUIRED").set_defaults(run=_run_verdict)
     commands.add_parser("report", help="Deploy's report on its commit").set_defaults(run=_run_report)
-    step = commands.add_parser("failed-step", help="the steps that failed in one job of this run")
-    step.add_argument("job")
-    step.set_defaults(run=_run_failed_step)
     commands.add_parser("diagnose", help="the catalog entry a log on stdin matches").set_defaults(run=_run_diagnose)
     return root
 

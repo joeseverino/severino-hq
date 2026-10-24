@@ -592,7 +592,10 @@ jobs:
           SEALED: ${{ steps.seal.outputs.sealed }}
         run: |
           set -euo pipefail
-          step="$(python3 -m tools.pipeline.ci_report failed-step "Build HQ" 2>/dev/null | head -1 || true)"
+          # This job's failed steps; called from another workflow it is "Caller / Build HQ".
+          step="$(gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --attempt "$GITHUB_RUN_ATTEMPT" --json jobs \
+            --jq '.jobs[] | select(.name == "Build HQ" or (.name | endswith(" / Build HQ"))) | .steps[]
+              | select(.conclusion == "failure") | .name' 2>/dev/null | head -1 || true)"
           echo "step=${step:-a step}" >> "$GITHUB_OUTPUT"
           {
             echo "### Not built: ${step:-a step} failed"

@@ -22,7 +22,7 @@ IMAGE = "ghcr.io/example-owner/example-repo/composition@sha256:" + "b" * 64
 RUN = ci_report.Run("42", "https://github.com/example-owner/example-repo/actions/runs/42")
 
 
-def job(id_, name, conclusion="success", steps=()):
+def job(id_, name, conclusion="success"):
     return {
         "id": id_,
         "name": name,
@@ -30,7 +30,7 @@ def job(id_, name, conclusion="success", steps=()):
         "started_at": "2026-10-02T00:00:00Z",
         "completed_at": "2026-10-02T00:01:05Z",
         "html_url": f"https://github.com/{REPO}/actions/runs/42/job/{id_}",
-        "steps": list(steps),
+        "steps": [],
     }
 
 
@@ -101,12 +101,12 @@ class ListingTests(SimpleTestCase):
             {
                 f"repos/{REPO}/actions/runs/42/attempts/2/jobs": [
                     {"jobs": [job(1, "Checks")]},
-                    {"jobs": [job(2, "Compose / Build HQ", "failure", [{"name": "Sign", "conclusion": "failure"}])]},
+                    {"jobs": [job(2, "Compose / Build HQ", "failure")]},
                 ]
             }
         )
 
-        self.assertEqual(ci_report.failed_steps(gh, "42", "2", "Build HQ"), ["Sign"])
+        self.assertEqual([each.name for each in ci_report.jobs(gh, "42", "2")], ["Checks", "Compose / Build HQ"])
         self.assertIn("--paginate", fake.calls[0]["args"])
 
     def test_without_a_token_gh_reads_as_its_own_login(self):
