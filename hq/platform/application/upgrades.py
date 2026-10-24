@@ -92,6 +92,18 @@ class Plan:
         return bool(self.data)
 
     @property
+    def fixes_tone(self) -> str:
+        return "good" if self.fixes else ""
+
+    @property
+    def data_tone(self) -> str:
+        return "attention" if self.stateful else ""
+
+    @property
+    def verified_tone(self) -> str:
+        return "" if self.verified_by else "attention"
+
+    @property
     def risk(self) -> str:
         if self.change == MAJOR or (self.stateful and not self.verified_by) or self.introduces:
             return HIGH
@@ -364,6 +376,14 @@ class Readiness:
     @property
     def automatic(self) -> bool:
         return not self.not_automatic
+
+    @property
+    def automatic_tone(self) -> str:
+        return "good" if self.automatic else ""
+
+    @property
+    def verified_tone(self) -> str:
+        return "good" if self.verified_by else "attention"
 
 
 def readiness_of(item: Container) -> Readiness:

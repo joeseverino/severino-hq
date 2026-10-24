@@ -13,18 +13,18 @@ standard. Each said once; the band above has its version and standing.
       <strong>{% entity plan.release.url|outside label=plan.target_tag code=True %}</strong>
       <small>{% if plan.target_digest %}<span tabindex="0" data-tip="{{ plan.target_digest }}">{{ plan.target_digest|slice:":19"|breakable }}…</span>{% else %}Exact build not read yet{% endif %}{% if plan.release.published %} · released {{ plan.release.published|ago_short }}{% endif %}</small>
     {% endband_fact %}
-    {% band_fact icon="shield" label="Fixes" %}
+    {% band_fact icon="shield" label="Fixes" tone=plan.fixes_tone %}
       <strong>{% if plan.fixes %}{{ plan.fixes|length|counted:"known vulnerability,known vulnerabilities" }}{% elif item.standing.source %}None known{% else %}Cannot check{% endif %}</strong>
       <small>{% for advisory in plan.fixes|slice:":2" %}{% entity advisory.url|outside label=advisory.id %} {% endfor %}{% if not plan.fixes %}{% if item.standing.source %}Nothing known against the running version.{% else %}The image does not say where its source is.{% endif %}{% endif %}</small>
-    {% tone %}{% if plan.fixes %}good{% endif %}{% endband_fact %}
-    {% band_fact icon="layers" label="Its data" %}
+    {% endband_fact %}
+    {% band_fact icon="layers" label="Its data" tone=plan.data_tone %}
       <strong>{% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}</strong>
       <small>{% for mount in plan.data %}<code>{{ mount.source|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}It has no writable mount.{% endfor %}</small>
-    {% tone %}{% if plan.stateful %}attention{% endif %}{% endband_fact %}
-    {% band_fact icon="check-circle" label="Checked afterwards by" %}
+    {% endband_fact %}
+    {% band_fact icon="check-circle" label="Checked afterwards by" tone=plan.verified_tone %}
       <strong>{% if plan.verified_by %}{{ plan.verified_by.0|capfirst|breakable }}{% else %}Nothing{% endif %}</strong>
       <small>{% for what in plan.verified_by|slice:"1:" %}{{ what|capfirst|breakable }}{% if not forloop.last %} · {% endif %}{% empty %}{% if not plan.verified_by %}HQ can only see that it stays running.{% endif %}{% endfor %}</small>
-    {% tone %}{% if not plan.verified_by %}attention{% endif %}{% endband_fact %}
+    {% endband_fact %}
   </div>
   <div class="upgrade-detail boxed-facts">
     <ol class="upgrade-steps">
@@ -70,18 +70,18 @@ standard. Each said once; the band above has its version and standing.
 <section id="upgrade" class="page-section" data-page-section>
   <h2>When a new version comes out <span class="heading-aside">{% if readiness.automatic %}Upgrades automatically{% else %}Waits for you{% endif %}</span></h2>
   <div class="fact-band upgrade-band readiness-band">
-    {% band_fact icon="check-circle" label="Checked afterwards by" %}
+    {% band_fact icon="check-circle" label="Checked afterwards by" tone=readiness.verified_tone %}
       <strong>{% if readiness.verified_by %}{{ readiness.verified_by.0|capfirst|breakable }}{% else %}Nothing{% endif %}</strong>
       <small>{% for what in readiness.verified_by|slice:"1:" %}{{ what|capfirst|breakable }}{% if not forloop.last %} · {% endif %}{% empty %}{% if not readiness.verified_by %}Add a health check to change that.{% endif %}{% endfor %}</small>
-    {% tone %}{% if not readiness.verified_by %}attention{% else %}good{% endif %}{% endband_fact %}
+    {% endband_fact %}
     {% band_fact icon="layers" label="Its data" %}
       <strong>{% if readiness.data %}{{ readiness.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}</strong>
       <small>{% for mount in readiness.data %}<code>{{ mount.source|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}Nothing to restore on a rollback.{% endfor %}</small>
     {% endband_fact %}
-    {% band_fact icon="deploy" label="Automatic upgrades" %}
+    {% band_fact icon="deploy" label="Automatic upgrades" tone=readiness.automatic_tone %}
       <strong>{% if readiness.automatic %}Patch updates apply{% else %}Not yet{% endif %}</strong>
       <small>{% if readiness.not_automatic %}{{ readiness.not_automatic|length|counted:"reason,reasons" }}, listed below{% endif %}</small>
-    {% tone %}{% if readiness.automatic %}good{% endif %}{% endband_fact %}
+    {% endband_fact %}
     <ul class="band-meta upgrade-reasons">{% for blocker in readiness.not_automatic %}<li>{{ blocker.reason|breakable }}</li>{% endfor %}</ul>
   </div>
 </section>

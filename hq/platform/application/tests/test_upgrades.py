@@ -1,4 +1,5 @@
 import re
+from dataclasses import replace
 
 from django.test import SimpleTestCase, TestCase, tag
 from django.utils import timezone
@@ -82,6 +83,18 @@ class PlanTests(TestCase):
         self.assertEqual(plan.steps[-1].detail, "The override as it was is restored if verification fails.")
         # Nothing can apply it until a machine has the helper, and it says so.
         self.assertEqual([blocker.id for blocker in plan.blockers], ["no-apply-path"])
+
+    def test_a_plan_s_facts_say_their_tones(self):
+        estate(advisories=[{**HIGH, "vulnerabilities": [["< 1.2.1", "1.2.1"]]}])
+        published()
+        inventory("portainer.runtime", [runtime("app", healthcheck=True)])
+        declare("app")
+
+        plan = self.plan("app")
+        risky = replace(plan, fixes=(), data=({"type": "volume", "source": "app_data"},), verified_by=())
+
+        self.assertEqual((plan.fixes_tone, plan.data_tone, plan.verified_tone), ("good", "", ""))
+        self.assertEqual((risky.fixes_tone, risky.data_tone, risky.verified_tone), ("", "attention", "attention"))
 
     def test_data_is_snapshotted_and_restored(self):
         estate()
@@ -305,6 +318,9 @@ class ReadinessTests(TestCase):
         # Nothing about a target it does not have.
         self.assertFalse(reasons & {"no-target-digest", "not-a-patch", "target-affected"})
         self.assertFalse(found.automatic)
+        self.assertEqual((found.verified_tone, found.automatic_tone), ("attention", ""))
+        ready = replace(found, verified_by=("its health check",), not_automatic=())
+        self.assertEqual((ready.verified_tone, ready.automatic_tone), ("good", "good"))
 
 
 class HelperInstallTests(TestCase):
