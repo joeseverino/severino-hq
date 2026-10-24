@@ -138,6 +138,13 @@ stamped, so a test that reads a file the image leaves out fails here. Without
 the set it runs the host alone and says so; `REQUIRE_COMPOSED=1` fails
 instead, which is how `mise run preflight` runs it.
 
+Compose builds each extension from its branch named like the host branch, or
+from its admitted main when it has none, so a host branch pushed ahead of its
+extension work is verified without it. `mise-tasks/git/pre-push` refuses that
+push: with a set named, every extension checkout with work off main must carry
+the host branch's name and be pushed first. The global pre-push hook runs it
+with git's refs on stdin.
+
 ### Heavy gates take turns
 
 Two suites at once exhaust a small machine's memory, so the heavy tasks (`fast`,

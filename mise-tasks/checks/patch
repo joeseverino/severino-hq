@@ -1,34 +1,7 @@
 #!/bin/sh
-#MISE description="No whitespace error in the change, from its base to the working tree, and no conflict marker in any tracked file"
-# The base is where the change starts. A branch's is its merge-base with
-# origin/main. CI checks out a pull request's merge commit alone, with no
-# origin/main, and there the first parent is the base; on main itself, the
-# commit's parent is. Only the base's tree is needed, so a shallow checkout
-# fetches that one commit.
+#MISE description="No whitespace error or conflict marker in any tracked file, as the working tree holds it"
+# Against the empty tree, so every tracked file is read, edited or not, and a
+# conflict marker is a whitespace error to `git diff --check`.
 set -eu
 
-parent=$(git cat-file commit HEAD | sed -n 's/^parent //p' | head -n 1)
-base=""
-if git rev-parse --verify --quiet origin/main >/dev/null; then
-    base=$(git merge-base HEAD origin/main 2>/dev/null || true)
-    [ "$base" != "$(git rev-parse HEAD)" ] || base=""
-fi
-if [ -z "$base" ]; then
-    if [ -n "$parent" ]; then
-        base=$parent
-    else
-        # A root commit: the whole tree is the change.
-        base=$(git hash-object -t tree /dev/null)
-    fi
-fi
-if ! git cat-file -e "$base^{tree}" 2>/dev/null; then
-    git fetch --quiet --no-tags --depth=1 origin "$base" || {
-        echo "checks:patch: the change's base $base is not here and could not be fetched" >&2
-        exit 1
-    }
-fi
-git diff --check "$base"
-# A conflict marker is never right, so every tracked file is read for one,
-# changed or not: the diff from the empty tree with the whitespace rules off.
-git -c core.whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab,-indent-with-non-tab,-tab-in-indent \
-    diff --check "$(git hash-object -t tree /dev/null)"
+git diff --check "$(git hash-object -t tree /dev/null)"

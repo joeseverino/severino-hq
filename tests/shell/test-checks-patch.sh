@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# Prove checks:patch reads the change itself: a trailing space or a conflict
-# marker committed on a branch fails it, as does one left in the working tree,
-# a pull request's merge commit, checked out alone, is held to its base, and a
-# conflict marker anywhere in the tree fails it.
+# Prove checks:patch reads the whole tree: a trailing space, a blank last line
+# or a conflict marker fails it, committed long ago or left in the working tree.
 set -euo pipefail
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
@@ -20,55 +18,35 @@ fail() { echo "$1" >&2; cat "$work/out" >&2; exit 1; }
 passes() { (cd "$1" && "$patch") >"$work/out" 2>&1 || fail "$2"; }
 refuses() { if (cd "$1" && "$patch") >"$work/out" 2>&1; then fail "$2"; fi; }
 
-# A remote whose main already holds a trailing space: what is on main is not
-# the change's, so no branch is failed for it.
-git init -q -b main "$work/origin"
-printf 'clean\nold \n' >"$work/origin/base.txt"
-commit "$work/origin" base
-printf 'more\n' >"$work/origin/more.txt"
-commit "$work/origin" more
-git clone -q "$work/origin" "$work/repo"
 repo=$work/repo
-git -C "$repo" switch -q -c change
+git init -q -b main "$repo"
+printf 'clean\n' >"$repo/base.txt"
+commit "$repo" base
+printf 'more\n' >"$repo/more.txt"
+commit "$repo" more
 
-passes "$repo" "a branch with no change was refused"
+passes "$repo" "a clean tree was refused"
 
-printf 'fine\n' >"$repo/new.txt"
-commit "$repo" clean
-passes "$repo" "a clean change was refused"
-
-printf 'trailing \n' >"$repo/new.txt"
+# Committed two commits back, where no diff from the last commit's parent looks.
+printf 'clean\nold \n' >"$repo/base.txt"
 commit "$repo" "trailing space"
-refuses "$repo" "a committed trailing space passed"
-git -C "$repo" reset -q --hard HEAD~1
+printf 'later\n' >"$repo/later.txt"
+commit "$repo" later
+refuses "$repo" "a trailing space committed before the last commit passed"
+printf 'clean\n' >"$repo/base.txt"
+commit "$repo" fixed
+passes "$repo" "a fixed tree was refused"
 
-printf '<<<<<<< ours\na\n=======\nb\n>>>>>>> theirs\n' >"$repo/new.txt"
-commit "$repo" "conflict marker"
-refuses "$repo" "a committed conflict marker passed"
-git -C "$repo" reset -q --hard HEAD~1
-
-printf 'trailing \n' >"$repo/new.txt"
+printf 'trailing \n' >"$repo/more.txt"
 refuses "$repo" "a trailing space in the working tree passed"
-git -C "$repo" checkout -q -- new.txt
+git -C "$repo" checkout -q -- more.txt
 
-# A pull request's merge commit, as CI checks it out: no origin/main, and
-# main's tip as the first parent.
-printf 'trailing \n' >"$repo/new.txt"
-commit "$repo" "trailing space"
-git -C "$repo" switch -q --detach origin/main
-git -C "$repo" -c commit.gpgsign=false merge --no-verify --no-ff -q -m merge change
-git -C "$repo" branch -q -D change
-git -C "$repo" update-ref -d refs/remotes/origin/main
-git -C "$repo" update-ref -d refs/remotes/origin/HEAD 2>/dev/null || true
-refuses "$repo" "a merge commit's trailing space passed"
+printf 'more\n\n' >"$repo/more.txt"
+refuses "$repo" "a blank last line in the working tree passed"
+git -C "$repo" checkout -q -- more.txt
 
-# A conflict marker is refused wherever it is, even one main already holds.
-printf 'a\n=======\nb\n' >"$work/origin/marked.txt"
-commit "$work/origin" marked
-printf 'more\n' >>"$work/origin/more.txt"
-commit "$work/origin" after
-git clone -q "$work/origin" "$work/marked"
-git -C "$work/marked" switch -q -c change
-refuses "$work/marked" "a conflict marker already on main passed"
+printf 'a\n=======\nb\n' >"$repo/marked.txt"
+commit "$repo" marked
+refuses "$repo" "a committed conflict marker passed"
 
-echo "checks:patch reads the change from its base"
+echo "checks:patch reads every tracked file"
