@@ -1907,35 +1907,37 @@ class TestPlacementTests(SimpleTestCase):
 
 @tag("source")
 class RuntimeDependencyTests(SimpleTestCase):
-    """Every runtime dependency earns its place: host code imports it, or
-    pyproject.toml says why it is installed without being imported."""
+    """checks:deptry holds every runtime dependency to host code's imports, less
+    the DEP002 ignores in pyproject.toml. deptry says nothing of an ignore that
+    has gone stale, so this holds each to a dependency it would report."""
 
-    def test_every_runtime_dependency_is_imported_or_explained(self):
-        import ast
-        import importlib.metadata
+    def test_every_unused_dependency_deptry_ignores_is_one_it_would_report(self):
+        import json
+        import subprocess
+        import sys
         import tomllib
 
         root = Path(__file__).resolve().parents[4]
-        project = tomllib.loads((root / "pyproject.toml").read_text())
-        explained = set(project["tool"]["severino-hq"]["unimported"])
-        imported: set[str] = set()
-        for package in ("hq", "hq_sdk"):
-            for path in (root / package).rglob("*.py"):
-                if "tests" in path.parts:
-                    continue
-                for node in ast.walk(parsed(path)):
-                    if isinstance(node, ast.Import):
-                        imported |= {alias.name.split(".")[0] for alias in node.names}
-                    elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-                        imported.add(node.module.split(".")[0])
-        providers = importlib.metadata.packages_distributions()
-        used = {distribution.lower() for name in imported for distribution in providers.get(name, ())}
-        declared = {
-            re.split(r"[<>=!~\[ ;]", requirement, maxsplit=1)[0].lower()
-            for requirement in project["project"]["dependencies"]
-        }
+        ignored = tomllib.loads((root / "pyproject.toml").read_text())["tool"]["deptry"]["per_rule_ignores"]["DEP002"]
+        with TemporaryDirectory() as scratch:
+            report = Path(scratch) / "deptry.json"
+            # A --per-rule-ignores replaces the table, so DEP002 runs with no ignore.
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "deptry",
+                    "hq",
+                    "hq_sdk",
+                    "--per-rule-ignores",
+                    "DEP001=",
+                    "--json-output",
+                    report,
+                ],
+                cwd=root,
+                capture_output=True,
+                check=False,
+            )
+            reported = {each["module"] for each in json.loads(report.read_text()) if each["error"]["code"] == "DEP002"}
 
-        self.assertEqual(sorted(declared - used - explained), [])
-        # A reason for something that is imported, or no longer installed, is stale.
-        self.assertEqual(sorted(explained & used), [])
-        self.assertEqual(sorted(explained - declared), [])
+        self.assertEqual(sorted(reported), sorted(ignored))

@@ -2,8 +2,8 @@
 name = "severino-hq"
 version = "0.0.0"
 requires-python = ">=3.15,<3.16"
-# Each is imported by host code, or listed under [tool.severino-hq.unimported]
-# with the reason it is installed anyway (a test holds that).
+# Each is imported by host code, or ignored for deptry's DEP002 under
+# [tool.deptry.per_rule_ignores] with the reason it is installed anyway.
 dependencies = [
     "argon2-cffi==25.1.0",
     "cryptography==50.0.2",
@@ -26,10 +26,26 @@ dependencies = [
     "whitenoise==6.12.0",
 ]
 
+# checks:deptry: host code is hq/ and hq_sdk/, which the task names, less every
+# tests/ directory. The groups under [dependency-groups] are development
+# dependencies, which DEP002 leaves alone.
+[tool.deptry]
+known_first_party = ["hq", "hq_sdk"]
+extend_exclude = [".*/tests/"]
+# DEP003, a transitive dependency imported directly, and DEP004, a development
+# dependency imported by host code, are not held.
+ignore = ["DEP003", "DEP004"]
+
+[tool.deptry.per_rule_ignores]
 # Runtime dependencies no host code imports, and why each is installed anyway.
-[tool.severino-hq.unimported]
-httpx2 = "The HTTP client extensions import: admitted wheels install with --no-deps, so the host provides it."
-tblib = "Django's parallel test runner pickles a failure's traceback with it, in the image as well."
+DEP002 = [
+    # The HTTP client extensions import: admitted wheels install with --no-deps,
+    # so the host provides it.
+    "httpx2",
+    # Django's parallel test runner pickles a failure's traceback with it, in
+    # the image as well.
+    "tblib",
+]
 
 [tool.uv]
 package = false
@@ -42,6 +58,8 @@ dev = [
 ]
 tools = [
     "coverage==7.16.2",
+    # Holds the runtime dependencies to what host code imports (checks:deptry).
+    "deptry==0.25.1",
     "django-stubs==6.1.2",
     "hypothesis==6.170.0",
     "mypy==2.4.0",

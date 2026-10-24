@@ -25,6 +25,11 @@ depends = ["setup:openapi"]
 # apply to Django's canonical trailing slashes or the stdin/stdout bridge.
 run = "node tools/openapi/node_modules/@redocly/cli/bin/cli.js lint --extends=spec --format=summary hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json"
 
+["checks:deptry"]
+description = "Every runtime dependency is imported by host code, or pyproject.toml says why it is installed anyway"
+# Host code is these two packages less their tests/ ([tool.deptry]).
+run = "uv run deptry hq hq_sdk"
+
 ["checks:lockfile"]
 description = "uv.lock matches pyproject.toml"
 run = "uv lock --check"
