@@ -31,7 +31,7 @@ Every agent reads [`AGENTS.md`](../AGENTS.md), the engineering contract
 
 ![A pass: a read-only map, workers in their own worktrees, the main session landing their branches and running the gates, and each lesson turned into a rule the next brief starts from](images/ai/build-loop.png)
 
-<sup>Source: [`docs/images/ai/build-loop.fig`](images/ai/build-loop.fig), pre-rendered with `brand`.</sup>
+<sup>Source: [`docs/images/ai/build-loop.fig`](images/ai/build-loop.fig), pre-rendered with [`brand`](https://github.com/joeseverino/branding-engine).</sup>
 
 1. **Map.** The auditor measures the change before anything is built:
    what is wrong, grouped by the shared rule or partial that causes it, and
@@ -59,7 +59,7 @@ the same gates on it, and `ship-hq` takes it to production.
 
 ![The worker reads AGENTS.md and loads the skills, runs its own scratch server and dev:look, runs fast and then check, and CI runs the same aggregates](diagrams/agent-tools.png)
 
-<sup>Source: [`docs/diagrams/agent-tools.mmd`](diagrams/agent-tools.mmd), pre-rendered with `diagram`.</sup>
+<sup>Source: [`docs/diagrams/agent-tools.mmd`](diagrams/agent-tools.mmd), pre-rendered with [`diagram`](https://github.com/joeseverino/tools/tree/main/lib/diagram).</sup>
 
 ### What holds the work to the bar
 
@@ -123,7 +123,7 @@ business rule" ([API](API.md)).
 
 ![An agent's call: its own token, MCP or the machine API, the pause switch, its grant, the operator's policy, then a run, or a hold until a person approves it in the web UI](images/ai/agent-call.png)
 
-<sup>Source: [`docs/images/ai/agent-call.fig`](images/ai/agent-call.fig), pre-rendered with `brand`.</sup>
+<sup>Source: [`docs/images/ai/agent-call.fig`](images/ai/agent-call.fig), pre-rendered with [`brand`](https://github.com/joeseverino/branding-engine).</sup>
 
 ### Reads and one write
 
