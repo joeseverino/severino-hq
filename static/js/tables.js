@@ -350,6 +350,20 @@
     });
   };
 
+  // A table held while its rows are open is fitted again as it would stand
+  // with them closed, the width the window now gives it, and held there.
+  const settleOpenRows = () => {
+    document.querySelectorAll(".data-table[data-rows-held]").forEach((table) => {
+      releaseColumns(table);
+      const open = [...table.querySelectorAll(":scope > tbody > tr.is-expanded")];
+      open.forEach((row) => row.classList.remove("is-expanded"));
+      refit(table);
+      if (!open.length) return;
+      holdColumns(table);
+      open.forEach((row) => row.classList.add("is-expanded"));
+    });
+  };
+
   const markTables = () => {
     settleOpenRows();
     markCuts();
