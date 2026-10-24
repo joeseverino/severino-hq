@@ -223,7 +223,9 @@ class ExampleEstateDrawnTests(ExampleEstateGate):
         for path in self.navigation:
             for width in DRAWN_AT:
                 with self.subTest(page=path, width=width):
-                    moved = self.moved_once_drawn(f"{ORIGIN}{path}", width, partial(self.finish, path, width))
+                    moved = self.moved_once_drawn(
+                        f"{ORIGIN}{path}", width, partial(self.in_flight.settle, f"{path} at {width}px")
+                    )
                     failed = [*moved, *self.refusals_so_far()]
                     if failed:
                         self.fail("\n".join(failed))
