@@ -210,5 +210,8 @@ sigterm = true
 omit = ["*/migrations/*", "*/tests/*", "manage.py", "hq/config/*", ".venv/*", "tools/*", "demo/*"]
 
 [tool.coverage.report]
+# The point below which the build fails. Raise it on purpose; a run that
+# measures higher changes nothing.
+fail_under = 90
 show_missing = false
 skip_covered = false

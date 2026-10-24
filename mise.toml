@@ -46,8 +46,8 @@ output = "keep-order"
 includes = ["mise-tasks", "tasks/*.toml"]
 
 [env]
-# Facts that are not tools: the Python matrix, the coverage floor, the Cordon
-# commit. Shell and workflows read the same file.
+# Facts that are not tools: the Python matrix, the Cordon commit, the failure
+# logs' key. Shell and workflows read the same file.
 _.file = "tools/pipeline/toolchain.env"
 # The npm tools setup:lint-tools installs run by name.
 _.path = "tools/lint/node_modules/.bin"
