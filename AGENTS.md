@@ -141,6 +141,11 @@ a path (an architecture test, a glob) fails when its path matches nothing.
   the template filter, so it is an http(s) address or no link at all.
 - A dependency used by a plugin must survive a clean wheel install with
   `--no-deps`; the host-owned plugin check reproduces that production boundary.
+- A workflow's write to GitHub (a deployment status, a push, a pull request)
+  uses a token minted from HQ's GitHub App for that one permission, declared
+  in `deploy/github-apps.json`, and the job's own permissions stay at read;
+  `checks:scorecard` refuses a job-level write, and the fix is the App's token,
+  never an exception in the gate.
 
 ## Frontend quality bar
 
