@@ -115,6 +115,8 @@ else
 fi
 if [ "$profile" = scratch ]; then
     set -a
+    # Written by `manage.py seed` at the first start, so there is nothing to follow here.
+    # shellcheck source=/dev/null
     . "$state/seed.env"
     set +a
     echo "Sign in as: $(cat "$state/login")" >&2
