@@ -222,6 +222,13 @@ _REPORT_REFUSALS = """document.addEventListener('securitypolicyviolation', (even
 # gate gave, which a class holds as its own (the estate's `unanswered`).
 _FAILED_ANSWER = "Failed to load resource: the server responded with a status of"
 
+# WebKit's line for a fetch that failed, a load the gate's next navigation
+# cancelled among them, which it logs as a script error whether or not the
+# script handles the rejection; Playwright passes it on as an uncaught error.
+# A rejection no script handles WebKit reports on a line of its own
+# ("Unhandled Promise Rejection"), which the gate still holds.
+_FAILED_FETCH = "Fetch API cannot load "
+
 
 def first_frame(stack):
     """Where an uncaught error was thrown, from its stack as Playwright gives
@@ -372,6 +379,8 @@ class BrowserGate(SimpleTestCase):
         # An error the engine raises with no Error object (a ResizeObserver
         # loop) has a message and no name or stack.
         said = f"{error.name}: {error.message}" if error.name else error.message
+        if said.startswith(_FAILED_FETCH):
+            return
         width = self.page.viewport_size["width"]
         self.refusals.append(f"{self.where()} at {width}px: uncaught {said}{first_frame(error.stack)}")
 
