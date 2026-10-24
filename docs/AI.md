@@ -26,7 +26,8 @@ Every agent reads [`AGENTS.md`](../AGENTS.md), the engineering contract
 
 ![A pass: a read-only map, workers in their own worktrees, the main session landing their branches and running the gates, and each lesson turned into a rule the next brief starts from](images/ai/build-loop.png)
 
-<sup>Figure source: [`docs/images/ai/build-loop.fig`](images/ai/build-loop.fig).</sup>
+<sup>Figure source: [`docs/images/ai/build-loop.fig`](images/ai/build-loop.fig),
+pre-rendered with [`brand`](https://github.com/joeseverino/tools/blob/main/bin/brand) as `brand figure docs/images/ai/build-loop.fig --out docs/images/ai/build-loop.png --scale 1`.</sup>
 
 1. **Map.** A read-only agent measures the change before anything is built:
    what is wrong, grouped by the shared rule or partial that causes it, and
@@ -122,7 +123,8 @@ business rule" ([API](API.md)).
 
 ![An agent's call: its own token, MCP or the machine API, the pause switch, its grant, the operator's policy, then a run, or a hold until a person approves it in the web UI](images/ai/agent-call.png)
 
-<sup>Figure source: [`docs/images/ai/agent-call.fig`](images/ai/agent-call.fig).</sup>
+<sup>Figure source: [`docs/images/ai/agent-call.fig`](images/ai/agent-call.fig),
+pre-rendered with [`brand`](https://github.com/joeseverino/tools/blob/main/bin/brand) as `brand figure docs/images/ai/agent-call.fig --out docs/images/ai/agent-call.png --scale 1`.</sup>
 
 ### Reads and one write
 
