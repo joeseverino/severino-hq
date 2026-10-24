@@ -6,14 +6,14 @@ file itself.
 """
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
 ROOT = Path(__file__).resolve().parents[4]
-STYLELINT = ROOT / "tools" / "lint" / "node_modules" / "stylelint" / "bin" / "stylelint.mjs"
-CONFIG = ROOT / "tools" / "lint" / "stylelint.config.mjs"
+CONFIG = "tools/lint/stylelint.config.mjs"
 
 APP = "static/css/app/fixture.css"
 TOKENS = "static/css/app/tokens.css"
@@ -59,7 +59,7 @@ def lint(sheet: str, css: str) -> list[str]:
     Each case is its own file, so no case shares a selector with another."""
 
     result = subprocess.run(
-        ["node", str(STYLELINT), "--config", str(CONFIG), "--formatter", "json", "--stdin-filename", sheet],
+        ["stylelint", "--config", CONFIG, "--formatter", "json", "--stdin-filename", sheet],
         input=css,
         capture_output=True,
         text=True,
@@ -74,7 +74,7 @@ def lint(sheet: str, css: str) -> list[str]:
 @tag("source")
 class StylesheetLintTests(SimpleTestCase):
     def setUp(self):
-        self.assertTrue(STYLELINT.exists(), "`mise run setup:lint-tools` installs Stylelint")
+        self.assertTrue(shutil.which("stylelint"), "`mise run setup:lint-tools` installs Stylelint")
 
     def test_each_break_of_the_contract_is_refused(self):
         for sheet, css, rule in REFUSED:

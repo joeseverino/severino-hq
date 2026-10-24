@@ -49,6 +49,8 @@ includes = ["mise-tasks", "tasks/*.toml"]
 # Facts that are not tools: the Python matrix, the coverage floor, the Cordon
 # commit. Shell and workflows read the same file.
 _.file = "tools/pipeline/toolchain.env"
+# The npm tools setup:lint-tools installs run by name.
+_.path = "tools/lint/node_modules/.bin"
 SEVERINO_LOG_LEVEL = "CRITICAL"
 # `uv run`, `uv sync` and `uv export` refuse a uv.lock that pyproject.toml has
 # moved past, as `--locked` does. So do `uv lock` and `uv add`: change the lock
