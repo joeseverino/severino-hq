@@ -47,7 +47,7 @@ hold() {
 
 names_holder() {
     case "$1" in
-        *"pid ${holder}, task example-holder, holding the turn "[0-9]*"m"[0-9]*"s, running "*release*) ;;
+        *"mise run example-holder in "*", for "[0-9]*"m"[0-9]*"s (pid ${holder})"*) ;;
         *) fail "$2 does not name the holder (pid ${holder}): $1" ;;
     esac
 }

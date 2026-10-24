@@ -89,30 +89,42 @@ fi
 lock="${XDG_CACHE_HOME:-${HOME}/.cache}/severino/heavy.lock"
 mkdir -p "${lock%/*}"
 
-# Seconds as minutes and seconds: 1203 is 20m03s.
-span() { printf '%dm%02ds' "$(($1 / 60))" "$(($1 % 60))"; }
+# Seconds as hours and minutes, or minutes and seconds: 7200 is 2h00m, 1203 is 20m03s.
+span() {
+    if [ "$1" -ge 3600 ]; then
+        printf '%dh%02dm' "$(($1 / 3600))" "$(($1 % 3600 / 60))"
+    else
+        printf '%dm%02ds' "$(($1 / 60))" "$(($1 % 60))"
+    fi
+}
 
-# The holder writes its pid, the time it took the turn and its mise task into
-# the file; if that pid is gone while the lock is still held, the turn has
-# passed to a holder that has not written it yet, and lsof finds which.
+# Who holds the turn, in the words a reader acts on: the mise task and the
+# checkout it runs in, how long it has held the turn, and its pid to stop it
+# by. The holder writes its pid, the time it took the turn, its task and its
+# checkout into the file; if that pid is gone while the lock is still held,
+# the turn has passed to a holder that has not written it yet, and lsof finds
+# which, named by its command.
 describe_holder() {
-    pid="" since="" task=""
-    read -r pid since task <"${lock}" 2>/dev/null || true
-    held=""
-    case "${since}" in
-        '' | *[!0-9]*) ;;
-        *) held=", holding the turn $(span "$(($(date +%s) - since))")" ;;
-    esac
+    pid="" since="" task="" where=""
+    read -r pid since task where <"${lock}" 2>/dev/null || true
     if [ -z "${pid}" ] || ! ps -p "${pid}" >/dev/null 2>&1; then
         pid="$(lsof -t -- "${lock}" 2>/dev/null | grep -vx "$$" | head -n 1 || true)"
-        task=""
+        since="" task="" where=""
     fi
-    if [ -n "${pid}" ] && ps -p "${pid}" >/dev/null 2>&1; then
-        printf 'pid %s, task %s%s, running %s: %s' "${pid}" "${task:-unnamed}" "${held}" \
-            "$(ps -o etime= -p "${pid}" | tr -d ' ')" "$(ps -o command= -p "${pid}")"
-    else
+    if [ -z "${pid}" ] || ! ps -p "${pid}" >/dev/null 2>&1; then
         printf 'a process lsof cannot name (%s)' "${lock}"
+        return
     fi
+    case "${task}" in
+        '' | -) printf '%s' "$(ps -o command= -p "${pid}")" ;;
+        *) printf 'mise run %s' "${task}" ;;
+    esac
+    [ -z "${where}" ] || printf ' in %s' "${where}"
+    case "${since}" in
+        '' | *[!0-9]*) ;;
+        *) printf ', for %s' "$(span "$(($(date +%s) - since))")" ;;
+    esac
+    printf ' (pid %s)' "${pid}"
 }
 
 exec 9>>"${lock}"
@@ -129,7 +141,7 @@ if [ "${status}" -eq 75 ]; then
         [ "${status}" -eq 75 ] || break
         waited="$((waited + step))"
         if [ "${waited}" -ge "${bound}" ]; then
-            echo "heavy: the turn is still held after ${bound}s, by $(describe_holder). Stop it if it is stuck." >&2
+            echo "heavy: the turn is still held after $(span "${bound}"), by $(describe_holder). If it is stuck, kill that pid." >&2
             exit 75
         fi
         echo "heavy: still waiting after $(span "${waited}"), held by $(describe_holder)" >&2
@@ -137,7 +149,13 @@ if [ "${status}" -eq 75 ]; then
 fi
 [ "${status}" -eq 0 ] || exit "${status}"
 
-echo "$$ $(date +%s) ${MISE_TASK_NAME:-}" >"${lock}"
+# The checkout last, as a path may hold spaces; ~ for the home directory.
+where="${MISE_CONFIG_ROOT:-${PWD}}"
+# shellcheck disable=SC2088  # a path to read, not to expand
+case "${where}" in
+    "${HOME}"/*) where="~/${where#"${HOME}"/}" ;;
+esac
+echo "$$ $(date +%s) ${MISE_TASK_NAME:--} ${where}" >"${lock}"
 SEVERINO_HEAVY_HOLDER=$$
 export SEVERINO_HEAVY_HOLDER
 
