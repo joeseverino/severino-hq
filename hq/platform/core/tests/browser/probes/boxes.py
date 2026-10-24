@@ -176,10 +176,14 @@ _SMALL_TARGETS = (
     const over = top.getBoundingClientRect();
     return over.left <= x && x <= over.right && over.top <= y && y <= over.bottom;
   };
+  // Inert: marked so, or outside the modal dialog open over the page, which
+  // makes the rest of the document inert. No pointer reaches it.
+  const modal = document.querySelector('dialog:modal');
+  const inert = (el) => Boolean(el.closest('[inert]')) || Boolean(modal && !modal.contains(el));
   try {
     const targets = [];
     for (const el of new Set([...document.querySelectorAll(selector)])) {
-      if (el.matches(':disabled') || !el.checkVisibility({visibilityProperty: true})) continue;
+      if (el.matches(':disabled') || inert(el) || !el.checkVisibility({visibilityProperty: true})) continue;
       const drawn = box(el);
       // Out of sight until focused (a skip link), or drawn by its label.
       if (drawn.width <= 1 || drawn.height <= 1 || covered(el, drawn)) continue;

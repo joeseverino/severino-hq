@@ -124,14 +124,16 @@ class PopoverTests(SimpleTestCase):
 class _Dialogs:
     """A page's dialogs as the look's scripts and presses reach them: the
     connection dialog's control sits in a closed menu, and its region loads
-    only once the dialog is open and the page has had a turn. What each
+    only once the dialog is open and the page has had a turn. Pressing a
+    control scrolls it into view and leaves the pointer on it. What each
     screenshot showed is kept, as the page stood when it was taken."""
 
     def __init__(self, ids, in_menu=()):
         self.open = dict.fromkeys(ids, False)
         self.loaded = dict.fromkeys(ids, False)
         self.in_menu, self.menu_open, self.shots = set(in_menu), False, []
-        self.keyboard = self
+        self.keyboard = self.mouse = self
+        self.at, self.hovered = (0, 0), None
 
     def named(self, openers):
         return next(dialog for dialog in self.open if look._OPENERS.format(id=dialog) == openers)
@@ -147,6 +149,11 @@ class _Dialogs:
             return not self.open[arg]
         if script == look._DIALOG_EXTENT:
             return [600, 600]
+        if script == look._WINDOW_AT:
+            return list(self.at)
+        if script == look._WINDOW_TO:
+            self.at = tuple(arg)
+            return None
         if script == look._LEAVE:
             self.menu_open = False
             return None
@@ -164,6 +171,7 @@ class _Dialogs:
                 if dialog in page.in_menu and not page.menu_open:
                     raise AssertionError(f"pressed the control for {dialog} inside a closed menu")
                 page.open[dialog] = True
+                page.at, page.hovered = (0, 1800), dialog
 
         return Opener()
 
@@ -174,6 +182,9 @@ class _Dialogs:
         held = self.open[dialog] and self.loaded[dialog] if script == look._DIALOG_READY else not self.open[dialog]
         if not held:
             raise AssertionError(f"waited for {dialog} forever")
+
+    def move(self, _x, _y):
+        self.hovered = None
 
     def press(self, key):
         if key == "Escape":
@@ -202,7 +213,10 @@ class _Opener:
         pass
 
     def judged(self, _name, _width, _rule):
-        return ["frames: a box beneath"] + [f"cut: a key in {d}" for d, shown in self.page.open.items() if shown]
+        found = ["frames: a box beneath"] + [f"cut: a key in {d}" for d, shown in self.page.open.items() if shown]
+        # The page beneath, judged otherwise than it was on its own.
+        moved = self.page.at != (0, 0) or self.page.hovered
+        return found + ["overlaps: the page beneath scrolled or hovered"] * bool(moved)
 
 
 @tag("source")

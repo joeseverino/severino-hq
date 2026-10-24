@@ -390,6 +390,36 @@ class ComponentLayoutTests(LayoutBrowserTests):
         found = self.page.evaluate(_SMALL_TARGETS, ["main :is(.example-hidden, .example-shown)", TARGET_MIN])
         self.assertEqual({finding.split(" in ")[0] for finding in found}, {"a.example-shown"})
 
+    def test_a_modal_dialog_leaves_the_page_beneath_unmeasured_and_its_own_targets_measured(self):
+        """A modal dialog makes the rest of the document inert, so no
+        pointer reaches a target behind it wherever it lies; the dialog's own
+        small targets still fail."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          const pair = (parent, name) => {
+            for (const left of ['40px', '50px']) {
+              const link = document.createElement('a');
+              link.href = '#';
+              link.className = name;
+              link.textContent = 'x';
+              link.style.setProperty('position', 'fixed');
+              link.style.setProperty('top', '8px');
+              link.style.setProperty('left', left);
+              link.style.setProperty('font-size', '8px');
+              link.style.setProperty('line-height', '8px');
+              parent.append(link);
+            }
+          };
+          pair(document.querySelector('main'), 'example-beneath');
+          const dialog = document.createElement('dialog');
+          document.body.append(dialog);
+          pair(dialog, 'example-within');
+          dialog.showModal();
+        }""")
+        found = self.page.evaluate(_SMALL_TARGETS, [":is(.example-beneath, .example-within)", TARGET_MIN])
+        self.assertEqual({finding.split(" in ")[0] for finding in found}, {"a.example-within"})
+
     def test_an_open_menu_over_the_page_text_is_no_overlap_and_text_in_one_layer_is(self):
         """An open menu's panel covers the page's text on purpose; two lines
         drawn over each other in the page, or in the one panel, still overlap."""

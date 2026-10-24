@@ -198,6 +198,9 @@ _DIALOG_READY = """([id, busy]) => {
   const dialog = document.getElementById(`modal-${id}`);
   return dialog.open && !dialog.querySelector(busy);
 }"""
+# Where the window is scrolled, and the window put back there.
+_WINDOW_AT = "() => [window.scrollX, window.scrollY]"
+_WINDOW_TO = "([x, y]) => window.scrollTo(x, y)"
 _DIALOG_CLOSED = "(id) => !document.getElementById(`modal-${id}`).open"
 # How far a dialog scrolls within itself, and a place to scroll it to.
 _DIALOG_EXTENT = (
@@ -686,9 +689,14 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if place < 0:
             print(f"{name} at {width}: no control a reader can reach opens dialog {dialog!r}", flush=True)
             return False
+        at = self.page.evaluate(_WINDOW_AT)
         self.page.locator(openers).nth(place).click()
         try:
             self.page.wait_for_function(_DIALOG_READY, arg=[dialog, _BUSY])
+            # The page beneath as it was judged on its own: the press scrolled
+            # the opener into view and left the pointer on it, hovered.
+            self.page.evaluate(_WINDOW_TO, at)
+            self.page.mouse.move(0, 0)
         except BrowserError as waited:
             print(
                 f"{name} at {width}: dialog {dialog!r} did not open loaded ({str(waited).splitlines()[0]})", flush=True
