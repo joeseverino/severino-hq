@@ -191,6 +191,9 @@ adding UI; grow a primitive rather than styling a page.
   overrides a base-class method carries `@override`.
 - `checks:mypy` holds the seams `pyproject.toml` names (`files`), fully
   annotated. A `# type: ignore[code]` is for a wrong stub, with the reason.
+- A docstring says what the thing is and why it exists. How it works lives in
+  the one doc or comment that owns the mechanism, so a long docstring is
+  trimmed as its file is touched; no gate measures it.
 - Duplication and tangling are green in every test; they are graph questions.
   The structural bar (`checks:structural`) fails a new near-duplicate pair
   outside tests, and its baseline never grows to pass. The other questions
