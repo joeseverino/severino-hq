@@ -246,8 +246,10 @@ also runs `browser:layout` in Chromium (`browser:layout-chromium`), which
 Every page a gate serves runs under the policy HQ sends: a page rendered
 through the test client keeps its response's headers (`gate.answered`), the
 API reference its own derived policy, and a page a test puts together HQ's.
-A policy refusal or a console error fails the test, naming the page, the
-directive and what it refused.
+A policy refusal, a console error or an uncaught script error fails the
+test, naming the page: a refusal its directive and what it refused, an
+uncaught error the width, its message and the frame it was thrown from. The
+example estate fails page by page, every other gate at the end of its test.
 
 The gates wait for Inter, but a reader whose copy is late is drawn in
 whatever face the platform has (`font-display: optional`), and each platform

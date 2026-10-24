@@ -67,10 +67,8 @@ class FragmentBrowserTests(BrowserGate):
 
     def start(self, **options):
         super().start(**options)
-        self.errors = []
         self.asked = []
         self.strip = [' data-fragment-poll="1"', ""]
-        self.page.on("pageerror", lambda error: self.errors.append(str(error)))
 
     def respond(self, route):
         request = route.request
@@ -117,7 +115,6 @@ class FragmentBrowserTests(BrowserGate):
         # A request after those turns is answered after any they made.
         self.page.evaluate("() => fetch('/probe-slot/')")
         self.assertEqual(self.asked.count(("/probe-strip/", "")), asked)
-        self.assertEqual(self.errors, [])
 
     def test_a_placeholder_waits_for_its_disclosure_and_refuses_a_whole_page(self):
         self.page.goto(f"{ORIGIN}/probe/", wait_until="load")
@@ -133,7 +130,6 @@ class FragmentBrowserTests(BrowserGate):
             "() => document.querySelector('[data-probe=\"fold\"]').textContent.includes('read when opened')"
         )
         self.assertEqual(self.asked.count(("/probe-slot/", "")), 1)
-        self.assertEqual(self.errors, [])
 
     def test_paging_the_calendar_asks_for_its_part_and_keeps_the_page(self):
         self.page.goto(f"{ORIGIN}{self.calendar}", wait_until="load")
@@ -151,4 +147,3 @@ class FragmentBrowserTests(BrowserGate):
         self.assertTrue(self.page.url.endswith(self.following))
         # The keyboard is where it was: on the control that was pressed.
         self.assertEqual(self.page.evaluate("() => document.activeElement.getAttribute('rel')"), "next")
-        self.assertEqual(self.errors, [])

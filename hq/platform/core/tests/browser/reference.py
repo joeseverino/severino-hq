@@ -211,14 +211,8 @@ class ReferenceBrowserTests(BrowserGate):
 
     def start(self, **options):
         super().start(**options)
-        self.errors = []
         self.requests = []
         self.refused = []
-        self.page.on("pageerror", lambda error: self.errors.append(str(error)))
-        self.page.on(
-            "console",
-            lambda message: self.errors.append(message.text) if message.type == "error" else None,
-        )
         self.page.on("request", lambda request: self.requests.append(request.url))
         self.page.on(
             "response",
@@ -324,7 +318,6 @@ class ReferenceBrowserTests(BrowserGate):
         self.assertFalse(chrome["search"].strip().lower().endswith("k"))
         self.assertEqual([url for url in self.requests if not url.startswith(ORIGIN)], [])
         self.assertEqual(self.refused, [])
-        self.assertEqual(self.errors, [])
 
     def test_a_link_to_an_operation_survives_a_reload(self):
         tag = next(tag for tag in self.document["tags"] if "parent" in tag)
@@ -359,4 +352,3 @@ class ReferenceBrowserTests(BrowserGate):
         self.assertEqual(self.page.evaluate("() => location.hash"), fragment)
         landed(fragment)
         self.assertEqual(self.refused, [])
-        self.assertEqual(self.errors, [])

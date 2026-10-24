@@ -176,6 +176,14 @@ _REPORT_REFUSALS = """document.addEventListener('securitypolicyviolation', (even
 _FAILED_ANSWER = "Failed to load resource: the server responded with a status of"
 
 
+def first_frame(stack):
+    """Where an uncaught error was thrown, from its stack as Playwright gives
+    it in every engine (V8's form: a line per frame, each starting ``at``)."""
+
+    frames = (line.strip() for line in (stack or "").splitlines())
+    return next((f" {frame}" for frame in frames if frame.startswith("at ")), "")
+
+
 # What Playwright's driver logs while the stall watch is on (its DEBUG and
 # DEBUG_FILE, read once when the driver starts): the browser's launch, with its
 # arguments and its own output, and every call with its steps, a navigation's
@@ -284,6 +292,7 @@ class BrowserGate(SimpleTestCase):
         self.context.route("**/*", self.respond)
         self.page = self.context.new_page()
         self.page.on("console", self.heard)
+        self.page.on("pageerror", self.threw)
 
     def where(self):
         parts = urlsplit(self.page.url)
@@ -297,9 +306,16 @@ class BrowserGate(SimpleTestCase):
         if message.type == "error" and not message.text.startswith(_FAILED_ANSWER):
             self.refusals.append(f"{self.where()}: console error: {message.text}")
 
+    def threw(self, error):
+        # An error the engine raises with no Error object (a ResizeObserver
+        # loop) has a message and no name or stack.
+        said = f"{error.name}: {error.message}" if error.name else error.message
+        width = self.page.viewport_size["width"]
+        self.refusals.append(f"{self.where()} at {width}px: uncaught {said}{first_frame(error.stack)}")
+
     def refusals_so_far(self):
-        """Every policy refusal and console error the pages have had since
-        this was last asked, each naming its page."""
+        """Every policy refusal, console error and uncaught script error the
+        pages have had since this was last asked, each naming its page."""
 
         refusals, self.refusals = self.refusals, []
         return refusals
