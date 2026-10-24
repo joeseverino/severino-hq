@@ -1,4 +1,5 @@
-# The Image job: build (mise-tasks/image/), then each image:verify:* check.
+# The build job's steps: image:build (mise-tasks/image/), then each
+# image:verify:* check, which `mise run build` runs in turn.
 # IMAGE names the image under test; the pipeline passes the one it built.
 
 ["image:verify:healthy"]

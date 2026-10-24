@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prove Compose takes the host image CI handed over, waits for one CI is still
-# building, and stops waiting, naming the failed step, once CI's Image job failed.
+# building, and stops waiting, naming the failed step, once CI's Build job failed.
 set -euo pipefail
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
@@ -18,7 +18,7 @@ asked=$(grep -c inspect "$TEST_CALLS")
 [ -n "$TEST_PUBLISHED_AFTER" ] && [ "$asked" -gt "$TEST_PUBLISHED_AFTER" ] || { echo "not found" >&2; exit 1; }
 echo "sha256:$(printf 'd%.0s' $(seq 64))"
 STUB
-# gh api: CI's run for the commit, and its Image job as TEST_IMAGE_JOB describes it.
+# gh api: CI's run for the commit, and its Build job as TEST_IMAGE_JOB describes it.
 cat >"$bin/gh" <<'STUB'
 #!/usr/bin/env bash
 echo "gh $*" >>"$TEST_CALLS"
@@ -61,14 +61,14 @@ PUBLISHED_AFTER=0 host_image "$ref" || fail "a published image was not found"
 
 PUBLISHED_AFTER=13 IMAGE_JOB="-	" host_image "$ref" || fail "an image CI was still building was not waited for"
 [ "$(output image)" = "ghcr.io/example/host@$digest" ] || fail "the image CI published was not composed"
-grep -q 'runs/42/jobs' "$work/calls" || fail "CI's Image job was not asked about while waiting"
+grep -q 'runs/42/jobs' "$work/calls" || fail "CI's Build job was not asked about while waiting"
 
 PUBLISHED_AFTER="" IMAGE_JOB="$(printf 'failure\tBuild the image')" host_image "$ref" &&
-  fail "a composition waited on an Image job that failed"
-grep -q '::error title=Host image failure at Build the image::' "$work/out" || fail "the failed Image step was not named"
-grep -q 'Build the image' "$work/summary" || fail "the summary does not name the failed Image step"
-[ "$(grep -c inspect "$work/calls")" -le 6 ] || fail "the wait went on after the Image job failed"
-[ ! -s "$work/github-output" ] || fail "a failed Image job left a host image"
+  fail "a composition waited on a Build job that failed"
+grep -q '::error title=Host image failure at Build the image::' "$work/out" || fail "the failed Build step was not named"
+grep -q 'Build the image' "$work/summary" || fail "the summary does not name the failed Build step"
+[ "$(grep -c inspect "$work/calls")" -le 6 ] || fail "the wait went on after the Build job failed"
+[ ! -s "$work/github-output" ] || fail "a failed Build job left a host image"
 
 PUBLISHED_AFTER="" IMAGE_JOB="-	" POLLS=12 host_image "$ref" && fail "an image that never appeared was composed"
 grep -q '::error title=Host image never appeared::' "$work/out" || fail "a wait that ran out did not say so"

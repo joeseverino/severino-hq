@@ -7,7 +7,7 @@ switch as ``true`` (``false`` when negated), and a repeated flag or a variadic
 argument shell-quoted and joined. :class:`Usage` is the one reader of them, so
 no tool declares or parses a flag of its own.
 
-A page is named as dev:look and perf:report both take it: ``estate/<path>``, a
+A page is named as dev:look and perf both take it: ``estate/<path>``, a
 plain path (``/infrastructure/containers/``), a route name
 (``control_plane:containers``), ``estate/all`` or ``all``. Django's
 ``resolve`` and ``reverse`` say whether it is one; ``difflib`` names the

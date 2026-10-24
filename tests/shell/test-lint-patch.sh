@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Prove checks:patch reads the whole tree: a trailing space, a blank last line
+# Prove lint:patch reads the whole tree: a trailing space, a blank last line
 # or a conflict marker fails it, committed long ago or left in the working tree.
 set -euo pipefail
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
-patch="$repo_dir/mise-tasks/checks/patch"
+patch="$repo_dir/mise-tasks/lint/patch"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
@@ -49,4 +49,4 @@ printf 'a\n=======\nb\n' >"$repo/marked.txt"
 commit "$repo" marked
 refuses "$repo" "a committed conflict marker passed"
 
-echo "checks:patch reads every tracked file"
+echo "lint:patch reads every tracked file"

@@ -412,7 +412,7 @@ class StyleContractTests(SimpleTestCase):
     def test_a_fallback_never_hides_an_undefined_custom_property(self):
         """A var() with a fallback still names a property some sheet defines.
 
-        Stylelint's no-unknown-custom-properties (`checks:css`) passes any
+        Stylelint's no-unknown-custom-properties (`lint:css`) passes any
         var() that carries a fallback, and a typo there degrades silently to
         the fallback.
         """
@@ -2058,7 +2058,7 @@ class TestPlacementTests(SimpleTestCase):
 
 @tag("source")
 class RuntimeDependencyTests(SimpleTestCase):
-    """checks:deptry holds every dependency to host code's imports, less the
+    """lint:deptry holds every dependency to host code's imports, less the
     per-rule ignores in pyproject.toml. deptry says nothing of an ignore that
     has gone stale, so this holds each to a finding it would report."""
 

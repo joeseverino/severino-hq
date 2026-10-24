@@ -1,7 +1,7 @@
 # Copy to `mise.local.toml` in the repository root. mise reads it after
 # mise.toml, and git ignores it.
 #
-# Without it `mise run suite:as-image` has no extension set to compose, and
+# Without it `mise run test --composed` has no extension set to compose, and
 # says so. Nothing here is committed, so the host can be told where extensions
 # live without any of it entering the source. The values below are the
 # synthetic `example.*` namespace; substitute your own checkouts.
@@ -18,7 +18,7 @@ HQ_LOCAL_PYTHONPATH = "{{ get_env(name='HQ_LOCAL_PYTHONPATH', default=env.HOME ~
 # only the composed suite and the dev server load it.
 HQ_LOCAL_PLUGINS = "example_alpha.plugin:plugin,example_beta.plugin:plugin"
 
-# The SSH destination `mise run preflight` checks read-only before a release.
+# The SSH destination `mise run check --release` checks read-only before a release.
 SEVERINO_HQ_DEPLOY_HOST = "deploy.example.test"
 
 # The age identity that opens a failed run's sealed logs

@@ -20,11 +20,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build
+  # Named for the task it runs, as every gate job is.
+  browser:
+    name: Browser (demo)
     runs-on: ubuntu-26.04
     timeout-minutes: 15
-    # In Playwright's image, with its browsers, as CI's Browser job runs.
+    # In Playwright's image, with its browsers, as CI's browser job runs.
     container:
       image: mcr.microsoft.com/playwright/python:v1.64.1-noble@sha256:330d401ae23c905896a0c26c66c36fc971b621519e7b11b435a8328d7bf6e031
       options: --user 1001 --ipc=host
@@ -41,7 +42,7 @@ jobs:
 
   publish:
     name: Publish
-    needs: build
+    needs: browser
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     # Can publish Pages; cannot write to the repository.

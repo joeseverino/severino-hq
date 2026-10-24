@@ -5,24 +5,25 @@
 #                       one needs lazy_bins for its shim, and `mise which`
 #                       finds it only once installed
 #   mise run fast       the inner loop: only what the change touches
-#   mise run check      does my change work
-#   mise run ci         will the pipeline accept it: every gate CI runs
-#   mise run <gate>     one gate, e.g. `mise run checks:ruff`
+#   mise run check      every gate CI runs; --release before a release
+#   mise run <job>      one of CI's jobs: lint, test, browser, build, scan
+#   mise run <gate>     one gate a verdict names, e.g. `mise run lint:ruff`
 #   mise tasks          what an agent starts from; --hidden for every task
 #
 # A gate is a task named <job>:<gate>, declared in its job's file under
-# mise-tasks/ (mise-tasks/checks.toml for checks:*), mise's default task
+# mise-tasks/ (mise-tasks/lint.toml for lint:*), mise's default task
 # directory, where it reads every .toml as a task file and every executable as a
-# file task. Each CI job runs the aggregate of its name (`mise run -c checks`),
-# so a gate added there runs locally and in the pipeline with no second list to
-# edit. `-c` keeps going past a failure and names every gate that failed. A task
-# that an aggregate, CI or the operator runs is `hide = true`: the aggregate's
-# wildcard and `mise run <name>`, which a verdict names, still reach it. No gate
+# file task. Each CI job runs the task of its name (`mise run lint`), whose
+# wildcard reaches every gate of the job, so a gate added there runs locally
+# and in the pipeline with no second list to edit. `-c` keeps going past a
+# failure and names every gate that failed. A task that a job's task, CI or
+# the operator runs is `hide = true`: the job's wildcard and `mise run <name>`,
+# which a verdict names, still reach it. No gate
 # declares `sources`: mise judges them by file times alone, and a verdict also
 # turns on the environment and on files no list would name. A task whose body is
 # more than one line is a file under mise-tasks/, declared in its own #MISE
-# header, so checks:shell lints it. This file keeps the tools, the environment,
-# the templates, the development servers and the aggregates.
+# header, so lint:shell lints it. This file keeps the tools, the environment,
+# the templates, the development servers and the lint and scan tasks.
 #
 # Python dependencies come from uv.lock, which UV_LOCKED below holds every uv
 # command to; nothing here needs a virtualenv made by hand. uv itself is one of
@@ -64,13 +65,13 @@ node = "26.12.1"
 go = '{{ read_file(path="controller/go.mod") | regex_replace(pattern="(?ms).*^toolchain go([0-9.]+)$.*", rep="$1") }}'
 shellcheck = "0.11.0"
 actionlint = "1.7.12"
-# The workflows' security audit (checks:workflows), offline.
+# The workflows' security audit (lint:workflows), offline.
 zizmor = "1.31.1"
 yq = "4.54.1"
 jq = "1.8.2"
 uv = "0.13.5"
 # The Scorecard the pinned ossf/scorecard-action builds against (its go.mod).
-# Lazy, as age is: only checks:scorecard runs it.
+# Lazy, as age is: only lint:scorecard runs it.
 scorecard = { version = "5.6.0", lazy = true }
 # Seals a failed Compose run's output (tools/pipeline/seal-failure-logs.sh). Lazy:
 # `mise install` leaves it to its first use, held to mise.lock all the same.
@@ -83,7 +84,7 @@ crane = { version = "0.22.1", lazy = true }
 
 # The code graph the structural bar indexes with. Linux takes the portable
 # (static) build so the runner needs no matching libc. Lazy: only
-# checks:structural runs it, and its first run of the command installs it.
+# lint:structural runs it, and its first run of the command installs it.
 [tools."github:DeusData/codebase-memory-mcp"]
 version = "0.12.1"
 lazy = true
@@ -136,7 +137,7 @@ env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/seve
 # aggregate's above the gates it runs in turn. A file task sources
 # tools/lib/heavy-turn.sh and sets its timeout in its header. A template takes
 # the turn for every run; a task whose tests are given to it decides per run
-# through tools/gate/turn.py, as a file task (`test` in its run). mise's own
+# through tools/gate/turn.py (`test` in tools/gate/at.py). mise's own
 # task.timeout setting would bound the whole run, development servers
 # included, so each heavy task carries its own.
 [task_templates.heavy]
@@ -229,8 +230,9 @@ PYTHONPATH = "{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"
 [tasks."dev:scratch"]
 extends = "dev:scratch-env"
 raw = true
-description = "To try a change in a browser: a throwaway server on loopback, DEBUG on, a new database each start (--seed fills it)"
+description = "To try a change in a browser: a throwaway server on loopback, DEBUG on, a new database each start (--seed fills it); --demo to browse the saved demo"
 usage = '''
+flag "--demo" help="Serve the public demo's static site on loopback instead, built first by demo:build when its sources moved: --seed names which, showcase by default"
 flag "--keep" help="Reuse the last scratch database"
 flag "--seed <seed>" help="Fill it with a named data set (hq/platform/core/seeds.py): the example estate as showcase (advanced posture) or standard, empty, or scale (years of records)" {
     choices "showcase" "standard" "empty" "scale"
@@ -242,21 +244,26 @@ run = "tools/dev/dev.sh"
 
 [tasks."dev:session"]
 extends = "dev:scratch-env"
+hide = true
 description = "To reach the scratch server from a script: a signed-in session cookie for it"
 # A program reads the cookie, so stdout is the command's own, unlabeled.
 raw = true
 run = "uv run python manage.py dev_session operator"
 
-[tasks."dev:manage"]
+# `mise run manage --scratch`: the env is the scratch server's, which mise
+# fixes per task, so the scratch half is a step of its own.
+[tasks."manage:scratch"]
 extends = "dev:scratch-env"
+hide = true
 raw = true
-description = "To inspect or change what dev:scratch serves: manage.py on this checkout's scratch database, extensions loaded"
+description = "manage.py on this checkout's scratch database, extensions loaded: mise run manage --scratch"
 run = "uv run python manage.py"
 
 # ------------------------------------------------------------- aggregates
-# An aggregate runs under tools.gate.verdict, which ends its output on the
-# tasks and tests that failed and keeps that line, and how long each task took,
-# in var/gate/<name>.txt.
+# A task that runs gates runs them under tools.gate.verdict, which ends its
+# output on the tasks and tests that failed and keeps that line, and how long
+# each task took, in var/gate/<name>.txt. Those with a body of more than one
+# line are files under mise-tasks/: check, test, browser and build.
 
 [tasks.fast]
 description = "While editing: the tests the change reaches, and the quick gates that read the paths it touched"
@@ -270,58 +277,16 @@ flag "--parallel <workers>" env="CHECK_PARALLEL" default="auto" help="Test worke
 '''
 run = "uv run python -m tools.gate.fast"
 
-[tasks.check]
-description = "Before handing work back, if the machine can hold it: every Checks gate, the Tests gates on one Python, the composed suite"
-# Named by aggregate and glob, so a new gate joins without an edit here. One
-# task at a time: each suite starts a worker per core, and two at once exhaust
-# a small machine's memory. CI runs each job's aggregate, never this task.
-extends = "heavy"
-timeout = "2h"
-run = "uv run python -m tools.gate.verdict check mise run -c -j 1 checks ::: 'tests:*' ::: suite:as-image"
-
-[tasks.ci]
-description = "CI's whole pipeline, every job's gates in turn; locally run check, or preflight before a release"
-# Run-form, so one turn covers the whole run.
-extends = "heavy"
-timeout = "2h"
-run = "uv run python -m tools.gate.verdict ci mise run -c checks ::: tests ::: browser ::: controller ::: scan ::: image"
-
-[tasks.checks]
-description = "CI's Checks job: lint, types, structure, dependencies, security, derived files; locally run fast, or the one gate a verdict names"
+[tasks.lint]
+description = "After editing, or when fast is not enough: CI's lint job, every lint:* gate: lint, types, structure, dependencies, security, derived files"
 # Run-form, so the gates and the installs they depend on run inside one turn.
 extends = "heavy"
 timeout = "2h"
-run = "uv run python -m tools.gate.verdict checks mise run -c 'checks:*' ::: 'drift:*'"
-
-[tasks.browser]
-description = "After a template or CSS change: every browser:* gate in WebKit, layout, navigation and the demo, one at a time"
-# Run-form, so one turn covers every browser gate. One at a time: a run-form
-# aggregate starts as many tasks as the jobs setting allows, and each gate
-# starts a browser per core. The Chromium leg is CI's alone.
-extends = "heavy"
-timeout = "2h"
-env = { MISE_TASK_SKIP = "browser:layout-chromium-1,browser:layout-chromium-2" }
-run = "uv run python -m tools.gate.verdict browser mise run -c -j 1 'browser:*'"
-
-[tasks.drift]
-description = "CI runs it inside checks: every derived file matches its source; locally fast runs the ones a change reaches, regen fixes them"
-# Run-form, so the gates and the installs they depend on run inside one turn.
-# The Go types are held by `mise run controller`, which regenerates them
-# against a snapshot.
-extends = "heavy"
-run = "uv run python -m tools.gate.verdict drift mise run -c 'drift:*'"
-
-[tasks.controller]
-description = "CI's Controller job: the Go controller formatted, vetted, race-tested, its types current; locally fast runs it on a controller change"
-depends = ["controller:*"]
+run = "uv run python -m tools.gate.verdict lint mise run -c 'lint:*'"
 
 [tasks.scan]
-description = "CI's Scan job: CodeQL's security-and-quality queries find no alert; slow, so run it locally only to reproduce an alert CI raised"
+description = "To reproduce an alert CI's scan job raised: CodeQL's security-and-quality queries find no alert; slow"
 depends = ["scan:*"]
-
-[tasks.image]
-description = "CI's Image job: the production image builds, boots and carries what it must; locally run image:build, then the image:verify:* gate it names"
-depends = ["image:verify:*"]
 
 # Whether this checkout can compose its extensions: `mise doctor project` names
 # each gap with its fix. Without a set, `fast` skips the composed pass and says

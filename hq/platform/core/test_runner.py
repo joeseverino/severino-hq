@@ -646,7 +646,7 @@ def require_tests_from(suite: unittest.TestSuite, modules: list[str]) -> None:
 
 # Tests that read the repository rather than run the product: the docs, the
 # workflows, the Dockerfile, the source itself. They hold for a checkout, so
-# they run once, on one (`mise run checks:source`), and never in an image,
+# they run once, on one (`mise run lint:source`), and never in an image,
 # which ships none of what they read.
 SOURCE = "source"
 

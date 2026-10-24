@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Run Go formatting, the generated-code check, vet, and the unit tests under the race detector.
+# Go formatting, the generated-code check, the vendor slicer, vet and the advisory guard:
+# the controller's static half, lint:controller. Its race tests are test:controller.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -59,7 +60,4 @@ if go list -deps -test ./... tool | grep -q '^golang.org/x/crypto/openpgp'; then
     exit 1
 fi
 
-echo "==> go test (race detector)"
-go test -race ./...
-
-echo "All controller checks passed cleanly."
+echo "All controller lint checks passed."

@@ -1,7 +1,10 @@
 #!/bin/sh
-#MISE description="To check the public demo: build its static site into var/demo; another seed into var/demo-<seed>"
+#MISE description="Build the public demo's static site into var/demo, another seed into var/demo-<seed>; nothing when that site is newer than its sources"
+#MISE hide=true
 #MISE extends="django"
 #MISE timeout="30m"
+#MISE sources=["hq/**/*", "hq_sdk/**/*", "templates/**/*", "static/**/*", "demo/**/*", "manage.py", "uv.lock", "!**/__pycache__/**"]
+#MISE outputs=["var/demo{% if usage.seed != 'showcase' %}-{{ usage.seed }}{% endif %}/index.html"]
 #USAGE arg "[seed]" default="showcase" {
 #USAGE     choices "showcase" "standard" "empty"
 #USAGE }

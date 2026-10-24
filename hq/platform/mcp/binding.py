@@ -18,7 +18,7 @@ class Tool:
 
     name: str
     description: str
-    # The document's schema, generated from ``arguments``; `mise run drift`
+    # The document's schema, generated from ``arguments``; `mise run lint`
     # holds the written document to that source.
     input_schema: Mapping[str, Any]
     # The protocol's tool annotations, as the document states them.

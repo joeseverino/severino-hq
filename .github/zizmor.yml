@@ -1,4 +1,4 @@
-# checks:workflows runs zizmor offline at its default persona. Each entry is a
+# lint:workflows runs zizmor offline at its default persona. Each entry is a
 # finding that is a deliberate choice, with the reason beside it.
 rules:
   # actionlint, at the newest release mise offers, refuses a `$/` reference, and

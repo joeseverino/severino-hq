@@ -1,4 +1,4 @@
-"""perf:report reads a task's stdout only where mise prints it unlabeled, and
+"""perf reads a task's stdout only where mise prints it unlabeled, and
 tells a server that refuses it from one still starting."""
 
 import ast
@@ -32,7 +32,7 @@ def calls(method: str) -> list[tuple[str, ast.Call]]:
 @tag("source")
 class TaskReadTests(SimpleTestCase):
     def test_a_task_is_read_only_through_read(self):
-        """A server's own output goes to its log; every other mise run is read, so goes through _read."""
+        """A server's own output goes to its log; every other task run is read, so goes through _read."""
 
         callers = {function for function, _ in calls("_mise")}
         self.assertEqual(callers, {"_read", "_start"})

@@ -1,4 +1,4 @@
-"""A perf:report run as it is kept: var/perf/<run>.json, rewritten as each measurement finishes.
+"""A perf run as it is kept: var/perf/<run>.json, rewritten as each measurement finishes.
 
 A run is named by both commits and the target, and the second it started, so
 no run overwrites another of the same commit. Its document holds each side's

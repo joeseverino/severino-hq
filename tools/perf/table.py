@@ -1,4 +1,4 @@
-"""One report, or one beside its base, as the table `perf:report` prints, and its summary.
+"""One report, or one beside its base, as the table `perf` prints, and its summary.
 
 A row is a page at one width: the server's numbers on its first width's row,
 the browser's on each. A total row sums each column over every page, so a

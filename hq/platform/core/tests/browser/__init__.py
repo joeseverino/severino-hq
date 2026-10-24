@@ -2,7 +2,7 @@
 
 No module here matches Django's default test*.py discovery, so the plain suite
 needs neither Playwright nor a browser, and this package imports nothing. `mise
-run browser` runs it, and `mise run ci` always does. Imports point down:
+run browser` runs it, and so does `mise run check`. Imports point down:
 widths, selectors and the probes, then survey, reading and serving, then the
 gate, then the stress estate and the layout rules, then the tests that run
 them.

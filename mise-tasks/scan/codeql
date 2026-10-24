@@ -2,8 +2,8 @@
 #MISE description="CodeQL, security-and-quality: no alerts"
 #MISE hide=true
 
-# What CI's CodeQL job runs, before pushing rather than after merging: the
-# bundle mise.toml pins (checks:codeql-bundle holds it to the action), the
+# What CI's scan job runs, before pushing rather than after merging: the
+# bundle mise.toml pins (lint:codeql-bundle holds it to the action), the
 # security-and-quality suite, and the paths and rules
 # .github/codeql/codeql-config.yml leaves out. It reads an export of the files
 # git would push, so a local .venv or stray build output is not scanned.

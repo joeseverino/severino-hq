@@ -1,14 +1,15 @@
 #!/bin/sh
-#MISE description="To see what a page change looks like: screenshots as the browser gates draw them, judged by a rule if asked"
+#MISE description="To see what a page change looks like: screenshots as the browser gates draw them, judged by a rule if asked; --docs to redraw the docs' pictures"
 #MISE extends="django"
 #MISE depends=[{task="setup:browser", args=["{{usage.engine}}"]}]
 #MISE timeout="30m"
-#USAGE arg "<pages>" var=#true help="Pages: a gate page (connections, dense/services, derived/<app>/<list>), api/docs, estate/<path>, a path (/infrastructure/containers/), a route name (control_plane:containers), estate/all, or all"
+#USAGE arg "[pages]" var=#true help="Pages, unless --docs: a gate page (connections, dense/services, derived/<app>/<list>), api/docs, estate/<path>, a path (/infrastructure/containers/), a route name (control_plane:containers), estate/all, or all"
+#USAGE flag "--docs" help="Redraw every screenshot in the docs from the showcase demo instead, after a change to a page one shows"
 #USAGE flag "--widths <widths>" help="Comma-separated widths in CSS pixels; default the phone, 820 and 1360"
 #USAGE flag "--rule <rule>" help="What to judge on each page: survey (every check the browser gates hold), tables (print each table) or one layout check by name, such as a_table_fits_its_box_at_every_width. Findings go to var/gate/look.txt"
 #USAGE flag "--css <css>" help="Extra CSS after app.css, as text or a file: the defect a new rule must catch"
 #USAGE flag "--base <ref>" help="Also look at <ref> in a temporary worktree and report only findings and errors new or fixed here; implies --rule survey and --perf"
-#USAGE flag "--perf" negate="--no-perf" help="Then measure the estate pages asked with perf:report, beside --base's; on by default with --base"
+#USAGE flag "--perf" negate="--no-perf" help="Then measure the estate pages asked with mise run perf, beside --base's; on by default with --base"
 #USAGE flag "--seed <name>" default="showcase" help="The data set the estate pages are drawn on, by its name in hq.platform.core.seeds"
 #USAGE flag "--columns" help="Also print each table's column widths as drawn, at min-content and at max-content"
 #USAGE flag "--eval <file>" help="Run the script in <file> on each page at each width before the screenshot and print what it returns"
@@ -24,9 +25,15 @@
 #USAGE flag "--no-script" help="As the server drew it, before any script runs"
 #USAGE flag "--deep" help="Also every page the estate pages link to: each record and the command forms it opens"
 
-# The look is hq/platform/core/tests/look.py; perf:report measures after it,
-# in the same heavy turn.
+# The look is hq/platform/core/tests/look.py; `mise run perf` measures after
+# it, in the same heavy turn. The docs' pictures are demo/screenshot.py's, a
+# step of its own (dev:look:docs) with the demo it draws from.
 set -eu
+
+if [ "${usage_docs:-}" = true ]; then
+    exec mise run dev:look:docs
+fi
+[ -n "${usage_pages:-}" ] || { echo "mise run dev:look: name the pages to look at, or --docs" >&2; exit 64; }
 
 # A look at the pages it names holds a fraction of a suite's memory, so it
 # runs beside other heavy work, as `mise run test` runs light labels; every
@@ -71,21 +78,21 @@ case "${usage_perf:-}" in
 esac
 [ -n "${measure}" ] || exit "${looked}"
 
-# perf:report serves the example estate alone, so it measures the estate pages asked.
+# `mise run perf` serves the example estate alone, so it measures the estate pages asked.
 for page do
     shift
     case "${page}" in
         estate | estate/* | /* | *:*) set -- "$@" "${page}" ;;
         all)
             set -- "$@" all
-            echo "perf:report measures the example estate's pages of all, not the stress or reference pages"
+            echo "mise run perf measures the example estate's pages of all, not the stress or reference pages"
             ;;
-        *) echo "perf:report does not measure ${page}: it serves the example estate's pages alone" ;;
+        *) echo "mise run perf does not measure ${page}: it serves the example estate's pages alone" ;;
     esac
 done
 [ "$#" -gt 0 ] || exit "${looked}"
 
 measured=0
-mise run perf:report "$@" --seed "${usage_seed:?}" ${usage_base:+--base "${usage_base}"} || measured=$?
+mise run perf "$@" --seed "${usage_seed:?}" ${usage_base:+--base "${usage_base}"} || measured=$?
 [ "${looked}" -ne 0 ] && exit "${looked}"
 exit "${measured}"

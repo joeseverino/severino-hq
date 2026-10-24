@@ -1,4 +1,4 @@
-"""perf:report keeps what it measured: each run in a file of its own, saved as each
+"""perf keeps what it measured: each run in a file of its own, saved as each
 measurement finishes, a failure recorded beside the numbers that did not fail."""
 
 import contextlib

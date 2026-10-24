@@ -126,7 +126,7 @@ class ServedFontTests(SimpleTestCase):
             },
             {},
             "The served font has no glyph for these, so a page draws them in another face: add each to "
-            "CODEPOINTS in tools/fonts/subset.py and run `mise run regen`, or, when Inter has none, "
+            "CODEPOINTS in tools/fonts/subset.py and run `mise run fix`, or, when Inter has none, "
             "draw it as an icon (templates/partials/_icon.html).",
         )
 

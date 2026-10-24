@@ -3,8 +3,8 @@ knowledge graph and fail on a near-duplicate function pair outside tests that
 the baseline does not list. Tests answer "does this behave?"; this answers "is
 it still one system?". A file's size is a test's (FileSizeTests).
 
-    mise run checks:structural             check
-    mise run checks:structural --record    rewrite the baseline from this tree
+    mise run lint:structural             check
+    mise run lint:structural --record    rewrite the baseline from this tree
 
 The graph is codebase-memory-mcp at the release mise.toml pins, since the
 answer's shape is that release's. It is lazy there, so mise installs it the
@@ -31,7 +31,7 @@ TOOL = "codebase-memory-mcp"
 # threshold: the graph's own SIMILAR_TO edges stop at a fixed, higher one.
 QUERY = "MATCH (f) WHERE f:Function OR f:Method RETURN f.file_path, f.name, f.parent_class, f.fp"
 HEADER = (
-    "# Structural baseline for `mise run checks:structural`: each near-duplicate\n"
+    "# Structural baseline for `mise run lint:structural`: each near-duplicate\n"
     "# pair outside tests. Pairs only leave. Rewrite with --record.\n"
 )
 

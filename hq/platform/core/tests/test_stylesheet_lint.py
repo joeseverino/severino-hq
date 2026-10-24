@@ -1,4 +1,4 @@
-"""`checks:css` refuses each break of the stylesheet's contract.
+"""`lint:css` refuses each break of the stylesheet's contract.
 
 Each sheet is handed to Stylelint under the name of a real one, so the
 overrides for the tokens layer and the API reference apply as they do to the

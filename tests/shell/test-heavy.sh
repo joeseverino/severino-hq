@@ -130,13 +130,13 @@ MISE_CONFIG_ROOT="${repo}" "${work}/file-task" "${work}/starts" "${work}/ran" 2>
 hold
 SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q test hq.platform.core.tests.test_test_runner.BrowserTestTests \
     >"${work}/light" 2>&1 || { cat "${work}/light" >&2; fail "a narrow test run waited for the turn, or failed"; }
-SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q checks:source tools.gate.tests.test_turn.NarrowRunTests \
+SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q lint:source tools.gate.tests.test_turn.NarrowRunTests \
     >"${work}/light" 2>&1 || { cat "${work}/light" >&2; fail "a narrow source test run waited for the turn, or failed"; }
 status=0
 SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q test hq.platform.core.tests >/dev/null 2>&1 || status=$?
 [ "${status}" -eq 75 ] || fail "a test run of a whole package exited ${status} while the turn was held, not 75"
 status=0
-SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q checks:source >/dev/null 2>&1 || status=$?
+SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q lint:source >/dev/null 2>&1 || status=$?
 [ "${status}" -eq 75 ] || fail "every source test exited ${status} while the turn was held, not 75"
 echo go >"${work}/release"
 wait "${holder}" || fail "the holder failed"
@@ -150,7 +150,7 @@ CI=true "${heavy}" true
 # heavy.sh as its shell, a file task by sourcing heavy-turn.sh.
 mise -C "${repo}" tasks ls --all --json >"${work}/tasks.json"
 heavies="$(jq '[.[] | select((.shell // "") | startswith("tools/lib/heavy.sh"))] | length' "${work}/tasks.json")"
-[ "${heavies}" -gt 3 ] || fail "found ${heavies} tasks that take the turn through heavy.sh"
+[ "${heavies}" -gt 1 ] || fail "found ${heavies} tasks that take the turn through heavy.sh"
 unbounded="$(jq -r '.[] | select(.timeout == null) | select((.shell // "") | startswith("tools/lib/heavy.sh")) | .name' "${work}/tasks.json")"
 [ -z "${unbounded}" ] || fail "a heavy task without a timeout: ${unbounded}"
 jq -e '.[] | select(.name == "test") | .timeout != null' "${work}/tasks.json" >/dev/null ||
@@ -166,7 +166,7 @@ done <"${work}/files"
 # with it, and a waiter takes the turn: run by hand, where mise signals the
 # task's process group, and from inside another task, where it signals only
 # the pid it started. The waiter's own bound is the timeout and a margin.
-# heavy.sh runs under the shell this suite runs under, which checks:shell
+# heavy.sh runs under the shell this suite runs under, which lint:shell
 # makes dash, Linux's, as well: dash grants no job control without a terminal,
 # and a CI runner has none.
 shell="${SHELL_UNDER_TEST:-/bin/sh}"

@@ -77,7 +77,7 @@
       "extractVersion": "^v?(?<version>\\d.*)$"
     },
     {
-      "description": "The CodeQL bundle's releases are tagged codeql-bundle-v<version> beside the action's own tags; checks:codeql-bundle holds it to the bundle the pinned action runs.",
+      "description": "The CodeQL bundle's releases are tagged codeql-bundle-v<version> beside the action's own tags; lint:codeql-bundle holds it to the bundle the pinned action runs.",
       "matchManagers": ["mise"],
       "matchDepNames": ["github:github/codeql-action"],
       "extractVersion": "^codeql-bundle-v(?<version>.+)$"
@@ -98,7 +98,7 @@
       "groupName": "playwright"
     },
     {
-      "description": "min_version and the mise image the image builds copy move as one update: checks:toolchain holds the image's tag to min_version.",
+      "description": "min_version and the mise image the image builds copy move as one update: lint:toolchain holds the image's tag to min_version.",
       "matchPackageNames": ["jdx/mise", "ghcr.io/jdx/mise"],
       "groupName": "mise"
     }

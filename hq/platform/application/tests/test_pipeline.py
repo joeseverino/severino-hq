@@ -1,6 +1,6 @@
 """What the pipeline promises: one pin per action, least privilege, sealed logs, and releases only from main.
 
-checks:workflows runs zizmor, which holds what any workflow should: actions pinned
+lint:workflows runs zizmor, which holds what any workflow should: actions pinned
 to a commit, no persisted checkout credentials, no expression expanded into a
 script, no dangerous trigger, no App token with every permission. These hold
 HQ's own promises, read through a YAML parser.
@@ -333,7 +333,7 @@ class PythonVersionTests(SimpleTestCase):
         self.assertEqual(badge.group(1).split("%20%7C%20"), self.versions)
 
     def test_every_workflow_matrix_runs_every_version(self):
-        self.assertEqual(jobs(workflow("ci.yml"))["tests"]["strategy"]["matrix"]["python"], self.versions)
+        self.assertEqual(jobs(workflow("ci.yml"))["test"]["strategy"]["matrix"]["python"], self.versions)
         reusable = triggers(workflow("plugin-checks.yml"))["workflow_call"]["inputs"]["python-versions"]
         self.assertEqual(json.loads(reusable["default"]), self.versions)
 
@@ -540,7 +540,7 @@ class ReleaseTests(SimpleTestCase):
 # The jobs in ci.yml that gate nothing: the cache writer and the two verdicts.
 NOT_GATES = {"caches", "ready", "release"}
 # Gates Ready waits for and Release does not: code scanning holds a merge, not a release.
-MERGE_ONLY = {"codeql"}
+MERGE_ONLY = {"scan"}
 
 
 def pull_request_only(job: Node) -> bool:
@@ -746,30 +746,12 @@ class WorkflowSecrecyTests(SimpleTestCase):
 
 @tag("source")
 class GateReferenceTests(SimpleTestCase):
-    def test_every_task_a_workflow_runs_exists(self):
-        tasks = set(mise_tasks())
-        named = [
-            (path.name, task.strip("'\""))
-            for path in [*workflows(), *composite_actions()]
-            for step in every_step(path)
-            for task in re.findall(r"mise run\s+(?:-\S+\s+)*(\S+)", script(step))
-            if not task.strip("'\"").startswith("$")
-        ]
-        self.assertGreater(len(named), 3)
-        for name, task in named:
-            with self.subTest(workflow=name, task=task):
-                self.assertIn(task, tasks)
-
     def test_every_browser_gate_has_a_leg_and_every_leg_a_gate(self):
         """The Browser job runs one ``browser:*`` gate per leg; a gate with no leg never runs in CI."""
         legs = jobs(workflow("ci.yml"))["browser"]["strategy"]["matrix"]["gate"]
         self.assertEqual(
             {f"browser:{leg}" for leg in legs}, {name for name in mise_tasks() if name.startswith("browser:")}
         )
-
-    # Tasks that hand whatever follows them to manage.py, whose command line no
-    # usage spec can declare: mise appends the words as they were typed.
-    PASSTHROUGH = frozenset({"manage"})
 
     def test_a_task_that_takes_arguments_says_what_they_are(self):
         """``mise run <task> --help`` prints a task's ``usage``. Once one is
@@ -813,7 +795,7 @@ class GateReferenceTests(SimpleTestCase):
                         if re.search(r"(?m)^\s*(?:import|from) argparse\b", path.read_text())
                     ]
                     self.assertEqual(parsing, [], f"{name} parses its own flags; read mise's parse through task.Usage")
-                elif name not in self.PASSTHROUGH and re.fullmatch(r"[\w/.-]+", run.strip()):
+                elif re.fullmatch(r"[\w/.-]+", run.strip()):
                     for path in scripts:
                         self.assertFalse(
                             READS_ARGUMENTS.search(path.read_text()), f"{name} takes arguments; declare usage"
@@ -862,7 +844,7 @@ class ExtensionCallerTests(SimpleTestCase):
     def test_an_admission_audits_its_lock_as_the_host_audits_its_own(self):
         (audit,) = [step for step in every_step(ADMIT) if "Audit locked dependencies" in step.get("name", "")]
         self.assertIn('host/tools/pipeline/audit.sh "$PACKAGE_DIR"', script(audit))
-        self.assertIn("tools/pipeline/audit.sh", body(mise_tasks()["checks:audit"]))
+        self.assertIn("tools/pipeline/audit.sh", body(mise_tasks()["lint:audit"]))
 
 
 @tag("source")

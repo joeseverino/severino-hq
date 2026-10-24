@@ -1,4 +1,4 @@
-# Structural baseline for `mise run checks:structural`: each near-duplicate
+# Structural baseline for `mise run lint:structural`: each near-duplicate
 # pair outside tests. Pairs only leave. Rewrite with --record.
 similar controller/host/rendered.go::Ownership <> controller/runtime/bridge_socket.go::ownerOf
 similar controller/providers/cloudflare.go::Registry.cloudflareZones <> controller/providers/cloudflare_api.go::Registry.cloudflareAPIZones

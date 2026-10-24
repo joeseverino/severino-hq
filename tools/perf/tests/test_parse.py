@@ -1,4 +1,4 @@
-"""perf:report reads its tools' output as those tools print it."""
+"""perf reads its tools' output as those tools print it."""
 
 from django.test import SimpleTestCase
 

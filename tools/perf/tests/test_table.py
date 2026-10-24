@@ -1,4 +1,4 @@
-"""perf:report's table: a row per page and width, a total, and each number beside its base's."""
+"""perf's table: a row per page and width, a total, and each number beside its base's."""
 
 import copy
 import re
@@ -7,7 +7,7 @@ from django.test import SimpleTestCase
 
 from tools.perf import table
 
-# Two pages of a recorded `perf:report` run's JSON.
+# Two pages of a recorded `perf` run's JSON.
 RECORDED = {
     "commit": "364c3fe324d8",
     "target": "dev:scratch",

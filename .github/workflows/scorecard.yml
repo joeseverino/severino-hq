@@ -6,7 +6,7 @@ name: Scorecard
 # and the published result backs the README badge.
 #
 # Weekly, and when branch protection changes: a pull request that would lower
-# a check is already held by CI's Checks, which runs the same checks, so a run
+# a check is already held by CI's lint job (lint:scorecard), which runs the same checks, so a run
 # on every push would only add a second row to each commit.
 on:
   branch_protection_rule:

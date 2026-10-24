@@ -1,13 +1,18 @@
-"""The one command whose exit 0 means ready to release.
+"""The check task: every gate CI runs, and with --release the one command
+whose exit 0 means ready to release.
 
 Runs, in order:
 
-1. ``mise run ci``: every gate the pipeline runs (one that cannot run fails);
-   or, with --remote, what GitHub ran on this exact commit, waited for and
-   required to pass: CI's newest run, which concludes success only when its
-   verdict job (Ready, or Release on main) passed, on main the Compose it
-   starts, and every other run and check. The commit must be pushed.
-2. ``mise run suite:as-image``, the extensions required.
+1. Every gate CI runs (``lint``, ``test``, ``browser``, ``build``, ``scan``),
+   one at a time (one that cannot run fails); or, with --remote, what GitHub
+   ran on this exact commit, waited for and required to pass: CI's newest run,
+   which concludes success only when its verdict job (Ready, or Release on
+   main) passed, on main the Compose it starts, and every other run and check.
+   The commit must be pushed.
+
+With --release (or --skip-host, a release run without its last step), then:
+
+2. ``mise run test --composed``, the extensions required.
 3. ``hq-host check`` on the deploy host, read-only, as the SSH login: built
    here for the host's platform from HEAD, so the release being checked is
    the one that checks, and handed the units this release and main ship.
@@ -17,9 +22,12 @@ environment or in mise.local.toml (tools/dev/mise.local.example.toml). The
 release is HEAD, which must be committed: a check of uncommitted files proves
 nothing about the commit that ships.
 
-Exit 0: ready. Exit 1: a gate failed. Exit 2: the host was skipped, or its
-release could not be verified, so whatever else passed, this is not a verdict
-on the release.
+A release run keeps its verdict as ``check-release`` (var/gate/check-release.txt),
+apart from a plain run's ``check`` (var/gate/check.txt).
+
+Exit 0: passed, or ready. Exit 1: a gate failed. Exit 2: the host was skipped,
+or its release could not be verified, so whatever else passed, this is not a
+verdict on the release.
 """
 
 from __future__ import annotations
@@ -54,8 +62,15 @@ UNVERIFIED = 3
 WATCH_FAILURES = 5
 
 
+# Every gate CI runs, by the task of each job's name, one at a time: each
+# suite starts a worker per core, and two at once exhaust a small machine.
+GATES = ["mise", "run", "-c", "-j", "1", "lint", ":::", "test", ":::", "browser", ":::", "build", ":::", "scan"]
+COMPOSED = ["env", "REQUIRE_COMPOSED=1", "mise", "run", "test", "--composed"]
+
+
 @dataclass
 class Summary:
+    name: str
     rows: list[tuple[str, Step]] = field(default_factory=list)
 
     def add(self, status: str, step: Step) -> None:
@@ -63,12 +78,12 @@ class Summary:
         self.rows.append((status, step))
 
     def command(self, label: str, cmd: list[str]) -> None:
-        print(f"[preflight] {label}", flush=True)
+        print(f"[{self.name}] {label}", flush=True)
         step = run(label, cmd)
         self.add("passed" if step.ok else "FAILED", step)
 
     def check(self, label: str, gate) -> None:
-        print(f"[preflight] {label}", flush=True)
+        print(f"[{self.name}] {label}", flush=True)
         self.add("passed" if gate() else "FAILED", Step(label))
 
 
@@ -201,9 +216,9 @@ def github_gates() -> bool:
         return False
     repository = gh("repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner").strip()
     github = GitHub(sha, repository)
-    deadline = time.monotonic() + int(os.environ.get("PREFLIGHT_REMOTE_TIMEOUT", "3600"))
+    deadline = time.monotonic() + int(os.environ.get("CHECK_REMOTE_TIMEOUT", "3600"))
     try:
-        return github.settle(deadline, int(os.environ.get("PREFLIGHT_REMOTE_POLL", "30"))) and github.passed()
+        return github.settle(deadline, int(os.environ.get("CHECK_REMOTE_POLL", "30"))) and github.passed()
     except subprocess.CalledProcessError as error:
         print(f"GitHub could not be read: {error.stderr or error}", file=sys.stderr)
         return False
@@ -235,7 +250,7 @@ def build_check(work: Path, platform: tuple[str, str]) -> Path:
 def unit_trees(payload: Path) -> None:
     """The units this release and main ship, as release/ and main/."""
 
-    for name, ref in (("release", "HEAD"), ("main", os.environ.get("PREFLIGHT_BASE_REF", "origin/main"))):
+    for name, ref in (("release", "HEAD"), ("main", os.environ.get("CHECK_RELEASE_BASE_REF", "origin/main"))):
         into = payload / name
         into.mkdir(parents=True)
         archive = subprocess.run(["git", "archive", ref, "deploy/systemd"], cwd=ROOT, check=True, capture_output=True)
@@ -244,7 +259,7 @@ def unit_trees(payload: Path) -> None:
 
 # Run by the login shell: unpack, check, remove, exit as the check did.
 REMOTE = (
-    'dir="$(mktemp -d "${TMPDIR:-/tmp}/hq-preflight.XXXXXX")" || exit 1; '
+    'dir="$(mktemp -d "${TMPDIR:-/tmp}/hq-check.XXXXXX")" || exit 1; '
     'if tar -x -C "$dir"; then "$dir/hq-host" check --release "$dir/release/deploy/systemd" '
     '--main "$dir/main/deploy/systemd"; status=$?; else status=1; fi; rm -rf "$dir"; exit "$status"'
 )
@@ -298,21 +313,23 @@ def send(stdin, payload: Path) -> bool:
 
 def main() -> int:
     started = time.monotonic()
-    summary = Summary()
-    head = git("rev-parse", "--short", "HEAD")
-    if git("status", "--porcelain"):
-        summary.add("FAILED", Step("committed tree (uncommitted changes are not part of the release)"))
-    else:
-        summary.add("passed", Step(f"committed tree at {head}"))
-
     asked = usage()
+    release = asked.switch("release") or asked.switch("skip_host")
+    summary = Summary("check-release" if release else "check")
+    if release:
+        head = git("rev-parse", "--short", "HEAD")
+        if git("status", "--porcelain"):
+            summary.add("FAILED", Step("committed tree (uncommitted changes are not part of the release)"))
+        else:
+            summary.add("passed", Step(f"committed tree at {head}"))
+
     if asked.switch("remote"):
         summary.check("every GitHub check on this commit", github_gates)
     else:
-        summary.command("every gate the pipeline runs", ["mise", "run", "-c", "ci"])
-    summary.command(
-        "the composed suite, as the image runs it", ["env", "REQUIRE_COMPOSED=1", "mise", "run", "suite:as-image"]
-    )
+        summary.command("every gate CI runs", GATES)
+    if not release:
+        return report(summary, started)
+    summary.command("the composed suite, as the image runs it", COMPOSED)
 
     destination = os.environ.get("SEVERINO_HQ_DEPLOY_HOST", "")
     if asked.switch("skip_host"):
@@ -321,24 +338,29 @@ def main() -> int:
         summary.add("FAILED", Step("deploy host: SEVERINO_HQ_DEPLOY_HOST is not set"))
     else:
         label = f"deploy host {destination}, read-only"
-        print(f"[preflight] {label}", flush=True)
+        print(f"[{summary.name}] {label}", flush=True)
         status = host_check(destination)
         if status == UNVERIFIED:
             summary.add("UNKNOWN", Step(f"{label}: the release it runs is unverified"))
         else:
             summary.add("passed" if status == 0 else "FAILED", Step(label))
+    return report(summary, started, passed=": READY", failed=": NOT READY")
 
-    print("\n[preflight] summary")
+
+def report(summary: Summary, started: float, passed: str = "", failed: str = "") -> int:
+    """The summary, then the verdict: 0 passed, 1 a gate failed, 2 the host unverified."""
+
+    print(f"\n[{summary.name}] summary")
     for status, step in summary.rows:
         print(f"  {status:<8} {step.label}")
-    failed = [step for status, step in summary.rows if status == "FAILED"]
-    if failed:
-        close("preflight", started, failed, failed=": NOT READY")
+    failures = [step for status, step in summary.rows if status == "FAILED"]
+    if failures:
+        close(summary.name, started, failures, failed=failed)
         return 1
     if any(status != "passed" for status, _ in summary.rows):
-        print("[preflight] HOST NOT VERIFIED. Every other gate passed; this is not a release verdict.")
+        print(f"[{summary.name}] HOST NOT VERIFIED. Every other gate passed; this is not a release verdict.")
         return 2
-    close("preflight", started, [step for _, step in summary.rows], passed=": READY")
+    close(summary.name, started, [step for _, step in summary.rows], passed=passed)
     return 0
 
 

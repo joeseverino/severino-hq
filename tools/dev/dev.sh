@@ -46,6 +46,20 @@ case "$profile" in
     *) die "Unknown profile: $profile" ;;
 esac
 
+# The saved demo, a static site: demo:build rebuilds it only when its sources
+# moved, on a database of its own, so the scratch server's env goes first.
+if [ "${usage_demo:-false}" = true ]; then
+    seed=${usage_seed:-showcase}
+    site=var/demo
+    [ "$seed" = showcase ] || site="var/demo-$seed"
+    (
+        unset SEVERINO_DATABASE_PATH SEVERINO_MEDIA_ROOT SEVERINO_EXPORTS_ROOT SEVERINO_HQ_PLUGINS PYTHONPATH \
+            SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS DJANGO_SECRET_KEY
+        mise run demo:build "$seed"
+    )
+    exec uv run python -u -m http.server --bind "$host" --directory "$site" "$port"
+fi
+
 # The checkout and each extension's sources are watched for changes, but for
 # what this server never runs: other worktrees, the environment, var/. The
 # list is split on spaces, so a path with one is refused rather than

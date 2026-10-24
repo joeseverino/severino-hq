@@ -1,7 +1,7 @@
 """The test task: manage.py test on the labels named, here or at another ref,
 closing on the line tools/gate/verdict.py prints.
 
-mise parses the task's arguments (its usage in mise-tasks/tests.toml) and this
+mise parses the task's arguments (its usage in mise-tasks/test.toml) and this
 reads what it parsed. What `--at` and `--keep` do is the task's help
 (`mise run test --help`). A run takes the heavy turn (tools/lib/heavy.sh) unless
 tools/gate/turn.py finds it narrow; a run at a ref builds a worktree, so it always takes it.

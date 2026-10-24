@@ -1,4 +1,4 @@
-"""perf:report fails a run where a page it measures answers anything but 200, and refuses a page that is none."""
+"""perf fails a run where a page it measures answers anything but 200, and refuses a page that is none."""
 
 import io
 from contextlib import redirect_stdout

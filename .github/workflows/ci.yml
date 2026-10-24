@@ -7,9 +7,9 @@ name: CI
 # reached from a pull request.
 #
 # The gates themselves are declared once, as mise tasks in their job's file
-# under mise-tasks/: each job below runs the aggregate of its name,
-# and `mise run ci` runs the same list on a developer's machine. A gate is
-# added there, never here.
+# under mise-tasks/: each gate job below is named for the task it runs
+# (lint, test, browser, build, scan), and `mise run check` runs the same list
+# on a developer's machine. A gate is added there, never here.
 #
 # The file keeps its name: the host image is signed by it, and what verifies
 # that signature (Compose, and the deploy script on the host) pins this path.
@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   # A push to main whose pull request already passed with this exact tree is
-  # not checked twice: Checks, Tests and Browser stand on that run, and Image
+  # not checked twice: Lint, Test and Browser stand on that run, and Build
   # promotes the pull request's image instead of building another. Anything
   # less than proof (tools/pipeline/proven-on-pr.sh) and every gate runs.
   proven:
@@ -71,8 +71,8 @@ jobs:
             echo "Proven on #$pr: its checks passed on this exact tree, and its image is promoted." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-  checks:
-    name: Checks
+  lint:
+    name: Lint
     needs: proven
     if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
     runs-on: ubuntu-26.04
@@ -88,14 +88,14 @@ jobs:
       - uses: ./.github/actions/toolchain
         with:
           # The structural bar builds its Go inspector from the controller's
-          # module, and checks:openapi lints with Redocly from npm.
+          # module, and lint:openapi lints with Redocly from npm.
           go: true
           npm: true
-      - name: Checks
-        # Every gate named checks:* (mise-tasks/checks.toml, mise-tasks/checks/)
-        # and drift:*. Each runs to the end, and the last lines of this step
-        # name every one that failed.
-        run: mise run -c checks
+      - name: Lint
+        # Every gate named lint:* (mise-tasks/lint.toml, mise-tasks/lint/).
+        # Each runs to the end, and the last lines of this step name every one
+        # that failed.
+        run: mise run lint
       - name: Dependency review
         if: github.event_name == 'pull_request'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
@@ -103,8 +103,8 @@ jobs:
           fail-on-severity: high
           comment-summary-in-pr: on-failure
 
-  tests:
-    name: Tests
+  test:
+    name: Test
     needs: proven
     if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
     runs-on: ubuntu-26.04
@@ -115,7 +115,7 @@ jobs:
         # PythonVersionTests holds this to tools/pipeline/toolchain.env: a matrix cannot read it.
         python: ["3.15"]
     env:
-      # `mise run tests` walks this list; a leg is one interpreter.
+      # `mise run test` walks this list; a leg is one interpreter.
       TEST_PYTHONS: ${{ matrix.python }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -124,11 +124,14 @@ jobs:
       - uses: ./.github/actions/toolchain
         with:
           python: ${{ matrix.python }}
-          # The live bridge tests build the controller.
+          # The live bridge tests build the controller, and test:controller
+          # runs its race tests.
           go: true
-      - name: Tests
-        # Every gate named tests:* (mise-tasks/tests.toml, mise-tasks/tests/).
-        run: mise run tests
+          # `mise run test` installs the lint tools a test label can reach.
+          npm: true
+      - name: Test
+        # Every gate named test:* (mise-tasks/test.toml, mise-tasks/test/).
+        run: mise run test
 
   # Real-browser layout invariants over synthetic example.* pages
   # (hq/platform/core/tests/browser/). Every request the page makes is answered in
@@ -173,25 +176,6 @@ jobs:
           path: /tmp/hq-browser-failure-*
           if-no-files-found: ignore
 
-  # The Go controller: format, generated types against their specs, vet, and
-  # the unit tests under the race detector.
-  controller:
-    name: Controller
-    needs: proven
-    if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
-    runs-on: ubuntu-26.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/toolchain
-        with:
-          go: true
-      - name: Controller
-        # Every gate named controller:* (mise-tasks/controller.toml).
-        run: mise run -c controller
-
   # The one writer of the caches the jobs above restore, on every push to main
   # so it runs when they stand on their pull request's run. A branch reads
   # main's caches and writes none, so a pull request adds no entries. Release
@@ -235,8 +219,10 @@ jobs:
 
   # Code scanning, on every pull request and push to main: main's analysis is
   # what a pull request's is compared with. Release does not wait for it.
-  codeql:
-    name: CodeQL
+  # CodeQL's own action, which uploads what it finds; `mise run scan` runs the
+  # same queries on a developer's machine.
+  scan:
+    name: Scan
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions:
@@ -258,8 +244,8 @@ jobs:
         with:
           category: "/language:python"
 
-  image:
-    name: Image
+  build:
+    name: Build
     # On a pull request the image is published as soon as it is built, so its
     # checks and its composition start at once. On main it is checked before
     # it is published and signed, and only Release composes it.
@@ -323,16 +309,16 @@ jobs:
         run: |
           set -euo pipefail
           image="ghcr.io/${{ github.repository }}:sha-${HEAD_SHA::12}"
-          mise run image:build --tag "$image" --revision "$HEAD_SHA"
+          mise run build --tag "$image" --revision "$HEAD_SHA" --no-verify
           echo "image=$image" >> "$GITHUB_OUTPUT"
-      # On main only: a pull request's image is checked by Image checks,
+      # On main only: a pull request's image is checked by Build verify,
       # alongside its composition.
       - name: Every check an image must pass
         # Every gate named image:verify:* (mise-tasks/image.toml), against the image just built.
         if: env.PROVEN == '' && github.event_name == 'push'
         env:
           IMAGE: ${{ steps.build.outputs.image }}
-        run: mise run -c image
+        run: mise run build
       - name: Log in to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -391,18 +377,19 @@ jobs:
         run: cosign sign --yes "$DIGEST"
 
   # A pull request's image, checked from the registry while its composition
-  # runs: the same gates main runs inside Image before it publishes.
-  image-checks:
-    name: Image checks
-    needs: image
-    if: ${{ !cancelled() && needs.image.result == 'success' && github.event_name == 'pull_request' }}
+  # runs: the same gates main runs inside Build before it publishes. IMAGE
+  # names it, so `mise run build` checks it without building another.
+  build-verify:
+    name: Build verify
+    needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' && github.event_name == 'pull_request' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     permissions:
       contents: read
       packages: read
     env:
-      IMAGE: ${{ needs.image.outputs.image }}
+      IMAGE: ${{ needs.build.outputs.image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -418,7 +405,7 @@ jobs:
       - uses: ./.github/actions/toolchain
       - name: Every check an image must pass
         # Every gate named image:verify:* (mise-tasks/image.toml).
-        run: mise run -c image
+        run: mise run build
 
   # A pull request's composition: this image plus every admitted extension,
   # each extension's tests run inside it (compose.yml). It publishes and signs
@@ -427,9 +414,9 @@ jobs:
   # before anything is published.
   compose:
     name: Composition
-    needs: image
+    needs: build
     if: >-
-      !cancelled() && needs.image.result == 'success' &&
+      !cancelled() && needs.build.result == 'success' &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/compose.yml
@@ -441,7 +428,7 @@ jobs:
       actions: read
       id-token: write
     with:
-      host-image: ${{ needs.image.outputs.image }}
+      host-image: ${{ needs.build.outputs.image }}
     secrets:
       HQ_APP_CLIENT_ID: ${{ secrets.HQ_APP_CLIENT_ID }}
       HQ_APP_KEY: ${{ secrets.HQ_APP_KEY }}
@@ -449,7 +436,7 @@ jobs:
 
   ready:
     name: Ready
-    needs: [proven, checks, tests, browser, controller, codeql, image, image-checks, compose]
+    needs: [proven, lint, test, browser, scan, build, build-verify, compose]
     # The one check the ruleset requires, accepted only from GitHub Actions:
     # it passes when every job above passed, so a gate added or removed here
     # never touches the repository's settings.
@@ -469,7 +456,7 @@ jobs:
           RESULTS: ${{ toJSON(needs) }}
           # A same-repository pull request is composed, so these must pass,
           # not be skipped.
-          REQUIRED: ${{ github.event.pull_request.head.repo.full_name == github.repository && 'image image-checks compose' || '' }}
+          REQUIRED: ${{ github.event.pull_request.head.repo.full_name == github.repository && 'build build-verify compose' || '' }}
         # Each job's result, in this run's summary; a job that did not pass
         # fails this one. Skipped passes, unless the job is required: a gate
         # skips itself only where it does not apply.
@@ -492,13 +479,13 @@ jobs:
 
   # On main, CI starts the build of HQ for this commit once every gate has
   # passed, and names the commit, so what Compose builds is exactly what CI
-  # checked. Nothing else about a push starts it. CodeQL is not waited for:
-  # code scanning holds a merge, not a release. Image checks and Composition
-  # run only for a pull request: on a push, Image checks what it builds or
+  # checked. Nothing else about a push starts it. Scan is not waited for:
+  # code scanning holds a merge, not a release. Build verify and Composition
+  # run only for a pull request: on a push, Build checks what it builds or
   # promotes the image its pull request checked, and Compose follows this job.
   release:
     name: Release
-    needs: [proven, checks, tests, browser, controller, image]
+    needs: [proven, lint, test, browser, build]
     if: ${{ !cancelled() && github.event_name == 'push' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -507,7 +494,7 @@ jobs:
       - name: Every gate passed
         env:
           RESULTS: ${{ toJSON(needs) }}
-          REQUIRED: image
+          REQUIRED: build
         run: *verdict
       - name: Mint a token to start Compose
         id: compose

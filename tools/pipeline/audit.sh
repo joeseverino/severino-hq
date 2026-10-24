@@ -1,6 +1,6 @@
 #!/bin/sh
 # No known vulnerability in a project's locked dependencies, audited by the
-# host's pinned pip-audit: the host's own (`mise run checks:audit`) or an
+# host's pinned pip-audit: the host's own (`mise run lint:audit`) or an
 # extension package's, by path where there is no mise (the admission action).
 #   tools/pipeline/audit.sh [PROJECT_DIR]
 set -eu

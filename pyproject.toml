@@ -32,7 +32,7 @@ dependencies = [
     "whitenoise==6.12.0",
 ]
 
-# checks:deptry: host code is hq/ and hq_sdk/, which the task names, less every
+# lint:deptry: host code is hq/ and hq_sdk/, which the task names, less every
 # tests/ directory. The groups under [dependency-groups] are development
 # dependencies, which DEP002 leaves alone.
 [tool.deptry]
@@ -77,7 +77,7 @@ dev = [
 ]
 tools = [
     "coverage==7.17.0",
-    # Holds the runtime dependencies to what host code imports (checks:deptry).
+    # Holds the runtime dependencies to what host code imports (lint:deptry).
     "deptry==0.25.1",
     "django-stubs==6.1.2",
     # Writes the served font from its source (tools/fonts), and the font tests read it.
@@ -94,7 +94,7 @@ tools = [
 browser = [
     "playwright==1.64.1",
 ]
-# Run by `mise run checks:audit`; never installed into the development environment.
+# Run by `mise run lint:audit`; never installed into the development environment.
 audit = [
     "pip-audit==2.10.1",
 ]
@@ -114,7 +114,7 @@ extend-include = ["deploy/targets/severino-hq-cpanel-controller"]
 "tools/pipeline/plugin_identity.py" = "py312"
 "tools/pipeline/verify_admissions.py" = "py312"
 # Its shell suite runs it, and the verdict it imports, on that same python3.
-"tools/gate/preflight.py" = "py312"
+"tools/gate/check.py" = "py312"
 "tools/gate/verdict.py" = "py312"
 "deploy/targets/severino-hq-cpanel-controller" = "py37"
 
@@ -164,7 +164,7 @@ max-complexity = 15
 
 [tool.pyright]
 # The editor's language server, for navigation and for an import that is
-# actually broken. Types are mypy's (checks:mypy): a second checker with its
+# actually broken. Types are mypy's (lint:mypy): a second checker with its
 # own opinions only contradicts the one the gates enforce. Each checkout,
 # worktrees included, resolves against its own environment; an agent's
 # worktree is checked by its own gates, not by the server rooted here.
@@ -204,7 +204,7 @@ disallow_untyped_decorators = false
 disallow_any_generics = false
 warn_return_any = false
 
-# Playwright is in the optional browser group, which checks:mypy does not
+# Playwright is in the optional browser group, which lint:mypy does not
 # install; it reads as Any whether or not it is installed, so one result holds.
 [[tool.mypy.overrides]]
 module = ["playwright.*"]
@@ -221,7 +221,7 @@ source = ["."]
 parallel = true
 concurrency = ["multiprocessing", "thread"]
 sigterm = true
-# tools/ and demo/ are development tooling, tested by checks:source, which the
+# tools/ and demo/ are development tooling, tested by lint:source, which the
 # suite this measures leaves out.
 omit = ["*/migrations/*", "*/tests/*", "manage.py", "hq/config/*", ".venv/*", "tools/*", "demo/*"]
 

@@ -1,8 +1,8 @@
 """The served Inter: the release's variable font cut to what HQ prints and the
 features its stylesheets ask for.
 
-    uv run python -m tools.fonts.subset          # writes SERVED (mise run regen)
-    uv run python -m tools.fonts.subset --check  # fails when SERVED is behind (drift:font)
+    uv run python -m tools.fonts.subset          # writes SERVED (mise run fix)
+    uv run python -m tools.fonts.subset --check  # fails when SERVED is behind (lint:drift-font)
 
 The source is Inter's own release (UPSTREAM beside this file). Both variable
 axes stay: weight, cut to the 400 to 700 the @font-face declares, and optical
@@ -132,7 +132,7 @@ def main() -> int:
     name = SERVED.relative_to(ROOT)
     if check:
         if SERVED.read_bytes() != built:
-            print(f"{name} is behind its source; run `mise run regen` and commit the result.", file=sys.stderr)
+            print(f"{name} is behind its source; run `mise run fix` and commit the result.", file=sys.stderr)
             return 1
         print(f"{name} is current.")
         return 0

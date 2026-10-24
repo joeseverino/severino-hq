@@ -115,7 +115,7 @@ DEBUG = env_bool("DJANGO_DEBUG", default=False)
 # mise task that runs Django sets both.
 _STARTED_WRONG = (
     "Locally, run Django through a mise task, which sets it: `mise run manage -- <command>`, "
-    "or `mise run dev:scratch` and `mise run dev:manage -- <command>` for the scratch server."
+    "or `mise run dev:scratch` and `mise run manage --scratch -- <command>` for the scratch server."
 )
 
 SECRET_KEY = env_str("DJANGO_SECRET_KEY")
@@ -505,7 +505,7 @@ DATABASES = {
             #
             # Named for the process, because two suites on one machine would
             # otherwise share the file: two worktrees' gates, or `mise run
-            # fast` beside `mise run ci`. A shared file makes them fail each
+            # fast` beside `mise run check`. A shared file makes them fail each
             # other with a locked table: a failure that says nothing about the
             # change and costs a while to attribute. Django's parallel workers
             # suffix this name per worker, so they stay distinct within a run

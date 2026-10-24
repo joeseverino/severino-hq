@@ -1,13 +1,13 @@
 #!/bin/sh
-# tools/gate/preflight.py, what `mise run preflight` runs, against a fixture repository, a fake GitHub and a fake
-# deploy host reached through a fake ssh: exit 0 only when every gate ran and
-# passed. What the host half checks is hq-host check's, held by
+# tools/gate/check.py, what `mise run check` runs, against a fixture repository, a fake GitHub and a fake
+# deploy host reached through a fake ssh: with --release, exit 0 only when every
+# gate ran and passed. What the host half checks is hq-host check's, held by
 # controller/host/check_test.go; here, that it is built from HEAD for the
 # host's platform, handed the units, and its exit read.
 
 set -eu
 # Hermetic: none of what the gates are asked for comes from the caller.
-unset REQUIRE_COMPOSED SEVERINO_HQ_DEPLOY_HOST PREFLIGHT_BASE_REF \
+unset REQUIRE_COMPOSED SEVERINO_HQ_DEPLOY_HOST CHECK_RELEASE_BASE_REF \
     TEST_FAIL_CI TEST_FAIL_COMPOSED TEST_HOST_EXIT TEST_UNAME TEST_HOST_REFUSES TEST_PROGRAM_PAD
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
@@ -30,7 +30,7 @@ for package in hq hq/platform hq/platform/core hq/platform/core/tests; do
     cp "${package}/__init__.py" "${repo}/${package}/"
 done
 cp hq/platform/core/tests/task.py "${repo}/hq/platform/core/tests/"
-cp tools/gate/__init__.py tools/gate/preflight.py tools/gate/verdict.py "${repo}/tools/gate/"
+cp tools/gate/__init__.py tools/gate/check.py tools/gate/verdict.py "${repo}/tools/gate/"
 # Hermetic: the fixture is a throwaway repository, so no signing and no hooks.
 git_() {
     git -C "${repo}" -c user.name=test -c user.email=test@example.com \
@@ -82,7 +82,7 @@ cat >"${bin}/mise" <<'EOF'
 #!/bin/sh
 echo "mise $* REQUIRE_COMPOSED=${REQUIRE_COMPOSED:-}" >>"${TEST_LOG}"
 case "$*" in
-    *suite:as-image*) exit "${TEST_FAIL_COMPOSED:-0}" ;;
+    *"test --composed"*) exit "${TEST_FAIL_COMPOSED:-0}" ;;
     *) exit "${TEST_FAIL_CI:-0}" ;;
 esac
 EOF
@@ -91,33 +91,53 @@ TEST_LOG="${work}/log"
 TEST_PAYLOAD="${work}/payload"
 export TEST_LOG TEST_PAYLOAD
 
-preflight() {
+run_check() {
     : >"${TEST_LOG}"
     rm -f "${TEST_PAYLOAD}"
     status=0
     # From the fixture, so `-m` imports its copy of the gate.
     (cd "${repo}" && PATH="${bin}:${PATH}" SEVERINO_HQ_DEPLOY_HOST="${SEVERINO_HQ_DEPLOY_HOST-deploy.example.test}" \
-        env "$@" python3 -m tools.gate.preflight) >"${work}/out" 2>&1 || status=$?
+        env "$@" python3 -m tools.gate.check) >"${work}/out" 2>&1 || status=$?
     return "${status}"
 }
-expect() { # expect <status> <why> [the task's usage_* flags]
+expect() { # expect <status> <why> [the task's usage_* flags]: a release run
     want="$1"
     why="$2"
     shift 2
     status=0
-    preflight "$@" || status=$?
+    run_check usage_release=true "$@" || status=$?
     [ "${status}" -eq "${want}" ] || fail "${why}: exit ${status}, expected ${want}
 $(cat "${work}/out")"
 }
 says() { grep -qF -- "$1" "${work}/out" || fail "output lacks '$1'"; }
 logged() { grep -qF -- "$1" "${TEST_LOG}" || fail "$2"; }
 
+# 0. A plain run is every gate CI runs, one at a time, and nothing past them:
+#    no committed tree asked for, no composed suite, no host.
+GATES="mise run -c -j 1 lint ::: test ::: browser ::: build ::: scan"
+printf '// not committed\n' >>"${repo}/controller/cmd/hq-host/main.go"
+status=0
+run_check || status=$?
+[ "${status}" -eq 0 ] || fail "a plain run whose gates pass: exit ${status}
+$(cat "${work}/out")"
+grep -qx "${GATES} REQUIRE_COMPOSED=" "${TEST_LOG}" || fail "a plain run did not run the pipeline's gates"
+if grep -q "composed\|^ssh" "${TEST_LOG}"; then fail "a plain run went past the gates"; fi
+[ -f "${repo}/var/gate/check.txt" ] || fail "a plain run kept no verdict"
+export TEST_FAIL_CI=1
+status=0
+run_check || status=$?
+[ "${status}" -eq 1 ] || fail "a plain run whose gate fails: exit ${status}"
+grep -qF "[check] FAILED in" "${work}/out" || fail "a plain run's failure is not its own verdict"
+unset TEST_FAIL_CI
+git_ checkout -q -- controller/cmd/hq-host/main.go
+
 # 1. A current host and passing gates: ready, every gate required, the host
 #    checked by the release's own hq-host.
 expect 0 "a ready release"
 says "READY"
-grep -qx "mise run -c ci REQUIRE_COMPOSED=" "${TEST_LOG}" || fail "the pipeline's gates did not run"
-grep -qx "mise run suite:as-image REQUIRE_COMPOSED=1" "${TEST_LOG}" || fail "the composed suite ran without being required"
+grep -qx "${GATES} REQUIRE_COMPOSED=" "${TEST_LOG}" || fail "the pipeline's gates did not run"
+grep -qx "mise run test --composed REQUIRE_COMPOSED=1" "${TEST_LOG}" || fail "the composed suite ran without being required"
+[ -f "${repo}/var/gate/check-release.txt" ] || fail "a release run's verdict is not kept apart from a plain run's"
 logged "ssh -o BatchMode=yes deploy.example.test uname -s -m" "the host was not asked its platform"
 logged "GOOS=linux GOARCH=amd64 CGO_ENABLED=0" "the check was not built for the host's platform"
 logged "check --release" "the host did not run hq-host check"
@@ -166,7 +186,7 @@ export TEST_HOST_REFUSES="example.test: no space left" TEST_PROGRAM_PAD=1
 expect 1 "a host that stops reading the check"
 says "FAILED   deploy host deploy.example.test"
 says "no space left"
-if grep -q "Traceback" "${work}/out"; then fail "a host that stops reading crashed preflight"; fi
+if grep -q "Traceback" "${work}/out"; then fail "a host that stops reading crashed the check"; fi
 unset TEST_HOST_REFUSES TEST_PROGRAM_PAD
 export TEST_UNAME="Linux aarch64"
 expect 0 "an arm64 host"
@@ -179,14 +199,14 @@ unset TEST_UNAME
 # 4. A failing local gate is not ready, and the verdict names it.
 export TEST_FAIL_CI=1
 expect 1 "a failing gate"
-says "[preflight] FAILED in"
-says "every gate the pipeline runs"
+says "[check-release] FAILED in"
+says "every gate CI runs"
 unset TEST_FAIL_CI
 export TEST_FAIL_COMPOSED=1
 expect 1 "a failing composed suite"
 unset TEST_FAIL_COMPOSED
 
-# 5. --remote reads what GitHub ran on HEAD instead of running `mise run ci`.
+# 5. --remote reads what GitHub ran on HEAD instead of running the gates here.
 #    The fake gh answers from JSON pages, <API path with / as _>.<page>.json in
 #    TEST_GH; every page, as one JSON array, only with --paginate --slurp. Watching a run
 #    replaces the pages with those in TEST_GH/finished.
@@ -217,7 +237,7 @@ chmod 0755 "${bin}/gh"
 git_ update-ref refs/remotes/origin/feature HEAD
 sha="$(git_ rev-parse HEAD)"
 TEST_GH="${work}/gh"
-export TEST_GH PREFLIGHT_REMOTE_POLL=0 PREFLIGHT_REMOTE_TIMEOUT=0
+export TEST_GH CHECK_REMOTE_POLL=0 CHECK_REMOTE_TIMEOUT=0
 
 list() { printf '%s,' "$@" | sed 's/,$//'; } # JSON values, comma-joined
 page() { # page <API path> <page> <key> <JSON values>
@@ -242,7 +262,7 @@ pull_request() {
     fresh
     runs "$(run 11 ci.yml pull_request completed "${passed}" 2026-10-19T10:00:00Z)" \
         "$(run 12 deploy.yml workflow_dispatch waiting null 2026-10-19T10:30:00Z)"
-    checks 1 "$(check completed "${passed}" Checks)" "$(check completed "${passed}" Ready)"
+    checks 1 "$(check completed "${passed}" Lint)" "$(check completed "${passed}" Ready)"
 }
 # A push to main: CI, the Compose its Release started, and the Demo build.
 main_push() {
@@ -250,13 +270,13 @@ main_push() {
     runs "$(run 21 ci.yml push completed "${passed}" 2026-10-19T11:00:00Z)" \
         "$(run 22 compose.yml workflow_dispatch completed "${passed}" 2026-10-19T11:20:00Z)" \
         "$(run 23 demo.yml push completed "${passed}" 2026-10-19T11:00:01Z)"
-    checks 1 "$(check completed "${passed}" Image)"
+    checks 1 "$(check completed "${passed}" Build)"
 }
 
 pull_request
 expect 0 "a pull request whose CI passed" usage_remote=true
 says "success  .github/workflows/ci.yml (pull_request, run 11)"
-if grep -q '^mise run -c ci ' "${TEST_LOG}"; then fail "--remote still ran the local gates"; fi
+if grep -q '^mise run -c -j 1 lint ' "${TEST_LOG}"; then fail "--remote still ran the local gates"; fi
 remote_refuses() { # remote_refuses <why> [expected output]
     expect 1 "$1" usage_remote=true
     [ -z "${2:-}" ] || says "$2"
@@ -290,9 +310,9 @@ pull_request
 mkdir -p "${TEST_GH}/finished"
 cp "${TEST_GH}/repos_example_host_actions_runs.1.json" "${TEST_GH}/finished/"
 runs "$(run 11 ci.yml pull_request in_progress null 2026-10-19T10:00:00Z)"
-PREFLIGHT_REMOTE_TIMEOUT=600
+CHECK_REMOTE_TIMEOUT=600
 expect 0 "a run that finishes while watched" usage_remote=true
-PREFLIGHT_REMOTE_TIMEOUT=0
+CHECK_REMOTE_TIMEOUT=0
 grep -q '^gh run watch 11 ' "${TEST_LOG}" || fail "the running CI was not watched"
 
 main_push
@@ -307,10 +327,10 @@ git_ update-ref -d refs/remotes/origin/main
 expect 1 "an unpushed HEAD" usage_remote=true
 says "HEAD is not pushed"
 git_ update-ref refs/remotes/origin/main HEAD~1
-unset TEST_GH PREFLIGHT_REMOTE_POLL PREFLIGHT_REMOTE_TIMEOUT
+unset TEST_GH CHECK_REMOTE_POLL CHECK_REMOTE_TIMEOUT
 
 if [ "${failures}" -ne 0 ]; then
-    echo "Preflight contracts failed (${failures})." >&2
+    echo "Check contracts failed (${failures})." >&2
     exit 1
 fi
-echo "Preflight contracts hold."
+echo "Check contracts hold."

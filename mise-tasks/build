@@ -1,0 +1,19 @@
+#!/bin/sh
+#MISE description="To check the production image: build it as CI builds it, then every image:verify:* check; with IMAGE set, check that image without a build"
+#USAGE flag "--tag <tag>" help="The name to build it as; severino-hq:ci-local by default"
+#USAGE flag "--revision <commit>" help="The commit it is built for, HEAD by default; a pull request builds its head, not the merge it checks out"
+#USAGE flag "--no-verify" help="Build only, as CI does before it publishes a pull request's image"
+
+# IMAGE names an image already built, which image:build then leaves alone and
+# the checks read. Each check runs to the end, and the last lines name every
+# one that failed.
+set -eu
+
+mise run image:build ${usage_tag:+--tag "${usage_tag}"} ${usage_revision:+--revision "${usage_revision}"}
+[ "${usage_no_verify:-}" != true ] || exit 0
+if [ -n "${IMAGE:-${usage_tag:-}}" ]; then
+    IMAGE="${IMAGE:-${usage_tag}}"
+    export IMAGE
+fi
+# The image is built: its checks run without building it again.
+exec mise run --skip-deps -c 'image:verify:*'

@@ -8,7 +8,7 @@
 # each from mise.lock and refuses a download whose checksum differs from it.
 # mise.toml reads Go's release from go.mod, so mise loads neither without it.
 # mise is the release min_version names, from its image by digest
-# (checks:toolchain holds the tag to min_version).
+# (lint:toolchain holds the tag to min_version).
 FROM python:3.15-slim-trixie@sha256:533b0b2f9b5d46fd097091cf826f27902f1d6c3bca714b6dc74551356aa97a51 AS tools
 COPY --from=ghcr.io/jdx/mise:2026.10.18@sha256:fc31de7b93d195613deb600d42c65a164b0205716ade38132aadeabac3838248 /usr/local/bin/mise /usr/local/bin/mise
 ENV MISE_TRUSTED_CONFIG_PATHS=/tools

@@ -1,5 +1,6 @@
 #!/bin/sh
-#MISE description="After changing what a source test reads (a task, a workflow, a doc): the tests tagged source, which read the repository"
+#MISE description="The tests tagged source, which read the repository: a task, a workflow, a doc"
+#MISE hide=true
 #MISE extends="django"
 #MISE depends=["setup:lint-tools"]
 #MISE timeout="30m"

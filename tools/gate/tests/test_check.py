@@ -1,4 +1,4 @@
-"""Preflight's reads of GitHub, where the shell contracts cannot reach without a clock."""
+"""check --remote's reads of GitHub, where the shell contracts cannot reach without a clock."""
 
 import json
 import subprocess
@@ -9,7 +9,7 @@ from unittest import mock
 
 from django.test import tag
 
-from tools.gate import preflight
+from tools.gate import check
 from tools.gate.tests.base import GateTestCase
 
 SHA = "a" * 40
@@ -31,7 +31,7 @@ class FakeApi:
         status = "completed" if self.reads > self.finish_after else "in_progress"
         run = {
             "id": 11,
-            "path": preflight.CI,
+            "path": check.CI,
             "event": "pull_request",
             "status": status,
             "conclusion": "success" if status == "completed" else None,
@@ -42,9 +42,9 @@ class FakeApi:
 
 @tag("source")
 class SettleTests(GateTestCase):
-    def github(self, finish_after: int) -> preflight.GitHub:
-        github = preflight.GitHub(SHA, REPOSITORY)
-        github.api = preflight.API(FakeApi(finish_after))
+    def github(self, finish_after: int) -> check.GitHub:
+        github = check.GitHub(SHA, REPOSITORY)
+        github.api = check.API(FakeApi(finish_after))
         return github
 
     def test_a_watch_gh_refuses_is_waited_between_and_then_refused_in_its_words(self):
@@ -53,8 +53,8 @@ class SettleTests(GateTestCase):
         waits: list[float] = []
 
         with (
-            mock.patch.object(preflight.subprocess, "run", return_value=refused),
-            mock.patch.object(preflight.time, "sleep", waits.append),
+            mock.patch.object(check.subprocess, "run", return_value=refused),
+            mock.patch.object(check.time, "sleep", waits.append),
             redirect_stderr(StringIO()) as err,
         ):
             settled = github.settle(time.monotonic() + 3600, 30)
@@ -65,11 +65,11 @@ class SettleTests(GateTestCase):
         self.assertEqual(set(waits), {30})
 
     def test_a_watch_that_works_is_not_held_against_the_run(self):
-        github = self.github(finish_after=preflight.WATCH_FAILURES * 2)
+        github = self.github(finish_after=check.WATCH_FAILURES * 2)
         watched = subprocess.CompletedProcess([], 0, "", "")
 
         with (
-            mock.patch.object(preflight.subprocess, "run", return_value=watched),
-            mock.patch.object(preflight.time, "sleep", self.fail),
+            mock.patch.object(check.subprocess, "run", return_value=watched),
+            mock.patch.object(check.time, "sleep", self.fail),
         ):
             self.assertTrue(github.settle(time.monotonic() + 3600, 30))

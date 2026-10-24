@@ -1,4 +1,4 @@
-"""`mise run perf:report <pages>... [--image] [--seed <name>] [--base <ref>]`: how light and fast HQ is.
+"""`mise run perf <pages>... [--image] [--seed <name>] [--base <ref>]`: how light and fast HQ is.
 
 Measures the pages asked, named as dev:look names the example estate's
 (`hq.platform.core.tests.task.pages`), or all for every page its navigation lists, on this
@@ -80,7 +80,7 @@ class Plan:
 
 
 class Unservable(Exception):
-    """A page or data set asked for that perf:report cannot serve."""
+    """A page or data set asked for that perf cannot serve."""
 
 
 class SetRefused(Exception):
@@ -121,7 +121,7 @@ def plan() -> Plan:
         try:
             chosen = task.pages(asked.repeated("pages"), every)
         except PageRefused as refused:
-            raise Unservable(f"{refused} perf:report serves the {ESTATE}'s pages alone.") from None
+            raise Unservable(f"{refused} perf serves the {ESTATE}'s pages alone.") from None
     return Plan(
         pages=chosen,
         walked=list(dict.fromkeys([*every, *chosen])),
@@ -382,7 +382,7 @@ def verdict(here: runs.Report) -> str:
 
 
 def closing(kept: runs.Run, here: runs.Report, base: runs.Report | None) -> str:
-    said = f"perf:report {here['commit']}" + (f" beside {base['commit']}" if base else "")
+    said = f"perf {here['commit']}" + (f" beside {base['commit']}" if base else "")
     said += f" ({here['target']}, {kept.doc['plan']['seed']})"
     if kept.doc.get("alone"):
         said += f", the host measured alone{' on both sides' if base else ''} because {kept.doc['alone'].rstrip('.')}"
@@ -449,13 +449,13 @@ def main() -> int:
     try:
         asked = plan()
     except Unservable as error:
-        print(f"perf:report: {error}", file=sys.stderr)
+        print(f"perf: {error}", file=sys.stderr)
         return 2
     here_commit = commit_of(ROOT)
     try:
         base_commit = task.commit_of(ref) if ref else None
     except RefError as error:
-        print(f"perf:report --base {ref}: {error}", file=sys.stderr)
+        print(f"perf --base {ref}: {error}", file=sys.stderr)
         return 2
     stem = runs.name(here_commit, base_commit and base_commit[:12], asked.target, datetime.now(UTC))
     kept = runs.Run.start(OUT, stem, target=asked.target, plan=asked.key(), alone=asked.alone or None)

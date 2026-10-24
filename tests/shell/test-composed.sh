@@ -1,10 +1,10 @@
 #!/bin/sh
-# Prove suite:as-image removes its copy of the checkout however the suite ends,
+# Prove test:composed removes its copy of the checkout however the suite ends,
 # passes the suite's exit status on, and touches no other run's copy.
 set -eu
 
 repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
-task=mise-tasks/suite/as-image
+task=mise-tasks/test/composed
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
 
@@ -84,4 +84,4 @@ cat >"${work}/bin/uv" <<'STUB'
 STUB
 [ "$(run 0)" = 0 ] || fail "the copy holds more than the image admits"
 
-echo "suite:as-image tests passed"
+echo "test:composed tests passed"

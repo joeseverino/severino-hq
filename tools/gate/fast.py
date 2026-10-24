@@ -37,24 +37,24 @@ ROOT = Path(__file__).resolve().parents[2]
 # template). A drift gate's paths are its sources and the file it derives.
 PYTHON = ("*.py",)
 TASKS: dict[str, tuple[str, ...]] = {
-    "checks:ruff": PYTHON,
-    "checks:mypy": PYTHON,
+    "lint:ruff": PYTHON,
+    "lint:mypy": PYTHON,
     # The graph fingerprints functions in every language it indexes.
-    "checks:structural": (*PYTHON, "*.go", "*.js", "*.mjs", "*.sh", "mise-tasks/*", "tools/structural/*"),
-    "checks:css": ("static/css/*", "tools/lint/*"),
-    "checks:deptry": ("hq/*.py", "hq_sdk/*.py"),
-    "checks:mise-tasks": ("mise-tasks/*",),
-    "tests:django": PYTHON,
-    "tests:migrations": ("hq/*.py",),
-    "drift:sdk-contract": (*PYTHON, "hq_sdk/*", "docs/Plugins.md"),
-    "drift:api-document": (*PYTHON, "hq/platform/api/hq-api.openapi.json"),
-    "drift:bridge-contract": (*PYTHON, "controller/api/*", "hq/config/controller-connections.json"),
-    "drift:connections-reference": (*PYTHON, "docs/Connections.md"),
-    "drift:font": ("tools/fonts/*", "static/fonts/*", "static/css/*"),
+    "lint:structural": (*PYTHON, "*.go", "*.js", "*.mjs", "*.sh", "mise-tasks/*", "tools/structural/*"),
+    "lint:css": ("static/css/*", "tools/lint/*"),
+    "lint:deptry": ("hq/*.py", "hq_sdk/*.py"),
+    "lint:mise-tasks": ("mise-tasks/*",),
+    "test:django": PYTHON,
+    "test:migrations": ("hq/*.py",),
+    "lint:drift-sdk-contract": (*PYTHON, "hq_sdk/*", "docs/Plugins.md"),
+    "lint:drift-api-document": (*PYTHON, "hq/platform/api/hq-api.openapi.json"),
+    "lint:drift-bridge-contract": (*PYTHON, "controller/api/*", "hq/config/controller-connections.json"),
+    "lint:drift-connections-reference": (*PYTHON, "docs/Connections.md"),
+    "lint:drift-font": ("tools/fonts/*", "static/fonts/*", "static/css/*"),
 }
 # Paths a gate never reads, so a change to them alone leaves it out: the
 # structural bar drops test code before it pairs anything.
-UNREAD = {"checks:structural": TEST}
+UNREAD = {"lint:structural": TEST}
 # What every gate reads: the dependencies, the tool pins and the task
 # definitions. A change to one runs them all.
 EVERY_TASK = (
@@ -123,7 +123,7 @@ def selected_tasks(paths: list[str]) -> tuple[str, ...]:
 
 
 def tasks_command(tasks: tuple[str, ...], parallel: str) -> list[str]:
-    """One mise run of every task, side by side unless parallelism is ruled out.
+    """One run of every task, side by side unless parallelism is ruled out.
 
     `-c` names every task that failed, and the configured keep-order output
     prints each one whole under its own name.
@@ -427,11 +427,11 @@ def main(asked: Usage) -> int:
         print("[fast] no quick gate reads what changed")
     steps.extend(step(label, cmd) for label, cmd in test_commands(labels, parallel, tree=tree))
     if os.environ.get("HQ_LOCAL_PLUGINS") and touches_shared_ui([*changed, *deleted]):
-        # suite:as-image hands what follows to manage.py test.
+        # test:composed hands what follows to manage.py test.
         steps.append(
             step(
                 "extension suites, composed (shared UI changed)",
-                ["mise", "run", "suite:as-image", "--", "--installed-plugins", "--parallel", parallel],
+                ["mise", "run", "test:composed", "--", "--installed-plugins", "--parallel", parallel],
             )
         )
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))

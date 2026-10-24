@@ -3,14 +3,14 @@
 Every request a page makes ends in Playwright's `requestfinished` or
 `requestfailed`, so a count of those against `request` that stays at zero is a
 page that has loaded; `networkidle` only guesses from 500 ms of silence. The
-layout gate and perf:report wait the same way.
+layout gate and perf wait the same way.
 """
 
 from typing import Any
 
 from hq.platform.core.tests.browser.probes.settle import _SETTLED
 
-# The wait in words, kept in perf:report's plan so a report that waited
+# The wait in words, kept in perf's plan so a report that waited
 # otherwise never stands in for one measured so.
 SETTLED = "no request in flight two frames running after load"
 

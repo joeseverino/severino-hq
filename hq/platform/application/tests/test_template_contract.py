@@ -169,7 +169,7 @@ class TemplateRecordTests(SimpleTestCase):
     def test_the_rendered_text_examples_are_current(self):
         differences = text_contract.drift(text_contract.load_committed(), text_contract.describe())
 
-        self.assertEqual(differences, [], "Run `mise run regen` and review the words that changed.")
+        self.assertEqual(differences, [], "Run `mise run fix` and review the words that changed.")
 
     @tag("source")
     def test_plugins_md_states_the_recorded_contract(self):
@@ -178,7 +178,7 @@ class TemplateRecordTests(SimpleTestCase):
         text = plugins_doc().read_text(encoding="utf-8")
         section = template_contract.markdown(contract.load_committed()["templates"])
 
-        self.assertEqual(documented(text, section), text, "Run `mise run regen`.")
+        self.assertEqual(documented(text, section), text, "Run `mise run fix`.")
 
 
 class PageDialogTests(SimpleTestCase):

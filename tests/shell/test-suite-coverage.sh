@@ -1,15 +1,15 @@
 #!/bin/sh
-# Prove tests:suite has coverage judge its own floor (pyproject.toml) on the one
+# Prove test:suite has coverage judge its own floor (pyproject.toml) on the one
 # report it reads the total from, and says that same total in the step summary.
 set -eu
 
 repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
-task=mise-tasks/tests/suite
+task=mise-tasks/test/suite
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
 
 fixture="${work}/checkout"
-mkdir -p "${fixture}/mise-tasks/tests" "${fixture}/tools/lib" "${work}/bin"
+mkdir -p "${fixture}/mise-tasks/test" "${fixture}/tools/lib" "${work}/bin"
 cp "${repo}/${task}" "${fixture}/${task}"
 cp "${repo}/tools/lib/heavy.sh" "${repo}/tools/lib/heavy-turn.sh" "${fixture}/tools/lib/"
 
@@ -64,7 +64,7 @@ $(cat "${work}/reports")"
 done
 
 if [ "${failures}" -ne 0 ]; then
-    echo "tests:suite coverage contracts failed (${failures})." >&2
+    echo "test:suite coverage contracts failed (${failures})." >&2
     exit 1
 fi
-echo "tests:suite coverage contracts hold."
+echo "test:suite coverage contracts hold."

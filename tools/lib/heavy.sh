@@ -49,7 +49,7 @@ inside_turn() {
 
 # bounded <command...>: runs the command as a process group of its own, and
 # stops that whole group when this script is stopped. A mise task's timeout
-# signals its process group, but a mise run from inside a task signals only
+# signals its process group, but a task run from inside a task signals only
 # the pid it started, so without the group a bound fired there would leave
 # what the command started running. Perl's setpgrp makes the group: set -m is
 # the shell's to refuse, and dash, Linux's /bin/sh, does without a terminal.

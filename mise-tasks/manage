@@ -1,0 +1,18 @@
+#!/bin/sh
+#MISE description="For a Django command: manage.py on a new empty database, host alone, as the gates set it up; --scratch on what dev:scratch serves"
+#MISE raw=true
+#MISE extends="django"
+#USAGE flag "--scratch" help="On this checkout's scratch database instead, extensions loaded: what dev:scratch serves"
+#USAGE arg "[command]..." var=#true double_dash="automatic" help="The manage.py command and its arguments, passed as typed"
+set -eu
+
+# mise hands the command over shell-quoted, one word each.
+eval "set -- ${usage_command:-}"
+if [ "${usage_scratch:-}" = true ]; then
+    # The scratch server's env, which mise fixes per task: manage:scratch holds
+    # it. The gate's throwaway key would stand in for the one the scratch
+    # server writes, so it goes first.
+    unset DJANGO_SECRET_KEY SEVERINO_DATABASE_PATH
+    exec mise run manage:scratch -- "$@"
+fi
+exec uv run --group browser python manage.py "$@"

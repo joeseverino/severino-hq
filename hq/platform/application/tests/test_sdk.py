@@ -286,7 +286,7 @@ class SdkShapeTests(SimpleTestCase):
                 [
                     (
                         "hq_sdk changed shape. Every extension binds to it, and no test "
-                        "or graph here can see them. Run `mise run regen`, "
+                        "or graph here can see them. Run `mise run fix`, "
                         "review the diff, and decide whether PLUGIN_API_VERSION moves:"
                     ),
                     *differences,

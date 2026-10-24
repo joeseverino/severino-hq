@@ -1,0 +1,93 @@
+#!/bin/sh
+#MISE description="After a template or CSS change: every browser gate in WebKit, layout, navigation and the demo, one at a time, or the legs named"
+#MISE timeout="2h"
+#USAGE arg "[target]..." var=#true double_dash="automatic" help="Legs by name (layout-1, navigation, demo), each the gate browser:<leg>; every leg but the Chromium ones by default. With --linux, a leg or test labels then any options for Django's test command, as mise run test takes them"
+#USAGE flag "--linux" help="In the Playwright image CI's browser job runs, on this checkout: a layout only CI's Linux shows, reproduced here"
+#USAGE flag "--engine <engine>" default="chromium" help="With --linux, the engine test labels are drawn in; a leg keeps its own" {
+#USAGE   choices "webkit" "chromium" "firefox"
+#USAGE }
+
+# One turn covers every gate. One gate at a time: each starts a browser per
+# core. The Chromium legs are CI's alone, since HQ is read in Safari.
+set -eu
+
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+# mise hands the targets over shell-quoted, one word each. A leg is a word
+# with no dot; a test label has one.
+eval "set -- ${usage_target:-}"
+for target do
+    shift
+    case "${target}" in
+        -* | *.*) set -- "$@" "${target}" ;;
+        *) set -- "$@" "browser:${target}" ;;
+    esac
+done
+
+if [ "${usage_linux:-}" != true ]; then
+    if [ "$#" -eq 0 ]; then
+        exec env MISE_TASK_SKIP=browser:layout-chromium-1,browser:layout-chromium-2 \
+            uv run python -m tools.gate.verdict browser mise run -c -j 1 'browser:*'
+    fi
+    # The gates named, joined as mise runs several.
+    joined=""
+    for gate do
+        shift
+        case "${gate}" in
+            browser:*) ;;
+            *) echo "mise run browser: ${gate} is no leg; test labels run with mise run test, or here with --linux" >&2; exit 64 ;;
+        esac
+        if [ -n "${joined}" ]; then set -- "$@" ::: "${gate}"; else set -- "$@" "${gate}"; fi
+        joined=1
+    done
+    exec uv run python -m tools.gate.verdict browser mise run -c -j 1 "$@"
+fi
+
+# The image and its options are the ones .github/workflows/ci.yml gives the
+# browser job, read from this checkout's copy, so a commit runs in the image
+# its own CI used. Inside, tools/dev/browser-linux.sh sets up as the toolchain
+# action does and runs the same mise task. What the setup downloads (mise, its
+# tools, uv's cache and the environment) stays in the Docker volume
+# severino-hq-browser-linux, so the next run starts at the gate.
+[ "$#" -gt 0 ] || { echo "mise run browser --linux: name a leg or test labels" >&2; exit 64; }
+docker info >/dev/null 2>&1 || {
+    echo "No container runtime answers: start one with Rosetta first (colima start --cpu 4 --memory 5 --vz-rosetta)." >&2
+    exit 69
+}
+
+workflow=.github/workflows/ci.yml
+image="$(sed -n 's|^ *image: \(mcr\.microsoft\.com/playwright/[^ ]*\)$|\1|p' "${workflow}")"
+options="$(sed -n '/^ *image: mcr\.microsoft\.com\/playwright\//{n;s/^ *options: //p;}' "${workflow}")"
+case "${image}" in
+    '' | *"
+"*) echo "${workflow} does not name one Playwright image for the browser job." >&2; exit 1 ;;
+esac
+
+# A gate names its own engine; labels are drawn in the one asked for.
+case "$1" in
+    browser:*) engine="" ;;
+    *) engine="${usage_engine:?}" ;;
+esac
+
+checkout="${MISE_CONFIG_ROOT}"
+# A worktree's .git is a file naming the repository's own, which the container
+# needs at the same path to read the checkout's history.
+common="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
+case "${common}" in
+    "${checkout}"/*) git_mount="" ;;
+    *) git_mount="--volume=${common}:${common}:ro" ;;
+esac
+
+# CI's runners are x64, the one Linux platform mise.lock records, so the image
+# runs as linux/amd64, through Rosetta on Apple silicon: under QEMU, Chromium
+# crashes as it starts.
+# shellcheck disable=SC2086  # the workflow's options are several words; the git mount is one or none
+exec docker run --rm --platform=linux/amd64 ${options} ${git_mount} \
+    --volume=severino-hq-browser-linux:/home/pwuser \
+    --volume="${checkout}:${checkout}" \
+    --workdir="${checkout}" \
+    --env=HOME=/home/pwuser \
+    ${engine:+--env=HQ_BROWSER_ENGINE="${engine}"} \
+    ${HQ_BROWSER_SLOW:+--env=HQ_BROWSER_SLOW="${HQ_BROWSER_SLOW}"} \
+    ${HQ_BROWSER_FACE:+--env=HQ_BROWSER_FACE="${HQ_BROWSER_FACE}"} \
+    "${image}" sh tools/dev/browser-linux.sh "$@"
