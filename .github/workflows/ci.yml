@@ -316,7 +316,6 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         if: env.PROVEN == ''
       - uses: ./.github/actions/toolchain
-        if: env.PROVEN == ''
       - name: Build the production image
         id: build
         if: env.PROVEN == ''
@@ -370,14 +369,20 @@ jobs:
       # a signature over a pointer proves nothing about what it points at now.
       - name: Promote the image its pull request proved
         # The same manifest under this commit's tag, so the tag names the
-        # digest that is signed (tools/pipeline/retag.sh).
+        # digest that is signed: `crane tag` PUTs the bytes it fetched by
+        # digest. Each tag is read back and must name that digest.
         id: promote
         if: env.PROVEN != ''
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          tools/pipeline/retag.sh "$PROVEN" "sha-${HEAD_SHA::12}" latest
+          for tag in "sha-${HEAD_SHA::12}" latest; do
+            crane tag "$PROVEN" "$tag"
+            resolved=$(crane digest "${PROVEN%@*}:$tag")
+            if [ "$resolved" != "${PROVEN#*@}" ]; then
+              echo "::error::$tag resolves to $resolved, not ${PROVEN#*@}"
+              exit 1
+            fi
+          done
           echo "digest=$PROVEN" >> "$GITHUB_OUTPUT"
       - name: Sign
         # On a promotion too: Compose deploys only an image signed by this
