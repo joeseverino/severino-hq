@@ -702,7 +702,8 @@ class SeverinoTestRunner(DiscoverRunner):
             require_tests_from(suite, modules)
         if self.tags and next(tests_in(suite), None) is None:
             # A gate that selects by tag and finds nothing has checked nothing.
-            raise RuntimeError(f"No test carries the tag(s) {', '.join(sorted(self.tags))}.")
+            untagged = f" Their tests run with `mise run test {' '.join(test_labels)}`." if test_labels else ""
+            raise RuntimeError(f"No test carries the tag(s) {', '.join(sorted(self.tags))}.{untagged}")
         return suite
 
     def needs_the_turn(self, suite: unittest.TestSuite) -> bool:
