@@ -70,12 +70,16 @@ runs:
         python-version: ${{ inputs.python || steps.read.outputs.oldest-python }}
     # mise's downloads, never its installed tools: mise checks each download
     # against mise.lock before it installs it, so a cache cannot change what
-    # runs. The key is the lock, the one list of what is downloaded.
+    # runs. The key is the lock, the one list of what is downloaded. A job that
+    # reads the caches falls back to the newest one of an older lock, since
+    # every tool verifies what it takes; the job that writes them starts from
+    # nothing, so a saved cache never carries what no lock names.
     - id: mise-downloads
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/mise/downloads-cas
         key: mise-downloads-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.lock') }}
+        restore-keys: ${{ inputs.save != 'true' && format('mise-downloads-{0}-{1}-', runner.os, runner.arch) || '' }}
     - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
       with:
         version: ${{ steps.read.outputs.mise }}
@@ -98,15 +102,21 @@ runs:
         GO_SUM: ${{ hashFiles('controller/go.sum') }}
         NPM_LOCK: ${{ hashFiles('tools/*/package-lock.json') }}
         GO: ${{ inputs.go }}
+        FALLBACK: ${{ inputs.save != 'true' }}
       run: |
         set -euo pipefail
+        # The key a reading job falls back to: the key without its lock's hash.
+        fallback() { if [ "$FALLBACK" = true ]; then echo "${1%-*}-"; fi; }
         {
           echo "uv-path=$HOME/.cache/uv"
           echo "uv-key=uv-$RUNNER_OS-$PYTHON-$UV_LOCK"
+          echo "uv-fallback=$(fallback "uv-$RUNNER_OS-$PYTHON-$UV_LOCK")"
           echo "npm-path=$HOME/.npm"
           echo "npm-key=npm-$RUNNER_OS-$NPM_LOCK"
+          echo "npm-fallback=$(fallback "npm-$RUNNER_OS-$NPM_LOCK")"
           if [ "$GO" = true ]; then
             echo "go-key=go-$RUNNER_OS-$(go env GOVERSION)-$GO_SUM"
+            echo "go-fallback=$(fallback "go-$RUNNER_OS-$(go env GOVERSION)-$GO_SUM")"
             echo "go-path<<EOF"
             go env GOMODCACHE GOCACHE
             echo "EOF"
@@ -117,15 +127,18 @@ runs:
       with:
         path: ${{ steps.caches.outputs.uv-path }}
         key: ${{ steps.caches.outputs.uv-key }}
+        restore-keys: ${{ steps.caches.outputs.uv-fallback }}
     - id: go
       if: inputs.go == 'true'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.caches.outputs.go-path }}
         key: ${{ steps.caches.outputs.go-key }}
+        restore-keys: ${{ steps.caches.outputs.go-fallback }}
     - id: npm
       if: inputs.npm == 'true'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.caches.outputs.npm-path }}
         key: ${{ steps.caches.outputs.npm-key }}
+        restore-keys: ${{ steps.caches.outputs.npm-fallback }}
