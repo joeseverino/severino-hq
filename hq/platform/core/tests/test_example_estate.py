@@ -23,8 +23,8 @@ from hq.platform.core.models import AuditLog
 class ExampleEstateTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        with throwaway_media():
-            cls.user = seeds.build("standard")
+        with throwaway_media(), seeds.built("standard") as owner:
+            cls.user = owner
 
     def test_every_published_item_has_visits_and_the_site_a_full_quarter(self):
         self.assertTrue(analytics.coverage_summary(days=28)["complete"])

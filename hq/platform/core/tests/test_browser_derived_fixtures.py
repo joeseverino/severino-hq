@@ -361,7 +361,9 @@ class DerivedEstateTests(TestCase):
     def test_every_list_page_shows_the_rows_derived_for_it(self):
         """A list a derived row cannot be shown on would be measured empty."""
 
-        for name, html in render_derived_pages(seeds.build("derived")).items():
+        with seeds.built("derived") as owner:
+            pages = render_derived_pages(owner)
+        for name, html in pages.items():
             with self.subTest(page=name):
                 cells = [cell.words for cell in elements(html, "td")]
                 self.assertTrue(any(_DERIVED.search(said) for said in cells), "no derived row is shown")

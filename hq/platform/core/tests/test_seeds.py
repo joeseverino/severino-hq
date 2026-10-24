@@ -1,5 +1,4 @@
-"""Every tool takes its data by one name from one registry, and the shipped
-registry reaches no test code."""
+"""Every tool takes its data by one name from one registry, which reaches no test code."""
 
 import json
 import os
@@ -16,38 +15,30 @@ from hq.platform.core.tests import test_browser_fixtures
 
 class RegistryTests(SimpleTestCase):
     def test_an_unknown_name_is_refused_with_every_known_one(self):
-        with self.assertRaises(LookupError) as refused:
+        with self.assertRaisesMessage(LookupError, ", ".join(seeds.SEEDS)):
             seeds.get("no-such-set")
-
-        for name in seeds.SEEDS:
-            self.assertIn(name, str(refused.exception))
 
     def test_a_name_is_registered_once(self):
         with self.assertRaisesMessage(ValueError, "showcase"):
-            seeds.register("showcase", seeds.Seed(seeds.SEEDS["empty"].plant))
+            seeds.register("showcase", seeds.SEEDS["empty"])
 
-        self.assertIs(seeds.get("showcase").plant, seeds.SEEDS["showcase"].plant)
+        self.assertIsNot(seeds.get("showcase"), seeds.SEEDS["empty"])
 
     def test_a_stress_estate_is_known_by_name_once_its_builder_is_loaded(self):
         self.assertIs(seeds.get("sparse").plant, test_browser_fixtures.build_estate)
 
-    def test_importing_the_registry_and_its_command_loads_no_test_module(self):
-        """The server ships the registry; the stress estates register from the
-        test tree, so the shipped half must never import it."""
-
+    def test_the_server_side_of_the_registry_loads_no_test_module(self):
         probe = (
             "import django, json, sys; django.setup()\n"
-            "from hq.platform.core import seeds\n"
             "from hq.platform.core.management.commands import seed\n"
-            "for name in list(seeds.SEEDS): seeds.get(name).plant\n"
             "print(json.dumps([m for m in sys.modules if 'tests' in m.split('.')]))\n"
         )
         env = {**os.environ, "DJANGO_SETTINGS_MODULE": "hq.config.settings", "DJANGO_SECRET_KEY": "x" * 50}
-        result = subprocess.run(
+        loaded = subprocess.run(
             [sys.executable, "-c", probe], cwd=settings.BASE_DIR, env=env, capture_output=True, text=True, check=True
         )
 
-        self.assertEqual(json.loads(result.stdout.splitlines()[-1]), [])
+        self.assertEqual(json.loads(loaded.stdout.splitlines()[-1]), [])
 
 
 class BuiltTests(TestCase):

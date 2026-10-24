@@ -78,13 +78,13 @@ def stress_estate():
     worker handed a second layout class does not build the estates again;
     each estate is rolled back once rendered, so nothing else sees it."""
 
-    with transaction.atomic():
-        pages = render_pages(seeds.build("sparse"))
+    with transaction.atomic(), seeds.built("sparse") as owner:
+        pages = render_pages(owner)
         transaction.set_rollback(True)
-    with transaction.atomic():
-        pages |= render_dense_pages(seeds.build("dense"))
+    with transaction.atomic(), seeds.built("dense") as owner:
+        pages |= render_dense_pages(owner)
         transaction.set_rollback(True)
-    with transaction.atomic():
-        lists = render_derived_pages(seeds.build("derived"))
+    with transaction.atomic(), seeds.built("derived") as owner:
+        lists = render_derived_pages(owner)
         transaction.set_rollback(True)
     return MappingProxyType(pages | lists | speaking_heads() | shared_parts()), tuple(lists)
