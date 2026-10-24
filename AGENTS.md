@@ -9,22 +9,27 @@ agents alike. Setup, tasks and layout: [Development](docs/Development.md).
    with `origin/main` before designing: work lands from more than one place,
    and the mechanism you need may already exist there.
 2. Read the nearest code and tests before changing an interface.
-3. While editing, run `mise run fast [BASE]`. Run `mise run check` before
-   handing work back when the machine can hold it.
-4. Push. CI runs every gate; `mise run ci` runs the same set locally. Ready is
-   the [definition of done](#definition-of-done).
+3. Work with the commands below. Ready is the
+   [definition of done](#definition-of-done).
 
-`mise tasks` lists every task, `mise run <task> --help` says what it takes.
-A CI job runs the aggregate of its name, so a gate is added to its job's file
-under `tasks/` (`tasks/checks.toml` for `checks:*`), never in a workflow. Django runs as `mise run manage -- <command>`, and tests by label as
-`mise run test <labels>`. Whether a new test fails on the old code, or a
-failure was already there, is `mise run test --at <ref> <labels>`: never a
-base worktree, snapshot or checkout made by hand.
+`mise tasks` lists what to start from, `mise run <task> --help` what each
+takes; `--hidden` adds the gates aggregates, CI and the operator run, each
+still runnable by the name a verdict gives it. A gate closes on a verdict line
+naming every failed task and test: run it plain, since a pipe reports the
+filter's status.
 
-`fast` and `check` close on a verdict line naming each failed task and test:
-run them plain, since a pipe reports the filter's exit status. `fast` selects
-through Python imports and app names, so a rule held only by a string or a
-template needs `check` ([The gates](docs/Development.md#the-gates)).
+- `mise run fast [BASE]` while editing. It selects through Python imports and
+  app names, so a rule held only by a string or a template needs `check`.
+- `mise run check` before handing work back, when the machine can hold it;
+  `mise run ci` is every gate CI runs.
+- `mise run test <labels>`; `--at <ref>` runs them on older code, never a base
+  worktree, snapshot or checkout made by hand.
+- `mise run dev:scratch` in the agent's own worktree, never `mise run dev`.
+- `mise run manage -- <command>` for Django, `fix` for what lint holds,
+  `regen` for derived files.
+
+A CI job runs the aggregate of its name, so a gate goes in its job's file under
+`tasks/` (`tasks/checks.toml` for `checks:*`), never in a workflow.
 
 The composed suite (`suite:as-image`, run as the image runs it) is where the
 host and its extensions first meet, which CI cannot reach. Name the extension
@@ -35,10 +40,10 @@ importable.
 
 A test that reads the repository rather than running the product carries
 `@tag("source")` and runs only in `checks:source` (`mise run checks:source
-<labels>` for some), since no image ships those files. The suite runs in parallel on WAL SQLite through
-`hq/platform/core/test_runner.py`: read it before changing the test database.
-An agent's server is `mise run dev:scratch` in its own worktree, never
-`mise run dev`. A new host domain: [New Domain](docs/New-Domain.md).
+<labels>` for some), since no image ships those files. The suite runs in
+parallel on WAL SQLite through `hq/platform/core/test_runner.py`: read it
+before changing the test database. A new host domain:
+[New Domain](docs/New-Domain.md).
 The project's agent and skills, and a pass: [AI](docs/AI.md).
 
 ## Architecture in one minute

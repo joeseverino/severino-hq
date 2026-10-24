@@ -25,22 +25,19 @@ reads a `.env` file: production's configuration is in
 
 ## Tasks
 
-Every gate and server is a mise task. These are the ones to start from;
-`mise tasks` lists every task with its description, and `mise run <task>
---help` shows what it takes.
+Every gate and server is a mise task: which to start from, and how to list
+the rest, is in [AGENTS.md](../AGENTS.md#start-here). `mise doctor project`
+says whether this checkout can compose its extensions, with the fix for each
+gap.
 
-| Task | What it is |
-| --- | --- |
-| `mise run fast` | The inner loop: the quick gates and the tests the change reaches. |
-| `mise run test <label>...` | `manage.py test` on the labels named, in parallel, as the gates run it; options after the labels reach it as typed. It closes on a verdict line as `fast` does, kept in `var/gate/test.txt`. |
-| `mise run test --at <ref> [--keep <path>]... <label>...` | The same on `<ref>`'s code with this tree's test files laid over it (every `tests/` directory and the browser gates' modules, uncommitted work included): does a new test fail on the old code, was a failure already there. `--keep` leaves a support file (a test file that is not `test*.py` and not named by a label) as the ref has it, for a check whose logic lives in a gate, probe or helper; the closing line counts the test modules and names each support file laid over or kept. A label that does not import at `<ref>` is its own verdict, `DOES NOT IMPORT`, exit 3: no test ran on that code. The throwaway worktree goes on every exit. |
-| `mise run fix` | Write Ruff's fixes and format and `mise fmt`'s, so the lint gates have nothing to report. |
-| `mise doctor project` | Whether this checkout can compose its extensions, with the fix for each gap. |
-| `mise run check` | Does my change work: every Checks gate, the Tests gates, the composed suite. |
-| `mise run ci` | Every gate the pipeline runs. |
-| `mise run dev:scratch` | A throwaway server on loopback with a database of this checkout's own. |
-| `mise run regen` / `mise run drift` | Rewrite every derived file from its source / check that none is behind. |
-| `mise run preflight` | Ready to release: the gates, the composed suite and the deploy host. |
+`mise run test --at <ref> <label>...` runs this tree's test files (every
+`tests/` directory and the browser gates' modules, uncommitted work included)
+on `<ref>`'s code: does a
+new test fail on the old code, was a failure already there. `--keep` leaves a
+support file (not `test*.py` and not named by a label) as the ref has it, for
+a check whose logic lives in a gate, probe or helper. A label that does not
+import at `<ref>` is its own verdict, `DOES NOT IMPORT`, exit 3: no test ran
+on that code.
 
 ## Development servers
 
@@ -104,9 +101,10 @@ rules parallelism out when a failure looks order- or isolation-dependent.
 test modules that import them directly or through one module between, plus
 every test of the changed Django apps, every test that names one (its URL
 namespace or app label), every test that reads the tasks when a task
-definition changed, and the architecture tests. Beside them it runs
-`checks:ruff`, `checks:mypy`, `checks:structural`, `checks:css`, `checks:deptry`, `checks:mise-tasks`, `tests:django`, `tests:migrations` and every
-`drift:*` gate. Each Django gate opens a database of its own, and its tests run
+definition changed, and the architecture tests. Beside them it runs each quick
+gate whose paths the change touches, as `TASKS` in `tools/gate/fast.py` lists
+them; a change to the dependencies, tool pins or task definitions runs them
+all. Each Django gate opens a database of its own, and its tests run
 with `DEBUG` on, the one pass that does. A change to what extensions render
 through (`templates/`, `static/`, `hq_sdk/`, the shared table, page, UI and
 moment modules, template tags) also runs the extensions' suites, composed, when

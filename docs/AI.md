@@ -63,16 +63,12 @@ pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin
 An agent's report is checked against gates, and the gates are the same mise
 tasks a person runs. CI runs each job's aggregate by name
 ([`ci.yml`](../.github/workflows/ci.yml) runs `mise run -c checks`), so a pass
-on a laptop and a pass in CI mean the same thing.
-
-| Gate | What it holds |
-| --- | --- |
-| `mise run fast [BASE]` | The tests the change reaches and the quick gates that read what it touched, each listed with its paths in `TASKS` (`tools/gate/fast.py`) ([What `fast` runs](Development.md#what-fast-runs)). |
-| `mise run check` | Every Checks gate, the suite as production configures it, and the suite composed with the extensions ([What `check` and `ci` run](Development.md#what-check-and-ci-run)). |
-| `mise run browser` | WebKit layout invariants over a stress estate and the example estate, at phone through desktop widths ([Browser layout](Development.md#browser-layout)). |
-| `mise run drift` | Every derived file is what its source generates; `mise run regen` writes them. |
-| `mise run checks:structural` | No new near-duplicate pair outside tests, and its baseline never grows to pass ([Structural Gate](Structural-Gate.md)). |
-| `mise run checks:source` | The tests tagged `source`, which read the repository rather than run the product. |
+on a laptop and a pass in CI mean the same thing. `mise tasks` lists the gates
+to start from and `mise run <task> --help` says what each holds; how they
+relate is in [What `fast` runs](Development.md#what-fast-runs),
+[What `check` and `ci` run](Development.md#what-check-and-ci-run),
+[Browser layout](Development.md#browser-layout) and
+[Structural Gate](Structural-Gate.md).
 
 Every aggregate (`fast`, `check`, `checks`, `tests`, `browser`, `drift`, `ci`)
 closes on a verdict line naming each failed task and test, and keeps it in
