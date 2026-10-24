@@ -119,7 +119,8 @@ linux-x64 = { asset_pattern = "codeql-bundle-linux64.tar.zst" }
 # "database is locked"). It is named as a test run's scratch is, for the mise
 # that ran it, so the next test run sweeps it (hq/config/sandbox.py). A gate
 # sees no extension set it did not ask for. A task extends one template and a
-# template extends none, so django-heavy restates django's env: an env file
+# template extends none, so django-heavy and django-browser restate django's
+# env (test_browser_gate_tasks holds them to it): an env file
 # could hold it once, but mise reads one as written, never rendered, and the
 # database path is an exec. The composed suite extends django and sets what
 # it changes in its own header.
@@ -149,6 +150,17 @@ timeout = "30m"
 env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 shell = "tools/lib/heavy.sh sh -o errexit -c"
 timeout = "30m"
+
+# A browser gate: django-heavy's env and turn, WebKit installed first, and the
+# test classes its task names in `vars.classes`, which mise renders from the
+# extending task's own vars.
+[task_templates.django-browser]
+env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
+shell = "tools/lib/heavy.sh sh -o errexit -c"
+timeout = "30m"
+depends = [{ task = "setup:browser", args = ["webkit"] }]
+usage = 'flag "--fallback-face" help="Draw every page in the system face, as a reader sees it before Inter loads"'
+run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test {{ vars.classes }} --noinput --parallel auto"
 
 # ---------------------------------------------------------------- servers
 # The development servers. Each profile is a task whose env says where it

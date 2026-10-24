@@ -16,18 +16,24 @@ run = "uv run --group browser python -m unittest demo.check -v"
 ["browser:layout-1"]
 description = "Real-browser layout invariants over the stress estate, leg 1 of 2"
 hide = true
-depends = [{ task = "setup:browser", args = ["webkit"] }]
-extends = "django-heavy"
-usage = 'flag "--fallback-face" help="Draw every page in the system face, as a reader sees it before Inter loads"'
-run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test hq.platform.core.tests.browser.sweeps.ScriptedSparseLayoutTests hq.platform.core.tests.browser.components.ComponentLayoutTests hq.platform.core.tests.browser.sweeps.LongestValueLayoutTests hq.platform.core.tests.browser.sweeps.UnscriptedDenseLayoutTests --noinput --parallel auto"
+extends = "django-browser"
+vars.classes = """\
+  hq.platform.core.tests.browser.sweeps.ScriptedSparseLayoutTests \
+  hq.platform.core.tests.browser.components.ComponentLayoutTests \
+  hq.platform.core.tests.browser.sweeps.LongestValueLayoutTests \
+  hq.platform.core.tests.browser.sweeps.UnscriptedDenseLayoutTests"""
 
 ["browser:layout-2"]
 description = "Real-browser layout invariants over the stress estate, leg 2 of 2"
 hide = true
-depends = [{ task = "setup:browser", args = ["webkit"] }]
-extends = "django-heavy"
-usage = 'flag "--fallback-face" help="Draw every page in the system face, as a reader sees it before Inter loads"'
-run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test hq.platform.core.tests.browser.sweeps.ScriptedDenseFirstLayoutTests hq.platform.core.tests.browser.sweeps.ScriptedDenseSecondLayoutTests hq.platform.core.tests.browser.sweeps.UnscriptedSparseLayoutTests hq.platform.core.tests.browser.sweeps.SettledDenseLayoutTests hq.platform.core.tests.browser.sweeps.SettledSparseLayoutTests hq.platform.core.tests.browser.page_errors.PageErrorBrowserTests --noinput --parallel auto"
+extends = "django-browser"
+vars.classes = """\
+  hq.platform.core.tests.browser.sweeps.ScriptedDenseFirstLayoutTests \
+  hq.platform.core.tests.browser.sweeps.ScriptedDenseSecondLayoutTests \
+  hq.platform.core.tests.browser.sweeps.UnscriptedSparseLayoutTests \
+  hq.platform.core.tests.browser.sweeps.SettledDenseLayoutTests \
+  hq.platform.core.tests.browser.sweeps.SettledSparseLayoutTests \
+  hq.platform.core.tests.browser.page_errors.PageErrorBrowserTests"""
 
 # The layout legs in Chromium, so a break WebKit happens not to show still
 # fails. CI runs them as legs of their own; `mise run browser` leaves them out,
@@ -59,7 +65,10 @@ run = [
 ["browser:navigation"]
 description = "Real-browser invariants over the example estate, the frame around a page and its fragments"
 hide = true
-depends = [{ task = "setup:browser", args = ["webkit"] }]
-extends = "django-heavy"
-usage = 'flag "--fallback-face" help="Draw every page in the system face, as a reader sees it before Inter loads"'
-run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test hq.platform.core.tests.browser.estate.ExampleEstateBrowserTests hq.platform.core.tests.browser.estate.ExampleEstateDrawnTests hq.platform.core.tests.browser.estate.ExampleEstateControlTests hq.platform.core.tests.browser.reference.ReferenceBrowserTests hq.platform.core.tests.browser.fragments.FragmentBrowserTests --noinput --parallel auto"
+extends = "django-browser"
+vars.classes = """\
+  hq.platform.core.tests.browser.estate.ExampleEstateBrowserTests \
+  hq.platform.core.tests.browser.estate.ExampleEstateDrawnTests \
+  hq.platform.core.tests.browser.estate.ExampleEstateControlTests \
+  hq.platform.core.tests.browser.reference.ReferenceBrowserTests \
+  hq.platform.core.tests.browser.fragments.FragmentBrowserTests"""

@@ -175,7 +175,8 @@ lock goes with the process, so a killed gate frees it. CI runs one job per
 machine and takes no lock.
 
 A TOML task takes the turn by extending the `heavy` template in `mise.toml`,
-or `django-heavy` when it is a Django gate; a file task sources
+`django-heavy` when it is a Django gate, or `django-browser` when it is a
+browser gate, which names its test classes in `vars.classes`; a file task sources
 `tools/lib/heavy-turn.sh` and sets `#MISE timeout`. `mise run test` decides
 in its run (`tools/gate/at.py`): it loads the labels' tests and takes the turn
 only when one makes a test database or drives a browser, or for `--at`, so a

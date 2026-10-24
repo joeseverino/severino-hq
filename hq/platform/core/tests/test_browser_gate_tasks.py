@@ -3,6 +3,7 @@ runs. The gates' `--fallback-face` still finds the face it withholds."""
 
 import ast
 import os
+import tomllib
 from pathlib import Path
 from unittest import mock
 
@@ -62,6 +63,15 @@ class BrowserGateTaskTests(SimpleTestCase):
         self.assertTrue(classes)
         unnamed = sorted(name for name, module in classes.items() if name not in labels and module not in labels)
         self.assertEqual(unnamed, [], "no browser:* task runs these")
+
+    def test_a_browser_gate_s_template_restates_django_s_env(self):
+        """A template extends none, so each Django gate template carries the
+        env of ``django`` itself: a gate never opens the developer's database."""
+
+        templates = tomllib.loads((ROOT / "mise.toml").read_text())["task_templates"]
+        for name in ("django-heavy", "django-browser"):
+            with self.subTest(template=name):
+                self.assertEqual(templates[name]["env"], templates["django"]["env"])
 
 
 @tag("source")
