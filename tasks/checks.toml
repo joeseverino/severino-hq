@@ -33,7 +33,7 @@ hide = true
 run = "uv lock --check"
 
 ["checks:toolchain"]
-description = "mise.lock checksums every pinned tool for each gate platform, mise's Go is go.mod's, no image borrows a build tool"
+description = "mise.lock checksums every pinned tool for each gate platform, mise renders Go from go.mod's toolchain line, no image borrows a build tool"
 hide = true
 run = "uv run python -m tools.pipeline.toolchain_lock"
 
