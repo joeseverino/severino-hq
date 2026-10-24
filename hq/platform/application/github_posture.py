@@ -25,7 +25,7 @@ from .github_estate import Repository, attention as repository_attention, reposi
 from .item_help import cannot_help, do_step, run_step, steps
 from .standards import UNMET, Check as _Check, Measurement, measure
 from .timestamps import moment
-from .ui import Insight, counted
+from .ui import Insight, counted, ended
 lazy from .projects import repository_key
 
 BOTH = "both"
@@ -485,7 +485,9 @@ def _left_out(check: _Check, missing: list[Repository]) -> str:
         parts.append(f"{', '.join(unread)}: {PINS_UNREAD}")
     if unresolved:
         parts.append(
-            f"HQ could not read these tags, so pinning is not required yet. Pin them by hand: {'; '.join(unresolved)}."
+            ended(
+                f"HQ could not read these tags, so pinning is not required yet. Pin them by hand: {'; '.join(unresolved)}"
+            )
         )
     if called:
         parts.append(PINS_CALLED)
@@ -549,7 +551,7 @@ def attention() -> tuple[Insight, ...]:
                 value=str(len(missing)),
                 # A setting to change in each repository that misses it.
                 magnitude=len(missing),
-                body=f"{', '.join(missing)}. {check.fix}",
+                body=f"{ended(', '.join(missing))} {check.fix}",
                 action="Open repo checks",
                 url=reverse("posture"),
                 workflow=help_for(check, unmet),

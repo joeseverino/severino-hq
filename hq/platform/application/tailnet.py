@@ -25,7 +25,7 @@ lazy from hq.domains.control_plane.observations.host import TAILNET_LOCK_KIND
 lazy from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
 
 from .projection import projection_scope, read_once
-from .ui import counted
+from .ui import counted, ended
 lazy from . import connections
 lazy from .connections import connection_rows
 lazy from .facts import inventory_records
@@ -299,7 +299,7 @@ def may_reach(source: str, target: str, port: int, known: dict[str, Device] | No
         return Verdict(
             True,
             True,
-            f"Allowed: {', '.join(as_devices(matched, owners))} to {owners.get(target, target)} on {port}.",
+            ended(f"Allowed: {', '.join(as_devices(matched, owners))} to {owners.get(target, target)} on {port}"),
             via=matched,
             rules=who_answers.rules.get(port, ()),
         )
@@ -307,8 +307,8 @@ def may_reach(source: str, target: str, port: int, known: dict[str, Device] | No
         False,
         True,
         f"No rule allows {', '.join(as_devices(sorted(who_asks.principals), owners))} "
-        f"to {owners.get(target, target)} on {port}. Allowed: "
-        f"{', '.join(as_devices(admitted, owners))}.",
+        f"to {owners.get(target, target)} on {port:d}. Allowed: "
+        f"{ended(', '.join(as_devices(admitted, owners)))}",
         rules=who_answers.rules.get(port, ()),
     )
 

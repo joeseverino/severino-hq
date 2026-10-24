@@ -21,7 +21,7 @@ from .connection_lifecycle import UNREPORTED_FACT
 from .derivations import reached
 from .finding_model import THEN_REFRESH, FindingRule, OperatorStep, built_findings, fact_values
 from .timestamps import moment
-from .ui import counted
+from .ui import counted, ended
 lazy from .credential_mint import address_fields
 lazy from .expiry import days_until
 lazy from .moments import span
@@ -64,7 +64,7 @@ def operator_steps(
     if not command and not notes and not by_hand:
         return ()
     if by_hand:
-        notes += (f"Or by hand: {by_hand}" + (f", adding {', '.join(missing)}." if missing else "."),)
+        notes += (ended(f"Or by hand: {by_hand}" + (f", adding {', '.join(missing)}" if missing else "")),)
     return (
         OperatorStep(
             label="Make a new token on your Mac" if command else "Make a new token",
@@ -119,7 +119,7 @@ def answer_steps(node: Any) -> tuple[OperatorStep, ...]:
                 label=f"Point the connection at {_service(node)}'s own API address",
                 notes=(
                     *((f"{endpoint} is not the API.",) if endpoint else ()),
-                    f"Set the address in the connection's 1Password item, {address_fields()}.",
+                    ended(f"Set the address in the connection's 1Password item, {address_fields()}"),
                     THEN_REFRESH,
                 ),
             ),
@@ -174,7 +174,7 @@ def missing_permissions(estate: Any) -> tuple[dict[str, Any], ...]:
                 "severity": "attention",
                 "explanation": (
                     f"The token works, but {_service(node)} will not let it read "
-                    f"{', '.join(unseen) or 'everything HQ asks for'}. "
+                    f"{ended(', '.join(unseen) or 'everything HQ asks for')} "
                     "Make a new token that includes them."
                 ),
                 "evidence": (
@@ -211,7 +211,7 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
                 "explanation": (
                     f"HQ cannot read anything through {node.label} until it is replaced."
                     if expired
-                    else f"After that HQ cannot read anything through {node.label}."
+                    else ended(f"After that HQ cannot read anything through {node.label}")
                 ),
                 "evidence": (("Expires", expiry_phrase(stamp)),),
                 "steps": mint_steps(node),

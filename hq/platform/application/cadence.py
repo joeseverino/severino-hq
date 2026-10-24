@@ -51,6 +51,7 @@ from .derivations import asked_ahead, holds_until
 from .integration_specs import requested
 from .moments import duration
 from .security import Capability, Principal
+from .ui import ended
 lazy from .action_links import READ_NOW_CAPABILITY
 lazy from .capabilities import capability_registry
 lazy from .credential_sight import fed_kinds
@@ -323,7 +324,7 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
         f"every {duration(interval)}: {'due' if due else 'not due'}."
     )
     if not due and forced:
-        reason += f" A refresh was asked for {', '.join(read.subject for read in forced)}."
+        reason += ended(f" A refresh was asked for {', '.join(read.subject for read in forced)}")
         if controller_id:
             # Due only because somebody asked: SSH is left as it was last
             # found, working or not, unless it is what they asked for.

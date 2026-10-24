@@ -41,6 +41,7 @@ from .moments import ago, duration, when
 from .reading_facts import FactRow, rows_of, state_on_controller, stated
 from .timestamps import moment
 from .topology_model import TopologyNode
+from .ui import ended
 
 # The fact a node carries per renderer its controller reported. Neither it nor
 # a rule's name or title says "secret": the findings and the topology are held
@@ -445,7 +446,7 @@ def _sync_stalled(estate: FindingEstate) -> tuple[Finding, ...]:
                 severity="attention",
                 explanation=(
                     "It is serving an old copy of the vault, so changes made in "
-                    f"1Password are not reaching {node.label}."
+                    f"1Password are not reaching {ended(node.label)}"
                 ),
                 evidence=tuple(
                     item

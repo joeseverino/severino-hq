@@ -5,6 +5,7 @@ from datetime import UTC
 from .expiry import days_until
 from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, parse_stamp
 from .moments import span, when_day
+from .ui import ended
 
 
 def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -60,7 +61,11 @@ def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
                     ("Auto-renew", "Off"),
                     ("Registrar", registrar or "Unknown"),
                 ),
-                steps=(OperatorStep(label=f"Renew {domain} or turn on auto-renew at {registrar or 'its registrar'}."),),
+                steps=(
+                    OperatorStep(
+                        label=ended(f"Renew {domain} or turn on auto-renew at {registrar or 'its registrar'}")
+                    ),
+                ),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))

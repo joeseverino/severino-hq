@@ -30,7 +30,7 @@ from .moments import ago, duration
 from .render_status_findings import RENDERER_UNITS
 from .topology_lenses import _STALE_AFTER
 from .topology_model import TopologyNode
-from .ui import counted
+from .ui import counted, ended
 lazy from .timestamps import moment
 
 # The background job that runs the controller on its machine (deploy/systemd).
@@ -456,7 +456,7 @@ def _weakly_verified(estate: FindingEstate) -> tuple[Finding, ...]:
             title=(f"HQ could not confirm {counted(len(node.unconfirmed_fields), 'setting')} of {node_name(node)}"),
             severity="attention",
             explanation=(
-                f"HQ set these and the last reading did not include them: {_settings(node)}. "
+                f"HQ set these and the last reading did not include them: {ended(_settings(node))} "
                 "Apply HQ's settings to set them and read them back. If this stays after applying, "
                 "HQ cannot read them from the service."
             ),
@@ -513,9 +513,9 @@ def _work_that_keeps_failing(estate: FindingEstate) -> tuple[Finding, ...]:
                     f"{counted(len(unfinished), 'thing it does keeps failing', 'things it does keep failing')}"
                 ),
                 severity="attention",
-                explanation=(
+                explanation=ended(
                     "It retries every few minutes and has not succeeded. The reason is "
-                    f"in the controller's log{f' on {machine}' if machine else ''}."
+                    f"in the controller's log{f' on {machine}' if machine else ''}"
                 ),
                 evidence=tuple(("Keeps failing", item) for item in unfinished),
                 steps=journal_step("Read the controller's log", machine, CONTROLLER_UNIT),

@@ -21,6 +21,7 @@ lazy from django.conf import settings
 
 from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
 from .images import affected, version
+from .ui import ended
 lazy from . import exposure, hq_self
 lazy from .container_standard import DOCKER_SOCKETS, runtime_path, system_path
 lazy from .exposure import LEVELS
@@ -345,7 +346,7 @@ def _steps(item: Container, target: str, digest: str, data, verified_by) -> tupl
             + (", against a copy of its data" if data else "")
             + ", until it proves itself. The service stays stopped, and is started unchanged if it fails.",
         ),
-        Step("pin", "Pin the digest in its compose override", f"{where}. The compose file itself is not edited."),
+        Step("pin", "Pin the digest in its compose override", f"{ended(where)} The compose file itself is not edited."),
         Step("apply", "Recreate the service", f"compose up for {item.running.name} only"),
         Step("verify", "Verify", ", ".join(verified_by) if verified_by else "That it keeps running."),
         Step(

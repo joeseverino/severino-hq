@@ -16,6 +16,7 @@ from django.db import models
 from django.db.models import Q
 from django.urls import reverse
 
+from hq.platform.application.ui import ended
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule
 lazy from hq.platform.application.derivations import today
@@ -157,7 +158,7 @@ class DocumentationRecord(TimestampedModel):
             Rule(
                 condition=Q(status__in=DocStatus.values),
                 name="documentation_status_is_a_doc_status",
-                violation_error_message=f"A doc's status is one of: {', '.join(DocStatus.values)}.",
+                violation_error_message=ended(f"A doc's status is one of: {', '.join(DocStatus.values)}"),
                 field="status",
             ),
         ]

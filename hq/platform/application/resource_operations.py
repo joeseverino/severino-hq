@@ -31,7 +31,7 @@ from .infrastructure import (
 )
 from .record_errors import RecordNotFound
 from .security import Capability, Principal
-from .ui import counted
+from .ui import counted, ended
 lazy from . import tailnet
 lazy from .inventory import live_spec
 lazy from .moments import when_day
@@ -101,7 +101,7 @@ def _outcome(operation: OperationRequest) -> tuple[str, str, str]:
     problem = _problem(result)
     if problem is not None:
         return "attention", "Problem found", problem.get("message") or said or "It found a problem."
-    return "good", state, said or f"{state}."
+    return "good", state, said or ended(state)
 
 
 def requested_by(operation: OperationRequest) -> str:

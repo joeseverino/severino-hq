@@ -12,6 +12,7 @@ lazy from datetime import date
 from django.urls.converters import StringConverter
 from pydantic import Field, field_validator, model_validator
 
+from hq.platform.application.ui import ended
 lazy from hq.platform.application.expiry import days_until
 lazy from hq.platform.application.timestamps import moment
 
@@ -391,7 +392,7 @@ NETWORK = ProviderSpec(
     # things that answer inside one.
     key_hint=_network_key_hint,
     removal_note=lambda spec: (
-        f"HQ forgets {spec.get('name', 'this network')}. Addresses in it are no longer linked to a network."
+        f"HQ forgets {ended(spec.get('name', 'this network'))} Addresses in it are no longer linked to a network."
     ),
     unobserved_reason=("Kept in HQ only, so there is nothing live to read."),
 )
@@ -409,7 +410,7 @@ AUTHORITY = ProviderSpec(
     readout=_authority_readout,
     key_hint=_authority_key_hint,
     removal_note=lambda spec: (
-        f"HQ forgets {spec.get('name', 'this authority')}. Certificates it issued are no longer linked to it."
+        f"HQ forgets {ended(spec.get('name', 'this authority'))} Certificates it issued are no longer linked to it."
     ),
     unobserved_reason=("Kept offline, so there is nothing to read."),
 )
@@ -438,7 +439,7 @@ MACHINE = ProviderSpec(
     # different one, so this marks which is which rather than locking it.
     notes="hq.platform.application.provider_choices:machine_address_notes",
     removal_note=lambda spec: (
-        f"HQ forgets {spec.get('name', 'this machine')}. Anything forwarding to its addresses shows an unknown host."
+        f"HQ forgets {ended(spec.get('name', 'this machine'))} Anything forwarding to its addresses shows an unknown host."
     ),
 )
 
@@ -463,7 +464,7 @@ DELIVERY_TARGET = ProviderSpec(
     key_hint=_delivery_target_key_hint,
     choices="hq.platform.application.provider_choices:delivery_target",
     removal_note=lambda spec: (
-        f"Certificates stop being installed on {spec.get('name', 'this target')}. "
+        f"Certificates stop being installed on {ended(spec.get('name', 'this target'))} "
         "HQ flags any certificate that still lists it."
     ),
     unobserved_reason=("Nothing to read. Each certificate shows its own install."),

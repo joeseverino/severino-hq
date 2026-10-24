@@ -139,7 +139,7 @@ class ExpenseCreateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, Crea
     page_title = "New expense"
     form_class = ExpenseForm
     template_name = "expenses/expense_form.html"
-    created_message = "Expense saved: {target}."
+    created_message = "Expense saved: {target}"
 
     @override
     def get_initial(self):
@@ -157,7 +157,7 @@ class ExpenseUpdateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, Upda
     model = Expense
     form_class = ExpenseForm
     template_name = "expenses/expense_form.html"
-    updated_message = "Expense saved: {target}."
+    updated_message = "Expense saved: {target}"
 
 
 class ExpenseDeleteView(ExpensePage, RecordDeleteMixin, DeleteView):
@@ -166,4 +166,4 @@ class ExpenseDeleteView(ExpensePage, RecordDeleteMixin, DeleteView):
     template_name = "expenses/expense_confirm_delete.html"
     success_url = reverse_lazy("expenses:list")
     context_object_name = "expense"
-    deleted_message = "Expense deleted: {target}."
+    deleted_message = "Expense deleted: {target}"

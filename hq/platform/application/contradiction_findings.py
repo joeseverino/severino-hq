@@ -40,6 +40,7 @@ from .finding_model import (
     fact_values,
     on_machine,
 )
+from .ui import ended
 lazy from . import exposure, zones
 lazy from .containers import containers
 lazy from .facts import inventory_records
@@ -114,7 +115,7 @@ def _answered_by_nothing() -> tuple[Finding, ...]:
                     title=f"{name} points at {last.name}, which serves nothing for it",
                     severity="attention",
                     explanation=(
-                        f"Public DNS sends {name} to {last.name}. No proxy answers for "
+                        f"Public DNS sends {name} to {ended(last.name)} No proxy answers for "
                         f"this name, and no container on {last.name} answers on a web port. "
                         "Either the record is left over from something removed, or the proxy "
                         "route that should serve it is missing."
@@ -219,7 +220,7 @@ def _gates_guarding_nothing() -> tuple[Finding, ...]:
                         title=f"{spec.label} {title} protects {name}, which has no DNS record",
                         severity="neutral",
                         explanation=(
-                            f"Nothing answers at {name}. If the name is published again "
+                            f"Nothing answers at {ended(name)} If the name is published again "
                             "later, this rule will apply to it without anyone reviewing it."
                         ),
                         evidence=(("Access rule", f"{spec.label} {title}"), ("Name", name)),

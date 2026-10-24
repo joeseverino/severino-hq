@@ -18,6 +18,7 @@ from typing import Any
 
 from .container_standard import POWERFUL_CAPABILITIES, holds_socket, writable_system_binds
 from .standards import UNMET
+from .ui import ended
 lazy from .container_attention import socket_holder_link
 lazy from .upgrades import data_of
 
@@ -300,8 +301,8 @@ def _health(container, runtime, unmet):
         "healthcheck:\n"
         f'  test: ["CMD-SHELL", "wget -q --spider {url} || exit 1"]\n'
         "  interval: 30s\n  timeout: 5s\n  retries: 3",
-        (f"Asks {why}. " if why else f"Assumes port {port} answers HTTP at {path}. ")
-        + "Needs wget in the image. With curl, use curl -fsS. With neither, use a check the image ships.",
+        ended(f"Asks {why}" if why else f"Assumes port {port} answers HTTP at {path}")
+        + " Needs wget in the image. With curl, use curl -fsS. With neither, use a check the image ships.",
     )
 
 

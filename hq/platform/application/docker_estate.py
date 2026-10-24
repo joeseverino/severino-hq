@@ -28,6 +28,7 @@ from .finding_model import (
     cannot_run_commands,
     machine_step,
 )
+from .ui import ended
 lazy from .adoption import unmanaged
 lazy from .inventory import record_token
 
@@ -209,7 +210,7 @@ def images_behind(estate: Any) -> tuple[dict[str, Any], ...]:
                     "severity": "attention",
                     "explanation": (
                         f"{reference} on this machine is now image {tagged}, and the "
-                        f"container still runs {running}. Recreate it to run what "
+                        f"container still runs {ended(running)} Recreate it to run what "
                         "was pulled."
                     ),
                     "evidence": (

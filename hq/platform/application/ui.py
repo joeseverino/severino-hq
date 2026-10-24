@@ -70,8 +70,9 @@ def counted_forms(one: str, many: str | None = None) -> tuple[str, str]:
 def ended(text: str) -> str:
     """``text`` as a sentence: a full stop added unless it already ends in one.
 
-    For sentences that end on a name a registry supplied, which may carry its
-    own period ("Example, Inc.").
+    For sentences that end on a value HQ did not write, which may carry its
+    own period ("Example, Inc."). ``tests/test_sentence_ends.py`` holds every
+    page sentence that closes on a value to it.
     """
 
     stripped = str(text or "").rstrip()

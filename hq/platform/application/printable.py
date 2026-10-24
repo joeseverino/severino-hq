@@ -25,7 +25,7 @@ from uuid import UUID
 from django.conf import settings
 from django.utils.functional import Promise
 
-from .ui import MISSING
+from .ui import MISSING, ended
 
 logger = logging.getLogger("severino.print")
 
@@ -54,7 +54,7 @@ def refused(reason: str, where: str) -> str:
     """The mark for a missing value, in place of one ``where`` could not print;
     raises ``Unprintable`` instead where strict printing holds."""
 
-    said = f"{where} printed {reason}. A page shows text or a number: say it in words where it is built."
+    said = f"{where} printed {ended(reason)} A page shows text or a number: say it in words where it is built."
     if settings.SEVERINO_STRICT_PRINT:
         raise Unprintable(said)
     logger.error(said, extra={"event": "print.refused"})

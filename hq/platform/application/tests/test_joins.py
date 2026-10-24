@@ -351,6 +351,23 @@ class RegistrationFallbackTests(TestCase):
         self.assertFalse(card.concern)
 
 
+class RegistrarRegistrationTests(TestCase):
+    def test_a_registrar_name_ending_in_a_period_ends_the_renewal_sentence(self):
+        store(
+            ZONE_KIND,
+            {
+                "zone": "example.com",
+                "connection_ref": CLOUDFLARE,
+                "registration": {"expires_at": LATER, "auto_renew": True, "registrar": "Example Registrar, Inc."},
+            },
+        )
+
+        card = registration(find_zone("example.com"))
+
+        self.assertIn("Example Registrar, Inc.", card.detail)
+        self.assertNotIn("..", card.detail)
+
+
 class ServiceColumnTests(TestCase):
     def setUp(self):
         estate()

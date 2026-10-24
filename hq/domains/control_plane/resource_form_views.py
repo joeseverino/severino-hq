@@ -40,6 +40,7 @@ from hq.platform.application.provider_forms import (
 from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.ui import ended
 from hq.platform.core import secrets
 
 from .models import ManagedResource, OperationRequest
@@ -456,7 +457,7 @@ class AdoptView(View):
         adopted = ", ".join(result["adopted"])
         messages.success(
             request,
-            f"HQ now manages {hostname} as {adopted}. Nothing live was changed.",
+            f"HQ now manages {hostname} as {ended(adopted)} Nothing live was changed.",
         )
         return redirect("control_plane:service", hostname=result["hostname"])
 
@@ -506,7 +507,7 @@ class CertificateUploadView(View):
             else:
                 messages.success(
                     request,
-                    f"Stored a certificate for {', '.join(stored['domains'])}. {APPLIES_SHORTLY}",
+                    f"Stored a certificate for {ended(', '.join(stored['domains']))} {APPLIES_SHORTLY}",
                 )
                 return redirect("control_plane:detail", key=resource.key)
         return render(

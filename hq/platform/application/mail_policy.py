@@ -19,7 +19,7 @@ knows how to reconcile a change and say what it will cost.
 from dataclasses import dataclass, field
 from typing import Any
 
-from .ui import counted
+from .ui import counted, ended
 
 DMARC_VERSION = "DMARC1"
 SPF_VERSION = "spf1"
@@ -423,7 +423,7 @@ def _signing(dkim: tuple[Any, ...]) -> tuple[str, str]:
     if keys:
         selectors = ", ".join(record.name.split("._domainkey.", 1)[0] for record in keys)
         words = "key" if len(keys) == 1 else "keys"
-        return counted(len(keys), "key"), f"Mail sent from this domain is signed with the {words} {selectors}."
+        return counted(len(keys), "key"), ended(f"Mail sent from this domain is signed with the {words} {selectors}")
     if dkim:
         return (
             "Nothing, on purpose",

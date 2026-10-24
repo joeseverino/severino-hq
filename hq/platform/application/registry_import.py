@@ -29,7 +29,7 @@ from .domains import records_of
 from .projects import ProjectCommand, upsert_project
 from .record_errors import RecordConflict, RecordNotFound
 from .security import Principal, require_all
-from .ui import counted
+from .ui import counted, ended
 
 MAX_IMPORT_RECORDS = 1000
 
@@ -123,7 +123,7 @@ def _shape_errors(record: dict, slug: str, seen: set[str], names: set[str]) -> l
     seen.add(slug)
     unknown = sorted(set(record) - names)
     if unknown:
-        errors.append(f"Unknown fields: {', '.join(unknown)}.")
+        errors.append(ended(f"Unknown fields: {', '.join(unknown)}"))
     return errors
 
 
@@ -214,7 +214,10 @@ def _model_errors(kind: _Kind, command: Any, known_projects: set[str]) -> list[s
     missing = sorted(set(related) - known_projects)
     if missing:
         errors.append(
-            f"{counted(len(missing), 'related project not found', 'related projects not found')}: {', '.join(missing)}."
+            ended(
+                f"{counted(len(missing), 'related project not found', 'related projects not found')}: "
+                f"{', '.join(missing)}"
+            )
         )
     try:
         kind.model(**values).full_clean(validate_unique=False)
@@ -243,7 +246,7 @@ def _audit(planned: _Planned, slug: str) -> None:
         action=AuditLog.Action.IMPORTED,
         obj=planned.kind.model.objects.get(slug=slug),
         type_label=planned.kind.model.__name__,
-        message=f"Imported {planned.kind.name} {planned.slug}: {planned.outcome}.",
+        message=ended(f"Imported {planned.kind.name} {planned.slug}: {planned.outcome}"),
         metadata={"outcome": planned.outcome, "kept": planned.kept},
         required=True,
     )

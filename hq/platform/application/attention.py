@@ -91,7 +91,7 @@ def _backlog(
     first = named[:MOST_NAMED]
     more = count - len(first)
     names = ", ".join(link.label for link in first) + (f" and {counted(more, 'other')}" if first and more > 0 else "")
-    body = " ".join(part for part in (f"{names}." if names else "", body) if part)
+    body = " ".join(part for part in (ended(names), body) if part)
     return (
         Insight(
             status="attention",
@@ -289,8 +289,8 @@ def _update_body(presence, newest: str) -> str:
     current = _VERSION.match(presence.client_version)
     running = current.group() if current else presence.client_version
     if newest and _version(newest) > _version(running):
-        return f"{running} → {newest}."
-    return f"Runs {running}."
+        return ended(f"{running} → {newest}")
+    return ended(f"Runs {running}")
 
 
 def tailnet() -> tuple[Insight, ...]:
@@ -335,7 +335,7 @@ def tailnet() -> tuple[Insight, ...]:
                     else f"{name} has left the tailnet"
                 ),
                 value=str(max(days, 0)),
-                body=(f"Its Tailscale key expires{on}." if days > 0 else f"Its Tailscale key expired{on}."),
+                body=ended(f"Its Tailscale key {'expires' if days > 0 else 'expired'}{on}"),
                 url=entity_link("machine", name).url,
                 subject=subject_link("machine", name),
                 observed_at=presence.observed_at,
@@ -346,7 +346,7 @@ def tailnet() -> tuple[Insight, ...]:
                         f"Sign in to Tailscale again on {name}, or turn off key expiry "
                         "for it in the Tailscale admin console."
                         if days > 0
-                        else f"Sign in to Tailscale again on {name}."
+                        else ended(f"Sign in to Tailscale again on {name}")
                     ),
                 ),
             )
@@ -448,7 +448,7 @@ def tailnet() -> tuple[Insight, ...]:
                 ),
                 value=str(len(unapproved)),
                 body=(
-                    f"Not approved: {', '.join(unapproved)}. "
+                    f"Not approved: {ended(', '.join(unapproved))} "
                     + (
                         "It cannot be used as an exit node until its exit route is approved. "
                         # The swept fact, not a second reading of the route
@@ -474,7 +474,7 @@ def _sign_key(key: str, name: str) -> WorkflowPlan:
     return commands(
         key,
         (("On a machine that can sign, list the keys waiting", "tailscale lock status"),),
-        then=f"Then run tailscale lock sign with the key it lists for {name}.",
+        then=ended(f"Then run tailscale lock sign with the key it lists for {name}"),
     )
 
 

@@ -2,6 +2,7 @@
 
 from .finding_model import THEN_CHECK_AGAIN, Finding, FindingEstate, FindingRule, OperatorStep
 from .posture import STANDARD, advanced
+from .ui import ended
 
 _BY_ID = {check.id: check for check in STANDARD}
 
@@ -19,7 +20,7 @@ def _unmet(estate: FindingEstate) -> tuple[Finding, ...]:
                 scope=f"posture.{check.id}",
                 title=f"HQ has not read whether {check.label[0].lower()}{check.label[1:]}" if not read else check.unmet,
                 severity="attention",
-                explanation=f"Stops {check.stops}.",
+                explanation=ended(f"Stops {check.stops}"),
                 evidence=((check.label, evidence),),
                 steps=(OperatorStep(label=check.step, notes=(THEN_CHECK_AGAIN,)),),
             )

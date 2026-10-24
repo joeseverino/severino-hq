@@ -29,7 +29,7 @@ from .moments import ago, when_day
 from .projection import read_once
 from .service_health import UNKNOWN
 from .timestamps import moment
-from .ui import DomainOverview, Insight, Kpi, counted
+from .ui import DomainOverview, Insight, Kpi, counted, ended
 from .workflow_contracts import ActionLink
 lazy from . import connections, services, zones
 lazy from .connection_catalog import connection_total
@@ -466,7 +466,7 @@ def _offline(estate: Estate) -> tuple[Insight, ...]:
                 value="1",
                 body=(
                     f"Last seen {ago(seen)}."
-                    + (f" It is the {what}." if what else "")
+                    + (ended(f" It is the {what}") if what else "")
                     + (f" It serves {counted(len(machine.hostnames), 'name')}." if machine.hostnames else "")
                 ),
                 action="Open machine",
@@ -491,7 +491,7 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
         if expiry.managed:
             key = f"estate-certificate:{expiry.resource_key}"
             body = (
-                f"Expires {expiry.phrase}. Renewal opens at "
+                f"Expires {ended(expiry.phrase)} Renewal opens at "
                 f"{counted(expiry.renewal_window_days, 'day')}; renew it or check why "
                 "renewal did not run."
             )
@@ -505,7 +505,7 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
         else:
             key = f"estate-certificate:{expiry.source}:{expiry.subject}"
             body = (
-                f"Expires {expiry.phrase}. Its issuer renews it automatically and "
+                f"Expires {ended(expiry.phrase)} Its issuer renews it automatically and "
                 f"should have by now; check the {expiry.source.lower()} certificate "
                 "settings."
             )

@@ -24,6 +24,7 @@ from .deletion import DeleteCommand, delete_record
 from .domains import Records, host_records, load, records_of
 from .integration_specs import TARGET_KINDS, CapabilitySpec
 from .security import Principal
+from .ui import ended
 
 # What a person calls the target, by kind.
 _TARGET_NAMES = {"slug": "slug", "integer": "ID", "doc_id": "ID", "key": "key"}
@@ -173,7 +174,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             records.write,
             command,
             records.save,
-            f"Add a new {title}.",
+            ended(f"Add a new {title}"),
             f"Create {title}",
             False,
         ),
@@ -195,7 +196,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             records.write,
             command,
             records.save,
-            f"Change one {title}.",
+            ended(f"Change one {title}"),
             f"Update {title}",
             True,
         ),
@@ -206,7 +207,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             records.delete,
             DeleteCommand,
             deleter(records.resource),
-            f"Delete one {title}.",
+            ended(f"Delete one {title}"),
             f"Delete {title}",
             True,
         ),
@@ -224,7 +225,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             records.target if targeted else None,
             records.resource,
             target_label=target_label if targeted else "",
-            target_help=f"The {title} to {verb}." if targeted else "",
+            target_help=ended(f"The {title} to {verb}") if targeted else "",
             label=wording.get(verb, ("", ""))[1] or label,
         )
         for verb, declared, effect, permission, command_type, handler, summary, label, targeted in verbs

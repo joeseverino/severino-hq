@@ -11,6 +11,7 @@ from pydantic import BaseModel, TypeAdapter
 
 from .search_contracts import SearchDefinition
 from .security import Capability
+from .ui import ended
 lazy from . import records
 lazy from .labels import human_label
 
@@ -160,7 +161,7 @@ def requested(words: str, subject: str = "", *, again: bool = False) -> str:
     for: the one sentence every action's toast is."""
 
     about = f" for {subject}" if subject else ""
-    return f"{words} was already requested{about}." if again else f"{words} requested{about}."
+    return ended(f"{words} {'was already requested' if again else 'requested'}{about}")
 
 
 # What every adapter reads beside a resource query as the keys to return, so

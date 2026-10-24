@@ -13,7 +13,7 @@ from . import tailnet
 from .request_channel import Channel
 from .request_identity import Identity
 from .timestamps import moment
-from .ui import counted
+from .ui import counted, ended
 lazy from .expiry import days_until
 lazy from .zones import public_answers_for
 
@@ -389,7 +389,7 @@ def _device_layer(device: tailnet.Device | None, *, read: bool = True) -> Layer:
             mechanism="Tailnet lock signature",
         )
     expiry = (
-        f" Its node key {_expiry_phrase(device.key_expires)}."
+        ended(f" Its node key {_expiry_phrase(device.key_expires)}")
         if device.key_expires
         else " Its node key does not expire."
     )
