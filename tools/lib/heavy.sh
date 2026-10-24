@@ -17,9 +17,8 @@
 # names it, how long it has been idle and the kill that stops it, and exits 75
 # then, so a gate fails at once rather than waiting out the two hours behind
 # it. Nothing here stops the holder, which may be another session's work. The
-# lock is taken on a descriptor the command inherits, so
-# it lasts as long as the command and what it started, and a killed command
-# frees it. A heavy command started inside a turn runs at once: the holder
+# lock lasts as long as this script, which waits for its command, so a command
+# that ends or is killed frees it. A heavy command started inside a turn runs at once: the holder
 # exports its pid, and a process descended from it is inside that turn. A CI
 # runner runs one job, and a system with neither lockf(1) nor flock(1) has no
 # lock to take: both run the command directly.
@@ -53,6 +52,32 @@ inside_turn() {
         [ -n "${pid}" ] || return 1
     done
     return 1
+}
+
+# bounded <command...>: runs the command as a job, a process group of its own
+# (set -m), and stops that whole group when this script is stopped. A mise
+# task's timeout signals its process group, but a mise run from inside a task
+# signals only the pid it started, so without the job a bound fired there
+# would leave what the command started running. The command never holds the
+# lock's descriptor: the turn lasts exactly as long as this script, which the
+# timeout's SIGKILL ends whatever the command does. A command inside a turn
+# runs as this pid (heavy-turn.sh knows its own run by it), in the turn's
+# group, so the turn's bound reaches it.
+bounded() {
+    set -m
+    "$@" 9>&- &
+    job=$!
+    # Job control has done its part; off, the shell reports no job's end.
+    set +m
+    trap 'kill -s TERM -- "-${job}" 2>/dev/null || true' HUP INT TERM
+    ended=0
+    wait "${job}" || ended=$?
+    # A trapped signal ends the wait early; the job is reaped once it exits.
+    while kill -0 "${job}" 2>/dev/null; do
+        ended=0
+        wait "${job}" || ended=$?
+    done
+    return "${ended}"
 }
 
 if [ -n "${CI:-}" ] || inside_turn; then
@@ -184,6 +209,6 @@ load() { uptime | sed 's/.*load averages*: *//'; }
 
 echo "heavy: the turn starts, load average $(load)" >&2
 status=0
-"$@" || status=$?
+bounded "$@" || status=$?
 echo "heavy: the turn ends, load average $(load)" >&2
 exit "${status}"
