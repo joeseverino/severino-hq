@@ -8,8 +8,8 @@ it still one system?". A file's size is a test's (FileSizeTests).
 
 The graph is codebase-memory-mcp at the release mise.toml pins, since the
 answer's shape is that release's. It is lazy there, so mise installs it the
-first time the task runs its command. An answer the classifier refuses fails it too, among them one with no pairs at
-all: the tests alone hold some, so that graph indexed nothing.
+first time the task runs its command. An answer the classifier refuses fails it too, among them one with no
+fingerprinted function at all, since that graph indexed nothing.
 """
 
 from __future__ import annotations
@@ -27,7 +27,9 @@ from tools.structural.classify import similar_pairs
 ROOT = Path(__file__).resolve().parents[2]
 BASELINE = Path(__file__).with_name("baseline.txt")
 TOOL = "codebase-memory-mcp"
-QUERY = "MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name"
+# Each function's MinHash fingerprint, compared here at the classifier's
+# threshold: the graph's own SIMILAR_TO edges stop at a fixed, higher one.
+QUERY = "MATCH (f) WHERE f:Function OR f:Method RETURN f.file_path, f.name, f.parent_class, f.fp"
 HEADER = (
     "# Structural baseline for `mise run checks:structural`: each near-duplicate\n"
     "# pair outside tests. Pairs only leave. Rewrite with --record.\n"
@@ -62,7 +64,8 @@ def graph_pages(store: Path, project: str) -> list[dict]:
         page = cli(
             store,
             "query_graph",
-            {"project": project, "query": QUERY, "format": "json", "max_rows": 99998}
+            # The whole answer in one page where it fits: each page re-runs the query.
+            {"project": project, "query": QUERY, "format": "json", "max_rows": 99998, "max_output_tokens": 1000000}
             | ({"cursor": cursor} if cursor else {}),
         )
         pages.append(page)

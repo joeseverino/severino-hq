@@ -1,2 +1,16 @@
 # Structural baseline for `mise run checks:structural`: each near-duplicate
 # pair outside tests. Pairs only leave. Rewrite with --record.
+similar controller/host/rendered.go::Ownership <> controller/runtime/bridge_socket.go::ownerOf
+similar controller/providers/cloudflare.go::Registry.cloudflareZones <> controller/providers/cloudflare_api.go::Registry.cloudflareAPIZones
+similar controller/providers/cloudflare_api.go::cloudflareDecode <> controller/providers/tailnet_policy.go::tailnetPolicyDocument.view
+similar controller/providers/npm.go::Registry.npmCertificates <> controller/providers/npm.go::Registry.npmStreams
+similar controller/providers/npm.go::npmNames <> controller/providers/redirects.go::uniqueNames
+similar controller/secrets/connect/internal/client/client.go::Client.Item <> controller/secrets/connect/internal/client/client.go::Client.Vault
+similar hq/platform/api/views.py::capabilities <> hq/platform/api/views.py::resources
+similar hq/platform/application/calendar_sources.py::container_events <> hq/platform/application/calendar_sources.py::deploy_events
+similar hq/platform/application/content.py::save_content <> hq/platform/application/documentation.py::save_documentation
+similar hq/platform/application/perimeter_findings.py::_perimeter_open <> hq/platform/application/tailnet_findings.py::_empty_group_granted
+similar hq/platform/application/tailnet_findings.py::_empty_group_granted <> hq/platform/application/tailnet_findings.py::_tag_granted_to_nobody
+similar hq/platform/core/bench.py::_content <> hq/platform/core/bench.py::_documentation
+similar hq/platform/core/example_estate/records.py::_runbooks <> hq/platform/core/example_estate/records.py::_writeups
+similar hq/platform/mcp/security.py::MCPBoundary._note_denial <> hq/platform/mcp/security.py::MCPBoundary._observe

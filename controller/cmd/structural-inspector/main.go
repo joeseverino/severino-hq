@@ -19,11 +19,19 @@ type Wrapper struct {
 	Signature         string
 	Forward           string
 }
+
+// Table is a function that sets one variable in a switch and returns it.
+type Table struct {
+	Return string
+	Cases  []string
+}
 type Result struct {
-	Wrappers   map[string]Wrapper
-	Functions  map[string]bool
-	Generated  bool
-	Directives []string
+	Wrappers    map[string]Wrapper
+	Delegations map[string]string
+	Tables      map[string]Table
+	Functions   map[string]bool
+	Generated   bool
+	Directives  []string
 }
 
 func show(n ast.Node) string {
@@ -258,6 +266,153 @@ func wrapper(f *ast.FuncDecl, declarations map[string]*ast.FuncDecl, constants m
 	}
 	return Wrapper{show(call.Fun), signature(declaration.Type), signature(f.Type), show(forward)}, true
 }
+
+// delegation names the same-file function f's whole body returns a call of.
+func delegation(f *ast.FuncDecl, declarations map[string]*ast.FuncDecl) (string, bool) {
+	if f.Body == nil || len(f.Body.List) != 1 {
+		return "", false
+	}
+	ret, ok := f.Body.List[0].(*ast.ReturnStmt)
+	if !ok || len(ret.Results) != 1 {
+		return "", false
+	}
+	call, ok := ret.Results[0].(*ast.CallExpr)
+	if !ok || call.Ellipsis.IsValid() {
+		return "", false
+	}
+	fun := call.Fun
+	switch instance := fun.(type) {
+	case *ast.IndexExpr:
+		fun = instance.X
+	case *ast.IndexListExpr:
+		fun = instance.X
+	}
+	name, ok := fun.(*ast.Ident)
+	if !ok || shadowed(f, name.Name) {
+		return "", false
+	}
+	declaration := declarations[name.Name]
+	if declaration == nil || declaration.Recv != nil || declaration == f {
+		return "", false
+	}
+	return name.Name, true
+}
+
+func shadowed(f *ast.FuncDecl, name string) bool {
+	lists := []*ast.FieldList{f.Recv, f.Type.Params, f.Type.Results}
+	for _, list := range lists {
+		if list == nil {
+			continue
+		}
+		for _, field := range list.List {
+			for _, parameter := range field.Names {
+				if parameter.Name == name {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// table reads a function whose only logic is a switch that sets one variable
+// from a literal or a call of identifiers and literals, then returns.
+func table(f *ast.FuncDecl) (Table, bool) {
+	if f.Body == nil || len(f.Body.List) < 2 {
+		return Table{}, false
+	}
+	last, ok := f.Body.List[len(f.Body.List)-1].(*ast.ReturnStmt)
+	if !ok {
+		return Table{}, false
+	}
+	var choice *ast.SwitchStmt
+	// A case names a declared variable by its type, so a renamed copy reads the same.
+	types := map[string]string{}
+	for _, statement := range f.Body.List[:len(f.Body.List)-1] {
+		switch s := statement.(type) {
+		case *ast.DeclStmt:
+			d, ok := s.Decl.(*ast.GenDecl)
+			if !ok || d.Tok != token.VAR {
+				return Table{}, false
+			}
+			for _, spec := range d.Specs {
+				v := spec.(*ast.ValueSpec)
+				if len(v.Values) != 0 {
+					return Table{}, false
+				}
+				for _, name := range v.Names {
+					types[name.Name] = show(v.Type)
+				}
+			}
+		case *ast.AssignStmt:
+			if s.Tok != token.DEFINE || len(s.Lhs) != 1 || len(s.Rhs) != 1 {
+				return Table{}, false
+			}
+			if _, ok := s.Rhs[0].(*ast.BasicLit); !ok {
+				return Table{}, false
+			}
+		case *ast.SwitchStmt:
+			if choice != nil || s.Init != nil {
+				return Table{}, false
+			}
+			choice = s
+		default:
+			return Table{}, false
+		}
+	}
+	if choice == nil {
+		return Table{}, false
+	}
+	result := Table{Return: show(last)}
+	target := ""
+	for _, clause := range choice.Body.List {
+		c := clause.(*ast.CaseClause)
+		if len(c.Body) != 1 {
+			return Table{}, false
+		}
+		set, ok := c.Body[0].(*ast.AssignStmt)
+		if !ok || set.Tok != token.ASSIGN || len(set.Lhs) != 1 || len(set.Rhs) != 1 {
+			return Table{}, false
+		}
+		variable, ok := set.Lhs[0].(*ast.Ident)
+		if !ok || (target != "" && variable.Name != target) || !plain(set.Rhs[0]) {
+			return Table{}, false
+		}
+		target = variable.Name
+		for _, value := range c.List {
+			ast.Inspect(value, func(n ast.Node) bool {
+				if name, ok := n.(*ast.Ident); ok && types[name.Name] != "" {
+					name.Name = "(" + types[name.Name] + ")"
+				}
+				return true
+			})
+			result.Cases = append(result.Cases, show(value))
+		}
+	}
+	return result, true
+}
+
+// plain is a literal, or a call of a named function on identifiers and literals.
+func plain(n ast.Expr) bool {
+	switch v := n.(type) {
+	case *ast.BasicLit:
+		return true
+	case *ast.CallExpr:
+		if _, ok := v.Fun.(*ast.Ident); !ok || v.Ellipsis.IsValid() {
+			return false
+		}
+		for _, argument := range v.Args {
+			switch argument.(type) {
+			case *ast.Ident, *ast.BasicLit:
+			default:
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 func main() {
 	if len(os.Args) != 2 {
 		fmt.Fprintln(os.Stderr, "one source path required")
@@ -269,7 +424,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	r := Result{Wrappers: map[string]Wrapper{}, Functions: map[string]bool{}}
+	r := Result{Wrappers: map[string]Wrapper{}, Delegations: map[string]string{}, Tables: map[string]Table{}, Functions: map[string]bool{}}
 	constants := map[string]bool{}
 	for _, declaration := range file.Decls {
 		if d, ok := declaration.(*ast.GenDecl); ok && d.Tok == token.CONST {
@@ -312,6 +467,12 @@ func main() {
 		}
 		if w, ok := wrapper(f, declarations, constants); ok {
 			r.Wrappers[name] = w
+		}
+		if callee, ok := delegation(f, declarations); ok {
+			r.Delegations[name] = callee
+		}
+		if t, ok := table(f); ok {
+			r.Tables[name] = t
 		}
 	}
 	_ = json.NewEncoder(os.Stdout).Encode(r)
