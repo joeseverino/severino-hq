@@ -10,38 +10,22 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
 {% block page %}
 {% if containers %}
   <div class="fact-band">
-    <div class="band-fact">
-      <span class="band-icon">{% include "partials/_icon.html" with name="container" %}</span>
-      <div>
-        <span class="band-label">Running</span>
-        <strong>{{ containers|length }}</strong>
-        <small>on {{ machines|counted:"machine" }}</small>
-      </div>
-    </div>
-    <div class="band-fact{% if vulnerable %} tone-serious{% else %} tone-good{% endif %}">
-      <span class="band-icon">{% include "partials/_icon.html" with name="shield" %}</span>
-      <div>
-        <span class="band-label">Known vulnerabilities</span>
-        <strong>{% if vulnerable %}{{ vulnerable_containers|counted:"container" }}{% else %}None serious{% endif %}</strong>
-        <small>{% if vulnerable %}in {{ vulnerable|counted:"image" }}{% endif %}{% if matched < containers|length %}{% if vulnerable %} · {% endif %}{{ unchecked|breakable }} of {{ containers|length }} cannot be checked{% endif %}</small>
-      </div>
-    </div>
-    <div class="band-fact{% if update_available %} tone-attention{% elif up_to_date == containers|length %} tone-good{% endif %}">
-      <span class="band-icon">{% include "partials/_icon.html" with name="deploy" %}</span>
-      <div>
-        <span class="band-label">Updates</span>
-        <strong>{% if update_available %}{{ update_available|counted:"has an update,have an update" }}{% elif up_to_date == containers|length %}All up to date{% elif up_to_date %}{{ up_to_date|breakable }} of {{ containers|length }} up to date{% else %}Unknown{% endif %}</strong>
-        <small>{% if update_available and up_to_date %}{{ up_to_date|breakable }} up to date{% if update_unknown %}, {% endif %}{% endif %}{% if update_unknown and up_to_date != containers|length %}{{ update_unknown|breakable }} unknown{% endif %}{% if update_available or update_unknown %} · {% endif %}{% include "partials/_reading_age.html" with at=read_at only %}</small>
-      </div>
-    </div>
-    <div class="band-fact{% if pinned == containers|length %} tone-good{% endif %}">
-      <span class="band-icon">{% include "partials/_icon.html" with name="lock" %}</span>
-      <div>
-        <span class="band-label">Locked to an exact build</span>
-        <strong>{{ pinned|breakable }} of {{ containers|length }}</strong>
-        <small>{% if pinned == containers|length %}None change on a pull.{% else %}The rest run a tag, which can point at a different build on the next pull.{% endif %}</small>
-      </div>
-    </div>
+    {% band_fact icon="container" label="Running" %}
+      <strong>{{ containers|length }}</strong>
+      <small>on {{ machines|counted:"machine" }}</small>
+    {% endband_fact %}
+    {% band_fact icon="shield" label="Known vulnerabilities" %}
+      <strong>{% if vulnerable %}{{ vulnerable_containers|counted:"container" }}{% else %}None serious{% endif %}</strong>
+      <small>{% if vulnerable %}in {{ vulnerable|counted:"image" }}{% endif %}{% if matched < containers|length %}{% if vulnerable %} · {% endif %}{{ unchecked|breakable }} of {{ containers|length }} cannot be checked{% endif %}</small>
+    {% tone %}{% if vulnerable %}serious{% else %}good{% endif %}{% endband_fact %}
+    {% band_fact icon="deploy" label="Updates" %}
+      <strong>{% if update_available %}{{ update_available|counted:"has an update,have an update" }}{% elif up_to_date == containers|length %}All up to date{% elif up_to_date %}{{ up_to_date|breakable }} of {{ containers|length }} up to date{% else %}Unknown{% endif %}</strong>
+      <small>{% if update_available and up_to_date %}{{ up_to_date|breakable }} up to date{% if update_unknown %}, {% endif %}{% endif %}{% if update_unknown and up_to_date != containers|length %}{{ update_unknown|breakable }} unknown{% endif %}{% if update_available or update_unknown %} · {% endif %}{% include "partials/_reading_age.html" with at=read_at only %}</small>
+    {% tone %}{% if update_available %}attention{% elif up_to_date == containers|length %}good{% endif %}{% endband_fact %}
+    {% band_fact icon="lock" label="Locked to an exact build" %}
+      <strong>{{ pinned|breakable }} of {{ containers|length }}</strong>
+      <small>{% if pinned == containers|length %}None change on a pull.{% else %}The rest run a tag, which can point at a different build on the next pull.{% endif %}</small>
+    {% tone %}{% if pinned == containers|length %}good{% endif %}{% endband_fact %}
   </div>
 
   {% if need_sections %}

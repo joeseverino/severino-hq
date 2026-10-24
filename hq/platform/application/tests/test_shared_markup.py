@@ -10,7 +10,7 @@ from django.template import Context, Template, TemplateSyntaxError
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
-from .markup import elements, select, with_class
+from .markup import elements, select, texts, with_class
 
 TEMPLATES = Path(settings.BASE_DIR) / "templates"
 
@@ -104,6 +104,48 @@ class SectionHeadTests(SimpleTestCase):
                 Template(source)
 
 
+class BandFactTests(SimpleTestCase):
+    PARTIAL = "partials/_band_fact.html"
+
+    def test_a_fact_is_its_label_its_value_and_its_tone(self):
+        html = _render(
+            '{% band_fact icon="shield" label=label %}<strong>{{ n }} open</strong><small>example-repo</small>'
+            "{% tone %}{% if n %}serious{% endif %}{% endband_fact %}",
+            label="Security",
+            n=2,
+        )
+
+        (fact,) = with_class(html, "band-fact")
+        (named,) = with_class(html, "band-label")
+        self.assertIn("tone-serious", fact.classes)
+        self.assertEqual(named.words, "Security")
+        self.assertEqual(len(with_class(html, "band-icon")), 1)
+        self.assertEqual(texts(html, "strong"), ["2 open"])
+        self.assertEqual(texts(html, "small"), ["example-repo"])
+
+    def test_a_tone_may_be_given_as_a_value(self):
+        html = _render('{% band_fact label="Health" tone=tone %}<strong>Up</strong>{% endband_fact %}', tone="good")
+
+        (fact,) = with_class(html, "band-fact")
+        self.assertIn("tone-good", fact.classes)
+
+    def test_without_a_tone_or_an_icon_it_has_neither(self):
+        html = _render('{% band_fact label="Running" %}<strong>3</strong>{% tone %}{% endband_fact %}')
+
+        (fact,) = with_class(html, "band-fact")
+        self.assertEqual(fact.classes, {"band-fact"})
+        self.assertEqual(with_class(html, "band-icon"), [])
+
+    def test_a_label_from_data_is_escaped(self):
+        html = _render("{% band_fact label=label %}<strong>1</strong>{% endband_fact %}", label="<b>x</b>")
+
+        self.assertEqual(elements(html, "b"), [])
+
+    def test_parts_come_in_order(self):
+        with self.assertRaises(TemplateSyntaxError):
+            Template('{% band_fact label="A" %}{% tone %}good{% value %}<strong>1</strong>{% endband_fact %}')
+
+
 @tag("source")
 class SharedMarkupTemplateTests(SimpleTestCase):
     """No template writes by hand what a shared partial or tag draws."""
@@ -115,3 +157,7 @@ class SharedMarkupTemplateTests(SimpleTestCase):
     def test_only_the_tag_draws_a_section_head(self):
         found = _written_by_hand(r'class="section-head[" ]', SectionHeadTests.PARTIAL)
         self.assertEqual(found, [], "write {% section_head %} instead")
+
+    def test_only_the_tag_draws_a_band_fact(self):
+        found = _written_by_hand(r'class="band-fact[" {]', BandFactTests.PARTIAL)
+        self.assertEqual(found, [], "write {% band_fact %} instead")

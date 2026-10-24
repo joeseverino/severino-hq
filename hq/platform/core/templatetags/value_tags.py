@@ -746,8 +746,12 @@ class SlotsNode(template.Node):
     def render(self, context) -> str:
         values = {name: value.resolve(context) for name, value in self.options.items()}
         for attribute in self.child_nodelists:
-            # Rendered by the page's own template, so escaped already.
-            values[attribute.removeprefix("nodelist_")] = mark_safe(getattr(self, attribute).render(context).strip())
+            # Rendered by the page's own template, so escaped already. A part
+            # left empty leaves an option of its name as it is.
+            part = mark_safe(getattr(self, attribute).render(context).strip())
+            name = attribute.removeprefix("nodelist_")
+            if part or name not in values:
+                values[name] = part
         return context.template.engine.get_template(self.partial).render(context.new(values))
 
 
@@ -777,4 +781,4 @@ def slotted(name: str, partial: str, parts: tuple[str, ...], options: frozenset[
 
 
 slotted("section_head", "partials/_section_head.html", ("heading", "aside"), frozenset(("id", "lede")))
-slotted("band_fact", "partials/_band_fact.html", ("value", "tone"), frozenset(("icon", "label")))
+slotted("band_fact", "partials/_band_fact.html", ("value", "tone"), frozenset(("icon", "label", "tone")))

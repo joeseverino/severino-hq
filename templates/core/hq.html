@@ -13,14 +13,10 @@ and leads to the first.
 
 <div class="fact-band">
   {% for tile in hq.tiles %}
-  <div class="band-fact tone-{{ tile.tone }}">
-    {% if tile.icon %}<span class="band-icon">{% include "partials/_icon.html" with name=tile.icon %}</span>{% endif %}
-    <div>
-      <span class="band-label">{{ tile.label|breakable }}</span>
-      <strong>{% if tile.url %}<a href="{{ tile.url }}">{{ tile.value|breakable }}</a>{% else %}{{ tile.value|breakable }}{% endif %}</strong>
-      {% if tile.detail %}<small>{{ tile.detail|breakable }}</small>{% endif %}
-    </div>
-  </div>
+  {% band_fact icon=tile.icon label=tile.label tone=tile.tone %}
+    <strong>{% if tile.url %}<a href="{{ tile.url }}">{{ tile.value|breakable }}</a>{% else %}{{ tile.value|breakable }}{% endif %}</strong>
+    {% if tile.detail %}<small>{{ tile.detail|breakable }}</small>{% endif %}
+  {% endband_fact %}
   {% endfor %}
 </div>
 

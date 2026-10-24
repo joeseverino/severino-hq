@@ -10,14 +10,10 @@ readings. The path is the next section, drawn once.
 {% endcomment %}
 <div class="service-band">
   {% for item in summary %}
-    <div class="band-fact{% if item.pill %} tone-{{ item.tone }}{% endif %}">
-      <span class="band-icon">{% include "partials/_icon.html" with name=item.icon %}</span>
-      <div>
-        <span class="band-label">{{ item.label|breakable }}</span>
-        <strong>{% if item.link and item.link.url %}{% entity item.link label=item.value %}{% else %}{{ item.value|breakable }}{% endif %}</strong>
-        {% if item.detail %}<small>{{ item.detail|breakable }}</small>{% endif %}
-      </div>
-    </div>
+    {% band_fact icon=item.icon label=item.label tone=item.tone %}
+      <strong>{% if item.link and item.link.url %}{% entity item.link label=item.value %}{% else %}{{ item.value|breakable }}{% endif %}</strong>
+      {% if item.detail %}<small>{{ item.detail|breakable }}</small>{% endif %}
+    {% endband_fact %}
   {% endfor %}
   {% if service.aliases %}
     <p class="band-meta"><span>Also at {% for alias in service.aliases %}<code>{{ alias|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></p>

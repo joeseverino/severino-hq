@@ -5,77 +5,53 @@ against it. HQ's own image answers the last two from the GitHub App's reading
 of its repository instead: the production deploy, and the repository's alerts.
 {% endcomment %}
 <div class="fact-band">
-  <div class="band-fact{% if running.healthy %} tone-good{% else %} tone-serious{% endif %}">
-    <span class="band-icon">{% include "partials/_icon.html" with name="activity" %}</span>
-    <div>
-      <span class="band-label">{{ running.state|capfirst|default:"Unknown"|breakable }}</span>
-      <strong>{{ container.item.uptime|default:running.uptime|default:running.status|default:"No status"|breakable }}</strong>
-      <small>{% if running.check %}{{ running.check|capfirst|breakable }} · {% endif %}{% if machine %}on {% entity machine.link %}{% endif %}</small>
-    </div>
-  </div>
-  <div class="band-fact">
-    <span class="band-icon">{% include "partials/_icon.html" with name="layers" %}</span>
-    <div>
-      <span class="band-label">Version</span>
-      <strong>{% if standing.tag %}<code>{{ standing.tag|breakable }}</code>{% else %}No version tag{% endif %}</strong>
-      <small>{{ standing.image.short|breakable }}</small>
-      <small>{% if standing.pinned %}<span tabindex="0" data-tip="{{ standing.image.digest }}">Locked to an exact build</span>{% else %}Tag only{% endif %}</small>
-      {% if standing.built %}<small>Built {{ standing.built|ago_short }}</small>{% endif %}
-      {% if standing.moved_to %}<small class="github-gap">Its tag now names a newer build.</small>{% endif %}
-    </div>
-  </div>
+  {% band_fact icon="activity" label=running.state|capfirst|default:"Unknown" %}
+    <strong>{{ container.item.uptime|default:running.uptime|default:running.status|default:"No status"|breakable }}</strong>
+    <small>{% if running.check %}{{ running.check|capfirst|breakable }} · {% endif %}{% if machine %}on {% entity machine.link %}{% endif %}</small>
+  {% tone %}{% if running.healthy %}good{% else %}serious{% endif %}{% endband_fact %}
+  {% band_fact icon="layers" label="Version" %}
+    <strong>{% if standing.tag %}<code>{{ standing.tag|breakable }}</code>{% else %}No version tag{% endif %}</strong>
+    <small>{{ standing.image.short|breakable }}</small>
+    <small>{% if standing.pinned %}<span tabindex="0" data-tip="{{ standing.image.digest }}">Locked to an exact build</span>{% else %}Tag only{% endif %}</small>
+    {% if standing.built %}<small>Built {{ standing.built|ago_short }}</small>{% endif %}
+    {% if standing.moved_to %}<small class="github-gap">Its tag now names a newer build.</small>{% endif %}
+  {% endband_fact %}
   {% if standing.repository %}{% with deploy=standing.repository.production %}
-    <div class="band-fact{% if standing.repository.production_verified %} tone-good{% elif standing.repository.production_verified is False %} tone-serious{% endif %}">
-      <span class="band-icon">{% include "partials/_icon.html" with name="deploy" %}</span>
-      <div>
-        <span class="band-label">Production deploy</span>
-        <strong>{% if standing.repository.production_verified %}Verified{% elif standing.repository.production_verified is False %}Failed its checks{% elif deploy %}Deployed{% else %}No deploy found{% endif %}</strong>
-        {% if deploy %}<small><a class="external-link" href="{{ standing.repository.url|web_url }}/commit/{{ deploy.sha }}" rel="noopener"><code>{{ deploy.sha|slice:":7"|breakable }}</code></a>{% if deploy.created_at %} · {{ deploy.created_at|ago_short }}{% endif %}</small>{% endif %}
-        <small>{% if standing.repository.production_verified %}Passed its checks before deploying.{% else %}From {{ standing.repository.name|breakable:"." }}{% endif %}</small>
-      </div>
-    </div>
-    <div class="band-fact{% if standing.repository.serious_alerts %} tone-serious{% elif standing.repository.open_alerts %} tone-attention{% else %} tone-good{% endif %}">
-      <span class="band-icon">{% include "partials/_icon.html" with name="shield" %}</span>
-      <div>
-        <span class="band-label">Security</span>
-        <strong><a class="external-link" href="{{ standing.repository.alerts_url|web_url }}" rel="noopener">{% if standing.repository.open_alerts %}{{ standing.repository.open_alerts|breakable }} open{% else %}Clear{% endif %}</a></strong>
-        <small>{% for n, level in standing.repository.severities %}{{ n|breakable }} {{ level|breakable:forloop }}{% if not forloop.last %} {% endif %}{% empty %}No open alerts on the repository.{% endfor %}</small>
-      </div>
-    </div>
+    {% band_fact icon="deploy" label="Production deploy" %}
+      <strong>{% if standing.repository.production_verified %}Verified{% elif standing.repository.production_verified is False %}Failed its checks{% elif deploy %}Deployed{% else %}No deploy found{% endif %}</strong>
+      {% if deploy %}<small><a class="external-link" href="{{ standing.repository.url|web_url }}/commit/{{ deploy.sha }}" rel="noopener"><code>{{ deploy.sha|slice:":7"|breakable }}</code></a>{% if deploy.created_at %} · {{ deploy.created_at|ago_short }}{% endif %}</small>{% endif %}
+      <small>{% if standing.repository.production_verified %}Passed its checks before deploying.{% else %}From {{ standing.repository.name|breakable:"." }}{% endif %}</small>
+    {% tone %}{% if standing.repository.production_verified %}good{% elif standing.repository.production_verified is False %}serious{% endif %}{% endband_fact %}
+    {% band_fact icon="shield" label="Security" %}
+      <strong><a class="external-link" href="{{ standing.repository.alerts_url|web_url }}" rel="noopener">{% if standing.repository.open_alerts %}{{ standing.repository.open_alerts|breakable }} open{% else %}Clear{% endif %}</a></strong>
+      <small>{% for n, level in standing.repository.severities %}{{ n|breakable }} {{ level|breakable:forloop }}{% if not forloop.last %} {% endif %}{% empty %}No open alerts on the repository.{% endfor %}</small>
+    {% tone %}{% if standing.repository.serious_alerts %}serious{% elif standing.repository.open_alerts %}attention{% else %}good{% endif %}{% endband_fact %}
   {% endwith %}{% else %}
-    <div class="band-fact{% if standing.newer %} tone-attention{% elif standing.update_state == 'current' %} tone-good{% endif %}">
-      <span class="band-icon">{% include "partials/_icon.html" with name="deploy" %}</span>
-      <div>
-        <span class="band-label">Update</span>
-        {% if standing.newer %}
-          <strong>{% if standing.release %}<a class="external-link" href="{{ standing.release.url }}" rel="noopener"><code>{{ standing.latest|breakable }}</code> available</a>{% else %}<code>{{ standing.latest|breakable }}</code> available{% endif %}</strong>
-          <small>{{ standing.newer|length|counted:"newer release,newer releases" }}{% if standing.release.published %}, the newest {{ standing.release.published|ago_short }}{% endif %}</small>
-        {% elif standing.update_state == "current" %}
-          <strong>Up to date</strong>
-          <small>No newer version.</small>
-        {% else %}
-          <strong>Unknown</strong>
-          <small>{{ standing.update_note|breakable }}</small>
-        {% endif %}
-        {% if standing.read_at %}<small>{% include "partials/_reading_age.html" with at=standing.read_at only %}</small>{% endif %}
-      </div>
-    </div>
-    <div class="band-fact{% if standing.serious %} tone-serious{% elif standing.state == 'vulnerable' %} tone-attention{% elif standing.source or standing.checked %} tone-good{% endif %}">
-      <span class="band-icon">{% include "partials/_icon.html" with name="shield" %}</span>
-      <div>
-        <span class="band-label">Known vulnerabilities</span>
-        {% if standing.state == 'vulnerable' %}
-          <strong>{{ standing.vulnerabilities|capfirst|breakable }}</strong>
-          {% for advisory in standing.advisories|slice:":2" %}<small><a class="external-link" href="{{ advisory.url }}" rel="noopener">{{ advisory.id|breakable }}</a> {{ advisory.severity|breakable }}</small>{% endfor %}
-          {% if not standing.advisories %}{% for finding in standing.urgent|slice:":2" %}<small><a class="external-link" href="{{ finding.url }}" rel="noopener">{{ finding.id|breakable }}</a> {{ finding.package|breakable }}</small>{% endfor %}{% endif %}
-        {% elif standing.checked or standing.source %}
-          <strong>{% if standing.findings %}None serious{% else %}None known{% endif %}</strong>
-          <small>{% if standing.findings %}{{ standing.findings|length }} lower, in {% endif %}{% if standing.checked %}{{ standing.checked.checked|counted:"package,packages" }}{% endif %}{% if standing.checked and standing.source %} and {% endif %}{% if standing.source %}<a class="external-link nowrap" href="{{ standing.source }}/security/advisories" rel="noopener">its repository</a>{% endif %}</small>
-        {% else %}
-          <strong>Cannot check</strong>
-          <small>The image does not say where its source is.{% if edit_url %} <a href="{{ edit_url }}">Name its source repository</a>{% endif %}</small>
-        {% endif %}
-      </div>
-    </div>
+    {% band_fact icon="deploy" label="Update" %}
+      {% if standing.newer %}
+        <strong>{% if standing.release %}<a class="external-link" href="{{ standing.release.url }}" rel="noopener"><code>{{ standing.latest|breakable }}</code> available</a>{% else %}<code>{{ standing.latest|breakable }}</code> available{% endif %}</strong>
+        <small>{{ standing.newer|length|counted:"newer release,newer releases" }}{% if standing.release.published %}, the newest {{ standing.release.published|ago_short }}{% endif %}</small>
+      {% elif standing.update_state == "current" %}
+        <strong>Up to date</strong>
+        <small>No newer version.</small>
+      {% else %}
+        <strong>Unknown</strong>
+        <small>{{ standing.update_note|breakable }}</small>
+      {% endif %}
+      {% if standing.read_at %}<small>{% include "partials/_reading_age.html" with at=standing.read_at only %}</small>{% endif %}
+    {% tone %}{% if standing.newer %}attention{% elif standing.update_state == 'current' %}good{% endif %}{% endband_fact %}
+    {% band_fact icon="shield" label="Known vulnerabilities" %}
+      {% if standing.state == 'vulnerable' %}
+        <strong>{{ standing.vulnerabilities|capfirst|breakable }}</strong>
+        {% for advisory in standing.advisories|slice:":2" %}<small><a class="external-link" href="{{ advisory.url }}" rel="noopener">{{ advisory.id|breakable }}</a> {{ advisory.severity|breakable }}</small>{% endfor %}
+        {% if not standing.advisories %}{% for finding in standing.urgent|slice:":2" %}<small><a class="external-link" href="{{ finding.url }}" rel="noopener">{{ finding.id|breakable }}</a> {{ finding.package|breakable }}</small>{% endfor %}{% endif %}
+      {% elif standing.checked or standing.source %}
+        <strong>{% if standing.findings %}None serious{% else %}None known{% endif %}</strong>
+        <small>{% if standing.findings %}{{ standing.findings|length }} lower, in {% endif %}{% if standing.checked %}{{ standing.checked.checked|counted:"package,packages" }}{% endif %}{% if standing.checked and standing.source %} and {% endif %}{% if standing.source %}<a class="external-link nowrap" href="{{ standing.source }}/security/advisories" rel="noopener">its repository</a>{% endif %}</small>
+      {% else %}
+        <strong>Cannot check</strong>
+        <small>The image does not say where its source is.{% if edit_url %} <a href="{{ edit_url }}">Name its source repository</a>{% endif %}</small>
+      {% endif %}
+    {% tone %}{% if standing.serious %}serious{% elif standing.state == 'vulnerable' %}attention{% elif standing.source or standing.checked %}good{% endif %}{% endband_fact %}
   {% endif %}
 </div>
