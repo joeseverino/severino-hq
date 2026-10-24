@@ -186,9 +186,7 @@ class EntryPage(PageMixin):
     slug_field = "uid"
     slug_url_kwarg = "uid"
 
-    @override
-    def get_page_trail(self):
-        return (CALENDAR_TRAIL,)
+    page_trail = CALENDAR_TRAIL
 
 
 class EntryWrite:

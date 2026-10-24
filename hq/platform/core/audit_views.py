@@ -3,7 +3,7 @@
 from typing import override
 lazy from datetime import date, datetime, time, timedelta
 
-from django.urls import reverse
+from django.urls import reverse, reverse_lazy
 from django.views.generic import DetailView, ListView
 lazy from django.utils import timezone
 
@@ -218,9 +218,7 @@ class AuditLogDetailView(PageMixin, DetailView):
     def get_page_title(self):
         return "Approval" if self.held_approval() is not None else "Audit event"
 
-    @override
-    def get_page_trail(self):
-        return (("Audit log", reverse("core:audit_list")),)
+    page_trail = ("Audit log", reverse_lazy("core:audit_list"))
 
     @override
     def get_context_data(self, **kwargs):
