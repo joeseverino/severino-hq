@@ -55,8 +55,8 @@
       "groupSlug": "go-patch"
     },
     {
-      "description": "requires-python, engines and the go directive say what the project supports, not what it runs, so they stay ranges.",
-      "matchDepTypes": ["requires-python", "engines", "golang"],
+      "description": "requires-python and the go directive say what the project supports, not what it runs, so they stay ranges.",
+      "matchDepTypes": ["requires-python", "golang"],
       "rangeStrategy": "auto"
     },
     {
