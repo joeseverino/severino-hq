@@ -18,6 +18,7 @@ from typing import Any
 
 from django.utils.functional import Promise
 
+from .asks import Ask
 from .fragments import FragmentMixin
 from .ui import PageNavigation
 lazy from .page_reads import remedy
@@ -109,7 +110,7 @@ class PageBadge:
 class Page:
     title: str
     lede: str = ""
-    actions: tuple[PageAction, ...] = ()
+    actions: tuple[PageAction | Ask, ...] = ()
     navigation: PageNavigation | None = None
     # Where the page sits, as (label, url) pairs, when it is reached from a parent.
     trail: tuple[tuple[str, str], ...] = field(default_factory=tuple)
@@ -129,7 +130,8 @@ class Page:
     def lead(self) -> PageAction | None:
         """The page's own way to add what it lists: its primary link."""
 
-        return next((action for action in self.actions if action.primary and action.method == "get"), None)
+        links = (action for action in self.actions if isinstance(action, PageAction))
+        return next((action for action in links if action.primary and action.method == "get"), None)
 
     @property
     def dialogs(self) -> tuple[PageDialog, ...]:
@@ -143,7 +145,7 @@ def page_context(
     title: str,
     lede: str = "",
     *,
-    actions: Iterable[PageAction] = (),
+    actions: Iterable[PageAction | Ask] = (),
     navigation: PageNavigation | None = None,
     trail: Iterable[tuple[str, str]] = (),
     reads: Iterable[str] = (),
@@ -191,7 +193,7 @@ class PageMixin(FragmentMixin):
     def get_page_lede(self) -> str:
         return self.page_lede
 
-    def get_page_actions(self) -> tuple[PageAction, ...]:
+    def get_page_actions(self) -> tuple[PageAction | Ask, ...]:
         return ()
 
     def get_page_navigation(self) -> PageNavigation | None:
