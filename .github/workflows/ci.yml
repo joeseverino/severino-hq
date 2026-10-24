@@ -316,6 +316,20 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         if: env.PROVEN == ''
       - uses: ./.github/actions/toolchain
+        if: env.PROVEN == ''
+      # A promotion runs one tool, so it installs that one rather than the
+      # toolchain the build and its checks need.
+      - name: Read the pinned mise
+        id: mise
+        if: env.PROVEN != ''
+        run: echo "version=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
+      - name: Install the pinned crane
+        if: env.PROVEN != ''
+        uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+        with:
+          version: ${{ steps.mise.outputs.version }}
+          install_args: crane
+          cache: false
       - name: Build the production image
         id: build
         if: env.PROVEN == ''
