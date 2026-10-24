@@ -195,8 +195,11 @@ def main() -> int:
     except NotMeasured as error:
         print(f"perf:report measured nothing: {error}", file=sys.stderr)
         return 1
-    print(table.render(here, base))
-    print(f"\nWritten to {OUT}/{here['commit']}.json" + (f" and {base['commit']}.json" if base else ""))
+    rendered = table.render(here, base)
+    print(rendered)
+    # The session log shows this table as printed, beside the report it renders.
+    (OUT / f"{here['commit']}.txt").write_text(rendered + "\n", encoding="utf-8")
+    print(f"\nWritten to {OUT}/{here['commit']}.json and .txt" + (f", and {base['commit']}.json" if base else ""))
     return 0
 
 
