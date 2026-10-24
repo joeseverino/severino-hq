@@ -3,71 +3,71 @@
 from pathlib import Path
 
 from hq.platform.core.tests.browser.probes.boxes import (
-    _EMPTY_FRAMES,
-    _HOLED_FORMS,
-    _NESTED_FRAMES,
-    _OVERLAPS,
-    _OVERRULED_ALIGNMENT,
-    _PAIRS,
-    _SIDEWAYS,
-    _SMALL_TARGETS,
-    _UNDER_ITS_LABEL,
-    _UNEVEN_BANDS,
+    EMPTY_FRAMES,
+    HOLED_FORMS,
+    NESTED_FRAMES,
+    OVERLAPS,
+    OVERRULED_ALIGNMENT,
+    PAIRS,
+    SIDEWAYS,
+    SMALL_TARGETS,
+    UNDER_ITS_LABEL,
+    UNEVEN_BANDS,
 )
 from hq.platform.core.tests.browser.probes.cut_names import (
-    _CUT_NAMES,
-    _CUT_WITH_ROOM,
-    _PADDED_CUTS,
-    _PAST_THE_CLAMP,
-    _SPLIT_NAMES,
+    CUT_NAMES,
+    CUT_WITH_ROOM,
+    PADDED_CUTS,
+    PAST_THE_CLAMP,
+    SPLIT_NAMES,
 )
 from hq.platform.core.tests.browser.probes.palette import (
-    _BUTTON_EDGES,
-    _CONTRAST,
-    _FAINT_LINES,
-    _FIELD_EDGES,
+    BUTTON_EDGES,
+    CONTRAST,
+    FAINT_LINES,
+    FIELD_EDGES,
     FIELD_CONTRAST,
     LARGE_TEXT_CONTRAST,
     LINE_CONTRAST,
     TEXT_CONTRAST,
 )
 from hq.platform.core.tests.browser.probes.parts import (
-    _HIDDEN_IN_SUMMARIES,
-    _LONE_ARROWS,
-    _NESTED_DISCLOSURES,
-    _RAISED_LINKS,
-    _READINGS,
-    _ROUTE_LINE_ENDS,
-    _SPILLED_LABELS,
-    _STRANDED_EVIDENCE,
-    _SUMMARY_MARKS,
+    HIDDEN_IN_SUMMARIES,
+    LONE_ARROWS,
+    NESTED_DISCLOSURES,
+    RAISED_LINKS,
+    READINGS,
+    ROUTE_LINE_ENDS,
+    SPILLED_LABELS,
+    STRANDED_EVIDENCE,
+    SUMMARY_MARKS,
     reading_problems,
 )
-from hq.platform.core.tests.browser.probes.shifts import _LAYOUT_SHIFTS
+from hq.platform.core.tests.browser.probes.shifts import LAYOUT_SHIFTS
 from hq.platform.core.tests.browser.probes.tables import (
-    _CELLS,
-    _CELLS_OFF_THE_FIRST_LINE,
-    _EMPTY_COLUMNS,
-    _PAST_THE_GUTTER,
-    _ROW_HEIGHTS,
-    _TABLES,
-    _TABLES_THAT_DO_NOT_FIT,
-    _UNPADDED_CELLS,
-    _UNSEEN_COLUMNS,
+    CELLS,
+    CELLS_OFF_THE_FIRST_LINE,
+    EMPTY_COLUMNS,
+    PAST_THE_GUTTER,
+    ROW_HEIGHTS,
+    TABLES,
+    TABLES_THAT_DO_NOT_FIT,
+    UNPADDED_CELLS,
+    UNSEEN_COLUMNS,
     ROW_LINES,
 )
 from hq.platform.core.tests.browser.probes.text import (
-    _ASIDE_BESIDE_ITS_HEADING,
-    _BROKEN_WORDS,
-    _BROKEN_WORDS_IN_TEXT,
-    _LONE_ASIDE_WORDS,
-    _OVERLAPPING_TEXT,
-    _SQUEEZED_TITLES,
-    _WRAPPED_PHRASES,
+    ASIDE_BESIDE_ITS_HEADING,
+    BROKEN_WORDS,
+    BROKEN_WORDS_IN_TEXT,
+    LONE_ASIDE_WORDS,
+    OVERLAPPING_TEXT,
+    SQUEEZED_TITLES,
+    WRAPPED_PHRASES,
 )
-from hq.platform.core.tests.browser.probes.tokens import _NAMES_IN_TRACKS, _STRANDED_MARKS, _TOKEN_BREAKS
+from hq.platform.core.tests.browser.probes.tokens import NAMES_IN_TRACKS, STRANDED_MARKS, TOKEN_BREAKS
 from hq.platform.core.tests.browser.reading import _probe
-from hq.platform.core.tests.browser.selectors import _TOKEN_SELECTORS, SELECTORS
+from hq.platform.core.tests.browser.selectors import TOKEN_SELECTORS, SELECTORS
 from hq.platform.core.tests.browser.widths import TARGET_MIN, WIDE, WIDE_REGION
 
 AUDIT = Path(__file__).parents[2] / "browser_audit.js"
@@ -100,7 +100,7 @@ _IDENTIFIER = "code, kbd, samp, time, .token, [data-entity]"
 
 # Probes read by more than one rule or check, with their arguments.
 _CUT_NAMES_READ = (
-    _CUT_NAMES,
+    CUT_NAMES,
     [
         SELECTORS["table_scroll"],
         SELECTORS["cell_name"],
@@ -111,12 +111,12 @@ _CUT_NAMES_READ = (
 )
 
 _CUT_WITH_ROOM_READ = (
-    _CUT_WITH_ROOM,
+    CUT_WITH_ROOM,
     [SELECTORS["table_scroll"], SELECTORS["open_row"], SELECTORS["context_line"], SELECTORS["phrase_part"]],
 )
 
 _SPLIT_NAMES_READ = (
-    _SPLIT_NAMES,
+    SPLIT_NAMES,
     [
         SELECTORS["table_scroll"],
         SELECTORS["cell_name"],
@@ -126,15 +126,15 @@ _SPLIT_NAMES_READ = (
     ],
 )
 
-_FRAMES_READ = (_NESTED_FRAMES, [SELECTORS["frame_exempt"], SELECTORS["frame_exempt_within"]])
+_FRAMES_READ = (NESTED_FRAMES, [SELECTORS["frame_exempt"], SELECTORS["frame_exempt_within"]])
 
-_CONTRAST_READ = (_CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_TEXT_CONTRAST])
+_CONTRAST_READ = (CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_TEXT_CONTRAST])
 
-_LINES_READ = (_FAINT_LINES, [SELECTORS["contrast_scope"], LINE_CONTRAST])
+_LINES_READ = (FAINT_LINES, [SELECTORS["contrast_scope"], LINE_CONTRAST])
 
-_FIELDS_READ = (_FIELD_EDGES, [SELECTORS["fillable"], FIELD_CONTRAST, SELECTORS["pressed"]])
+_FIELDS_READ = (FIELD_EDGES, [SELECTORS["fillable"], FIELD_CONTRAST, SELECTORS["pressed"]])
 
-_BUTTON_EDGES_READ = (_BUTTON_EDGES, SELECTORS["pressed"])
+_BUTTON_EDGES_READ = (BUTTON_EDGES, SELECTORS["pressed"])
 
 # Every check whose verdict depends on the palette the page is drawn in.
 _PALETTE = {
@@ -145,75 +145,75 @@ _PALETTE = {
     "button edges": _BUTTON_EDGES_READ,
 }
 
-_SIDEWAYS_READ = (_SIDEWAYS, SELECTORS["sideways"])
+_SIDEWAYS_READ = (SIDEWAYS, SELECTORS["sideways"])
 
-_SPILLED_CONTROLS = (_SPILLED_LABELS, SELECTORS["control"])
+_SPILLED_CONTROLS = (SPILLED_LABELS, SELECTORS["control"])
 
-_SPILLED_CELLS = (_SPILLED_LABELS, SELECTORS["cell_content"])
+_SPILLED_CELLS = (SPILLED_LABELS, SELECTORS["cell_content"])
 
-_PHRASES_READ = (_WRAPPED_PHRASES, SELECTORS["one_line"])
+_PHRASES_READ = (WRAPPED_PHRASES, SELECTORS["one_line"])
 
-_ROUTE_ENDS_READ = (_ROUTE_LINE_ENDS, [SELECTORS["route_line"], SELECTORS["route_mark"]])
+ROUTE_ENDS_READ = (ROUTE_LINE_ENDS, [SELECTORS["route_line"], SELECTORS["route_mark"]])
 
-_EVIDENCE_READ = (_STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["check_evidence"]])
+EVIDENCE_READ = (STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["check_evidence"]])
 
-_SUMMARIES_READ = (_HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"])
+SUMMARIES_READ = (HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"])
 
-_UNDER_LABELS_READ = (_UNDER_ITS_LABEL, SELECTORS["labeled"])
+_UNDER_LABELS_READ = (UNDER_ITS_LABEL, SELECTORS["labeled"])
 
-_SMALL_TARGETS_READ = (_SMALL_TARGETS, [SELECTORS["target"], TARGET_MIN])
+_SMALL_TARGETS_READ = (SMALL_TARGETS, [SELECTORS["target"], TARGET_MIN])
 
-_FORM_ROWS_READ = (_HOLED_FORMS, [SELECTORS["form"], SELECTORS["field"]])
+_FORM_ROWS_READ = (HOLED_FORMS, [SELECTORS["form"], SELECTORS["field"]])
 
-_EMPTY_FRAMES_READ = (_EMPTY_FRAMES, [SELECTORS["frame"], SELECTORS["frame_content"]])
+_EMPTY_FRAMES_READ = (EMPTY_FRAMES, [SELECTORS["frame"], SELECTORS["frame_content"]])
 
-_READINGS_OF = f"(selector) => ({_READINGS})([...document.querySelectorAll(selector)])"
+_READINGS_OF = f"(selector) => ({READINGS})([...document.querySelectorAll(selector)])"
 
 # Every probe the layout invariants read on a page, by the check it answers.
 _GEOMETRY = {
     "sideways": _SIDEWAYS_READ,
-    "cells": _CELLS,
-    "broken words": _BROKEN_WORDS,
-    "words broken in text": (_BROKEN_WORDS_IN_TEXT, _IDENTIFIER),
+    "cells": CELLS,
+    "broken words": BROKEN_WORDS,
+    "words broken in text": (BROKEN_WORDS_IN_TEXT, _IDENTIFIER),
     "wrapped phrases": _PHRASES_READ,
-    "overlaps": _OVERLAPS,
-    "overlapping text": (_OVERLAPPING_TEXT, SELECTORS["floating"]),
-    "grid rows": (_PAIRS, SELECTORS["paired"]),
-    "chip alignment": (_OVERRULED_ALIGNMENT, SELECTORS["chip"]),
+    "overlaps": OVERLAPS,
+    "overlapping text": (OVERLAPPING_TEXT, SELECTORS["floating"]),
+    "grid rows": (PAIRS, SELECTORS["paired"]),
+    "chip alignment": (OVERRULED_ALIGNMENT, SELECTORS["chip"]),
     "form rows": _FORM_ROWS_READ,
-    "bands": (_UNEVEN_BANDS, [SELECTORS["band"], SELECTORS["band_aside"]]),
-    "band padding": (_UNPADDED_CELLS, SELECTORS["band_cell"]),
-    "tables": _TABLES,
-    "tables fit": (_TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]),
-    "unseen columns": (_UNSEEN_COLUMNS, SELECTORS["table_scroll"]),
-    "empty columns": _EMPTY_COLUMNS,
-    "row heights": (_ROW_HEIGHTS, ROW_LINES),
-    "row alignment": (_CELLS_OFF_THE_FIRST_LINE, SELECTORS["table_scroll"]),
+    "bands": (UNEVEN_BANDS, [SELECTORS["band"], SELECTORS["band_aside"]]),
+    "band padding": (UNPADDED_CELLS, SELECTORS["band_cell"]),
+    "tables": TABLES,
+    "tables fit": (TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]),
+    "unseen columns": (UNSEEN_COLUMNS, SELECTORS["table_scroll"]),
+    "empty columns": EMPTY_COLUMNS,
+    "row heights": (ROW_HEIGHTS, ROW_LINES),
+    "row alignment": (CELLS_OFF_THE_FIRST_LINE, SELECTORS["table_scroll"]),
     "names cut whole": _CUT_NAMES_READ,
     "short names split": _SPLIT_NAMES_READ,
     "cut with room": _CUT_WITH_ROOM_READ,
-    "padded cuts": (_PADDED_CUTS, SELECTORS["cut_box"]),
+    "padded cuts": (PADDED_CUTS, SELECTORS["cut_box"]),
     "control labels": _SPILLED_CONTROLS,
     "cell labels": _SPILLED_CELLS,
-    "raised links": _RAISED_LINKS,
-    "lone arrows": (_LONE_ARROWS, SELECTORS["external_link"]),
+    "raised links": RAISED_LINKS,
+    "lone arrows": (LONE_ARROWS, SELECTORS["external_link"]),
     "small targets": _SMALL_TARGETS_READ,
-    "row disclosures": _NESTED_DISCLOSURES,
-    "summary marks": _SUMMARY_MARKS,
-    "tokens": (_TOKEN_BREAKS, _TOKEN_SELECTORS),
-    "stranded marks": (_STRANDED_MARKS, SELECTORS["seam"]),
-    "names in tracks": (_NAMES_IN_TRACKS, ".token, .whole, .cut"),
+    "row disclosures": NESTED_DISCLOSURES,
+    "summary marks": SUMMARY_MARKS,
+    "tokens": (TOKEN_BREAKS, TOKEN_SELECTORS),
+    "stranded marks": (STRANDED_MARKS, SELECTORS["seam"]),
+    "names in tracks": (NAMES_IN_TRACKS, ".token, .whole, .cut"),
     "values under labels": _UNDER_LABELS_READ,
-    "heading asides": (_ASIDE_BESIDE_ITS_HEADING, SELECTORS["heading_aside"]),
-    "lone aside words": (_LONE_ASIDE_WORDS, SELECTORS["any_aside"]),
-    "past the clamp": _PAST_THE_CLAMP,
-    "titles": (_SQUEEZED_TITLES, [SELECTORS["page_title"], SELECTORS["page_actions"], SELECTORS["page_head"]]),
+    "heading asides": (ASIDE_BESIDE_ITS_HEADING, SELECTORS["heading_aside"]),
+    "lone aside words": (LONE_ASIDE_WORDS, SELECTORS["any_aside"]),
+    "past the clamp": PAST_THE_CLAMP,
+    "titles": (SQUEEZED_TITLES, [SELECTORS["page_title"], SELECTORS["page_actions"], SELECTORS["page_head"]]),
     # Every box and every line of text, not only a card's or code's.
-    "gutter": (_PAST_THE_GUTTER, ["*", True]),
+    "gutter": (PAST_THE_GUTTER, ["*", True]),
     # Whatever moved by itself since the page began to load, read from the
     # browser's record of it, so nothing a script does after the first frame
     # goes unseen.
-    "layout shifts": (_LAYOUT_SHIFTS, SELECTORS["vendored"]),
+    "layout shifts": (LAYOUT_SHIFTS, SELECTORS["vendored"]),
     "audit": _AUDIT,
 }
 
@@ -243,7 +243,7 @@ def _as_is(value):
 
 # What turns a probe's value into its check's findings, where that is not the
 # value itself.
-_AS_FINDINGS = {
+AS_FINDINGS = {
     "tables": lambda report: report["found"],
     "audit": lambda report: [v for v in report["violations"] if v["rule"] in AUDIT_RULES],
     "contrast": lambda report: report["found"] if report["sampled"] else ["no text sampled"],

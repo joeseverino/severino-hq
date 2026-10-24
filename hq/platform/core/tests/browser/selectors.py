@@ -223,7 +223,7 @@ SELECTORS = {
     ),
 }
 
-_TOKEN_SELECTORS = [
+TOKEN_SELECTORS = [
     SELECTORS["token"],
     SELECTORS["cell_name"],
     SELECTORS["token_part"],

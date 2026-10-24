@@ -246,7 +246,7 @@ class _Folds:
             self.marked = self.marked or self.timer
         elif script == look._PRESS_SHOWN and toggles == look._FOLD_TOGGLES:
             self.folded = self.timer = True
-        elif script == look._PRESS_SHOWN and toggles == look._ROW_TOGGLES and self.marked:
+        elif script == look._PRESS_SHOWN and toggles == look.ROW_TOGGLES and self.marked:
             self.opened |= set(self.rows)
 
 

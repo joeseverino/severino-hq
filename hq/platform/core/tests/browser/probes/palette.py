@@ -1,6 +1,6 @@
 """Probes of color: contrast, faint lines, field edges and the fills a theme paints."""
 
-from hq.platform.core.tests.browser.probes.describe import _DESCRIBE
+from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 
 # WCAG AA: body text, and text large enough to need less (24px, or 18.66px bold).
 TEXT_CONTRAST = 4.5
@@ -63,9 +63,9 @@ _COLOR = """
   };
 """
 
-_CONTRAST = (
+CONTRAST = (
     "([scope, body, large]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + _COLOR
     + """
   // Every visible element that holds text of its own, measured against the
@@ -108,9 +108,9 @@ _CONTRAST = (
 # A line drawn to separate things (a divider, a frame's edge) is seen against
 # the surface it is drawn on. A faint token on a tinted panel is a line in the
 # panel's own color: the rows it was meant to part run together.
-_FAINT_LINES = (
+FAINT_LINES = (
     "([scope, least]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + _COLOR
     + """
   const found = [];
@@ -142,9 +142,9 @@ _FAINT_LINES = (
 # from what is behind the frame. A disabled field is exempt, as WCAG exempts it,
 # and so is one framed by a control that is pressed (`pressed`: the sort's
 # label around its select), which its label identifies, as a button's does.
-_FIELD_EDGES = (
+FIELD_EDGES = (
     "([fillable, least, pressed]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + _COLOR
     + """
   const edged = (style) => ['Top', 'Right', 'Bottom', 'Left'].some((side) =>
@@ -175,9 +175,9 @@ _FIELD_EDGES = (
 # a checkbox) is identified by its label and wears a button's edge, so no
 # side of its border is drawn in the field's. The token is resolved where the
 # control sits, in the palette the page is in.
-_BUTTON_EDGES = (
+BUTTON_EDGES = (
     "(pressed) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   const fieldLine = new Map();
@@ -208,9 +208,9 @@ _BUTTON_EDGES = (
 # by its edge, whichever shows more. Keyed by the box's place in the document,
 # so the same box can be read again in the other palette. A vendored widget
 # carries its own two palettes, and is not HQ's to hold.
-_FILL_STEPS = (
+FILL_STEPS = (
     "([scope, vendored]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + _COLOR
     + """
   const place = new Map([...document.querySelectorAll('*')].map((el, at) => [el, at]));
@@ -239,7 +239,7 @@ _FILL_STEPS = (
 
 def lost_fills(steps, least):
     """The boxes a fill sets apart in one palette and not in the other, from
-    each palette's ``_FILL_STEPS``: the two palettes are one set of
+    each palette's ``FILL_STEPS``: the two palettes are one set of
     distinctions, so a fill one shows and the other loses is a token whose
     other half was never checked. A fill as faint in both is passed: its
     faintness was chosen."""
@@ -263,9 +263,9 @@ def lost_fills(steps, least):
 # runs no frame callback to wait on. So each reading puts focus where autofocus
 # would, and a focused page takes no autofocus after it: both loads read the
 # same focus, and the focus ring stays among the colors compared.
-_PAINT = (
+PAINT = (
     "() => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   if (document.activeElement === document.body) document.querySelector('[autofocus]')?.focus();
   document.getAnimations().forEach((a) => { try { a.finish(); } catch { a.cancel(); } });

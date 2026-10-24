@@ -1,7 +1,7 @@
 """The script every in-page probe is built on: how an element is named, measured and seen."""
 
 # In-page probes. Each returns a list of findings; empty is the pass.
-_DESCRIBE = """
+DESCRIBE = """
 const describe = (el) => el.tagName.toLowerCase()
   + (el.id ? '#' + el.id : '')
   + (typeof el.className === 'string' && el.className.trim()
@@ -33,7 +33,7 @@ const inFlow = (parent) => {
 # escapes the overflow of every box up to the one it is placed against;
 # `clip-path` cuts all a box paints. A `display: contents` box has no box to
 # clip with.
-_PAINTED_PART = r"""
+PAINTED_PART = r"""
 const painted = (el, rect) => {
   let shown = el;
   while (shown.parentElement && getComputedStyle(shown).display === 'contents') shown = shown.parentElement;
@@ -80,7 +80,7 @@ const painted = (el, rect) => {
 # break's outcome. And `checkVisibility()` on a `display: contents` box is
 # false, which would skip the text inside it; its text is judged by the box
 # it lays out in.
-_LINES = r"""
+LINES = r"""
 const range = document.createRange();
 const charsOf = (node) => {
   // A box with no box of its own (`display: contents`) is never "visible":

@@ -10,7 +10,7 @@ from django.test import Client
 from django.urls import reverse
 
 from hq.platform.core.tests.browser.gate import BrowserGate, answered
-from hq.platform.core.tests.browser.probes.palette import _CONTRAST, LARGE_TEXT_CONTRAST, TEXT_CONTRAST
+from hq.platform.core.tests.browser.probes.palette import CONTRAST, LARGE_TEXT_CONTRAST, TEXT_CONTRAST
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE
@@ -294,7 +294,7 @@ class ReferenceBrowserTests(BrowserGate):
                 painted[scheme] = self.page.evaluate(_REFERENCE_PAINT)
                 self.assert_painted_as_hq(painted[scheme], f"{scheme}-mode")
                 report = self.page.evaluate(
-                    _CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_TEXT_CONTRAST]
+                    CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_TEXT_CONTRAST]
                 )
                 self.assertGreater(report["sampled"], 0)
                 self.assertEqual(report["found"], [])

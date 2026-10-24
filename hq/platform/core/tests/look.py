@@ -115,7 +115,7 @@ _HIDE_POPOVER = "(place) => document.querySelectorAll('[popover]')[place].hidePo
 _ANSWERED = "(busy) => [...document.querySelectorAll(busy)].every((region) => region.lookWaiting)"
 # The rows a reader opens: the folds first, then each row on its own.
 _FOLD_TOGGLES = "main button[data-fold-toggle]"
-_ROW_TOGGLES = "main button[data-row-toggle]:not([data-fold-toggle])"
+ROW_TOGGLES = "main button[data-row-toggle]:not([data-fold-toggle])"
 _PRESS_SHOWN = "(toggles) => document.querySelectorAll(toggles).forEach((t) => t.checkVisibility() && t.click())"
 # A fold's rows are marked as cut, which shows their toggles, on tables.js's
 # debounce (`markTablesSoon`), a timer the press sets. A timer set after it
@@ -797,7 +797,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.page.evaluate(_PRESS_SHOWN, _FOLD_TOGGLES)
         self.page.evaluate(_AFTER_THE_PAGES_TIMERS)
         self.settle()
-        self.page.evaluate(_PRESS_SHOWN, _ROW_TOGGLES)
+        self.page.evaluate(_PRESS_SHOWN, ROW_TOGGLES)
 
     def open_everything(self, name, width):
         """Every disclosure open, round after round until none is

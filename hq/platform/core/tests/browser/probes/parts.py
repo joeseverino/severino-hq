@@ -1,8 +1,8 @@
 """Probes of a page's parts: heads, links, disclosures, controls, routes and what a pressed control says."""
 
-from hq.platform.core.tests.browser.probes.describe import _DESCRIBE
+from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 
-_HEAD_ON_ONE_LINE = """([leadSelector, titleSelector, headSelector]) => {
+HEAD_ON_ONE_LINE = """([leadSelector, titleSelector, headSelector]) => {
   // A narrow head is one line: the title and its lead control, nothing
   // between them and the lede. The control takes a row of its own only when
   // the title's widest word or name could not sit whole beside the controls.
@@ -24,9 +24,9 @@ _HEAD_ON_ONE_LINE = """([leadSelector, titleSelector, headSelector]) => {
 
 # A link that sits above or below the words it continues: an inline line in a
 # smaller size than its cell aligns a clamped link to the cell's taller line.
-_RAISED_LINKS = (
+RAISED_LINKS = (
     "() => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   const rects = (node) => {
@@ -60,9 +60,9 @@ _RAISED_LINKS = (
 
 # An external link's arrow on a line of its own, below every word of the
 # link it marks: the link's last line box holds nothing but the arrow.
-_LONE_ARROWS = (
+LONE_ARROWS = (
     "(selector) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   const range = document.createRange();
@@ -85,9 +85,9 @@ _LONE_ARROWS = (
 # (surfaces.css), or its own where its details opts out of that one. A second
 # reads as a second control. A mark is the browser's own marker, or a glyph a
 # pseudo-element draws on the summary or anything in it.
-_SUMMARY_MARKS = (
+SUMMARY_MARKS = (
     "() => {"
-    + _DESCRIBE
+    + DESCRIBE
     + r"""
   const found = [];
   const glyph = (el, pseudo) => {
@@ -112,9 +112,9 @@ _SUMMARY_MARKS = (
 
 # A row has one disclosure. The row toggle shows what a row holds back; a
 # dropdown inside the row beside it is a second, smaller way to do the same.
-_NESTED_DISCLOSURES = (
+NESTED_DISCLOSURES = (
     "() => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   return [...document.querySelectorAll('main table > tbody > tr')]
     .filter((row) => row.querySelector('button[aria-expanded]') && row.querySelector(':is(td, th) details'))
@@ -124,9 +124,9 @@ _NESTED_DISCLOSURES = (
 
 # Opening a disclosure adds what it holds after its summary and moves nothing
 # before it: the summary pressed stays under the pointer that pressed it.
-_MOVING_SUMMARIES = (
+MOVING_SUMMARIES = (
     "() => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   for (const details of document.querySelectorAll('main details:not([open])')) {
@@ -145,9 +145,9 @@ _MOVING_SUMMARIES = (
 )
 
 # Press a heading's sort control and read its column back, top to bottom.
-_SPILLED_LABELS = (
+SPILLED_LABELS = (
     "(selector) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   // A control is at least as wide as what it says. One sized for a glyph and
   // given a word draws the word over whatever stands beside it. One with no
@@ -194,9 +194,9 @@ _SPILLED_LABELS = (
 }"""
 )
 
-_MOVED_BY_SPEAKING = (
+MOVED_BY_SPEAKING = (
     "async ([said, spoken]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   // Pressing a control moves nothing. What it says about the work it asked
   // for is drawn over the page, so every other box is where it was, the page
@@ -253,7 +253,7 @@ _MOVED_BY_SPEAKING = (
 # Each reading's mark and lines, as laid out: where the mark sits, and for each
 # line whether it starts beside the mark, whether it is cut short, and where
 # its top is.
-_READINGS = """(heads) => heads.map((head) => {
+READINGS = """(heads) => heads.map((head) => {
   const [mark, ...lines] = [...head.children].filter((el) => el.checkVisibility());
   const at = mark.getBoundingClientRect();
   return {
@@ -296,9 +296,9 @@ def reading_problems(readings):
 # One-line controls side by side are one height: a select beside a field
 # beside a date, in one row of a form or of a bar. A control in a field is in
 # the row its field is; any other is in the row its own top is.
-_UNEVEN_CONTROL_ROWS = (
+UNEVEN_CONTROL_ROWS = (
     "([control, field]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const rows = new Map();
   for (const el of document.querySelectorAll('main ' + control)) {
@@ -321,9 +321,9 @@ _UNEVEN_CONTROL_ROWS = (
 
 # A bar of controls that wraps is whole rows: each row it wraps to reaches
 # its far edge, rather than a ragged run of controls of their own widths.
-_RAGGED_BARS = (
+RAGGED_BARS = (
     "(bar) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   for (const el of document.querySelectorAll('main ' + bar)) {
@@ -347,9 +347,9 @@ _RAGGED_BARS = (
 
 # A route is one row across its box or one column down it, never a row that
 # wrapped with its line running off the edge.
-_WRAPPED_ROUTES = (
+WRAPPED_ROUTES = (
     "(route) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   for (const el of document.querySelectorAll('main ' + route)) {
@@ -365,9 +365,9 @@ _WRAPPED_ROUTES = (
 
 # A route across its box spaces its icons evenly: no gap between two hops'
 # icons is a pixel longer than another.
-_UNEVEN_ROUTES = (
+UNEVEN_ROUTES = (
     "([route, icon]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   for (const el of document.querySelectorAll('main ' + route)) {
@@ -387,9 +387,9 @@ _UNEVEN_ROUTES = (
 # A route's line runs from the center of its first stop's mark to the center
 # of its last, opened or closed: each stop draws its stretch as `::before`,
 # read back from its computed box.
-_ROUTE_LINE_ENDS = (
+ROUTE_LINE_ENDS = (
     "([route, mark]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   for (const el of document.querySelectorAll('main ' + route)) {
@@ -420,9 +420,9 @@ _ROUTE_LINE_ENDS = (
 
 # A check's evidence follows its statement: on the same line within a short
 # gap, or on the next line starting where the statement starts.
-_STRANDED_EVIDENCE = (
+STRANDED_EVIDENCE = (
     "([statement, evidence]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   for (const el of document.querySelectorAll('main ' + evidence)) {
@@ -440,9 +440,9 @@ _STRANDED_EVIDENCE = (
 )
 
 # What a disclosure's handle names is shown wherever the handle is.
-_HIDDEN_IN_SUMMARIES = (
+HIDDEN_IN_SUMMARIES = (
     "(value) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   return [...document.querySelectorAll(value)]
     .filter((el) => el.closest('summary').checkVisibility() && !el.checkVisibility())
@@ -452,9 +452,9 @@ _HIDDEN_IN_SUMMARIES = (
 
 # A section of queue cards ends every card's buttons at one edge: no card's
 # end stops more than a pixel short of another's in the same section.
-_RAGGED_QUEUES = (
+RAGGED_QUEUES = (
     "([card, end]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   for (const list of document.querySelectorAll('main section:has(' + card + ')')) {

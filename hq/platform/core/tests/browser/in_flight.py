@@ -8,7 +8,7 @@ layout gate and perf wait the same way.
 
 from typing import Any
 
-from hq.platform.core.tests.browser.probes.settle import _SETTLED
+from hq.platform.core.tests.browser.probes.settle import SETTLE
 
 # The wait in words, kept in perf's plan so a report that waited
 # otherwise never stands in for one measured so.
@@ -34,7 +34,7 @@ class InFlight:
 
         quiet = 0
         for _frame in range(frames):
-            self.page.evaluate(_SETTLED)
+            self.page.evaluate(SETTLE)
             quiet = quiet + 1 if self.count == 0 else 0
             if quiet == 2:
                 return

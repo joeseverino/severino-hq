@@ -27,8 +27,8 @@ lazy from django.db import transaction
 
 from hq.platform.core.tests.browser.gate import BrowserGate, answered
 from hq.platform.core.tests.browser.in_flight import InFlight
-from hq.platform.core.tests.browser.probes.boxes import _SIDEWAYS, _UNPADDED_TILES
-from hq.platform.core.tests.browser.probes.settle import _FINISH_TRANSITIONS, _FONTS_READY, _SETTLED
+from hq.platform.core.tests.browser.probes.boxes import SIDEWAYS, UNPADDED_TILES
+from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, FONTS_READY, SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, WIDE_TABLES, WIDTHS, viewport
@@ -171,7 +171,7 @@ class ExampleEstateGate(BrowserGate):
         self.page.set_viewport_size(viewport(width))
         self.page.goto(f"{ORIGIN}{path}", wait_until="load")
         self.in_flight.settle(f"{path} at {width}px")
-        self.page.evaluate(_FONTS_READY)
+        self.page.evaluate(FONTS_READY)
 
 
 class ExampleEstateBrowserTests(ExampleEstateGate):
@@ -182,7 +182,7 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
 
         found = {
             "tile padding": self.page.evaluate(
-                _UNPADDED_TILES,
+                UNPADDED_TILES,
                 [
                     SELECTORS["tile_exempt"],
                     SELECTORS["tile_control"],
@@ -191,8 +191,8 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
                 ],
             )
         }
-        self.page.evaluate(_SETTLED)
-        found["sideways, opened"] = self.page.evaluate(_SIDEWAYS, SELECTORS["sideways"])
+        self.page.evaluate(SETTLE)
+        found["sideways, opened"] = self.page.evaluate(SIDEWAYS, SELECTORS["sideways"])
         return found
 
     def test_every_navigation_page_keeps_the_layout_rules(self):
@@ -205,8 +205,8 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
                     found = self.geometry(path, width)
                     for theme in THEMES:
                         self.page.emulate_media(color_scheme=theme)
-                        self.page.evaluate(_SETTLED)
-                        self.page.evaluate(_FINISH_TRANSITIONS)
+                        self.page.evaluate(SETTLE)
+                        self.page.evaluate(FINISH_TRANSITIONS)
                         found |= {f"{check} ({theme})": said for check, said in self.palette().items()}
                     found |= self.opened()
                     found["unanswered"], self.unanswered = self.unanswered, []
@@ -358,8 +358,8 @@ class ExampleEstateControlTests(BrowserGate):
     def visit(self, path, width):
         self.page.set_viewport_size(viewport(width))
         self.page.goto(f"{ORIGIN}{path}", wait_until="load")
-        self.page.evaluate(_FONTS_READY)
-        self.page.evaluate(_SETTLED)
+        self.page.evaluate(FONTS_READY)
+        self.page.evaluate(SETTLE)
 
     def rows(self):
         return self.page.locator(SELECTORS["table_rows"]).count()

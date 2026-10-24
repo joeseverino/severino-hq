@@ -22,25 +22,25 @@ lazy from playwright.sync_api import Browser, BrowserContext, Error as BrowserEr
 
 from hq.platform.core.speculation import rules_document
 from hq.platform.core.test_runner import stall_watch
-from hq.platform.core.tests.browser.probes.palette import _FILL_STEPS, LINE_CONTRAST, lost_fills
+from hq.platform.core.tests.browser.probes.palette import FILL_STEPS, LINE_CONTRAST, lost_fills
 from hq.platform.core.tests.browser.probes.settle import (
-    _DEAF_WHILE_PROBED,
-    _FINISH_TRANSITIONS,
-    _FONTS_READY,
-    _IN_THE_HEAD,
-    _MOVED_SINCE_DRAWN,
-    _PAINTED,
-    _PUT_BACK,
-    _SETTLED,
-    _STAND_IN,
-    _STILL,
-    _UNTIL_DRAWN,
+    DEAF_WHILE_PROBED,
+    FINISH_TRANSITIONS,
+    FONTS_READY,
+    IN_THE_HEAD,
+    MOVED_SINCE_DRAWN,
+    PAINTED,
+    PUT_BACK,
+    SETTLE,
+    STAND_IN,
+    STILL,
+    UNTIL_DRAWN,
     hushed,
 )
 from hq.platform.core.tests.browser.reading import _in_one_trip, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, slow_frames, static_file
-from hq.platform.core.tests.browser.survey import _AS_FINDINGS, _PALETTE, _as_is, geometry_probes
+from hq.platform.core.tests.browser.survey import AS_FINDINGS, _PALETTE, _as_is, geometry_probes
 from hq.platform.core.tests.browser.uncaught import Uncaught
 from hq.platform.core.tests.browser.widths import viewport
 
@@ -346,7 +346,7 @@ class BrowserGate(SimpleTestCase):
         if options["java_script_enabled"]:
             self.context.expose_binding("hqRefused", self.refused_by_policy)
             self.context.add_init_script(_REPORT_REFUSALS)
-            self.context.add_init_script(_DEAF_WHILE_PROBED)
+            self.context.add_init_script(DEAF_WHILE_PROBED)
         self.context.route("**/*", self.respond)
         self.page = self.context.new_page()
         self.page.on("console", self.heard)
@@ -389,8 +389,8 @@ class BrowserGate(SimpleTestCase):
     def settle(self):
         """Wait until the page has drawn what it just did and nothing is moving."""
 
-        self.page.evaluate(_PAINTED)
-        self.page.wait_for_function(_STILL)
+        self.page.evaluate(PAINTED)
+        self.page.wait_for_function(STILL)
 
     def holds(self, route):
         """Whether a script the page asks for is being held back, and so not
@@ -492,7 +492,7 @@ class BrowserGate(SimpleTestCase):
     def open(self, name, width):
         self.page.set_viewport_size(viewport(width))
         self.page.goto(f"{ORIGIN}/{name}/", wait_until="load")
-        self.page.evaluate(_FONTS_READY)
+        self.page.evaluate(FONTS_READY)
 
     def moved_once_drawn(self, url, width, settled):
         """What moves on ``url`` after it is first drawn.
@@ -508,7 +508,7 @@ class BrowserGate(SimpleTestCase):
         self.page.set_viewport_size(viewport(width))
         self.page.goto(url, wait_until="commit")
         for _frame in range(600):
-            parsing = self.page.evaluate(_UNTIL_DRAWN)
+            parsing = self.page.evaluate(UNTIL_DRAWN)
             if parsing is None:
                 break
             waiting = [route for route in self.held if route.request.url in set(parsing)]
@@ -517,15 +517,15 @@ class BrowserGate(SimpleTestCase):
                 self.answer(route)
             # A parser stopped in the head has no frame to draw, so it is
             # asked again at once rather than waited on for one.
-            if not waiting and not self.page.evaluate(_IN_THE_HEAD):
-                self.page.evaluate(_SETTLED)
+            if not waiting and not self.page.evaluate(IN_THE_HEAD):
+                self.page.evaluate(SETTLE)
         else:
             raise AssertionError(f"{url} at {width}px was never drawn")
         held, self.held = self.held, None
         for route in held:
             self.answer(route)
         settled()
-        return self.page.evaluate(_MOVED_SINCE_DRAWN)
+        return self.page.evaluate(MOVED_SINCE_DRAWN)
 
     def geometry(self, path, width):
         """What the layout invariants find on the page as loaded, by check:
@@ -546,10 +546,10 @@ class BrowserGate(SimpleTestCase):
         steps = {}
         for palette in ("light", "dark"):
             self.page.emulate_media(color_scheme=palette)
-            self.page.evaluate(_FINISH_TRANSITIONS)
-            steps[palette] = self.page.evaluate(_FILL_STEPS, [SELECTORS["contrast_scope"], SELECTORS["vendored"]])
+            self.page.evaluate(FINISH_TRANSITIONS)
+            steps[palette] = self.page.evaluate(FILL_STEPS, [SELECTORS["contrast_scope"], SELECTORS["vendored"]])
         self.page.emulate_media(color_scheme=was)
-        self.page.evaluate(_FINISH_TRANSITIONS)
+        self.page.evaluate(FINISH_TRANSITIONS)
         return lost_fills(steps, LINE_CONTRAST)
 
     def palette(self):
@@ -566,10 +566,10 @@ class BrowserGate(SimpleTestCase):
 
         found = self.checked(
             {
-                "stand in": (_STAND_IN, SELECTORS["vendored"]),
+                "stand in": (STAND_IN, SELECTORS["vendored"]),
                 **geometry_probes(path, width),
                 **_PALETTE,
-                "put back": (_PUT_BACK, None),
+                "put back": (PUT_BACK, None),
             }
         )
         found["fills"] = self.lost_fills()
@@ -581,6 +581,6 @@ class BrowserGate(SimpleTestCase):
 
         outcomes = self.outcomes(list(probes.values()))
         return {
-            check: _AS_FINDINGS.get(check, _as_is)(value) if returned else [f"the probe threw: {value}"]
+            check: AS_FINDINGS.get(check, _as_is)(value) if returned else [f"the probe threw: {value}"]
             for check, (returned, value) in zip(probes, outcomes, strict=True)
         }

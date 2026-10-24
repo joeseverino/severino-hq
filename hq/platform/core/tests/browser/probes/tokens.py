@@ -1,6 +1,6 @@
 """Probes of tokens: where one may break, the scraps a break leaves, and marks stranded from their token."""
 
-from hq.platform.core.tests.browser.probes.describe import _DESCRIBE, _LINES
+from hq.platform.core.tests.browser.probes.describe import DESCRIBE, LINES
 
 # An identifier (an address, a host or record name, a path, an image) that
 # fits on its line moves to the next line whole. One longer than its line
@@ -8,10 +8,10 @@ from hq.platform.core.tests.browser.probes.describe import _DESCRIBE, _LINES
 # slash, after a colon run, after a dot without a digit on both sides), and
 # inside the part between two seams only when that part alone is longer than
 # its line. A hyphen is no seam: a name split there reads as two names.
-_TOKEN_BREAKS = (
+TOKEN_BREAKS = (
     "([token, cellName, tokenPart, free, openRow]) => {"
-    + _DESCRIBE
-    + _LINES
+    + DESCRIBE
+    + LINES
     + r"""
   const found = [];
   const digit = /\d/;
@@ -181,12 +181,12 @@ _TOKEN_BREAKS = (
 # stray mark. Only what shows counts: a cut name's lines past its clamp are
 # hidden, and a part broken inside itself, where it had to be, is a run of
 # letters with no seam to begin at.
-_SCRAP = 3
+SCRAP = 3
 
-_SCRAPS = (
+SCRAPS = (
     "([token, scrap]) => {"
-    + _DESCRIBE
-    + _LINES
+    + DESCRIBE
+    + LINES
     + r"""
   const found = [];
   const seam = /[-/.:]/;
@@ -236,9 +236,9 @@ _SCRAPS = (
 # outside the box is held to it only by markup that says so (`.held-mark`,
 # value_tags.breakable). A mark after a seam begins the piece the seam lets
 # the line break before.
-_STRANDED_MARKS = (
+STRANDED_MARKS = (
     "(seam) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + r"""
   const found = [];
   const range = document.createRange();
@@ -281,9 +281,9 @@ _STRANDED_MARKS = (
 # is then an item of the box, so the name stands as side-by-side columns
 # rather than one run that wraps, and its least width is every part's summed.
 # A token that is one box, or text inside a box of its own, is one item.
-_NAMES_IN_TRACKS = (
+NAMES_IN_TRACKS = (
     "(part) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + r"""
   const shown = (el) => getComputedStyle(el).display;
   const tracks = ['flex', 'inline-flex', 'grid', 'inline-grid'];

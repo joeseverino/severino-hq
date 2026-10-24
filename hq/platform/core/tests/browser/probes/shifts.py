@@ -1,6 +1,6 @@
 """The probe that reads what moved on a page by itself since it began to load."""
 
-from hq.platform.core.tests.browser.probes.describe import _DESCRIBE
+from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 
 # Every layout shift the browser recorded on this page that no input of the
 # reader's explains, each with its score and the boxes it moved: whatever
@@ -12,9 +12,9 @@ from hq.platform.core.tests.browser.probes.describe import _DESCRIBE
 # shift's rect, taken in the viewport as it happened, is the page's. A browser
 # that keeps no such record (WebKit) has nothing to say; Chromium's leg of
 # the gates reads it.
-_LAYOUT_SHIFTS = (
+LAYOUT_SHIFTS = (
     "(vendored) => new Promise((done) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   if (!PerformanceObserver.supportedEntryTypes.includes('layout-shift')) { done([]); return; }
   const boxes = [...document.querySelectorAll(vendored)].map((el) => {
@@ -53,7 +53,7 @@ _LAYOUT_SHIFTS = (
 # Where each part of the site header that shows stands, by its class, and the
 # header's own box: read on a page cut short inside the header and on the
 # whole page, so a part that moves once its later siblings arrive is found.
-_HEADER_PARTS = """(selector) => {
+HEADER_PARTS = """(selector) => {
   const header = document.querySelector(selector);
   const at = (el) => { const r = el.getBoundingClientRect(); return [r.x, r.y, r.width, r.height].map(Math.round); };
   const parts = {header: at(header)};

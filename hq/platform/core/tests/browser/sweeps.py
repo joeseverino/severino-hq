@@ -2,11 +2,11 @@
 
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.settle import (
-    _CLOSE_AGAIN,
-    _FINISH_TRANSITIONS,
-    _KEEP_CLOSED,
-    _PRESS_EVERY_SHOWN,
-    _SETTLED,
+    CLOSE_AGAIN,
+    FINISH_TRANSITIONS,
+    KEEP_CLOSED,
+    PRESS_EVERY_SHOWN,
+    SETTLE,
 )
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
@@ -52,14 +52,14 @@ class UnscriptedLayoutTests(LayoutBrowserTests):
         first, *rest = sorted(widths)
         if not self.loaded(name, first):
             return
-        self.page.evaluate(_KEEP_CLOSED)
+        self.page.evaluate(KEEP_CLOSED)
         yield first
         for width in rest:
-            self.page.evaluate(_CLOSE_AGAIN)
+            self.page.evaluate(CLOSE_AGAIN)
             self.page.set_viewport_size(viewport(width))
             # A rule the new width changes may transition; the load it stands
             # for would have drawn it finished.
-            self.page.evaluate(_FINISH_TRANSITIONS)
+            self.page.evaluate(FINISH_TRANSITIONS)
             yield width
 
 
@@ -112,7 +112,7 @@ class ScriptedLayoutTests(LayoutBrowserTests):
             widths = SPEAKING_WIDTHS if name in SPEAKING_HEADS else (*WIDTHS, *SPEAKING_WIDTHS, *WIDE_TABLES)
             for width in sorted(set(widths)):
                 if self.loaded(name, width, script="on"):
-                    self.page.evaluate(_SETTLED)
+                    self.page.evaluate(SETTLE)
                     self.read_loaded(name, width)
 
     def sweep_dense(self, dense, *others):
@@ -207,11 +207,11 @@ class LongestValueLayoutTests(LayoutBrowserTests):
             for width in (NARROWEST, *WIDTHS, *WIDE_TABLES):
                 if not self.loaded(name, width, script="on"):
                     continue
-                self.page.evaluate(_SETTLED)
+                self.page.evaluate(SETTLE)
                 if width == NARROWEST:
                     self.hold(name, width, [self.a_table_fits_its_box_at_every_width], script="on")
                     continue
                 self.hold(name, width, [self.every_layout_check_holds, *held], script="on")
-                self.page.locator(SELECTORS["row_toggle"]).evaluate_all(_PRESS_EVERY_SHOWN)
-                self.page.evaluate(_SETTLED)
+                self.page.locator(SELECTORS["row_toggle"]).evaluate_all(PRESS_EVERY_SHOWN)
+                self.page.evaluate(SETTLE)
                 self.hold(name, width, [self.nothing_runs_out_of_its_table_cell, *held], script="on", rows="open")

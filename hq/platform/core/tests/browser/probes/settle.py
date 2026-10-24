@@ -1,8 +1,8 @@
 """Probes that bring a page to a known state: loaded, drawn, still, and put back as it was."""
 
-from hq.platform.core.tests.browser.probes.describe import _DESCRIBE
+from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 
-_STYLESHEETS = """() => {
+STYLESHEETS = """() => {
   const links = [...document.querySelectorAll('link[rel="stylesheet"]')];
   const loaded = [...document.styleSheets].filter((sheet) => sheet.href);
   return {links: links.length,
@@ -13,7 +13,7 @@ _STYLESHEETS = """() => {
 # Every style rule's selector the browser kept, nested rules included. A rule
 # whose selector does not parse is dropped whole and silently: the stylesheet
 # still loads and nothing reports it.
-_KEPT_SELECTORS = """(directory) => {
+KEPT_SELECTORS = """(directory) => {
   const sheets = [...document.styleSheets].filter((s) => s.href && new URL(s.href).pathname.includes(directory));
   const found = [];
   const walk = (rules) => {
@@ -27,15 +27,15 @@ _KEPT_SELECTORS = """(directory) => {
 }"""
 
 # A frame has been drawn and nothing is moving.
-_PAINTED = "() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
+PAINTED = "() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
 
-_STILL = """() => document.getAnimations()
+STILL = """() => document.getAnimations()
   .every((motion) => motion.playState !== 'running' || motion.effect?.getComputedTiming().iterations === Infinity)"""
 
-_SETTLED = "() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
+SETTLE = "() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
 
 # Every face the page asked for has arrived (see _LATE_FACE).
-_FONTS_READY = "() => document.fonts.ready.then(() => document.fonts.status)"
+FONTS_READY = "() => document.fonts.ready.then(() => document.fonts.status)"
 
 # The page as the server drew it, with its scripts held back: parsed, styled
 # and in its own face, which is what a reader is shown first. An image a sheet
@@ -48,10 +48,10 @@ _DRAWN = """() => document.readyState !== 'loading'
 # The scripts the parser stops for, which are drawn before the page is.
 _PARSER_SCRIPTS = "() => [...document.scripts].filter((s) => s.src && !s.defer && !s.async).map((s) => s.src)"
 
-_IN_THE_HEAD = "() => !document.body"
+IN_THE_HEAD = "() => !document.body"
 
 # Where every element that shows stands on the page as first drawn, kept on
-# the window for _MOVED_SINCE_DRAWN to read once the scripts have run.
+# the window for MOVED_SINCE_DRAWN to read once the scripts have run.
 _DRAWN_BOXES = """() => {
   const boxes = new Map();
   for (const el of document.body.querySelectorAll('*')) {
@@ -67,7 +67,7 @@ _DRAWN_BOXES = """() => {
 # waits for; once it is, where everything stands (null) in the next frame it
 # paints. A ResizeObserver's first answer comes after layout and the page's
 # own observers (tables.js fits a table in one), just before that paint.
-_UNTIL_DRAWN = f"""() => {{
+UNTIL_DRAWN = f"""() => {{
   if (!({_DRAWN})()) return ({_PARSER_SCRIPTS})();
   return new Promise((done) => {{
     const painting = new ResizeObserver(() => {{
@@ -82,9 +82,9 @@ _UNTIL_DRAWN = f"""() => {{
 # Every element that still shows and no longer stands where it was drawn. A
 # child carried by its parent, the same distance and at the same size, is the
 # parent's move and is not named again.
-_MOVED_SINCE_DRAWN = (
+MOVED_SINCE_DRAWN = (
     "() => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const drawn = window.drawnBoxes;
   const now = (el) => { const r = el.getBoundingClientRect();
@@ -111,23 +111,23 @@ _MOVED_SINCE_DRAWN = (
 
 # Colors transition between palettes, so contrast is measured after the
 # transition ends.
-_FINISH_TRANSITIONS = """() => document.getAnimations().forEach((a) => { try { a.finish(); } catch { a.cancel(); } })"""
+FINISH_TRANSITIONS = """() => document.getAnimations().forEach((a) => { try { a.finish(); } catch { a.cancel(); } })"""
 
 # The disclosures a page loads closed, and closing them again: a rule opens
 # them to lay out what they hold, and the page read at its next width is the
 # page as it loaded.
-_KEEP_CLOSED = "() => { window.hqLoadedClosed = [...document.querySelectorAll('details:not([open])')]; }"
+KEEP_CLOSED = "() => { window.hqLoadedClosed = [...document.querySelectorAll('details:not([open])')]; }"
 
-_CLOSE_AGAIN = "() => window.hqLoadedClosed.forEach((details) => { details.open = false; })"
+CLOSE_AGAIN = "() => window.hqLoadedClosed.forEach((details) => { details.open = false; })"
 
 # Press every one of these a reader can see: one drawn but not offered is not.
-_PRESS_EVERY_SHOWN = "(controls) => controls.forEach((control) => control.checkVisibility() && control.click())"
+PRESS_EVERY_SHOWN = "(controls) => controls.forEach((control) => control.checkVisibility() && control.click())"
 
 # What a vendored script draws is not HQ's markup, so the layout rules judge
 # the page with it taken out of the box HQ wrote for it, and an empty block as
 # tall in its place: the box keeps its own rules and the page its height. The
-# script's own tests hold what it draws. Put back by `_PUT_BACK`.
-_STAND_IN = """(selector) => {
+# script's own tests hold what it draws. Put back by `PUT_BACK`.
+STAND_IN = """(selector) => {
   window.hqStandIns = [...document.querySelectorAll(selector)].map((box) => {
     const stand = document.createElement('div');
     stand.style.blockSize = `${box.getBoundingClientRect().height}px`;
@@ -138,7 +138,7 @@ _STAND_IN = """(selector) => {
   });
 }"""
 
-_PUT_BACK = """() => (window.hqStandIns || []).forEach(([box, stand, drawn]) => {
+PUT_BACK = """() => (window.hqStandIns || []).forEach(([box, stand, drawn]) => {
   stand.remove();
   box.append(drawn);
 })"""
@@ -152,7 +152,7 @@ _PUT_BACK = """() => (window.hqStandIns || []).forEach(([box, stand, drawn]) => 
 # changes, since only the page's observers miss the records.
 _HUSH = "Symbol.for('hq.probing')"
 
-_DEAF_WHILE_PROBED = f"""(() => {{
+DEAF_WHILE_PROBED = f"""(() => {{
   const Heard = window.MutationObserver;
   window.MutationObserver = class MutationObserver extends Heard {{
     constructor(callback) {{

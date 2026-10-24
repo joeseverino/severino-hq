@@ -9,72 +9,72 @@ lazy from playwright.sync_api import TimeoutError as LoadTimeout
 
 from hq.platform.core.tests.browser.gate import BrowserGate, answered_as
 from hq.platform.core.tests.browser.probes.boxes import (
-    _ESCAPES,
-    _FIGURE_UNDER_LABEL,
-    _NARROW_FRAMES,
-    _OFF_CENTER_MARKS,
-    _OVERLAPS,
-    _PAIRS,
-    _UNEVEN_BANDS,
-    _UNPADDED_TILES,
+    ESCAPES,
+    FIGURE_UNDER_LABEL,
+    NARROW_FRAMES,
+    OFF_CENTER_MARKS,
+    OVERLAPS,
+    PAIRS,
+    UNEVEN_BANDS,
+    UNPADDED_TILES,
 )
-from hq.platform.core.tests.browser.probes.cut_names import _PADDED_CUTS, _PAST_THE_CLAMP
-from hq.platform.core.tests.browser.probes.palette import _PAINT
+from hq.platform.core.tests.browser.probes.cut_names import PADDED_CUTS, PAST_THE_CLAMP
+from hq.platform.core.tests.browser.probes.palette import PAINT
 from hq.platform.core.tests.browser.probes.parts import (
-    _HEAD_ON_ONE_LINE,
-    _LONE_ARROWS,
-    _MOVED_BY_SPEAKING,
-    _MOVING_SUMMARIES,
-    _NESTED_DISCLOSURES,
-    _RAGGED_BARS,
-    _RAGGED_QUEUES,
-    _RAISED_LINKS,
-    _SUMMARY_MARKS,
-    _UNEVEN_CONTROL_ROWS,
-    _UNEVEN_ROUTES,
-    _WRAPPED_ROUTES,
+    HEAD_ON_ONE_LINE,
+    LONE_ARROWS,
+    MOVED_BY_SPEAKING,
+    MOVING_SUMMARIES,
+    NESTED_DISCLOSURES,
+    RAGGED_BARS,
+    RAGGED_QUEUES,
+    RAISED_LINKS,
+    SUMMARY_MARKS,
+    UNEVEN_CONTROL_ROWS,
+    UNEVEN_ROUTES,
+    WRAPPED_ROUTES,
 )
-from hq.platform.core.tests.browser.probes.settle import _FINISH_TRANSITIONS, _SETTLED, _STYLESHEETS
+from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, SETTLE, STYLESHEETS
 from hq.platform.core.tests.browser.probes.tables import (
-    _CELLS,
-    _CELLS_OFF_THE_FIRST_LINE,
-    _NAME_EDGES,
-    _PAST_THE_GUTTER,
-    _ROW_HEIGHTS,
-    _TABLES,
-    _TABLES_THAT_DO_NOT_FIT,
-    _UNPADDED_CELLS,
+    CELLS,
+    CELLS_OFF_THE_FIRST_LINE,
+    NAME_EDGES,
+    PAST_THE_GUTTER,
+    ROW_HEIGHTS,
+    TABLES,
+    TABLES_THAT_DO_NOT_FIT,
+    UNPADDED_CELLS,
     ROW_LINES,
 )
 from hq.platform.core.tests.browser.probes.text import (
-    _ASIDE_BESIDE_ITS_HEADING,
-    _BROKEN_WORDS,
-    _LONE_ASIDE_WORDS,
-    _SQUEEZED_TITLES,
+    ASIDE_BESIDE_ITS_HEADING,
+    BROKEN_WORDS,
+    LONE_ASIDE_WORDS,
+    SQUEEZED_TITLES,
 )
-from hq.platform.core.tests.browser.probes.tokens import _SCRAP, _SCRAPS, _STRANDED_MARKS, _TOKEN_BREAKS
+from hq.platform.core.tests.browser.probes.tokens import SCRAP, SCRAPS, STRANDED_MARKS, TOKEN_BREAKS
 from hq.platform.core.tests.browser.reading import reads, taken
-from hq.platform.core.tests.browser.selectors import _TOKEN_SELECTORS, SELECTORS
+from hq.platform.core.tests.browser.selectors import TOKEN_SELECTORS, SELECTORS
 from hq.platform.core.tests.browser.stress import ROUTE_PAGES, stress_estate
 from hq.platform.core.tests.browser.survey import (
-    _AS_FINDINGS,
+    AS_FINDINGS,
     _AUDIT,
     _CONTRAST_READ,
     _CUT_NAMES_READ,
     _CUT_WITH_ROOM_READ,
     _EMPTY_FRAMES_READ,
-    _EVIDENCE_READ,
+    EVIDENCE_READ,
     _FORM_ROWS_READ,
     _FRAMES_READ,
     _LINES_READ,
     _PHRASES_READ,
-    _ROUTE_ENDS_READ,
+    ROUTE_ENDS_READ,
     _SIDEWAYS_READ,
     _SMALL_TARGETS_READ,
     _SPILLED_CELLS,
     _SPILLED_CONTROLS,
     _SPLIT_NAMES_READ,
-    _SUMMARIES_READ,
+    SUMMARIES_READ,
     _UNDER_LABELS_READ,
 )
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, SPARSE_WIDTHS, WIDTHS
@@ -148,7 +148,7 @@ class LayoutBrowserTests(BrowserGate):
         than waited for: without script no animation frame runs."""
 
         self.page.emulate_media(color_scheme=scheme)
-        self.page.evaluate(_FINISH_TRANSITIONS)
+        self.page.evaluate(FINISH_TRANSITIONS)
 
     # Without script: the page as the server drew it. Layout must hold before
     # progressive enhancement.
@@ -241,13 +241,13 @@ class LayoutBrowserTests(BrowserGate):
             ]
         return rules
 
-    @reads(_STYLESHEETS)
+    @reads(STYLESHEETS)
     def every_stylesheet_loads(self, _name, sheets):
         self.assertGreater(sheets["links"], 0)
         self.assertEqual(sheets["loaded"], sheets["links"])
         self.assertEqual(sheets["empty"], [])
 
-    @reads(_ESCAPES)
+    @reads(ESCAPES)
     def nothing_escapes_the_page_sideways(self, _name, found):
         self.assertEqual(found, [])
 
@@ -256,7 +256,7 @@ class LayoutBrowserTests(BrowserGate):
 
         self.page.evaluate("() => document.querySelectorAll('details').forEach((d) => { d.open = true; })")
 
-    @reads(_ESCAPES)
+    @reads(ESCAPES)
     def nothing_escapes_the_page_sideways_with_every_disclosure_open(self, _name, found):
         self.assertEqual(found, [])
 
@@ -269,7 +269,7 @@ class LayoutBrowserTests(BrowserGate):
     def nothing_is_framed_inside_a_frame(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_HEAD_ON_ONE_LINE, [SELECTORS["head_lead"], SELECTORS["head_title"], SELECTORS["page_head"]]))
+    @reads((HEAD_ON_ONE_LINE, [SELECTORS["head_lead"], SELECTORS["head_title"], SELECTORS["page_head"]]))
     def a_narrow_head_keeps_its_lead_control_beside_the_title(self, _name, beside):
         self.assertIn(beside, (None, True))
 
@@ -288,19 +288,19 @@ class LayoutBrowserTests(BrowserGate):
     def only_a_table_scrolls_sideways_with_every_disclosure_open(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads(_CELLS)
+    @reads(CELLS)
     def nothing_runs_out_of_its_table_cell(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_ROW_HEIGHTS, ROW_LINES))
+    @reads((ROW_HEIGHTS, ROW_LINES))
     def a_table_row_stays_within_its_height_budget(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_CELLS_OFF_THE_FIRST_LINE, SELECTORS["table_scroll"]))
+    @reads((CELLS_OFF_THE_FIRST_LINE, SELECTORS["table_scroll"]))
     def a_row_reads_from_its_first_line(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads(_ESCAPES, _OVERLAPS, _PHRASES_READ)
+    @reads(ESCAPES, OVERLAPS, _PHRASES_READ)
     def dense_pages_keep_to_their_boxes(self, _name, escapes, overlaps, phrases):
         """Nothing escapes, overlaps, or wraps a pill with production-sized data."""
 
@@ -308,7 +308,7 @@ class LayoutBrowserTests(BrowserGate):
         self.assertEqual(overlaps, [])
         self.assertEqual(phrases, [])
 
-    @reads(_TABLES)
+    @reads(TABLES)
     def tables_scroll_inside_their_own_container(self, name, tables):
         """On a phone a wide table scrolls sideways; it never stacks into cards."""
 
@@ -316,7 +316,7 @@ class LayoutBrowserTests(BrowserGate):
         if "<table" in self.pages[name]:
             self.assertGreater(tables["seen"], 0, "the probe measured nothing")
 
-    @reads((_PAIRS, SELECTORS["paired"]))
+    @reads((PAIRS, SELECTORS["paired"]))
     def grid_rows_end_together(self, _name, found):
         self.assertEqual(found, [])
 
@@ -324,23 +324,23 @@ class LayoutBrowserTests(BrowserGate):
     def a_pill_never_wraps(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads(_OVERLAPS)
+    @reads(OVERLAPS)
     def nothing_overlaps(self, _name, found):
         self.assertEqual(found, [])
 
     @reads(_AUDIT)
     def layout_audit_structural_rules(self, _name, report):
-        self.assertEqual(_AS_FINDINGS["audit"](report), [])
+        self.assertEqual(AS_FINDINGS["audit"](report), [])
 
-    @reads((_NARROW_FRAMES, SELECTORS["table_scroll"]))
+    @reads((NARROW_FRAMES, SELECTORS["table_scroll"]))
     def a_table_frame_spans_its_box(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_OFF_CENTER_MARKS, SELECTORS["route_mark"]))
+    @reads((OFF_CENTER_MARKS, SELECTORS["route_mark"]))
     def a_mark_holds_its_glyph_in_its_middle(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads(_MOVING_SUMMARIES)
+    @reads(MOVING_SUMMARIES)
     def opening_a_disclosure_moves_nothing_before_it(self, _name, found):
         self.assertEqual(found, [])
 
@@ -387,10 +387,10 @@ class LayoutBrowserTests(BrowserGate):
             for theme, other in (("dark", "light"), ("light", "dark")):
                 self.page.emulate_media(color_scheme=theme)
                 self.load_as(name, html, None)
-                system = self.page.evaluate(_PAINT)
+                system = self.page.evaluate(PAINT)
                 self.page.emulate_media(color_scheme=other)
                 self.load_as(name, html, theme)
-                chosen = self.page.evaluate(_PAINT)
+                chosen = self.page.evaluate(PAINT)
                 differ += [
                     f"{theme} chosen paints {el} {mine}, the system's {its}"
                     for (el, mine), (_, its) in zip(chosen, system, strict=True)
@@ -425,11 +425,11 @@ class LayoutBrowserTests(BrowserGate):
             self.fail(f"{name} did not load again with {chosen} within {self.reload_within} ms")
         finally:
             self.page.unroute(address, answer)
-        self.page.evaluate(_FINISH_TRANSITIONS)
+        self.page.evaluate(FINISH_TRANSITIONS)
 
     @reads(
         (
-            _UNPADDED_TILES,
+            UNPADDED_TILES,
             [SELECTORS["tile_exempt"], SELECTORS["tile_control"], SELECTORS["tile_detached"], SELECTORS["disclosure"]],
         )
     )
@@ -438,15 +438,15 @@ class LayoutBrowserTests(BrowserGate):
 
         self.assertEqual(found, [])
 
-    @reads(_BROKEN_WORDS)
+    @reads(BROKEN_WORDS)
     def no_column_is_narrower_than_its_words(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads(_RAISED_LINKS)
+    @reads(RAISED_LINKS)
     def a_link_sits_on_the_line_it_continues(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_LONE_ARROWS, SELECTORS["external_link"]))
+    @reads((LONE_ARROWS, SELECTORS["external_link"]))
     def an_external_links_arrow_keeps_to_its_last_word(self, _name, found):
         self.assertEqual(found, [])
 
@@ -488,27 +488,27 @@ class LayoutBrowserTests(BrowserGate):
     def a_wide_frame_is_filled(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads(_NESTED_DISCLOSURES)
+    @reads(NESTED_DISCLOSURES)
     def a_row_has_one_disclosure(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads(_SUMMARY_MARKS)
+    @reads(SUMMARY_MARKS)
     def a_summary_draws_one_mark(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_UNPADDED_CELLS, SELECTORS["band_cell"]))
+    @reads((UNPADDED_CELLS, SELECTORS["band_cell"]))
     def a_band_cell_keeps_its_padding(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_UNEVEN_BANDS, [SELECTORS["band"], SELECTORS["band_aside"]]))
+    @reads((UNEVEN_BANDS, [SELECTORS["band"], SELECTORS["band_aside"]]))
     def a_band_lays_out_as_whole_rows(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_WRAPPED_ROUTES, SELECTORS["route"]))
+    @reads((WRAPPED_ROUTES, SELECTORS["route"]))
     def a_route_is_one_row_or_one_column(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_FIGURE_UNDER_LABEL, [SELECTORS[key] for key in ("figure", "figure_label", "figure_value")]))
+    @reads((FIGURE_UNDER_LABEL, [SELECTORS[key] for key in ("figure", "figure_label", "figure_value")]))
     def a_figure_sits_under_its_label(self, _name, found):
         self.assertEqual(found, [])
 
@@ -518,15 +518,15 @@ class LayoutBrowserTests(BrowserGate):
 
         self.assertEqual(found, [])
 
-    @reads((_TOKEN_BREAKS, _TOKEN_SELECTORS))
+    @reads((TOKEN_BREAKS, TOKEN_SELECTORS))
     def a_token_breaks_only_where_it_may(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_SCRAPS, [SELECTORS["any_token"], _SCRAP]))
+    @reads((SCRAPS, [SELECTORS["any_token"], SCRAP]))
     def no_token_leaves_a_scrap_on_a_line(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_STRANDED_MARKS, SELECTORS["seam"]))
+    @reads((STRANDED_MARKS, SELECTORS["seam"]))
     def a_mark_keeps_to_the_words_it_punctuates(self, _name, found):
         self.assertEqual(found, [])
 
@@ -544,7 +544,7 @@ class LayoutBrowserTests(BrowserGate):
     def nothing_is_held_back_while_its_table_has_room(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_PADDED_CUTS, SELECTORS["cut_box"]))
+    @reads((PADDED_CUTS, SELECTORS["cut_box"]))
     def a_cut_value_ends_where_its_words_end(self, _name, found):
         self.assertEqual(found, [])
 
@@ -555,31 +555,31 @@ class LayoutBrowserTests(BrowserGate):
         if found := self.findings(name, self.page.viewport_size["width"]):
             self.fail(json.dumps(found, indent=1))
 
-    @reads((_ASIDE_BESIDE_ITS_HEADING, SELECTORS["heading_aside"]))
+    @reads((ASIDE_BESIDE_ITS_HEADING, SELECTORS["heading_aside"]))
     def an_aside_wraps_only_under_its_heading(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_LONE_ASIDE_WORDS, SELECTORS["any_aside"]))
+    @reads((LONE_ASIDE_WORDS, SELECTORS["any_aside"]))
     def an_aside_leaves_no_word_alone(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads(_PAST_THE_CLAMP)
+    @reads(PAST_THE_CLAMP)
     def a_clamped_box_shows_only_its_lines(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_SQUEEZED_TITLES, [SELECTORS["page_title"], SELECTORS["page_actions"], SELECTORS["page_head"]]))
+    @reads((SQUEEZED_TITLES, [SELECTORS["page_title"], SELECTORS["page_actions"], SELECTORS["page_head"]]))
     def a_title_is_not_split_beside_its_controls(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_PAST_THE_GUTTER, [SELECTORS["gutter_bound"], False]))
+    @reads((PAST_THE_GUTTER, [SELECTORS["gutter_bound"], False]))
     def code_and_cards_keep_inside_the_gutter(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_UNEVEN_CONTROL_ROWS, [SELECTORS["line_control"], SELECTORS["field"]]))
+    @reads((UNEVEN_CONTROL_ROWS, [SELECTORS["line_control"], SELECTORS["field"]]))
     def controls_in_a_row_share_one_height(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_RAGGED_BARS, SELECTORS["wrapping_bar"]))
+    @reads((RAGGED_BARS, SELECTORS["wrapping_bar"]))
     def a_wrapped_bar_fills_its_rows(self, _name, found):
         self.assertEqual(found, [])
 
@@ -587,23 +587,23 @@ class LayoutBrowserTests(BrowserGate):
     def a_form_fills_its_rows(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_RAGGED_QUEUES, [SELECTORS["queue_card"], SELECTORS["queue_card_end"]]))
+    @reads((RAGGED_QUEUES, [SELECTORS["queue_card"], SELECTORS["queue_card_end"]]))
     def a_queue_ends_its_cards_at_one_edge(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((_UNEVEN_ROUTES, [SELECTORS["route"], SELECTORS["route_icon"]]))
+    @reads((UNEVEN_ROUTES, [SELECTORS["route"], SELECTORS["route_icon"]]))
     def a_route_across_spaces_its_hops_evenly(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads(_ROUTE_ENDS_READ)
+    @reads(ROUTE_ENDS_READ)
     def a_route_line_runs_from_its_first_stop_to_its_last(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads(_EVIDENCE_READ)
+    @reads(EVIDENCE_READ)
     def a_checks_evidence_follows_its_statement(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads(_SUMMARIES_READ)
+    @reads(SUMMARIES_READ)
     def nothing_a_summary_names_is_hidden(self, _name, found):
         self.assertEqual(found, [])
 
@@ -618,7 +618,7 @@ class LayoutBrowserTests(BrowserGate):
             self.a_tables_names_share_one_edge_whether_or_not_a_row_opens,
         ]
 
-    @reads((_NAME_EDGES, SELECTORS["table_scroll"]))
+    @reads((NAME_EDGES, SELECTORS["table_scroll"]))
     def a_tables_names_share_one_edge_whether_or_not_a_row_opens(self, _name, tables):
         """A row with a toggle and a row without start their names on the same
         line down the column: the toggle has a gutter every row keeps.
@@ -633,7 +633,7 @@ class LayoutBrowserTests(BrowserGate):
 
         for said in SAYINGS:
             with self.subTest(rule="pressing_a_control_moves_nothing", page=name, width=width, said=said):
-                found = self.page.evaluate(_MOVED_BY_SPEAKING, [said, SELECTORS["spoken"]])
+                found = self.page.evaluate(MOVED_BY_SPEAKING, [said, SELECTORS["spoken"]])
                 if found is None:
                     continue
                 self.spoke += 1
@@ -646,8 +646,8 @@ class LayoutBrowserTests(BrowserGate):
         """
 
         self.open_every_disclosure(name)
-        self.page.evaluate(_SETTLED)
-        self.assertEqual(self.page.evaluate(_TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
+        self.page.evaluate(SETTLE)
+        self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
 
     def wait_for_parts(self, route):
         if route.request.headers.get("x-requested-with") != "XMLHttpRequest":
@@ -656,7 +656,7 @@ class LayoutBrowserTests(BrowserGate):
     def loaded_and_still(self):
         self.page.wait_for_load_state("load")
         self.settle()
-        self.page.evaluate(_SETTLED)
+        self.page.evaluate(SETTLE)
 
     def card_rows(self, key):
         """The cards of one dashboard grid, grouped by the row they sit on."""

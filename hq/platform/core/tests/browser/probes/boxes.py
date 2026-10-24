@@ -1,10 +1,10 @@
 """Probes of boxes: what escapes the page, frames, overlaps, bands, forms and targets."""
 
-from hq.platform.core.tests.browser.probes.describe import _DESCRIBE
+from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 
-_ESCAPES = (
+ESCAPES = (
     "() => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const width = document.documentElement.clientWidth;
   const found = [];
@@ -26,9 +26,9 @@ _ESCAPES = (
 }"""
 )
 
-_NESTED_FRAMES = (
+NESTED_FRAMES = (
     "([exemptSelector, withinSelector]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + r"""
   // One frame per thing. A box that draws its own border inside a box that
   // draws one is two borders, two paddings and often two shadows around the
@@ -56,9 +56,9 @@ _NESTED_FRAMES = (
 }"""
 )
 
-_SIDEWAYS = (
+SIDEWAYS = (
     "(allowed) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   // Nothing moves sideways except inside the one box built for it. A chip row,
   // a lane or a code block scrolled past the edge of a phone is content nobody
@@ -88,9 +88,9 @@ _SIDEWAYS = (
 # and none of the criterion's exceptions it can be measured for. The area a
 # target is hit through is its box, grown by a pseudo-element it positions
 # over the space beside it, and for a tick box by the labels that tick it.
-_SMALL_TARGETS = (
+SMALL_TARGETS = (
     "([selector, least]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   // What the stylesheet sizes hit areas from is the criterion's size.
@@ -236,9 +236,9 @@ _SMALL_TARGETS = (
 
 # A grid whose items stretch ends each row together, and so does one the
 # stylesheet pairs, whatever its own alignment says.
-_PAIRS = (
+PAIRS = (
     "(paired) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   for (const grid of document.querySelectorAll('main *')) {
@@ -267,9 +267,9 @@ _PAIRS = (
 # grid's justify-items, a column flexbox's align-items across, a row
 # flexbox's align-items down. Its own stretched box is the room it is
 # aligned in, measured by stretching it for the moment of the reading.
-_OVERRULED_ALIGNMENT = (
+OVERRULED_ALIGNMENT = (
     "(chip) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + r"""
   const found = [];
   const ends = new Set(['end', 'flex-end', 'self-end']);
@@ -315,9 +315,9 @@ _OVERRULED_ALIGNMENT = (
 }"""
 )
 
-_OVERLAPS = (
+OVERLAPS = (
     "() => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   for (const parent of document.querySelectorAll('main *')) {
@@ -342,9 +342,9 @@ _OVERLAPS = (
 # A route's mark (a hop's icon, a check's tick) holds its glyph in its middle.
 # A glyph keeps the line height of the row around it unless its mark sets its
 # own, and a line taller than the mark pushes the glyph off its center.
-_OFF_CENTER_MARKS = (
+OFF_CENTER_MARKS = (
     "(mark) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   const range = document.createRange();
@@ -363,9 +363,9 @@ _OFF_CENTER_MARKS = (
 
 # A table's frame spans the box it sits in, as its heading does: a frame cut to
 # its columns leaves the heading's count and the page's edge beyond its end.
-_NARROW_FRAMES = (
+NARROW_FRAMES = (
     "(scroll) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   for (const el of document.querySelectorAll('main ' + scroll)) {
@@ -385,9 +385,9 @@ _NARROW_FRAMES = (
 # is one, so a component placed in a band loses its padding without a trace.
 # A frame across most of the page whose content fills less than half of it (a
 # short table stretched wide, a one-line card): the content should set the width.
-_EMPTY_FRAMES = (
+EMPTY_FRAMES = (
     "([selector, content]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const page = document.querySelector('main').clientWidth;
   const found = [];
@@ -416,9 +416,9 @@ _EMPTY_FRAMES = (
 # A filled box whose text or buttons touch its edge. The frame rule strips a
 # nested surface's border and padding together; one that keeps its own fill is
 # still a tile, and without padding its content sits on the fill's edge.
-_UNPADDED_TILES = (
+UNPADDED_TILES = (
     "([exempt, control, detached, disclosure]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   // What a disclosure holds is laid out only when it is open.
   for (const details of document.querySelectorAll(disclosure)) details.open = true;
@@ -472,9 +472,9 @@ _UNPADDED_TILES = (
 # to holds as many cells as the first (Design.md, "One band"). A band of more
 # lays out in even columns: every row but its last holds as many cells as the
 # first, and every cell is as wide as the others.
-_UNEVEN_BANDS = (
+UNEVEN_BANDS = (
     "([band, aside]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   for (const el of document.querySelectorAll('main ' + band)) {
@@ -498,9 +498,9 @@ _UNEVEN_BANDS = (
 
 # A form is two columns or one: each row of its fields holds one or two and
 # runs from its first edge to its last, so no field has a hole beside it.
-_HOLED_FORMS = (
+HOLED_FORMS = (
     "([form, field]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   for (const el of document.querySelectorAll('main ' + form)) {
@@ -531,7 +531,7 @@ _HOLED_FORMS = (
 # A figure reads with its label: a value under the label it answers, never
 # left at the foot of a box grown to its neighbor's height. The budget is a
 # wrapped label's second line and the row's gap.
-_FIGURE_UNDER_LABEL = r"""([figure, label_, value_]) => {
+FIGURE_UNDER_LABEL = r"""([figure, label_, value_]) => {
   const found = [];
   for (const kpi of document.querySelectorAll('main ' + figure)) {
     const label = kpi.querySelector(':scope > ' + label_), value = kpi.querySelector(':scope ' + value_);
@@ -550,7 +550,7 @@ _FIGURE_UNDER_LABEL = r"""([figure, label_, value_]) => {
 # two take is a copy of their box holding only them, laid out on one line
 # beside it, so whatever the box puts between them counts: a column gap, a
 # margin, the space between two inline boxes.
-_UNDER_ITS_LABEL = r"""(labeled) => {
+UNDER_ITS_LABEL = r"""(labeled) => {
   const found = [];
   const firstLine = (el) => {
     const range = document.createRange();
@@ -587,7 +587,7 @@ _UNDER_ITS_LABEL = r"""(labeled) => {
 }"""
 
 # The map scrolls with the page, and draws no lane with nothing in it.
-_MAP = """([map, lane, node]) => {
+MAP = """([map, lane, node]) => {
   const box = document.querySelector(map);
   if (!box) return null;
   return {

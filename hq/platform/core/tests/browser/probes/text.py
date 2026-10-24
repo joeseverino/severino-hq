@@ -1,14 +1,14 @@
 """Probes of running text: broken words, wrapped phrases, asides, squeezed titles and text that overlaps."""
 
-from hq.platform.core.tests.browser.probes.describe import _DESCRIBE, _LINES, _PAINTED_PART
+from hq.platform.core.tests.browser.probes.describe import DESCRIBE, LINES, PAINTED_PART
 
 # A plain word split across lines inside a table cell: its column was given
 # less than the word, because another column's content took the width. A word
 # inside a run with no space in it (a link, a digest) that is itself wider than
 # its cell breaks somewhere wherever the column is, so it is not counted.
-_BROKEN_WORDS = (
+BROKEN_WORDS = (
     "() => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   const range = document.createRange();
@@ -44,9 +44,9 @@ _BROKEN_WORDS = (
 }"""
 )
 
-_WRAPPED_PHRASES = (
+WRAPPED_PHRASES = (
     "(selector) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   // A pill or a time is one phrase: no taller than the same element holding one letter.
   const found = [];
@@ -66,10 +66,10 @@ _WRAPPED_PHRASES = (
 }"""
 )
 
-_LONE_ASIDE_WORDS = (
+LONE_ASIDE_WORDS = (
     "(aside) => {"
-    + _DESCRIBE
-    + _LINES
+    + DESCRIBE
+    + LINES
     + r"""
   const found = [];
   for (const el of document.querySelectorAll(aside)) {
@@ -84,10 +84,10 @@ _LONE_ASIDE_WORDS = (
 }"""
 )
 
-_ASIDE_BESIDE_ITS_HEADING = (
+ASIDE_BESIDE_ITS_HEADING = (
     "(aside) => {"
-    + _DESCRIBE
-    + _LINES
+    + DESCRIBE
+    + LINES
     + r"""
   const found = [];
   for (const el of document.querySelectorAll('main ' + aside)) {
@@ -114,10 +114,10 @@ _ASIDE_BESIDE_ITS_HEADING = (
 # A page's title breaks at its spaces, or inside a word only when its
 # controls have already taken a row of their own and the word alone is
 # longer than the line: squeezed beside them, a name splits at a hyphen.
-_SQUEEZED_TITLES = (
+SQUEEZED_TITLES = (
     "([title, actions, pageHead]) => {"
-    + _DESCRIBE
-    + _LINES
+    + DESCRIBE
+    + LINES
     + r"""
   const found = [];
   for (const el of document.querySelectorAll('main ' + title)) {
@@ -146,9 +146,9 @@ _SQUEEZED_TITLES = (
 # breaks. A number is a figure with its sign and currency mark ("\u2212$1,243.52",
 # "+5%"), which UAX #14 lets a line end inside (between the sign and the mark,
 # both class PR) unless the writer glues them.
-_BROKEN_WORDS_IN_TEXT = (
+BROKEN_WORDS_IN_TEXT = (
     "(identifier) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + r"""
   const WORD = /[A-Za-z]{4,}/g;
   // A figure standing on its own (not the digits inside a word), with what
@@ -178,10 +178,10 @@ _BROKEN_WORDS_IN_TEXT = (
 # A layer that floats over the page (`floating`: an open menu, a dialog) covers
 # the page's text on purpose, so a line is held only against lines in its own
 # layer.
-_OVERLAPPING_TEXT = (
+OVERLAPPING_TEXT = (
     "(floating) => {"
-    + _DESCRIBE
-    + _PAINTED_PART
+    + DESCRIBE
+    + PAINTED_PART
     + """
   const rects = [];
   const range = document.createRange();

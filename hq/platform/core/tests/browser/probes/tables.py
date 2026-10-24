@@ -1,6 +1,6 @@
 """Probes of tables: their cells, rows, columns and gutter, and the tables drawn to probe them."""
 
-from hq.platform.core.tests.browser.probes.describe import _DESCRIBE, _PAINTED_PART
+from hq.platform.core.tests.browser.probes.describe import DESCRIBE, PAINTED_PART
 
 # How tall a table row may be, in lines of its own body text. The tallest row
 # the tables are designed for is a connection's: its name, endpoint, who holds
@@ -19,9 +19,9 @@ from hq.platform.core.tests.browser.probes.describe import _DESCRIBE, _PAINTED_P
 # give.
 ROW_LINES = 6
 
-_CELLS = (
+CELLS = (
     "() => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   // A cell's content stays in the cell. Inside a table that scrolls, running
   // past the edge is not caught by anything else: it lands under the next
@@ -50,9 +50,9 @@ _CELLS = (
 }"""
 )
 
-_TABLES = (
+TABLES = (
     "() => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const width = document.documentElement.clientWidth;
   const found = [];
@@ -90,9 +90,9 @@ _TABLES = (
 }"""
 )
 
-_ROW_HEIGHTS = (
+ROW_HEIGHTS = (
     "(lines) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   // A row is as tall as its tallest cell's content. The cell itself is
   // stretched to the row, so what is measured is the visible text in it: not
@@ -183,9 +183,9 @@ _ROW_HEIGHTS = (
 }"""
 )
 
-_UNPADDED_CELLS = (
+UNPADDED_CELLS = (
     "(selector) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   // A dialog or popover placed in a band and shown lays out in the top
   // layer, not in the band.
@@ -203,7 +203,7 @@ _UNPADDED_CELLS = (
 # table's later rows after the first are fitted, then for every record's row
 # the places where a cell shows in a column whose heading left, or the other
 # way about.
-_ROW_ARRIVES = """async (scroll) => {
+ROW_ARRIVES = """async (scroll) => {
   const table = document.querySelector('main ' + scroll + ' > table');
   const headings = [...table.querySelectorAll(':scope > thead > tr:last-child > th')];
   // A record's row has a cell under every heading; a group's heading row and
@@ -225,7 +225,7 @@ _ROW_ARRIVES = """async (scroll) => {
 # box, how wide each showing column is, how tall each record's row is, how
 # many rows show their toggle, and what the open rows' lines beneath name.
 # The line is the server's (`table_tags._detail_row`), found by attribute.
-_PHONE_TABLE = """(scroll) => {
+PHONE_TABLE = """(scroll) => {
   const box = document.querySelector('main ' + scroll);
   const table = box && box.querySelector('table');
   if (!table) return null;
@@ -244,7 +244,7 @@ _PHONE_TABLE = """(scroll) => {
 
 # Every table that is wider than the box it scrolls in, and for each table
 # that has row toggles, how many different left edges its rows' names start on.
-_TABLES_THAT_DO_NOT_FIT = """(scroll) => [...document.querySelectorAll('main ' + scroll)]
+TABLES_THAT_DO_NOT_FIT = """(scroll) => [...document.querySelectorAll('main ' + scroll)]
   .filter((box) => box.checkVisibility() && !box.closest('details:not([open])'))
   .map((box) => [box, box.querySelector(':scope > table')])
   .filter(([box, table]) => table && table.querySelector('tbody td')
@@ -252,7 +252,7 @@ _TABLES_THAT_DO_NOT_FIT = """(scroll) => [...document.querySelectorAll('main ' +
   .map(([box, table]) => (box.getAttribute('aria-label') || table.querySelector('th')?.textContent || '').trim().slice(0, 24)
     + ' +' + Math.round(table.getBoundingClientRect().width - box.clientWidth))"""
 
-_NAME_EDGES = """(scroll) => [...document.querySelectorAll('main ' + scroll + ' > table')]
+NAME_EDGES = """(scroll) => [...document.querySelectorAll('main ' + scroll + ' > table')]
   .map((table) => [table, [...table.querySelectorAll('tbody button[aria-expanded]')].find((el) => el.checkVisibility())])
   .filter(([table, toggle]) => table.checkVisibility() && toggle)
   .map(([table, toggle]) => {
@@ -272,9 +272,9 @@ _NAME_EDGES = """(scroll) => [...document.querySelectorAll('main ' + scroll + ' 
     return new Set(edges).size;
   })"""
 
-_CELLS_OFF_THE_FIRST_LINE = (
+CELLS_OFF_THE_FIRST_LINE = (
     "(scroll) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   // A row reads from its first line: its toggle is placed there, so every
   // cell of the row starts there too, whatever page the table is on.
@@ -289,9 +289,9 @@ _CELLS_OFF_THE_FIRST_LINE = (
 }"""
 )
 
-_UNSEEN_COLUMNS = (
+UNSEEN_COLUMNS = (
     "(scroll) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   // A table's width belongs to the columns that are showing. A cell left
   // spanning columns that were dropped keeps them in the table, and a table
@@ -312,7 +312,7 @@ _UNSEEN_COLUMNS = (
 }"""
 )
 
-_SORT_BY = """([scroll, column]) => {
+SORT_BY = """([scroll, column]) => {
   const table = document.querySelector('main ' + scroll + ' > table');
   const heading = table.querySelectorAll('thead th')[column];
   const control = heading.querySelector('button');
@@ -328,8 +328,8 @@ _SORT_BY = """([scroll, column]) => {
 }"""
 
 # Press the first toggle that shows in the page's first table, and say which
-# of its records (counted as _PHONE_TABLE counts them) it opened.
-_PRESS_FIRST_ROW_TOGGLE = """(scroll) => {
+# of its records (counted as PHONE_TABLE counts them) it opened.
+PRESS_FIRST_ROW_TOGGLE = """(scroll) => {
   const table = document.querySelector('main ' + scroll).querySelector('table');
   const records = [...table.querySelectorAll('tbody > tr:not([data-row-detail]):not(:has(> th[scope="rowgroup"]))')];
   const toggle = [...table.querySelectorAll('tbody button[aria-expanded]')].find((el) => el.checkVisibility());
@@ -340,10 +340,10 @@ _PRESS_FIRST_ROW_TOGGLE = """(scroll) => {
 # Nothing reaches past the content's side gutter: drawn there, it touches the
 # edge of the screen. `text` also holds every line of text to the box that
 # holds it.
-_PAST_THE_GUTTER = (
+PAST_THE_GUTTER = (
     "([selector, text]) => {"
-    + _DESCRIBE
-    + _PAINTED_PART
+    + DESCRIBE
+    + PAINTED_PART
     + """
   const main = document.querySelector('main');
   const pad = getComputedStyle(main);
@@ -389,9 +389,9 @@ _PAST_THE_GUTTER = (
 )
 
 # A column no row has anything in.
-_EMPTY_COLUMNS = (
+EMPTY_COLUMNS = (
     "() => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   const shown = (cell) => cell.textContent.trim()
@@ -417,7 +417,7 @@ _EMPTY_COLUMNS = (
 # A table with a column of dashes, a column of marks with no words, and a
 # column of short words: the server marks the dashes blank and they are not
 # drawn, the marks are, and no word is split however the column's width rounds.
-_BLANK_TABLE = """{% table_region "Runbooks" %}<table class="data-table">
+BLANK_TABLE = """{% table_region "Runbooks" %}<table class="data-table">
 <thead><tr>{% table_heading "Title" %}{% table_heading "Type" %}{% table_heading "Nothing" %}
 {% table_heading "Runs" %}{% table_heading "Note" %}</tr></thead><tbody>
 <tr><td>Upgrade a container to a new release</td><td>Runbook</td><td><span class="empty-value">–</span></td>
@@ -426,7 +426,7 @@ _BLANK_TABLE = """{% table_region "Runbooks" %}<table class="data-table">
 <td><span class="kpi-dots"><span class="kpi-dot is-filled" title="Succeeded"></span></span></td><td>Another sentence that wraps in its column.</td></tr>
 </tbody></table>{% endtable_region %}"""
 
-_COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
+COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
   .filter((th) => getComputedStyle(th).display !== 'none').map((th) => th.textContent.replace(/[^A-Za-z ]/g, '').trim())"""
 
 # Two tables whose every row the server made openable. In the first a narrow
@@ -435,7 +435,7 @@ _COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
 # from them, and one row's value really is cut off. In the second a row folds
 # part of a list, so the gutter is kept at every width, and a row's value is
 # cut off there too.
-_ROW_TOGGLE_TABLES = """
+ROW_TOGGLE_TABLES = """
 {% table_region "Dropping" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" drop=1 %}</tr></thead><tbody>
 <tr data-probe="dropped"><td class="row-gutter">Dropped{% row_toggle %}</td><td>Short</td>
@@ -455,7 +455,7 @@ _ROW_TOGGLE_TABLES = """
 <td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
 </tbody></table>{% endtable_region %}"""
 
-_ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr:not([data-row-detail])')].map((row) => ({
+ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr:not([data-row-detail])')].map((row) => ({
   probe: row.dataset.probe,
   toggles: row.querySelectorAll('button[aria-expanded]').length,
   shown: [...row.querySelectorAll('button[aria-expanded]')].some((toggle) => toggle.checkVisibility()),

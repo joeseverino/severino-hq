@@ -1,10 +1,10 @@
 """Probes of a name cut to fit: where it is cut, split or clamped, and whether it had the room."""
 
-from hq.platform.core.tests.browser.probes.describe import _DESCRIBE, _LINES, _PAINTED_PART
+from hq.platform.core.tests.browser.probes.describe import DESCRIBE, LINES, PAINTED_PART
 
-_CUT_NAMES = (
+CUT_NAMES = (
     "([region, name, soleToken, context, wide]) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + """
   const found = [];
   for (const scroll of document.querySelectorAll('main ' + region)) {
@@ -25,10 +25,10 @@ _CUT_NAMES = (
 # (the table's --name-hold, read in the name's own font) is on one line:
 # "hq.example." over "com" means a column that could wrap gave nothing. A name
 # with a hyphenated part holds out for that part, which the rule above holds.
-_SPLIT_NAMES = (
+SPLIT_NAMES = (
     "([region, name, context, wide, part]) => {"
-    + _DESCRIBE
-    + _LINES
+    + DESCRIBE
+    + LINES
     + """
   const found = [];
   for (const scroll of document.querySelectorAll('main ' + region)) {
@@ -77,9 +77,9 @@ _SPLIT_NAMES = (
 # A box that holds out for a few characters of a value shorter than that:
 # the floor pads it past its last character, a gulf before the words after it
 # on its line ("app-host        · another-host").
-_PADDED_CUTS = (
+PADDED_CUTS = (
     "(selector) => {"
-    + _DESCRIBE
+    + DESCRIBE
     + r"""
   const found = [];
   const range = document.createRange();
@@ -108,10 +108,10 @@ _PADDED_CUTS = (
 }"""
 )
 
-_CUT_WITH_ROOM = (
+CUT_WITH_ROOM = (
     "([region, openRow, context, phrasePart]) => {"
-    + _DESCRIBE
-    + _PAINTED_PART
+    + DESCRIBE
+    + PAINTED_PART
     + r"""
   const found = [];
   const range = document.createRange();
@@ -282,10 +282,10 @@ _CUT_WITH_ROOM = (
 # A box the stylesheet clamps to some lines shows those lines and no more: a
 # line past its clamp that is still drawn (a box of its own on it, which a
 # browser may leave out of the clamp) reads as a row that grew.
-_PAST_THE_CLAMP = (
+PAST_THE_CLAMP = (
     "() => {"
-    + _DESCRIBE
-    + _LINES
+    + DESCRIBE
+    + LINES
     + r"""
   const found = [];
   for (const el of document.querySelectorAll('main *')) {

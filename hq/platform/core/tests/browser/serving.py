@@ -21,7 +21,7 @@ NONCE = "hq-browser-gate"
 # optional`). A late face is drawn in the fallback for the page's whole life,
 # so on a loaded machine a wrapping check would read one page in either face
 # from run to run. The gate's copy waits for its face instead, and every
-# measure waits for the fonts (`_FONTS_READY`): each page is read in the face
+# measure waits for the fonts (`FONTS_READY`): each page is read in the face
 # a reader whose font arrived in time sees.
 _LATE_FACE = re.compile(rb"font-display:\s*optional")
 
