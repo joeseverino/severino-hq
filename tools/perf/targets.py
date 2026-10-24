@@ -166,9 +166,10 @@ class Scratch:
         self.server = None
 
     def _read(self, task: str, *args: str, env: dict[str, str] | None = None) -> str:
-        """What ``task`` prints. Each task read here is raw, so its stdout is the command's own, unlabeled."""
+        """What ``task`` prints, run raw so its stdout is the command's own, unlabeled, whatever the
+        ref's own task declares."""
 
-        return run(self._mise(task, *args), env=env or self.env)
+        return run(self._mise("--raw", task, *args), env=env or self.env)
 
     def session(self) -> tuple[str, str]:
         return parse.cookie(self._read("dev:session"))
@@ -202,7 +203,7 @@ def stop_group(process: subprocess.Popen) -> None:
     """Terminate ``process`` and everything in its group, killing what outlasts STOP_S."""
 
     for sent in (signal.SIGTERM, signal.SIGKILL):
-        with contextlib.suppress(ProcessLookupError):
+        with contextlib.suppress(ProcessLookupError, PermissionError):
             os.killpg(process.pid, sent)
         deadline = time.monotonic() + STOP_S
         while time.monotonic() < deadline:
@@ -214,9 +215,11 @@ def stop_group(process: subprocess.Popen) -> None:
 
 
 def _group_alive(group: int) -> bool:
+    # macOS can answer EPERM instead of ESRCH while a stopped server's group is exiting; either
+    # way nothing is left there that this process can signal.
     try:
         os.killpg(group, 0)
-    except ProcessLookupError:
+    except ProcessLookupError, PermissionError:
         return False
     return True
 
