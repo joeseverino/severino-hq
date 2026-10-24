@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="Write what checks:ruff and checks:mise-format hold: Ruff's fixes and format, and mise.toml and its task files as mise fmt writes them"
+#MISE description="When a lint or format gate fails: write Ruff's fixes and format, and mise fmt's format of the task files"
 
 # The same file set the two gates read, so a fix run leaves them nothing to
 # report.

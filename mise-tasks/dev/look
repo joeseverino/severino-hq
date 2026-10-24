@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="Screenshot HQ pages as the browser gates draw them, judged by a rule if asked (docs/Development.md, Browser layout)"
+#MISE description="To see what a page change looks like: screenshots as the browser gates draw them, judged by a rule if asked"
 #MISE extends="django"
 #MISE depends=[{task="setup:browser", args=["{{usage.engine}}"]}]
 #MISE timeout="30m"

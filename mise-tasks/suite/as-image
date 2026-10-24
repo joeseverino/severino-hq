@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="The suite composed with the extensions mise.local.toml names, as the image runs it: only the files the image ships"
+#MISE description="When a change reaches the extensions (hq_sdk, shared templates): the suite composed with the set mise.local.toml names, as the image runs it"
 #MISE extends="django"
 #MISE env={DJANGO_DEBUG=false, SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION="0", SEVERINO_HQ_PLUGINS="{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH="{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"}
 #MISE timeout="30m"

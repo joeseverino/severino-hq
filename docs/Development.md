@@ -130,6 +130,17 @@ A test tagged `source` runs once, on the checkout, in `checks:source`
 name). A whole-suite run leaves the tag out; a run that asks for a tag no test
 carries fails.
 
+### Derived files
+
+`mise run regen` rewrites every file generated from a source, in the order
+each reads the last: `hq_sdk/contract.json` with the SDK's text examples and
+the table in `docs/Plugins.md`, the machine API's OpenAPI document, the
+controller's contracts from the connection registry and the Go types generated
+from them, `docs/Connections.md` from what the providers declare, and the
+served font cut to the characters HQ prints. `mise run drift` checks each against its source without writing, and
+`fast` runs the ones a change reaches. A rebase conflict in one is settled by
+`regen`, never by hand.
+
 ### The extension set
 
 Name it once in a gitignored `mise.local.toml` (copy

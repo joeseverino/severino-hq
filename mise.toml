@@ -172,7 +172,7 @@ run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser p
 # task reads. The profile's invariants come after the file, so it cannot
 # change them.
 [tasks.dev]
-description = "The server behind a TLS proxy: DEBUG off, single sign-on, the bind dev.local.toml names"
+description = "The operator's long-lived server on real data, behind a TLS proxy with single sign-on and 1Password secrets; an agent runs dev:scratch"
 raw = true
 usage = '''
 flag "--fresh" help="Delete its database and migrate a new one"
@@ -229,7 +229,7 @@ PYTHONPATH = "{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"
 [tasks."dev:scratch"]
 extends = "dev:scratch-env"
 raw = true
-description = "A throwaway server on loopback: DEBUG on, a new database each start, a port the system picks"
+description = "To try a change in a browser: a throwaway server on loopback, DEBUG on, a new database each start (--seed fills it)"
 usage = '''
 flag "--keep" help="Reuse the last scratch database"
 flag "--seed <seed>" help="Fill it with a named data set (hq/platform/core/seeds.py): the example estate as showcase (advanced posture) or standard, empty, or scale (years of records)" {
@@ -242,7 +242,7 @@ run = "tools/dev/dev.sh"
 
 [tasks."dev:session"]
 extends = "dev:scratch-env"
-description = "A signed-in session cookie for this checkout's scratch server"
+description = "To reach the scratch server from a script: a signed-in session cookie for it"
 # A program reads the cookie, so stdout is the command's own, unlabeled.
 raw = true
 run = "uv run python manage.py dev_session operator"
@@ -250,7 +250,7 @@ run = "uv run python manage.py dev_session operator"
 [tasks."dev:manage"]
 extends = "dev:scratch-env"
 raw = true
-description = "manage.py against this checkout's scratch database, extensions loaded: mise run dev:manage -- <command>"
+description = "To inspect or change what dev:scratch serves: manage.py on this checkout's scratch database, extensions loaded"
 run = "uv run python manage.py"
 
 # ------------------------------------------------------------- aggregates
@@ -259,7 +259,7 @@ run = "uv run python manage.py"
 # in var/gate/<name>.txt.
 
 [tasks.fast]
-description = "Inner loop: the tests the change reaches, and the quick gates that read the paths it touched"
+description = "While editing: the tests the change reaches, and the quick gates that read the paths it touched"
 extends = "django-heavy"
 # The lint tools the quick gates and the stylesheet tests run.
 depends = ["setup:lint-tools"]
@@ -271,7 +271,7 @@ flag "--parallel <workers>" env="CHECK_PARALLEL" default="auto" help="Test worke
 run = "uv run python -m tools.gate.fast"
 
 [tasks.check]
-description = "Does my change work: every Checks gate, the Tests gates on one Python, and the suite composed"
+description = "Before handing work back, if the machine can hold it: every Checks gate, the Tests gates on one Python, the composed suite"
 # Named by aggregate and glob, so a new gate joins without an edit here. One
 # task at a time: each suite starts a worker per core, and two at once exhaust
 # a small machine's memory. CI runs each job's aggregate, never this task.
@@ -280,21 +280,21 @@ timeout = "2h"
 run = "uv run python -m tools.gate.verdict check mise run -c -j 1 checks ::: 'tests:*' ::: suite:as-image"
 
 [tasks.ci]
-description = "Every gate the pipeline runs"
+description = "CI's whole pipeline, every job's gates in turn; locally run check, or preflight before a release"
 # Run-form, so one turn covers the whole run.
 extends = "heavy"
 timeout = "2h"
 run = "uv run python -m tools.gate.verdict ci mise run -c checks ::: tests ::: browser ::: controller ::: scan ::: image"
 
 [tasks.checks]
-description = "Lint, types, structure, dependencies, security and every derived file: each checks:* and drift:* gate"
+description = "CI's Checks job: lint, types, structure, dependencies, security, derived files; locally run fast, or the one gate a verdict names"
 # Run-form, so the gates and the installs they depend on run inside one turn.
 extends = "heavy"
 timeout = "2h"
 run = "uv run python -m tools.gate.verdict checks mise run -c 'checks:*' ::: 'drift:*'"
 
 [tasks.browser]
-description = "Real-browser invariants of layout, navigation and the demo: each browser:* gate in WebKit, one at a time"
+description = "After a template or CSS change: every browser:* gate in WebKit, layout, navigation and the demo, one at a time"
 # Run-form, so one turn covers every browser gate. One at a time: a run-form
 # aggregate starts as many tasks as the jobs setting allows, and each gate
 # starts a browser per core. The Chromium leg is CI's alone.
@@ -304,7 +304,7 @@ env = { MISE_TASK_SKIP = "browser:layout-chromium-1,browser:layout-chromium-2" }
 run = "uv run python -m tools.gate.verdict browser mise run -c -j 1 'browser:*'"
 
 [tasks.drift]
-description = "Every derived file is what its source generates: each drift:* gate, naming every one behind"
+description = "CI runs it inside checks: every derived file matches its source; locally fast runs the ones a change reaches, regen fixes them"
 # Run-form, so the gates and the installs they depend on run inside one turn.
 # The Go types are held by `mise run controller`, which regenerates them
 # against a snapshot.
@@ -312,15 +312,15 @@ extends = "heavy"
 run = "uv run python -m tools.gate.verdict drift mise run -c 'drift:*'"
 
 [tasks.controller]
-description = "The Go controller is formatted, vetted, race-tested and its generated types current: each controller:* gate"
+description = "CI's Controller job: the Go controller formatted, vetted, race-tested, its types current; locally fast runs it on a controller change"
 depends = ["controller:*"]
 
 [tasks.scan]
-description = "CodeQL's security-and-quality queries over the code find no alert: each scan:* gate"
+description = "CI's Scan job: CodeQL's security-and-quality queries find no alert; slow, so run it locally only to reproduce an alert CI raised"
 depends = ["scan:*"]
 
 [tasks.image]
-description = "The production image builds, boots healthy and carries what it must and nothing it must not: each image:verify:* gate"
+description = "CI's Image job: the production image builds, boots and carries what it must; locally run image:build, then the image:verify:* gate it names"
 depends = ["image:verify:*"]
 
 # Whether this checkout can compose its extensions: `mise doctor project` names

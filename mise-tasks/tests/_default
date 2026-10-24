@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="The suite, the plugin contract, system checks, migrations and generated API cases: each tests:* gate on every Python the matrix declares"
+#MISE description="CI's Tests job: the suite, plugin contract, system checks, migrations and API cases on every Python; locally run fast, or test <labels>"
 #MISE timeout="2h"
 
 # One turn covers every interpreter's suite.

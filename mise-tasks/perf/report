@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="How light and fast each page is, in the server and in Chromium, with memory and cold start; with --base, each beside the base's and which pages' server time moved past its spread"
+#MISE description="For a performance claim: each page's weight, server and Chromium time, memory and cold start; --base compares with a base"
 #MISE extends="django"
 #MISE depends=[{task="setup:browser", args=["chromium"]}]
 #MISE env={SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION="0", SEVERINO_HQ_PLUGINS="{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH="{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"}

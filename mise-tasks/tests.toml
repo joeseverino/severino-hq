@@ -32,7 +32,7 @@ run = "uv run python manage.py test tests.fuzz.api_properties --noinput --parall
 # weight, so it takes the heavy turn itself, unless tools/gate/turn.py finds
 # them narrow; the timeout is the heavy template's.
 [test]
-description = "Run the test labels named, as the gates run them, here or on another commit's code"
+description = "To run some tests by label, as the gates run them; --at <ref> proves a new test fails on the old code"
 extends = "django"
 timeout = "30m"
 usage = '''

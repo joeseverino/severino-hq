@@ -3,7 +3,7 @@
 # contract check.
 
 [manage]
-description = "Run a manage.py command on a new empty database, host alone, as the gates set it up: mise run manage -- <command>"
+description = "For a Django command that needs no data: manage.py on a new empty database, host alone, as the gates set it up"
 raw = true
 extends = "django"
 run = "uv run --group browser python manage.py"
@@ -26,7 +26,7 @@ run = [
 ]
 
 ["demo:screenshot"]
-description = "Retake the README's pictures from the showcase demo"
+description = "After a change to a page the docs picture: redraw every docs screenshot from the showcase demo"
 depends = [{ task = "setup:browser", args = ["webkit"] }, "demo:build"]
 extends = "heavy"
 run = "uv run --group browser python -m demo.screenshot"

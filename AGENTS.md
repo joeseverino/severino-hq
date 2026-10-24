@@ -25,7 +25,8 @@ naming every failed task and test.
   new test fails without the fix, never a base worktree, snapshot or checkout
   made by hand.
 - `mise run dev:scratch` in the agent's own worktree, never `mise run dev`.
-- `mise run manage -- <command>` for Django, `fix` for what lint holds,
+- `mise run manage -- <command>` for Django on an empty database, host alone,
+  `dev:manage` on this checkout's scratch database; `fix` for what lint holds,
   `regen` for derived files.
 
 A CI job runs the aggregate of its name, so a gate goes in its job's file under

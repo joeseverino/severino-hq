@@ -3,7 +3,7 @@
 # all.
 
 [regen]
-description = "Rewrite every derived file from its source (the API's and the controller's OpenAPI documents, the connection registry, hq_sdk/contract.json, docs/Connections.md, the Go types, the served font); `mise run drift` checks them instead"
+description = "After changing a derived file's source, or on a rebase conflict in one: rewrite every derived file (docs/Development.md, Derived files)"
 # In the order each reads the last: the bridge contract feeds the Go types.
 extends = "django-heavy"
 run = [
