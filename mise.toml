@@ -69,7 +69,7 @@ actionlint = "1.7.12"
 zizmor = "1.31.1"
 yq = "4.54.1"
 jq = "1.8.2"
-uv = "0.13.4"
+uv = "0.13.5"
 # The Scorecard the pinned ossf/scorecard-action builds against (its go.mod).
 # Lazy, as age is: only checks:scorecard runs it.
 scorecard = { version = "5.6.0", lazy = true }
