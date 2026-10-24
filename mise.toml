@@ -63,6 +63,8 @@ node = "24.22.0"
 go = "1.27.3"
 shellcheck = "0.11.0"
 actionlint = "1.7.12"
+# The workflows' security audit (checks:workflows), offline.
+zizmor = "1.31.1"
 yq = "4.54.1"
 jq = "1.8.2"
 uv = "0.13.4"

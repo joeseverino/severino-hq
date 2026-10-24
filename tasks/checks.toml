@@ -38,8 +38,10 @@ description = "Every task is valid: its usage spec parses, its dependencies exis
 run = "mise tasks validate"
 
 ["checks:workflows"]
-description = "The workflows are valid, run: blocks included"
-run = "actionlint -color"
+description = "The workflows are valid, run: blocks included, and pass zizmor's security audit"
+# zizmor runs offline, with no token, at its default persona; a deliberate
+# finding is suppressed in .github/zizmor.yml with its reason.
+run = ["actionlint -color", "zizmor --offline --strict-collection .github"]
 
 ["checks:source"]
 description = "The tests that read the repository, run once on the checkout"
