@@ -561,8 +561,6 @@ jobs:
       - name: Install the pinned age
         if: failure()
         uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
-        env:
-          MISE_LOCKED: "1"
         with:
           version: ${{ steps.mise.outputs.version }}
           install_args: age

@@ -1,7 +1,7 @@
 """Hold mise.lock to mise.toml, and mise's Go to the language go.mod names.
 
-Every pinned tool is locked for every platform a gate runs on, and the images
-install their build tools from the same lock. The controller
+Every pinned tool is locked for each of mise.toml's lockfile_platforms, and
+the images install their build tools from the same lock. The controller
 builds with mise's Go, a release of the language version go.mod names. An
 image takes nothing from another image but the Python it runs on and mise from
 its own image, by digest, at the release min_version names, so no build tool
@@ -16,9 +16,6 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-# The pipeline's runners, which also build the images, and the machines the
-# gates are run on by hand.
-PLATFORMS = ("linux-x64", "macos-arm64")
 IMAGES = ("Dockerfile", "composition/Dockerfile")
 # The OS and interpreter the app runs on: a base, not a build tool.
 BASE_IMAGE = "python:"
@@ -39,12 +36,13 @@ def declared_version(declared: str | dict) -> str:
 
 def missing(config: dict, lock: dict) -> list[str]:
     found = []
+    platforms = config["settings"]["lockfile_platforms"]
     for name, declared in config.get("tools", {}).items():
         version = declared_version(declared)
         entries = [entry for entry in lock.get("tools", {}).get(name, []) if entry.get("version") == version]
         found.extend(
             f"{name}@{version} has no checksum for {platform}"
-            for platform in PLATFORMS
+            for platform in platforms
             if not any(entry.get(f"platforms.{platform}", {}).get("checksum") for entry in entries)
         )
     return found
@@ -95,7 +93,7 @@ def main() -> int:
     for line in unlocked + drift:
         print(line, file=sys.stderr)
     if unlocked:
-        print("Run: mise lock --platform linux-x64,linux-arm64,macos-arm64,macos-x64", file=sys.stderr)
+        print("Run: mise lock", file=sys.stderr)
     return 1 if unlocked or drift else 0
 
 

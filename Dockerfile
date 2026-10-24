@@ -10,8 +10,7 @@
 # (checks:toolchain holds the tag to min_version).
 FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS tools
 COPY --from=ghcr.io/jdx/mise:2026.10.18@sha256:fc31de7b93d195613deb600d42c65a164b0205716ade38132aadeabac3838248 /usr/local/bin/mise /usr/local/bin/mise
-ENV MISE_LOCKED=1 \
-    MISE_TRUSTED_CONFIG_PATHS=/tools
+ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
 COPY mise.toml mise.lock ./
 RUN mise install go uv \

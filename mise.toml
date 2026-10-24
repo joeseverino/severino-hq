@@ -27,6 +27,12 @@
 
 min_version = "2026.10.18"
 
+[settings]
+# The runners, which build the images, and the machines gates run on by hand.
+lockfile_platforms = ["linux-x64", "macos-arm64"]
+# Here, in CI and in the images, nothing installs that mise.lock does not record.
+locked = true
+
 [settings.task]
 # Gates that run together print one after another, each whole and labeled,
 # never line by line into each other: an aggregate reads gate by gate, and each

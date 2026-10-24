@@ -28,8 +28,6 @@ runs:
         key: mise-downloads-uv-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(format('{0}/mise.lock', inputs.host)) }}
     # Only uv: the host's other tools and its [env] are not this job's.
     - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
-      env:
-        MISE_LOCKED: "1"
       with:
         version: ${{ steps.read.outputs.mise }}
         working_directory: ${{ inputs.host }}
