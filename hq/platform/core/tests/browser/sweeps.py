@@ -107,13 +107,21 @@ class ScriptedLayoutTests(LayoutBrowserTests):
         a control moves nothing; a table fits its box with every disclosure
         open. Script reads the width a page loads at, so each width is a load."""
 
-        self.spoke = 0
+        self.spoke, self.spoken_on = 0, set()
         for name in names:
             widths = SPEAKING_WIDTHS if name in SPEAKING_HEADS else (*WIDTHS, *SPEAKING_WIDTHS, *WIDE_TABLES)
             for width in sorted(set(widths)):
                 if self.loaded(name, width, script="on"):
                     self.page.evaluate(_SETTLED)
                     self.read_loaded(name, width)
+
+    def sweep_dense(self, dense, *others):
+        """``sweep`` over ``dense`` and ``others``, held to a control that
+        speaks on a page of ``dense``, so the rule that presses one is not
+        held over these pages vacuously."""
+
+        self.sweep((*dense, *others))
+        self.assertTrue(self.spoken_on & set(dense), "no dense page here has a control that speaks")
 
     def read_loaded(self, name, width):
         read = name in ALL_PAGES and width in (*WIDTHS, *WIDE_TABLES)
@@ -126,7 +134,10 @@ class ScriptedLayoutTests(LayoutBrowserTests):
         if read:
             self.hold(name, width, [self.every_layout_check_holds], script="on")
         if width in SPEAKING_WIDTHS:
+            spoke = self.spoke
             self.pressing_a_control_moves_nothing(name, width)
+            if self.spoke > spoke:
+                self.spoken_on.add(name)
         if name in ALL_PAGES:
             self.hold(name, width, [self.a_table_fits_its_box_at_every_width], script="on")
 
@@ -137,19 +148,19 @@ class ScriptedSparseLayoutTests(ScriptedLayoutTests):
 
 
 # The dense pages in two halves, every other page, each a class of its own:
-# swept together they are the longest class a layout leg runs.
+# swept together they are the longest class a layout leg runs. Each half holds
+# its own pages to a control that speaks.
 FIRST_DENSE, SECOND_DENSE = tuple(DENSE_PAGES)[::2], tuple(DENSE_PAGES)[1::2]
 
 
 class ScriptedDenseFirstLayoutTests(ScriptedLayoutTests):
     def test_the_first_dense_pages_and_every_head_keep_the_layout_rules_once_their_script_has_run(self):
-        self.sweep((*FIRST_DENSE, *SPEAKING_HEADS))
-        self.assertGreater(self.spoke, len(SPEAKING_HEADS), "no page in the fixture has a control that speaks")
+        self.sweep_dense(FIRST_DENSE, *SPEAKING_HEADS)
 
 
 class ScriptedDenseSecondLayoutTests(ScriptedLayoutTests):
     def test_the_second_dense_pages_keep_the_layout_rules_once_their_script_has_run(self):
-        self.sweep(SECOND_DENSE)
+        self.sweep_dense(SECOND_DENSE)
 
 
 class SettledLayoutTests(LayoutBrowserTests):
