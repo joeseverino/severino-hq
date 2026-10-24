@@ -114,10 +114,22 @@
   // narrows it, and in the window's resize event, which runs before layout.
   // What holds a region's width otherwise (a region shown, a fold, a row
   // closing, its faces arriving) fits it where it happens, and the observer
-  // answers only a width none of those saw.
+  // answers only a width none of those saw. WebKit lays out a resized window
+  // and delivers the observer before the resize event, so there the observer
+  // fits it, and a region its fit made taller would be reported again in the
+  // same frame, which the browser raises as an error: a region the observer
+  // fitted is let go until the next frame, whose first report of it is the
+  // width it was just fitted at.
   const fitted = new ResizeObserver((entries) => entries.forEach(({ target: region }) => {
-    if (region.isConnected) fitIn(region);
-    else fitted.unobserve(region);
+    if (!region.isConnected) {
+      fitted.unobserve(region);
+      return;
+    }
+    const was = regionWidths.get(region);
+    fitIn(region);
+    if (regionWidths.get(region) === was) return;
+    fitted.unobserve(region);
+    requestAnimationFrame(() => fitted.observe(region));
   }));
   const watched = new WeakSet();
   const fitEvery = (changed = new Set()) => document.querySelectorAll(REGION).forEach((region) => {
