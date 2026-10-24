@@ -2056,3 +2056,45 @@ class RuntimeDependencyTests(SimpleTestCase):
             rule: sorted({each["module"] for each in findings if each["error"]["code"] == rule}) for rule in ignored
         }
         self.assertEqual(reported, {rule: sorted(modules) for rule, modules in ignored.items()})
+
+
+def _restated_trails(tree: ast.AST) -> list[int]:
+    """Lines of a ``get_page_trail`` that only returns crumbs or a ``record_trail`` call."""
+
+    found = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.FunctionDef) and node.name == "get_page_trail"):
+            continue
+        body = [
+            statement
+            for statement in node.body
+            if not (isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant))
+        ]
+        if len(body) != 1 or not isinstance(body[0], ast.Return):
+            continue
+        value = body[0].value
+        is_crumbs = isinstance(value, ast.Tuple)
+        is_record_trail = (
+            isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "record_trail"
+        )
+        if is_crumbs or is_record_trail:
+            found.append(node.lineno)
+    return found
+
+
+@tag("source")
+class PageTrailTests(SimpleTestCase):
+    """A view says its trail with ``page_trail`` and ``trail_label``, not a ``get_page_trail`` that restates them.
+
+    An override stays for a trail the mixin cannot say: one built from the
+    request or from several statements.
+    """
+
+    def test_no_view_overrides_get_page_trail_to_say_what_the_mixin_says(self):
+        root = Path(__file__).resolve().parents[4]
+        self.assertEqual(_restated_trails(ast.parse("def get_page_trail(self):\n    return (A,)")), [1])
+        self.assertEqual(_restated_trails(ast.parse("def get_page_trail(self):\n    x = 1\n    return (x,)")), [])
+        restated = [
+            f"{path.relative_to(root)}:{line}" for path in view_modules(root) for line in _restated_trails(parsed(path))
+        ]
+        self.assertEqual(restated, [], "declare page_trail (and trail_label) on the view")

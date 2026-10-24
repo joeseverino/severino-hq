@@ -70,7 +70,8 @@ tokens, spacing, color), `StyleContractTests` and `SharedPrimitiveStyleTests`
 (CSS, layers), `TemplateCommentTests` (what a `{# #}` comment left open is),
 `CognitiveComplexityTests` (score 20 per function), `FileSizeTests` (no source
 file past 1,000 lines), `OneDefinitionTests` (a module-level name is
-assigned once), `SettingsReadTests` (a setting is read as `settings.NAME`, never with a
+assigned once), `PageTrailTests` (a view declares `page_trail` and `trail_label`, not a
+`get_page_trail` that restates them), `SettingsReadTests` (a setting is read as `settings.NAME`, never with a
 default), `OperationQueueTests` (an operation is queued through
 `resource_operations.enqueue`, whose unique key settles two writers),
 `SignedInTests` (who a request's session signed in is
