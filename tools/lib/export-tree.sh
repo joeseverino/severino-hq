@@ -14,7 +14,8 @@ export_tree() {
 
 # A scanner's work directory, printed, with a fresh export of the checkout in
 # its src/. It is under the checkout's var/, so a worktree takes its scans with
-# it when it is removed.
+# it when it is removed. The scanner removes src/ and what it built from it on
+# exit, keeping only the report it prints from.
 #   work="$(scan_tree NAME)"
 scan_tree() {
     work="${PWD}/var/scan/$1"

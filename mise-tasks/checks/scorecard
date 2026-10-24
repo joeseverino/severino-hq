@@ -13,6 +13,8 @@ set -eu
 
 work="$(scan_tree scorecard)"
 src="${work}/src"
+# The export is rebuilt on every run; scorecard.json holds the findings.
+trap 'rm -rf "${src}"' EXIT
 
 checks="$(uv run python -m tools.pipeline.scorecard_report --checks)"
 # No token: local mode reads files, and a token would let it reach GitHub on
