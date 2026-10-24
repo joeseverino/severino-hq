@@ -130,7 +130,7 @@
 /* A fixed width no wider than its content lays a kept column out first; shared, WebKit takes the difference from the rightmost wrapping column alone. */
 .data-table > thead th:is([data-kind="status"], [data-kind="numeric"], [data-kind="control"]) { width: 1px; }
 /* A long line (`data-long`, table_tags.LONG) holds out for a floor up to its column's share, as a box inside the cell both engines size, and for a few words a line however small the share, so its column leaves before it wraps a word a line; in a narrow box no column is left to leave, so there the share alone bounds it. A status asks a pixel and a cut sentence almost nothing, and Chromium shares the rest in proportion. */
-.data-table > tbody td[data-long]::before { content: ""; display: block; inline-size: min(16ch, max(var(--hold), 10ch)); }
+.data-table > tbody td[data-long]::before { content: ""; display: block; inline-size: min(16ch, max(var(--hold), 14ch)); }
 .data-table[data-narrow] > tbody td[data-long]::before { inline-size: min(16ch, var(--hold)); }
 /* Asked for a pixel, a column is as wide as its longest word, so a control in it keeps its label on one line; a column's kind is its heading's, read down by place, at most sixteen (`--showing`). */
 .data-table:has(> thead th:nth-child(1)[data-kind="control"]) > tbody > tr > td:nth-child(1):not([colspan]) :is(.btn, button),
