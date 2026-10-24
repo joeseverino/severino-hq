@@ -160,7 +160,11 @@ def compare(base: Side, here: Side, pages: list[str], rounds: int) -> dict[str, 
 
     found: dict[str, dict[str, Any]] = {}
     for page in pages:
-        first = {side.name: side.ask(page, html=True, queries=True) for side in (base, here)}
+        for _ in range(WARM):
+            for side in (base, here):
+                side.ask(page)
+        # Read once warm, so what a first request caches is not counted as the page's.
+        warm = {side.name: side.ask(page, html=True, queries=True) for side in (base, here)}
         found[page] = {
             side: {
                 "status": said["status"],
@@ -169,11 +173,8 @@ def compare(base: Side, here: Side, pages: list[str], rounds: int) -> dict[str, 
                 "queries": said["queries"],
                 "ms": [],
             }
-            for side, said in first.items()
+            for side, said in warm.items()
         }
-        for _ in range(WARM):
-            for side in (base, here):
-                side.ask(page)
     for turn in range(rounds):
         order = (base, here) if turn % 2 == 0 else (here, base)
         for page in pages:
