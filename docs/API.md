@@ -439,12 +439,12 @@ gates; production test discovery does not require development dependencies.
 
 All MCP tool input schemas and descriptions consume the live deployment's
 OpenAPI document after Django initialization. `x-hq-mcp-tools` records MCP-only
-metadata; it does not invent HTTP operations for those tools. Argument types
-and defaults are emitted from the declared service signatures with the MCP
-SDK and Pydantic. Resource names, identifiers and catalogs consume the
-already-emitted resource paths. Registration fails if the document disagrees
-with the execution signature, and calls validate against the documented
-constraints before entering application code. Unknown arguments, mistyped
+metadata; it does not invent HTTP operations for those tools. Each tool's
+`inputSchema` is generated from one Pydantic model, built from the handler's
+signature, and a call is validated by that same model before entering
+application code; `mise run drift` holds the written document to it. A
+resource tool's `name` takes only the resources the document's paths serve,
+and catalogs consume those paths too. Unknown arguments, mistyped
 values and stringified JSON objects are rejected; validation errors do not
 include rejected input values. Authorization and thread-sensitive execution
 remain on the shared service path.
