@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="Scorecard: every file-based check at 10"
+#MISE hide=true
 
 # What .github/workflows/scorecard.yml reports after a merge, before the push:
 # the Scorecard mise.toml pins, every check local mode can answer from files

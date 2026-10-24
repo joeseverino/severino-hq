@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="Every shell file parses and passes shellcheck; the shell suites pass"
+#MISE hide=true
 set -eu
 
 sources="$(tools/gate/shell-sources.sh)"

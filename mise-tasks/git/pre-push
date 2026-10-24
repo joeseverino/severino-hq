@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="Before a host branch is pushed: every extension checkout with work off main carries its name and is pushed first"
+#MISE hide=true
 # The global pre-push hook runs this with git's refs on stdin. Compose builds
 # an extension from its branch of the host branch's name on GitHub, else from
 # its admitted main, so a host branch pushed before its extension work would be

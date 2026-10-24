@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="Build the static public demo site (not the live app) and serve it on loopback, on a port the system picks"
+#MISE description="Build the demo site as demo:build does and serve it on loopback, on a port the system picks"
 #MISE raw=true
 #MISE depends=[{ task = "demo:build", args = ["{{ usage.seed }}"] }]
 #USAGE arg "[seed]" default="showcase" {

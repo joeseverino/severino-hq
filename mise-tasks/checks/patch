@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="No whitespace error or conflict marker in any tracked file, as the working tree holds it"
+#MISE hide=true
 # Against the empty tree, so every tracked file is read, edited or not, and a
 # conflict marker is a whitespace error to `git diff --check`.
 set -eu

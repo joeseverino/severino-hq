@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="mise.toml and the task files it includes are formatted as `mise fmt` writes them"
+#MISE hide=true
 
 # Each file through stdin: `mise fmt --check` also judges the gitignored
 # mise.local.toml. The task files are the .toml entries of

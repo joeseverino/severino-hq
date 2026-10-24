@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="Trivy over an image, as Compose scans the composed one: fixable HIGH and CRITICAL fail"
+#MISE hide=true
 #USAGE arg "[image]" help="The image to scan; without one, the host image is built and scanned"
 
 # The Trivy mise.toml pins, which Compose scans with too, with its flags.

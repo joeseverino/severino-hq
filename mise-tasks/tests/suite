@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="The suite as production configures it, with the coverage floor"
+#MISE hide=true
 #MISE extends="django"
 #MISE env={DJANGO_DEBUG=false}
 #MISE timeout="30m"

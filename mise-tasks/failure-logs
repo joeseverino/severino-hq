@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Open a failed Compose run's sealed logs"
+#MISE hide=true
 #MISE raw=true
 #MISE env={SEVERINO_FAILURE_LOG_IDENTITY={required="The identity that decrypts sealed logs, an op:// reference or a file (tools/dev/mise.local.example.toml)"}}
 #USAGE arg "<run>" help="The Compose run whose logs were sealed"

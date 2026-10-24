@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="The annotations of each failed job in a CI run: level, path:line and message, one per line"
+#MISE hide=true
 #USAGE arg "<run>" help="The run's id"
 
 # Annotations appear when a step fails, before the logs are readable.

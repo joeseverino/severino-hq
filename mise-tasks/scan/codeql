@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="CodeQL, security-and-quality: no alerts"
+#MISE hide=true
 
 # What CI's CodeQL job runs, before pushing rather than after merging: the
 # bundle mise.toml pins (checks:codeql-bundle holds it to the action), the

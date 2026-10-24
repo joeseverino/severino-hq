@@ -8,13 +8,15 @@
 #   mise run check      does my change work
 #   mise run ci         will the pipeline accept it: every gate CI runs
 #   mise run <gate>     one gate, e.g. `mise run checks:ruff`
-#   mise tasks          the list
+#   mise tasks          what an agent starts from; --hidden for every task
 #
 # A gate is a task named <job>:<gate>, declared in its job's file under tasks/
 # (tasks/checks.toml for checks:*), which task_config below includes. Each CI
 # job runs the aggregate of its name (`mise run -c checks`), so a gate added
 # there runs locally and in the pipeline with no second list to edit. `-c`
-# keeps going past a failure and names every gate that failed. No gate declares
+# keeps going past a failure and names every gate that failed. A task that an
+# aggregate, CI or the operator runs is `hide = true`: the aggregate's wildcard
+# and `mise run <name>`, which a verdict names, still reach it. No gate declares
 # `sources`: mise judges them by file times alone, and a verdict also turns on
 # the environment and on files no list would name. A task whose body is more
 # than one line is a file under mise-tasks/, declared in its own #MISE header,

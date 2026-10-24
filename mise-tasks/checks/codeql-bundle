@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="The local CodeQL is the one the pinned action runs"
+#MISE hide=true
 
 # scan:codeql and CI must run the same queries: the bundle mise.toml pins is
 # the one the action's commit defaults to (its src/defaults.json).

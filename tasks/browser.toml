@@ -5,12 +5,14 @@
 
 ["browser:demo"]
 description = "Build the demo and check it in WebKit"
+hide = true
 depends = [{ task = "setup:browser", args = ["webkit"] }, "demo:build"]
 extends = "heavy"
 run = "uv run --group browser python -m unittest demo.check -v"
 
 ["browser:layout"]
 description = "Real-browser layout invariants over the stress estate"
+hide = true
 depends = [{ task = "setup:browser", args = ["webkit"] }]
 extends = "django-heavy"
 usage = 'flag "--fallback-face" help="Draw every page in the system face, as a reader sees it before Inter loads"'
@@ -23,6 +25,7 @@ run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser p
 # a skipped task would still run.
 ["browser:layout-chromium"]
 description = "browser:layout in Chromium: a CI leg, which mise run browser leaves out"
+hide = true
 env = { HQ_BROWSER_ENGINE = "chromium" }
 run = [
   { task = "setup:browser", args = [
@@ -33,6 +36,7 @@ run = [
 
 ["browser:navigation"]
 description = "Real-browser invariants over the example estate, the frame around a page and its fragments"
+hide = true
 depends = [{ task = "setup:browser", args = ["webkit"] }]
 extends = "django-heavy"
 usage = 'flag "--fallback-face" help="Draw every page in the system face, as a reader sees it before Inter loads"'

@@ -17,24 +17,29 @@ run = [
 
 ["drift:sdk-contract"]
 description = "hq_sdk's committed shape, text examples and docs/Plugins.md table are what the SDK offers"
+hide = true
 extends = "django"
 run = "uv run python manage.py sdk_contract --check"
 
 ["drift:api-document"]
 description = "The machine API's OpenAPI document is current"
+hide = true
 extends = "django"
 run = "uv run python manage.py api_openapi --check"
 
 ["drift:bridge-contract"]
 description = "The controller's contracts are the ones the registry derives"
+hide = true
 extends = "django"
 run = "uv run python manage.py bridge_contract --check"
 
 ["drift:connections-reference"]
 description = "docs/Connections.md is what the providers declare"
+hide = true
 extends = "django"
 run = "uv run python manage.py connections_reference --check"
 
 ["drift:font"]
 description = "The served font is its source cut to the characters HQ prints and the features its stylesheets use"
+hide = true
 run = "uv run python -m tools.fonts.subset --check"

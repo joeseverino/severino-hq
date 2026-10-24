@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="No known vulnerability in any locked dependency"
+#MISE hide=true
 set -eu
 
 exec tools/pipeline/audit.sh

@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="Build the production image as CI builds it; nothing when IMAGE hands one over"
+#MISE hide=true
 #MISE skip_if='test -n "${IMAGE:-}"'
 #USAGE flag "--tag <tag>" default="severino-hq:ci-local" help="The name to build it as"
 #USAGE flag "--revision <commit>" help="The commit it is built for, HEAD by default; a pull request builds its head, not the merge it checks out"

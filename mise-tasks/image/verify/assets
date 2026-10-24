@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="It carries its collected assets, their brotli and gzip copies and their manifest, readable by the account that serves them"
+#MISE hide=true
 #MISE depends=["image:build"]
 set -eu
 

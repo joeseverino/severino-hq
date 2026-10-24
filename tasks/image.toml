@@ -3,10 +3,12 @@
 
 ["image:verify:healthy"]
 description = "It comes up healthy"
+hide = true
 depends = ["image:build"]
 run = 'tools/pipeline/image-health.sh "${IMAGE:-severino-hq:ci-local}"'
 
 ["image:verify:host-boot"]
 description = "It boots under its unit: waits for its environment, survives a crash and a reboot"
+hide = true
 depends = ["image:build"]
 run = 'tools/pipeline/host-boot-drill.sh "${IMAGE:-severino-hq:ci-local}"'

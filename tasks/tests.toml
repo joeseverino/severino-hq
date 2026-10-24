@@ -3,22 +3,26 @@
 
 ["tests:django"]
 description = "Django's system checks"
+hide = true
 extends = "django"
 run = "uv run python manage.py check"
 
 ["tests:plugins"]
 description = "The public plugin contract"
+hide = true
 extends = "django"
 env = { SEVERINO_HQ_PLUGINS = "tests.fixtures.example_hq_plugin.plugin:plugin" }
 run = ["uv run python manage.py check", "uv run python manage.py plugins"]
 
 ["tests:migrations"]
 description = "No model change without its migration"
+hide = true
 extends = "django"
 run = "uv run python manage.py makemigrations --check --dry-run"
 
 ["tests:api-properties"]
 description = "Generated API cases through the real WSGI middleware"
+hide = true
 extends = "django-heavy"
 run = "uv run python manage.py test tests.fuzz.api_properties --noinput --parallel 1"
 

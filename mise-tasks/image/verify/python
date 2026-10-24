@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="It runs the oldest Python the toolchain declares, without package managers"
+#MISE hide=true
 #MISE depends=["image:build"]
 set -eu
 

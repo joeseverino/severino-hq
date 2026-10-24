@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="Its decimal is the C module on libmpdec, not the pure-Python fallback"
+#MISE hide=true
 #MISE depends=["image:build"]
 set -eu
 

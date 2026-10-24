@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="Rehearse a release on the deploy host's real data, touching nothing live"
+#MISE hide=true
 #MISE raw=true
 #MISE env={SEVERINO_HQ_DEPLOY_HOST={required="The deploy host's SSH name (tools/dev/mise.local.example.toml)"}}
 #USAGE arg "<image>" help="The image the release waits to deploy, by digest"
