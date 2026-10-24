@@ -4,7 +4,7 @@
 
 ["dev:look"]
 extends = "django-heavy"
-depends = ["setup:{{usage.engine}}"]
+depends = [{ task = "setup:browser", args = ["{{usage.engine}}"] }]
 description = "Screenshot HQ pages as the browser gates draw them at a few widths, and run one of their rules there, reported page by page"
 usage = '''
 arg "<pages>" help="Comma-separated pages, any mix: the gate's estate (connections,dense/services,derived/assets/list), the API reference (api/docs), the example estate's navigation (estate, estate/infrastructure, estate/all for every page of it, or any address as estate/<path>), or all"
@@ -50,7 +50,7 @@ run = [
 
 ["docs:screenshot"]
 description = "Retake the README's pictures from the showcase demo"
-depends = ["setup:webkit", "demo:build"]
+depends = [{ task = "setup:browser", args = ["webkit"] }, "demo:build"]
 extends = "heavy"
 run = "uv run --group browser python -m demo.screenshot"
 

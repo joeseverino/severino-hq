@@ -1,0 +1,17 @@
+#!/bin/sh
+#MISE description="Install a browser engine at the release the locked Playwright pins"
+#MISE hide=true
+#MISE sources=["uv.lock"]
+#USAGE arg "<engine>" help="The engine to install" {
+#USAGE   choices "webkit" "chromium" "firefox"
+#USAGE }
+
+# Named as a dependency, { task = "setup:browser", args = ["webkit"] }, so
+# `mise tasks validate` sees it; mise keeps the sources' freshness per
+# argument, so each engine installs once. A browser removed by hand comes back with
+# `mise run --force setup:browser <engine>`. CI's browser jobs run in
+# Playwright's image, which carries the engines and their system libraries, so
+# there this finds them installed.
+set -eu
+
+uv run --group browser python -m playwright install "${usage_engine:?}"

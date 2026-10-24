@@ -104,7 +104,7 @@ test modules that import them directly or through one module between, plus
 every test of the changed Django apps, every test that names one (its URL
 namespace or app label), every test that reads the tasks when a task
 definition changed, and the architecture tests. Beside them it runs
-`checks:ruff`, `checks:mypy`, `checks:structural`, `checks:css`, `checks:deptry`, `tests:django`, `tests:migrations` and every
+`checks:ruff`, `checks:mypy`, `checks:structural`, `checks:css`, `checks:deptry`, `checks:mise-tasks`, `tests:django`, `tests:migrations` and every
 `drift:*` gate. Each Django gate opens a database of its own, and its tests run
 with `DEBUG` on, the one pass that does. A change to what extensions render
 through (`templates/`, `static/`, `hq_sdk/`, the shared table, page, UI and
@@ -241,7 +241,7 @@ finding names its check, page, width and theme.
 `HQ_BROWSER_ENGINE=chromium` or `firefox` runs both in another engine; CI
 also runs `browser:layout` in Chromium (`browser:layout-chromium`), which
 `mise run browser` leaves to CI. One browser test runs as
-`mise run test <label>` once `mise run setup:webkit` has installed the engine.
+`mise run test <label>` once `mise run setup:browser webkit` has installed the engine.
 
 Every page a gate serves runs under the policy HQ sends: a page rendered
 through the test client keeps its response's headers (`gate.answered`), the

@@ -199,7 +199,7 @@ class CacheWriterTests(SimpleTestCase):
                 self.assertRegex(condition(job), r"github\.event_name == 'push'")
 
 
-BROWSER_SETUP = frozenset({"setup:webkit", "setup:chromium"})
+BROWSER_SETUP = "setup:browser"
 
 
 def step_tasks(step: Node) -> list[re.Pattern[str]]:
@@ -216,9 +216,11 @@ def step_tasks(step: Node) -> list[re.Pattern[str]]:
 
 
 def needs_a_browser(task: dict[str, Any]) -> bool:
-    # A dependency given with arguments is listed as [name, *arguments].
+    # A dependency given with arguments is listed as [name, *arguments]; a task
+    # run as a step, as {"task": name, ...}.
     depends = {each if isinstance(each, str) else each[0] for each in task["depends"]}
-    return bool(BROWSER_SETUP & {*depends, *re.findall(r"mise run (setup:\w+)", body(task))})
+    steps = {each["task"] for each in task["run"] if isinstance(each, dict) and "task" in each}
+    return BROWSER_SETUP in depends | steps
 
 
 def locked_version(package: str) -> str:
@@ -242,7 +244,7 @@ class BrowserInstallTests(SimpleTestCase):
         fails here rather than downloading at run time. Pinned by digest, which
         Renovate moves with the tag."""
         tasks = mise_tasks()
-        gates = {name for name, task in tasks.items() if name not in BROWSER_SETUP and needs_a_browser(task)}
+        gates = {name for name, task in tasks.items() if name != BROWSER_SETUP and needs_a_browser(task)}
         image = f"mcr.microsoft.com/playwright/python:v{locked_version('playwright')}-noble"
         checked = 0
         for path, name, job in all_jobs():
@@ -755,7 +757,7 @@ class GateReferenceTests(SimpleTestCase):
                     if reads.search(body(task)):
                         self.assertRegex(body(task), r"(?m)^#USAGE ", "takes arguments; declare usage")
                 continue
-            run = " ".join(task["run"])
+            run = body(task)
             scripts = [ROOT / path for path in re.findall(r"[\w/.-]+\.(?:sh|py)\b", run) if (ROOT / path).is_file()]
             # A test module named the dotted way (`manage.py test a.b.c.Case`).
             for dotted in re.findall(r"\b[a-z_]+(?:\.\w+)+", run):

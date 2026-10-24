@@ -37,6 +37,7 @@ TASKS = (
     "checks:structural",
     "checks:css",
     "checks:deptry",
+    "checks:mise-tasks",
     "tests:django",
     "tests:migrations",
     "drift:*",

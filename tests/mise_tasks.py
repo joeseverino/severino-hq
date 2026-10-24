@@ -24,6 +24,10 @@ def mise_tasks() -> dict[str, dict[str, Any]]:
 
 
 def body(task: dict[str, Any]) -> str:
-    """What the task runs: a file task's whole source, a TOML task's run lines."""
+    """What the task runs: a file task's whole source, a TOML task's run scripts.
 
-    return Path(task["file"]).read_text() if task["file"] else "\n".join(task["run"])
+    A step that runs another task is listed as a table, {"task": name, ...}, and is not a script."""
+
+    if task["file"]:
+        return Path(task["file"]).read_text()
+    return "\n".join(each for each in task["run"] if isinstance(each, str))
