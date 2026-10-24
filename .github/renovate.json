@@ -121,13 +121,6 @@
       "versioningTemplate": "semver"
     },
     {
-      "description": "The hosted runner image, so a new one moves toolchain.env with every runs-on in the same pull request.",
-      "customType": "regex",
-      "managerFilePatterns": ["/^tools/pipeline/toolchain\\.env$/"],
-      "matchStrings": ["RUNNER_IMAGE=(?<depName>ubuntu)-(?<currentValue>\\S+)"],
-      "datasourceTemplate": "github-runners"
-    },
-    {
       "description": "The Cordon commit admission signs and verifies with, followed on its main branch.",
       "customType": "regex",
       "managerFilePatterns": ["/^tools/pipeline/toolchain\\.env$/"],

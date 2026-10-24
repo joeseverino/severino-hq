@@ -11,7 +11,8 @@ Where every pin lives, and how to move one.
 | Go and its modules | the release in `mise.toml`, of the language version `controller/go.mod` names; modules in `go.sum` | `checks:toolchain`, `controller:check` |
 | The Python base image, every stage's start | `Dockerfile` and `composition/Dockerfile`, by digest | `image:build`; `checks:toolchain` refuses any other image |
 | GitHub Actions | each workflow, by commit with its version beside it | `ActionPinTests` |
-| Hosted runner image, Python matrix, coverage floor, Cordon commit, the Trivy release the image scans run | [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env) | `JobLimitTests`, `PythonVersionTests` |
+| Hosted runner image | each workflow's `runs-on`, one versioned label | `JobLimitTests` |
+| Python matrix, coverage floor, Cordon commit, the Trivy release the image scans run | [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env) | `PythonVersionTests` |
 | cosign, on the host and in every workflow | `CosignVersion` in `controller/host/verifier.go`; workflows install it through `.github/actions/cosign` | `hq-host install` |
 | The API reference bundle | `static/vendor/scalar/standalone.js`, version and SHA-256 in `UPSTREAM` | a test |
 

@@ -262,18 +262,13 @@ def all_jobs() -> list[tuple[str, str, str]]:
 
 @tag("source")
 class JobLimitTests(SimpleTestCase):
-    def test_every_hosted_job_runs_on_the_declared_runner_image(self):
-        """``ubuntu-latest`` moves to a new OS on GitHub's schedule."""
-        image = toolchain()["RUNNER_IMAGE"]
-        hosted = 0
-        for path, name, job in all_jobs():
-            runner = block(job, "runs-on", 4)
-            if not runner or "self-hosted" in " ".join(runner):
-                continue
-            hosted += 1
-            with self.subTest(workflow=path, job=name):
-                self.assertEqual(runner, [image])
-        self.assertGreater(hosted, 3)
+    def test_every_hosted_job_runs_on_one_versioned_runner_image(self):
+        """``ubuntu-latest`` moves to a new OS on GitHub's schedule; Renovate moves a
+        versioned label in every workflow at once."""
+        runners = {" ".join(block(job, "runs-on", 4)) for _, _, job in all_jobs()} - {""}
+        hosted = {runner for runner in runners if "self-hosted" not in runner}
+        self.assertEqual(len(hosted), 1, hosted)
+        self.assertNotIn("latest", hosted.pop())
 
     def test_every_job_has_a_timeout(self):
         """Without one a hung job holds its runner for GitHub's six-hour default. A job
