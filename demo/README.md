@@ -10,7 +10,7 @@ as HQ; no page is made for the demo alone.
 | --- | --- |
 | `mise run demo:build [seed]` | Seeds a throwaway database, signs in, follows every link from the dashboard and saves each page to `var/demo` (another seed: `var/demo-<seed>`). |
 | `mise run browser:demo` | Builds, then serves `var/demo` over plain HTTP and checks it in WebKit (below). Part of the `browser` gate, so every pull request runs it. |
-| `mise run dev:demo [seed]` | Builds that seed and serves it on loopback, on a port the system picks; the log names the address. |
+| `mise run demo:serve [seed]` | Builds that seed and serves it on loopback, on a port the system picks; the log names the address. |
 | `mise run docs:screenshot` | Builds the showcase and retakes the README's pictures from it in WebKit, so they never show a real HQ. |
 
 ## Three seeds
