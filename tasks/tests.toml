@@ -35,8 +35,8 @@ description = "Run the test labels named, as the gates run them, here or on anot
 extends = "django"
 timeout = "30m"
 usage = '''
-flag "--at <ref>" help="Run this tree's tests on the code at <ref>, to prove a new test fails without the fix (docs/Development.md)"
-flag "--keep <path>" var=#true help="With --at, keep this support file as <ref> has it rather than laying this tree's over it; repeatable"
+flag "--at <ref>" help="Run this tree's test files, uncommitted work included, on the code at <ref> in a throwaway worktree: the way to prove a new test fails without the fix. A support file (a gate, probe or fixture) is laid over too, and the closing line names what was laid over and kept (docs/Development.md)"
+flag "--keep <path>" var=#true help="With --at, keep this support file as <ref> has it, when it holds the logic being proven; logic in a test module itself cannot be kept, so move it to a support module beside the test. Repeatable"
 arg "[arguments]..." var=#true double_dash="automatic" help="Test labels, dotted, then any manage.py test options, passed as typed. Every test by default"
 '''
 run = "uv run --group browser python -m tools.gate.at"

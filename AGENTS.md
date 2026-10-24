@@ -6,24 +6,24 @@ agents alike. Setup, tasks and layout: [Development](docs/Development.md).
 ## Start here
 
 1. Run `git status --short`; preserve unrelated work. `git fetch` and compare
-   with `origin/main` before designing: work lands from more than one place,
-   and the mechanism you need may already exist there.
-2. Read the nearest code and tests before changing an interface.
-3. Work with the commands below. Ready is the
-   [definition of done](#definition-of-done).
+   with your brief's base, or `origin/main` without one, before designing:
+   work lands from more than one place, and the mechanism you need may already
+   exist there.
+2. Ready is the [definition of done](#definition-of-done).
 
 `mise tasks` lists what to start from, `mise run <task> --help` what each
 takes; `--hidden` adds the gates aggregates, CI and the operator run, each
 still runnable by the name a verdict gives it. A gate closes on a verdict line
-naming every failed task and test: run it plain, since a pipe reports the
-filter's status.
+naming every failed task and test.
 
 - `mise run fast [BASE]` while editing. It selects through Python imports and
   app names, so a rule held only by a string or a template needs `check`.
-- `mise run check` before handing work back, when the machine can hold it;
-  `mise run ci` is every gate CI runs.
-- `mise run test <labels>`; `--at <ref>` runs them on older code, never a base
-  worktree, snapshot or checkout made by hand.
+- `mise run check` before handing work back, when the machine can hold it (a
+  worker runs `fast`, per its house rules); `mise run ci` is every gate CI
+  runs.
+- `mise run test <labels>`, and `mise run test --at <base> <labels>` to prove a
+  new test fails without the fix, never a base worktree, snapshot or checkout
+  made by hand.
 - `mise run dev:scratch` in the agent's own worktree, never `mise run dev`.
 - `mise run manage -- <command>` for Django, `fix` for what lint holds,
   `regen` for derived files.
@@ -32,11 +32,11 @@ A CI job runs the aggregate of its name, so a gate goes in its job's file under
 `tasks/` (`tasks/checks.toml` for `checks:*`), never in a workflow.
 
 The composed suite (`suite:as-image`, run as the image runs it) is where the
-host and its extensions first meet, which CI cannot reach. Name the extension
-set once in a gitignored `mise.local.toml` (copy
-`tools/dev/mise.local.example.toml`); without it the pass runs the host alone,
-covering less. `mise doctor project` says whether the set is named, found and
-importable.
+host and its extensions first meet, which CI cannot reach. The machine's own
+gitignored `mise.local.toml` names the extension set, and an agent leaves it as
+it is; without it the pass runs the host alone. `mise doctor project` says
+whether the set is named, found and importable
+([The extension set](docs/Development.md#the-extension-set)).
 
 A test that reads the repository rather than running the product carries
 `@tag("source")` and runs only in `checks:source` (`mise run checks:source
@@ -102,11 +102,9 @@ module, and `test_admission.py` there holds that to be enough. Its Go half in
 (`r.Supplied.For`), never a setting by name ([Providers](docs/Architecture.md#providers)).
 
 Tests live in each package's `tests/` directory. When a definition moves,
-retarget every `mock.patch("module.name")` that named its old home: a patch of
-a name no longer looked up there passes and patches nothing. Code that reads a
-patched name off its module at call time (`module.name`) is reached by the
-patch; a name imported at module top binds once and is not. A check that walks
-a path (an architecture test, a glob) fails when its path matches nothing.
+retarget every `mock.patch` that named its old home, since a patch of a name
+no longer looked up there patches nothing. A check that walks a path (an
+architecture test, a glob) fails when its path matches nothing.
 
 ## Rules that eliminate bug classes
 
@@ -125,17 +123,13 @@ a path (an architecture test, a glob) fails when its path matches nothing.
   own.
 - Every mutation is atomic and audit-attributed. Machine writes are safely
   retryable with durable idempotency.
-- Plugin IDs, routes, Django apps, distributions, providers, grants, and
-  capability names fail at startup when invalid or conflicting.
 - Plugin code imports `hq_sdk`, never `application`, `core`, or another host
   app (`python -m hq_sdk.validation src`).
 - A change to `hq_sdk`'s shape (`hq_sdk/contract.json`) is a fleet change:
   decide whether `PLUGIN_API_VERSION` moves, and give a new export a case in
   `tests/sdk_consumer/consumer.py` ([Plugins](docs/Plugins.md)).
-- Derived files are never edited by hand: `mise run regen` writes them (the
-  API's and the controller's OpenAPI documents, the connection registry,
-  `hq_sdk/contract.json`, `docs/Connections.md`, the Go types, the served
-  font) and `mise run drift` names any that is behind.
+- Derived files are never edited by hand: `mise run regen` writes them and
+  `mise run drift` names any that is behind.
 - List views use `TableListMixin`; direct view mutations and MCP model access
   are rejected by architecture tests.
 - A link to a command's form is built by
@@ -148,9 +142,7 @@ a path (an architecture test, a glob) fails when its path matches nothing.
   `--no-deps`; the host-owned plugin check reproduces that production boundary.
 - A workflow's write to GitHub (a deployment status, a push, a pull request)
   uses a token minted from HQ's GitHub App for that one permission, declared
-  in `deploy/github-apps.json`, and the job's own permissions stay at read;
-  `checks:scorecard` refuses a job-level write, and the fix is the App's token,
-  never an exception in the gate.
+  in `deploy/github-apps.json`; the job's own permissions stay at read.
 
 ## Frontend quality bar
 
@@ -176,31 +168,24 @@ adding UI; grow a primitive rather than styling a page.
   (`hq/platform/core/speculation.py`).
 - Avoid N+1 queries. Prefetch relation panels and add a query-budget regression
   test for a projection that can grow with data or plugins.
-- Scripts are deferred and respect `prefers-reduced-motion`; two load in the
-  head and run before the first frame (`test_script_loading.py`): the
-  page-transition listener, and `tables.js`, which lets a table's ranked
-  columns go while it is wider than its region, since CSS has no query for
-  "this content overflows". Nothing moves once a page is drawn: a
-  script fills space the server's HTML already holds. No inline
-  scripts or event handlers; `style-src 'unsafe-inline'` exists only
-  for a per-datum custom property on a chart mark (`style="--at: 62%"`).
+- Scripts are deferred and respect `prefers-reduced-motion`; only the two
+  `test_script_loading.py` names run before the first frame. Nothing moves
+  once a page is drawn: a script fills space the server's HTML already holds.
 
 ## Structural checks
 
-- Ruff's C901 (cyclomatic 15) and `CognitiveComplexityTests` (cognitive 20)
-  have no allowance list: a function over either is split into named steps.
-  `FileSizeTests` holds every source file under 1,000 lines; one past that is
-  split by responsibility.
+- Ruff's C901, `CognitiveComplexityTests` and `FileSizeTests` have no
+  allowance list: a function over either complexity bound is split into named
+  steps, a file over the size bound by responsibility.
 - A Ruff rule is switched off only in `pyproject.toml`, with the reason beside
-  it; a line-level `# noqa` names its code and says why. A method that
-  overrides a base-class method carries `@override`.
+  it; a line-level `# noqa` names its code and says why.
 - `checks:mypy` holds the seams `pyproject.toml` names (`files`) fully
   annotated, and the browser test package to attributes and calls that exist,
   without demanding annotations there. A `# type: ignore[code]` is for a wrong
   stub, with the reason.
 - A docstring says what the thing is and why it exists. How it works lives in
   the one doc or comment that owns the mechanism, so a long docstring is
-  trimmed as its file is touched; no gate measures it.
+  trimmed as its file is touched.
 - Duplication and tangling are green in every test; they are graph questions.
   The structural bar (`checks:structural`) fails a new near-duplicate pair
   outside tests, and its baseline never grows to pass. The other questions
@@ -218,7 +203,6 @@ required, and read-only checks of the deploy host (`hq-host check`,
 [Deployment](docs/Deployment.md)). `--skip-host` exits 2, never 0, and so does
 a host whose release nothing verified; the check says how to verify it.
 
-- The requested behavior is implemented at the correct layer.
 - Tests cover success, denial, invalid input, and the regression class where
   applicable, not only the happy path.
 - `mise run check` passes, including the composed pass when a change touches
@@ -228,5 +212,5 @@ a host whose release nothing verified; the check says how to verify it.
 - Docs change when a supported contract changes.
 - No private identifiers, generated artifacts, secrets, or unrelated edits
   enter the diff.
-- Do not commit, push, deploy, or modify private repositories unless the user
-  explicitly asks for that operation.
+- Push, deploy and changes to private repositories wait for an explicit ask;
+  committing follows the orchestrating session's rules.
