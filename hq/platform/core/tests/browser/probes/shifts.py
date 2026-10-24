@@ -49,3 +49,16 @@ _LAYOUT_SHIFTS = (
   }, 0);
 })"""
 )
+
+# Where each part of the site header that shows stands, by its class, and the
+# header's own box: read on a page cut short inside the header and on the
+# whole page, so a part that moves once its later siblings arrive is found.
+_HEADER_PARTS = """(selector) => {
+  const header = document.querySelector(selector);
+  const at = (el) => { const r = el.getBoundingClientRect(); return [r.x, r.y, r.width, r.height].map(Math.round); };
+  const parts = {header: at(header)};
+  for (const part of header.children) {
+    if (part.checkVisibility()) parts[part.className] = at(part);
+  }
+  return parts;
+}"""

@@ -166,6 +166,8 @@ SELECTORS = {
     "head_title": ".page-head .page-title-row",
     # Where the contrast check samples text: the page and the header over it.
     "contrast_scope": "main, .site-header",
+    # The bar at the top of every page.
+    "site_header": ".site-header",
     # Filled boxes that are not tiles: controls, tables, code, charts, and
     # anything floating over the page.
     "tile_exempt": (".btn, .pill, button, input, select, textarea, table, pre, code, svg, canvas, dialog, [data-menu]"),

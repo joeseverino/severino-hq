@@ -11,6 +11,7 @@ from hq.platform.core.tests.browser.probes.boxes import _MAP, _OVERRULED_ALIGNME
 from hq.platform.core.tests.browser.probes.palette import _BUTTON_EDGES
 from hq.platform.core.tests.browser.probes.parts import _READINGS, _SPILLED_LABELS, reading_problems
 from hq.platform.core.tests.browser.probes.settle import _KEPT_SELECTORS, _PRESS_EVERY_SHOWN, _SETTLED
+from hq.platform.core.tests.browser.probes.shifts import _HEADER_PARTS
 from hq.platform.core.tests.browser.probes.tables import (
     _BLANK_TABLE,
     _CELLS,
@@ -28,7 +29,7 @@ from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.stress import ALL_PAGES
 from hq.platform.core.tests.browser.survey import _IDENTIFIER
-from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS
+from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS, viewport
 from hq.platform.core.tests.test_browser_fixtures import PAGES
 
 
@@ -655,3 +656,23 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 )
                 self.assertEqual(set(ends), sides)
                 self.assertEqual(self.page.evaluate(_OVERRULED_ALIGNMENT, SELECTORS["chip"]), [])
+
+    def test_the_site_header_stands_where_it_ends_while_it_is_still_arriving(self):
+        """A page drawn while its header is still being parsed, cut before the
+        search as a slow connection cuts it, puts every part of the header that
+        has arrived where the whole header puts it, with its sections menu
+        closed and open."""
+
+        name = next(iter(PAGES))
+        whole = self.pages[name]
+        self.pages = {**self.pages, "header-cut": whole[: whole.index('<a class="global-search"')]}
+        for width in WIDTHS:
+            for menu in ("", "#sections"):
+                with self.subTest(width=width, menu=menu or "closed"):
+                    self.page.set_viewport_size(viewport(width))
+                    self.page.goto(f"{ORIGIN}/header-cut/{menu}", wait_until="load")
+                    arrived = self.page.evaluate(_HEADER_PARTS, SELECTORS["site_header"])
+                    self.page.goto(f"{ORIGIN}/{name}/{menu}", wait_until="load")
+                    ended = self.page.evaluate(_HEADER_PARTS, SELECTORS["site_header"])
+                    self.assertGreater(len(arrived), 2, "the cut left too little of the header to judge")
+                    self.assertEqual(arrived, {part: ended[part] for part in arrived})

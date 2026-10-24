@@ -339,11 +339,11 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    down to the mark alone: squeezed, the name wraps to a second line that the
    control does not show. So the name is there on every phone that fits it and
    on none that does not, all of it or none of it, without a width being named. */
-.user-menu { position: relative; flex: 0 0 auto; }
+.user-menu { position: relative; grid-area: user; }
 /* The badge is one size whatever it counts, so the count arriving after the
    page (a fragment on every page but the two that count it) moves nothing in
    the bar: it is pinned to the corner, outside the flow. */
-.action-badge { position: relative; display: inline-flex; flex: none; align-items: center; justify-content: center; width: var(--control-size); height: var(--control-size); border: 1px solid var(--bar-control-line); border-radius: var(--radius-sm); background: var(--bar-control-bg); color: var(--ink-2); text-decoration: none; }
+.action-badge { position: relative; display: inline-flex; grid-area: badge; align-items: center; justify-content: center; width: var(--control-size); height: var(--control-size); border: 1px solid var(--bar-control-line); border-radius: var(--radius-sm); background: var(--bar-control-bg); color: var(--ink-2); text-decoration: none; }
 .action-badge [data-action-count] { position: absolute; inset-block-start: -7px; inset-inline-end: -7px; box-sizing: border-box; min-width: 18px; height: 18px; padding: 0 var(--space-2); border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-size: var(--text-2xs); font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .action-badge:hover { background: var(--bar-control-bg-hover); color: var(--ink); text-decoration: none; }
 .action-badge svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }

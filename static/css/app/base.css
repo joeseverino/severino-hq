@@ -86,6 +86,7 @@ pre ::selection { color: var(--code-ink); }
    operator who forgets can screenshot fiction and file it as fact) and it
    sits beside the profile control rather than shouting over the header. */
 .demo-flag {
+  grid-area: demo; justify-self: end;
   font-size: var(--text-2xs); font-weight: 600; white-space: nowrap;
   padding: var(--space-1) var(--space-4); border-radius: 20px;
   background: var(--bg-tint); color: var(--muted);
@@ -147,12 +148,19 @@ pre ::selection { color: var(--code-ink); }
 /* One row, always. The sections are the header's job; the search field is the
    part that gives way. It collapses to a button that expands back over the nav
    on focus, so a cramped header costs a click rather than a second row, and
-   the nav is never handed less room than its own content. */
+   the nav is never handed less room than its own content.
+   Each part has a track of its own and the row is a control tall, so a page
+   drawn while its header is still arriving already puts each part where it
+   ends: the brand and the sections hold the start, the demo mark's
+   track takes what is left, the mark at its end, and every track past it is as wide as its control
+   whether or not the control has come. */
 .site-header {
-  display: flex;
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-areas: "brand nav demo search badge user";
+  grid-template-columns: auto auto 1fr minmax(150px, 210px) var(--control-size) auto;
+  grid-template-rows: var(--control-size);
   align-items: center;
-  gap: var(--space-5) var(--space-7);
+  column-gap: var(--space-7);
   padding: var(--space-5) var(--space-14);
   background: color-mix(in srgb, var(--surface) 80%, transparent);
   border-bottom: 1px solid var(--line);
@@ -160,6 +168,7 @@ pre ::selection { color: var(--code-ink); }
   backdrop-filter: saturate(180%) blur(12px);
 }
 .brand {
+  grid-area: brand;
   font-weight: 700; font-size: var(--text-lg); color: var(--ink);
   letter-spacing: -.01em;
   display: inline-flex; align-items: center; gap: var(--space-4);
@@ -171,17 +180,15 @@ pre ::selection { color: var(--code-ink); }
 }
 .brand:hover { text-decoration: none; }
 .primary-nav {
+  grid-area: nav;
   display: flex;
   /* Single row, deliberately: a control wrapped onto a second row would sit
      beneath an open dropdown, where the panel covers it and swallows its
      clicks. Grouping keeps the bar short enough that one row is enough. */
   flex-wrap: nowrap;
   gap: var(--space-1);
-  /* Never squeezed below its own content. `overflow` must stay visible, so a
-     nav handed less room than it needs has nothing to clip or scroll it: its
-     tail would paint underneath the search field. */
-  flex: 0 1 auto;
-  /* Must stay visible: an overflow scroll container clips absolutely
+  /* Never squeezed below its own content, which its track gives it, and
+     `overflow` stays visible: an overflow scroll container clips absolutely
      positioned descendants, the group dropdowns included. */
   overflow: visible;
 }
@@ -226,9 +233,7 @@ pre ::selection { color: var(--code-ink); }
 
 /* Gives way before the sections do: below the breakpoint it is an icon. */
 .global-search {
-  flex: 0 1 210px;
-  min-width: 150px;
-  margin-left: auto;
+  grid-area: search;
   display: flex;
   align-items: center;
   gap: var(--space-4);
@@ -247,7 +252,8 @@ pre ::selection { color: var(--code-ink); }
 .search-key { padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--muted-2); font: inherit; font-size: var(--text-3xs); line-height: 1.6; }
 
 @media (max-width: 1280px) {
-  .global-search { flex: none; min-width: 0; width: var(--control-size); justify-content: center; padding: 0; }
+  .site-header { grid-template-columns: auto auto 1fr var(--control-size) var(--control-size) auto; }
+  .global-search { justify-content: center; padding: 0; }
   .search-label, .search-key { display: none; }
 }
 
