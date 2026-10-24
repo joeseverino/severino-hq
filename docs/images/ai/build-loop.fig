@@ -1,6 +1,5 @@
 # One change to HQ: mapped, built by workers in parallel, integrated and gated in one place, with each lesson fed back into the rules.
 title: Building HQ with agents
-subtitle: .claude/agents · .claude/skills
 direction: down
 
 Map [icon: monitor, note: read only · classes · file owners]

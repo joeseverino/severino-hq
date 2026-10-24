@@ -1,7 +1,7 @@
 # AI and HQ
 
 HQ is built by one person working with AI agents, and agents also operate it.
-This page covers both: the agent files this repository ships and the gates
+This page covers both: how agents build it and the gates
 that hold their work to the same bar as anyone's, then the two doors an agent
 uses to read and change HQ, and the limits on what it can do through them.
 
@@ -110,8 +110,8 @@ of this public repository:
   across all of them. These live in a private repository, because they carry
   one operator's machine, accounts and other projects.
 
-HQ's own rules do not depend on that private setup: the contract, the gates,
-the worker and the skills above are all in this repository.
+HQ's own rules do not depend on that private setup: the contract and the
+gates are in this repository.
 
 ## Operating HQ with agents
 
