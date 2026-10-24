@@ -25,7 +25,7 @@ class WriteTests(SimpleTestCase):
                 self.assertIsNone(WRITE.match(sql))
 
 
-class TallyTests(SimpleTestCase):
+class RoleTimingsTests(SimpleTestCase):
     def test_it_keeps_the_five_slowest_with_what_each_was(self):
         tally = RoleTimings()
         for took in range(10):
