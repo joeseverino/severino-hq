@@ -13,7 +13,6 @@ import tomllib
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-import yaml
 from django.test import SimpleTestCase, tag
 
 from tests.mise_tasks import body, mise_tasks
@@ -60,6 +59,10 @@ def composite_actions() -> list[Path]:
 
 
 def load(path: Path) -> Node:
+    # The image's suite collects this module without PyYAML, and discovery
+    # reads every name a module binds, which would resolve a lazy import.
+    import yaml
+
     return yaml.safe_load(path.read_text())
 
 
