@@ -28,6 +28,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 from tools.gate.verdict import Step, close, run
+from tools.structural.classify import TEST
 
 ROOT = Path(__file__).resolve().parents[2]
 # The quick gates, each with the paths a change must touch for it to run, as
@@ -51,6 +52,9 @@ TASKS: dict[str, tuple[str, ...]] = {
     "drift:connections-reference": (*PYTHON, "docs/Connections.md"),
     "drift:font": ("tools/fonts/*", "static/fonts/*", "static/css/*"),
 }
+# Paths a gate never reads, so a change to them alone leaves it out: the
+# structural bar drops test code before it pairs anything.
+UNREAD = {"checks:structural": TEST}
 # What every gate reads: the dependencies, the tool pins and the task
 # definitions. A change to one runs them all.
 EVERY_TASK = ("pyproject.toml", "uv.lock", "mise.toml", "mise.lock", "tasks/*.toml", "tools/pipeline/toolchain.env")
@@ -100,12 +104,14 @@ def touches_shared_ui(paths: list[str]) -> bool:
 def selected_tasks(paths: list[str]) -> tuple[str, ...]:
     """The quick gates a change can have broken: those whose paths it touches, or all when it touches EVERY_TASK."""
 
-    def touched(patterns: tuple[str, ...]) -> bool:
-        return any(fnmatch(path, pattern) for path in paths for pattern in patterns)
+    def touched(patterns: tuple[str, ...], task: str = "") -> bool:
+        unread = UNREAD.get(task)
+        read = [path for path in paths if not (unread and unread.search(path))]
+        return any(fnmatch(path, pattern) for path in read for pattern in patterns)
 
     if touched(EVERY_TASK):
         return tuple(TASKS)
-    return tuple(task for task, patterns in TASKS.items() if touched(patterns))
+    return tuple(task for task, patterns in TASKS.items() if touched(patterns, task))
 
 
 def tasks_command(tasks: tuple[str, ...], parallel: str) -> list[str]:

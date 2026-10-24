@@ -138,6 +138,12 @@ class FastGateTaskSelectionTests(GateTestCase):
         self.assertNotIn("checks:css", selected)
         self.assertNotIn("drift:font", selected)
 
+    def test_a_change_to_tests_alone_leaves_out_the_structural_bar_which_never_reads_them(self):
+        self.assertNotIn("checks:structural", fast_gate.selected_tasks(["hq/platform/core/tests/test_example.py"]))
+        self.assertIn("checks:structural", fast_gate.selected_tasks(["hq/platform/core/example.py"]))
+        both = ["hq/platform/core/tests/test_example.py", "hq/platform/core/example.py"]
+        self.assertIn("checks:structural", fast_gate.selected_tasks(both))
+
     def test_a_change_to_what_every_gate_reads_runs_them_all(self):
         for changed in ("uv.lock", "tasks/checks.toml"):
             with self.subTest(changed=changed):
