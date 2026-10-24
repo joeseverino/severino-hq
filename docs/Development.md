@@ -305,7 +305,9 @@ host name outside the reserved and shared ranges it names.
 
 `mise run dev:look -- <pages>` is the same browser for looking rather than
 gating: it saves a full-page screenshot of each page at each width under
-`var/look/`. `estate` names the example estate's pages; `--deep` adds every
+`var/look/`, which each run empties first so every shot there is its own.
+The pages and the rule asked are checked before anything is drawn, and a rule
+that does not exist is refused with the list of those that do. `estate` names the example estate's pages; `--deep` adds every
 page they link to (each record, each command form), answered by HQ's views as
 the browser asks, every request marked as a prefetch so a page that would act
 or reach out is refused and reported instead. `--rule survey` runs every
@@ -316,8 +318,12 @@ tests, not judged. `mise run dev:look --deep --rule survey estate/all` walks
 the whole estate. What a rule finds is written beside the screenshot
 (`<page>-<width>.txt`) as each page is looked at, so a run stopped part way
 keeps what it found, and page by page to `var/gate/look.txt` once the run
-ends; the run prints each page and width as it starts, the checks it ran,
-and a verdict naming every page that failed. `--base <ref>` looks at the same
+ends; the run prints each page and width as it starts and, once it has
+looked, each shot it took, how many findings it kept, and every console
+error, uncaught script error and policy refusal the page had, then the
+checks it ran and a verdict naming every page that failed. Those errors are
+judged as a rule's findings are: without a base any fails the run, against
+one only a new one does. `--base <ref>` looks at the same
 pages at `<ref>` first, in a temporary worktree it removes however the run
 ends and judges by this checkout's rules, its output relayed line by line
 after the ref as it runs, writes what is new on this checkout and what
@@ -369,8 +375,9 @@ run) is shot as it stands, as `<page>-<width>.failed.png`, and its path
 printed. `--open` opens every disclosure, round after round until nothing
 more opens, so a disclosure a region brings in when another opens is opened
 too; then a rule is run again with one popover of each kind shown on its own,
-as a reader shows one, and what it finds past the page beneath is said under
-that popover's id. A kind is the popover's classes and the table and column it
+as a reader shows one, shot that way (`<page>-<width>.popover-<id>.png`),
+and what it finds past the page beneath is said under that popover's id and
+its shot. A kind is the popover's classes and the table and column it
 sits in, so a list's many panels from one partial cost one run. `--engine chromium` or `firefox` draws in
 another engine, installed first (`webkit` by default).
 

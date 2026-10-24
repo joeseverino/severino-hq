@@ -72,6 +72,36 @@ class AskedTests(SimpleTestCase):
         self.assertEqual(look._evaluated("example/one", 402, None), "example/one at 402:\n  null")
 
 
+@tag("source")
+class AskedFirstTests(SimpleTestCase):
+    def refused_before_the_base(self, asked, said):
+        """``asked`` refused with ``said`` before any look at a base began."""
+
+        for kept in ("clock_at", "asked"):
+            self.addCleanup(lambda kept=kept: kept in vars(look.Look) and delattr(look.Look, kept))
+        environment = {**ASKED, "usage_base": "HEAD", **asked}
+        with (
+            mock.patch.dict(os.environ, environment, clear=True),
+            mock.patch.object(look, "_look_at") as base,
+            self.assertRaisesMessage(AssertionError, said),
+        ):
+            look.Look.setUpClass()
+        base.assert_not_called()
+
+    def test_a_rule_that_does_not_exist_is_refused_with_the_rules_that_do_before_the_base_is_looked_at(self):
+        self.refused_before_the_base(
+            {"usage_pages": "dense/action-items", "usage_rule": "example_no_such_rule"},
+            "No rule named 'example_no_such_rule'. Rules: ",
+        )
+        rules = look._rules()
+        self.assertIn("survey", rules)
+        self.assertIn("a_table_fits_its_box_at_every_width", rules)
+        self.assertNotIn("look", rules)
+
+    def test_a_page_that_does_not_exist_is_refused_before_the_base_is_looked_at(self):
+        self.refused_before_the_base({"usage_pages": "example/no-such-page"}, "No page ['example/no-such-page']")
+
+
 class _Popovers:
     """A page's popovers as the look's scripts reach them: some shown, one
     that will not show."""
@@ -88,7 +118,7 @@ class _Popovers:
             if popover in self.refused:
                 return None
             self.shown.add(popover)
-            return f"#{popover}"
+            return [f"#{popover}", popover]
         self.shown.discard(popover)
         return None
 
@@ -100,10 +130,14 @@ class _Lens:
     with_each_popover = look.Look.with_each_popover
 
     def __init__(self, page):
-        self.page = page
+        self.page, self.shots, self.shot_while_shown = page, [], []
 
     def settle(self):
         pass
+
+    def shoot_popover(self, name, width, popover):
+        self.shot_while_shown.append(sorted(self.page.shown))
+        return f"var/look/{name}-{width}.popover-{popover}.png"
 
     def judged(self, _name, _width, _rule):
         shown = sorted(self.page.shown)
@@ -116,12 +150,32 @@ class _Lens:
 class PopoverTests(SimpleTestCase):
     def test_each_popover_is_judged_alone_and_only_for_what_it_adds_to_the_page(self):
         page = _Popovers(["origin-one", "origin-two", "origin-three"], refused=["origin-three"])
-        found = _Lens(page).with_each_popover("example/one", 820, "survey", ["frames: a box beneath"])
+        lens = _Lens(page)
+        found = lens.with_each_popover("example/one", 820, "survey", ["frames: a box beneath"])
         self.assertEqual(
             found,
-            ["with #origin-one shown: cut: a key in origin-one", "with #origin-two shown: cut: a key in origin-two"],
+            [
+                "with #origin-one shown (var/look/example/one-820.popover-origin-one.png): cut: a key in origin-one",
+                "with #origin-two shown (var/look/example/one-820.popover-origin-two.png): cut: a key in origin-two",
+            ],
         )
         self.assertEqual(page.shown, set())
+
+    def test_each_popover_judged_is_shot_shown_on_its_own_and_the_shot_is_named_beside_it(self):
+        page = _Popovers(["origin-one", "origin-two"])
+        lens = _Lens(page)
+        lens.with_each_popover("example/one", 820, "survey", [])
+        self.assertEqual(lens.shot_while_shown, [["origin-one"], ["origin-two"]])
+        self.assertEqual(
+            lens.shots,
+            [
+                ("var/look/example/one-820.popover-origin-one.png", "with #origin-one shown"),
+                ("var/look/example/one-820.popover-origin-two.png", "with #origin-two shown"),
+            ],
+        )
+        self.assertEqual(
+            look._shot("example/one", 820, "popover-origin-one").name, "example-one-820.popover-origin-one.png"
+        )
 
     def test_one_popover_stands_for_its_kind_and_the_next_stands_in_for_one_that_will_not_show(self):
         page = _Popovers(
@@ -133,8 +187,9 @@ class PopoverTests(SimpleTestCase):
         self.assertEqual(
             found,
             [
-                "with #origin-two and 2 like it shown: cut: a key in origin-two",
-                "with #origin-four shown: cut: a key in origin-four",
+                "with #origin-two and 2 like it shown (var/look/example/one-820.popover-origin-two.png):"
+                " cut: a key in origin-two",
+                "with #origin-four shown (var/look/example/one-820.popover-origin-four.png): cut: a key in origin-four",
             ],
         )
 
@@ -261,7 +316,7 @@ class _Opener:
     script = ""
 
     def __init__(self, page, dialogs):
-        self.page, self.dialogs = page, dialogs
+        self.page, self.dialogs, self.shots = page, dialogs, []
 
     def settle(self):
         pass
@@ -439,6 +494,21 @@ class ReportTests(SimpleTestCase):
         ):
             self.assertEqual(look_report.finding_key(one), look_report.finding_key(other))
 
+    def test_against_a_base_only_a_new_error_fails_and_without_one_any_does(self):
+        base = {("example/one", 402): ["/one/: console error: Failed to load 12"]}
+        same = {("example/one", 402): ["/one/: console error: Failed to load 13"]}
+        _, printed, failed = look_report.closing(look._ERRORS, same, base, "example-ref")
+        self.assertFalse(failed)
+        self.assertNotIn("new", " ".join(printed[:-1]))
+        new = {("example/one", 402): [*same["example/one", 402], "/one/: the policy's script-src refused inline"]}
+        _, printed, failed = look_report.closing(look._ERRORS, new, base, "example-ref")
+        self.assertTrue(failed)
+        self.assertEqual(printed[:-1], ["new: example/one at 402: /one/: the policy's script-src refused inline"])
+        _, printed, failed = look_report.closing(look._ERRORS, same, None, "")
+        self.assertTrue(failed)
+        self.assertIn("example/one", printed[-1])
+        self.assertFalse(look_report.closing(look._ERRORS, {("example/one", 402): []}, None, "")[2])
+
     def test_alike_findings_are_counted_so_one_more_of_them_is_new(self):
         base = {("example/one", 402): [self.FIRST_RUN[1]]}
         branch = {("example/one", 402): [self.SECOND_RUN[1], self.FIRST_RUN[1]]}
@@ -488,9 +558,12 @@ class ReportTests(SimpleTestCase):
         measured = {("example/one", 402): {"columns": "example/one table 1 at 402", "eval": "example/one at 402:\n  1"}}
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder, "found.json")
-            look._write_found(path, self.FOUND, measured)
-            found, read = look._read_found(path)
+            errors = {("example/one", 402): ["/one/: console error: example"]}
+            look._write_found(path, self.FOUND, measured, errors)
+            found, read, heard = look._read_found(path)
         self.assertEqual(found, self.FOUND)
+        self.assertEqual(heard[("example/one", 402)], errors[("example/one", 402)])
+        self.assertEqual(heard[("example/two", 402)], [])
         self.assertEqual(read[("example/one", 402)], measured[("example/one", 402)])
         self.assertEqual(read[("example/two", 402)], {})
 
@@ -534,12 +607,19 @@ class _Pages:
 
     look_at_every_page = look.Look.look_at_every_page
 
-    def __init__(self, asked, said):
-        self.asked, self.said, self.began = asked, said, []
+    def __init__(self, asked, said, heard=None):
+        self.asked, self.said, self.began, self.errors = asked, said, [], {}
+        self.heard, self.refusals = heard or {}, []
 
     def look(self, name, width, _rule):
         self.began.append(((name, width), self.said.getvalue()))
+        self.shots.append((f"var/look/{name}-{width}.png", ""))
+        self.refusals += self.heard.get((name, width), [])
         return []
+
+    def refusals_so_far(self):
+        refusals, self.refusals = self.refusals, []
+        return refusals
 
 
 @tag("source")
@@ -555,6 +635,22 @@ class ProgressTests(SimpleTestCase):
         for (name, width), before in pages.began:
             self.assertEqual(before.splitlines()[-1], f"Looking at {name} at {width}")
         self.assertEqual(len(pages.began), 4)
+
+    def test_each_page_and_width_says_its_shots_and_every_error_it_had_and_keeps_them_apart(self):
+        heard = {("example/one", 1360): ["/one/ at 1360px: uncaught TypeError: example"]}
+        with (
+            tempfile.TemporaryDirectory() as folder,
+            mock.patch.object(look, "OUT", Path(folder)),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as said,
+        ):
+            pages = _Pages(["example/one"], said, heard)
+            pages.look_at_every_page([402, 1360], "survey")
+        lines = said.getvalue().splitlines()
+        at_wide = lines.index("Looking at example/one at 1360")
+        self.assertIn("  shot var/look/example/one-402.png", lines[:at_wide])
+        self.assertFalse([line for line in lines[:at_wide] if line.startswith("  error:")])
+        self.assertIn("  error: /one/ at 1360px: uncaught TypeError: example", lines[at_wide:])
+        self.assertEqual(pages.errors, {("example/one", 402): [], ("example/one", 1360): heard["example/one", 1360]})
 
     def test_the_base_pass_is_said_line_by_line_after_its_ref_and_kept_whole_in_its_log(self):
         sink = io.StringIO()

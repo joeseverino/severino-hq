@@ -164,3 +164,18 @@ def beside(ref: str, ours: str, theirs: str | None) -> str:
         if there != here:
             lines.append(f"{ref}: {'(no such line)' if there is None else there.strip()}")
     return "\n".join(lines)
+
+
+def looked(shots: list[tuple[str, str]], said: list[str], rule: str, report: str, errors: list[str]) -> list[str]:
+    """What one page at one width came to, under the line that began it: each
+    shot taken, by its path and what it shows; what ``rule`` found there, by
+    how many and where they are kept, or without a rule what kept it from
+    being looked at; and each console error, uncaught error and policy
+    refusal the page had."""
+
+    lines = [f"  shot {path}{f', {shows}' if shows else ''}" for path, shows in shots]
+    if rule:
+        lines.append(f"  {rule}: {len(said)} found, in {report}" if said else f"  {rule} holds")
+    else:
+        lines += [f"  {line}" for line in said]
+    return lines + ([f"  error: {line}" for line in errors] or ["  no console error, uncaught error or policy refusal"])

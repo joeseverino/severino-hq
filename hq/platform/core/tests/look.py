@@ -6,6 +6,7 @@ It runs only as `mise run dev:look`, whose flags say what each does
 to use it is in docs/Development.md, under "Browser layout".
 """
 
+import inspect
 import json
 import os
 import re
@@ -41,8 +42,8 @@ from hq.platform.core.tests.look_report import (
     Found,
     Measured,
     beside,
-    block,
     closing,
+    looked,
     unmatched,
 )
 from hq.platform.core.tests.look_tables import COLUMNS, TABLES, columns_line
@@ -62,6 +63,9 @@ LENS = (
 # findings and its verdict, so a long report is never cut short where it is read.
 REPORT = Path(settings.BASE_DIR) / "var" / "gate" / "look.txt"
 REFERENCE_PAGES = (REFERENCE, REFERENCE_DARK)
+# What the console errors, uncaught errors and policy refusals a page had are
+# reported as: judged as a rule's findings are, so only a new one fails against a base.
+_ERRORS = "the error check"
 ESTATE = "estate"
 
 # Request headers the browser sends that are not the view's to read. The
@@ -100,8 +104,8 @@ _POPOVER_KINDS = """() => {
     return [popover.className, tables.indexOf(table), popover.closest('td, th')?.cellIndex ?? -1].join(' ');
   });
 }"""
-# The popover at a place in the page shown, and what names it in a finding;
-# nothing for one that will not show.
+# The popover at a place in the page shown, what names it in a finding and
+# what names its shot; nothing for one that will not show.
 _SHOW_POPOVER = """(place) => {
   const popover = document.querySelectorAll('[popover]')[place];
   try {
@@ -109,7 +113,7 @@ _SHOW_POPOVER = """(place) => {
   } catch {
     return null;
   }
-  return popover.id ? `#${popover.id}` : `popover ${place + 1}`;
+  return popover.id ? [`#${popover.id}`, popover.id] : [`popover ${place + 1}`, `${place + 1}`];
 }"""
 _HIDE_POPOVER = "(place) => document.querySelectorAll('[popover]')[place].hidePopover()"
 # No region a round of opening brought in is waiting on its answer.
@@ -245,18 +249,27 @@ def _bands(height: int, band: int) -> list[tuple[int, int]]:
     return [(top, min(band, height - top)) for top in range(0, height, band)]
 
 
-def _write_found(path: Path, found: Found, measured: Measured) -> None:
+def _write_found(path: Path, found: Found, measured: Measured, errors: Found) -> None:
     entries = [
-        {"page": name, "width": width, "found": said, "measured": measured.get((name, width), {})}
+        {
+            "page": name,
+            "width": width,
+            "found": said,
+            "measured": measured.get((name, width), {}),
+            "errors": errors.get((name, width), []),
+        }
         for (name, width), said in found.items()
     ]
     path.write_text(json.dumps(entries), encoding="utf-8")
 
 
-def _read_found(path: Path) -> tuple[Found, Measured]:
+def _read_found(path: Path) -> tuple[Found, Measured, Found]:
     entries = json.loads(path.read_text(encoding="utf-8"))
-    found = {(entry["page"], entry["width"]): entry["found"] for entry in entries}
-    return found, {(entry["page"], entry["width"]): entry["measured"] for entry in entries}
+
+    def each(field: str) -> dict:
+        return {(entry["page"], entry["width"]): entry[field] for entry in entries}
+
+    return each("found"), each("measured"), each("errors")
 
 
 def _commit(ref: str) -> str:
@@ -318,8 +331,8 @@ def _relay(command: list[str], sink, ref: str, **options) -> None:
             raise
 
 
-def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured]:
-    """What this run finds and measures, looked for at ``ref``: the same
+def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Found]:
+    """What this run finds, measures and hears go wrong, looked for at ``ref``: the same
     task's run, in a worktree of it, through this checkout's copy of the
     lens (`LENS`) so both are judged alike. Its environment is this run's, but for a
     database of its own, this run's clock, and the CSS already read and the
@@ -377,9 +390,54 @@ def _address(url: str) -> str:
     return parts.path + (f"?{parts.query}" if parts.query else "")
 
 
-def _shot(name: str, width: int, dialog: str = "") -> Path:
-    shot = OUT / f"{re.sub(r'[^A-Za-z0-9._-]+', '-', name).strip('-')}-{width}.png"
-    return shot.with_name(f"{shot.stem}.dialog-{dialog}.png") if dialog else shot
+def _slug(name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")
+
+
+def _shot(name: str, width: int, part: str = "") -> Path:
+    """Where the shot of ``name`` at ``width`` goes, or of a ``part`` of it
+    open, such as ``dialog-<id>`` or ``popover-<id>``."""
+
+    shot = OUT / f"{_slug(name)}-{width}.png"
+    return shot.with_name(f"{shot.stem}.{_slug(part)}.png") if part else shot
+
+
+def _with(shows: str, bands: int) -> str:
+    """What a shot shows, and the bands cut from it beside it."""
+
+    return ", ".join(filter(None, [shows, f"{bands} bands beside it (.band-NN.png)" if bands else ""]))
+
+
+def _shown(path: Path) -> str:
+    """A shot's path as a reader in the checkout names it."""
+
+    return str(path.relative_to(settings.BASE_DIR)) if path.is_relative_to(settings.BASE_DIR) else str(path)
+
+
+def _rules() -> list[str]:
+    """What ``--rule`` may name: each check that takes a page's name alone."""
+
+    return sorted(
+        name
+        for owner in (Look, LayoutBrowserTests)
+        for name, member in vars(owner).items()
+        if inspect.isfunction(member) and list(inspect.signature(member).parameters)[1:] in (["name"], ["_name"])
+    )
+
+
+def _pages(asked: list[str]) -> list[str]:
+    """The pages ``asked`` names, ``all`` and ``estate/all`` spelled out,
+    each one checked to be a page dev:look can draw."""
+
+    estate = [_estate_name(path) for path in navigation()]
+    known = [*ALL_PAGES, *derived_pages(), *REFERENCE_PAGES, *estate]
+    named = {"all": known, f"{ESTATE}/all": estate}
+    pages = list(dict.fromkeys(page for name in asked for page in named.get(name, [name])))
+    # Any address of the example estate is a page, not only its navigation's.
+    unknown = sorted(name for name in set(pages) - set(known) if not _is_estate(name))
+    if unknown:
+        raise AssertionError(f"No page {unknown}. Pages: {', '.join(known)}, or estate/<any address>")
+    return pages
 
 
 class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
@@ -389,9 +447,13 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     @classmethod
     def setUpClass(cls):
         cls.clock_at = float(_usage(_CLOCK) or round(time.time()))
-        # The base first, while nothing of this run's holds memory but Django.
+        # What was asked is checked before the base is looked at, which takes a while.
+        cls.asked = _pages(_listed("usage_pages"))
+        if (rule := cls.rule_asked()) and rule not in _rules():
+            raise AssertionError(f"No rule named {rule!r}. Rules: {', '.join(_rules())}")
+        # The base next, while nothing of this run's holds memory but Django.
         ref = _usage("usage_base")
-        cls.base, cls.base_measured = _look_at(ref, cls.rule_asked(), cls.clock_at) if ref else (None, {})
+        cls.base, cls.base_measured, cls.base_errors = _look_at(ref, rule, cls.clock_at) if ref else (None, {}, {})
         super().setUpClass()
 
     @override
@@ -406,16 +468,9 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     @classmethod
     def render(cls):
+        pages = cls.asked
         estate = [_estate_name(path) for path in navigation()]
         stress = [*ALL_PAGES, *derived_pages()]
-        known = [*stress, *REFERENCE_PAGES, *estate]
-        named = {"all": known, f"{ESTATE}/all": estate}
-        pages = list(dict.fromkeys(page for asked in _listed("usage_pages") for page in named.get(asked, [asked])))
-        # Any address of the example estate is a page, not only its navigation's.
-        unknown = sorted(name for name in set(pages) - set(known) if not _is_estate(name))
-        if unknown:
-            raise AssertionError(f"No page {unknown}. Pages: {', '.join(known)}, or estate/<any address>")
-        cls.asked = pages
         cls.addresses = {name: _estate_path(name) for name in {*estate, *filter(_is_estate, pages)}}
         rendered: dict = {}
         if set(pages) & set(stress):
@@ -518,43 +573,58 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.start(java_script_enabled=not _usage("usage_no_script"), bypass_csp=bool(self.css))
         if _usage("usage_dark"):
             self.page.emulate_media(color_scheme="dark")
-        OUT.mkdir(parents=True, exist_ok=True)
+        # One run's shots alone, so none left by an earlier run is read as this one's.
+        shutil.rmtree(OUT, ignore_errors=True)
+        OUT.mkdir(parents=True)
+        self.errors: Found = {}
         if _usage("usage_deep"):
             self.follow(widths[0])
         print(f"Screenshots in {OUT}", flush=True)
         self.measured: Measured = {}
         found = self.look_at_every_page(widths, rule)
         if into := _usage(_FINDINGS):
-            _write_found(Path(into), found, self.measured)
-        if not rule:
-            return
+            _write_found(Path(into), found, self.measured, self.errors)
+        if failed := self.close(rule, found):
+            self.fail("\n".join(failed))
+
+    def close(self, rule, found) -> list[str]:
+        """What the run found and heard said, each new one against a base on
+        a line and each verdict last, the rule's report kept in ``REPORT``;
+        the verdicts that failed."""
+
         ref = _usage("usage_base")
-        report, printed, failed = closing(rule, found, self.base, ref)
-        head = _commit("HEAD") + (f" against {ref} at {_commit(ref)}" if self.base is not None else "")
-        REPORT.parent.mkdir(parents=True, exist_ok=True)
-        REPORT.write_text(f"{head}\n{report}\n", encoding="utf-8")
-        print(f"Page by page: {REPORT}", *printed, sep="\n", flush=True)
-        if failed:
-            self.fail(printed[-1])
+        base_errors = self.base_errors if self.base is not None else None
+        report, printed, errors_failed = closing(_ERRORS, self.errors, base_errors, ref)
+        failed = [printed[-1]] if errors_failed else []
+        if rule:
+            judged, said, rule_failed = closing(rule, found, self.base, ref)
+            head = _commit("HEAD") + (f" against {ref} at {_commit(ref)}" if self.base is not None else "")
+            REPORT.parent.mkdir(parents=True, exist_ok=True)
+            REPORT.write_text(f"{head}\n{judged}\n{report}\n", encoding="utf-8")
+            printed = [f"Page by page: {REPORT}", *said, *printed]
+            failed = [said[-1]] * rule_failed + failed
+        print(*printed, sep="\n", flush=True)
+        return failed
 
     def look_at_every_page(self, widths, rule) -> Found:
         """Each page at each width, said as it starts, so a look that hangs
-        names where; its findings kept beside its screenshot, and said once it
-        has been looked at when no rule asks for a report."""
+        names where, and once it has been looked at: its shots, its findings
+        (kept beside its screenshot) and every error and refusal it had."""
 
         found: Found = {}
         for name in self.asked:
             for width in widths:
                 stall_watch.mark(f"dev:look {name} at {width}")
                 print(f"Looking at {name} at {width}", flush=True)
+                self.shots = []
                 said = found[name, width] = self.look(name, width, rule)
+                errors = self.errors[name, width] = self.refusals_so_far()
                 report = _shot(name, width).with_suffix(".txt")
                 if said:
                     report.write_text("\n".join([f"{name} at {width}", *said]) + "\n", encoding="utf-8")
                 else:
                     report.unlink(missing_ok=True)
-            if not rule:
-                print(block(name, {width: found[name, width] for width in widths}, rule), flush=True)
+                print(*looked(self.shots, said, rule, _shown(report), errors), sep="\n", flush=True)
         return found
 
     def follow(self, width):
@@ -572,6 +642,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
                 followed = _estate_name(address)
                 self.addresses[followed] = address
                 self.asked.append(followed)
+        # Each page followed from is looked at again at this width, and says them then.
+        self.refusals_so_far()
 
     def asked_for(self):
         """The widths and rule the task was given, each checked, and the CSS it
@@ -629,13 +701,24 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             if kind in judged or (shown := self.page.evaluate(_SHOW_POPOVER, place)) is None:
                 continue
             judged.add(kind)
+            label, slug = shown
             self.settle()
+            shot = self.shoot_popover(name, width, slug)
             said = self.judged(name, width, rule)
             self.page.evaluate(_HIDE_POPOVER, place)
             alike = kinds.count(kind) - 1
-            named = f"{shown} and {alike} like it" if alike else shown
-            found += [f"with {named} shown: {line}" for line in unmatched(said, beneath)]
+            named = f"{label} and {alike} like it" if alike else label
+            self.shots.append((shot, f"with {named} shown"))
+            found += [f"with {named} shown ({shot}): {line}" for line in unmatched(said, beneath)]
         return found
+
+    def shoot_popover(self, name, width, popover) -> str:
+        """The window with ``popover`` shown (``<page>-<width>.popover-<id>.png``),
+        where it sits, by the path a reader names it."""
+
+        shot = _shot(name, width, f"popover-{popover}")
+        self.page.screenshot(path=shot, animations="disabled")
+        return _shown(shot)
 
     def with_each_dialog(self, name, width, rule, beneath) -> list[str]:
         """Each dialog ``--dialog`` names, or every one the page declares for
@@ -701,17 +784,16 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         the same scrolled down a band at a time, overlapping so a sticky head
         hides nothing (``.band-01.png``)."""
 
-        shot = _shot(name, width, dialog)
-        for stale in OUT.glob(f"{shot.stem}.band-*.png"):
-            stale.unlink()
+        shot = _shot(name, width, f"dialog-{dialog}")
         self.page.screenshot(path=shot, animations="disabled")
         tall, band = self.page.evaluate(_DIALOG_EXTENT, dialog)
-        if tall <= band:
-            return
-        for number, top in enumerate([*range(0, tall - band, band * 3 // 4), tall - band], start=1):
+        tops = [*range(0, tall - band, band * 3 // 4), tall - band] if tall > band else []
+        for number, top in enumerate(tops, start=1):
             self.page.evaluate(_DIALOG_SCROLL, [dialog, top])
             self.page.screenshot(path=shot.with_name(f"{shot.stem}.band-{number:02}.png"), animations="disabled")
-        self.page.evaluate(_DIALOG_SCROLL, [dialog, 0])
+        if tops:
+            self.page.evaluate(_DIALOG_SCROLL, [dialog, 0])
+        self.shots.append((_shown(shot), _with(f"#modal-{dialog} open", len(tops))))
 
     def close_dialog(self, dialog):
         """``dialog`` closed with Escape, and the menus opened to reach it
@@ -778,17 +860,17 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         cut into window-sized bands beside it, so each can be read at once."""
 
         shot = _shot(name, width)
-        for stale in OUT.glob(f"{shot.stem}.band-*.png"):
-            stale.unlink()
         self.page.screenshot(path=shot, full_page=True, animations="disabled")
         wide, tall = self.page.evaluate(_EXTENT)
-        for number, (top, height) in enumerate(_bands(tall, self.page.viewport_size["height"]), start=1):
+        bands = _bands(tall, self.page.viewport_size["height"])
+        for number, (top, height) in enumerate(bands, start=1):
             self.page.screenshot(
                 path=shot.with_name(f"{shot.stem}.band-{number:02}.png"),
                 full_page=True,
                 clip={"x": 0, "y": top, "width": wide, "height": height},
                 animations="disabled",
             )
+        self.shots.append((_shown(shot), _with("", len(bands))))
 
     def shoot_failure(self, name, width, said) -> list[str]:
         """``said`` as the finding, with the page as it stands kept beside the
@@ -800,7 +882,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         except BrowserError as broke:
             print(f"{name} at {width}: {said}; no screenshot ({str(broke).splitlines()[0]})", flush=True)
         else:
-            print(f"{name} at {width}: {said}; screenshot {path}", flush=True)
+            self.shots.append((_shown(path), "as it failed"))
         return [said]
 
     def beside_base(self, name, width, kind, said) -> str:
@@ -834,7 +916,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             said = _evaluated(where, width, self.page.evaluate(self.script))
         except BrowserError as threw:
             said = f"{where} at {width}: --eval threw ({str(threw).splitlines()[0]})"
-        shot = _shot(name, width, dialog)
+        shot = _shot(name, width, f"dialog-{dialog}" if dialog else "")
         shot.with_name(shot.stem + ".eval.txt").write_text(said + "\n", encoding="utf-8")
         kind = f"eval dialog-{dialog}" if dialog else "eval"
         self.measured.setdefault((name, width), {})[kind] = said
