@@ -9,25 +9,8 @@ demo's check runs without Django.
 # whether or not the script handles the rejection, and Playwright passes on as
 # an uncaught error. A rejection no script handles WebKit reports on a line of
 # its own ("Unhandled Promise Rejection"), which is held like any other, so the
-# fetch's own line is dropped only for a request that was cancelled, as the
-# gate's next navigation cancels a poll in flight.
-_FAILED_FETCH = "Fetch API cannot load "
-_FAILED_FETCH_ENDS = (" due to access control checks.", ".")
-
-# How Playwright tells a cancelled request in WebKit (its _onLoadingFailed),
-# and so the one wording it promises for one.
-_CANCELLED = "cancelled"
-
-
-def as_said(text):
-    """``text`` as Playwright hands on an engine's error line: split at its
-    first colon into a name and a message, the character after the colon
-    lost (its splitErrorMessage), and joined again as the gate prints it."""
-
-    at = text.find(":")
-    name = text[:at] if at != -1 else ""
-    message = text[at + 2 :] if at != -1 and at + 2 <= len(text) else text
-    return f"{name}: {message}" if name else message
+# fetch's own line says nothing that one does not.
+_FAILED_FETCH = "Fetch API cannot load"
 
 
 def first_frame(stack):
@@ -45,9 +28,7 @@ class Uncaught:
     def __init__(self, page, where):
         self.where = where
         self.heard = []
-        self.cancelled = set()
         page.on("pageerror", self.threw)
-        page.on("requestfailed", self.failed)
 
     def threw(self, error):
         # An error the engine raises with no Error object (a ResizeObserver
@@ -55,16 +36,8 @@ class Uncaught:
         said = f"{error.name}: {error.message}" if error.name else error.message
         self.heard.append((said, f"{self.where()}: uncaught {said}{first_frame(error.stack)}"))
 
-    def failed(self, request):
-        if _CANCELLED in (request.failure or ""):
-            self.cancelled.add(request.url)
-
     def so_far(self):
-        """Each line heard since this was last asked, but a cancelled fetch's.
+        """Each line heard since this was last asked, but WebKit's line for a failed fetch."""
 
-        Judged as it is asked, so a cancellation heard after its fetch's line
-        still answers it."""
-
-        cancelled = {as_said(f"{_FAILED_FETCH}{url}{end}") for url in self.cancelled for end in _FAILED_FETCH_ENDS}
         heard, self.heard = self.heard, []
-        return [line for said, line in heard if said not in cancelled]
+        return [line for said, line in heard if not said.startswith(_FAILED_FETCH)]
