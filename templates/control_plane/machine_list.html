@@ -8,7 +8,7 @@ anyway, and would go on meaning nothing after it stopped being.
 {% endcomment %}
 
 {% if machines %}<p class="muted">{{ machines|length|counted:"machine" }}: {% for count, state in state_counts %}{{ count|breakable }} {{ state|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}</p>{% endif %}
-{% table_region "Machines" room="shared" narrow=3 %}
+{% table_region "Machines" room="shared" %}
   <table class="data-table">
     <thead>
       <tr>

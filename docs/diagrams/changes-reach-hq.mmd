@@ -2,7 +2,7 @@ flowchart TB
     pr["Host pull request"]
     ext["Extension merge<br/>its CI admits a signed wheel"]
     ci["CI<br/>checks · tests · browser · controller · image"]
-    ready{"Ready<br/>HQ's review"}
+    ready{"Ready<br/>the required check"}
     compose["Compose<br/>host image + admitted extensions<br/>verified as one application"]
     registry[("Signed composition<br/>ghcr.io/…/composition")]
     approve{"Deploy<br/>approval in production"}

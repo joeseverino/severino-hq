@@ -95,14 +95,14 @@ def repository(container: Any) -> Any:
 
 
 def _source() -> str:
-    return web_url(str(getattr(settings, "SEVERINO_HQ_SOURCE", "") or ""))
+    return web_url(settings.SEVERINO_HQ_SOURCE)
 
 
 def release(container: Any) -> Release:
     standing = container.standing if container is not None else None
     build = standing.build if standing is not None else None
     return Release(
-        revision=str(getattr(settings, "SEVERINO_HQ_REVISION", "") or ""),
+        revision=settings.SEVERINO_HQ_REVISION,
         source=_source(),
         image=container.running.image if container is not None else "",
         digest=standing.digest if standing is not None else "",

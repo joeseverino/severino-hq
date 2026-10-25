@@ -1,0 +1,36 @@
+# The Test job: these and the suite under mise-tasks/test/. Each Python gate
+# runs on the interpreter UV_PYTHON names; `mise run test` walks the matrix and
+# runs test:controller once beside it.
+
+["test:django"]
+description = "Django's system checks"
+hide = true
+extends = "django"
+run = "uv run python manage.py check"
+
+["test:plugins"]
+description = "The public plugin contract"
+hide = true
+extends = "django"
+env = { SEVERINO_HQ_PLUGINS = "tests.fixtures.example_hq_plugin.plugin:plugin" }
+run = ["uv run python manage.py check", "uv run python manage.py plugins"]
+
+["test:migrations"]
+description = "No model change without its migration"
+hide = true
+extends = "django"
+run = "uv run python manage.py makemigrations --check --dry-run"
+
+["test:api-properties"]
+description = "Generated API cases through the real WSGI middleware"
+hide = true
+# One module in one process: a narrow run, outside the heavy turn (tools/gate/turn.py).
+extends = "django"
+run = "uv run python manage.py test tests.fuzz.api_properties --noinput --parallel 1"
+
+# Go does not vary with Python, so `mise run test` runs it once, outside the
+# interpreter loop.
+["test:controller"]
+description = "The Go controller's tests under the race detector"
+hide = true
+run = "go -C controller test -race ./..."

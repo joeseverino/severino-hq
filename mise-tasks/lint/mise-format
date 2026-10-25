@@ -1,0 +1,19 @@
+#!/bin/sh
+#MISE description="mise.toml and the task files in mise-tasks/ are formatted as `mise fmt` writes them"
+#MISE hide=true
+
+# Each file through stdin: `mise fmt --check` also judges the gitignored
+# mise.local.toml, and never reads a task file.
+set -eu
+# shellcheck source=tools/lib/mise-files.sh
+. ./tools/lib/mise-files.sh
+
+files="$(mktemp)"
+trap 'rm -f "${files}"' EXIT
+mise_files "${files}"
+status=0
+while IFS= read -r file; do
+    # shellcheck disable=SC2094  # diff only reads the file it compares against
+    mise fmt --stdin <"${file}" | diff -u "${file}" - || status=1
+done <"${files}"
+exit "${status}"

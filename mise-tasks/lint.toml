@@ -1,0 +1,111 @@
+# The Lint job: every lint:* gate here and under mise-tasks/lint/. A derived
+# file's gate is lint:drift-<file>, held against its source; `mise run fix`
+# rewrites them all.
+
+["lint:ruff"]
+description = "Ruff lints the Python and holds it to its format"
+hide = true
+run = ["uv run ruff check .", "uv run ruff format --check ."]
+
+["lint:mypy"]
+description = "mypy type-checks the seams pyproject.toml names, and the browser test package's calls"
+hide = true
+# django-stubs loads the host's settings.
+extends = "django"
+run = "uv run python -m mypy"
+
+["lint:openapi"]
+description = "Both OpenAPI descriptions pass specification lint"
+hide = true
+depends = ["setup:lint-tools"]
+# Specification rules cover wire contracts. HTTP style recommendations do not
+# apply to Django's canonical trailing slashes or the stdin/stdout bridge.
+run = "redocly lint --extends=spec --format=summary hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json"
+
+["lint:deptry"]
+description = "Host code imports only declared runtime dependencies and imports every one, or pyproject.toml says why not"
+hide = true
+# Host code is these two packages less their tests/ ([tool.deptry]).
+run = "uv run deptry hq hq_sdk"
+
+["lint:lockfile"]
+description = "uv.lock matches pyproject.toml"
+hide = true
+run = "uv lock --check"
+
+["lint:toolchain"]
+description = "mise.lock checksums every pinned tool for each gate platform, mise renders Go from go.mod's toolchain line, no image borrows a build tool"
+hide = true
+run = "uv run python -m tools.pipeline.toolchain_lock"
+
+["lint:mise-tasks"]
+description = "Every task is valid: its usage spec parses, its dependencies exist, its timeout and globs are well formed"
+hide = true
+run = "mise tasks validate"
+
+["lint:workflows"]
+description = "The workflows are valid, run: blocks included, and pass zizmor's security audit"
+hide = true
+# zizmor runs offline, with no token, at its default persona; a deliberate
+# finding is suppressed in .github/zizmor.yml with its reason.
+run = ["actionlint -color", "zizmor --offline --strict-collection .github"]
+
+["lint:deploycheck"]
+description = "Production settings raise no security warning"
+hide = true
+# DEBUG off, a real host. The values mirror a production configuration so the
+# check judges how settings.py reads one. The key is a throwaway long enough
+# for the strength check.
+extends = "django"
+env = { DJANGO_DEBUG = "0", DJANGO_SECRET_KEY = "ci-only-deploy-check-key-0123456789abcdef0123456789abcdef", DJANGO_ALLOWED_HOSTS = "hq.example.com", SEVERINO_OIDC_ISSUER = "https://sso.example.com", DJANGO_BEHIND_TLS_PROXY = "1", DJANGO_SESSION_COOKIE_SECURE = "1", DJANGO_CSRF_COOKIE_SECURE = "1", DJANGO_HSTS_SECONDS = "31536000" }
+run = "uv run python manage.py check --deploy --fail-level WARNING"
+
+["lint:structural"]
+description = "No new near-duplicate pair outside tests"
+hide = true
+usage = 'flag "--record" help="Rewrite the baseline from this tree instead of checking it"'
+run = "uv run python -m tools.structural.bar"
+
+["lint:css"]
+description = "Stylelint holds the stylesheets to their contract: color and sizes from tokens, every custom property defined"
+hide = true
+depends = ["setup:lint-tools"]
+run = "stylelint --config tools/lint/stylelint.config.mjs 'static/css/**/*.css'"
+
+# The Go controller's static half: format, generated types, the vendor slicer,
+# vet and the advisory guard. Its race tests are test:controller.
+["lint:controller"]
+description = "The Go controller is formatted and vetted, its generated types current"
+hide = true
+run = "controller/scripts/check.sh"
+
+# Each derived file against its source, in the order fix:derived writes them.
+
+["lint:drift-sdk-contract"]
+description = "hq_sdk's committed shape, text examples and docs/Plugins.md table are what the SDK offers"
+hide = true
+extends = "django"
+run = "uv run python manage.py sdk_contract --check"
+
+["lint:drift-api-document"]
+description = "The machine API's OpenAPI document is current"
+hide = true
+extends = "django"
+run = "uv run python manage.py api_openapi --check"
+
+["lint:drift-bridge-contract"]
+description = "The controller's contracts are the ones the registry derives"
+hide = true
+extends = "django"
+run = "uv run python manage.py bridge_contract --check"
+
+["lint:drift-connections-reference"]
+description = "docs/Connections.md is what the providers declare"
+hide = true
+extends = "django"
+run = "uv run python manage.py connections_reference --check"
+
+["lint:drift-font"]
+description = "The served font is its source cut to the characters HQ prints and the features its stylesheets use"
+hide = true
+run = "uv run python -m tools.fonts.subset --check"

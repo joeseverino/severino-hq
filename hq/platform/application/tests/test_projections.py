@@ -17,6 +17,7 @@ from hq.platform.application.tests.host_only import host_only
 
 from ..cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
 from ..dashboard import operating_snapshot
+from ..money import money
 from ..projection import projection_scope, read_once
 from ..resource_context import get_managed_resource
 from ..resource_operations import operation_summary
@@ -387,7 +388,7 @@ class ChartDataTableTests(TestCase):
         table = self.table("partials/_line_chart.html", chart)
 
         self.assertIn("$12,346", table)
-        self.assertIn("\u2212$980", table)
+        self.assertIn(money(-980, cents=False), table)
         self.assertIn("Balance", table)
         self.assertIn("Balance: $12,346", chart.series[0].points[0].tooltip)
 

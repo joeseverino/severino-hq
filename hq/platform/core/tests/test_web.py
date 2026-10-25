@@ -18,13 +18,12 @@ from urllib.parse import parse_qs, urlsplit
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.contrib.auth.middleware import AuthenticationMiddleware
-from django.contrib.sessions.middleware import SessionMiddleware
+from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.templatetags.static import static
-from django.test import Client, SimpleTestCase, TestCase, override_settings, tag
+from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
 
@@ -47,15 +46,14 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
-from hq.platform.application import readings
+from hq.platform.application import readings, request_context
 from hq.platform.application.action_links import command_url
 from hq.platform.application.dashboard import operating_snapshot
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
-from hq.platform.application.tests.markup import elements, hrefs, select, text
-from hq.platform.core.audit import operation_context
+from hq.platform.application.tests.markup import elements, hrefs, select, text, within
+from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.logging import JsonFormatter, reset_request_id, set_request_id
-from hq.platform.core.middleware import CurrentUserMiddleware, get_current_user, set_current_user
 from hq.platform.core.models import AuditLog
 from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY, HQOIDCAuthenticationBackend
 
@@ -198,7 +196,9 @@ class AuthGateTests(TestCase):
         }
 
         self.assertEqual(directives["default-src"], ["'self'"])
-        self.assertEqual(directives["script-src"], ["'self'"])
+        nonce, *scripts = directives["script-src"]
+        self.assertRegex(nonce, r"^'nonce-[^']+'$")
+        self.assertEqual(scripts, ["'strict-dynamic'", "'self'"])
         self.assertEqual(directives["object-src"], ["'none'"])
         self.assertEqual(directives["frame-ancestors"], ["'none'"])
         relaxed = sorted(
@@ -256,14 +256,21 @@ class AuthGateTests(TestCase):
 
 
 class SecurityBoundaryTests(TestCase):
-    def test_current_user_context_never_retains_session_lazy_object(self):
-        request = self.client.request().wsgi_request
-        SessionMiddleware(lambda value: value).process_request(request)
-        AuthenticationMiddleware(lambda value: value).process_request(request)
-        observed = CurrentUserMiddleware(lambda _request: get_current_user())(request)
+    def test_an_audit_row_names_who_the_bound_request_signed_in(self):
+        operator = User.objects.create_user("example-auditor")
+        signed = RequestFactory().get("/")
+        signed.user = operator
+        anonymous = RequestFactory().get("/")
+        anonymous.user = AnonymousUser()
 
-        self.assertIs(observed, request._cached_user)
-        self.assertNotEqual(type(observed).__name__, "SimpleLazyObject")
+        for request, expected in ((signed, operator), (anonymous, None), (None, None)):
+            with self.subTest(request=request):
+                bound = request_context.bind(request)
+                try:
+                    row = record_event(action="example.read", required=True)
+                finally:
+                    request_context.unbind(bound)
+                self.assertEqual(row.user, expected)
 
     def test_json_logs_carry_request_correlation_without_query_strings(self):
         token = set_request_id("request-123")
@@ -295,28 +302,28 @@ class SecurityBoundaryTests(TestCase):
             ready = [asyncio.Event(), asyncio.Event()]
             release = asyncio.Event()
 
-            async def worker(index, user):
-                set_current_user(user)
+            async def worker(index, request):
+                bound = request_context.bind(request)
                 ready[index].set()
                 await release.wait()
                 try:
-                    return get_current_user()
+                    return request_context.current()
                 finally:
-                    set_current_user(None)
+                    request_context.unbind(bound)
 
             tasks = [
-                asyncio.create_task(worker(0, "first-user")),
-                asyncio.create_task(worker(1, "second-user")),
+                asyncio.create_task(worker(0, "first-request")),
+                asyncio.create_task(worker(1, "second-request")),
             ]
             await asyncio.gather(*(event.wait() for event in ready))
             release.set()
             return await asyncio.gather(*tasks)
 
-        self.assertEqual(async_to_sync(exercise)(), ["first-user", "second-user"])
-        self.assertIsNone(get_current_user())
+        self.assertEqual(async_to_sync(exercise)(), ["first-request", "second-request"])
+        self.assertIsNone(request_context.current())
 
 
-@tag("source")
+@tag("source", "tree")
 class TemplateSourceTests(SimpleTestCase):
     def test_application_templates_do_not_bypass_csp(self):
         violations = []
@@ -1153,50 +1160,15 @@ class ManifestImportTests(TestCase):
         self.assertEqual(project.technologies_used, "Django, PostgreSQL")
         self.assertNotIn("projects_tech_backfilled", stats)
 
-    def test_task_doc_imports_with_its_own_status_lifecycle(self):
-        # A task carries open/active/parked/done/wontfix: the standard status
-        # set rejects these, so the importer must validate tasks per-doc-type
-        # rather than against the standard status set.
-        stats = import_manifest_data(
-            [
-                {
-                    "doc_id": "task-ship-the-thing",
-                    "title": "Ship the thing",
-                    "doc_type": "task",
-                    "status": "open",
-                    "related_projects": [],
-                }
-            ]
-        )
-        self.assertEqual(stats["created"], 1)
-        record = DocumentationRecord.objects.get(doc_id="task-ship-the-thing")
-        self.assertEqual(record.status, "open")
-
-    def test_task_status_set_is_distinct_from_standard_docs(self):
-        # "parked" is a task status, never a standard-doc status; "deprecated" is
-        # the reverse. Each doc_type is held to its own vocabulary.
-        with self.assertRaises(ManifestImportError):
-            import_manifest_data(
-                [
-                    {
-                        "doc_id": "rb-x",
-                        "title": "x",
-                        "doc_type": "runbook",
-                        "status": "parked",
-                    }
-                ]
-            )
-        with self.assertRaises(ManifestImportError):
-            import_manifest_data(
-                [
-                    {
-                        "doc_id": "task-x",
-                        "title": "x",
-                        "doc_type": "task",
-                        "status": "deprecated",
-                    }
-                ]
-            )
+    def test_a_task_note_is_not_a_doc_the_vault_writes(self):
+        # The vault keeps no task notes: their type and lifecycle are refused.
+        for case, entry in (
+            ("task type", {**self.STANDARD_DOC, "doc_id": "rb-x", "doc_type": "task"}),
+            ("task status", {**self.STANDARD_DOC, "doc_id": "rb-x", "status": "parked"}),
+        ):
+            with self.subTest(case), self.assertRaises(ManifestImportError):
+                import_manifest_data([entry])
+        self.assertEqual(DocumentationRecord.objects.count(), 0)
 
     def test_validate_manifest_data_flags_bad_enums_without_db(self):
         # The read-only preflight catches the contract-drift class (an invalid
@@ -1214,17 +1186,20 @@ class ManifestImportTests(TestCase):
                     "sensitivity": "internal",
                 },
                 {
-                    "doc_id": "task-bad",
+                    "doc_id": "rb-bad-status",
                     "title": "bad",
-                    "doc_type": "task",
-                    "status": "deprecated",
+                    "doc_type": "runbook",
+                    "status": "open",
+                    "system": "Example service",
+                    "environment": "other",
+                    "sensitivity": "internal",
                 },
                 {"doc_id": "rb-bad-env", "doc_type": "runbook", "environment": "nope"},
             ]
         )
         by = {p["doc_id"]: p for p in problems}
         self.assertNotIn("rb-ok", by)
-        self.assertIn("task-bad", by)
+        self.assertIn("rb-bad-status", by)
         self.assertIn("rb-bad-env", by)
         self.assertEqual(DocumentationRecord.objects.count(), 0)
 
@@ -1239,12 +1214,6 @@ class ManifestImportTests(TestCase):
         "environment": "other",
         "status": "active",
         "sensitivity": "internal",
-    }
-    TASK_DOC = {
-        "doc_id": "task-complete",
-        "title": "Complete",
-        "doc_type": "task",
-        "status": "open",
     }
 
     def _assert_rejected(self, entry, *fragments):
@@ -1275,7 +1244,6 @@ class ManifestImportTests(TestCase):
             ("prefix", {**self.STANDARD_DOC, "doc_id": "wiki-complete"}, ("rb-",)),
             ("missing", without(self.STANDARD_DOC, "environment", "sensitivity"), ("environment", "sensitivity")),
             ("blank", {**self.STANDARD_DOC, "system": ""}, ("system",)),
-            ("task missing", without(self.TASK_DOC, "title"), ("title",)),
             # The schema's prefixes bind every vault doc: a runbook cannot pass with a writeup's id.
             ("vault doc with a content id", {**self.STANDARD_DOC, "doc_id": "writeup-complete"}, ()),
             # Not routed to ContentItem, so held to the schema's prefixes.
@@ -1293,28 +1261,18 @@ class ManifestImportTests(TestCase):
                 entry = {**self.CONTENT_DOC, "doc_id": doc_id}
                 self.assertEqual(validate_manifest_data([entry]), [])
 
-    def test_valid_standard_doc_and_task_pass(self):
-        # A task owes only the slimmer set: no system/environment/sensitivity.
-        manifest = [self.STANDARD_DOC, self.TASK_DOC]
+    def test_valid_standard_doc_passes(self):
+        manifest = [self.STANDARD_DOC]
         self.assertEqual(validate_manifest_data(manifest), [])
         stats = import_manifest_data(manifest)
-        self.assertEqual(stats["created"], 2)
+        self.assertEqual(stats["created"], 1)
 
     def test_check_only_command_gates_an_invalid_manifest(self):
-        bad = json.dumps(
-            [
-                {
-                    "doc_id": "task-x",
-                    "title": "x",
-                    "doc_type": "task",
-                    "status": "deprecated",
-                }
-            ]
-        )
+        bad = json.dumps([{**self.STANDARD_DOC, "status": "open"}])
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             f.write(bad)
             bad_path = f.name
-        ok = json.dumps([{"doc_id": "task-x", "title": "x", "doc_type": "task", "status": "open"}])
+        ok = json.dumps([self.STANDARD_DOC])
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             f.write(ok)
             ok_path = f.name
@@ -1374,30 +1332,6 @@ class ManifestImportTests(TestCase):
         self.assertEqual(stats["orphans_pruned"], 1)
         self.assertEqual(stats["content_items_pruned"], 1)
         self.assertFalse(ContentItem.objects.filter(slug="old-slug").exists())
-
-
-class DeductibleMathTests(TestCase):
-    def test_expense_deductible_is_recomputed_on_save(self):
-        e = Expense.objects.create(
-            date=date.today(),
-            vendor="x",
-            item="y",
-            category="hosting",
-            total_cost=Decimal("100.00"),
-            business_use_percentage=75,
-        )
-        self.assertEqual(e.estimated_deductible_amount, Decimal("75.00"))
-        e.total_cost = Decimal("200.00")
-        e.save()
-        self.assertEqual(e.estimated_deductible_amount, Decimal("150.00"))
-
-    def test_asset_deductible_is_computed_on_save(self):
-        a = Asset.objects.create(
-            item_name="x",
-            total_cost=Decimal("100.00"),
-            business_use_percentage=40,
-        )
-        self.assertEqual(a.estimated_deductible_amount, Decimal("40.00"))
 
 
 class AuditLogTests(TestCase):
@@ -1515,6 +1449,27 @@ class AuditDetailPageTests(_AuthedTestCase):
         page = self.client.get(reverse("core:audit_detail", args=[event.pk]))
 
         self.assertIn(reverse("core:audit_detail", args=[other.pk]), hrefs(page))
+
+    def test_the_operation_and_the_objects_history_are_one_table_whose_history_folds(self):
+        with operation_context(interface="cli", actor="op", operation="test.bulk", operation_id="op-1"):
+            project = Project.objects.create(name="One", status=Project.Status.IDEA)
+            Project.objects.create(name="Two", status=Project.Status.IDEA)
+        project.name = "Renamed"
+        project.save()
+        created = AuditLog.objects.get(object_id=str(project.pk), action=AuditLog.Action.CREATED)
+        updated = AuditLog.objects.get(object_id=str(project.pk), action=AuditLog.Action.UPDATED)
+
+        page = self.client.get(reverse("core:audit_detail", args=[created.pk]))
+
+        inside = within(page, "aria-label", "Other events")
+        self.assertEqual(len([each for each in inside if each.tag == "table"]), 1)
+        self.assertEqual(len([each for each in inside if each.attrs.get("scope") == "rowgroup"]), 2)
+        (group,) = [each for each in inside if "data-folds" in each.attrs]
+        (folded,) = [each for each in inside if "data-folded" in each.attrs]
+        self.assertEqual(folded.attrs["data-folded"], group.attrs["id"])
+        # The object's own history is what folds; the rest of the operation stays open.
+        (link,) = [each for each in inside if each.attrs.get("href") == reverse("core:audit_detail", args=[updated.pk])]
+        self.assertTrue(any(ancestor is folded for ancestor in link.ancestors))
 
     def test_the_detail_page_needs_a_session(self):
         project = Project.objects.create(name="Private", status=Project.Status.IDEA)

@@ -25,7 +25,7 @@ from .connection_lifecycle import UNREPORTED_NODE
 from .entity_links import node_name
 from .finding_model import Finding, FindingEstate, FindingRemedy, FindingRule, fact_values
 from .topology_model import TopologyNode
-from .ui import counted
+from .ui import counted, ended
 lazy from .facts import snapshots_of
 
 RULE = "names-nothing"
@@ -137,7 +137,7 @@ def _no_connection(node: TopologyNode, ref: str, reported: tuple[str, ...]) -> F
         title=f"{name} uses a connection no controller has",
         severity="attention",
         explanation=(
-            f"It names the connection {ref}. No controller has one called that, so "
+            f"It names the connection {ended(ref)} No controller has one called that, so "
             f"nothing reads {name} and nothing applies HQ's settings to it."
         ),
         evidence=(

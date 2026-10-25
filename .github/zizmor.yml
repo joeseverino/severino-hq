@@ -1,0 +1,21 @@
+# lint:workflows runs zizmor offline at its default persona. Each entry is a
+# finding that is a deliberate choice, with the reason beside it.
+rules:
+  # actionlint, at the newest release mise offers, refuses a `$/` reference, and
+  # the two uses of the host's uv action under ./host/ name the host checked
+  # out at the commit the job resolved, which the running workflow's own commit
+  # need not be.
+  self-repository:
+    disable: true
+  github-env:
+    ignore:
+      # admit-plugin: PACKAGE_DIR, checked against a relative-path pattern in
+      # the same step before it is written.
+      - action.yml:83
+      # uv: the directory of the uv mise installed from mise.lock.
+      - action.yml:48
+  github-app:
+    ignore:
+      # The extensions' reader is scoped by the installation, so no private
+      # repository's name is written into the public log (the step's comment).
+      - compose.yml:188

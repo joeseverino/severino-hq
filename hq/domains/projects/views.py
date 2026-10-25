@@ -21,7 +21,7 @@ from hq.platform.application.action_links import READ_NOW_CAPABILITY, capability
 from hq.platform.application.capabilities import capability_registry, capability_words, execute_capability
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import web_url
-from hq.platform.application.pages import PageAction, PageBadge, PageMixin, record_trail
+from hq.platform.application.pages import PageAction, PageBadge, PageMixin
 from hq.platform.application.projects import (
     DEPENDENCY_UPDATES,
     REFRESH,
@@ -72,8 +72,6 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
     page_title = "Projects"
     table_search_scope = "projects"
     table_selectable = True
-    # A technology list runs to a sentence, so a phone keeps the name and its status.
-    table_drop_narrow = 5
     table_columns = (
         TableColumn("Name", "name"),
         TableColumn("Status", "status", css="key-col"),
@@ -186,13 +184,16 @@ class ProjectUpdatesRunView(View):
 class ProjectPage(PageMixin):
     """A page about one project, or a new one: its trail runs back to the list."""
 
+    page_trail = PROJECTS_TRAIL
+
     @override
-    def get_page_trail(self):
-        return record_trail(PROJECTS_TRAIL, getattr(self, "object", None), lambda project: project.name)
+    def trail_label(self, record):
+        return record.name
 
 
 class ProjectDetailView(PageMixin, DetailView):
     model = Project
+    page_trail = PROJECTS_TRAIL
     template_name = "projects/project_detail.html"
     slug_field = "slug"
     slug_url_kwarg = "slug"
@@ -261,10 +262,6 @@ class ProjectDetailView(PageMixin, DetailView):
                 "sections": hq_sections(self.object),
             },
         )
-
-    @override
-    def get_page_trail(self):
-        return (PROJECTS_TRAIL,)
 
     @override
     def get_page_actions(self):

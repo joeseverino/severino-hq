@@ -34,10 +34,7 @@
 
   {% for group in groups %}{% if group.count %}
   <section class="card search-group" id="scope-{{ group.scope }}">
-    <div class="section-head">
-      <h2>{{ group.label|breakable }}</h2>
-      <span class="count">{{ group.count|breakable }}</span>
-    </div>
+    <h2>{{ group.label|breakable }} <span class="count">{{ group.count|breakable }}</span></h2>
     <ul class="search-hits">
       {% for item in group.items %}
       <li class="search-hit">
@@ -63,10 +60,7 @@
 
   {% if contacts %}
   <section class="card search-group" id="scope-contacts">
-    <div class="section-head">
-      <h2>Messages</h2>
-      <span class="count">{{ contacts|length }}</span>
-    </div>
+    <h2>Messages <span class="count">{{ contacts|length }}</span></h2>
     <ul class="search-hits">
       {% for item in contacts %}
       <li class="search-hit">

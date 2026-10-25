@@ -501,15 +501,16 @@ def serialize_provider_sight(found: Any) -> dict[str, Any]:
         "credential_refusal": found.credential_refusal,
         "manages": list(found.manages),
         "tally": [{"count": count, "state": label} for count, label in found.tally],
-        "sights": [
-            {
-                **asdict(item),
-                "observed_at": _moment(item.observed_at),
-                "state_label": item.state_label,
-                "remedy": item.remedy,
-            }
-            for item in found.sights
-        ],
+        "sights": [serialize_sight(item) for item in found.sights],
+    }
+
+
+def serialize_sight(item: Any) -> dict[str, Any]:
+    return {
+        **asdict(item),
+        "observed_at": _moment(item.observed_at),
+        "state_label": item.state_label,
+        "remedy": item.remedy,
     }
 
 

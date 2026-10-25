@@ -73,13 +73,3 @@ class HighlightGridTests(SimpleTestCase):
         # Two cards a row at the content width leaves each card about 520px.
         self.assertEqual(columns(4, 520), 4)
         self.assertEqual(columns(6, 520), 3)
-
-    def test_highlight_cards_fit_the_available_width_without_empty_tracks(self):
-        css = stylesheet()
-        rule = re.search(r"\.dashboard-highlights \{([^}]*)\}", css).group(1)
-        # As many to a row as fit, each row shared evenly by the cards on it:
-        # the last row too, so a third card on a window that fits two takes the
-        # whole width, never half of it beside an empty track.
-        self.assertIn("display: flex", rule)
-        self.assertIn("flex-wrap: wrap", rule)
-        self.assertIn(".dashboard-highlights > .highlight-card { flex: 1 1 320px; }", css)

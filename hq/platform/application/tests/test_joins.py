@@ -17,6 +17,7 @@ from hq.domains.control_plane.certificate_authorities import authority_name
 from hq.domains.control_plane.dns_lookup import LookupNotFound, LookupUnavailable
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations.public_registry import ADDRESS_KIND, DOMAIN_KIND
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..facts import Subject, readings
 from ..inventory import inventory_state
@@ -350,6 +351,23 @@ class RegistrationFallbackTests(TestCase):
         self.assertFalse(card.concern)
 
 
+class RegistrarRegistrationTests(TestCase):
+    def test_a_registrar_name_ending_in_a_period_ends_the_renewal_sentence(self):
+        store(
+            ZONE_KIND,
+            {
+                "zone": "example.com",
+                "connection_ref": CLOUDFLARE,
+                "registration": {"expires_at": LATER, "auto_renew": True, "registrar": "Example Registrar, Inc."},
+            },
+        )
+
+        card = registration(find_zone("example.com"))
+
+        self.assertIn("Example Registrar, Inc.", card.detail)
+        self.assertNotIn("..", card.detail)
+
+
 class ServiceColumnTests(TestCase):
     def setUp(self):
         estate()
@@ -592,6 +610,9 @@ class ConnectionSpecFixture:
         )
 
 
+GROWN_NAMES = distinct(r"\bn\d+\.example\.com\b")
+
+
 class QueryCostTests(TestCase):
     """The pages cost the same however many readings and names there are."""
 
@@ -611,8 +632,9 @@ class QueryCostTests(TestCase):
         )
 
     def grow(self, count):
-        for index in range(count):
-            declare_record(f"n{index}", f"n{index}.example.com", "CNAME", "example.com")
+        # An address record, so each name is a service of its own rather than an alias.
+        for index in range(ManagedResource.objects.filter(key__regex=r"^n\d+$").count(), count):
+            declare_record(f"n{index}", f"n{index}.example.com", "A", f"192.0.2.{index + 1}")
         store(
             "cloudflare.access_app",
             *[{**ACCESS, "id": f"a{index}", "domain": f"n{index}.example.com"} for index in range(count)],
@@ -623,16 +645,8 @@ class QueryCostTests(TestCase):
             *[{**EDGE[1], "id": f"e{index}", "hosts": [f"n{index}.example.com"]} for index in range(count)],
         )
 
-    def count(self, fetch):
-        with CaptureQueriesContext(database_connection) as queries:
-            fetch()
-        return len(queries)
-
-    def assert_flat(self, fetch):
-        small = self.count(fetch)
-        self.grow(20)
-        large = self.count(fetch)
-        self.assertLessEqual(large, small, f"{small} then {large}")
+    def assert_flat(self, fetch, rows=GROWN_NAMES):
+        assert_cost_does_not_grow(self, sizes=(1, 20), arrange=self.grow, draw=lambda _count: fetch(), rows=rows)
 
     def test_the_domain_page(self):
         self.assert_flat(lambda: self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"})))
@@ -642,7 +656,10 @@ class QueryCostTests(TestCase):
 
     def test_the_topology(self):
         with host_only():
-            self.assert_flat(lambda: derive_topology(principal=READ))
+            self.assert_flat(
+                lambda: derive_topology(principal=READ),
+                rows=lambda topology: distinct(r"\bresource:n\d+\b")(" ".join(node.id for node in topology.nodes)),
+            )
 
 
 @override_settings(SEVERINO_RDAP_ENDPOINT="https://rdap.example.test")

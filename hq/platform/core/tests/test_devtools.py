@@ -28,13 +28,15 @@ PROBE = "; ".join(
     [
         "import json",
         "from hq.config import settings as s",
-        "print(json.dumps({"
-        "'enabled': s.SEVERINO_DEBUG_TOOLBAR,"
-        f"'app': {DEBUG_TOOLBAR_APP!r} in s.INSTALLED_APPS,"
-        f"'middleware': {DEBUG_TOOLBAR_MIDDLEWARE!r} in s.MIDDLEWARE,"
-        "'csp': sorted(s.SECURE_CSP),"
-        "'internal_ips': getattr(s, 'INTERNAL_IPS', []),"
-        "}))",
+        (
+            "print(json.dumps({"
+            "'enabled': s.SEVERINO_DEBUG_TOOLBAR,"
+            f"'app': {DEBUG_TOOLBAR_APP!r} in s.INSTALLED_APPS,"
+            f"'middleware': {DEBUG_TOOLBAR_MIDDLEWARE!r} in s.MIDDLEWARE,"
+            "'csp': sorted(s.SECURE_CSP),"
+            "'internal_ips': getattr(s, 'INTERNAL_IPS', []),"
+            "}))"
+        ),
     ]
 )
 

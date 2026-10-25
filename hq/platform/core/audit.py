@@ -3,7 +3,7 @@ Audit helpers.
 
 Every domain model is registered via ``register_audit(Model, type_label)``.
 post_save / post_delete signals then write to AuditLog, attributing the change
-to the current request user (via CurrentUserMiddleware).
+to whoever the request being answered signed in (``request_context``).
 """
 
 import json
@@ -24,11 +24,12 @@ lazy from django.contrib.auth.base_user import AbstractBaseUser
 lazy from django.db.models import Max, Model, Q, QuerySet
 lazy from django.utils import timezone
 
+from hq.platform.application import request_context
 from hq.platform.application.payload_words import changed_words
+lazy from hq.platform.application.request_identity import signed_in
 
 from . import speculation
 from .facets import as_metadata as facet_metadata
-from .middleware import get_current_user
 from .models import AuditLog
 lazy from .facets import Facet
 
@@ -392,8 +393,12 @@ def record_event(
     # A page fetched on a guess does nothing worth recording, so it does not
     # get as far as recording it.
     speculation.refuse("it does something the audit log records")
-    user = user or get_current_user()
-    if user is not None and not getattr(user, "is_authenticated", False):
+    # The request is what a context variable holds, never its lazy user:
+    # asgiref compares a variable's values when it restores a context
+    # (``asgiref.sync._restore_context``), and comparing the lazy user would
+    # load it from the session on the event loop's thread.
+    user = user or signed_in(request_context.current())
+    if user is not None and not user.is_authenticated:
         user = None
 
     object_type = type_label or (obj.__class__.__name__ if obj is not None else "")

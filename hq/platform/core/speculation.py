@@ -35,6 +35,7 @@ from django.views.decorators.cache import cache_control
 from django.views.decorators.http import require_safe
 
 lazy from hq.platform.application.plugins import plugin_token_authenticated_prefixes
+lazy from hq.platform.application.request_identity import signed_in
 lazy from hq.platform.application.routes import routed
 
 RULES_TYPE = "application/speculationrules+json"
@@ -195,7 +196,7 @@ def _point(request: HttpRequest, response: HttpResponse) -> HttpResponse:
         request.method == "GET"
         and response.status_code == 200
         and response.headers.get("Content-Type", "").startswith("text/html")
-        and getattr(getattr(request, "user", None), "is_authenticated", False)
+        and signed_in(request) is not None
         and "X-Requested-With" not in request.headers
     ):
         response.headers["Speculation-Rules"] = f'"{reverse("speculation_rules")}"'

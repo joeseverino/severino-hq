@@ -6,7 +6,7 @@ from typing import override
 from django.db import models
 lazy from django.urls import reverse
 
-from hq.domains.assets.models import PAYMENT_METHOD_CHOICES, quantize_money
+from hq.domains.assets.models import PAYMENT_METHOD_CHOICES
 from hq.platform.application import business_use
 from hq.platform.application.references import Referable, ReferenceField
 from hq.platform.core.models import TimestampedModel
@@ -42,13 +42,7 @@ class Expense(TimestampedModel):
         validators=business_use.VALIDATORS,
         help_text="0-100. Used to estimate the deductible amount.",
     )
-    estimated_deductible_amount = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=Decimal("0.00"),
-        editable=False,
-        help_text="Calculated on save. Estimate, not tax advice.",
-    )
+    estimated_deductible_amount = business_use.deductible("Estimate, not tax advice.")
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True)
     business_purpose = models.CharField(
         max_length=300,
@@ -132,12 +126,6 @@ class Expense(TimestampedModel):
         """When and how much, beside its name where something else lists it."""
 
         return f"{when_day(self.date)} · {money(self.total_cost)}"
-
-    @override
-    def save(self, *args, **kwargs):
-        cost = self.total_cost or Decimal("0.00")
-        self.estimated_deductible_amount = quantize_money(cost * Decimal(self.business_use_percentage) / Decimal(100))
-        super().save(*args, **kwargs)
 
     def get_absolute_url(self):
         return reverse("expenses:detail", args=[self.pk])

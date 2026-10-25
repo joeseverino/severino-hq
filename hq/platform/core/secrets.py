@@ -35,7 +35,7 @@ def available() -> bool:
 
 
 def _configured_key() -> str:
-    return (getattr(settings, "SEVERINO_SECRET_STORE_KEY", "") or "").strip()
+    return settings.SEVERINO_SECRET_STORE_KEY.strip()
 
 
 def _cipher() -> Fernet:

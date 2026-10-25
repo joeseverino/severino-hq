@@ -16,8 +16,6 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime
 
-from tools.pipeline.ci_report import github_instant as when
-
 
 @dataclass(frozen=True)
 class Span:
@@ -33,6 +31,11 @@ class Span:
 @dataclass(frozen=True)
 class Job(Span):
     steps: tuple[Span, ...]
+
+
+def when(text: str) -> datetime:
+    """GitHub's one shape of instant; HQ's own parser is not importable here."""
+    return datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ")
 
 
 def ran(record: dict) -> bool:

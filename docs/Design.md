@@ -14,7 +14,7 @@ to the list where its rules belong in the cascade, and every check of the
 stylesheet reads it through that list.
 
 Each rule names its gate where one enforces it. A lower-case gate without
-`test_` is a rule of `LayoutBrowserTests` (`hq/platform/core/browser_tests.py`), held on
+`test_` is a rule of `LayoutBrowserTests` (`hq/platform/core/tests/browser/layout.py`), held on
 every page at every width it applies to, each a subtest named for the rule,
 the page and the width.
 
@@ -52,40 +52,51 @@ in a comment. Content uses the window up to `--content-max`; prose keeps
 restyles its contents once the container is measured and runs their
 transitions from nothing, so every button fades in on load.
 *Gates:* the overflow sweep at a phone's width (402), 820 and 1360
-(`WIDTHS` in `browser_tests.py`); `test_viewport_breakpoints_only_go_down`, a ceiling that
+(`WIDTHS` in `tests/browser/widths.py`); `test_viewport_breakpoints_only_go_down`, a ceiling that
 only falls.
 
-**A table fits its box, at every width, from its HTML.** No screen width is
-asked anywhere in the table primitive: its region (`{% table_region %}`) is a
-size container, and what a table shows is decided by the stylesheet on first
-paint. A table takes its box's width and wraps, the browser sizing each column
-from what it holds. Each column that may leave has a rank, 1 first
-(`{% table_heading ... drop=N %}`; a list's are derived by `ranked`:
+**A table fits its box, at every width.** No screen width is asked anywhere
+in the table primitive. A table takes its box's width and wraps, the browser
+sizing each column from what it holds. Each column that may leave has a rank,
+1 first (`{% table_heading ... drop=N %}`; a list's are derived by `ranked`:
 `optional-col` first, then from the far end, never the column that names the
 row, one marked `key-col`, or the closing figure of a table that marks none).
-The region says how many ranks leave in a box under 1000px (`mid=`) and under
-640px (`narrow=`; a list view's `table_drop_mid` and `table_drop_narrow`), so
-each heading carries the widest box it leaves in (`data-drop-tier`), the
-region writes it on every cell beneath, and the column goes there with no
-limit on how many a table has. The column that names the row has no tier.
-What leaves is in the row's toggle. A table in a narrow
-box, a phone or half a page beside a chart, also gets roomier rows and holds
-back what is marked `narrow-more`; what is marked `narrow-only` shows there
-alone, a few words in the cell that names the row standing in for the columns
-that left (the audit log's action under its name). The region marks each body cell that says
+Only the browser knows how wide a table is, so `tables.js` decides what shows,
+the established responsive-table pattern: while a table is wider than its
+region, its next ranked column leaves (rank 1 first, the rightmost of a rank
+first, `data-dropped` on its cells), and once none is left to go the table is
+in a narrow box (`data-narrow`), then tight (below); as the region grows
+they come back, the last to leave first, each only if the table still fits. A ResizeObserver on every
+region does it in the frame the table is laid out, before that frame is
+painted, and the script loads in the head without `defer` so every region is
+watched from the moment it is parsed: nothing moves once a page is drawn
+(`test_nothing_moves_once_a_sparse_page_is_drawn` reads each box as that frame
+paints it). What leaves is in the row's toggle. The columns showing set
+`--showing`, which bounds what a held line asks for (`--hold`). In a narrow
+box (`--box: narrow`, else `whole`, read by `@container style()`) a table gets
+roomier rows and holds back what is marked `narrow-more`, and what is marked
+`narrow-only` shows there alone, a few words in the cell that names the row
+standing in for the columns that left (the audit log's action under its
+name). A table still wider in a narrow box is tight (`data-tight`): its
+headings, times, statuses and a value's parts wrap at their spaces and its
+cells stand closer, so the narrowest phone (320px) holds every table the
+gates draw (`a_table_fits_its_box_at_every_width`). With no script nothing
+leaves and the table scrolls in its region.
+The region marks each body cell that says
 nothing (`data-blank`) and every cell of a column blank in every row
 (`data-blank-column`), which is not drawn. Since a
 table fits, its region is no scroll box and its heading pins under the page's
 chrome; only a region declared a pane (`pane=True`: a height of its own, as a
 chart's data or the topology ledger, or a table sized to its content) or a
 chart's (`chart=True`) scrolls, pins its heading to its own edge, and takes
-focus. A drop rank in a region that counts no drops is refused at render. A
-table never stacks into cards and is not swiped through. A key/value table (row headers,
+focus. A table never stacks into cards and is not swiped through. A key/value table (row headers,
 no `thead`) sizes its label column to its longest label. Rows that belong to
-sections share one table as a `tbody` per group with a `.row-group` heading
-row, never two tables kept aligned by hand. Rows that belong under one row
+sections share one table as a `tbody` per group, headed by
+`{% row_group label count %}`, which spans every column the headings declare,
+never two tables kept aligned by hand. Rows that belong under one row
 name it (`data-folded`) and show while it is open (`data-folds`, its toggle
-in the same gutter as the row toggle); with no script they all show. A row
+in the same gutter as the row toggle); with no script they all show. A group
+folded away is `row_group ... folds=<id>`, its rows naming that id. A row
 reads from its first line: the toggle stands there, so every cell is set at
 the top, and no page sets its table's cells otherwise.
 *Gates:* `a_table_fits_its_box_at_every_width`, `a_row_reads_from_its_first_line`,
@@ -93,13 +104,17 @@ the top, and no page sets its table's cells otherwise.
 `only_a_table_scrolls_sideways`, the row height budget, and the page
 crawl, which fails any `.data-table` outside `.table-scroll`.
 
-**Opening a row moves nothing.** What an open row was holding back, the
-columns that left and the `narrow-more` parts, is listed in a line of its own
-beneath the row, each part under its column's name. It is the row's own
-content moved there and moved back, never a copy, so a control in it is still
-the one control. The row's own cells stay as they were, and the columns are
-held at their widths for as long as any row is open, so every other row keeps
-its place. Every row that can open has its toggle drawn by the server
+**Opening a row moves nothing.** What a row holds back, the columns that
+left, the `narrow-more` parts and the `row-below` blocks, is in a line of its
+own beneath the row, drawn by the server after the row (`tr.row-detail`,
+`table_tags._detail_row`) and shown while the row is open: the blocks first,
+then each part under its column's name (`dl.row-columns`). A column's part
+shows while the column is gone (`data-dropped`, which `tables.js` sets on it
+as on the cells), a narrow part in a narrow box, a labeled block always; a
+line with nothing to show is a blank row of no height. The line holds a copy
+of what the row holds back, so the row's own cells stay as they were, and the
+columns are held at their widths for as long as any row is open, so every
+other row keeps its place. Every row that can open has its toggle drawn by the server
 (`{% row_toggle %}`), and it shows only where the row holds something back
 now: a column that left with something in it, a `narrow-more` or `row-below`
 part, a fold, or a value `tables.js` found cut (`data-cut`). The toggle
@@ -120,9 +135,11 @@ same control, looking the same, drawn as a button (`local_sort=rows|sortable`,
 or a row count where rows come in groups), and `tables.js` sorts the rows on
 the page: ascending, descending, then as they came. Amounts, dates and lengths
 of time sort as what they are; a cell may say its own value with `data-sort`.
-Sections keep their own rows. A table drawn by hand, with no declared
-headings, gets its buttons from `tables.js`.
-*Gate:* `test_any_table_sorts_by_a_heading`.
+Sections keep their own rows. No table is drawn by hand, an extension's
+included: `hand_drawn_tables` in `plugin_testing` refuses one, and the host's
+suite runs it over every installed extension's templates.
+*Gate:* `test_any_table_sorts_by_a_heading`,
+`test_every_table_is_declared_through_the_tags`.
 
 **A table is laid out before any script runs.** A long identifier is one
 line, cut with an ellipsis at a share of its region's width
@@ -134,7 +151,7 @@ identifier sits beside wide columns (it gets little until the region is wide),
 length); a list view says it as `table_room`. An identifier the row is read
 by, in a row of many columns (a container's image), is `code.cell-whole`: it
 wraps at its seams instead, so its column gives way without hiding any of it.
-In a wide region a status keeps its line and a one-token name is never cut; a
+Outside a narrow box a status keeps its line and a one-token name is never cut; a
 value told in several parts marks each `cell-part`, and where its line is
 short it wraps only between them. Every such hold, and an identifier's cut,
 asks for at most its column's even share of the region (`--hold`, counted
@@ -170,7 +187,10 @@ cells (not a dialog a cell opens, not its note) and takes the tracks for that
 count, two to six (`--tracks-2-1` up to `--tracks-6-3-1`), and a lone cell takes
 the band, so no page says how many it holds. A band is listed once, in the band rule in `css/app/figures.css`; its
 cells keep their own padding. Too narrow for two cells, a band reads as a
-list: label left, value right. A list of short steps (`.step-list`) is read
+list: label left, value right. What names a value (`.band-label`, a tile's
+label, a `<dt>`) is sentence case in the muted voice; capitals are for a
+kicker over a group (`.eyebrow`), never a value's name
+(`test_no_value_is_named_in_capitals`). A list of short steps (`.step-list`) is read
 down its columns, so its columns end within a step of each other. The
 dashboard's readings are one row when each has room and a list when not.
 *Gates:* `a_band_cell_keeps_its_padding`, `a_band_lays_out_as_whole_rows`.
@@ -196,8 +216,9 @@ beside a table, a chart beside a chart, so each row ends together.
 where there is room and none narrower than 18rem, and a row's fields share its
 whole width: pairs sit side by side and the odd one of a run takes its row, so
 no row is left with a field and a hole beside it. A textarea, a group of
-choices, errors and the actions take the row. A group of checkboxes reads
-across.
+choices, errors, a command's confirmation and the actions take the row. A
+group of checkboxes reads across. A command's form is this grid too: `.form`
+is the one form layout. *Gate:* `a_form_fills_its_rows`.
 
 **Nothing empty takes space.** A panel with nothing to show is not drawn: the
 page closes up rather than carrying a card that says "nothing here". An empty
@@ -287,7 +308,10 @@ Chromium breaks at a `<wbr>` even under `white-space: nowrap`, and WebKit
 does not. Chromium also breaks a part held to one line (`.whole`) that has no
 box (`display: contents`) at an element's edge inside it when the box around
 the part has `overflow-wrap: break-word`, so a box that cuts such a part sets
-`overflow-wrap: normal`.
+`overflow-wrap: normal`. An external link's arrow (`.external-link`) is joined
+to its last word by a no-break space, and a link whose name is one box (a cut
+token, a chip in a table) lays the name and the arrow out as one row, since a
+line may break after any box: `an_external_links_arrow_keeps_to_its_last_word`.
 
 A moment, a date and an age are each written one way, by `hq/platform/application/moments.py`:
 `when` ("Oct 3, 9:29 AM"), `when_day` ("Oct 3"), `ago` ("5 days ago", one
@@ -297,14 +321,27 @@ no-break spaces, so neither wraps inside itself. A page shows them through the b
 filter, which wraps the words in `<time datetime title>`: `{{ at|when }}` on a
 detail page, `{{ at|when:"ago" }}` in a list (the exact moment on hover),
 `"day"` and `"exact"` for the other two. The `datetime` is what a table sorts
-on, so a date column needs nothing else. No template carries a `|date:` clock
-format or prints a datetime bare; `|ago` is the same age as plain words, for a
-sentence or an attribute. A run of days is `when_range` ("Oct 3 – Oct 9"), a
-year both ends share said once. Extensions get all five from `hq_sdk.ui`.
+on, so a date column needs nothing else. No template writes a day and its
+month in a `|date:` or `{% now %}` format of its own, or prints a datetime
+bare; a month or a weekday alone (a calendar's heading and columns) is not a
+date, and digits only (`Y-m-d` in an address) are for a machine. `|ago` and
+`|day` are the same age and day as plain words, for a sentence, an attribute or
+a label where a `<time>` cannot go. A run of days is
+`when_range` ("Oct 3 – Oct 9"), a year both ends share said once. Extensions
+get all five from `hq_sdk.ui`.
+*Gate:* `test_templates_write_dates_through_the_when_filter`.
 
 A count's plural has one owner too: `counted`, which spells a single noun
 through `labels.plural` ("2 entries"). An audit type's plural is
 `AuditLog.type_plural`: the model's `verbose_name_plural` where declared.
+
+A bare figure counting what a heading heads (`.count`) stands in that
+heading after its words: `<h2>Readings <span class="count">7</span></h2>`,
+and the same in a summary, a group row and a tab. Never in parentheses, and
+never alone at the far end of a `.section-head`, cut off from the words it
+counts; what stands there is a line about the section, a count with its
+unit ("3 events", "2 left") among them.
+*Gate:* `test_every_bare_count_stands_in_its_heading`.
 
 **Color comes from tokens.** No color literal outside `@layer tokens`, so a
 theme is a set of token values and dark mode is not a second stylesheet.
@@ -388,7 +425,11 @@ has one: "Last read 3 hours ago", and "out of date" beside it past the line
 **A frame is filled.** Facts are `.kv`: each label beside its value, as many
 pairs to a row as the width holds, never a two-column table stretched to the
 page. A pair whose value is wider than a column (a machine's addresses, as
-`.address-list`) takes a row of its own: `.kv-whole` on its `dt`. A thing's
+`.address-list`) takes a row of its own: `.kv-whole` on its `dt`. A value
+goes under its label only where the box cannot hold both on one line, and
+the same holds for a node key beside its machine and a piece of evidence
+beside its kind (`.conn-rows` flows each row once it is too narrow for three
+columns): `a_value_sits_beside_its_label`. A thing's
 state sits on its title's line (`page_aside`), as words; the facts about it
 at a glance are a band under the head, as a service, a machine and HQ's own
 page open. A line that dates or sources a section goes beside its

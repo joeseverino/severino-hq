@@ -10,6 +10,7 @@ from typing import Any
 from pydantic import Field, field_validator
 
 from hq.platform.application.github_public import GitHubRepositoryURL
+from hq.platform.application.ui import ended
 lazy from hq.platform.application.container_standard import CHECK_IDS
 
 from ..connection_shapes import API_TOKEN
@@ -283,7 +284,7 @@ def _stack_warnings(spec: dict[str, Any]) -> tuple[str, ...]:
     compose = str(spec.get("compose") or "")
     found = [what for pattern, what in _ROOT_EQUIVALENT if pattern.search(compose)]
     host = spec.get("host") or "its machine"
-    return tuple(f"It {what} on {host}." for what in found)
+    return tuple(ended(f"It {what} on {host}") for what in found)
 
 
 STACK = ProviderSpec(
@@ -302,7 +303,7 @@ STACK = ProviderSpec(
     advanced_fields=("connection_ref", "environment"),
     removal_note=lambda spec: (
         f"{spec.get('name', 'This stack')} stops running on "
-        f"{spec.get('host', 'its machine')}. Anything it serves goes "
+        f"{ended(spec.get('host', 'its machine'))} Anything it serves goes "
         "offline."
     ),
     facet="runtime",

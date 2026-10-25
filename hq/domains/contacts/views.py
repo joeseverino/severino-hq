@@ -28,7 +28,7 @@ from hq.platform.application.moments import when
 from hq.platform.application.pages import PageAction, page_context
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.timestamps import moment
-from hq.platform.application.ui import counted
+from hq.platform.application.ui import counted, ended
 
 from . import inbox
 from .forms import STATUS_CHOICES, ContactReviewForm
@@ -170,7 +170,7 @@ def contact_set_status(request, pk: int):
         admin_notes=submission.get("admin_notes") or "",
     )
     if _review(request, pk, command):
-        messages.success(request, f"Message marked {STATUS_LABELS[status].lower()}. {QUEUED}")
+        messages.success(request, f"Message marked {ended(STATUS_LABELS[status].lower())} {QUEUED}")
     return redirect(_safe_next(request))
 
 

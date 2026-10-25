@@ -67,7 +67,8 @@ ruleset before they can publish anything.
    refuses an image that drops an extension production runs unless it is named
    there. How an extension is admitted is in [Plugins](Plugins.md#composition).
 4. Create the `production` environment with yourself as a required reviewer.
-5. Add a `main` ruleset requiring the **Severino HQ · Review** check.
+5. Add a `main` ruleset requiring the **Ready** check, with GitHub Actions
+   as its expected source.
 
 **Check:** the repository's secrets list `HQ_APP_KEY`, `HQ_APP_CLIENT_ID` and
 `COMPOSITION_EXTENSIONS`.
@@ -224,8 +225,10 @@ values, and no name appears twice.
 
 ## 8. Add the first connection
 
-**For:** what HQ reads. This step is optional: HQ starts without a connection,
-and you can add one now or later from the Connections page. Once the host has a connection, a vault that holds none is refused and the installed connections are kept ([Secrets](Secrets.md#renderer-behavior)).
+**For:** what HQ reads. This step is optional: HQ starts without a
+connection, and you can add one now or later from the Connections page. Once
+the host has a connection, a vault that holds none is refused and the
+installed connections are kept ([Secrets](Secrets.md#renderer-behavior)).
 
 A connection is a vault item with three text fields the renderer reads:
 `connection_ref` (a name you choose), `projection` (the shape of the
@@ -353,7 +356,7 @@ cat /run/severino-hq-secrets/status.json
 ```
 
 `last_attempt.outcome` is `rendered` or `current`, and `counts.connections` is
-at least 1. The document holds no secret.
+at least 1 if you added a connection in step 8. The document holds no secret.
 
 ```sh
 curl -fsS http://127.0.0.1:8000/health/ready/

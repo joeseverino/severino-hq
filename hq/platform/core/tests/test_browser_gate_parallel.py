@@ -8,7 +8,7 @@ import threading
 from django.test import SimpleTestCase
 from django.test.runner import RemoteTestResult
 
-from hq.platform.core.browser_tests import BrowserGate, failure_name
+from hq.platform.core.tests.browser.gate import BrowserGate, failure_name
 
 
 class Probe(BrowserGate):
@@ -18,13 +18,12 @@ class Probe(BrowserGate):
     Its parts are not named test_, so discovery runs none of them on its own.
     """
 
-    def setUp(self):
+    def start(self, **options):
+        # BrowserGate.setUp runs as it is, cleanups and all, with this in
+        # place of the browser it starts.
         self.page = threading.Lock()
         self.on = None
         self.shots = []
-        # The cleanups BrowserGate.setUp registers, in its order.
-        self.addCleanup(lambda: None)
-        self.addCleanup(self.capture_failure)
 
     def shoot(self, name):
         self.shots.append((name, self.on))
@@ -54,7 +53,14 @@ class ParallelBrowserGateTests(SimpleTestCase):
 
         # What the worker sends the parent once the test has finished.
         sent = pickle.loads(pickle.dumps(result.events))
-        self.assertIn("addSubTest", [event[0] for event in sent])
+        failed = [event for event in sent if event[0] == "addSubTest"]
+        self.assertEqual(len(failed), 1)
+        _, _, subtest, (kind, error, _) = failed[0]
+        # The failure as the subtest raised it, under the test that ran it.
+        self.assertIs(kind, AssertionError)
+        self.assertEqual(str(error), "on purpose")
+        self.assertEqual(subtest.test_case.id(), probe.id())
+        self.assertNotIn("addError", [event[0] for event in sent])
         self.assertEqual(
             probe.shots, [(failure_name({"page": "example/one", "width": 402, "rule": "overflow"}), "example/one")]
         )

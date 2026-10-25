@@ -157,11 +157,15 @@
 .connection-table td > .connection-ability-list > li { display: inline; font-size: inherit; line-height: inherit; }
 .connection-table td > .connection-ability-list > li::before { content: none; }
 .connection-table td > .connection-ability-list > li:not(:last-child)::after { content: " ·"; color: var(--muted-2); }
-.connection-table td > .connection-ability-list > li > small { margin-left: var(--space-2); }
+.connection-table td > .connection-ability-list > li > * + * { margin-left: var(--space-2); }
 .connection-table td > .connection-ability-more { display: inline; margin: 0 0 0 var(--space-3); font-size: var(--text-2xs); }
 /* Its names wrap one under another, so each line is a target tall. */
 .connection-depends { line-height: var(--target-min); }
-.connection-depends .row-less { margin-left: var(--space-2); white-space: nowrap; }
+/* The dot before a name keeps to it: a line breaks only between names, so
+   no dot stands on a line of its own. The name itself still wraps. */
+.connection-depends > span { white-space: nowrap; }
+.connection-depends > span > * { white-space: normal; }
+.connection-depends .row-less { margin-left: var(--space-2); }
 /* Opened, the rest of them, flowing across the line beneath the row. */
 .connection-ability-all { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); }
 .connection-ability-all > li { flex: none; }
@@ -325,8 +329,8 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
   }
   /* Matches the collapsed search button and the account chip exactly, so it
      reads as the same kind of control as the ones beside it. */
-  .nav-toggle { align-items: center; justify-content: center;
-    inline-size: var(--control-size); block-size: var(--control-size); order: 4;
+  .nav-toggle { grid-area: toggle; align-items: center; justify-content: center;
+    inline-size: var(--control-size); block-size: var(--control-size);
     border: 1px solid var(--bar-control-line); border-radius: var(--radius-sm);
     background: var(--bar-control-bg); color: var(--ink-2);
   }
@@ -336,7 +340,7 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
     outline: 2px solid var(--accent-2);
     outline-offset: 2px;
   }
-  .primary-nav { display: none; }
+  .primary-nav { display: none; grid-area: auto; }
   .site-header:target .primary-nav,
   .nav-is-open .primary-nav {
     display: flex;
@@ -387,12 +391,12 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
 
 }
 
-/* The nav row is nowrap, so below roughly 830px the four grid tracks do not
-   fit; the nav gets its own row here rather than overlapping the search. */
 @media (max-width: 860px) {
-  .site-header { gap: var(--space-4) var(--space-6); padding: var(--space-5) var(--space-7); }
   /* The person's control is a square mark like search and the bell beside it:
-     the name is in its menu, and a phone's one row has no room to repeat it. */
+     the name is in its menu, and a phone's one row has no room to repeat it.
+     Its track is squared here, beside the rules that square it, which sit in
+     the components layer to beat page.css. */
+  .site-header { --header-user: var(--control-size); gap: var(--space-4) var(--space-6); padding: var(--space-5) var(--space-7); }
   .user-menu > summary { width: var(--control-size); padding: 0; }
   .user-menu .user-name { display: none; }
   .brand { font-size: var(--text-md); }
@@ -416,7 +420,6 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
     box-shadow: none;
     border-radius: var(--radius-sm);
   }
-  .user-menu { order: 2; }
 }
 
 }

@@ -5,12 +5,13 @@ from hq.platform.application.domains import domain_navigation
 lazy from hq.platform.application.agent_access import agents_paused
 lazy from hq.platform.application.appearance import Theme, theme_for
 lazy from hq.platform.application.request_channel import channel_for_request
+lazy from hq.platform.application.request_identity import signed_in
 
 
 def site(request):
     return {
-        "SITE_NAME": getattr(settings, "SEVERINO_SITE_NAME", "Severino HQ"),
-        "SITE_HOST": getattr(settings, "SEVERINO_SITE_HOST", "localhost"),
+        "SITE_NAME": settings.SEVERINO_SITE_NAME,
+        "SITE_HOST": settings.SEVERINO_SITE_HOST,
     }
 
 
@@ -76,7 +77,7 @@ def nav(request):
 
 
 def auth_config(request):
-    return {"OIDC_ENABLED": getattr(settings, "SEVERINO_OIDC_ENABLED", False)}
+    return {"OIDC_ENABLED": settings.SEVERINO_OIDC_ENABLED}
 
 
 def connection(request):
@@ -95,8 +96,7 @@ def connection(request):
 def agent_access(request):
     """Whether agents are paused, read lazily so templates without the menu cost nothing."""
 
-    user = getattr(request, "user", None)
-    if not (user and user.is_authenticated):
+    if signed_in(request) is None:
         return {}
 
     return {"agents_paused": SimpleLazyObject(agents_paused)}
@@ -109,7 +109,7 @@ def appearance(request):
     out follows the system without a query.
     """
 
-    user = getattr(request, "user", None)
+    user = signed_in(request)
     return {
         "THEME": SimpleLazyObject(lambda: theme_for(user)),
         "THEME_CHOICES": Theme.choices,

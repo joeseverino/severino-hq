@@ -1,12 +1,11 @@
 """A record's slug is made once, from its name, and never collides."""
 
-from django.db import connection
 from django.test import TestCase
-from django.test.utils import CaptureQueriesContext
 
 from hq.domains.projects.models import Project
 
 from ..models import free_slug
+from .estate_sizes import assert_cost_does_not_grow
 
 
 class FreeSlugTests(TestCase):
@@ -45,14 +44,19 @@ class FreeSlugTests(TestCase):
         self.assertEqual(project.slug, "home-lab")
 
     def test_finding_a_free_slug_costs_the_same_however_crowded(self):
-        def cost(expected):
-            with CaptureQueriesContext(connection) as queries:
-                self.assertEqual(free_slug(Project(name="Home Lab"), "Home Lab", "project"), expected)
-            return len(queries)
+        def arrange(count):
+            for _ in range(Project.objects.count(), count):
+                Project.objects.create(name="Home Lab")
 
-        Project.objects.create(name="Home Lab")
-        uncrowded = cost("home-lab-2")
-        for _ in range(4):
-            Project.objects.create(name="Home Lab")
+        def taken(slug):
+            """The projects the slug steps past: home-lab-6 is free after five."""
 
-        self.assertEqual(cost("home-lab-6"), uncrowded)
+            return int(slug.removeprefix("home-lab-")) - 1
+
+        assert_cost_does_not_grow(
+            self,
+            sizes=(1, 5),
+            arrange=arrange,
+            draw=lambda _count: free_slug(Project(name="Home Lab"), "Home Lab", "project"),
+            rows=taken,
+        )

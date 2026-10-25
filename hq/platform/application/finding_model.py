@@ -17,6 +17,7 @@ from .action_links import ActionLink
 from .core_capabilities import CONTROLLER_REFRESH
 from .timestamps import moment
 from .topology_model import Topology, TopologyNode
+from .ui import ended
 from .workflows import WorkflowPlan
 lazy from .capabilities import capability_words
 
@@ -241,7 +242,7 @@ def journal_step(label: str, machine: str, unit: str, notes: tuple[str, ...] = (
 def cannot_run_commands(machine: str = "") -> str:
     """Why a fix that is a command on a machine is the owner's to run."""
 
-    return f"HQ cannot run commands on {machine or 'the machine'}."
+    return ended(f"HQ cannot run commands on {machine or 'the machine'}")
 
 
 CANNOT_EDIT_COMPOSE = "HQ cannot edit compose files."

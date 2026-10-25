@@ -13,6 +13,7 @@ is the failure this prevents.
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Concatenate, Literal, NotRequired, TypedDict, cast
 
 from django.conf import settings
@@ -24,6 +25,7 @@ from pydantic import ConfigDict, with_config
 
 from hq.platform.application.agent_access import agents_paused
 from hq.platform.application.agent_registry import observe
+from hq.platform.application.approvals import is_held
 from hq.platform.application.capabilities import (
     CapabilityDescription,
     authorize_capability,
@@ -48,6 +50,7 @@ from hq.platform.application.idempotency import (
 from hq.platform.application.integration_specs import RESERVED_QUERY_FIELD
 from hq.platform.application.projection import QueryRefusal
 from hq.platform.application.record_errors import RecordNotFound
+from hq.platform.application.request_identity import signed_in
 from hq.platform.application.resources import (
     InvalidResourceInput,
     ResourceDescription,
@@ -147,10 +150,18 @@ Projection = dict[str, Any]
 CAPABILITY_STATUS = {
     "unknown_capability": 404,
     "forbidden": 403,
+    # The operator's standing rule refuses this client. Like a missing grant,
+    # no change to the request gets it through.
+    "denied_by_policy": 403,
     "not_found": 404,
+    # The call had to be held, and the record it names could not be read to
+    # show the person deciding: the target is not there.
+    "approval_subject_unreadable": 404,
     "conflict": 409,
     "operation_failed": 409,
     "idempotency_conflict": 409,
+    # The request is valid; the state it acts on refuses it until it changes.
+    "precondition": 409,
     # Nothing is wrong with the request. This client is holding more decisions
     # than a person has answered, so the honest status is the one that says
     # "later", not the one that says "malformed".
@@ -227,10 +238,8 @@ def _operator(request: HttpRequest) -> Principal | None:
 
     if "Authorization" in request.headers:
         return None
-    user = getattr(request, "user", None)
-    if user is None or not user.is_authenticated:
-        return None
-    return web_principal(user)
+    user = signed_in(request)
+    return None if user is None else web_principal(user)
 
 
 def _request_schema(spec: Mapping[str, Any]) -> dict[str, Any]:
@@ -279,6 +288,7 @@ def _endpoint(
     title: str,
     data: Any,
     errors: tuple[int, ...] = (),
+    codes: Mapping[str, int] = MappingProxyType({}),
     operator_session: bool = False,
 ) -> Callable[[APIView], View]:
     """Authenticate, then put every failure in the same envelope.
@@ -292,8 +302,9 @@ def _endpoint(
 
     ``data`` is the type a success carries under ``data`` (None: the body is
     not enveloped) and ``errors`` the statuses the view adds to
-    ENDPOINT_ERRORS. ``title`` names the operation in a few words, where the
-    docstring's first line says what it answers. All three are read by
+    ENDPOINT_ERRORS, and ``codes`` maps each error code the view answers with
+    to its status. ``title`` names the operation in a few words, where the
+    docstring's first line says what it answers. All are read by
     hq_api/openapi.py.
     """
 
@@ -377,6 +388,7 @@ def _endpoint(
             __hq_title__=title,
             __hq_data__=data,
             __hq_errors__=tuple(sorted({*ENDPOINT_ERRORS, *errors})),
+            __hq_codes__=codes,
             __hq_operator_session__=operator_session,
         )
         return wrapper
@@ -743,7 +755,17 @@ def _parse_envelope(request: HttpRequest) -> tuple[dict[str, Any], Envelope]:
 EXECUTE_ERRORS = (400, 409, 413, 415, *CAPABILITY_STATUS.values())
 
 
-@_endpoint(("POST",), title="Run a capability", data=dict[str, Any], errors=EXECUTE_ERRORS)
+def _ran(response: dict[str, Any], status: int) -> bool:
+    """Whether the call did its work, which is all its key keeps.
+
+    A refusal or a call held for a person has done nothing, so the same key
+    runs once the rule, the grant or the record that stopped it has changed.
+    """
+
+    return status == 200 and not is_held(response["data"])
+
+
+@_endpoint(("POST",), title="Run a capability", data=dict[str, Any], errors=EXECUTE_ERRORS, codes=CAPABILITY_STATUS)
 def execute(request: APIRequest, name: str) -> HttpResponse:
     """Run one HQ capability, replaying machine writes by idempotency key."""
 
@@ -806,6 +828,7 @@ def execute(request: APIRequest, name: str) -> HttpResponse:
             key=key,
             request_sha256=request_fingerprint(name, payload, api_version=CURRENT_API_VERSION),
             operation=run,
+            keep=_ran,
         )
     except InvalidIdempotencyKey as exc:
         return _fail(exc.reason, code="invalid_idempotency_key", status=400)

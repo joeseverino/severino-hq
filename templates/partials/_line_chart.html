@@ -35,7 +35,7 @@ a zero-based axis would draw every reading as the same height.
           <path class="chart-line chart-line-{{ series.slot }}" d="{{ series.path }}"></path>
           {% if series.dotted %}{% for point in series.points %}<circle class="chart-dot chart-series-{{ series.slot }}" cx="{{ point.x }}" cy="{{ point.y }}" r="2.5"></circle>{% endfor %}{% endif %}
         {% endfor %}
-        
+
         {% comment %}
         Invisible targets, drawn last so they sit above every line. A plotted
         point is three pixels across, smaller than a pointer can be aimed, so

@@ -26,7 +26,7 @@ from .connection_catalog import ConnectionGroup
 from .connection_lifecycle import ATTENTION, WORKING, Lifecycle
 from .reach import TAILNET
 from .request_channel import channel_for_request
-from .ui import counted
+from .ui import counted, ended
 lazy from .facts import stored_snapshots
 lazy from .moments import ago
 lazy from .request_path import address_chain
@@ -293,7 +293,7 @@ def host_firewall_control(snapshot) -> SecurityControl:
             FIREWALL_LABEL,
             "good",
             f"Required on {interface}",
-            f"The firewall accepts this port only on {interface}. It has no rule "
+            f"The firewall accepts this port only on {ended(interface)} It has no rule "
             "that drops a tailnet address arriving on another interface.",
         )
     return SecurityControl(
@@ -477,7 +477,7 @@ def _scope_control(evidence: Counter, connections: tuple) -> SecurityControl:
     else:
         state, detail = "good", "Each service confirmed the permissions HQ needs."
     if whole:
-        detail = f"{detail} Full account access: {', '.join(whole)}."
+        detail = ended(f"{detail} Full account access: {', '.join(whole)}")
     return SecurityControl(
         "scope",
         "Tokens hold only the permissions HQ uses",
@@ -557,7 +557,7 @@ def connection_security_posture(
     external_custody = sum(len(group.connections) for group in groups if group.spec.secret_store)
     dependencies = sum(len(connection.instance.dependencies) for connection in connections)
 
-    gate = bool(getattr(settings, "SEVERINO_ENFORCE_TRUSTED_NETWORK", False))
+    gate = settings.SEVERINO_ENFORCE_TRUSTED_NETWORK
     admission = _admission(request, gate) if request is not None else None
     tailnet_policy_control = tailnet_policy or _unattested_tailnet_policy()
     edge_control = edge or _unattested_edge()

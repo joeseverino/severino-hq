@@ -64,8 +64,7 @@
       <section class="topology-lane" data-topology-lane="{{ group.kind }}" aria-labelledby="topology-{{ group.kind }}">
         <header>
           <span class="topology-kind-mark topology-kind-{{ group.kind }}" aria-hidden="true"></span>
-          <h2 id="topology-{{ group.kind }}">{{ group.label|breakable }}</h2>
-          <span class="count" data-topology-count title="{{ group.count }}" aria-label="{{ group.count }}">{{ group.items|length }}</span>
+          <h2 id="topology-{{ group.kind }}">{{ group.label|breakable }} <span class="count" data-topology-count title="{{ group.count }}" aria-label="{{ group.count }}">{{ group.items|length }}</span></h2>
         </header>
         <div class="topology-node-list">
           {% for item in group.items %}
@@ -82,7 +81,7 @@
               data-topology-body="{{ item.body_url }}"
             >
               <span class="topology-node-title" title="{{ item.node.label }} · {{ item.node.subtitle }}{% if item.node.summary %} · {{ item.node.summary }}{% endif %}">
-                <strong>{% if item.link.url %}<a class="topology-node-link" href="{{ item.link.url }}" data-entity="{{ item.link.kind_label }}"{% if item.link.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.link.label|breakable }}</a>{% else %}<span data-entity="{{ item.link.kind_label }}">{{ item.link.label|breakable }}</span>{% endif %}</strong>
+                <strong>{% if item.link.url and item.link.external %}{% outside_link url=item.link.url css="topology-node-link" entity=item.link.kind_label %}{{ item.link.label|breakable }}{% endoutside_link %}{% elif item.link.url %}<a class="topology-node-link" href="{{ item.link.url }}" data-entity="{{ item.link.kind_label }}">{{ item.link.label|breakable }}</a>{% else %}<span data-entity="{{ item.link.kind_label }}">{{ item.link.label|breakable }}</span>{% endif %}</strong>
                 <small>{{ item.node.subtitle|breakable }}</small>
                 {% if item.node.summary %}<small data-topology-node-summary>{{ item.node.summary|breakable }}</small>{% endif %}
               </span>
@@ -111,7 +110,7 @@
     <h2 id="topology-relations-heading">Links shown</h2>
     <span class="muted">{{ topology_edges|length|counted:"link" }}</span>
   </header>
-  {% table_region "Links shown" pane=True narrow=2 %}
+  {% table_region "Links shown" pane=True %}
     <table class="data-table">
       <thead><tr>{% table_heading "From" "identifier" gutter=True local_sort=topology_edges|sortable %}{% table_heading "Link" drop=3 local_sort=topology_edges|sortable %}{% table_heading "To" "identifier" drop=2 local_sort=topology_edges|sortable %}{% table_heading "State" "status" drop=1 local_sort=topology_edges|sortable %}</tr></thead>
       <tbody>

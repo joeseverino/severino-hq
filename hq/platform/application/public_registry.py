@@ -46,6 +46,7 @@ from .locate import host_of
 from .lookup import HOSTNAME, allocation_of, entity_name
 from .reach import is_public, public_label
 from .security import Capability, Principal
+from .timestamps import moment
 lazy from . import osv, services, zones
 lazy from .attestations import reduce
 lazy from .containers import containers
@@ -88,7 +89,7 @@ def read_every(kind: str) -> timedelta:
 
 
 def _configured() -> bool:
-    endpoint = str(getattr(settings, "SEVERINO_RDAP_ENDPOINT", "") or "").strip()
+    endpoint = settings.SEVERINO_RDAP_ENDPOINT.strip()
     parsed = urlsplit(endpoint)
     return parsed.scheme == "https" and bool(parsed.hostname)
 
@@ -320,7 +321,7 @@ def vulnerability_reader(
     def one(identifier: str, modified: str, purl: str) -> tuple[Mapping[str, Any], bool]:
         bare = finding({"id": identifier}, purl, modified)
         held = kept.get((identifier, bare["package"], bare["installed"]))
-        if held is not None and held.get("modified") == modified:
+        if held is not None and moment(held.get("modified")) == moment(modified):
             return held, True
         if remaining[0] <= 0:
             return {**bare, "modified": ""}, False

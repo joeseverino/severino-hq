@@ -7,16 +7,25 @@ entries, confirm prune to yes".
 """
 
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from .labels import field_label, lower_first
+from .printable import admitted
+from .timestamps import moment
 from .ui import counted
+lazy from .moments import when
 
 # How many plain facts a record may carry and still be said whole. Past this it
 # is counted, because a sentence of twenty facts is not read.
 SAID_WHOLE = 6
+# The extended form a stamp is written in: a date with its dashes, then
+# optionally a time and an offset. The basic form ("20261023") is also a
+# number, so it is left to read as one.
+_STAMP = re.compile(r"\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?)?")
 
 
 def _scalar(value: Any) -> bool:
@@ -59,7 +68,26 @@ def value_words(value: Any, schema: Mapping[str, Any] | None = None) -> str:
             return ", ".join(value_words(item) for item in items)
         noun = lower_first(_items_title(schema))
         return counted(len(items), noun if noun and " " not in noun else "entry")
-    return str(value)
+    return _plain_words(value)
+
+
+def _plain_words(value: Any) -> str:
+    """A value that is neither a record nor a list: a moment as HQ says one,
+    text and numbers as they are, and nothing a page would refuse to print."""
+
+    if isinstance(value, str):
+        value = _instant(value) or value
+    if isinstance(value, date):
+        return when(value)
+    return str(admitted(value, "value_words"))
+
+
+def _instant(text: str) -> date | None:
+    """The day or instant ``text`` wholly names, if it names one."""
+
+    text = text.strip()
+    found = moment(text) if _STAMP.fullmatch(text) else None
+    return found.date() if found and len(text) == len("YYYY-MM-DD") else found
 
 
 def field_words(name: str, schema: Mapping[str, Any] | None = None) -> str:

@@ -124,7 +124,7 @@ case "${operation}" in
         ;;
     deploy)
         work="$(mktemp -d /tmp/severino-hq-cert.XXXXXX)"
-        archive="$(mktemp /tmp/severino-hq-certificate.XXXXXX.tar)"
+        archive="$(mktemp /tmp/severino-hq-certificate.XXXXXX)"
         trap 'rm -rf "${work}"; rm -f "${archive}"' EXIT HUP INT TERM
         cat >"${archive}"
         test "$(tar -tf "${archive}" | sort)" = "fullchain.pem

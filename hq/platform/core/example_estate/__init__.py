@@ -1,7 +1,7 @@
 """The example estate: a small, well-run homelab, the one HQ is shown with.
 
-It seeds the public demo, a dev database (``manage.py seed_demo``), the
-rendered-page and export tests, and the layout gate's realistic pass. The
+It is the showcase and standard data sets (``hq.platform.core.seeds``), and
+seeds the rendered-page and export tests. The
 gate's stress estate (``test_browser_fixtures.build_estate``) breaks things on
 purpose so layouts are tested at their worst. This one is the opposite: an
 HQ that has run for months. Every record is read, every service is set up,
@@ -31,12 +31,16 @@ from django.contrib.auth import get_user_model
 from django.test import override_settings
 
 from hq.domains.receipts.models import Receipt
-from hq.platform.application import cadence
+from hq.platform.application import cadence, pins
+from hq.platform.application.linked_accounts import GITHUB, record_claimed_accounts
 
-from . import agents, docker, infra, network, records, work
+from . import agents, docker, history, infra, network, records, web, work
 from .names import HQ, HQ_REVISION, HQ_SOURCE, LAN, LAPTOP, OWNER, PROXY, SSO, container_id
 
-__all__ = ("REQUEST", "SSO", "as_production", "build_showcase", "seed", "throwaway_media")
+# The services the operator starred, to keep at the top of the list.
+FAVORITES = (HQ, "photos.example.com")
+
+__all__ = ("REQUEST", "SSO", "as_production", "build", "example_owner", "seed", "throwaway_media")
 
 # A reader's browser on the laptop, forwarded by the proxy, over HTTPS.
 REQUEST = {
@@ -69,8 +73,6 @@ def as_production():
                 # The commit this build says it is, and where it came from.
                 SEVERINO_HQ_REVISION=HQ_REVISION,
                 SEVERINO_HQ_SOURCE=HQ_SOURCE,
-                # A saved copy: what a page says about the reader is an example, not the reader's.
-                SEVERINO_RENDERED_COPY=True,
             )
         )
         # Facts about the host HQ runs on, which no database row holds.
@@ -92,16 +94,25 @@ def throwaway_media():
         yield
 
 
-def build_showcase():
-    """Seed the estate and return the user its pages are rendered for."""
+def example_owner():
+    """The user a page is rendered for when no operator signed up: the estate's owner."""
 
-    user = get_user_model().objects.create_user(username="example", email=OWNER, password=None, first_name="Example")
-    seed()
-    return user
+    return get_user_model().objects.create_user(username="example", email=OWNER, password=None, first_name="Example")
 
 
-def seed():
-    """Every record of the estate, written into an empty database."""
+def build(owner):
+    """The estate, owned by ``owner``: its records, their sign-in naming their
+    GitHub account as the identity provider says it, and their favorites."""
+
+    record_claimed_accounts(owner, {GITHUB: "example"})
+    seed(owner=owner)
+    for hostname in FAVORITES:
+        pins.toggle(owner, pins.SERVICE, hostname)
+
+
+def seed(owner=None):
+    """Every record of the estate, written into an empty database, the hand-kept
+    ones by ``owner`` (``history.settle`` says who when none is named)."""
 
     # The controller checked in a moment ago; a fresh install's never has.
     cadence.note_controller()
@@ -119,5 +130,8 @@ def seed():
     work.jobs()
     records.calendar()
     records.money()
-    records.messages()
-    agents.seen()
+    web.pages()
+    web.analytics()
+    web.contact()
+    agents.seen(owner)
+    history.settle(owner)

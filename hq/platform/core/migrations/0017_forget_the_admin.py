@@ -11,16 +11,22 @@ from django.db import migrations
 FORGET = (
     "DROP TABLE IF EXISTS django_admin_log",
     "DELETE FROM django_migrations WHERE app = 'admin'",
-    "DELETE FROM auth_group_permissions WHERE permission_id IN ("
-    "SELECT auth_permission.id FROM auth_permission JOIN django_content_type "
-    "ON django_content_type.id = auth_permission.content_type_id "
-    "WHERE django_content_type.app_label = 'admin')",
-    "DELETE FROM auth_user_user_permissions WHERE permission_id IN ("
-    "SELECT auth_permission.id FROM auth_permission JOIN django_content_type "
-    "ON django_content_type.id = auth_permission.content_type_id "
-    "WHERE django_content_type.app_label = 'admin')",
-    "DELETE FROM auth_permission WHERE content_type_id IN ("
-    "SELECT id FROM django_content_type WHERE app_label = 'admin')",
+    (
+        "DELETE FROM auth_group_permissions WHERE permission_id IN ("
+        "SELECT auth_permission.id FROM auth_permission JOIN django_content_type "
+        "ON django_content_type.id = auth_permission.content_type_id "
+        "WHERE django_content_type.app_label = 'admin')"
+    ),
+    (
+        "DELETE FROM auth_user_user_permissions WHERE permission_id IN ("
+        "SELECT auth_permission.id FROM auth_permission JOIN django_content_type "
+        "ON django_content_type.id = auth_permission.content_type_id "
+        "WHERE django_content_type.app_label = 'admin')"
+    ),
+    (
+        "DELETE FROM auth_permission WHERE content_type_id IN ("
+        "SELECT id FROM django_content_type WHERE app_label = 'admin')"
+    ),
     "DELETE FROM django_content_type WHERE app_label = 'admin'",
 )
 

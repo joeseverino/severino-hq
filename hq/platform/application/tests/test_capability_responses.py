@@ -11,7 +11,7 @@ from hq.platform.core.models import AuditLog
 from hq_sdk.capabilities import StrictCommand
 
 from ..capabilities import CapabilitySpec, describe_capabilities, execute_capability
-from ..security import Capability, cli_principal
+from ..security import Capability, Principal, cli_principal
 
 
 class ExampleCommand(StrictCommand):
@@ -89,6 +89,26 @@ class CapabilityCallTests(TestCase):
         self.assertTrue(self.call(spec, {"connection_ref": "example-gateway"})["ok"])
 
         self.assertEqual(AuditLog.objects.get(object_type="Example").connection, "example-gateway")
+
+    def test_what_any_capability_records_names_the_caller(self):
+        """The runner attributes every handler, so none can write anonymously."""
+
+        def handler(command, **_bound):
+            record_event(action=AuditLog.Action.UPDATED, type_label="Example", message="Changed.", required=True)
+            return {"ok": True}
+
+        caller = Principal("example-agent", "mcp", frozenset({Capability.READ}))
+        spec = CapabilitySpec(
+            "example.records.change", "Change.", "remote_write", Capability.READ, ExampleCommand, handler
+        )
+        with self.registered(spec):
+            self.assertTrue(execute_capability(spec.name, {}, principal=caller)["ok"])
+
+        metadata = AuditLog.objects.get(object_type="Example").metadata
+        self.assertEqual(
+            (metadata["actor"], metadata["interface"], metadata["operation"]),
+            ("example-agent", "mcp", "example.records.change"),
+        )
 
     def stale_write_call(self, handler, *, target_kind=None, target=None):
         spec = CapabilitySpec(

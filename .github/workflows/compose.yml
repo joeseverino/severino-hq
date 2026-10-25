@@ -92,7 +92,7 @@ jobs:
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     permissions:
       contents: read
@@ -109,6 +109,8 @@ jobs:
     steps:
       - name: Check out host
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Read the toolchain pins
         id: pins
@@ -117,7 +119,7 @@ jobs:
           . ./tools/pipeline/toolchain.env
           {
             echo "cordon-commit=$CORDON_COMMIT"
-            echo "trivy=$TRIVY_VERSION"
+            echo "mise=$(.github/actions/toolchain/mise-version.sh mise.toml)"
             echo "date=$(date -u +%Y-%m-%d)"
           } >> "$GITHUB_OUTPUT"
 
@@ -269,10 +271,8 @@ jobs:
             echo "Nothing was built and nothing was deployed."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # On main, HQ's production row opens here: the one row on the commit that
-      # says where it is, moved on by Deploy and closed by its Report.
-      # The same token starts Deploy once HQ is published, below.
-      - name: Mint a token for HQ's production row
+      # As HQ's app, which starts Deploy once HQ is published, below.
+      - name: Mint a token to start Deploy
         id: production
         if: env.IS_RELEASE == 'true' && steps.fingerprint.outputs.build == 'true'
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
@@ -281,18 +281,7 @@ jobs:
           private-key: ${{ secrets.HQ_APP_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
-          permission-checks: write
           permission-actions: write
-
-      - name: Say on the commit that HQ is being built
-        if: steps.production.outputs.token != ''
-        env:
-          GH_TOKEN: ${{ steps.production.outputs.token }}
-          HEAD_SHA: ${{ steps.host.outputs.sha }}
-          CHECK_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: >-
-          python3 -m tools.pipeline.ci_report check "Severino HQ · Production" "$HEAD_SHA" in_progress "Building HQ"
-          "The host and every admitted extension are being built and tested as one application."
 
       - name: Download admitted artifacts
         env:
@@ -309,6 +298,7 @@ jobs:
         if: >-
           steps.fingerprint.outputs.build == 'true'
         with:
+          persist-credentials: false
           repository: joeseverino/cordon
           ref: ${{ steps.pins.outputs.cordon-commit }}
           path: cordon
@@ -477,6 +467,14 @@ jobs:
           key: cache-trivy-${{ steps.pins.outputs.date }}
           restore-keys: cache-trivy-
 
+      - name: Install the pinned Trivy
+        if: >-
+          steps.fingerprint.outputs.build == 'true'
+        uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+        with:
+          version: ${{ steps.pins.outputs.mise }}
+          install_args: trivy
+          cache: false
       - name: Scan composed image
         # Skipped only by an admission's dispatch that found nothing to do.
         # JSON to a file rather than the table: the table lists every package,
@@ -486,7 +484,7 @@ jobs:
           steps.fingerprint.outputs.build == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          version: ${{ steps.pins.outputs.trivy }}
+          skip-setup-trivy: true
           cache: ${{ github.ref == 'refs/heads/main' }}
           cache-dir: ${{ github.workspace }}/.cache/trivy
           image-ref: ${{ steps.candidate.outputs.image }}
@@ -522,7 +520,7 @@ jobs:
           # push never leaves a claim that this composition was published.
           docker tag "$image" "$FINGERPRINT_TAG"
           docker push "$FINGERPRINT_TAG"
-          digest=$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          digest=$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}')
           echo "image=${image%:*}@$digest" >> "$GITHUB_OUTPUT"
 
       # The artifact production actually runs. Every input to it is now signed
@@ -552,19 +550,11 @@ jobs:
           gh workflow run deploy.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f commit="$COMMIT" -f compose_run="$THIS_RUN"
 
-      - name: Read the pinned mise
-        id: mise
-        if: failure()
-        run: |
-          version="$(.github/actions/toolchain/mise-version.sh mise.toml)"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Install the pinned age
         if: failure()
         uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
-        env:
-          MISE_LOCKED: "1"
         with:
-          version: ${{ steps.mise.outputs.version }}
+          version: ${{ steps.pins.outputs.mise }}
           install_args: age
           # One small tool, on a failure: no cache entry of its own.
           cache: false
@@ -585,15 +575,16 @@ jobs:
           retention-days: 14
 
       - name: Name the step that failed
-        id: failed
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
           SEALED: ${{ steps.seal.outputs.sealed }}
         run: |
           set -euo pipefail
-          step="$(python3 -m tools.pipeline.ci_report failed-step "Build HQ" 2>/dev/null | head -1 || true)"
-          echo "step=${step:-a step}" >> "$GITHUB_OUTPUT"
+          # This job's failed steps; called from another workflow it is "Caller / Build HQ".
+          step="$(gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --attempt "$GITHUB_RUN_ATTEMPT" --json jobs \
+            --jq '.jobs[] | select(.name == "Build HQ" or (.name | endswith(" / Build HQ"))) | .steps[]
+              | select(.conclusion == "failure") | .name' 2>/dev/null | head -1 || true)"
           {
             echo "### Not built: ${step:-a step} failed"
             echo
@@ -603,15 +594,3 @@ jobs:
               echo "Withheld output, for the operator: \`mise run failure-logs ${GITHUB_RUN_ID}\`"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Say on the commit that HQ could not be built
-        if: failure() && steps.production.outputs.token != ''
-        env:
-          GH_TOKEN: ${{ steps.production.outputs.token }}
-          HEAD_SHA: ${{ steps.host.outputs.sha }}
-          FAILED_STEP: ${{ steps.failed.outputs.step }}
-          CHECK_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: >-
-          python3 -m tools.pipeline.ci_report check "Severino HQ · Production" "$HEAD_SHA" completed "Not deployed: ${FAILED_STEP} failed"
-          "Nothing was published, so production still runs the previous image."
-          failure

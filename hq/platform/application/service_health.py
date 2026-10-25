@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .projection import read_once
-from .ui import counted
+from .ui import counted, ended
 lazy from . import connections
 lazy from .findings import estate_findings
 lazy from .hq_self import hq_service
@@ -96,17 +96,21 @@ def _in_place(service: Any) -> Health:
         return Health(UNKNOWN, "DNS record only", "A DNS record is in place. Nothing HQ set up answers at it.")
     behind = _behind_the_proxy(service)
     if behind is None:
-        return Health(UNKNOWN, "In place", f"{checked}." if checked else "")
+        return Health(UNKNOWN, "In place", ended(checked))
     address, machine, container, reads_containers = behind
     if container:
-        return _running(service.container, f"{checked} and forward to {container} on {machine}.")
+        return _running(service.container, ended(f"{checked} and forward to {container} on {machine}"))
     if reads_containers:
         return Health(
             ATTENTION,
             "Nothing on that port",
-            f"{checked}. The proxy forwards to {address}, and no container on {machine} publishes that port.",
+            f"{ended(checked)} The proxy forwards to {address}, and no container on {machine} publishes that port.",
         )
-    return Health(UNKNOWN, "In place", f"{checked}. The proxy forwards to {address}. HQ does not read what runs there.")
+    return Health(
+        UNKNOWN,
+        "In place",
+        f"{ended(checked)} The proxy forwards to {ended(address)} HQ does not read what runs there.",
+    )
 
 
 def _running(running: Any, detail: str) -> Health:
@@ -168,7 +172,7 @@ def _with_own_findings(found: Health) -> Health:
         return found
     state = found.state if found.state == SERIOUS else ATTENTION
     about = counted(len(own), "open problem is about HQ", "open problems are about HQ")
-    return Health(state, found.label, " ".join(part for part in (found.detail, f"{about}.") if part))
+    return Health(state, found.label, " ".join(part for part in (found.detail, ended(about)) if part))
 
 
 def hq_findings() -> tuple[Any, ...]:

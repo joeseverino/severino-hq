@@ -1,0 +1,10 @@
+{% comment %}
+A link to a page outside HQ, the one form every outside link takes: written by
+{% entity url|outside label=name %} for a name, and by {% outside_link url %}markup{% endoutside_link %}
+for anything else (a chip, an icon, a card). It opens in a new tab with no way
+back to this page, and only a web address is a link (web_url); anything else
+draws what it holds, unlinked. A name carries the arrow that says it leaves
+(.external-link); a chip or an icon carries its own sign. A modal names the dialog the link opens where
+script runs, the page being its fallback.
+{% endcomment %}
+{% with href=url|web_url %}{% if href %}<a href="{{ href }}"{% if arrow or css or tone %} class="{% if arrow %} external-link {% endif %}{{ css }}{% if tone %} tone-{{ tone }}{% endif %}"{% endif %}{% if entity %} data-entity="{{ entity }}"{% endif %}{% if tip %} data-tip="{{ tip }}"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}{% if modal %} data-modal-open="{{ modal }}" aria-haspopup="dialog" aria-controls="modal-{{ modal }}"{% endif %} target="_blank" rel="noopener noreferrer"{% if not tip %} title="{% if title %}{{ title }}{% else %}Opens {{ href|host }}{% endif %}"{% endif %}>{{ content|safe }}</a>{% else %}{{ content|safe }}{% endif %}{% endwith %}

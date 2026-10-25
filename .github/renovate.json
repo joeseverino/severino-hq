@@ -16,7 +16,7 @@
   "automerge": false,
   "rangeStrategy": "pin",
   "lockFileMaintenance": {
-    "description": "Moves what only the locks name (uv.lock, mise.lock, the npm lock) in the same Monday window; Renovate never groups it with other updates.",
+    "description": "Moves what only the locks name (uv.lock, mise.lock, the npm locks) in the same Monday window; Renovate never groups it with other updates.",
     "schedule": ["* * * * 1"]
   },
   "vulnerabilityAlerts": {
@@ -45,9 +45,9 @@
       "groupSlug": "{{depName}}-{{newMajor}}.{{newMinor}}"
     },
     {
-      "description": "Go's patch releases are its security releases, and OSV sees the standard library only through a go.mod toolchain line, so a Go patch opens at once. mise.toml is Go's one pin: the images install it from mise.lock.",
-      "matchManagers": ["mise"],
-      "matchDepNames": ["go"],
+      "description": "Go's patch releases are its security releases, and OSV sees the standard library through go.mod's toolchain line, so a Go patch opens at once.",
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["toolchain"],
       "matchUpdateTypes": ["patch"],
       "minimumReleaseAge": "0 days",
       "schedule": ["at any time"],
@@ -55,8 +55,19 @@
       "groupSlug": "go-patch"
     },
     {
-      "description": "requires-python, engines and the go directive say what the project supports, not what it runs, so they stay ranges.",
-      "matchDepTypes": ["requires-python", "engines", "golang"],
+      "description": "go.mod's toolchain line is Go's one pin and mise.toml reads it, so mise.lock is locked again for the new release, which the images install from.",
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["toolchain"],
+      "postUpgradeTasks": {
+        "commands": ["mise trust mise.toml", "mise lock go"],
+        "installTools": { "mise": {} },
+        "fileFilters": ["mise.lock"],
+        "executionMode": "branch"
+      }
+    },
+    {
+      "description": "requires-python and the go directive say what the project supports, not what it runs, so they stay ranges.",
+      "matchDepTypes": ["requires-python", "golang"],
       "rangeStrategy": "auto"
     },
     {
@@ -66,7 +77,7 @@
       "extractVersion": "^v?(?<version>\\d.*)$"
     },
     {
-      "description": "The CodeQL bundle's releases are tagged codeql-bundle-v<version> beside the action's own tags; checks:codeql-bundle holds it to the bundle the pinned action runs.",
+      "description": "The CodeQL bundle's releases are tagged codeql-bundle-v<version> beside the action's own tags; lint:codeql-bundle holds it to the bundle the pinned action runs.",
       "matchManagers": ["mise"],
       "matchDepNames": ["github:github/codeql-action"],
       "extractVersion": "^codeql-bundle-v(?<version>.+)$"
@@ -85,11 +96,16 @@
       "description": "Playwright and the image the browser jobs run in move as one update: a test holds them to one version.",
       "matchPackageNames": ["playwright", "mcr.microsoft.com/playwright/python"],
       "groupName": "playwright"
+    },
+    {
+      "description": "min_version and the mise image the image builds copy move as one update: lint:toolchain holds the image's tag to min_version.",
+      "matchPackageNames": ["jdx/mise", "ghcr.io/jdx/mise"],
+      "groupName": "mise"
     }
   ],
   "customManagers": [
     {
-      "description": "The mise release CI and the image builds install, which min_version decides; mise's own manager reads only the tools.",
+      "description": "The mise release CI installs, which min_version decides; mise's own manager reads only the tools.",
       "customType": "regex",
       "managerFilePatterns": ["/^mise\\.toml$/"],
       "matchStrings": ["min_version = \"(?<currentValue>[^\"]+)\""],
@@ -105,22 +121,6 @@
       "matchStrings": ["package: (?<depName>\\S+)\\nversion: (?<currentValue>\\S+)"],
       "datasourceTemplate": "npm",
       "versioningTemplate": "npm"
-    },
-    {
-      "description": "The Trivy release the image scans run.",
-      "customType": "regex",
-      "managerFilePatterns": ["/^tools/pipeline/toolchain\\.env$/"],
-      "matchStrings": ["TRIVY_VERSION=(?<currentValue>\\S+)"],
-      "depNameTemplate": "aquasecurity/trivy",
-      "datasourceTemplate": "github-releases",
-      "versioningTemplate": "semver"
-    },
-    {
-      "description": "The hosted runner image, so a new one moves toolchain.env with every runs-on in the same pull request.",
-      "customType": "regex",
-      "managerFilePatterns": ["/^tools/pipeline/toolchain\\.env$/"],
-      "matchStrings": ["RUNNER_IMAGE=(?<depName>ubuntu)-(?<currentValue>\\S+)"],
-      "datasourceTemplate": "github-runners"
     },
     {
       "description": "The Cordon commit admission signs and verifies with, followed on its main branch.",

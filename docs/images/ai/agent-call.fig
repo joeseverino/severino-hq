@@ -1,0 +1,24 @@
+# One agent's call into HQ: its own token, the pause switch, its grant, the operator's policy, then a run, a hold or a refusal, each recorded under its name.
+title: An agent's call
+subtitle: /mcp/ and /api/v2/
+direction: down
+
+Agent [icon: bot, note: its own access token]
+
+Doors [dashed] {
+  MCP [icon: terminal, note: /mcp/ · capped by settings]
+  Machine API [icon: globe, note: /api/v2/ · Idempotency-Key]
+}
+
+Pause [icon: lock, note: every agent · fails closed]
+Grant [icon: key, note: what the token was granted]
+Policy [icon: shield, anchor, note: allow · hold · deny]
+Run [icon: database, note: one transaction · audited]
+Person [icon: user, note: approves in the web UI]
+Refused [icon: firewall, note: 403 denied_by_policy · audited]
+
+Agent > Doors > Pause > Grant > Policy
+Policy > Run: allowed
+Policy > Person: held
+Policy > Refused: denied
+Person > Run: runs as the agent

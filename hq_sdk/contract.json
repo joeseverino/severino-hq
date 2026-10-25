@@ -1,5 +1,5 @@
 {
-  "api_version": 4,
+  "api_version": 5,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -638,7 +638,8 @@
         "parameters": [
           "value",
           "*",
-          "cents="
+          "cents=",
+          "plus="
         ]
       },
       "quantize_money": {
@@ -792,6 +793,12 @@
               "**kwargs"
             ]
           },
+          "get_form_kwargs": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
           "get_page_actions": {
             "kind": "method",
             "parameters": [
@@ -833,6 +840,17 @@
           "page_title": {
             "kind": "attribute",
             "type": "str"
+          },
+          "page_trail": {
+            "kind": "attribute",
+            "type": "NoneType"
+          },
+          "trail_label": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "record"
+            ]
           }
         }
       },
@@ -1021,8 +1039,7 @@
         "bases": [],
         "constructor": [
           "heading",
-          "items",
-          "folded="
+          "items"
         ],
         "fields": [],
         "kind": "dataclass",
@@ -1408,14 +1425,6 @@
           "table_default_sort": {
             "kind": "attribute",
             "type": "str"
-          },
-          "table_drop_mid": {
-            "kind": "attribute",
-            "type": "int"
-          },
-          "table_drop_narrow": {
-            "kind": "attribute",
-            "type": "int"
           },
           "table_empty": {
             "kind": "attribute",
@@ -2599,13 +2608,22 @@
       "ago": {
         "argument": "none"
       },
+      "breakable": {
+        "argument": "optional"
+      },
       "counted": {
         "argument": "required"
+      },
+      "day": {
+        "argument": "none"
       },
       "money": {
         "argument": "optional"
       },
       "or_empty": {
+        "argument": "none"
+      },
+      "readout": {
         "argument": "none"
       },
       "sortable": {
@@ -2887,9 +2905,7 @@
           "css=",
           "chart=",
           "pane=",
-          "room=",
-          "mid=",
-          "narrow="
+          "room="
         ]
       }
     }

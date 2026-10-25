@@ -10,8 +10,8 @@ description: >-
 #
 # The caches are restored here and written by one job, CI's Caches on main,
 # which every branch can read: a job that only restores leaves no entry of its
-# own behind. That job saves each cache this action missed, from the keys and
-# paths below.
+# own behind. That job saves each cache this action missed: mise's downloads
+# here, the rest from the keys and paths below.
 
 inputs:
   python:
@@ -23,11 +23,11 @@ inputs:
     required: false
     default: "false"
   npm:
-    description: Restore npm's downloads, for a job that installs tools/openapi.
+    description: Restore npm's downloads, for a job that installs an npm project under tools/.
     required: false
     default: "false"
   save:
-    description: Save mise's tools at the end of the job when they were not cached. Only the Caches job does.
+    description: Save mise's downloads once it has installed them, when they were not cached. Only the Caches job does.
     required: false
     default: "false"
 
@@ -61,44 +61,62 @@ runs:
         . ./tools/pipeline/toolchain.env
         mise="$("$GITHUB_ACTION_PATH/mise-version.sh" mise.toml)"
         {
-          # shellcheck disable=SC2086  # the version list is meant to split
-          echo "oldest-python=$(printf '%s\n' $PYTHON_VERSIONS | head -1)"
+          echo "oldest-python=${PYTHON_VERSIONS%% *}"
           echo "mise=$mise"
         } >> "$GITHUB_OUTPUT"
-        # Nothing installs that mise.lock does not record. The tools no gate of
-        # these jobs runs are lazy in mise.toml, so they are never fetched here.
-        echo "MISE_LOCKED=1" >> "$GITHUB_ENV"
 
     - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
       with:
         python-version: ${{ inputs.python || steps.read.outputs.oldest-python }}
+    # mise's downloads, never its installed tools: mise checks each download
+    # against mise.lock before it installs it, so a cache cannot change what
+    # runs. The key is the lock, the one list of what is downloaded. A job that
+    # reads the caches falls back to the newest one of an older lock, since
+    # every tool verifies what it takes; the job that writes them starts from
+    # nothing, so a saved cache never carries what no lock names.
+    - id: mise-downloads
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/mise/downloads-cas
+        key: mise-downloads-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.lock') }}
+        restore-keys: ${{ inputs.save != 'true' && format('mise-downloads-{0}-{1}-', runner.os, runner.arch) || '' }}
     - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
       with:
         version: ${{ steps.read.outputs.mise }}
-        cache_save: ${{ inputs.save }}
-        cache_save_post: true
+        cache: false
+    - if: inputs.save == 'true' && steps.mise-downloads.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/mise/downloads-cas
+        key: ${{ steps.mise-downloads.outputs.cache-primary-key }}
 
     # What decides each cache: uv's downloads by the Python and uv.lock (uv
     # verifies every artifact against the lock), Go's modules and compiled
     # packages by its release (mise's, from mise.lock) and go.sum, npm's
-    # downloads by the OpenAPI lint's lock.
+    # downloads by every npm project's lock under tools/.
     - id: caches
       shell: bash
       env:
         PYTHON: ${{ inputs.python || steps.read.outputs.oldest-python }}
         UV_LOCK: ${{ hashFiles('uv.lock') }}
         GO_SUM: ${{ hashFiles('controller/go.sum') }}
-        NPM_LOCK: ${{ hashFiles('tools/openapi/package-lock.json') }}
+        NPM_LOCK: ${{ hashFiles('tools/*/package-lock.json') }}
         GO: ${{ inputs.go }}
+        FALLBACK: ${{ inputs.save != 'true' }}
       run: |
         set -euo pipefail
+        # The key a reading job falls back to: the key without its lock's hash.
+        fallback() { if [ "$FALLBACK" = true ]; then echo "${1%-*}-"; fi; }
         {
           echo "uv-path=$HOME/.cache/uv"
           echo "uv-key=uv-$RUNNER_OS-$PYTHON-$UV_LOCK"
+          echo "uv-fallback=$(fallback "uv-$RUNNER_OS-$PYTHON-$UV_LOCK")"
           echo "npm-path=$HOME/.npm"
           echo "npm-key=npm-$RUNNER_OS-$NPM_LOCK"
+          echo "npm-fallback=$(fallback "npm-$RUNNER_OS-$NPM_LOCK")"
           if [ "$GO" = true ]; then
             echo "go-key=go-$RUNNER_OS-$(go env GOVERSION)-$GO_SUM"
+            echo "go-fallback=$(fallback "go-$RUNNER_OS-$(go env GOVERSION)-$GO_SUM")"
             echo "go-path<<EOF"
             go env GOMODCACHE GOCACHE
             echo "EOF"
@@ -109,15 +127,18 @@ runs:
       with:
         path: ${{ steps.caches.outputs.uv-path }}
         key: ${{ steps.caches.outputs.uv-key }}
+        restore-keys: ${{ steps.caches.outputs.uv-fallback }}
     - id: go
       if: inputs.go == 'true'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.caches.outputs.go-path }}
         key: ${{ steps.caches.outputs.go-key }}
+        restore-keys: ${{ steps.caches.outputs.go-fallback }}
     - id: npm
       if: inputs.npm == 'true'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.caches.outputs.npm-path }}
         key: ${{ steps.caches.outputs.npm-key }}
+        restore-keys: ${{ steps.caches.outputs.npm-fallback }}

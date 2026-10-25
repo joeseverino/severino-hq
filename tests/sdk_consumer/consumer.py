@@ -10,7 +10,9 @@ fails the gate the day one of those stops being an error.
 
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Any, assert_type
+from typing import Any, assert_type, override
+
+from django.urls import reverse_lazy
 
 from hq_sdk import (
     capabilities,
@@ -63,6 +65,7 @@ def amounts() -> None:
     assert_type(money.to_money("1.20", Decimal(0)), Decimal)
     assert_type(money.quantize_money(Decimal("1.234")), Decimal)
     assert_type(money.money(Decimal(1)), str)
+    assert_type(money.money(Decimal(-1), cents=False, plus=True), str)
 
     money.quantize_money(1.5)  # type: ignore[arg-type]
     money.money("1.00")  # type: ignore[arg-type]
@@ -190,17 +193,34 @@ class Things(tables.TableListMixin, pages.PageMixin):
     )
     table_search_fields = ("name",)
     table_default_sort = "name"
-    # How many ranked columns leave a mid-width box and a narrow one.
-    table_drop_mid = 0
-    table_drop_narrow = 1
     # An identifier beside a wide prose column takes what it leaves.
     table_room = "shared"
+
+
+class AThing(pages.PageMixin):
+    # A record's page: its list as the trail's first crumb, the record's own after it.
+    page_trail = ("Things", reverse_lazy("example:things"))
+
+    @override
+    def trail_label(self, record: Any) -> str | None:
+        return str(record)
+
+
+class WronglyTrailed(pages.PageMixin):
+    page_trail = "Things"  # type: ignore[assignment]
+
+    @override
+    def trail_label(self, record: Any) -> int:  # type: ignore[override]
+        return 1
+
+
+def a_trail(page: AThing) -> None:
+    assert_type(page.get_page_trail(), tuple[tuple[str, str], ...])
 
 
 class WronglyDeclared(tables.TableListMixin):
     table_empty = None  # type: ignore[assignment]
     table_columns = ("Name",)  # type: ignore[assignment]
-    table_drop_narrow = "1"  # type: ignore[assignment]
     table_room = "wide"  # type: ignore[assignment]
 
 

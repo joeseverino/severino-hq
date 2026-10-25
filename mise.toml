@@ -5,27 +5,37 @@
 #                       one needs lazy_bins for its shim, and `mise which`
 #                       finds it only once installed
 #   mise run fast       the inner loop: only what the change touches
-#   mise run check      does my change work
-#   mise run ci         will the pipeline accept it: every gate CI runs
-#   mise run <gate>     one gate, e.g. `mise run checks:ruff`
-#   mise tasks          the list
+#   mise run check      every gate CI runs; --release before a release
+#   mise run <job>      one of CI's jobs: lint, test, browser, build, scan
+#   mise run <gate>     one gate a verdict names, e.g. `mise run lint:ruff`
+#   mise tasks          what an agent starts from; --hidden for every task
 #
-# A gate is a task named <job>:<gate>, declared in its job's file under tasks/
-# (tasks/checks.toml for checks:*), which task_config below includes. Each CI
-# job runs the aggregate of its name (`mise run -c checks`), so a gate added
-# there runs locally and in the pipeline with no second list to edit. `-c`
-# keeps going past a failure and names every gate that failed. No gate declares
-# `sources`: mise judges them by file times alone, and a verdict also turns on
-# the environment and on files no list would name. A task whose body is more
-# than one line is a file under mise-tasks/, declared in its own #MISE header,
-# so checks:shell lints it. This file keeps the tools, the environment, the
-# templates, the development servers and the aggregates.
+# A gate is a task named <job>:<gate>, declared in its job's file under
+# mise-tasks/ (mise-tasks/lint.toml for lint:*), mise's default task
+# directory, where it reads every .toml as a task file and every executable as a
+# file task. Each CI job runs the task of its name (`mise run lint`), whose
+# wildcard reaches every gate of the job, so a gate added there runs locally
+# and in the pipeline with no second list to edit. `-c` keeps going past a
+# failure and names every gate that failed. A task that a job's task, CI or
+# the operator runs is `hide = true`: the job's wildcard and `mise run <name>`,
+# which a verdict names, still reach it. No gate
+# declares `sources`: mise judges them by file times alone, and a verdict also
+# turns on the environment and on files no list would name. A task whose body is
+# more than one line is a file under mise-tasks/, declared in its own #MISE
+# header, so lint:shell lints it. This file keeps the tools, the environment,
+# the templates, the development servers and the lint and scan tasks.
 #
 # Python dependencies come from uv.lock, which UV_LOCKED below holds every uv
 # command to; nothing here needs a virtualenv made by hand. uv itself is one of
 # the tools below.
 
-min_version = "2026.10.15"
+min_version = "2026.10.18"
+
+[settings]
+# The runners, which build the images, and the machines gates run on by hand.
+lockfile_platforms = ["linux-x64", "macos-arm64"]
+# Here, in CI and in the images, nothing installs that mise.lock does not record.
+locked = true
 
 [settings.task]
 # Gates that run together print one after another, each whole and labeled,
@@ -33,45 +43,50 @@ min_version = "2026.10.15"
 # gate's failures sit under its own verdict.
 output = "keep-order"
 
-[task_config]
-# The list replaces mise's default task directories, so it names mise-tasks.
-includes = ["mise-tasks", "tasks/*.toml"]
-
 [env]
-# Facts that are not tools: the Python matrix, the coverage floor, the runner
-# image. Shell and workflows read the same file.
+# Facts that are not tools: the Python matrix, the Cordon commit, the failure
+# logs' key. Shell and workflows read the same file.
 _.file = "tools/pipeline/toolchain.env"
+# The npm tools setup:lint-tools installs run by name.
+_.path = "tools/lint/node_modules/.bin"
 SEVERINO_LOG_LEVEL = "CRITICAL"
 # `uv run`, `uv sync` and `uv export` refuse a uv.lock that pyproject.toml has
 # moved past, as `--locked` does. So do `uv lock` and `uv add`: change the lock
 # outside mise, or with UV_LOCKED=0.
 UV_LOCKED = "1"
-# Go builds with the release mise pins and never downloads the one go.mod
-# names, here and in the image.
+# Go builds with the release mise installs and never downloads one, here and
+# in the image.
 GOTOOLCHAIN = "local"
 
 [tools]
-node = "24.22.0"
-# The controller's Go, a release of go.mod's language version (checks:toolchain).
-# The images install it and uv from mise.lock, so this line is their only pin.
-go = "1.27.3"
+node = "26.12.1"
+# The controller's Go is the release go.mod's toolchain line names, its one
+# pin, which Renovate moves; the images install it and uv from mise.lock.
+go = '{{ read_file(path="controller/go.mod") | regex_replace(pattern="(?ms).*^toolchain go([0-9.]+)$.*", rep="$1") }}'
 shellcheck = "0.11.0"
 actionlint = "1.7.12"
+# The workflows' security audit (lint:workflows), offline.
+zizmor = "1.31.1"
 yq = "4.54.1"
 jq = "1.8.2"
-uv = "0.13.4"
+uv = "0.13.5"
 # The Scorecard the pinned ossf/scorecard-action builds against (its go.mod).
-# Lazy, as age is: only checks:scorecard runs it.
+# Lazy, as age is: only lint:scorecard runs it.
 scorecard = { version = "5.6.0", lazy = true }
 # Seals a failed Compose run's output (tools/pipeline/seal-failure-logs.sh). Lazy:
 # `mise install` leaves it to its first use, held to mise.lock all the same.
 age = { version = "1.3.2", lazy = true }
+# The image scan, here (image:trivy) and in Compose. Lazy, as age is.
+trivy = { version = "0.76.0", lazy = true }
+# Tags a proven image on main: `crane tag` PUTs the manifest's own bytes, so
+# the tag names the signed digest. Lazy, as age is.
+crane = { version = "0.22.1", lazy = true }
 
 # The code graph the structural bar indexes with. Linux takes the portable
 # (static) build so the runner needs no matching libc. Lazy: only
-# checks:structural runs it, and installs it first (tools/structural/bar.py).
+# lint:structural runs it, and its first run of the command installs it.
 [tools."github:DeusData/codebase-memory-mcp"]
-version = "0.12.0"
+version = "0.12.1"
 lazy = true
 lazy_bins = ["codebase-memory-mcp"]
 
@@ -102,7 +117,8 @@ linux-x64 = { asset_pattern = "codeql-bundle-linux64.tar.zst" }
 # "database is locked"). It is named as a test run's scratch is, for the mise
 # that ran it, so the next test run sweeps it (hq/config/sandbox.py). A gate
 # sees no extension set it did not ask for. A task extends one template and a
-# template extends none, so django-heavy restates django's env: an env file
+# template extends none, so django-heavy and django-browser restate django's
+# env (test_browser_gate_tasks holds them to it): an env file
 # could hold it once, but mise reads one as written, never rendered, and the
 # database path is an exec. The composed suite extends django and sets what
 # it changes in its own header.
@@ -111,15 +127,17 @@ linux-x64 = { asset_pattern = "codeql-bundle-linux64.tar.zst" }
 env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 
 # ------------------------------------------------------------------ heavy
-# A task that loads the machine (a suite, a browser, a demo build, an aggregate
-# of them) runs under tools/lib/heavy.sh: its shell is mise's default behind the
+# A task that loads the machine (a suite, a browser, an aggregate of them) runs
+# under tools/lib/heavy.sh: its shell is mise's default behind the
 # wrapper. Heavy tasks take turns through one lock every checkout shares; one
 # started while another holds the turn names the holder and waits for it, up to
 # SEVERINO_HEAVY_WAIT seconds (two hours by default), then exits 75. A heavy
 # task inside a turn runs in it. CI takes no lock. The timeout stops a
 # hung holder: well above the slowest gate (the suite, a browser gate), and an
 # aggregate's above the gates it runs in turn. A file task sources
-# tools/lib/heavy-turn.sh and sets its timeout in its header. mise's own
+# tools/lib/heavy-turn.sh and sets its timeout in its header. A template takes
+# the turn for every run; a task whose tests are given to it decides per run
+# through tools/gate/turn.py (`test` in tools/gate/at.py). mise's own
 # task.timeout setting would bound the whole run, development servers
 # included, so each heavy task carries its own.
 [task_templates.heavy]
@@ -132,19 +150,30 @@ env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/seve
 shell = "tools/lib/heavy.sh sh -o errexit -c"
 timeout = "30m"
 
+# A browser gate: django-heavy's env and turn, WebKit installed first, and the
+# test classes its task names in `vars.classes`, which mise renders from the
+# extending task's own vars.
+[task_templates.django-browser]
+env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
+shell = "tools/lib/heavy.sh sh -o errexit -c"
+timeout = "30m"
+depends = [{ task = "setup:browser", args = ["webkit"] }]
+usage = 'flag "--fallback-face" help="Draw every page in the system face, as a reader sees it before Inter loads"'
+run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test {{ vars.classes }} --noinput --parallel auto"
+
 # ---------------------------------------------------------------- servers
 # The development servers. Each profile is a task whose env says where it
 # listens and which database it opens; tools/dev/dev.sh refuses what env cannot.
 # They stay in this file because their env names files by path: mise reads an
 # env path, and renders config_root inside env, from the directory of the file
-# that declares the task, so the same lines in tasks/ would point under tasks/.
+# that declares the task, so the same lines in mise-tasks/ would point under mise-tasks/.
 
 # The long-lived server behind a TLS proxy. Its facts live only in the
 # gitignored dev.local.toml (tools/dev/dev.local.example.toml), which no other
 # task reads. The profile's invariants come after the file, so it cannot
 # change them.
 [tasks.dev]
-description = "The server behind a TLS proxy: DEBUG off, single sign-on, the bind dev.local.toml names"
+description = "The operator's long-lived server on real data, behind a TLS proxy with single sign-on and 1Password secrets; an agent runs dev:scratch"
 raw = true
 usage = '''
 flag "--fresh" help="Delete its database and migrate a new one"
@@ -172,7 +201,6 @@ DJANGO_BEHIND_TLS_PROXY = "1"
 SEVERINO_OIDC_ENABLED = "1"
 # A checkout has no admitted wheels, and admission is required whenever DEBUG is off.
 SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION = "0"
-DJANGO_TEMPLATE_CACHE = "0"
 DJANGO_WHITENOISE_AUTOREFRESH = "1"
 SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS = "1"
 SEVERINO_LOG_LEVEL = "INFO"
@@ -202,11 +230,12 @@ PYTHONPATH = "{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"
 [tasks."dev:scratch"]
 extends = "dev:scratch-env"
 raw = true
-description = "A throwaway server on loopback: DEBUG on, a new database each start, a port the system picks"
+description = "To try a change in a browser: a throwaway server on loopback, DEBUG on, a new database each start (--seed fills it); --demo to browse the saved demo"
 usage = '''
+flag "--demo" help="Serve the public demo's static site on loopback instead, built first by demo:build when its sources moved: --seed names which, showcase by default"
 flag "--keep" help="Reuse the last scratch database"
-flag "--seed <seed>" help="Fill it with the example estate" {
-    choices "showcase" "standard"
+flag "--seed <seed>" help="Fill it with a named data set (hq/platform/core/seeds.py): the example estate as showcase (advanced posture) or standard, empty, or scale (years of records)" {
+    choices "showcase" "standard" "empty" "scale"
 }
 flag "--port <port>" help="A fixed port instead of a free one"
 flag "--plan" help="Print what it would run under and exit"
@@ -215,86 +244,55 @@ run = "tools/dev/dev.sh"
 
 [tasks."dev:session"]
 extends = "dev:scratch-env"
-description = "A signed-in session cookie for this checkout's scratch server"
+hide = true
+description = "To reach the scratch server from a script: a signed-in session cookie for it"
+# A program reads the cookie, so stdout is the command's own, unlabeled.
+raw = true
 run = "uv run python manage.py dev_session operator"
 
-[tasks."dev:manage"]
+# `mise run manage --scratch`: the env is the scratch server's, which mise
+# fixes per task, so the scratch half is a step of its own.
+[tasks."manage:scratch"]
 extends = "dev:scratch-env"
+hide = true
 raw = true
-description = "manage.py against this checkout's scratch database, extensions loaded: mise run dev:manage -- <command>"
+description = "manage.py on this checkout's scratch database, extensions loaded: mise run manage --scratch"
 run = "uv run python manage.py"
 
 # ------------------------------------------------------------- aggregates
+# A task that runs gates runs them under tools.gate.verdict, which ends its
+# output on the tasks and tests that failed and keeps that line, and how long
+# each task took, in var/gate/<name>.txt. Those with a body of more than one
+# line are files under mise-tasks/: check, test, browser and build.
 
 [tasks.fast]
-description = "Inner loop: the quick gates, and the tests the change reaches"
+description = "While editing: the tests the change reaches, and the quick gates that read the paths it touched"
 extends = "django-heavy"
+# The lint tools the quick gates and the stylesheet tests run.
+depends = ["setup:lint-tools"]
 usage = '''
 arg "[base]" env="CHECK_BASE" help="The ref to diff against; default origin/main, then main"
 flag "--list" help="Print the selected test modules and run nothing"
 flag "--parallel <workers>" env="CHECK_PARALLEL" default="auto" help="Test workers per suite; 1 rules out an order or isolation failure"
 '''
-run = 'uv run python -m tools.gate.fast ${usage_list:+--list} --parallel "$usage_parallel" ${usage_base:+"$usage_base"}'
+run = "uv run python -m tools.gate.fast"
 
-[tasks.check]
-description = "Does my change work: every Checks gate, the Tests gates on one Python, and the suite composed"
-# Named by aggregate and glob, so a new gate joins without an edit here. One
-# task at a time: each suite starts a worker per core, and two at once exhaust
-# a small machine's memory. CI runs each job's aggregate, never this task.
-# tools.gate.verdict ends the output on the tasks and tests that failed.
-extends = "heavy"
-timeout = "2h"
-run = "uv run python -m tools.gate.verdict check mise run -c -j 1 checks ::: 'tests:*' ::: suite:as-image"
-
-[tasks.ci]
-description = "Every gate the pipeline runs"
-# Run-form, so one turn covers the whole run.
-extends = "heavy"
-timeout = "2h"
-run = "mise run -c checks ::: tests ::: browser ::: controller ::: scan ::: image"
-
-[tasks.checks]
-description = "CI job Checks"
+[tasks.lint]
+description = "After editing, or when fast is not enough: CI's lint job, every lint:* gate: lint, types, structure, dependencies, security, derived files"
 # Run-form, so the gates and the installs they depend on run inside one turn.
 extends = "heavy"
 timeout = "2h"
-run = "mise run -c 'checks:*' ::: 'drift:*'"
-
-[tasks.browser]
-description = "CI job Browser, one gate at a time, in WebKit"
-# Run-form, so one turn covers every browser gate. One at a time: a run-form
-# aggregate starts as many tasks as the jobs setting allows, and each gate
-# starts a browser per core. The Chromium leg is CI's alone.
-extends = "heavy"
-timeout = "2h"
-env = { MISE_TASK_SKIP = "browser:layout-chromium" }
-run = "mise run -c -j 1 'browser:*'"
-
-[tasks.drift]
-description = "Every derived file is what its source generates: each drift:* gate, naming every one behind"
-# Run-form, so the gates and the installs they depend on run inside one turn.
-# The Go types are held by `mise run controller`, which regenerates them
-# against a snapshot.
-extends = "heavy"
-run = "mise run -c 'drift:*'"
-
-[tasks.controller]
-description = "CI job Controller"
-depends = ["controller:*"]
+run = "uv run python -m tools.gate.verdict lint mise run -c 'lint:*'"
 
 [tasks.scan]
-description = "Code scanning, as CI's CodeQL job runs it"
+description = "To reproduce an alert CI's scan job raised: CodeQL's security-and-quality queries find no alert; slow"
 depends = ["scan:*"]
-
-[tasks.image]
-description = "CI job Image: build, then every check an image must pass"
-depends = ["image:verify:*"]
 
 # Whether this checkout can compose its extensions: `mise doctor project` names
 # each gap with its fix. Without a set, `fast` skips the composed pass and says
 # nothing, and an agent's worktree has none until its mise.local.toml is copied
-# in. A check that needs the set passes when none is named, so one missing file
-# is reported once.
+# in. A check that needs the set depends on it, so without one it is reported
+# blocked and one missing file is reported once.
 [doctor.checks."local:extensions"]
 description = "mise.local.toml names an extension set, so the composed suite and dev servers load it"
 run = 'test -n "$HQ_LOCAL_PLUGINS"'
@@ -302,11 +300,13 @@ hint = "cp tools/dev/mise.local.example.toml mise.local.toml and name your exten
 
 [doctor.checks."local:extension-sources"]
 description = "Every directory on HQ_LOCAL_PYTHONPATH exists"
-run = '[ -z "$HQ_LOCAL_PLUGINS" ] || { IFS=:; for d in $HQ_LOCAL_PYTHONPATH; do test -d "$d" || exit 1; done; }'
+depends = "local:extensions"
+run = 'IFS=:; for d in $HQ_LOCAL_PYTHONPATH; do test -d "$d" || exit 1; done'
 hint = "Point HQ_LOCAL_PYTHONPATH in mise.local.toml at each extension checkout's src directory"
 
 [doctor.checks."local:extension-imports"]
 description = "Every module HQ_LOCAL_PLUGINS names imports with the host's libraries"
-run = '''[ -z "$HQ_LOCAL_PLUGINS" ] || PYTHONPATH="$HQ_LOCAL_PYTHONPATH" uv run --no-sync python -c 'import importlib, os; [importlib.import_module(p.split(":")[0]) for p in os.environ["HQ_LOCAL_PLUGINS"].split(",")]' '''
+depends = "local:extensions"
+run = '''PYTHONPATH="$HQ_LOCAL_PYTHONPATH" uv run --no-sync python -c 'import importlib, os; [importlib.import_module(p.split(":")[0]) for p in os.environ["HQ_LOCAL_PLUGINS"].split(",")]' '''
 hint = "Run uv sync; if it still fails, the extension needs a newer host: update both checkouts to main"
 timeout = "30s"

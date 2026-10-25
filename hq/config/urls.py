@@ -5,6 +5,10 @@ from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_not_required
 from django.urls import URLPattern, include, path
 
+# Development only (config/devtools.py): the image has no toolbar, so the name
+# is bound lazily and imported only when the setting below calls it.
+lazy from debug_toolbar.toolbar import debug_toolbar_urls
+
 from hq.domains.projects.views import PostureView, WatchingRefreshView, WatchingView
 from hq.platform.application.domains import host_urlpatterns
 from hq.platform.application.plugins import plugin_urlpatterns
@@ -132,11 +136,7 @@ urlpatterns = [
 
 urlpatterns.extend(plugin_urlpatterns())
 
-# Development only; see config/devtools.py. Imported here, behind the setting,
-# because the package is absent from the host image.
 if settings.SEVERINO_DEBUG_TOOLBAR:
-    from debug_toolbar.toolbar import debug_toolbar_urls
-
     urlpatterns.extend(debug_toolbar_urls())
 
 handler500 = "hq.platform.core.error_views.server_error"

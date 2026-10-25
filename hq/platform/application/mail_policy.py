@@ -19,7 +19,7 @@ knows how to reconcile a change and say what it will cost.
 from dataclasses import dataclass, field
 from typing import Any
 
-from .ui import counted
+from .ui import counted, ended
 
 DMARC_VERSION = "DMARC1"
 SPF_VERSION = "spf1"
@@ -234,7 +234,10 @@ class SpfTerm:
     def costs_lookup(self) -> bool:
         return self.mechanism in SPF_LOOKUP_MECHANISMS
 
-    def __str__(self) -> str:
+    @property
+    def rule(self) -> str:
+        """The term as an SPF record writes it."""
+
         prefix = "" if self.qualifier == "+" else self.qualifier
         return f"{prefix}{self.mechanism}" + (f":{self.argument}" if self.argument else "")
 
@@ -296,7 +299,7 @@ def parse_spf(value: str) -> SpfPolicy:
 
 
 def compose_spf(terms: tuple[SpfTerm, ...]) -> str:
-    return " ".join([f"v={SPF_VERSION}", *(str(term) for term in terms)])
+    return " ".join([f"v={SPF_VERSION}", *(term.rule for term in terms)])
 
 
 SPF_DEFAULTS: tuple[Choice, ...] = (
@@ -420,7 +423,7 @@ def _signing(dkim: tuple[Any, ...]) -> tuple[str, str]:
     if keys:
         selectors = ", ".join(record.name.split("._domainkey.", 1)[0] for record in keys)
         words = "key" if len(keys) == 1 else "keys"
-        return counted(len(keys), "key"), f"Mail sent from this domain is signed with the {words} {selectors}."
+        return counted(len(keys), "key"), ended(f"Mail sent from this domain is signed with the {words} {selectors}")
     if dkim:
         return (
             "Nothing, on purpose",

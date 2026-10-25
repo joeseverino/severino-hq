@@ -12,6 +12,7 @@ from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.control_plane.topology_views import TopologyView
 from hq.platform.application.derivations import uncached
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..action_links import topology_investigation_links, topology_url
 from ..command_center import command_center
@@ -249,29 +250,27 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
         self.assertNoSentinel(payload)
 
     def test_query_count_does_not_grow_with_resource_count(self):
-        principals = (READ, MANAGE)
-        small_counts = {}
-        large_counts = {}
-        with host_only():
-            for principal in principals:
-                with CaptureQueriesContext(database_connection) as small:
-                    derive_topology(principal=principal)
-                small_counts[principal.actor] = len(small)
-            for index in range(20):
+        def arrange(count):
+            for index in range(ManagedResource.objects.filter(key__startswith="example-zone-").count(), count):
                 ManagedResource.objects.create(
                     key=f"example-zone-{index}",
                     kind="cloudflare.zone",
-                    spec={
-                        "zone": f"{index}.example.com",
-                        "connection_ref": "example-cloudflare",
-                    },
+                    spec={"zone": f"{index}.example.com", "connection_ref": "example-cloudflare"},
                 )
-            for principal in principals:
-                with CaptureQueriesContext(database_connection) as large:
-                    derive_topology(principal=principal)
-                large_counts[principal.actor] = len(large)
 
-        self.assertEqual(large_counts, small_counts)
+        def zones(topology):
+            return sum(node.id.startswith("resource:example-zone-") for node in topology.nodes)
+
+        for principal in (READ, MANAGE):
+            with self.subTest(principal=principal.actor), host_only():
+                ManagedResource.objects.filter(key__startswith="example-zone-").delete()
+                assert_cost_does_not_grow(
+                    self,
+                    sizes=(1, 20),
+                    arrange=arrange,
+                    draw=lambda _count, principal=principal: derive_topology(principal=principal),
+                    rows=zones,
+                )
 
 
 class TopologyTraceTests(TestCase):

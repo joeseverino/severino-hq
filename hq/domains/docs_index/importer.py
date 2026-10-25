@@ -86,20 +86,18 @@ def _is_blank(value: Any) -> bool:
 def _enforce_contract(entry: dict, doc_id: str) -> None:
     """Hold an entry to the schema's required fields and doc_id prefixes.
 
-    The required set is per-doc-type, as the doctor and the MCP apply it: a task
-    owes the slimmer ``TASK_REQUIRED_FIELDS``, every other doc the standard
-    ``REQUIRED_FIELDS``. Every missing field is named at once, with the doc_id,
-    so one preflight run is enough to fix an entry.
+    Every missing field of ``REQUIRED_FIELDS`` is named at once, with the
+    doc_id, so one preflight run is enough to fix an entry.
 
     ``DOC_ID_PREFIXES`` is the vault-doc id namespace, so it binds vault docs
     only. Content entries owe the required fields but not the prefixes: their
     ids belong to the site content, not to the vault schema.
     """
     label = doc_id or "(no doc_id)"
-    is_task = entry.get("doc_type") == "task"
-    required = frontmatter_schema.TASK_REQUIRED_FIELDS if is_task else frontmatter_schema.REQUIRED_FIELDS
     missing = [
-        field for field in required if all(_is_blank(entry.get(key)) for key in _FIELD_ALIASES.get(field, (field,)))
+        field
+        for field in frontmatter_schema.REQUIRED_FIELDS
+        if all(_is_blank(entry.get(key)) for key in _FIELD_ALIASES.get(field, (field,)))
     ]
     if missing:
         raise ManifestImportError(
@@ -131,15 +129,13 @@ def _enforce_content_contract(entry: dict, label: str) -> None:
         )
 
 
-def _build_record_defaults(entry: dict) -> tuple[str, dict, bool]:
+def _build_record_defaults(entry: dict) -> dict:
     """Validate an entry against the schema and build the record field defaults.
 
     Pure (no DB); raises ManifestImportError on a bad doc_id prefix, a missing
     required field, or an invalid choice. Shared by the importer's write path
     and the read-only validate path so the two can never disagree about what HQ
-    accepts. A task carries its own status lifecycle (open/active/parked/done/
-    wontfix) and required-field set, validated per-doc-type exactly as the MCP
-    write path does; every other doc uses the standard sets.
+    accepts.
     """
     doc_id = (entry.get("doc_id") or "").strip()
     _enforce_contract(entry, doc_id)
@@ -148,8 +144,6 @@ def _build_record_defaults(entry: dict) -> tuple[str, dict, bool]:
         frontmatter_schema.DOC_TYPES,
         field="doc_type",
     )
-    is_task = doc_type == "task"
-    status_allowed = frontmatter_schema.TASK_STATUSES if is_task else frontmatter_schema.STATUSES
     defaults = {
         "title": entry.get("title") or doc_id,
         "doc_type": doc_type,
@@ -161,7 +155,7 @@ def _build_record_defaults(entry: dict) -> tuple[str, dict, bool]:
         ),
         "status": _validate_choice(
             entry["status"],
-            status_allowed,
+            frontmatter_schema.STATUSES,
             field="status",
         ),
         "sensitivity": _validate_choice(
@@ -176,7 +170,7 @@ def _build_record_defaults(entry: dict) -> tuple[str, dict, bool]:
         "published_at": _coerce_date(entry.get("published_at")),
         "notes": entry.get("notes") or "",
     }
-    return doc_id, defaults, is_task
+    return defaults
 
 
 def validate_manifest_data(items: Iterable[dict]) -> list[dict]:
@@ -329,7 +323,7 @@ def _backfill_project_technologies(projects, entry: dict, stats: dict) -> None:
 def _import_entry(entry: dict, *, doc_id: str, update_existing: bool, stats: dict) -> None:
     """Upsert one manifest record, its relations and its mirrored content."""
 
-    _, defaults, _ = _build_record_defaults(entry)
+    defaults = _build_record_defaults(entry)
 
     record, created = DocumentationRecord.objects.get_or_create(doc_id=doc_id, defaults=defaults)
     if created:

@@ -48,7 +48,7 @@ class Job(models.Model):
     # Declared above the model so a rule in ``Meta`` can name its values.
     State = JobState
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
     # Namespaced by convention ("<extension>.<work>") so the list stays
     # readable with several extensions running work.
     kind = models.CharField(max_length=64, db_index=True)

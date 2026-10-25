@@ -16,7 +16,7 @@ from hq.platform.application import related
 from hq.platform.application.analytics import CONTENT_TRAFFIC_DAYS, attach_traffic, item_traffic
 from hq.platform.application.content import published_on
 from hq.platform.application.documentation import related_documents
-from hq.platform.application.pages import PageAction, PageMixin, record_trail
+from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 
@@ -86,10 +86,6 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
     @cached_property
     def types_held(self) -> frozenset[str]:
         return frozenset(content_type for content_type, _url in self._held)
-
-    # A title runs to a dozen words, so a tablet lets the description and the
-    # last edit go, and a phone keeps only the title and its status.
-    table_drop_mid, table_drop_narrow = 2, 6
 
     @cached_property
     def table_columns(self) -> tuple[TableColumn, ...]:
@@ -181,13 +177,16 @@ CONTENT_TRAIL = ("Content", reverse_lazy("content:list"))
 class ContentPage(PageMixin):
     """A page about one content item, or a new one: its trail runs back to the list."""
 
+    page_trail = CONTENT_TRAIL
+
     @override
-    def get_page_trail(self):
-        return record_trail(CONTENT_TRAIL, getattr(self, "object", None), lambda item: item.title)
+    def trail_label(self, record):
+        return record.title
 
 
 class ContentDetailView(PageMixin, DetailView):
     model = ContentItem
+    page_trail = CONTENT_TRAIL
     template_name = "content/content_detail.html"
     slug_field = "slug"
     slug_url_kwarg = "slug"
@@ -229,10 +228,6 @@ class ContentDetailView(PageMixin, DetailView):
             self.object.status,
             self.object.get_status_display(),
         )
-
-    @override
-    def get_page_trail(self):
-        return (CONTENT_TRAIL,)
 
     @override
     def get_page_actions(self):

@@ -27,8 +27,9 @@ from .first_seen import dated
 from .item_help import cannot_help, remedy_link
 from .moments import ago, when_day
 from .projection import read_once
+from .service_health import UNKNOWN
 from .timestamps import moment
-from .ui import DomainOverview, Insight, Kpi, counted
+from .ui import DomainOverview, Insight, Kpi, counted, ended
 from .workflow_contracts import ActionLink
 lazy from . import connections, services, zones
 lazy from .connection_catalog import connection_total
@@ -350,6 +351,10 @@ def _answers_at(machine) -> str:
 def overview():
     shown = cards()
     estate = estate_reading()
+    # A service is drawn when HQ reads its health, as a machine is when a
+    # connection reaches it: one with no health reading (a DNS record only,
+    # hosted elsewhere) is neither up nor down, and a hollow dot would say down.
+    checked = tuple(service for service in estate.services if service.health.state != UNKNOWN)
     # A part of a whole is drawn as well as said: one dot a machine or a
     # service, naming it when pointed at and leading to its page. On the
     # overview only: the cards are also a transport payload, which carries no
@@ -374,7 +379,7 @@ def overview():
                     tip=" · ".join((service.hostname, service.faults[0] if service.faults else service.health.label)),
                     url=entity_link("service", service.hostname).url,
                 )
-                for service in estate.services
+                for service in checked
             )
         ),
     }
@@ -387,6 +392,8 @@ def overview():
         "hq.estate.connections": "Connections",
     }
     notes = {"hq.estate.machines": "" if estate.offline else f"of {len(estate.watched)} online"}
+    if len(checked) < len(estate.services):
+        notes["hq.estate.services"] = f"{len(checked)} health-checked"
     for card_id, expiries in (
         ("hq.estate.registration", estate.registrations),
         ("hq.estate.certificate", estate.operator_certificates),
@@ -459,7 +466,7 @@ def _offline(estate: Estate) -> tuple[Insight, ...]:
                 value="1",
                 body=(
                     f"Last seen {ago(seen)}."
-                    + (f" It is the {what}." if what else "")
+                    + (ended(f" It is the {what}") if what else "")
                     + (f" It serves {counted(len(machine.hostnames), 'name')}." if machine.hostnames else "")
                 ),
                 action="Open machine",
@@ -484,7 +491,7 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
         if expiry.managed:
             key = f"estate-certificate:{expiry.resource_key}"
             body = (
-                f"Expires {expiry.phrase}. Renewal opens at "
+                f"Expires {ended(expiry.phrase)} Renewal opens at "
                 f"{counted(expiry.renewal_window_days, 'day')}; renew it or check why "
                 "renewal did not run."
             )
@@ -498,7 +505,7 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
         else:
             key = f"estate-certificate:{expiry.source}:{expiry.subject}"
             body = (
-                f"Expires {expiry.phrase}. Its issuer renews it automatically and "
+                f"Expires {ended(expiry.phrase)} Its issuer renews it automatically and "
                 f"should have by now; check the {expiry.source.lower()} certificate "
                 "settings."
             )

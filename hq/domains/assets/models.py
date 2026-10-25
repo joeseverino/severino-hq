@@ -7,11 +7,6 @@ from django.db import models
 from django.urls import reverse
 
 from hq.platform.application import business_use
-
-# Re-exported: expenses imports it from here, and moving the rule should not
-# make every caller move with it. The rule itself lives in application.money,
-# which extensions can reach through hq_sdk and a domain app cannot.
-from hq.platform.application.money import quantize_money
 from hq.platform.application.references import CERTIFICATE, Referable, ReferenceField
 from hq.platform.core.models import TimestampedModel, free_slug
 lazy from hq.platform.application.moments import when_day
@@ -59,12 +54,8 @@ class Asset(TimestampedModel):
         validators=business_use.VALIDATORS,
         help_text="0-100. Multiplied into total_cost to estimate deductible amount.",
     )
-    estimated_deductible_amount = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=Decimal("0.00"),
-        editable=False,
-        help_text=("total_cost × business_use_percentage / 100. Estimate, not tax advice."),
+    estimated_deductible_amount = business_use.deductible(
+        "total_cost × business_use_percentage / 100. Estimate, not tax advice."
     )
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True)
     serial_number = models.CharField(max_length=120, blank=True)
@@ -102,8 +93,6 @@ class Asset(TimestampedModel):
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = free_slug(self, self.item_name, "asset")
-        cost = self.total_cost or Decimal("0.00")
-        self.estimated_deductible_amount = quantize_money(cost * Decimal(self.business_use_percentage) / Decimal(100))
         super().save(*args, **kwargs)
 
     def get_absolute_url(self) -> str:

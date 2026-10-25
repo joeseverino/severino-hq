@@ -3,20 +3,21 @@
 from datetime import date
 
 from django.core.exceptions import FieldFetchBlocked
-from django.db import connection
 from django.db.models import FETCH_RAISE
 from django.test import TestCase, override_settings
-from django.test.utils import CaptureQueriesContext
 
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..projection import guarded, listing
 from ..tables import TableListMixin
 
 
 def _expenses(count: int) -> None:
-    for index in range(count):
+    """Expenses, each with a project of its own, until there are ``count``."""
+
+    for index in range(Expense.objects.count(), count):
         project = Project.objects.create(name=f"Example project {index}")
         Expense.objects.create(date=date(2026, 10, 1), vendor="Example", item=f"Item {index}", related_project=project)
 
@@ -40,17 +41,13 @@ class GuardedTests(TestCase):
 
     @override_settings(SEVERINO_STRICT_FETCH=False)
     def test_in_production_it_is_fetched_once_for_the_page(self):
-        def read() -> tuple[int, int]:
-            with CaptureQueriesContext(connection) as captured:
-                names = [expense.related_project.name for expense in guarded(Expense.objects.all())]
-            return len(names), len(captured)
-
-        few, cost = read()
-        _expenses(5)
-        many, again = read()
-
-        self.assertEqual((few, many), (3, 8))
-        self.assertEqual(again, cost)
+        assert_cost_does_not_grow(
+            self,
+            sizes=(3, 8),
+            arrange=_expenses,
+            draw=lambda _count: {expense.related_project.name for expense in guarded(Expense.objects.all())},
+            rows=len,
+        )
 
     def test_every_table_and_every_listing_is_guarded(self):
         class View(TableListMixin):

@@ -37,6 +37,7 @@ from .locate import host_of
 from .projection import read_once
 from .tailnet import TAILNET_KIND, snapshots
 from .timestamps import moment
+from .ui import ended
 lazy from . import tailnet
 lazy from .containers import Running
 
@@ -208,7 +209,7 @@ class Unread:
     def detail(self) -> str:
         because = self.error or "The last read failed and gave no reason."
         requires = ", ".join(self.spec.requires)
-        return f"{because} Requires: {requires}." if requires else because
+        return ended(f"{because} Requires: {requires}") if requires else because
 
 
 @dataclass(frozen=True, slots=True)
@@ -681,7 +682,7 @@ def _unreadable(
     record: Mapping[str, Any] | None = None,
 ) -> Fact:
     because = reason or snapshot.error or "The last read failed and gave no reason."
-    detail = f"{because} Requires: {requires}." if requires else because
+    detail = ended(f"{because} Requires: {requires}") if requires else because
     return Fact(
         label=part or label,
         value="",

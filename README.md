@@ -28,8 +28,7 @@ touches. How is in [Derived Facts](docs/Derived-Facts.md) and
 
 ![Derived estate: the controller reads what each credential sees, readings are joined into one relation graph that every surface reads, and every write passes the manages gate](docs/diagrams/derived-estate.png)
 
-<sup>Diagram source: [`docs/diagrams/derived-estate.mmd`](docs/diagrams/derived-estate.mmd),
-pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram).</sup>
+<sup>Source: [`docs/diagrams/derived-estate.mmd`](docs/diagrams/derived-estate.mmd), pre-rendered with [`diagram`](https://github.com/joeseverino/tools/tree/main/lib/diagram).</sup>
 
 ## Stack
 
@@ -45,12 +44,13 @@ pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin
 | Host | one Linux machine: systemd runs the container, the controller and the scheduled work |
 | Toolchain | [mise](https://mise.jdx.dev) pins every tool by checksum and runs every gate as a task, the same on a laptop, in an agent's worktree and in CI; uv locks Python; Renovate moves the pins |
 | Delivery | GitHub Actions: CI, Compose (host plus extensions, signed with Sigstore), Deploy on a self-hosted runner after approval |
-| Tests | Django's runner in parallel, Playwright on WebKit for layout, Go tests, shell suites, CodeQL, Scorecard, Trivy |
+| Tests | Django's runner in parallel, Playwright on WebKit for layout and navigation, and on Chromium in CI, Go tests, shell suites, CodeQL, Scorecard, Trivy |
 
 ## Security
 
-- Tailnet only. No public route, registration, or Django admin; every URL but
-  sign-in, health and static needs a session.
+- Tailnet only. No public route, registration, or Django admin. Every URL but
+  sign-in, health probes, browser policy reports and static files needs a
+  session, or a token for the API and MCP.
 - One write path. Every mutation is a capability: authorized in the
   application layer, schema-validated, atomic, audited, and idempotent for
   machines. Agents can be held for approval or paused globally.
@@ -75,26 +75,26 @@ its source, with what breaks if that step fails.
 ## Verify it yourself
 
 ```sh
-mise run ci
+mise run check
 ```
 
-runs every gate CI runs, at the same pinned versions: lint, types, the suite
-on every supported Python, the browser layout gate, the controller, CodeQL,
+runs every gate CI runs, at the same pinned versions: lint, types, the suite,
+the browser gates in WebKit, the controller, CodeQL,
 Scorecard, and the image built and tested from inside.
 
 - The host/extension boundary is tested in both directions:
   `python -m hq_sdk.validation` rejects an extension importing anything but
   `hq_sdk`, and `hq/platform/application/tests/test_plugins.py` fails when a
   host file names an installed extension.
-- Architecture rules (no view writes a model, one table engine, no inline
-  script, function complexity) are tests in
+- Architecture rules (no view writes a model, MCP reads no model, one table
+  engine, function complexity) are tests in
   `hq/platform/application/tests/test_architecture.py`, listed in
   [New Domain](docs/New-Domain.md).
 - A composition's signature checks against Compose on `main`, the identity
   `hq-host deploy` requires:
   `cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '^https://github\.com/joeseverino/severino-hq/\.github/workflows/compose\.yml@refs/heads/main$' <image>`.
 - [Scorecard](https://github.com/joeseverino/severino-hq/actions/workflows/scorecard.yml)
-  and CI's CodeQL job publish to code scanning; the ruleset holds a merge on an alert.
+  and CI's scan job publish to code scanning; the ruleset holds a merge on an alert.
 
 ## Repository
 
@@ -104,12 +104,15 @@ hq_sdk/        the supported import surface for extensions
 controller/    Go: the controller, hq-host and hq-secrets
 templates/     server-rendered pages and shared partials
 static/        CSS, scripts and pinned vendor bundles
-deploy/        systemd units, tmpfiles rule, remote targets, host.json shape
+deploy/        systemd units, tmpfiles rule, remote targets, host.json shape,
+               the GitHub App permissions CI's writes use
 composition/   the composed image
 policy/        the extension admission policy
 demo/          the static demo site built from HQ's own pages
+mise-tasks/    mise tasks: one per CI job, its gates in a TOML file of its name, and their scripts
 tools/         development and CI programs, never in the image
-tests/         synthetic extension fixtures and property tests
+tests/         synthetic extension fixtures, the SDK consumer, property
+               tests and shell suites
 docs/          architecture, operations and guides
 ```
 
@@ -118,15 +121,18 @@ docs/          architecture, operations and guides
 ```sh
 mise install
 mise run dev:scratch      # a local server: fresh database, signed-in account, reload
+mise run dev:look <page>  # screenshots of a page at every width the browser gates draw
 mise run fast             # what the change reaches
-mise run check            # every Checks and Tests gate, and the suite composed
-mise run preflight        # ready: every CI gate, the composed suite, the host
+mise run check            # every gate CI runs
+mise run check --release  # ready: every CI gate, the composed suite, the host
 ```
 
 Agents work in their own worktrees on `mise run dev:scratch` and pass the same
 gates. [`AGENTS.md`](AGENTS.md) is the engineering contract: placement rules, the
-boundary, frontend standards and the definition of done.
-[Development](docs/Development.md) has setup and the gates in full.
+boundary, frontend standards and the definition of done. How agents build HQ
+and operate it, through MCP and the machine API under a person's policy, is in
+[AI and HQ](docs/AI.md). [Development](docs/Development.md) has setup and the
+gates in full.
 
 ## Documentation
 
@@ -142,6 +148,7 @@ boundary, frontend standards and the definition of done.
 | [New Domain](docs/New-Domain.md) | adding a host domain, and the test behind each rule |
 | [Design](docs/Design.md) | the UI's primitives and rules |
 | [Development](docs/Development.md) | setup, gates, browser checks, repository layout |
+| [AI and HQ](docs/AI.md) | how agents build HQ, and how they operate it |
 | [Dependencies](docs/Dependencies.md) | where every pin lives and how to move one |
 | [Structural Gate](docs/Structural-Gate.md) | how the duplication gate classifies source |
 | [Deployment](docs/Deployment.md) | the pipeline, the host, `hq-host`, a new host |

@@ -1,0 +1,1 @@
+<tr class="row-group"{% if folds %} id="{{ folds }}" data-folds{% endif %}><th class="row-gutter" scope="rowgroup">{% if folds %}{% include "partials/_row_fold.html" with label=label only %}{% endif %}{{ label|breakable }}{% if count is not None %} <span class="count">{{ count|breakable }}</span>{% endif %}</th></tr>

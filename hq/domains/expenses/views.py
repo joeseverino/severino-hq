@@ -14,7 +14,7 @@ from hq.platform.application import related
 from hq.platform.application.documentation import document_link
 from hq.platform.application.expenses import costs_by_category
 from hq.platform.application.moments import when_day
-from hq.platform.application.pages import PageAction, PageMixin, record_trail
+from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.projection import years_of
 from hq.platform.application.references import ReferencePickerMixin, referenced_by_row, resolve_many
 from hq.platform.application.security import web_principal
@@ -33,9 +33,6 @@ class ExpenseListView(PageMixin, TableListMixin, ListView):
     page_title = "Expenses"
     table_search_scope = "expenses"
     table_selectable = True
-    # A vendor runs to a sentence beside a date and a six-figure cost, so a phone
-    # keeps the vendor and the cost, and a tablet the date too.
-    table_drop_mid, table_drop_narrow = 1, 5
     table_columns = (
         TableColumn("Vendor", "vendor", "Vendor A–Z", "Vendor Z–A"),
         TableColumn("Date", "date", "Oldest expense", "Newest expense", css="date-col"),
@@ -87,13 +84,16 @@ EXPENSES_TRAIL = ("Expenses", reverse_lazy("expenses:list"))
 class ExpensePage(PageMixin):
     """A page about one expense, or a new one: its trail runs back to the list."""
 
+    page_trail = EXPENSES_TRAIL
+
     @override
-    def get_page_trail(self):
-        return record_trail(EXPENSES_TRAIL, getattr(self, "object", None), str)
+    def trail_label(self, record):
+        return str(record)
 
 
 class ExpenseDetailView(PageMixin, DetailView):
     model = Expense
+    page_trail = EXPENSES_TRAIL
     template_name = "expenses/expense_detail.html"
     context_object_name = "expense"
     queryset = Expense.objects.select_related(
@@ -127,10 +127,6 @@ class ExpenseDetailView(PageMixin, DetailView):
         return f"{when_day(self.object.date)} · {self.object.get_category_display()}"
 
     @override
-    def get_page_trail(self):
-        return (EXPENSES_TRAIL,)
-
-    @override
     def get_page_actions(self):
         pk = self.object.pk
         return (
@@ -143,7 +139,7 @@ class ExpenseCreateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, Crea
     page_title = "New expense"
     form_class = ExpenseForm
     template_name = "expenses/expense_form.html"
-    created_message = "Expense saved: {target}."
+    created_message = "Expense saved: {target}"
 
     @override
     def get_initial(self):
@@ -161,7 +157,7 @@ class ExpenseUpdateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, Upda
     model = Expense
     form_class = ExpenseForm
     template_name = "expenses/expense_form.html"
-    updated_message = "Expense saved: {target}."
+    updated_message = "Expense saved: {target}"
 
 
 class ExpenseDeleteView(ExpensePage, RecordDeleteMixin, DeleteView):
@@ -170,4 +166,4 @@ class ExpenseDeleteView(ExpensePage, RecordDeleteMixin, DeleteView):
     template_name = "expenses/expense_confirm_delete.html"
     success_url = reverse_lazy("expenses:list")
     context_object_name = "expense"
-    deleted_message = "Expense deleted: {target}."
+    deleted_message = "Expense deleted: {target}"

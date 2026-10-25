@@ -167,7 +167,6 @@ def _assets(rng: random.Random, scale: float, today: date, projects: list[Projec
                 purchase_date=today - timedelta(days=rng.randrange(1500)),
                 total_cost=Decimal(rng.randrange(1000, 250000)) / 100,
                 business_use_percentage=rng.choice((25, 50, 100)),
-                estimated_deductible_amount=Decimal("10.00"),
                 serial_number=f"SN-{index:05d}",
                 warranty_date=today + timedelta(days=rng.randrange(-200, 700)),
                 status=statuses[0] if index % 5 else statuses[index % len(statuses)],
@@ -190,15 +189,7 @@ def _assets(rng: random.Random, scale: float, today: date, projects: list[Projec
 def _documentation(scale: float, today: date, projects, assets) -> list[DocumentationRecord]:
     doc_types = _choices(DocumentationRecord, "doc_type")
     environments = _choices(DocumentationRecord, "environment")
-    # A task carries the task lifecycle and every other doc the doc one.
-    statuses = {
-        doc_type: (
-            DocumentationRecord.TaskStatus.values
-            if doc_type == DocumentationRecord.DocType.TASK
-            else DocumentationRecord.Status.values
-        )
-        for doc_type in doc_types
-    }
+    statuses = _choices(DocumentationRecord, "status")
     sensitivities = _choices(DocumentationRecord, "sensitivity")
     records = _create(
         DocumentationRecord,
@@ -206,10 +197,10 @@ def _documentation(scale: float, today: date, projects, assets) -> list[Document
             DocumentationRecord(
                 doc_id=f"example-doc-{index}",
                 title=f"Example runbook {index}",
-                doc_type=(doc_type := doc_types[index % len(doc_types)]),
+                doc_type=doc_types[index % len(doc_types)],
                 system_service=f"example-service-{index % 12}",
                 environment=environments[index % len(environments)],
-                status=statuses[doc_type][index % len(statuses[doc_type])],
+                status=statuses[index % len(statuses)],
                 sensitivity=sensitivities[index % len(sensitivities)],
                 obsidian_path=f"example/Example runbook {index}.md",
                 last_reviewed=today - timedelta(days=index % 400),
@@ -287,7 +278,6 @@ def _expenses(rng, scale, today, projects, assets, content, records) -> list[Exp
                 category=categories[index % len(categories)],
                 total_cost=cost,
                 business_use_percentage=share,
-                estimated_deductible_amount=(cost * share / 100).quantize(Decimal("0.01")),
                 payment_method=methods[index % len(methods)],
                 business_purpose="Operating the example estate",
                 related_project=related(index, 2, projects),
@@ -685,12 +675,13 @@ def _operations(scale: float, user, resources: list[ManagedResource]) -> None:
     )
 
 
-def seed(scale: float = 1.0) -> Seeded:
-    """Fill the current database; ``scale`` multiplies every count."""
+def seed(scale: float = 1.0, owner: Any = None) -> Seeded:
+    """Fill the current database; ``scale`` multiplies every count. Its
+    operator is ``owner``, or a superuser it signs up when none is given."""
 
     rng = random.Random(20261004)
     today = timezone.localdate()
-    user = get_user_model().objects.create_superuser("bench", "bench@example.com")
+    user = owner or get_user_model().objects.create_superuser("bench", "bench@example.com")
     projects = _projects(rng, scale)
     assets = _assets(rng, scale, today, projects)
     records = _documentation(scale, today, projects, assets)

@@ -5,9 +5,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BeforeValidator, ConfigDict, Field
 
-lazy from hq.platform.application.timestamps import moment
-
-from .contract import ObservationRecord, ObservationSpec
+from .contract import ObservationRecord, ObservationSpec, Stamp
 
 
 class HostFirewallRecord(ObservationRecord):
@@ -15,7 +13,7 @@ class HostFirewallRecord(ObservationRecord):
     interface: str = ""
     accept_requires_interface: bool = False
     foreign_interface_dropped: bool = False
-    read_at: str = ""
+    read_at: Stamp = None
 
 
 class HostTailnetLockRecord(ObservationRecord):
@@ -37,7 +35,7 @@ class HostPerimeterRecord(ObservationRecord):
     public_addresses: tuple[str, ...] = ()
     ports_checked: tuple[int, ...] = ()
     answered_publicly: tuple[int, ...] = ()
-    read_at: str = ""
+    read_at: Stamp = None
 
 
 # The only strings a secret renderer's status document carries besides its
@@ -60,18 +58,11 @@ def _word(value: Any) -> str:
     return value if isinstance(value, str) and _STATUS_WORD.fullmatch(value) else UNREADABLE_WORD
 
 
-def _instant(value: Any) -> str:
-    """An ISO 8601 instant as it was written, or "" when it is not one."""
-
-    return value if isinstance(value, str) and moment(value) is not None else ""
-
-
 Word = Annotated[str, BeforeValidator(_word)]
-Instant = Annotated[str, BeforeValidator(_instant)]
 
 
 class SecretRenderAttempt(ObservationRecord):
-    at: Instant = ""
+    at: Stamp = None
     outcome: Word = UNREADABLE_WORD
     failure: Word = ""
 
@@ -85,8 +76,8 @@ class SecretRenderCounts(ObservationRecord):
 
 
 class SecretRenderSuccess(ObservationRecord):
-    at: Instant = ""
-    rendered_at: Instant = ""
+    at: Stamp = None
+    rendered_at: Stamp = None
     content_version: int | None = None
     attribute_version: int | None = None
     counts: SecretRenderCounts = SecretRenderCounts()
@@ -98,7 +89,7 @@ class SecretRenderDependency(ObservationRecord):
 
 
 class SecretRenderConnect(ObservationRecord):
-    read_at: Instant = ""
+    read_at: Stamp = None
     version: Word = UNREADABLE_WORD
     dependencies: tuple[SecretRenderDependency, ...] = Field(default=(), max_length=16)
 

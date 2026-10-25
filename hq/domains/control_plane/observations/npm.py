@@ -16,7 +16,7 @@ from hq.platform.core.network import is_address
 from ..certificate_authorities import authority_name
 from ..names import normalized_hostname
 from .cloudflare import redirect_target
-from .contract import ObservationRecord, ObservationSpec, ReadingPart
+from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
 
 PROVIDER = "npm"
 
@@ -53,7 +53,7 @@ class CertificateRecord(ObservationRecord):
     # "letsencrypt" or "other", as NPM reports it.
     provider: str = ""
     domains: tuple[str, ...] = ()
-    expires_on: str = ""
+    expires_on: Stamp = None
     # The names NPM answers with this certificate: proxy, redirection and 404 hosts.
     serves: tuple[str, ...] = ()
 

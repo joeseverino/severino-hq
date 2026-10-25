@@ -604,7 +604,10 @@ plan offers none, and says so.
 `hq.platform.application.github_estate` joins a project to its repository by
 URL and queues what waits on a person: a deploy held for approval, a failing
 default branch, a deploy that failed its own verification, serious alerts, an
-admission about to lapse.
+admission about to lapse. A leaked credential counts as serious whatever its
+scanner calls it, since anyone who reads the code can use it. An alert item
+links to GitHub's list for each part holding alerts (code scanning,
+Dependabot, secret scanning; `ALERT_PAGES`), the worst first.
 
 `hq.platform.application.github_posture` holds every repository to a standard
 derived from the same record: what every repository is held to (only you have

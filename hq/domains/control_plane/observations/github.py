@@ -17,7 +17,7 @@ from typing import Annotated, Any
 
 from pydantic import Field
 
-from .contract import ObservationRecord, ObservationSpec, ReadingPart
+from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
 
 PROVIDER = "github_app"
 REPOSITORY_KIND = "github.repository"
@@ -62,7 +62,7 @@ class RepositoryRecord(ObservationRecord):
     archived: bool = False
     url: str = ""
     default_branch: str = ""
-    pushed_at: str = ""
+    pushed_at: Stamp = None
     head: dict[str, Any] = {}
     checks: dict[str, Any] = {}
     # ``{number, title, url, author, draft, created_at, updated_at, head, branch,
@@ -126,7 +126,7 @@ class ProfileRecord(ObservationRecord):
     followers: int = 0
     following: int = 0
     public_repos: int = 0
-    created_at: str = ""
+    created_at: Stamp = None
     company: str = ""
     location: str = ""
     website: str = ""
@@ -160,8 +160,8 @@ class DependencyRunRecord(ObservationRecord):
     outcome: str = Field(pattern=r"^(ok|failed|timeout|handed_off)$")
     # None until the run has finished.
     exit_code: int | None
-    started_at: str = ""
-    finished_at: str = ""
+    started_at: Stamp = None
+    finished_at: Stamp = None
 
 
 OBSERVATIONS: tuple[ObservationSpec, ...] = (

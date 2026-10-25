@@ -70,7 +70,7 @@
 .topology-lane:not(:has(.topology-node:not([hidden]))) { display: none; }
 .topology-lane > header {
   display: grid; break-inside: avoid; break-after: avoid;
-  grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-3);
+  grid-template-columns: auto 1fr; align-items: center; gap: var(--space-3);
   padding: var(--space-1) var(--space-1) var(--space-4);
 }
 .topology-node-list > * { break-inside: avoid; }
@@ -139,10 +139,7 @@
    runs long. */
 .topology-facts { display: grid; gap: var(--space-3); margin: 0; }
 .topology-fact { display: grid; gap: 1px; }
-.topology-fact dt {
-  color: var(--muted-2); font-size: var(--text-3xs); font-weight: 700;
-  letter-spacing: .08em; text-transform: uppercase;
-}
+.topology-fact dt { color: var(--muted); font-size: var(--text-xs); }
 .topology-fact dd { margin: 0; font-size: var(--text-xs); color: var(--ink-2); }
 .topology-fact dd .pill { margin-right: var(--space-2); vertical-align: baseline; }
 .topology-field-list { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-1) 0; padding: 0; list-style: none; }
@@ -307,10 +304,14 @@
 .bar-value { position: relative; flex: none; font-feature-settings: "tnum"; font-weight: 650; }
 
 /* Vitals sit under the breakdowns, not above them: they are the check you run
-   after the question you came to ask. */
-.vitals-strip { display: flex; flex-wrap: wrap; gap: var(--space-6) var(--space-16); margin: 0; }
+   after the question you came to ask. Each takes an equal share of the card,
+   so a wide card is filled rather than gathered at its start. */
+.vitals-strip {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: var(--space-6) var(--space-16); margin: 0;
+}
 .vital { display: flex; flex-direction: column; gap: var(--space-1); }
-.vital dt { font-size: var(--text-2xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.vital dt { color: var(--muted); font-size: var(--text-xs); }
 .vital dd { margin: 0; display: flex; align-items: baseline; gap: var(--space-4); font-size: var(--text-lg); }
 .vital-rate { font-weight: 650; font-feature-settings: "tnum"; color: var(--attn); }
 /* 75% of samples good is what passing means; the color says which side of it

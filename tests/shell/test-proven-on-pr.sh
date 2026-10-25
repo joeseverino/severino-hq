@@ -22,7 +22,7 @@ STUB
 cat >"$bin/docker" <<'STUB'
 #!/bin/sh
 case "$*" in
-  *Manifest.Digest*) [ -n "$TEST_DIGEST" ] && echo "\"$TEST_DIGEST\"" || exit 1 ;;
+  *Manifest.Digest*) [ -n "$TEST_DIGEST" ] && echo "$TEST_DIGEST" || exit 1 ;;
   *.Image*) printf '{"config":{"Labels":{"dev.severino.hq.tree":"%s"}}}\n' "$TEST_TREE" ;;
 esac
 STUB

@@ -6,22 +6,21 @@
 
 # The build tools, Go and uv, at the releases mise.toml pins: mise installs
 # each from mise.lock and refuses a download whose checksum differs from it.
-# mise itself is checked against its release signature (install-mise.sh).
-FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS tools
-RUN apt-get update && apt-get install -y --no-install-recommends curl minisign \
-    && rm -rf /var/lib/apt/lists/*
-ENV MISE_LOCKED=1 \
-    MISE_TRUSTED_CONFIG_PATHS=/tools
+# mise.toml reads Go's release from go.mod, so mise loads neither without it.
+# mise is the release min_version names, from its image by digest
+# (lint:toolchain holds the tag to min_version).
+FROM python:3.15-slim-trixie@sha256:533b0b2f9b5d46fd097091cf826f27902f1d6c3bca714b6dc74551356aa97a51 AS tools
+COPY --from=ghcr.io/jdx/mise:2026.10.18@sha256:fc31de7b93d195613deb600d42c65a164b0205716ade38132aadeabac3838248 /usr/local/bin/mise /usr/local/bin/mise
+ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
-COPY .github/actions/toolchain/mise-version.sh .github/actions/toolchain/install-mise.sh ./bin/
 COPY mise.toml mise.lock ./
-RUN bin/install-mise.sh mise.toml /usr/local/bin/mise \
-    && mise install go uv \
+COPY controller/go.mod controller/
+RUN mise install go uv \
     && cp -a "$(mise where go)" /opt/go \
     && install -D "$(mise which uv)" /opt/bin/uv
 
 
-FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS build
+FROM python:3.15-slim-trixie@sha256:533b0b2f9b5d46fd097091cf826f27902f1d6c3bca714b6dc74551356aa97a51 AS build
 COPY --from=tools /opt/bin/uv /usr/local/bin/uv
 # The cache mount and /install are different filesystems, so files are copied.
 ENV UV_COMPILE_BYTECODE=1 \
@@ -47,7 +46,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # The controller and the root secret renderer, one static binary each: CGO off,
 # -trimpath, so the runtime image carries no Go toolchain and the binaries no
-# build paths. Their Go is mise's (checks:toolchain holds it to go.mod).
+# build paths. Their Go is mise's, the release go.mod's toolchain line names.
 FROM tools AS controller
 ENV PATH=/opt/go/bin:$PATH \
     CGO_ENABLED=0 \
@@ -66,7 +65,7 @@ RUN go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-controller ./cmd/hq
         -o /out/hq-host ./cmd/hq-host
 
 
-FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS runtime
+FROM python:3.15-slim-trixie@sha256:533b0b2f9b5d46fd097091cf826f27902f1d6c3bca714b6dc74551356aa97a51 AS runtime
 
 # Non-root user. UID/GID 10001 to be predictable in volume permissions.
 # `apt-get upgrade` applies Debian security fixes published after the base
@@ -103,7 +102,9 @@ COPY --from=build /install /usr/local
 COPY --from=controller /out/hq-controller /usr/local/bin/hq-controller
 
 WORKDIR /app
-COPY . /app
+# The controller's source is the controller stage's input: its programs are
+# copied in built, and HQ never reads the source.
+COPY --exclude=controller . /app
 # The renderer root runs on the host. It ships in the root-run tree, beside
 # the units that name it, so the manifest below covers it: the host's copy is
 # the signed image's, byte for byte, and checked daily like every script.

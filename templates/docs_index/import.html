@@ -2,9 +2,9 @@
 {% block page %}
 <form method="post" enctype="multipart/form-data" class="form">
   {% csrf_token %}
-  {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
+  {% include "partials/_form_errors.html" %}
   {% include "partials/_dropzone.html" with field=form.manifest_file title="Drop the manifest here" hint="A JSON list of vault documents" %}
-  {% for field in form %}{% if field.name != "manifest_file" %}{% include "partials/_form_field.html" %}{% endif %}{% endfor %}
+  {% for field in form %}{% if field.name != "manifest_file" %}{{ field.as_field_group }}{% endif %}{% endfor %}
   <div class="form-actions">
     <button type="submit" class="primary">Import</button>
     <a class="btn" href="{% url 'docs_index:list' %}">Cancel</a>

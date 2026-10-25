@@ -75,11 +75,18 @@ def content_named(path: str) -> bool:
     return path in getattr(staticfiles_storage, "hashed_files", {}).values()
 
 
-def accepts_gzip(scope) -> bool:
-    """Whether the request's Accept-Encoding takes gzip (RFC 9110, section 12.5.3).
+# Each coding a copy can be written in, by the suffix collectstatic gives it,
+# best compression first: WhiteNoise writes a .br copy when brotli is installed.
+COPIES = {"br": ".br", "gzip": ".gz"}
 
-    gzip named outright decides, wherever it stands; ``*`` speaks only for a
-    coding the header does not name. A weight that is not a number refuses.
+
+def acceptable_codings(scope) -> list[str]:
+    """The codings of COPIES the request's Accept-Encoding takes, most preferred first
+    (RFC 9110, section 12.5.3).
+
+    A coding named outright decides, wherever it stands; ``*`` speaks only for a
+    coding the header does not name. A weight of 0, or one that is not a
+    number, refuses.
     """
 
     weights: dict[str, float] = {}
@@ -90,15 +97,17 @@ def accepts_gzip(scope) -> bool:
             weights[coding.strip()] = float(quality or 1)
         except ValueError:
             weights[coding.strip()] = 0
-    return weights.get("gzip", weights.get("*", 0)) > 0
+    weighed = {coding: weights.get(coding, weights.get("*", 0)) for coding in COPIES}
+    # A stable sort, so a tie keeps the order of COPIES.
+    return sorted((coding for coding in COPIES if weighed[coding] > 0), key=weighed.__getitem__, reverse=True)
 
 
 class CachedStaticFiles(StaticFiles):
     """Collected assets, as the bytes the image build left: compressed once, never per request.
 
-    A request that takes gzip is answered with the ``.gz`` copy collectstatic
-    wrote beside the asset. Content-named assets are cached permanently and
-    ordinary ones briefly.
+    A request is answered with the compressed copy collectstatic wrote beside
+    the asset in the coding it prefers: ``.br`` for brotli, ``.gz`` for gzip.
+    Content-named assets are cached permanently and ordinary ones briefly.
 
     Never while serving live (``STATIC_LIVE``): the source trees it reads
     change under the same plain name and have no compressed copies. Production
@@ -119,26 +128,30 @@ class CachedStaticFiles(StaticFiles):
         return super().lookup_path(path)
 
     async def precompressed(self, path, scope):
-        """The asset's gzip copy as its response, or None when there is none to send."""
+        """The asset's compressed copy the request takes as its response, or None
+        when there is none to send."""
 
-        if settings.STATIC_LIVE or not accepts_gzip(scope):
+        if settings.STATIC_LIVE:
             return None
-        try:
-            # The media type is the asset's: mimetypes reads ".css.gz" as CSS, gzip-encoded.
-            response = await super().get_response(path + ".gz", scope)
-        except HTTPException as refused:
-            if refused.status_code != 404:
-                raise
-            return None
-        if response.status_code == 200:
-            response.headers["Content-Encoding"] = "gzip"
-        return response
+        for coding in acceptable_codings(scope):
+            try:
+                # The media type is the asset's: mimetypes reads ".css.br" and
+                # ".css.gz" as CSS, in that encoding.
+                response = await super().get_response(path + COPIES[coding], scope)
+            except HTTPException as refused:
+                if refused.status_code != 404:
+                    raise
+                continue
+            if response.status_code == 200:
+                response.headers["Content-Encoding"] = coding
+            return response
+        return None
 
     @override
     async def get_response(self, path, scope):
         response = await self.precompressed(path, scope) or await super().get_response(path, scope)
         if not settings.STATIC_LIVE:
-            # One name, two representations: a cache keeps them apart.
+            # One name, several representations: a cache keeps them apart.
             response.headers["Vary"] = "Accept-Encoding"
         # A revalidation carries the policy the full answer would have.
         if response.status_code in (200, 304):

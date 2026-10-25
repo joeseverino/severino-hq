@@ -6,9 +6,7 @@ button named for what it does. How it is built belongs to the API reference.
 {% endcomment %}
 {% if result %}
 <section class="card command-result command-result-good" aria-labelledby="command-result-title">
-  <div class="section-head">
-    <h2 id="command-result-title">Done</h2>
-  </div>
+  {% section_head id="command-result-title" %}Done{% endsection_head %}
   {% if result.replayed %}<p class="muted command-result-note">This was already done earlier. Nothing ran again.</p>{% endif %}
   {% comment %}
   The answer in the shape a person reads: the facts the result states and the
@@ -21,7 +19,7 @@ button named for what it does. How it is built belongs to the API reference.
     </dl>
   {% endif %}
   {% if result_table %}
-    {% table_region result_table.label narrow=result_table.columns|length|add:-2 %}
+    {% table_region result_table.label %}
       <table class="data-table command-result-table">
         <caption>{{ result_table.label|breakable }} · {{ result_table.rows|length }}</caption>
         <thead><tr>{% for column in result_table.columns %}{% if forloop.first %}{% table_heading column local_sort=result_table.rows|sortable gutter=True %}{% elif result_table.columns|length > 2 %}{% table_heading column local_sort=result_table.rows|sortable drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=result_table.rows|sortable %}{% endif %}{% endfor %}</tr></thead>
@@ -71,25 +69,23 @@ button named for what it does. How it is built belongs to the API reference.
     </div>
   {% endif %}
 
-  <form method="post" class="stack-form command-form" data-command-form{% if hydrates_target %} data-command-hydrate-target{% endif %} data-submit-busy data-submit-label="Working…">
+  <form method="post" class="form command-form" data-command-form{% if hydrates_target %} data-command-hydrate-target{% endif %} data-submit-busy data-submit-label="Working…">
     {% csrf_token %}
-    {% for hidden in form.hidden_fields %}{{ hidden|breakable }}{% endfor %}
-    {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
-    <div class="command-fields">
-      {% for field in form.primary_fields %}
-        {% if chosen_target and field.name == "__target" %}
-          <div class="field command-target">
-            <span class="field-label">{{ chosen_target.field|breakable }}</span>
-            <p><strong>{{ chosen_target.label|breakable }}</strong> <a class="subtle-link" href="{{ chosen_target.change_url }}">Change</a></p>
-            {{ field }}
-            {{ field.errors }}
-          </div>
-        {% else %}
-          {% include "partials/_command_field.html" %}
-        {% endif %}
-      {% endfor %}
-    </div>
-    {% for field in form.confirmation_fields %}{% include "partials/_command_field.html" %}{% endfor %}
+    {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+    {% include "partials/_form_errors.html" %}
+    {% for field in form.primary_fields %}
+      {% if chosen_target and field.name == "__target" %}
+        <div class="field command-target">
+          <span class="field-label">{{ chosen_target.field|breakable }}</span>
+          <p><strong>{{ chosen_target.label|breakable }}</strong> <a class="subtle-link" href="{{ chosen_target.change_url }}">Change</a></p>
+          {{ field }}
+          {{ field.errors }}
+        </div>
+      {% else %}
+        {{ field.as_field_group }}
+      {% endif %}
+    {% endfor %}
+    {% for field in form.confirmation_fields %}{{ field.as_field_group }}{% endfor %}
     <div class="form-actions">
       <button class="btn primary" type="submit">{{ command_label|breakable }}</button>
       <span class="muted" data-submit-status hidden role="status">Working…</span>

@@ -24,8 +24,8 @@
 {% else %}
   <form method="post" class="form">
     {% csrf_token %}
-    {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
-    {% for field in form %}{% include "partials/_form_field.html" %}{% endfor %}
+    {% include "partials/_form_errors.html" %}
+    {{ form }}
     <div class="form-actions">
       <button type="submit" class="primary">Upload</button>
       <a class="btn" href="{% url 'control_plane:detail' resource.key %}">Cancel</a>

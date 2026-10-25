@@ -10,13 +10,11 @@ from .test_web import _AuthedTestCase
 
 
 class AuditColumnTests(SimpleTestCase):
-    def test_a_narrow_audit_log_keeps_what_and_when_and_lets_who_go_first(self):
+    def test_a_narrow_audit_log_lets_who_go_first_and_never_what(self):
         columns = ranked(AuditLogListView.table_columns)
-        narrow = AuditLogListView.table_drop_narrow
-        kept = [column.label for column in columns if not column.drop or column.drop > narrow]
 
-        self.assertEqual(kept, ["What", "When"])
         self.assertEqual(next(column.label for column in columns if column.drop == 1), "Who")
+        self.assertEqual(next(column.drop for column in columns if column.label == "What"), 0)
 
 
 class AuditWhatTests(_AuthedTestCase):

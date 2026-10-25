@@ -2,7 +2,7 @@
 {% block page %}
 <form method="post" enctype="multipart/form-data" class="form">
   {% csrf_token %}
-  {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
+  {% include "partials/_form_errors.html" %}
   {% comment %}
   The file field is the whole point of this page, so it gets the target the
   shared primitive draws rather than the same one-line row as a vendor name.
@@ -10,9 +10,9 @@
   actually looks like.
   {% endcomment %}
   {% include "partials/_dropzone.html" with field=form.file title="Drop a receipt here, or choose a file" %}
-  {% for field in form %}{% if field.name != "file" %}{% include "partials/_form_field.html" %}{% endif %}{% endfor %}
+  {% for field in form %}{% if field.name != "file" %}{{ field.as_field_group }}{% endif %}{% endfor %}
   <div class="form-actions">
-    <button type="submit" class="primary">{% if form.instance.pk %}Save changes{% else %}Upload receipt{% endif %}</button>
+    <button type="submit" class="primary">{% if object %}Save changes{% else %}Upload receipt{% endif %}</button>
     <a class="btn" href="{% url 'receipts:list' %}">Cancel</a>
   </div>
 </form>

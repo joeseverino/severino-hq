@@ -5,15 +5,14 @@ from datetime import UTC, timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.db import connection
 from django.test import SimpleTestCase, TestCase, override_settings
-from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND
 from hq.domains.jobs.models import Job
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..container_words import UP_TO_DATE, UPDATE_AVAILABLE
 from ..drawings import Dot, Dots
@@ -385,17 +384,19 @@ class PageTests(TestCase):
         self.assertContains(response, f'href="{reverse("hq_self")}"')
 
     def test_the_cost_does_not_grow_with_its_work_or_the_estate(self):
-        from django.db import connection
-        from django.test.utils import CaptureQueriesContext
-
-        def queries(containers, timers):
+        def arrange(count):
             ManagedResource.objects.all().delete()
-            estate(containers=containers, timers=timers)
-            with CaptureQueriesContext(connection) as captured:
-                self.assertEqual(self.client.get(reverse("hq_self")).status_code, 200)
-            return len(captured)
+            estate(containers=count, timers=count)
 
-        self.assertEqual(queries(1, 1), queries(20, 12))
+        def draw(_count):
+            response = self.client.get(reverse("hq_self"))
+            self.assertEqual(response.status_code, 200)
+            return response
+
+        # Every timer is a row of HQ's work; the other containers are not drawn.
+        assert_cost_does_not_grow(
+            self, sizes=(1, 12), arrange=arrange, draw=draw, rows=distinct(r"\bexample-\d+\.timer\b")
+        )
 
 
 @SITE
@@ -470,17 +471,21 @@ class ScheduledWorkTests(TestCase):
         self.assertEqual(set(self.rows()), {"audit.prune", "content.sync", "registry.refresh", "sessions.clear"})
 
     def test_the_cost_does_not_grow_with_the_jobs(self):
-        self.ran("content.sync", timedelta(hours=0))
-        with CaptureQueriesContext(connection) as one:
-            self.rows()
-        for hours in range(1, 40):
-            self.ran("content.sync", timedelta(hours=hours))
+        def arrange(count):
+            Job.objects.filter(kind="content.sync").delete()
+            for hours in range(count):
+                self.ran("content.sync", timedelta(hours=hours))
 
-        with CaptureQueriesContext(connection) as forty:
-            rows = self.rows()
-
-        self.assertEqual(len(forty), len(one))
-        self.assertEqual(len(rows["content.sync"].runs.shown), 12)
+        # Twelve runs are what a row shows, so twelve is the most it can prove.
+        assert_cost_does_not_grow(
+            self,
+            sizes=(1, 12),
+            arrange=arrange,
+            draw=lambda _count: self.rows(),
+            rows=lambda rows: len(rows["content.sync"].runs.shown),
+        )
+        arrange(40)
+        self.assertEqual(len(self.rows()["content.sync"].runs.shown), 12)
 
     def test_the_resource_carries_the_rows_without_the_drawing(self):
         self.ran("sessions.clear", timedelta(hours=1))

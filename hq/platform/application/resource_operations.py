@@ -31,7 +31,7 @@ from .infrastructure import (
 )
 from .record_errors import RecordNotFound
 from .security import Capability, Principal
-from .ui import counted
+from .ui import counted, ended
 lazy from . import tailnet
 lazy from .inventory import live_spec
 lazy from .moments import when_day
@@ -101,7 +101,7 @@ def _outcome(operation: OperationRequest) -> tuple[str, str, str]:
     problem = _problem(result)
     if problem is not None:
         return "attention", "Problem found", problem.get("message") or said or "It found a problem."
-    return "good", state, said or f"{state}."
+    return "good", state, said or ended(state)
 
 
 def requested_by(operation: OperationRequest) -> str:
@@ -216,6 +216,28 @@ def _resource_for_operation(key: str) -> ManagedResource:
         raise RecordNotFound("That record was not found.") from exc
 
 
+def enqueue(
+    resource: ManagedResource, action: str, *, idempotency_key: str, **fields: Any
+) -> tuple[OperationRequest, bool]:
+    """Queue an operation once per key, and once per resource and action while one waits.
+
+    Returns the operation and whether this call created it. The key's unique
+    column decides between two writers on one key: ``get_or_create`` catches
+    the second one's ``IntegrityError`` and hands it the first one's row.
+    """
+
+    active = OperationRequest.objects.filter(
+        resource=resource,
+        action=action,
+        state__in=(OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED),
+    ).first()
+    if active is not None:
+        return active, False
+    return OperationRequest.objects.get_or_create(
+        idempotency_key=idempotency_key, defaults={"resource": resource, "action": action, **fields}
+    )
+
+
 def _queue_operation(
     resource: ManagedResource,
     command: OperationCommand,
@@ -239,29 +261,13 @@ def _queue_operation(
     allowed, explanation = controller_action_policy(resource.kind, action)
     if not allowed:
         raise PolicyError(explanation)
-    existing = OperationRequest.objects.filter(idempotency_key=command.idempotency_key).first()
-    if existing:
-        if existing.resource_id != resource.id or existing.action != action:
-            raise PolicyError("Idempotency key is already used by another operation.")
-        return {"ok": True, "queued": False, "operation": serialize_operation(existing)}
-    active = OperationRequest.objects.filter(
-        resource=resource,
-        action=action,
-        state__in=(
-            OperationRequest.State.QUEUED,
-            OperationRequest.State.CLAIMED,
-        ),
-    ).first()
-    if active:
-        return {"ok": True, "queued": False, "operation": serialize_operation(active)}
-
-    operation = OperationRequest.objects.create(
-        resource=resource,
-        action=action,
+    operation, queued = enqueue(
+        resource,
+        action,
+        idempotency_key=command.idempotency_key,
         requested_actor=principal.actor,
         requested_interface=principal.interface,
         reason=command.reason,
-        idempotency_key=command.idempotency_key,
         # Who asked stays who asked. Where a person had to agree before this
         # could be queued, that is recorded beside the request rather than in
         # place of it: an operation applied on somebody's say-so and one a
@@ -272,10 +278,14 @@ def _queue_operation(
             else {"generation": resource.generation}
         ),
     )
-    # Every operation of every kind is created here, so this is the one place
-    # that has to ring. The controller still pulls the work; this only says
-    # there is some, which is what removes the wait between pressing Save and
-    # anything happening.
+    if operation.resource_id != resource.id or operation.action != action:
+        raise PolicyError("Idempotency key is already used by another operation.")
+    if not queued:
+        return {"ok": True, "queued": False, "operation": serialize_operation(operation)}
+    # Every operation a person or credential asks for is created here, so this
+    # is the one place that has to ring. The controller still pulls the work;
+    # this only says there is some, which is what removes the wait between
+    # pressing Save and anything happening.
     transaction.on_commit(ring_doorbell)
     return {"ok": True, "queued": True, "operation": serialize_operation(operation)}
 
@@ -524,8 +534,10 @@ def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, str]:
 
     return (
         False,
-        f"Renews automatically from {when_day(renewal_opens_at(expiry, window))} "
-        f"({counted(window, 'day')} before it expires).",
+        (
+            f"Renews automatically from {when_day(renewal_opens_at(expiry, window))} "
+            f"({counted(window, 'day')} before it expires)."
+        ),
     )
 
 

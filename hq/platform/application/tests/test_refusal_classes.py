@@ -36,7 +36,7 @@ def _declared(path: Path):
             yield node
 
 
-@tag("source")
+@tag("source", "tree")
 class OneRefusalClassTests(SimpleTestCase):
     def test_no_module_declares_its_own_not_found_or_conflict(self):
         """A module raises record_errors' two classes; a class of its own is one an adapter would miss."""

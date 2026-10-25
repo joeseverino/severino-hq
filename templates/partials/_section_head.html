@@ -1,0 +1,9 @@
+{% comment %}
+A section's heading and what sits beside it, drawn by {% section_head %}:
+{% section_head id="..." lede="..." %}heading{% aside %}a count, a link, a control{% endsection_head %}.
+A lede is the line under the heading that says what the section holds.
+{% endcomment %}
+<div class="section-head">
+  {% if lede %}<hgroup><h2{% if id %} id="{{ id }}"{% endif %}>{{ heading|safe }}</h2><p class="section-lede">{{ lede|breakable }}</p></hgroup>{% else %}<h2{% if id %} id="{{ id }}"{% endif %}>{{ heading|safe }}</h2>{% endif %}
+  {{ aside|safe }}
+</div>

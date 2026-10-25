@@ -29,6 +29,8 @@ from typing import Any, get_args
 from django.core.exceptions import NON_FIELD_ERRORS, ValidationError as DjangoValidationError
 from pydantic_core.core_schema import ErrorType
 
+from .ui import ended
+
 # How many problems the sentence names before pointing at ``details``.
 _NAMED = 5
 
@@ -120,7 +122,7 @@ def _message(subject: str, problems: list[tuple[str, str]]) -> str:
     shown = "; ".join(named[:_NAMED])
     if len(named) > _NAMED:
         shown += f"; and {len(named) - _NAMED} more (see details)"
-    return f"{subject}: {shown}."
+    return ended(f"{subject}: {shown}")
 
 
 def _path(loc: Sequence[Any]) -> str:

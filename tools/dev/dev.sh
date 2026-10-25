@@ -46,20 +46,37 @@ case "$profile" in
     *) die "Unknown profile: $profile" ;;
 esac
 
-# The checkout and each extension's sources are watched for changes. The list
-# is split on spaces, so a path with one is refused rather than half-watched.
-case "${PYTHONPATH:-}" in
-    *' '*) die "PYTHONPATH holds a path with a space, which the reload list cannot carry: $PYTHONPATH" ;;
+# The saved demo, a static site: demo:build rebuilds it only when its sources
+# moved, on a database of its own, so the scratch server's env goes first.
+if [ "${usage_demo:-false}" = true ]; then
+    seed=${usage_seed:-showcase}
+    site=var/demo
+    [ "$seed" = showcase ] || site="var/demo-$seed"
+    (
+        unset SEVERINO_DATABASE_PATH SEVERINO_MEDIA_ROOT SEVERINO_EXPORTS_ROOT SEVERINO_HQ_PLUGINS PYTHONPATH \
+            SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS DJANGO_SECRET_KEY
+        mise run demo:build "$seed"
+    )
+    exec uv run python -u -m http.server --bind "$host" --directory "$site" "$port"
+fi
+
+# The checkout and each extension's sources are watched for changes, but for
+# what this server never runs: other worktrees, the environment, var/. The
+# list is split on spaces, so a path with one is refused rather than
+# half-watched.
+case "$root${PYTHONPATH:-}" in
+    *' '*) die "The checkout or PYTHONPATH holds a path with a space, which the reload list cannot carry: $root:${PYTHONPATH:-}" ;;
 esac
 reload_dirs="$root"
 for dir in $(printf '%s' "${PYTHONPATH:-}" | tr ':' ' '); do
     reload_dirs="$reload_dirs $dir"
 done
+reload_skipped="$root/.claude/worktrees $root/.venv $root/var"
 
 if [ "${usage_plan:-false}" = true ]; then
     # Before any secret is read or any file touched, so the plan holds neither.
     env | grep -E '^(DJANGO_|SEVERINO_|UVICORN_|HQ_DEV_|PYTHONPATH=)' | grep -Ev '^[A-Z_]*(SECRET_KEY|_SECRET)=' | sort
-    echo "serve: $host:$port, reloading on changes in $reload_dirs"
+    echo "serve: $host:$port, reloading on changes to Python and templates in $reload_dirs, but for $reload_skipped"
     exit 0
 fi
 
@@ -99,27 +116,38 @@ elif [ ! -f "$state/secret.env" ]; then
     export DJANGO_SECRET_KEY
 fi
 
-uv run python manage.py migrate --noinput
+if [ "$profile" = scratch ] && [ ! -f "$state/login" ]; then
+    # A new database: migrated, its operator signed up and the data set
+    # written in one process, with the settings the set is shown under.
+    password=$(openssl rand -hex 12)
+    DJANGO_SUPERUSER_PASSWORD=$password uv run python manage.py seed "${usage_seed:-empty}" \
+        --owner operator --env-file "$state/seed.env" --verbosity 0
+    (umask 077 && echo "operator $password" > "$state/login")
+else
+    [ -z "${usage_seed:-}" ] || die "--seed fills a new database, and --keep keeps the last one as it was seeded."
+    uv run python manage.py migrate --noinput --verbosity 0
+fi
 if [ "$profile" = scratch ]; then
-    if [ ! -f "$state/login" ]; then
-        password=$(openssl rand -hex 12)
-        DJANGO_SUPERUSER_PASSWORD=$password uv run python manage.py createsuperuser \
-            --noinput --username operator --email operator@example.invalid
-        (umask 077 && echo "operator $password" > "$state/login")
-        if [ -n "${usage_seed:-}" ]; then
-            uv run python manage.py seed_demo
-        fi
-    fi
-    if [ "${usage_seed:-}" = showcase ]; then
-        export SEVERINO_POSTURE=advanced
-    fi
+    set -a
+    # Written by `manage.py seed` at the first start, so there is nothing to follow here.
+    # shellcheck source=/dev/null
+    . "$state/seed.env"
+    set +a
     echo "Sign in as: $(cat "$state/login")" >&2
 fi
 
-uv run python manage.py collectstatic --noinput --verbosity 0
-
-set -- --reload
+# Uvicorn watches with watchfiles (the dev group), the reloader that reads
+# --reload-include and --reload-exclude. A template edit restarts it too: with
+# DEBUG off, as `dev` runs, templates are cached until the server restarts.
+set -- --reload --reload-include '*.html'
 for dir in $reload_dirs; do
     set -- "$@" --reload-dir "$dir"
+done
+# Uvicorn reads an exclude that is no directory as a pattern, which an
+# absolute path cannot be.
+for dir in $reload_skipped; do
+    if [ -d "$dir" ]; then
+        set -- "$@" --reload-exclude "$dir"
+    fi
 done
 exec uv run python -m uvicorn hq.config.asgi:application --host "$host" --port "$port" "$@"

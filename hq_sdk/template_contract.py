@@ -85,7 +85,19 @@ TAGS = (
     "table_heading",
     "table_region",
 )
-FILTERS = ("ago", "counted", "money", "or_empty", "sortable", "span", "when", "web_url")
+FILTERS = (
+    "ago",
+    "breakable",
+    "counted",
+    "day",
+    "money",
+    "or_empty",
+    "readout",
+    "sortable",
+    "span",
+    "when",
+    "web_url",
+)
 
 # Django's own libraries an extension may ``{% load %}`` beside its own.
 LIBRARIES = ("humanize", "static")
@@ -517,8 +529,10 @@ def markdown(templates: dict[str, Any]) -> str:
     )
     lines += [
         "",
-        f"Host tags: {tags}. Host filters: {filters}. Django's own tags and filters, and "
-        f"`{{% load %}}` of {_code(templates['django']['libraries'])} or the extension's own libraries.",
+        (
+            f"Host tags: {tags}. Host filters: {filters}. Django's own tags and filters, and "
+            f"`{{% load %}}` of {_code(templates['django']['libraries'])} or the extension's own libraries."
+        ),
         "",
         f"Classes: {_code(templates['classes'])}.",
         "",

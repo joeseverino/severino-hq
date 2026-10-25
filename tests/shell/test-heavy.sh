@@ -1,21 +1,25 @@
 #!/bin/sh
 # Heavy commands take turns: a second one names the first and waits for it, a
 # bound that runs out exits 75 naming the holder, a killed command frees the
-# turn, a heavy command inside a turn runs, a waiting one names the holder
-# again at its interval, a turn prints the load average as it starts and ends,
-# and CI takes no lock.
+# turn, a heavy command inside a turn runs, a file task's body runs once, a
+# waiting one names the holder again at its interval, a turn prints the load
+# average as it starts and ends, a run of tests takes it only when it is
+# heavy, CI takes no lock, and every heavy task carries a bound
+# that, run out, stops what it started and frees the turn.
 set -eu
 
 repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 heavy="${repo}/tools/lib/heavy.sh"
 work="$(mktemp -d)"
 holder=""
+hung=""
 cleanup() {
     [ -z "${holder}" ] || kill "${holder}" 2>/dev/null || true
+    [ -z "${hung}" ] || kill "${hung}" 2>/dev/null || true
     rm -rf "${work}"
 }
 trap cleanup EXIT
-unset CI SEVERINO_HEAVY_HOLDER SEVERINO_HEAVY_WAIT
+unset CI SEVERINO_HEAVY_HOLDER SEVERINO_HEAVY_TASK SEVERINO_HEAVY_WAIT MISE_TASK_PGID_MANAGED
 XDG_CACHE_HOME="${work}/cache"
 export XDG_CACHE_HOME
 lock="${XDG_CACHE_HOME}/severino/heavy.lock"
@@ -43,7 +47,7 @@ hold() {
 
 names_holder() {
     case "$1" in
-        *"pid ${holder}, task example-holder, holding the turn "[0-9]*"m"[0-9]*"s, running "*release*) ;;
+        *"mise run example-holder in "*", for "[0-9]*"m"[0-9]*"s (pid ${holder})"*) ;;
         *) fail "$2 does not name the holder (pid ${holder}): $1" ;;
     esac
 }
@@ -101,6 +105,98 @@ esac
 said="$("${heavy}" sh -c '"$1" echo nested' sh "${heavy}" 2>/dev/null)" || fail "a heavy command inside a turn was refused"
 [ "${said}" = nested ] || fail "the nested command did not run: ${said}"
 
+# A file task takes the turn by running itself again under heavy.sh, and its
+# body goes ahead in the run whose pid heavy-turn.sh exported, so a command
+# inside a turn runs as heavy.sh's own pid: a fork there would start the task
+# again without end. This one counts its starts and gives up past the three a
+# turn takes.
+cat >"${work}/file-task" <<'SH'
+#!/bin/sh
+set -eu
+starts="$(($(cat "$1" 2>/dev/null || echo 0) + 1))"
+echo "${starts}" >"$1"
+[ "${starts}" -le 3 ] || exit 9
+. "${MISE_CONFIG_ROOT}/tools/lib/heavy-turn.sh"
+echo ran >>"$2"
+SH
+chmod +x "${work}/file-task"
+MISE_CONFIG_ROOT="${repo}" "${work}/file-task" "${work}/starts" "${work}/ran" 2>/dev/null ||
+    fail "a file task that takes the turn started itself $(cat "${work}/starts") times"
+[ "$(cat "${work}/ran")" = ran ] || fail "a file task that takes the turn did not run its body once"
+
+# A run of tests takes the turn only when tools/gate/turn.py finds it heavy:
+# the test task and a file task alike run tests a label narrows while another
+# command holds the turn, and wait for it with every test of a tree.
+hold
+SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q test hq.platform.core.tests.test_test_runner.BrowserTestTests \
+    >"${work}/light" 2>&1 || { cat "${work}/light" >&2; fail "a narrow test run waited for the turn, or failed"; }
+SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q lint:source tools.gate.tests.test_turn.NarrowRunTests \
+    >"${work}/light" 2>&1 || { cat "${work}/light" >&2; fail "a narrow source test run waited for the turn, or failed"; }
+status=0
+SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q test hq.platform.core.tests >/dev/null 2>&1 || status=$?
+[ "${status}" -eq 75 ] || fail "a test run of a whole package exited ${status} while the turn was held, not 75"
+status=0
+SEVERINO_HEAVY_WAIT=0 mise -C "${repo}" run -q lint:source >/dev/null 2>&1 || status=$?
+[ "${status}" -eq 75 ] || fail "every source test exited ${status} while the turn was held, not 75"
+echo go >"${work}/release"
+wait "${holder}" || fail "the holder failed"
+holder=""
+
 rm -rf "${XDG_CACHE_HOME}"
 CI=true "${heavy}" true
 [ ! -e "${lock}" ] || fail "under CI a lock file was made"
+
+# Every task that takes the turn has a timeout of its own: a TOML task through
+# heavy.sh as its shell, a file task by sourcing heavy-turn.sh.
+mise -C "${repo}" tasks ls --all --json >"${work}/tasks.json"
+heavies="$(jq '[.[] | select((.shell // "") | startswith("tools/lib/heavy.sh"))] | length' "${work}/tasks.json")"
+[ "${heavies}" -gt 1 ] || fail "found ${heavies} tasks that take the turn through heavy.sh"
+unbounded="$(jq -r '.[] | select(.timeout == null) | select((.shell // "") | startswith("tools/lib/heavy.sh")) | .name' "${work}/tasks.json")"
+[ -z "${unbounded}" ] || fail "a heavy task without a timeout: ${unbounded}"
+jq -e '.[] | select(.name == "test") | .timeout != null' "${work}/tasks.json" >/dev/null ||
+    fail "the test task, which takes the turn from inside its run, has no timeout"
+jq -r '.[] | select(.timeout == null and .file != null) | .file' "${work}/tasks.json" >"${work}/files"
+while IFS= read -r file; do
+    if grep -q '^\. .*tools/lib/heavy-turn\.sh' "${file}"; then
+        fail "a heavy file task without #MISE timeout: ${file}"
+    fi
+done <"${work}/files"
+
+# A heavy task that hangs past its timeout is stopped at it, what it started
+# with it, and a waiter takes the turn: run by hand, where mise signals the
+# task's process group, and from inside another task, where it signals only
+# the pid it started. The waiter's own bound is the timeout and a margin.
+# heavy.sh runs under the shell this suite runs under, which lint:shell
+# makes dash, Linux's, as well: dash grants no job control without a terminal,
+# and a CI runner has none.
+shell="${SHELL_UNDER_TEST:-/bin/sh}"
+bound="${work}/bound"
+mkdir -p "${bound}"
+mkfifo "${bound}/never"
+cat >"${bound}/mise.toml" <<TOML
+[task_templates.heavy]
+shell = "${shell} ${heavy} sh -o errexit -c"
+timeout = "1s"
+
+[tasks.hang]
+extends = "heavy"
+run = 'echo \$\$ >ready; read -r _ <never'
+
+[tasks.outer]
+run = "mise run hang"
+TOML
+for task in hang outer; do
+    rm -f "${bound}/ready"
+    mkfifo "${bound}/ready"
+    MISE_TRUSTED_CONFIG_PATHS="${bound}" mise -C "${bound}" run "${task}" >/dev/null 2>&1 &
+    run=$!
+    read -r hung <"${bound}/ready"
+    SEVERINO_HEAVY_WAIT=30 "${heavy}" true 2>/dev/null || fail "run as ${task} under ${shell}, a hung heavy task kept the turn past its timeout"
+    status=0
+    wait "${run}" || status=$?
+    [ "${status}" -ne 0 ] || fail "run as ${task} under ${shell}, a heavy task stopped at its timeout passed"
+    if kill -0 "${hung}" 2>/dev/null; then
+        fail "run as ${task} under ${shell}, the hung command outlived its task's timeout"
+    fi
+    hung=""
+done

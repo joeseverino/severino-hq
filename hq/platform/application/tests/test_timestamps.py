@@ -136,7 +136,7 @@ class CorrectedCallSiteTests(SimpleTestCase):
         self.assertIsNone(_parse_date(None))
 
 
-@tag("source")
+@tag("source", "tree")
 class OneParserTests(SimpleTestCase):
     """A new ``datetime.fromisoformat`` outside the kept list is a new copy."""
 
@@ -165,5 +165,5 @@ class OneParserTests(SimpleTestCase):
             offenders,
             [],
             "parse through hq.platform.application.timestamps.moment, or "
-            "tools/pipeline/ci_report.github_instant outside the app",
+            "tools/pipeline/ci_timings.when outside the app",
         )

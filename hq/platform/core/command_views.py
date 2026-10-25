@@ -257,6 +257,7 @@ class CommandView(View):
                     key=validate_key(form.cleaned_data["__execution_key"]),
                     request_sha256=request_fingerprint(self.spec.name, envelope, api_version=2),
                     operation=run,
+                    keep=lambda answer, _status: answer.get("ok", False),
                 )
         except IdempotencyConflict as exc:
             form.add_error(None, exc.reason)

@@ -25,7 +25,7 @@ from .github_estate import Repository, attention as repository_attention, reposi
 from .item_help import cannot_help, do_step, run_step, steps
 from .standards import UNMET, Check as _Check, Measurement, measure
 from .timestamps import moment
-from .ui import Insight, counted
+from .ui import Insight, counted, ended
 lazy from .projects import repository_key
 
 BOTH = "both"
@@ -276,8 +276,10 @@ def _delete_key(repo: Repository, title: str) -> str:
 def _writable_keys(repo: Repository) -> Runs:
     return tuple(
         (
-            f"{repo.short}: delete the writable key {key['title']}, then add its public key back "
-            f"with gh repo deploy-key add -R {repo.name}, which is read-only unless told otherwise",
+            (
+                f"{repo.short}: delete the writable key {key['title']}, then add its public key back "
+                f"with gh repo deploy-key add -R {repo.name}, which is read-only unless told otherwise"
+            ),
             _delete_key(repo, key["title"]),
         )
         for key in (_access(repo) or {}).get("deploy_keys", ())
@@ -485,7 +487,9 @@ def _left_out(check: _Check, missing: list[Repository]) -> str:
         parts.append(f"{', '.join(unread)}: {PINS_UNREAD}")
     if unresolved:
         parts.append(
-            f"HQ could not read these tags, so pinning is not required yet. Pin them by hand: {'; '.join(unresolved)}."
+            ended(
+                f"HQ could not read these tags, so pinning is not required yet. Pin them by hand: {'; '.join(unresolved)}"
+            )
         )
     if called:
         parts.append(PINS_CALLED)
@@ -500,7 +504,7 @@ FOLLOWS_HOST = "It calls HQ's own workflows at their main branch, which requirin
 def _host() -> str:
     """``owner/name`` of the repository HQ is built from; "" when it says none."""
 
-    return repository_key(str(getattr(settings, "SEVERINO_HQ_SOURCE", "") or ""))
+    return repository_key(settings.SEVERINO_HQ_SOURCE)
 
 
 def _intended(repo: Repository) -> dict[str, str]:
@@ -549,7 +553,7 @@ def attention() -> tuple[Insight, ...]:
                 value=str(len(missing)),
                 # A setting to change in each repository that misses it.
                 magnitude=len(missing),
-                body=f"{', '.join(missing)}. {check.fix}",
+                body=f"{ended(', '.join(missing))} {check.fix}",
                 action="Open repo checks",
                 url=reverse("posture"),
                 workflow=help_for(check, unmet),

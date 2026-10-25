@@ -20,11 +20,12 @@ from hq.platform.application.derivations import uncached
 from hq.platform.application.security import cli_principal
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..attention import infrastructure, tailnet
 from ..command_center import command_center
 from ..connection_lifecycle import Lifecycle
-from ..estate import Estate, attention as estate_attention, cards, estate_reading
+from ..estate import Estate, attention as estate_attention, cards, estate_reading, overview
 from ..glance import dashboard_panels
 from ..inventory_testing import store
 from ..machines import machine, machine_catalog
@@ -278,6 +279,16 @@ class EstateCardTests(TestCase):
         )
         self.assertIn("example.com", found["hq.estate.registration"]["detail"])
         self.assertEqual(found["hq.estate.registration"]["url"], reverse("zones:detail", args=["example.com"]))
+
+    def test_a_service_hq_reads_no_health_of_is_not_drawn_as_down(self):
+        with projection_scope():
+            services = estate_reading().services
+            (figure,) = (kpi for kpi in overview().kpis if kpi.url == reverse("control_plane:services"))
+        unread = [service for service in services if service.health.state == "unknown"]
+
+        self.assertTrue(unread, "the estate has no service without a health reading")
+        self.assertEqual(len(figure.drawing.dots), len(services) - len(unread))
+        self.assertIn(f"{len(services) - len(unread)} health-checked", figure.detail)
 
     def test_connections_are_counted_when_every_one_answers(self):
         ProviderConnection.objects.filter(connection_ref="example-ssh").update(reachable=True, detail="")
@@ -771,14 +782,21 @@ class EstateQueryBudgetTests(TestCase):
         store("cloudflare.zone", {"zone": "example.com", "connection_ref": "example-dns"})
 
     def test_the_estate_card_costs_the_same_whatever_the_estate_holds(self):
-        self.estate_of(1)
-        small = self.snapshot_queries()
-        ManagedResource.objects.all().delete()
-        ProviderConnection.objects.all().delete()
-        self.estate_of(6)
-        large = self.snapshot_queries()
+        from ..dashboard import operating_snapshot
 
-        self.assertEqual(small, large)
+        def arrange(size):
+            ManagedResource.objects.all().delete()
+            ProviderConnection.objects.all().delete()
+            self.estate_of(size)
+
+        def draw(_size):
+            with host_only():
+                return operating_snapshot(principal=cli_principal())
+
+        def online(snapshot):
+            return int(next(card["value"] for card in snapshot["cards"] if card["id"] == "hq.estate.machines"))
+
+        assert_cost_does_not_grow(self, sizes=(1, 6), arrange=arrange, draw=draw, rows=online)
 
     def test_the_estate_reads_what_the_dashboard_already_read(self):
         """Every catalog it reads is shared with the queue in one projection."""

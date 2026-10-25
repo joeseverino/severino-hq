@@ -11,20 +11,19 @@
    Two, never three: a third column is where a run of four became three and a
    stray. Anything that is not a single short field (a textarea, a group of
    boxes, errors, the actions) takes the row. */
-/* A command's fields are the same grid, inside the card that holds its notes. */
-:is(.form, .command-fields) {
+.form {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-7) var(--space-10);
   align-items: flex-start;
+  padding: var(--surface-inset, var(--space-10));
 }
-.form { padding: var(--surface-inset, var(--space-10)); }
 /* More than a third of the row, so no more than two fit it. */
-:is(.form, .command-fields) .field { flex: 1 1 max(18rem, 34%); min-width: min(100%, 18rem); }
-:is(.form, .command-fields) > :not(.field) { flex-basis: 100%; }
-:is(.form, .command-fields) > .field:has(textarea) { flex-basis: 100%; }
-:is(.form, .command-fields) > .field:has(> div > * + *) { flex-basis: 100%; }
-:is(.form, .command-fields) > .field { margin-bottom: 0; }
+.form .field { flex: 1 1 max(18rem, 34%); min-width: min(100%, 18rem); }
+.form > :not(.field) { flex-basis: 100%; }
+.form > .field:has(textarea) { flex-basis: 100%; }
+.form > .field:has(> div > * + *) { flex-basis: 100%; }
+.form > .field { margin-bottom: 0; }
 /* A lone checkbox sits beside its label, the help under both, rather than
    alone on a line under its own question. */
 .field:has(> input[type=checkbox]) { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: var(--space-4); }
@@ -81,17 +80,6 @@
   font-size: var(--text-xs);
   font-weight: 600;
 }
-/* Errors with no field to sit under say what was wrong with the request as a
-   whole, so they read as a notice rather than as a line under a control. */
-.form-errors {
-  margin: 0 0 var(--space-7);
-  padding: var(--space-5) var(--space-6);
-  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
-  border-left: 3px solid var(--danger);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--danger) 6%, var(--surface));
-}
-.form-errors .errorlist { margin: 0; }
 .errors { color: var(--danger); margin: var(--space-2) 0 0; padding-left: var(--space-8); font-size: var(--text-sm); }
 .form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-top: var(--space-6); }
 .form-actions-note { font-size: var(--text-xs); }
@@ -319,7 +307,7 @@
   margin: var(--layout-gap) 0;
 }
 .command-center-grid > * { margin: 0; min-width: 0; }
-.discovery-group > .section-head { margin-bottom: var(--space-4); }
+.discovery-group > h2 { margin-bottom: var(--space-4); }
 .discovery-list { list-style: none; margin: 0; padding: 0; }
 .discovery-list li { border-top: 1px solid var(--line); }
 .discovery-list li:first-child { border-top: 0; }
@@ -352,8 +340,8 @@ a.discovery-link:hover strong { color: var(--accent); }
 /* What a command acts on, when the page was opened for one thing. */
 .command-target p { margin: 0; }
 .command-target .field-label { display: block; color: var(--muted); font-size: var(--text-xs); }
-/* The confirmation closes the form, apart from the fields it confirms. */
-.command-form > .command-confirm { margin: var(--space-8) 0 0; }
+/* The confirmation closes the form, a row of its own under the fields it confirms. */
+.command-form > .command-confirm { flex-basis: 100%; }
 .command-effect-note { margin: 0 0 var(--space-7); }
 .command-confirm {
   padding: var(--space-6) var(--space-7);
@@ -381,7 +369,7 @@ a.discovery-link:hover strong { color: var(--accent); }
   gap: var(--space-4);
   margin: var(--space-6) 0 0;
 }
-.command-result-facts dt { font-size: var(--text-3xs); font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.command-result-facts dt { color: var(--muted); font-size: var(--text-xs); }
 .command-result-facts dd { margin: var(--space-1) 0 0; overflow-wrap: anywhere; font-weight: 600; }
 .command-result .table-scroll { margin-top: var(--space-6); }
 .command-result-table caption { caption-side: top; text-align: left; padding: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: 600; }
@@ -404,10 +392,12 @@ a.discovery-link:hover strong { color: var(--accent); }
    cell's larger line and sit above the words beside them. */
 .connection-row-meta { display: block; color: var(--muted); font-size: var(--text-2xs); }
 /* Where a connection is reached from is one line. Sized to nothing and
-   stretched to the cell, it never widens its column; its words keep their
-   length and the machine's name, a name in a context line, is cut at the
-   cell's edge (figures.css). */
+   stretched to the cell, it never widens its column. With a machine, its
+   words keep their length and the machine's name, a name in a context line,
+   is cut at the cell's edge (figures.css); with none, the words are, as any
+   context line's are. */
 .connection-reach { display: flex; gap: .3em; width: 0; min-width: 100%; white-space: nowrap; }
+.connection-reach:not(:has([data-entity])) { display: block; overflow: hidden; text-overflow: ellipsis; }
 /* Its own section under the table, not a second compartment of a card around it. */
 /* How to connect each provider not yet connected: one row each, opened for its steps. */
 .connection-setup { margin-top: var(--stack-gap); }
@@ -423,25 +413,22 @@ a.discovery-link:hover strong { color: var(--accent); }
 .setup-list > .setup-other { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); padding: var(--space-4) 0 var(--space-4) calc(1.05em + var(--space-1) + var(--space-5)); }
 .setup-permissions { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); margin: var(--space-2) 0; padding: 0; list-style: none; font-size: var(--text-xs); }
 .setup-permissions code { white-space: nowrap; }
-.connection-sight,
 .connection-more-scope { margin-top: var(--space-2); }
-.connection-sight-tally { display: block; font-size: var(--text-xs); color: var(--muted); }
 /* Styled by their own class: opened, they move to the line beneath the row,
    out of the cell they were written in. */
 .connection-sight-list,
 .cell-notes { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
-.connection-sight-list ul { margin: var(--space-1) 0 0; padding-left: var(--space-6); }
-.connection-sight-list > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); font-size: var(--text-xs); }
-.connection-sight-list > li > ul { flex-basis: 100%; }
+.connection-sight-list > li { font-size: var(--text-xs); }
 .connection-credential-steps { font-size: var(--text-xs); }
-/* Opened beneath the row, the things it reads fill the line, row by row. */
-.row-detail .connection-sight-list { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); margin: 0; }
+/* Opened beneath the row, what it reads and what it would also see fill the
+   line, row by row. */
+.row-detail :is(.connection-sight-list, .connection-read-list) { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); margin: 0; }
+.row-detail :is(.connection-sight-list, .connection-read-list) > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
 /* Each reading carries its state's color, so what needs reading again shows. */
-.row-detail .connection-sight-list > li::before { content: ""; flex: none; align-self: center; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
-.row-detail .connection-sight-list > li:is(.connection-sight-partial)::before { background: var(--warn); }
-.row-detail .connection-sight-list > li:is(.connection-sight-refused, .connection-sight-unreadable)::before { background: var(--danger); }
-.row-detail .connection-sight-list > li:is(.connection-sight-never_swept, .connection-sight-not_connected)::before { background: var(--muted-2); }
-.row-detail .connection-sight-list > li.muted::before { content: none; }
+.row-detail :is(.connection-sight-list, .connection-read-list) > li::before { content: ""; flex: none; align-self: center; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.row-detail .connection-read-list > li.connection-sight-partial::before { background: var(--warn); }
+.row-detail .connection-read-list > li:is(.connection-sight-refused, .connection-sight-unreadable)::before { background: var(--danger); }
+.row-detail .connection-read-list > li:is(.connection-sight-never_swept, .connection-sight-not_connected)::before { background: var(--muted-2); }
 /* The fix is the one thing to do, so it reads as a callout, its notes
    numbered steps at a reading width. */
 .row-detail .connection-credential-steps {
@@ -453,7 +440,7 @@ a.discovery-link:hover strong { color: var(--accent); }
   display: grid; grid-template-columns: 1.5em minmax(0, 1fr); margin-top: var(--space-2); color: var(--ink-2);
 }
 .row-detail .connection-credential-steps .operator-step p::before { counter-increment: fix-step; content: counter(fix-step) "."; color: var(--warn); font-weight: 650; }
-/* The rest of what it reads, as chips. They sit on the opened row's tinted
+/* What it lets HQ change, as chips. They sit on the opened row's tinted
    panel, which `--accent-tint` all but matches in light, so the chip is a
    wash of the accent over whatever is behind it: darker than the panel in
    light, lighter in dark. */
@@ -463,9 +450,10 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-sight-refused .connection-sight-state,
 .connection-sight-unreadable .connection-sight-state,
 .connection-sight-refusal { color: var(--danger); }
-.connection-sight-refusal { margin: var(--space-2) 0 0; font-size: var(--text-xs); }
+/* Lines under a connection's name share `.connection-row-meta`'s size. */
+.connection-sight-refusal { margin: var(--space-2) 0 0; font-size: var(--text-2xs); }
 .connection-sight-partial .connection-sight-state { color: var(--warn); }
-.connection-credential-fix { margin-top: var(--space-2); font-size: var(--text-xs); }
+.connection-credential-fix { margin-top: var(--space-2); font-size: var(--text-2xs); }
 .connection-credential-fix-headline { display: block; color: var(--warn); }
 .operator-step { margin-top: var(--space-2); }
 .operator-step p { margin: var(--space-1) 0 0; }

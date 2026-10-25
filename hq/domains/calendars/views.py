@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import CreateView, DeleteView, RedirectView, TemplateView, UpdateView
 
-from hq.platform.application.calendar import calendar_day, calendar_month, month_of
+from hq.platform.application.calendar import calendar_day, calendar_month, month_of, month_url, new_entry_url
 from hq.platform.application.calendar_entries import (
     calendar_choices,
     choose_source,
@@ -44,11 +44,6 @@ def _day(value: str) -> date | None:
         return None
 
 
-def month_url(month: date, day: date | None = None) -> str:
-    query = f"?month={month:%Y-%m}"
-    return f"{reverse('calendar:month')}{query}{f'&day={day.isoformat()}' if day else ''}"
-
-
 class CalendarView(PageMixin, TemplateView):
     template_name = "calendars/calendar.html"
     page_title = "Calendar"
@@ -62,7 +57,7 @@ class CalendarView(PageMixin, TemplateView):
         return (
             PageAction(
                 capability_words("calendar.entry.create"),
-                f"{reverse('calendar:entry_new')}?on={day.isoformat()}",
+                new_entry_url(day),
                 primary=True,
             ),
         )
@@ -89,7 +84,6 @@ class CalendarView(PageMixin, TemplateView):
             next_url=month_url(calendar.next, selected),
             today_url=month_url(today.replace(day=1), today),
             here=self.request.get_full_path(),
-            new_entry_url=reverse("calendar:entry_new"),
         )
         return context
 
@@ -192,9 +186,7 @@ class EntryPage(PageMixin):
     slug_field = "uid"
     slug_url_kwarg = "uid"
 
-    @override
-    def get_page_trail(self):
-        return (CALENDAR_TRAIL,)
+    page_trail = CALENDAR_TRAIL
 
 
 class EntryWrite:

@@ -9,24 +9,31 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-import pydantic_core
 from mcp import types
 from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
+from pydantic import TypeAdapter
 from starlette.applications import Starlette
 
 from hq.platform.api.openapi import document
 
 from .binding import Tool, bind_tools
 
+# An answer is any value a tool returns, serialized by what it is.
+_ANSWER = TypeAdapter(Any)
+
 
 def _answer(result: Any) -> types.CallToolResult:
     """An answer as a client reads it: the object, and the same as indented JSON text."""
 
     return types.CallToolResult(
-        content=[types.TextContent(type="text", text=pydantic_core.to_json(result, fallback=str, indent=2).decode())],
-        structured_content=pydantic_core.to_jsonable_python(result, fallback=str),
+        content=[
+            types.TextContent(
+                type="text", text=_ANSWER.dump_json(result, by_alias=True, fallback=str, indent=2).decode()
+            )
+        ],
+        structured_content=_ANSWER.dump_python(result, mode="json", by_alias=True, fallback=str),
         is_error=False,
     )
 

@@ -294,7 +294,7 @@ above it found is not a row.
 {% endcomment %}
 {% if operations %}
 <h2>History</h2>
-{% table_region "History" narrow=1 %}
+{% table_region "History" %}
   <table class="data-table">
     <thead><tr>{% table_heading "What" gutter=True local_sort=operations|sortable %}{% table_heading "Result" local_sort=operations|sortable %}{% table_heading "By" drop=1 local_sort=operations|sortable %}{% table_heading "When" "status" local_sort=operations|sortable %}</tr></thead>
     <tbody>

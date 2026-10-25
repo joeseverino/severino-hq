@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="Put HQ's GitHub App key and client ID where the pipeline reads them (docs/Deployment.md)"
+#MISE hide=true
 #MISE raw=true
 #USAGE flag "--vault <vault>" required=#true help="The 1Password vault holding the app's private key"
 #USAGE flag "--item <item>" required=#true help="The 1Password item holding the app's private key"

@@ -33,7 +33,7 @@ def _reads(function: ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda) -> boo
 
 
 class StaleWriteTokenTests(SimpleTestCase):
-    @tag("source")
+    @tag("source", "tree")
     def test_every_function_that_declares_the_token_reads_it(self):
         unread = set()
         for package in ("hq", "hq_sdk"):

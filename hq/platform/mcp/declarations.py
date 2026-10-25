@@ -2,12 +2,12 @@
 
 import inspect
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, create_model
 
 from . import services
-from .contract import catalog, resource_contract
+from .contract import Resource, ResourceContract, catalog, resource_contract
 
 HANDLERS: tuple[Callable[..., Any], ...] = (
     services.describe_capabilities,
@@ -46,9 +46,22 @@ def hints(handler: Callable[..., Any]) -> dict[str, bool]:
 _ARGUMENTS = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
 
 
-def argument_model(handler: Callable[..., Any]) -> type[BaseModel]:
-    """The handler's parameters as the model its arguments are validated by."""
+def _kinds(handler: Callable[..., Any], resources: ResourceContract) -> tuple[Resource, ...] | None:
+    """The resources a tool names by its ``name`` argument, when it names one."""
 
+    if handler is services.list_resource:
+        return resources.listable
+    if handler is services.get_resource:
+        return resources.addressable
+    return None
+
+
+def argument_model(handler: Callable[..., Any], resources: ResourceContract) -> type[BaseModel]:
+    """The handler's parameters as the one model its arguments are validated by
+    and its published schema is generated from. A resource tool's ``name`` is
+    one of the resources the document serves for it."""
+
+    kinds = _kinds(handler, resources)
     fields: dict[str, Any] = {
         name: (
             Any if parameter.annotation is inspect.Parameter.empty else parameter.annotation,
@@ -56,6 +69,9 @@ def argument_model(handler: Callable[..., Any]) -> type[BaseModel]:
         )
         for name, parameter in inspect.signature(handler, eval_str=True).parameters.items()
     }
+    # A Literal needs one value; with no resource to name, the service refuses every name.
+    if kinds:
+        fields["name"] = (Literal[tuple(resource.name for resource in kinds)], ...)
     return create_model(f"{handler.__name__}Arguments", __config__=_ARGUMENTS, **fields)
 
 
@@ -66,11 +82,9 @@ def tool_contract(document: dict[str, Any]) -> dict[str, Any]:
     entries: dict[str, Any] = {}
     for handler in HANDLERS:
         name = handler.__name__
-        schema = argument_model(handler).model_json_schema(by_alias=True)
+        schema = argument_model(handler, resources).model_json_schema(by_alias=True)
         description = handler.__doc__ or ""
-        if name in {"list_resource", "get_resource"}:
-            kinds = resources.listable if name == "list_resource" else resources.addressable
-            schema["properties"]["name"]["enum"] = [resource.name for resource in kinds]
+        if (kinds := _kinds(handler, resources)) is not None:
             description += "\nKinds:\n" + catalog(kinds)
         entries[name] = {"description": description, "inputSchema": schema, "annotations": hints(handler)}
     if len(entries) != len(HANDLERS):

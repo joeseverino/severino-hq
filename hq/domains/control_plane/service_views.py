@@ -6,6 +6,7 @@ from typing import override
 from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import redirect, render
+from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import TemplateView
 
@@ -158,9 +159,7 @@ class ServiceDetailView(PageMixin, TemplateView):
     def get_page_title(self):
         return self.service.hostname
 
-    @override
-    def get_page_trail(self):
-        return (("Services", reverse("control_plane:services")),)
+    page_trail = ("Services", reverse_lazy("control_plane:services"))
 
     @override
     def get_page_navigation(self):

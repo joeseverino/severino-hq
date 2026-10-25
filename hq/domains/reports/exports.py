@@ -328,12 +328,16 @@ def _totals_section(totals) -> list[str]:
     return [
         "## Totals",
         "",
-        f"- Expenses: {totals['expenses_count']} records · "
-        f"{money(totals['expenses_total'])} total, "
-        f"{money(totals['expenses_deductible_total'])} estimated deductible",
-        f"- Assets purchased this year: {totals['assets_count']} · "
-        f"{money(totals['assets_total'])} total, "
-        f"{money(totals['assets_deductible_total'])} estimated deductible",
+        (
+            f"- Expenses: {totals['expenses_count']} records · "
+            f"{money(totals['expenses_total'])} total, "
+            f"{money(totals['expenses_deductible_total'])} estimated deductible"
+        ),
+        (
+            f"- Assets purchased this year: {totals['assets_count']} · "
+            f"{money(totals['assets_total'])} total, "
+            f"{money(totals['assets_deductible_total'])} estimated deductible"
+        ),
         "",
     ]
 

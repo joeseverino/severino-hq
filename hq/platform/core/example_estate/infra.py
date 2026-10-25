@@ -43,7 +43,7 @@ from .names import (
     stamp,
 )
 
-CERTIFICATE = "example-wildcard"
+CERTIFICATE = "wildcard-example-com"
 # Inside its renewal window, so renewing it is one of the things to do.
 CERTIFICATE_EXPIRES = timedelta(days=24)
 
@@ -137,7 +137,7 @@ def connections():
             answering(TAILSCALE, "tailscale", "https://api.tailscale.com", "3 devices."),
             answering(SSH, "ssh", f"{MACHINE}:22", "Host key matches.", [MACHINE]),
             answering(GITHUB, "github_app", "https://api.github.com", f"{len(work.REPOSITORIES)} repositories."),
-            answering("example-1password", "onepassword", "https://my.1password.com", "1 vault."),
+            answering("onepassword", "onepassword", "https://my.1password.com", "1 vault."),
         ],
         principal=cli_principal(),
         controller_id="example-controller",
@@ -213,8 +213,8 @@ def host():
         "registry.address",
         {
             "address": PUBLIC,
-            "organization": "Example Broadband",
-            "network": "EXAMPLE-RESIDENTIAL",
+            "organization": "Prairie Fiber",
+            "network": "PRAIRIE-RESIDENTIAL",
             "handle": "NET-198-51-100-0-1",
             "country": "US",
             "range": "198.51.100.0/24",
@@ -282,7 +282,7 @@ def _weather():
 
     point = "40.0000,-90.0000"
     DashboardConfiguration.objects.update_or_create(
-        pk=1, defaults={"weather_point": point, "weather_label": "Example City"}
+        pk=1, defaults={"weather_point": point, "weather_label": "Fairview"}
     )
     observed = now() - timedelta(minutes=14)
     first = localtime(observed).replace(minute=0, second=0, microsecond=0)
@@ -300,7 +300,7 @@ def _weather():
         point=point,
         payload={
             "status": "good",
-            "summary": "Example City, EX",
+            "summary": "Fairview, IL",
             "metrics": [
                 {"label": "Now", "value": _HOURS[0][2], "detail": "This Afternoon"},
                 {"label": "Temperature", "value": f"{_HOURS[0][0]}°F", "detail": ""},

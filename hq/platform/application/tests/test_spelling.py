@@ -63,7 +63,7 @@ TEXT = {
     ".cfg",
 }
 NOT_OURS = ("static/vendor/", "controller/api/vendor/")
-# What `mise run regen` writes; its source carries the words.
+# What `mise run fix` writes; its source carries the words.
 GENERATED = {"docs/Connections.md", "hq_sdk/contract.json"}
 
 
@@ -85,7 +85,7 @@ def checked_files() -> list[Path]:
     return found
 
 
-@tag("source")
+@tag("source", "tree")
 class AmericanSpellingTests(SimpleTestCase):
     def test_the_tree_has_walked_files(self):
         self.assertGreater(len(checked_files()), 500)

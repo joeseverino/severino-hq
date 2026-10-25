@@ -13,14 +13,10 @@ and leads to the first.
 
 <div class="fact-band">
   {% for tile in hq.tiles %}
-  <div class="band-fact tone-{{ tile.tone }}">
-    {% if tile.icon %}<span class="band-icon">{% include "partials/_icon.html" with name=tile.icon %}</span>{% endif %}
-    <div>
-      <span class="band-label">{{ tile.label|breakable }}</span>
-      <strong>{% if tile.url %}<a href="{{ tile.url }}">{{ tile.value|breakable }}</a>{% else %}{{ tile.value|breakable }}{% endif %}</strong>
-      {% if tile.detail %}<small>{{ tile.detail|breakable }}</small>{% endif %}
-    </div>
-  </div>
+  {% band_fact icon=tile.icon label=tile.label tone=tile.tone %}
+    <strong>{% if tile.url %}<a href="{{ tile.url }}">{{ tile.value|breakable }}</a>{% else %}{{ tile.value|breakable }}{% endif %}</strong>
+    {% if tile.detail %}<small>{{ tile.detail|breakable }}</small>{% endif %}
+  {% endband_fact %}
   {% endfor %}
 </div>
 
@@ -34,7 +30,7 @@ they share a row; either alone takes it.
   {% include "partials/_problems.html" with problems=hq.problems_in.release|not_urgent only %}
   <dl class="kv">
         <dt>Commit</dt>
-          <dd>{% if release.commit_url %}<a class="external-link" href="{{ release.commit_url }}" rel="noopener"><code>{{ release.short|breakable }}</code></a>{% elif release.revision %}<code>{{ release.short|breakable }}</code>{% else %}<span class="muted">This build does not say which commit it is.</span>{% endif %}</dd>
+          <dd>{% if release.commit_url %}{% entity release.commit_url|outside label=release.short code=True %}{% elif release.revision %}<code>{{ release.short|breakable }}</code>{% else %}<span class="muted">This build does not say which commit it is.</span>{% endif %}</dd>
         {% if release.repository %}{% with repository=release.repository %}
         <dt>{{ repository.default_branch|default:"Branch"|capfirst|breakable }}</dt>
           <dd>
@@ -42,7 +38,7 @@ they share a row; either alone takes it.
             {% elif release.behind is False %}Production runs its head, <code>{{ release.head|slice:":7"|breakable }}</code>
             {% else %}<span class="muted">Its head or its production deploy has not been read.</span>{% endif %}
             {% if release.runs_deployed is False %}<br><strong>This process is not the commit production last deployed.</strong>{% endif %}
-            <br>{% if repository.url|web_url %}<a class="external-link" href="{{ repository.url|web_url }}" rel="noopener">{{ repository.name|breakable }}</a>{% else %}{{ repository.name|breakable }}{% endif %} <span class="muted">· {% include "partials/_reading_age.html" with reading=repository.reading only %}</span>
+            <br>{% entity repository.url|outside label=repository.name %} <span class="muted">· {% include "partials/_reading_age.html" with reading=repository.reading only %}</span>
           </dd>
         {% endwith %}{% endif %}
         {% if release.image %}
@@ -54,7 +50,7 @@ they share a row; either alone takes it.
         <dt>Signature</dt>
           <dd>{% if release.signed %}Signed{% elif release.signed is False %}<strong>Not signed</strong>{% else %}<span class="muted">Not read</span>{% endif %}</dd>
         <dt>Vulnerabilities</dt>
-          <dd>{{ release.vulnerabilities|capfirst|breakable }}{% if release.vulnerabilities_note %} <span class="muted">{{ release.vulnerabilities_note|breakable }}</span>{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %} · <a class="external-link" href="{{ repository.alerts_url|web_url }}" rel="noopener">{% if repository.open_alerts %}{{ repository.open_alerts|counted:"open alert,open alerts" }}{% else %}no open alerts{% endif %}</a>{% endif %}{% endwith %}{% endif %}</dd>
+          <dd>{{ release.vulnerabilities|capfirst|breakable }}{% if release.vulnerabilities_note %} <span class="muted">{{ release.vulnerabilities_note|breakable }}</span>{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %} · {% if repository.open_alerts %}{% entity repository.alerts_url|outside label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|outside label="no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</dd>
         {% endif %}
         <dt>Extensions</dt>
           <dd>{% for name, version in release.extensions %}{{ name|breakable }} <span class="muted">{{ version|breakable }}</span>{% if not forloop.last %} · {% endif %}{% empty %}<span class="muted">None composed into this build</span>{% endfor %}</dd>
@@ -105,7 +101,7 @@ they share a row; either alone takes it.
   {% if work.unread %}
     <p class="muted">{{ work.unread|breakable }}</p>
   {% elif work.jobs %}
-    {% table_region "Jobs" narrow=3 %}
+    {% table_region "Jobs" %}
       <table class="data-table">
         <thead><tr>{% table_heading "Unit" "identifier" local_sort=work.jobs|sortable gutter=True %}{% table_heading "Runs" "identifier" local_sort=work.jobs|sortable drop=3 %}{% table_heading "Last run" "status" local_sort=work.jobs|sortable drop=2 %}{% table_heading "Result" "status" css="key-col" local_sort=work.jobs|sortable %}{% table_heading "Next run" "status" css="optional-col" local_sort=work.jobs|sortable drop=1 %}</tr></thead>
         <tbody>
@@ -123,7 +119,7 @@ they share a row; either alone takes it.
     {% endtable_region %}
   {% endif %}
   {% if work.scheduled %}
-    {% table_region "Scheduled work" narrow=3 %}
+    {% table_region "Scheduled work" %}
       <table class="data-table">
         <thead><tr>{% table_heading "Scheduled work" local_sort=work.scheduled|sortable gutter=True %}{% table_heading "How often" "status" css="optional-col" local_sort=work.scheduled|sortable drop=2 %}{% table_heading "Recent runs" "status" local_sort=work.scheduled|sortable drop=3 %}{% table_heading "Last result" "status" css="key-col" local_sort=work.scheduled|sortable %}{% table_heading "Next due" "status" css="optional-col" local_sort=work.scheduled|sortable drop=1 %}</tr></thead>
         <tbody>
@@ -143,7 +139,7 @@ they share a row; either alone takes it.
   {% if work.renderers_unread %}
     <p class="muted">{{ work.renderers_unread|breakable }}</p>
   {% elif work.renderers %}
-    {% table_region "Credentials refresh" narrow=2 %}
+    {% table_region "Credentials refresh" %}
       <table class="data-table compact-table">
         <thead><tr>{% table_heading "Credentials refresh" "identifier" local_sort=work.renderers|sortable gutter=True %}{% table_heading "Last run" "status" css="key-col" local_sort=work.renderers|sortable %}{% table_heading "Tried" "status" local_sort=work.renderers|sortable drop=2 %}{% table_heading "Last confirmed current" "status" local_sort=work.renderers|sortable drop=1 %}</tr></thead>
         <tbody>
@@ -169,12 +165,12 @@ they share a row; either alone takes it.
   {% if sight.never == sight.rows|length %}
   <p class="card">None read yet. Once the controller runs, HQ reads {% for row in sight.rows %}{{ row.label|breakable }}{% if forloop.revcounter == 2 %} and {% elif not forloop.last %}, {% endif %}{% endfor %}.</p>
   {% else %}
-  {% table_region "Readings" narrow=2 %}
+  {% table_region "Readings" %}
     <table class="data-table">
       <thead><tr>{% table_heading "Reading" local_sort=sight.rows|sortable gutter=True %}{% table_heading "State" "status" css="key-col" local_sort=sight.rows|sortable %}{% table_heading "Records" "numeric" local_sort=sight.rows|sortable drop=2 %}{% table_heading "Last read" "status" css="optional-col" local_sort=sight.rows|sortable drop=1 %}</tr></thead>
       {% for provider, rows in sight.groups %}
       <tbody>
-        <tr class="row-group"><th colspan="4" scope="rowgroup">{{ provider|breakable }} <span class="count">{{ rows|length }}</span></th></tr>
+        {% row_group provider rows|length %}
         {% for row in rows %}
           <tr>
             <td class="row-gutter">

@@ -29,12 +29,6 @@ class PipelineReportTests(SimpleTestCase):
 
         return Path(__file__).resolve().parents[5].joinpath(*parts).read_text()
 
-    def test_the_review_is_one_check_by_one_name(self):
-        name = '"Severino HQ · Review"'
-
-        self.assertIn(name, self.read(".github", "workflows", "ci.yml"))
-        self.assertIn(f"REVIEW = {name}", self.read("tools", "pipeline", "ci_report.py"))
-
     def test_hqs_key_never_reaches_the_homelab_runner(self):
         import re
 

@@ -206,11 +206,31 @@ async (page) => {
       // here: a list would need editing every time a capped box is added,
       // and a box missing from it would be reported as a fault.
       //
+      // So is a box that declares its own vertical scroll and whose height
+      // the stylesheet sets without its content (a dialog that is the whole
+      // phone screen, `height: 100dvh; overflow-y: auto`). The scroll is its
+      // own when it outlives the other axis turning visible, rather than
+      // being the `auto` that axis forced on it; the height is set when the
+      // box keeps it while overflowing visibly, where a box as tall as its
+      // content would grow.
+      //
       // An accidental scrollbar is exactly the case with no cap: nothing was
       // limiting the box, it simply came out a pixel smaller than its
       // contents.
+      const overridden = (property, read) => {
+        const inline = el.getAttribute('style');
+        el.style.setProperty(property, 'visible', 'important');
+        const value = read();
+        if (inline === null) el.removeAttribute('style');
+        else el.setAttribute('style', inline);
+        return value;
+      };
+      const scrollsTall = () =>
+        scrolls(overridden('overflow-x', () => getComputedStyle(el).overflowY))
+        && Math.abs(overridden('overflow', () => el.getBoundingClientRect().height) - el.getBoundingClientRect().height)
+          < SCROLL_SLOP;
       const capped = (axis) =>
-        axis === 'x' ? style.maxWidth !== 'none' : style.maxHeight !== 'none';
+        axis === 'x' ? style.maxWidth !== 'none' : style.maxHeight !== 'none' || scrollsTall();
       axes.forEach(({ axis, overflow }) => {
         if (capped(axis)) return;
         add('unwanted-scrollbar', {

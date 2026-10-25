@@ -83,7 +83,7 @@ def unused_style_classes(css: str, sources: Iterable[tuple[str, str]], public: C
     )
 
 
-@tag("source")
+@tag("source", "tree")
 class StylesheetUsageTests(SimpleTestCase):
     # Django renders a form's errors as ``<ul class="errorlist">`` itself.
     FRAMEWORK = {ErrorList().error_class}

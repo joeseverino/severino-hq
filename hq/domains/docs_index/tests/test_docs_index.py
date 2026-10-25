@@ -55,22 +55,6 @@ class ModelChoicesMatchSchemaTests(SimpleTestCase):
                 f"docs_index/schema.json.",
             )
 
-    def test_status_field_covers_both_doc_and_task_statuses(self):
-        # The status field holds either a standard doc status or a task lifecycle
-        # status, so its choices must cover the union, otherwise admin/ModelForm
-        # rejects a task's "open"/"done" that the importer legitimately writes.
-        self.assertEqual(
-            _values(DocumentationRecord.TaskStatus.choices),
-            set(frontmatter_schema.TASK_STATUSES),
-            "TaskStatus choices drifted from the schema's task_statuses.",
-        )
-        field_values = {value for value, _label in DocumentationRecord._meta.get_field("status").choices}
-        self.assertEqual(
-            field_values,
-            set(frontmatter_schema.STATUSES) | set(frontmatter_schema.TASK_STATUSES),
-            "The status field choices must cover STATUSES | TASK_STATUSES.",
-        )
-
 
 @tag("source")
 class CommittedSchemaMatchesMcpTests(SimpleTestCase):
@@ -96,18 +80,33 @@ class CommittedSchemaMatchesMcpTests(SimpleTestCase):
         )
 
 
+class ReviewQueueTests(TestCase):
+    def test_a_frozen_report_and_a_generated_queue_note_are_never_queued_for_review_but_a_runbook_is(self):
+        DocumentationRecord.objects.create(
+            doc_id="report-example", title="Example report", doc_type="report", status="active"
+        )
+        DocumentationRecord.objects.create(
+            doc_id="queue-example", title="Example queue", doc_type="queue", status="active"
+        )
+        DocumentationRecord.objects.create(
+            doc_id="rb-example", title="Example runbook", doc_type="runbook", status="active"
+        )
+
+        queued = DocumentationRecord.objects.needing_review().values_list("doc_id", flat=True)
+
+        self.assertEqual(list(queued), ["rb-example"])
+
+
 class RelatedDocumentsTests(TestCase):
     """A record's documents as its page lists them: by type, by title."""
 
     def _document(self, doc_id, title, doc_type="runbook", status="active"):
         return DocumentationRecord.objects.create(doc_id=doc_id, title=title, doc_type=doc_type, status=status)
 
-    def test_groups_follow_the_type_order_and_tasks_come_last(self):
+    def test_groups_follow_the_type_order(self):
         from hq.platform.application.documentation import related_documents
 
         records = [
-            self._document("task-example-done", "Ship it", "task", "done"),
-            self._document("task-example-parked", "Wait for it", "task", "parked"),
             self._document("note-example-design", "Example design", "architecture_note"),
             self._document("rb-example-b", "Back up the example"),
             self._document("rb-example-a", "Add an example"),
@@ -116,12 +115,10 @@ class RelatedDocumentsTests(TestCase):
         found = related_documents(records)
 
         self.assertEqual(
-            [(group.heading, [item.link.label for item in group.items], group.folded) for group in found.groups],
+            [(group.heading, [item.link.label for item in group.items]) for group in found.groups],
             [
-                ("Runbooks", ["Add an example", "Back up the example"], False),
-                ("Architecture notes", ["Example design"], False),
-                ("Open tasks", ["Wait for it"], False),
-                ("Done tasks", ["Ship it"], True),
+                ("Runbooks", ["Add an example", "Back up the example"]),
+                ("Architecture notes", ["Example design"]),
             ],
         )
         self.assertEqual(found.groups[0].items[0].link.title, "rb-example-a")

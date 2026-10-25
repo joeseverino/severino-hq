@@ -17,7 +17,7 @@ host_image=$1 admissions=$2 policy=$3
 fingerprint=$(printf '%s\n%s\n%s\n' \
   "$host_image" \
   "$(sha256sum "$admissions" | cut -d' ' -f1)" \
-  "$(openssl dgst -sha256 "$policy" | awk '{print $NF}')" |
+  "$(sha256sum "$policy" | cut -d' ' -f1)" |
   sha256sum | cut -c1-32)
 tag="ghcr.io/$GITHUB_REPOSITORY/composition:fp-$fingerprint"
 

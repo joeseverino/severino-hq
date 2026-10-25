@@ -10,7 +10,7 @@ the last one back.
 favorites, where the order is something the operator chose; among the rest,
 alphabetical is the order and there is nothing to move.
 {% endcomment %}
-{% table_region "Services" room="snug" mid=4 narrow=6 %}
+{% table_region "Services" room="snug" %}
   <table class="data-table service-table">
     <thead>
       <tr>
@@ -24,7 +24,7 @@ alphabetical is the order and there is nothing to move.
     </thead>
     {% for group_label, rows, reorderable in groups %}
     <tbody>
-      {% if groups|length > 1 %}<tr class="row-group"><th colspan="{% if show_service_projects %}{{ facets|length|add:5 }}{% else %}{{ facets|length|add:4 }}{% endif %}" scope="rowgroup">{{ group_label|breakable }}</th></tr>{% endif %}
+      {% if groups|length > 1 %}{% row_group group_label %}{% endif %}
       {% for service in rows %}
         <tr>
           <td class="row-gutter">

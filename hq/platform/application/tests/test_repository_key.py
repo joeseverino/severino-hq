@@ -42,7 +42,7 @@ def _keys_by_join(node: ast.AST) -> bool:
     return isinstance(node, ast.DictComp) and _slash_join(node.key)
 
 
-@tag("source")
+@tag("source", "tree")
 class OneRepositoryKeyTests(SimpleTestCase):
     def test_only_the_projects_service_builds_a_repository_key(self):
         offenders = []

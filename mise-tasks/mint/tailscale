@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="Mint a read-only Tailscale OAuth client for the tailscale connection (docs/Secrets.md)"
+#MISE hide=true
 #USAGE flag "--tailnet <name>" default="-" help="Tailnet (default: -, the credential's own)"
 #USAGE flag "--description <text>" default="hq-observer" help="Client description"
 #USAGE flag "--tag <tag>" var=#true help="Tag the client; repeatable"

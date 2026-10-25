@@ -4,8 +4,10 @@ Changed files against the merge base are mapped to the test modules that reach
 them, by the import graph of the tree itself (nothing here lists an app), a
 changed task definition to the tests that read the tasks, and a changed file
 that is not Python to the tests that name its path. The
-architecture tests always run. Every other check is a mise task, run here by
-name, so each exists once. A change to what extensions render through
+architecture tests always run, and a change to a module under hq/ or hq_sdk/
+runs every test tagged tree, which finds its files by walking. Every other check is a mise task, run here by
+name, so each exists once, and only when the change touches a path it reads
+(TASKS). A change to what extensions render through
 (templates, static, hq_sdk, the shared page and table layer) also runs the
 extensions' own suites, composed, when HQ_LOCAL_PLUGINS names a set.
 ```mise run check``` stays the gate before a push.
@@ -15,27 +17,61 @@ Run as `mise run fast`; `mise run fast --help` says what it takes.
 
 from __future__ import annotations
 
-import argparse
 import ast
 import os
 import re
 import subprocess
 import sys
 import time
-import tomllib
 from fnmatch import fnmatch
 from pathlib import Path
 
+from hq.platform.core.tests.task import Usage, usage
 from tools.gate.verdict import Step, close, run
+from tools.structural.classify import TEST
 
 ROOT = Path(__file__).resolve().parents[2]
-# The gates that run whatever changed, side by side: each is quick, and each
-# Django gate opens a database of its own (the django task template).
-TASKS = ("checks:ruff", "checks:mypy", "checks:structural", "tests:django", "tests:migrations", "drift:*")
-# Never part of the Django suite: other languages, vendored trees, the browser
-# pass that `mise run check` also leaves to `mise run browser`.
-SKIP_PARTS = {"node_modules", "controller", "browser_tests", ".venv", "staticfiles"}
+# The quick gates, each with the paths a change must touch for it to run, as
+# fnmatch patterns, where `*` crosses directories. Those selected run side by
+# side; each Django gate opens a database of its own (the django task
+# template). A drift gate's paths are its sources and the file it derives.
+PYTHON = ("*.py",)
+TASKS: dict[str, tuple[str, ...]] = {
+    "lint:ruff": PYTHON,
+    "lint:mypy": PYTHON,
+    # The graph fingerprints functions in every language it indexes.
+    "lint:structural": (*PYTHON, "*.go", "*.js", "*.mjs", "*.sh", "mise-tasks/*", "tools/structural/*"),
+    "lint:css": ("static/css/*", "tools/lint/*"),
+    "lint:deptry": ("hq/*.py", "hq_sdk/*.py"),
+    "lint:mise-tasks": ("mise-tasks/*",),
+    "test:django": PYTHON,
+    "test:migrations": ("hq/*.py",),
+    "lint:drift-sdk-contract": (*PYTHON, "hq_sdk/*", "docs/Plugins.md"),
+    "lint:drift-api-document": (*PYTHON, "hq/platform/api/hq-api.openapi.json"),
+    "lint:drift-bridge-contract": (*PYTHON, "controller/api/*", "hq/config/controller-connections.json"),
+    "lint:drift-connections-reference": (*PYTHON, "docs/Connections.md"),
+    "lint:drift-font": ("tools/fonts/*", "static/fonts/*", "static/css/*"),
+}
+# Paths a gate never reads, so a change to them alone leaves it out: the
+# structural bar drops test code before it pairs anything.
+UNREAD = {"lint:structural": TEST}
+# What every gate reads: the dependencies, the tool pins and the task
+# definitions. A change to one runs them all.
+EVERY_TASK = (
+    "pyproject.toml",
+    "uv.lock",
+    "mise.toml",
+    "mise.lock",
+    "mise-tasks/*.toml",
+    "tools/pipeline/toolchain.env",
+)
+# Never part of the Django suite: other languages and vendored trees.
+SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
 ALWAYS = ("architecture", "new_domain")
+# A test that walks a directory finds a module there through no import, so a
+# change to a module here runs every test tagged tree
+# (hq/platform/application/tests/test_tree_tag.py holds the tag to the walks).
+TREE = ("hq/*.py", "hq_sdk/*.py")
 # The module every test that reads the tasks goes through; a change to a task
 # definition reaches those tests as a change to it would.
 TASK_READER = "tests.mise_tasks"
@@ -59,25 +95,35 @@ SHARED_UI = (
 )
 
 
-def task_sources() -> tuple[str, ...]:
-    """Where mise reads this checkout's tasks: mise.toml and what its task_config includes."""
+def defines_tasks(path: str) -> bool:
+    """A file mise reads this checkout's tasks from: mise.toml, or one in mise-tasks/, mise's default task directory."""
 
-    config = tomllib.loads((ROOT / "mise.toml").read_text(encoding="utf-8"))
-    return ("mise.toml", *config.get("task_config", {}).get("includes", ()))
-
-
-def defines_tasks(path: str, sources: tuple[str, ...]) -> bool:
-    """A file mise reads tasks from: one a source names or matches, or one inside a source directory."""
-
-    return any(fnmatch(path, source) or fnmatch(path, f"{source}/*") for source in sources)
+    return path == "mise.toml" or path.startswith("mise-tasks/")
 
 
 def touches_shared_ui(paths: list[str]) -> bool:
     return any(path.startswith(SHARED_UI) or "/templatetags/" in path for path in paths)
 
 
+def reaches_tree(paths: list[str]) -> bool:
+    return any(fnmatch(path, pattern) for path in paths for pattern in TREE)
+
+
+def selected_tasks(paths: list[str]) -> tuple[str, ...]:
+    """The quick gates a change can have broken: those whose paths it touches, or all when it touches EVERY_TASK."""
+
+    def touched(patterns: tuple[str, ...], task: str = "") -> bool:
+        unread = UNREAD.get(task)
+        read = [path for path in paths if not (unread and unread.search(path))]
+        return any(fnmatch(path, pattern) for path in read for pattern in patterns)
+
+    if touched(EVERY_TASK):
+        return tuple(TASKS)
+    return tuple(task for task, patterns in TASKS.items() if touched(patterns, task))
+
+
 def tasks_command(tasks: tuple[str, ...], parallel: str) -> list[str]:
-    """One mise run of every task, side by side unless parallelism is ruled out.
+    """One run of every task, side by side unless parallelism is ruled out.
 
     `-c` names every task that failed, and the configured keep-order output
     prints each one whole under its own name.
@@ -139,18 +185,9 @@ def is_test(path: Path) -> bool:
     return (
         path.suffix == ".py"
         and path.name != "__init__.py"
-        and (path.name.startswith("test") or ("fuzz" in path.parts and not is_fuzz_harness(path)))
+        and (path.name.startswith("test") or "fuzz" in path.parts)
         and all((ROOT / parent / "__init__.py").exists() for parent in path.parents if parent != Path())
     )
-
-
-def is_fuzz_harness(path: Path) -> bool:
-    """An atheris harness: run by its fuzzer, and in the suite through the test that drives it."""
-
-    try:
-        return "import atheris" in (ROOT / path).read_text()
-    except OSError:
-        return False
 
 
 def imports(path: Path, modules: set[str]) -> set[str]:
@@ -281,11 +318,10 @@ def affected(changed: list[str], deleted: list[str], files: list[Path]) -> tuple
     seen: set[str] = set()
     seeds: set[str] = set()
     touched: set[str] = set()
-    sources = task_sources()
     for path in [*changed, *deleted]:
         if path.endswith(".py"):
             seeds.add(module_name(Path(path)))
-        elif defines_tasks(path, sources):
+        elif defines_tasks(path):
             seeds.add(TASK_READER)
         pkg = owner(path, apps)
         if pkg:
@@ -342,25 +378,31 @@ def test_labels(
     return sorted(chosen), len(tests)
 
 
+def test_commands(labels: list[str], parallel: str, *, tree: bool) -> list[tuple[str, list[str]]]:
+    """The test runs, each with its label: the selected modules, then with
+    `tree` every test tagged tree, once, in a pass of its own.
+
+    The label "." is the whole tree; named, the runner keeps the source tests
+    a bare run leaves out.
+    """
+
+    test = [sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel]
+    if not tree:
+        return [("tests", [*test, *labels])]
+    return [("tests", [*test, "--exclude-tag", "tree", *labels]), ("tree tests", [*test, "--tag", "tree", "."])]
+
+
 def step(label: str, cmd: list[str]) -> Step:
     print(f"[fast] {label}", flush=True)
-    started = time.monotonic()
-    result = run(label, cmd)
-    print(f"[fast] {label}: {time.monotonic() - started:.1f}s", flush=True)
-    return result
+    return run(label, cmd)
 
 
-def main(argv: list[str]) -> int:
+def main(asked: Usage) -> int:
     started = time.monotonic()
-    # The task's usage spec reads CHECK_BASE and CHECK_PARALLEL behind its own arguments.
-    parser = argparse.ArgumentParser(prog="fast")
-    parser.add_argument("base", nargs="?")
-    parser.add_argument("--list", action="store_true")
-    parser.add_argument("--parallel", default="auto")
-    args = parser.parse_args(argv)
-    parallel = args.parallel
-    list_only = args.list
-    base = merge_base(args.base)
+    # The task's usage reads CHECK_BASE and CHECK_PARALLEL behind its own arguments.
+    parallel = asked.text("parallel", "auto")
+    list_only = asked.switch("list")
+    base = merge_base(asked.text("base") or None)
     changed, deleted = changed_files(base)
     files = python_files()
     reached, touched = affected(changed, deleted, files)
@@ -370,20 +412,26 @@ def main(argv: list[str]) -> int:
     if total and len(labels) / total > WIDE:
         print("[fast] wide change: most of the suite is reached; `mise run check` is the honest gate")
 
+    tree = reaches_tree([*changed, *deleted])
+    if tree:
+        print("[fast] a module under hq/ or hq_sdk/ changed: every test tagged tree runs too")
     if list_only:
         print("\n".join(labels))
         return 0
 
-    steps = [
-        step(" ".join(TASKS), tasks_command(TASKS, parallel)),
-        step("tests", [sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel, *labels]),
-    ]
+    steps = []
+    if tasks := selected_tasks([*changed, *deleted]):
+        print(f"[fast] the quick gates that read what changed: {' '.join(tasks)}")
+        steps.append(step("quick gates", tasks_command(tasks, parallel)))
+    else:
+        print("[fast] no quick gate reads what changed")
+    steps.extend(step(label, cmd) for label, cmd in test_commands(labels, parallel, tree=tree))
     if os.environ.get("HQ_LOCAL_PLUGINS") and touches_shared_ui([*changed, *deleted]):
-        # suite:as-image hands what follows to manage.py test.
+        # test:composed hands what follows to manage.py test.
         steps.append(
             step(
                 "extension suites, composed (shared UI changed)",
-                ["mise", "run", "suite:as-image", "--", "--installed-plugins", "--parallel", parallel],
+                ["mise", "run", "test:composed", "--", "--installed-plugins", "--parallel", parallel],
             )
         )
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))
@@ -392,4 +440,4 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main(usage()))

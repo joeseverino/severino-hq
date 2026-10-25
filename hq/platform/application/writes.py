@@ -39,6 +39,7 @@ from .deletion import DeleteCommand
 from .record_errors import RecordConflict, RecordNotFound
 from .records import delete_instance, display_noun, records_for, save_form
 from .security import web_principal
+from .ui import ended
 lazy from .security import Principal
 
 # What a write says when the view does not say it differently. Constants rather
@@ -48,6 +49,12 @@ lazy from .security import Principal
 CREATED = "{noun} “{target}” created."
 UPDATED = "{noun} “{target}” updated."
 DELETED = "{noun} “{target}” deleted."
+
+
+def announce(request, template: str, noun: str, target: object) -> None:
+    """Say a write landed: ``template`` names the record as ``{target}``, closed by ``ended``."""
+
+    messages.success(request, ended(template.format(noun=noun, target=target)))
 
 
 class ServiceWriteMixin:
@@ -121,7 +128,7 @@ class ServiceWriteMixin:
         return self.model._default_manager.get(**{self.identity_attr: result[self.result_key][key]})
 
     def announce(self, template: str, target: object) -> None:
-        messages.success(self.request, template.format(noun=self.noun, target=target))
+        announce(self.request, template, self.noun, target)
 
 
 class ServiceCreateMixin(ServiceWriteMixin):
@@ -208,7 +215,7 @@ class RecordFormMixin:
             return self.form_invalid(form)
         template = getattr(self, "created_message", CREATED) if adding else getattr(self, "updated_message", UPDATED)
         noun = display_noun(records_for(type(self.object)))
-        messages.success(self.request, template.format(noun=noun, target=self.object))
+        announce(self.request, template, noun, self.object)
         return redirect(self.object.get_absolute_url())
 
 
@@ -225,7 +232,7 @@ class RecordDeleteMixin(ServiceDeleteMixin):
         noun = display_noun(records_for(type(self.object)))
         result = delete_instance(self.object, principal=web_principal(self.request.user))
         template = getattr(self, "deleted_message", DELETED)
-        messages.success(self.request, template.format(noun=noun, target=result["deleted"]["label"]))
+        announce(self.request, template, noun, result["deleted"]["label"])
         return redirect(self.success_url)
 
 

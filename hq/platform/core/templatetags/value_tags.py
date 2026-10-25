@@ -1,14 +1,16 @@
 import re
-from datetime import date, datetime, time
+from datetime import date, datetime
 from html import unescape
 from numbers import Number
 from urllib.parse import parse_qs, unquote, urlsplit
 lazy from dataclasses import replace
 
 from django import template
-from django.utils import timezone
+from django.template.base import token_kwargs
+from django.template.loader import render_to_string
+from django.utils import dateformat, timezone
 from django.utils.html import conditional_escape, format_html
-from django.utils.safestring import SafeData, mark_safe
+from django.utils.safestring import mark_safe
 lazy from django.conf import settings
 
 from hq.platform.application.entity_links import (
@@ -28,16 +30,21 @@ from hq.platform.application.moments import (
     when_exact as _when_exact,
 )
 from hq.platform.application.money import money as _money
+from hq.platform.application.printable import admitted
 from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import MISSING, counted as _counted
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
-lazy from hq.platform.application import references, security
+lazy from hq.platform.application import references, request_identity, security
+lazy from hq.platform.application.derivations import this_year
 lazy from hq.platform.application.problems import problems_about as _problems_about
 lazy from hq.platform.application.references import reference_of
 lazy from hq.platform.application.where_it_runs import named_links as _named_links, where_it_runs as _where_it_runs
 lazy from hq.platform.core.oidc import SIGNED_IN_SESSION_KEY
 
 register = template.Library()
+
+# The one form a link to a page outside HQ takes, whichever tag writes it.
+OUTSIDE_LINK = "partials/_outside_link.html"
 
 
 @register.filter
@@ -93,15 +100,14 @@ def or_empty(value):
     """The value, or the one muted mark for a value that is not there.
 
     Built in, so every HQ and extension template has it without a load. Zero is
-    a value and is shown; only None and the empty string are missing. What
-    shows as text (a string, a record's name) holds the names in it
-    (``breakable``); markup, numbers and dates pass as they are.
+    a value and is shown; only None and the empty string are missing. A number
+    passes as it is; anything else is what ``breakable`` makes of it.
     """
     if value is None or value == "":
         return format_html('<span class="empty-value" title="None">{}</span>', MISSING)
-    if not isinstance(value, (SafeData, Number, date, time)):
-        return breakable(value)
-    return value
+    if isinstance(value, Number) and not isinstance(value, bool):
+        return value
+    return breakable(value)
 
 
 def _instant(value) -> date | datetime | None:
@@ -119,12 +125,33 @@ def _instant(value) -> date | datetime | None:
         return None
 
 
+def _dated_mark(value: date):
+    """A day as a mark beside a dated row: its month over its day, and its year
+    under them only when it is not this one. A horizon can run years out (a
+    passport, a license), and month-and-day alone makes a correctly sorted list
+    read as a sorting bug; the current year on every row would be noise on the
+    rows that are actually soon."""
+
+    if isinstance(value, datetime):
+        value = timezone.localtime(value) if timezone.is_aware(value) else value
+    year = (
+        "" if value.year == this_year() else format_html('<span class="timeline-year">{}</span>', breakable(value.year))
+    )
+    return format_html(
+        '<span class="timeline-month">{}</span><span class="timeline-day">{}</span>{}',
+        breakable(dateformat.format(value, "M")),
+        breakable(value.day),
+        year,
+    )
+
+
 # What ``when`` can be asked for, and the words each one shows.
 _WHEN_FORMS = {
     "": _when,
     "ago": lambda value: _ago(value) if isinstance(value, datetime) else _when_day(value),
     "day": _when_day,
     "exact": _when_exact,
+    "mark": _dated_mark,
 }
 
 
@@ -140,6 +167,7 @@ def when(value, form=""):
     - ``{{ at|when:"ago" }}``: "5 days ago", the moment itself on hover.
     - ``{{ at|when:"day" }}``: the day a moment fell on.
     - ``{{ at|when:"exact" }}``: "Oct 3, 2026, 9:29:15 AM CDT".
+    - ``{{ at|when:"mark" }}``: the day as a dated mark, month over day.
 
     Takes a datetime, a date or an ISO stamp. Nothing shows the mark for a
     missing value; text that names no instant is shown as it came, its names held.
@@ -177,6 +205,14 @@ def ago(value):
 
 
 @register.filter
+def day(value):
+    """``{{ moment|day }}``: the day ``when:"day"`` names, as bare words, for
+    a day written where only text may go."""
+
+    return _when_day(value)
+
+
+@register.filter
 def signed_in(request):
     """``{{ request|signed_in }}``: how long ago this session's sign-in was, in hours or days.
 
@@ -187,7 +223,7 @@ def signed_in(request):
 
     session = getattr(request, "session", None)
     when = moment(str(session.get(SIGNED_IN_SESSION_KEY) or "")) if session is not None else None
-    when = when or getattr(getattr(request, "user", None), "last_login", None)
+    when = when or getattr(request_identity.signed_in(request), "last_login", None)
     if when is None:
         return ""
     hours = int((timezone.now() - when).total_seconds() // 3600)
@@ -398,7 +434,12 @@ def _token(word: str, sole: bool) -> str:
     # (figures.css).
     if any(_INNER_HYPHEN.search(part) for part in parts):
         inside = f'<span class="cut">{inside}</span>'
-    return f'<span class="token" data-sole{_short(word)}>{inside}</span>'
+    # The name again, unseen and with nothing to copy, broken only where the
+    # name breaks once a row opens it: a table cell that cuts the name sizes
+    # its column by it, so the column already holds the longest piece
+    # (tables.css). First, so a mark after the name lands in the name.
+    strut = f'<span class="strut" data-strut="{"&#8203;".join(parts)}" aria-hidden="true"></span>'
+    return f'{strut}<span class="token" data-sole{_short(word)}>{inside}</span>'
 
 
 # The characters a value a cell cuts holds out for (`--cut-floor`,
@@ -441,8 +482,11 @@ def breakable(value, mark=""):
     """
 
     mark = _mark(mark)
-    if isinstance(value, SafeData):
-        return value + conditional_escape(mark)
+    value = admitted(value)
+    # Markup is whatever renders itself: a form field is not SafeData until
+    # Django renders it.
+    if hasattr(value, "__html__"):
+        return conditional_escape(value) + conditional_escape(mark)
     # Escaped first, so the only markup in the result is what is added here.
     text = str(conditional_escape(value))
     words = _WORDS.split(text)
@@ -519,19 +563,18 @@ def entity(context, link, code=False, label="", mark=""):
         return format_html('<span class="empty-value" title="None">{}</span>', MISSING) + conditional_escape(
             _mark(mark)
         )
-    if label:
+    # A count of nothing is still a name to show.
+    if label is not None and label != "":
         link = replace(link, label=str(label))
     label = format_html("<code>{}</code>", breakable(link.label, mark)) if code else breakable(link.label, mark)
     if link.url and not link.external and _is_this_page(context, link.url):
         return format_html('<span data-entity="{}">{}</span>', link.kind_label, label)
     if link.url and link.external:
-        return format_html(
-            '<a href="{}" data-entity="{}" class="external-link" target="_blank" '
-            'rel="noopener noreferrer" title="Opens {}">{}</a>',
-            link.url,
-            link.kind_label,
-            link.kind_label,
-            label,
+        return mark_safe(
+            render_to_string(
+                OUTSIDE_LINK,
+                {"url": link.url, "arrow": True, "entity": link.kind_label, "content": label},
+            ).strip()
         )
     if link.url:
         return format_html(
@@ -614,6 +657,16 @@ def declared_link(link):
 
 
 @register.filter
+def outside(url):
+    """``{% entity url|outside label=name %}``: a page outside HQ, named.
+
+    A url that is not a web address leaves the name unlinked, so a page builds
+    no href from data HQ did not write (``web_url``)."""
+
+    return declared("", _web_url(url), kind="dependency")
+
+
+@register.filter
 def connection_anchor(ref):
     """The id of a connection's row, the target of its entity link."""
 
@@ -634,12 +687,19 @@ def readout(value):
     copy, and put a gray chip around each number in a list of three numbers.
     """
 
-    text = str(value)
+    text = str(admitted(value))
     if " " not in text.strip() and _IDENTIFIER.search(text):
         return format_html("<code>{}</code>", breakable(text))
     # A phrase can still name something ("restart example-web"): its names
     # are held as tokens, its words stay text.
     return breakable(text)
+
+
+@register.filter
+def host(url):
+    """The host a web address names: what an outside link says it opens."""
+
+    return urlsplit(str(url or "")).hostname or ""
 
 
 @register.filter
@@ -685,7 +745,66 @@ def not_urgent(problems):
 
 
 @register.simple_tag
-def rendered_copy() -> bool:
-    """Whether this render is a saved copy of HQ (``SEVERINO_RENDERED_COPY``)."""
+def rendered_copy() -> datetime | None:
+    """When this saved copy of HQ was saved (``SEVERINO_RENDERED_COPY``), which
+    is the moment it was rendered; None for a running HQ."""
 
-    return bool(settings.SEVERINO_RENDERED_COPY)
+    return timezone.now() if settings.SEVERINO_RENDERED_COPY else None
+
+
+class SlotsNode(template.Node):
+    """A block tag drawn by its partial, each part it encloses handed over as
+    the variable it is named for (``slotted``)."""
+
+    def __init__(self, partial: str, parts: dict[str, template.NodeList], options: dict) -> None:
+        self.partial = partial
+        self.options = options
+        self.child_nodelists = tuple(f"nodelist_{name}" for name in parts)
+        for name, nodelist in parts.items():
+            setattr(self, f"nodelist_{name}", nodelist)
+
+    def render(self, context) -> str:
+        values = {name: value.resolve(context) for name, value in self.options.items()}
+        for attribute in self.child_nodelists:
+            # Rendered by the page's own template, so escaped already. A part
+            # left empty leaves an option of its name as it is.
+            part = mark_safe(getattr(self, attribute).render(context).strip())
+            name = attribute.removeprefix("nodelist_")
+            if part or name not in values:
+                values[name] = part
+        return context.template.engine.get_template(self.partial).render(context.new(values)).strip()
+
+
+def slotted(name: str, partial: str, parts: tuple[str, ...], options: frozenset[str]) -> None:
+    """Register ``{% name option=value %}first{% second %}...{% endname %}``:
+    markup a page would otherwise write by hand, drawn by ``partial`` with
+    each part as the variable it is named for. The first part follows the
+    opening tag; the others may be left out, and come in ``parts``' order."""
+
+    end = f"end{name}"
+
+    def compile_(parser, token) -> SlotsNode:
+        bits = token.split_contents()
+        given = token_kwargs(bits[1:], parser)
+        if len(given) != len(bits) - 1 or not set(given) <= options:
+            raise template.TemplateSyntaxError(f"{name} takes {', '.join(sorted(options))} as name=value")
+        found = {part: template.NodeList() for part in parts}
+        ahead = list(parts)
+        while True:
+            found[ahead.pop(0)] = parser.parse((*ahead, end))
+            marker = parser.next_token().contents
+            if marker == end:
+                return SlotsNode(partial, found, given)
+            ahead = ahead[ahead.index(marker) :]
+
+    register.tag(name, compile_)
+
+
+slotted("section_head", "partials/_section_head.html", ("heading", "aside"), frozenset(("id", "lede")))
+slotted(
+    "outside_link",
+    OUTSIDE_LINK,
+    ("content",),
+    frozenset(("url", "css", "tone", "tip", "title", "label", "modal", "entity")),
+)
+slotted("band_fact", "partials/_band_fact.html", ("value",), frozenset(("icon", "label", "tone")))

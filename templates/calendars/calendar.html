@@ -8,28 +8,26 @@ opening a day ask this page for the `calendar` part and take it in place.
 {% partialdef calendar inline %}
 <div class="split calendar-layout" id="calendar" data-fragment data-fragment-name="calendar" data-fragment-links data-fragment-history="replace">
   <section class="card calendar-month" id="calendar-month" aria-labelledby="calendar-period">
-    <div class="section-head">
-      <h2 id="calendar-period">{{ calendar.month|date:"F Y" }}</h2>
+    {% section_head id="calendar-period" %}{{ calendar.month|date:"F Y" }}{% aside %}
       <nav class="calendar-nav" aria-label="Change month">
         <a href="{{ previous_url }}" rel="prev" aria-label="Previous month" data-hotkey="ArrowLeft k p">&lsaquo;</a>
         <a class="calendar-now" href="{{ today_url }}" data-hotkey="t"{% if calendar.is_current %} aria-current="date"{% endif %}>Today</a>
         <a href="{{ next_url }}" rel="next" aria-label="Next month" data-hotkey="ArrowRight j n">&rsaquo;</a>
       </nav>
-    </div>
+    {% endsection_head %}
     {% include "calendars/_month_grid.html" %}
   </section>
 
   <aside class="calendar-aside">
     {% if day %}
       <section class="card day-panel" id="day-panel" aria-labelledby="day-panel-title">
-        <div class="section-head">
-          <h2 id="day-panel-title">{% if day.day == day.today %}Today{% else %}{{ day.day|date:"l" }}{% endif %} <span class="muted">{{ day.day|when:"day" }}</span></h2>
+        {% section_head id="day-panel-title" %}{% if day.day == day.today %}Today{% else %}{{ day.day|date:"l" }}{% endif %} <span class="muted">{{ day.day|when:"day" }}</span>{% aside %}
           <nav class="calendar-nav" aria-label="Change day">
-            <a href="?month={{ day.previous|date:'Y-m' }}&amp;day={{ day.previous|date:'Y-m-d' }}" rel="prev" aria-label="Previous day">&lsaquo;</a>
-            <a href="?month={{ day.next|date:'Y-m' }}&amp;day={{ day.next|date:'Y-m-d' }}" rel="next" aria-label="Next day">&rsaquo;</a>
+            <a href="{{ day.previous_url }}" rel="prev" aria-label="Previous day">&lsaquo;</a>
+            <a href="{{ day.next_url }}" rel="next" aria-label="Next day">&rsaquo;</a>
             <a href="?month={{ calendar.month|date:'Y-m' }}" aria-label="Close this day" data-hotkey="Escape">&times;</a>
           </nav>
-        </div>
+        {% endsection_head %}
         {% if entry %}
           <article class="day-panel-entry" aria-label="{{ entry.object.title }}">
             <h3>{{ entry.object.title|breakable }}</h3>
@@ -47,13 +45,13 @@ opening a day ask this page for the `calendar` part and take it in place.
         {% empty %}
           {% if not entry %}<p class="muted">Nothing on this day.</p>{% endif %}
         {% endfor %}
-        <p><a href="{{ new_entry_url }}?on={{ day.day|date:'Y-m-d' }}" data-hotkey="c">{% words "calendar.entry.create" %}</a></p>
+        <p><a href="{{ day.new_entry_url }}" data-hotkey="c">{% words "calendar.entry.create" %}</a></p>
       </section>
     {% endif %}
 
     {% if upcoming %}
       <section class="card calendar-upcoming" aria-labelledby="calendar-upcoming-title">
-        <div class="section-head"><h2 id="calendar-upcoming-title">Upcoming</h2></div>
+        {% section_head id="calendar-upcoming-title" %}Upcoming{% endsection_head %}
         {% include "partials/_record_list.html" with rows=upcoming label="Upcoming" %}
       </section>
     {% endif %}

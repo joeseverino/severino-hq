@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 lazy from hq_sdk import contract, template_contract, text_contract
 
-BEGIN = "<!-- sdk_contract: shared UI contract, written by `mise run regen` from hq_sdk/template_contract.py -->"
+BEGIN = "<!-- sdk_contract: shared UI contract, written by `mise run fix` from hq_sdk/template_contract.py -->"
 END = "<!-- /sdk_contract -->"
 
 
@@ -55,7 +55,7 @@ class Command(BaseCommand):
                 for line in differences:
                     self.stderr.write(line)
                 raise CommandError(
-                    "The SDK's committed record is behind the host; run `mise run regen`, "
+                    "The SDK's committed record is behind the host; run `mise run fix`, "
                     "review the diff, and decide whether PLUGIN_API_VERSION must move."
                 )
             self.stdout.write("hq_sdk contract is current.")

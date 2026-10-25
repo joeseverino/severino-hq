@@ -7,14 +7,15 @@ Dropzone: a file field that also accepts a drop.
 The real <input type="file"> covers the zone, so clicking anywhere opens the
 picker and a browser drop lands on the input natively. JavaScript only adds the
 drag highlight and the list of chosen files: with it unavailable the field
-still selects, validates, and submits.
+still selects, validates, and submits. The hint and the errors carry the ids
+the input's aria-describedby names.
 {% endcomment %}
 <div class="field{% if field.errors %} has-errors{% endif %}">
   <label class="dropzone" data-dropzone>
     {{ field }}
     <span class="dropzone-title">{{ title|default:field.label|breakable }}</span>
-    <span class="dropzone-hint">{{ hint|default:field.help_text|breakable }}</span>
+    <span class="dropzone-hint"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ hint|default:field.help_text|breakable }}</span>
     <ul class="dropzone-files" data-dropzone-files hidden></ul>
   </label>
-  {% if field.errors %}<ul class="errors">{% for error in field.errors %}<li>{{ error|breakable }}</li>{% endfor %}</ul>{% endif %}
+  {% if field.errors %}<ul class="errors"{% if field.auto_id %} id="{{ field.auto_id }}_error"{% endif %}>{% for error in field.errors %}<li>{{ error|breakable }}</li>{% endfor %}</ul>{% endif %}
 </div>

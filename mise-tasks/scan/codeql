@@ -1,8 +1,9 @@
 #!/bin/sh
 #MISE description="CodeQL, security-and-quality: no alerts"
+#MISE hide=true
 
-# What CI's CodeQL job runs, before pushing rather than after merging: the
-# bundle mise.toml pins (checks:codeql-bundle holds it to the action), the
+# What CI's scan job runs, before pushing rather than after merging: the
+# bundle mise.toml pins (lint:codeql-bundle holds it to the action), the
 # security-and-quality suite, and the paths and rules
 # .github/codeql/codeql-config.yml leaves out. It reads an export of the files
 # git would push, so a local .venv or stray build output is not scanned.
@@ -13,6 +14,9 @@ set -eu
 
 work="$(scan_tree codeql)"
 src="${work}/src"
+# The export and the database are rebuilt on every run, and the database alone
+# is hundreds of megabytes; codeql.sarif holds the findings.
+trap 'rm -rf "${src}" "${work}/codeql-db"' EXIT
 
 echo "[codeql] CodeQL $(codeql version --format=terse) database"
 # `--build-mode none` is what the Action uses for Python: nothing is compiled,

@@ -7,12 +7,15 @@ from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
 from hq.platform.application.tests.markup import elements
-from hq.platform.core.stylesheets import DIRECTORY, SHEETS, STATIC, sheet_paths
+from hq.platform.core.stylesheets import DIRECTORY, SHEETS, STATIC, sheet_paths, stylesheet
 
 LAYER_ORDER = re.compile(r"@layer\s+([\w\s,.-]+);")
 LAYER_BLOCK = re.compile(r"@layer\s+([\w.-]+)\s*\{")
 CONTAINER_QUERY = re.compile(r"@container\s+([^{]+)\{")
 QUERY_NAME = re.compile(r"([a-zA-Z_][\w-]*)\s*(?=\(|not\b|style\()")
+# A query of a custom property's value, asked or negated: a style query is
+# asked of the element's parent, never of a size container.
+STYLE_QUERY = re.compile(r"(?:not\s+)?style\(")
 CONTAINER_NAMES = re.compile(r"(?:^|[{;])\s*container(?:-name)?\s*:\s*([^;{}/]+)")
 # A rule with no rule nested in it: its selector and its declarations.
 RULE = re.compile(r"([^{}]+)\{([^{}]*)\}")
@@ -20,6 +23,8 @@ CELL = re.compile(r"(?<![\w.#-])(?:td|th)(?![\w-])")
 HELD_WIDTH = re.compile(r"(?:^|;)\s*min-width\s*:(?!\s*0(?:px)?\s*(?:;|$))", re.MULTILINE)
 NOWRAP = re.compile(r"white-space\s*:\s*nowrap")
 CLIPPED = re.compile(r"overflow(?:-x)?\s*:\s*(?:hidden|clip)")
+# The one-pixel clip that keeps text for a screen reader alone.
+CLIP_RECIPE = re.compile(r"clip-path\s*:\s*inset\(50%\)")
 TABLE_PRIMITIVES = frozenset({"tables.css", "figures.css"})
 FONT_FACE = re.compile(r"@font-face\s*\{[^{}]*\}")
 FETCHED = re.compile(r"\burl\(|@import\b")
@@ -29,7 +34,7 @@ def _uncommented(css: str) -> str:
     return re.sub(r"/\*.*?\*/", " ", css, flags=re.DOTALL)
 
 
-@tag("source")
+@tag("source", "tree")
 class SheetTests(SimpleTestCase):
     def test_every_sheet_in_the_directory_is_linked(self):
         """A sheet left out of the list is never linked, and every check of the
@@ -64,10 +69,10 @@ class SheetTests(SimpleTestCase):
         declared = {name for names in CONTAINER_NAMES.findall(css) for name in names.split()}
         unnamed, undeclared = [], []
         for prelude in (query.strip() for query in CONTAINER_QUERY.findall(css)):
-            if prelude.startswith("style("):
+            if STYLE_QUERY.match(prelude):
                 continue
             named = QUERY_NAME.match(prelude)
-            if named is None or named.group(1) in {"not", "style"}:
+            if named is None or named.group(1) == "not":
                 unnamed.append(prelude)
             elif named.group(1) not in declared:
                 undeclared.append(prelude)
@@ -94,6 +99,18 @@ class SheetTests(SimpleTestCase):
                     found.append(f"{path.name}: {' '.join(selector.split())}")
 
         self.assertEqual(found, [], "a cell's line is held only by the table primitives")
+
+    def test_text_for_a_screen_reader_alone_is_hidden_by_the_one_class(self):
+        """What only a screen reader hears is `.visually-hidden`
+        (cadence.css), never the same recipe restated under another selector,
+        so a change to how it is clipped is made once."""
+
+        found = [
+            " ".join(selector.split())
+            for selector, body in RULE.findall(_uncommented(stylesheet()))
+            if CLIP_RECIPE.search(body) and selector.strip() != ".visually-hidden"
+        ]
+        self.assertEqual(found, [])
 
     def test_a_sheet_fetches_nothing_but_its_faces(self):
         """An image or sheet a rule fetches arrives after the page is drawn and

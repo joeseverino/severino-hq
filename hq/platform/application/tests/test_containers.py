@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import timedelta
 from unittest import mock
 
@@ -7,9 +8,11 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
-from ..containers import BEHIND, CURRENT, UNKNOWN, VULNERABLE, attention, containers
+from ..containers import BEHIND, CURRENT, UNKNOWN, VULNERABLE, Running, Tally, attention, containers, tally
 from ..exposure import OPEN, PRIVATE, Exposure, RouteExposure, front_door_names, listening_ports
+from ..github_estate import Repository
 from .markup import text
 
 
@@ -150,8 +153,10 @@ class StandingTests(TestCase):
             [
                 (
                     "do",
-                    "On example-box, set the image of kuma to docker.io/example/kuma:2 where it is defined, "
-                    "then start it again.",
+                    (
+                        "On example-box, set the image of kuma to docker.io/example/kuma:2 where it is defined, "
+                        "then start it again."
+                    ),
                 ),
                 ("cannot", "HQ cannot apply an update itself yet."),
             ],
@@ -201,10 +206,14 @@ class StandingTests(TestCase):
             (step.phase, step.label, step.summary),
             (
                 "run",
-                "On example-box, set the image of kuma to docker.io/example/kuma:2 in "
-                "/opt/apps/kuma/compose.override.yaml, then run",
-                'ssh example-box "sudo docker compose -f /opt/apps/kuma/compose.yaml '
-                '-f /opt/apps/kuma/compose.override.yaml up -d kuma-web"',
+                (
+                    "On example-box, set the image of kuma to docker.io/example/kuma:2 in "
+                    "/opt/apps/kuma/compose.override.yaml, then run"
+                ),
+                (
+                    'ssh example-box "sudo docker compose -f /opt/apps/kuma/compose.yaml '
+                    '-f /opt/apps/kuma/compose.override.yaml up -d kuma-web"'
+                ),
             ),
         )
 
@@ -278,6 +287,80 @@ class StandingTests(TestCase):
         self.assertEqual(attention(), ())
 
 
+class ToneTests(TestCase):
+    """Each fact's tone, decided where the fact is built."""
+
+    def test_a_vulnerability_is_serious_when_high_attention_when_lower_and_a_clean_check_good(self):
+        estate(advisories=[HIGH])
+        app = next(item.standing for item in containers() if item.running.name == "app")
+        self.assertEqual(app.vulnerability_tone, "serious")
+
+        estate(advisories=[{**HIGH, "severity": "medium"}])
+        found = {item.running.name: item.standing for item in containers()}
+        self.assertEqual(found["app"].vulnerability_tone, "attention")
+
+        estate()
+        found = {item.running.name: item.standing for item in containers()}
+        # Kuma names no source and no package list: nothing was checked.
+        self.assertEqual((found["app"].vulnerability_tone, found["kuma"].vulnerability_tone), ("good", ""))
+
+    def test_a_newer_version_asks_for_attention_and_a_newest_one_is_good(self):
+        estate()
+
+        found = {item.running.name: item.standing for item in containers()}
+
+        self.assertEqual((found["kuma"].update_tone, found["web"].update_tone), ("attention", "good"))
+
+    def test_a_repository_s_alerts_are_serious_when_high_attention_when_lower_and_good_when_clear(self):
+        estate()
+        standing = containers()[0].standing
+
+        def tone(**counts):
+            repository = Repository("example/app", {"alerts": {"dependabot": counts}}, None)
+            return replace(standing, repository=repository).alerts_tone
+
+        self.assertEqual((tone(high=1), tone(low=1), tone()), ("serious", "attention", "good"))
+        self.assertEqual(standing.alerts_tone, "")
+
+    def test_a_container_is_good_running_and_serious_otherwise(self):
+        record = running("web", "example/web:1.0.0")
+
+        tones = [Running.of({**record, "state": state}, None).state_tone for state in ("running", "exited")]
+
+        self.assertEqual(tones, ["good", "serious"])
+
+    def test_a_tally_counts_each_container_and_says_its_tones(self):
+        estate(advisories=[HIGH])
+
+        found = tally(containers())
+
+        self.assertEqual(
+            (found.running, found.vulnerable, found.vulnerable_images, found.update_available, found.up_to_date),
+            (3, 1, 1, 2, 1),
+        )
+        self.assertEqual(
+            (found.vulnerable_tone, found.updates_tone, found.pinned_tone, found.tone),
+            ("serious", "attention", "", "serious"),
+        )
+
+    def test_a_tally_is_good_only_when_every_container_is(self):
+        clean = Tally(
+            running=2,
+            vulnerable=0,
+            vulnerable_images=0,
+            update_available=0,
+            up_to_date=2,
+            pinned=2,
+            checkable=2,
+            stopped=0,
+        )
+
+        self.assertEqual((clean.vulnerable_tone, clean.updates_tone, clean.pinned_tone, clean.tone), ("good",) * 4)
+        self.assertEqual(replace(clean, stopped=1).tone, "serious")
+        self.assertEqual(replace(clean, update_available=1, up_to_date=1).tone, "attention")
+        self.assertEqual(replace(clean, up_to_date=1).updates_tone, "")
+
+
 class RefreshTests(TestCase):
     def test_the_upstreams_read_are_the_ones_the_images_name(self):
         from hq.platform.application.public_registry import refresh
@@ -324,7 +407,8 @@ class PageTests(TestCase):
         needs = [group["standing"].label for group in response.context["needs"]]
         self.assertEqual(needs, ["ghcr.io/example/app:v1.2.0", "example/kuma:1"])
         self.assertContains(response, "GHSA-high")
-        self.assertEqual((response.context["pinned"], response.context["matched"]), (2, 1))
+        tally = response.context["tally"]
+        self.assertEqual((tally.pinned, tally.checkable), (2, 1))
 
     def test_a_version_nothing_can_fix_and_nothing_public_reaches_does_not_need_you(self):
         estate(advisories=[HIGH], app_tags=("v1.2.0",))
@@ -335,7 +419,7 @@ class PageTests(TestCase):
         needs = [group["standing"].label for group in response.context["needs"]]
         self.assertNotIn("ghcr.io/example/app:v1.2.0", needs)
         # Still counted where the page says what is known.
-        self.assertEqual(response.context["vulnerable"], 1)
+        self.assertEqual(response.context["tally"].vulnerable, 1)
         with exposed(OPEN):
             response = self.client.get(reverse("control_plane:containers"))
         self.assertIn("ghcr.io/example/app:v1.2.0", [group["standing"].label for group in response.context["needs"]])
@@ -423,20 +507,21 @@ class QueryBudgetTests(TestCase):
     def setUp(self):
         self.client.force_login(get_user_model().objects.create_user("owner", password="unused-password"))
 
-    def queries_for(self, count):
-        from django.db import connection
-        from django.test.utils import CaptureQueriesContext
-
+    def arrange(self, count):
         estate()
         inventory(
             "portainer.container", [running(f"app-{index}", "ghcr.io/example/app:v1.2.0") for index in range(count)]
         )
-        with CaptureQueriesContext(connection) as captured:
-            self.assertEqual(self.client.get(reverse("control_plane:containers")).status_code, 200)
-        return len(captured)
+
+    def draw(self, _count):
+        response = self.client.get(reverse("control_plane:containers"))
+        self.assertEqual(response.status_code, 200)
+        return response
 
     def test_the_cost_does_not_grow_with_the_containers(self):
-        self.assertEqual(self.queries_for(3), self.queries_for(30))
+        assert_cost_does_not_grow(
+            self, sizes=(3, 30), arrange=self.arrange, draw=self.draw, rows=distinct(r"\bapp-\d+\b")
+        )
 
 
 class RetryTests(TestCase):

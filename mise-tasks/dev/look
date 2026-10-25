@@ -1,0 +1,98 @@
+#!/bin/sh
+#MISE description="To see what a page change looks like: screenshots as the browser gates draw them, judged by a rule if asked; --docs to redraw the docs' pictures"
+#MISE extends="django"
+#MISE depends=[{task="setup:browser", args=["{{usage.engine}}"]}]
+#MISE timeout="30m"
+#USAGE arg "[pages]" var=#true help="Pages, unless --docs: a gate page (connections, dense/services, derived/<app>/<list>), api/docs, estate/<path>, a path (/infrastructure/containers/), a route name (control_plane:containers), estate/all, or all"
+#USAGE flag "--docs" help="Redraw every screenshot in the docs from the showcase demo instead, after a change to a page one shows"
+#USAGE flag "--widths <widths>" help="Comma-separated widths in CSS pixels; default the phone, 820 and 1360"
+#USAGE flag "--rule <rule>" help="What to judge on each page: survey (every check the browser gates hold), tables (print each table) or one layout check by name, such as a_table_fits_its_box_at_every_width. Findings go to var/gate/look.txt"
+#USAGE flag "--css <css>" help="Extra CSS after app.css, as text or a file: the defect a new rule must catch"
+#USAGE flag "--base <ref>" help="Also look at <ref> in a temporary worktree and report only findings and errors new or fixed here; implies --rule survey and --perf"
+#USAGE flag "--perf" negate="--no-perf" help="Then measure the estate pages asked with mise run perf, beside --base's; on by default with --base"
+#USAGE flag "--seed <name>" default="showcase" help="The data set the estate pages are drawn on, by its name in hq.platform.core.seeds"
+#USAGE flag "--columns" help="Also print each table's column widths as drawn, at min-content and at max-content"
+#USAGE flag "--eval <file>" help="Run the script in <file> on each page at each width before the screenshot and print what it returns"
+#USAGE flag "--dialog <ids>" help="Also shoot each page with these dialogs open, comma-separated ids or all; --rule runs again inside each"
+#USAGE flag "--slow <ms>" help="Draw as a loaded machine does, each animation frame <ms> late, to reproduce a timing flake"
+#USAGE flag "--engine <engine>" default="webkit" help="The browser engine to draw in, installed first" {
+#USAGE   choices "webkit" "chromium" "firefox"
+#USAGE }
+#USAGE flag "--dark" help="In the dark palette"
+#USAGE flag "--fallback-face" help="With Inter withheld, in the next face of the font stack"
+#USAGE flag "--open" help="With every disclosure open; --rule runs again with one popover of each kind shown, and shoots it"
+#USAGE flag "--expand" help="With every table row opened"
+#USAGE flag "--no-script" help="As the server drew it, before any script runs"
+#USAGE flag "--deep" help="Also every page the estate pages link to: each record and the command forms it opens"
+
+# The look is hq/platform/core/tests/look.py; `mise run perf` measures after
+# it, in the same heavy turn. The docs' pictures are demo/screenshot.py's, a
+# step of its own (dev:look:docs) with the demo it draws from.
+set -eu
+
+if [ "${usage_docs:-}" = true ]; then
+    exec mise run dev:look:docs
+fi
+[ -n "${usage_pages:-}" ] || { echo "mise run dev:look: name the pages to look at, or --docs" >&2; exit 64; }
+
+# A look at the pages it names holds a fraction of a suite's memory, so it
+# runs beside other heavy work, as `mise run test` runs light labels; every
+# page, every page linked, a base or a measure takes the heavy turn.
+light_run=1
+[ -z "${usage_base:-}" ] && [ "${usage_perf:-}" != true ] && [ "${usage_deep:-}" != true ] || light_run=""
+# mise hands the pages over shell-quoted, one word each.
+eval "set -- ${usage_pages:?}"
+for page do
+    case "${page}" in all | estate/all) light_run="" ;; esac
+done
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+
+# The test database outlives the run (Django's --keepdb), so the next run
+# migrates only what is new. A run that did not come back to say it ended may
+# have left its estate committed there, so the next one starts from a new
+# file. A look against a base keeps none: the run at the base inherits this
+# environment, and a database migrated here does not fit the code there.
+keep=""
+if [ -z "${usage_base:-}" ]; then
+    kept="${MISE_CONFIG_ROOT}/var/dev-look"
+    mkdir -p "${kept}"
+    [ ! -e "${kept}/running" ] || rm -f "${kept}"/test.sqlite3*
+    : >"${kept}/running"
+    SEVERINO_TEST_DATABASE_PATH="${kept}/test.sqlite3"
+    export SEVERINO_TEST_DATABASE_PATH
+    keep=--keepdb
+fi
+
+looked=0
+HQ_BROWSER_ENGINE="${usage_engine:?}" HQ_BROWSER_FACE="${usage_fallback_face:+fallback}" \
+    HQ_BROWSER_SLOW="${usage_slow:-${HQ_BROWSER_SLOW:-}}" \
+    uv run --group browser python manage.py test hq.platform.core.tests.look.Look.test_look --noinput --parallel 1 \
+    ${keep} || looked=$?
+[ -z "${keep}" ] || rm -f "${kept}/running"
+
+case "${usage_perf:-}" in
+    true) measure=1 ;;
+    false) measure="" ;;
+    *) measure="${usage_base:+1}" ;;
+esac
+[ -n "${measure}" ] || exit "${looked}"
+
+# `mise run perf` serves the example estate alone, so it measures the estate pages asked.
+for page do
+    shift
+    case "${page}" in
+        estate | estate/* | /* | *:*) set -- "$@" "${page}" ;;
+        all)
+            set -- "$@" all
+            echo "mise run perf measures the example estate's pages of all, not the stress or reference pages"
+            ;;
+        *) echo "mise run perf does not measure ${page}: it serves the example estate's pages alone" ;;
+    esac
+done
+[ "$#" -gt 0 ] || exit "${looked}"
+
+measured=0
+mise run perf "$@" --seed "${usage_seed:?}" ${usage_base:+--base "${usage_base}"} || measured=$?
+[ "${looked}" -ne 0 ] && exit "${looked}"
+exit "${measured}"

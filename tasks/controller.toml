@@ -1,5 +1,0 @@
-# The Controller job.
-
-["controller:check"]
-description = "The Go controller: format, generated types, vet, race tests"
-run = "controller/scripts/check.sh"

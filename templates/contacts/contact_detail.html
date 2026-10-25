@@ -10,7 +10,7 @@
 </div>
 
 <section class="card">
-  <div class="section-head"><h2>Message</h2><span class="pill pill-{{ submission.status|default:'unread' }}">{{ submission.status|default:"unread"|capfirst|breakable }}</span>{% if submission.pending %} <span class="pill pill-attention">{% waiting %}</span>{% endif %}</div>
+  {% section_head %}Message{% aside %}<span class="pill pill-{{ submission.status|default:'unread' }}">{{ submission.status|default:"unread"|capfirst|breakable }}</span>{% if submission.pending %} <span class="pill pill-attention">{% waiting %}</span>{% endif %}{% endsection_head %}
   <dl class="kv">
     <dt>Name</dt><dd>{{ submission.name|breakable }}</dd>
     <dt>Email</dt><dd><a href="{{ reply_href }}">{{ submission.email|breakable }}</a></dd>
@@ -19,7 +19,7 @@
 </section>
 
 <section class="card">
-  <div class="section-head"><h2>How it arrived</h2></div>
+  {% section_head %}How it arrived{% endsection_head %}
   <dl class="kv">
     <dt>Number</dt><dd>#{{ submission.id|breakable }}</dd>
     <dt>Bot check</dt><dd>{{ submission.turnstile|or_empty }}</dd>
@@ -29,17 +29,17 @@
     <dt>Browser</dt><dd>{{ submission.browser|or_empty }}</dd>
     <dt>Device</dt><dd>{{ submission.device|or_empty }}</dd>
     <dt>Country</dt><dd>{{ submission.country|or_empty }}</dd>
-    {% if submission.source_url %}<dt>Sent from</dt><dd>{% if submission.source_url|web_url %}<a href="{{ submission.source_url|web_url }}" rel="noopener noreferrer">{{ submission.source_url|breakable }}</a>{% else %}{{ submission.source_url|breakable }}{% endif %}</dd>{% endif %}
+    {% if submission.source_url %}<dt>Sent from</dt><dd>{% entity submission.source_url|outside label=submission.source_url %}</dd>{% endif %}
     <dt>User agent</dt><dd class="muted">{{ submission.user_agent|or_empty }}</dd>
   </dl>
 </section>
 
 <section class="card">
-  <div class="section-head"><h2>Your notes</h2></div>
+  {% section_head %}Your notes{% endsection_head %}
   <form method="post" class="form">
     {% csrf_token %}
-    {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
-    {% for field in form %}{% include "partials/_form_field.html" %}{% endfor %}
+    {% include "partials/_form_errors.html" %}
+    {{ form }}
     <div class="form-actions">
       <button type="submit" class="primary">Save note</button>
     </div>

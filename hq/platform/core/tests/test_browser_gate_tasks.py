@@ -3,28 +3,30 @@ runs. The gates' `--fallback-face` still finds the face it withholds."""
 
 import ast
 import os
+import tomllib
+from collections import Counter
 from pathlib import Path
 from unittest import mock
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.core.browser_tests import in_the_face
+from hq.platform.core.tests.browser.serving import in_the_face
+from hq.platform.core.tests.browser_modules import browser_modules
 from tests.mise_tasks import body, mise_tasks
 
 ROOT = Path(__file__).resolve().parents[4]
-MODULES = ("hq.platform.core.browser_tests", "hq.platform.core.estate_browser_tests")
 BASE = "BrowserGate"
 
 
-def gate_classes(root: Path) -> dict[str, str]:
+def gate_classes() -> dict[str, str]:
     """Each class built on the browser gate that holds tests, its own or inherited, as ``module.Class``, by module.
 
     A class that holds only rules for others to run runs nothing when named.
     """
 
     defined: dict[str, tuple[str, ast.ClassDef]] = {}
-    for module in MODULES:
-        tree = ast.parse((root / (module.replace(".", "/") + ".py")).read_text())
+    for module, path in browser_modules().items():
+        tree = ast.parse(path.read_text())
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef):
                 defined[node.name] = (module, node)
@@ -47,21 +49,48 @@ def gate_classes(root: Path) -> dict[str, str]:
     }
 
 
+def browser_tasks() -> dict[str, dict]:
+    return {name: task for name, task in mise_tasks().items() if name.startswith("browser:")}
+
+
 def browser_labels() -> set[str]:
     """Every word the ``browser:*`` tasks run."""
 
-    return {word for name, task in mise_tasks().items() if name.startswith("browser:") for word in body(task).split()}
+    return {word for task in browser_tasks().values() for word in body(task).split()}
 
 
-@tag("source")
+@tag("source", "tree")
 class BrowserGateTaskTests(SimpleTestCase):
     def test_every_browser_test_class_is_named_by_a_browser_task(self):
-        classes = gate_classes(ROOT)
+        classes = gate_classes()
         labels = browser_labels()
 
         self.assertTrue(classes)
         unnamed = sorted(name for name, module in classes.items() if name not in labels and module not in labels)
         self.assertEqual(unnamed, [], "no browser:* task runs these")
+        # Once per engine: a WebKit leg names its classes, and a leg in
+        # another engine runs a WebKit leg rather than naming any.
+        named = Counter(
+            name
+            for task in browser_tasks().values()
+            for name, module in classes.items()
+            if {name, module} & set(body(task).split())
+        )
+        self.assertEqual(sorted(name for name, count in named.items() if count > 1), [], "two browser tasks run these")
+        run = Counter(
+            word for name, task in browser_tasks().items() if "chromium" in name for word in body(task).split()
+        )
+        legs = [name for name in browser_tasks() if name.startswith("browser:layout-") and "chromium" not in name]
+        self.assertEqual({leg: run[leg] for leg in legs}, dict.fromkeys(legs, 1), "Chromium runs each layout leg once")
+
+    def test_a_browser_gate_s_template_restates_django_s_env(self):
+        """A template extends none, so each Django gate template carries the
+        env of ``django`` itself: a gate never opens the developer's database."""
+
+        templates = tomllib.loads((ROOT / "mise.toml").read_text())["task_templates"]
+        for name in ("django-heavy", "django-browser"):
+            with self.subTest(template=name):
+                self.assertEqual(templates[name]["env"], templates["django"]["env"])
 
 
 @tag("source")

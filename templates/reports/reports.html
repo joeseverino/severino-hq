@@ -76,10 +76,7 @@ mostly empty card. A reading with nothing in it is not drawn.
 
   {% if docs_needing_review %}
   <section>
-    <div class="section-head">
-      <h2>Documents due for review</h2>
-      <a class="subtle-link" href="{{ docs_needing_review_url }}">All &rarr;</a>
-    </div>
+    {% section_head %}Documents due for review{% aside %}<a class="subtle-link" href="{{ docs_needing_review_url }}">All &rarr;</a>{% endsection_head %}
     <ul class="list-rows">
       {% for link, reviewed in docs_needing_review %}
         <li><span class="row-main">{% entity link %}</span><span class="row-meta">{% if reviewed %}last reviewed {{ reviewed|when:"day" }}{% else %}never reviewed{% endif %}</span></li>
@@ -95,10 +92,7 @@ Each export once, by what it holds, its files beside it: a list on a card,
 not a wall of buttons.
 {% endcomment %}
 <section class="card" aria-labelledby="exports-heading">
-  <div class="section-head">
-    <h2 id="exports-heading">Exports</h2>
-    <span class="count">Without secrets, sensitive documents' text or receipt files</span>
-  </div>
+  {% section_head id="exports-heading" %}Exports{% aside %}<span class="count">Without secrets, sensitive documents' text or receipt files</span>{% endsection_head %}
   <dl class="kv">
     <dt>Expenses</dt><dd class="dot-list"><span><a href="{% url 'reports:expenses_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></span><span><a href="{% url 'reports:expenses_csv' %}">All years CSV</a></span></dd>
     <dt>Assets</dt><dd class="dot-list"><span><a href="{% url 'reports:assets_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></span><span><a href="{% url 'reports:assets_csv' %}">All years CSV</a></span></dd>

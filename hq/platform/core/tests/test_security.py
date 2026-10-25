@@ -622,16 +622,17 @@ class PrecompressedStaticTests(SimpleTestCase):
     """An asset is compressed once, when it is collected, and that copy is what is sent."""
 
     BODY = "body { color: red }\n" * 200
-    # Not the gzip of BODY: what arrives shows which file was read.
-    COPY = "precompressed"
+    # Not BODY compressed: what arrives shows which file was read.
+    COPY = {"br": "the brotli copy", "gzip": "the gzip copy"}
 
-    def _get(self, path, *, live=False, copy=True, **headers):
+    def _get(self, path, *, live=False, copies=("br", "gzip"), **headers):
         import gzip
         import os
         import tempfile
         from pathlib import Path
         from unittest.mock import patch
 
+        import brotli
         import httpx2
         from asgiref.sync import async_to_sync
         from starlette.applications import Starlette
@@ -650,8 +651,10 @@ class PrecompressedStaticTests(SimpleTestCase):
         with tempfile.TemporaryDirectory() as root:
             for name in ("app.css", "app.0123456789ab.css"):
                 Path(root, name).write_text(self.BODY, encoding="utf-8")
-                if copy:
-                    Path(root, f"{name}.gz").write_bytes(gzip.compress(self.COPY.encode(), mtime=0))
+                if "br" in copies:
+                    Path(root, f"{name}.br").write_bytes(brotli.compress(self.COPY["br"].encode()))
+                if "gzip" in copies:
+                    Path(root, f"{name}.gz").write_bytes(gzip.compress(self.COPY["gzip"].encode(), mtime=0))
             for written in Path(root).iterdir():
                 # A validator is the file's time and size: the same in every scratch tree.
                 os.utime(written, (1_700_000_000, 1_700_000_000))
@@ -661,24 +664,38 @@ class PrecompressedStaticTests(SimpleTestCase):
             ):
                 return async_to_sync(request)(root)
 
-    def test_a_request_that_takes_gzip_gets_the_collected_copy(self):
-        response = self._get("/app.0123456789ab.css", **{"Accept-Encoding": "br, gzip"})
+    def _assert_copy(self, response, coding):
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.text, self.COPY)
-        self.assertEqual(response.headers["content-encoding"], "gzip")
+        self.assertEqual(response.text, self.COPY[coding])
+        self.assertEqual(response.headers["content-encoding"], coding)
         self.assertEqual(response.headers["content-type"], "text/css; charset=utf-8")
         self.assertEqual(response.headers["vary"], "Accept-Encoding")
+
+    def test_a_request_that_takes_brotli_gets_the_brotli_copy(self):
+        response = self._get("/app.0123456789ab.css", **{"Accept-Encoding": "gzip, deflate, br, zstd"})
+        self._assert_copy(response, "br")
         self.assertEqual(response.headers["cache-control"], "public, max-age=31536000, immutable")
         self.assertEqual(response.headers["cross-origin-resource-policy"], "same-origin")
         self.assertEqual(response.headers["x-content-type-options"], "nosniff")
 
+    def test_a_request_that_takes_only_gzip_gets_the_gzip_copy(self):
+        # A weight of 0 is RFC 9110's "not acceptable", and a lower weight is a
+        # lower preference.
+        for accepted in ("gzip", "br;q=0, gzip", "gzip, br; q=0.0", "gzip;q=1, br;q=0.5", "*, br;q=0"):
+            with self.subTest(accepted=accepted):
+                self._assert_copy(self._get("/app.0123456789ab.css", **{"Accept-Encoding": accepted}), "gzip")
+
+    def test_a_coding_with_no_copy_gives_way_to_the_next(self):
+        response = self._get("/app.0123456789ab.css", copies=("gzip",), **{"Accept-Encoding": "br, gzip"})
+        self._assert_copy(response, "gzip")
+
     def test_an_unhashed_name_is_compressed_but_never_pinned(self):
         response = self._get("/app.css", **{"Accept-Encoding": "gzip"})
-        self.assertEqual(response.text, self.COPY)
+        self.assertEqual(response.text, self.COPY["gzip"])
         self.assertEqual(response.headers["cache-control"], "public, max-age=3600")
 
-    def test_a_request_that_refuses_gzip_gets_the_asset_itself(self):
-        for accepted in ("identity", "br", "gzip;q=0", "gzip; q=0.0", ""):
+    def test_a_request_that_takes_neither_gets_the_asset_itself(self):
+        for accepted in ("identity", "zstd", "gzip;q=0", "br;q=0, gzip; q=0.0", "*;q=0", ""):
             with self.subTest(accepted=accepted):
                 response = self._get("/app.0123456789ab.css", **{"Accept-Encoding": accepted})
                 self.assertEqual(response.text, self.BODY)
@@ -688,16 +705,16 @@ class PrecompressedStaticTests(SimpleTestCase):
                 self.assertEqual(response.headers["cache-control"], "public, max-age=31536000, immutable")
 
     def test_an_asset_with_no_copy_is_sent_as_it_is(self):
-        response = self._get("/app.0123456789ab.css", copy=False, **{"Accept-Encoding": "gzip"})
+        response = self._get("/app.0123456789ab.css", copies=(), **{"Accept-Encoding": "br, gzip"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.text, self.BODY)
         self.assertNotIn("content-encoding", response.headers)
 
     def test_a_copy_already_held_is_not_sent_again(self):
-        first = self._get("/app.0123456789ab.css", **{"Accept-Encoding": "gzip"})
+        first = self._get("/app.0123456789ab.css", **{"Accept-Encoding": "br"})
         again = self._get(
             "/app.0123456789ab.css",
-            **{"Accept-Encoding": "gzip", "If-None-Match": first.headers["etag"]},
+            **{"Accept-Encoding": "br", "If-None-Match": first.headers["etag"]},
         )
         self.assertEqual(again.status_code, 304)
         self.assertEqual(again.content, b"")
@@ -705,12 +722,14 @@ class PrecompressedStaticTests(SimpleTestCase):
         self.assertEqual(again.headers["cache-control"], "public, max-age=31536000, immutable")
 
     def test_each_representation_has_its_own_validator(self):
-        compressed = self._get("/app.0123456789ab.css", **{"Accept-Encoding": "gzip"})
-        plain = self._get("/app.0123456789ab.css")
-        self.assertNotEqual(compressed.headers["etag"], plain.headers["etag"])
+        tags = {
+            self._get("/app.0123456789ab.css", **{"Accept-Encoding": accepted}).headers["etag"]
+            for accepted in ("br", "gzip", "identity")
+        }
+        self.assertEqual(len(tags), 3)
 
     def test_a_missing_asset_is_not_found_either_way(self):
-        for accepted in ("gzip", "identity"):
+        for accepted in ("br", "gzip", "identity"):
             with self.subTest(accepted=accepted):
                 response = self._get("/absent.css", **{"Accept-Encoding": accepted})
                 self.assertEqual(response.status_code, 404)
@@ -728,34 +747,39 @@ class PrecompressedStaticTests(SimpleTestCase):
         self.assertEqual(refused.exception.status_code, 405)
 
     def test_serving_live_reads_the_source_and_never_a_copy(self):
-        response = self._get("/app.css", live=True, **{"Accept-Encoding": "gzip"})
+        response = self._get("/app.css", live=True, **{"Accept-Encoding": "br, gzip"})
         self.assertEqual(response.text, self.BODY)
         self.assertNotIn("content-encoding", response.headers)
         self.assertEqual(response.headers["cache-control"], "no-cache")
 
-    def test_what_takes_gzip(self):
-        from hq.platform.core.static import accepts_gzip
+    def test_which_codings_a_request_takes(self):
+        from hq.platform.core.static import acceptable_codings
 
         cases = {
-            "gzip": True,
-            "GZIP": True,
-            "deflate, gzip;q=0.5, br": True,
-            "*": True,
-            "": False,
-            "identity": False,
-            "gzip;q=0": False,
-            "gzip;q=nonsense": False,
-            "xgzip": False,
-            "gzip;q=0, *;q=1": False,
-            "*;q=1, gzip;q=0": False,
-            "br, *;q=0.1": True,
-            "*;q=0": False,
+            "gzip": ["gzip"],
+            "GZIP": ["gzip"],
+            "br": ["br"],
+            "gzip, deflate, br, zstd": ["br", "gzip"],
+            "deflate, gzip;q=0.5, br": ["br", "gzip"],
+            "br;q=0.5, gzip": ["gzip", "br"],
+            "*": ["br", "gzip"],
+            "": [],
+            "identity": [],
+            "br;q=0": [],
+            "br;q=0, gzip": ["gzip"],
+            "gzip;q=0": [],
+            "gzip;q=nonsense": [],
+            "xgzip, brotli": [],
+            "gzip;q=0, *;q=1": ["br"],
+            "*;q=1, gzip;q=0": ["br"],
+            "zstd, *;q=0.1": ["br", "gzip"],
+            "*;q=0": [],
         }
         for header, expected in cases.items():
             with self.subTest(header=header):
                 scope = {"type": "http", "headers": [(b"accept-encoding", header.encode())]}
-                self.assertIs(accepts_gzip(scope), expected)
-        self.assertIs(accepts_gzip({"type": "http", "headers": []}), False)
+                self.assertEqual(acceptable_codings(scope), expected)
+        self.assertEqual(acceptable_codings({"type": "http", "headers": []}), [])
 
 
 @override_settings(SEVERINO_TRUSTED_PROXIES=[PROXY])
@@ -947,7 +971,7 @@ class FormActionTests(SimpleTestCase):
                     self.assertEqual(policy, ["'self'"])
 
 
-@tag("source")
+@tag("source", "tree")
 class SourceBoundaryTests(SimpleTestCase):
     """What the shipped sources may contain, read from the checkout."""
 
@@ -1152,32 +1176,3 @@ class SafeNextTests(SimpleTestCase):
 
     def test_a_form_names_its_destination_in_its_body(self):
         self.assertEqual(self.destination("/expenses/", method="post"), "/expenses/")
-
-
-MCP_SWITCHES = (
-    "SEVERINO_MCP_ENABLE_WRITES",
-    "SEVERINO_MCP_ENABLE_DOC_SYNC",
-    "SEVERINO_MCP_ENABLE_PRUNE",
-    "SEVERINO_MCP_ENABLE_DELETES",
-    "SEVERINO_MCP_ENABLE_INFRASTRUCTURE",
-    "SEVERINO_MCP_ENABLE_CERT_RENEWAL",
-    "SEVERINO_MCP_ENABLE_LOOKUP",
-    "SEVERINO_MCP_ENABLE_CALENDAR",
-)
-
-
-class McpCeilingTests(SimpleTestCase):
-    def test_a_switch_left_unset_is_off(self):
-        from hq.platform.application.security import mcp_principal
-
-        for on in ((), ("SEVERINO_MCP_ENABLE_WRITES",), ("SEVERINO_MCP_ENABLE_WRITES", "SEVERINO_MCP_ENABLE_DELETES")):
-            rest = [name for name in MCP_SWITCHES if name not in on]
-            with self.subTest(on=on):
-                with override_settings(**dict.fromkeys(on, True), **dict.fromkeys(rest, False)):
-                    switched_off = mcp_principal().capabilities
-                with override_settings(**dict.fromkeys(on, True)):
-                    for name in rest:
-                        delattr(settings, name)
-                    unset = mcp_principal().capabilities
-
-                self.assertEqual(unset, switched_off)

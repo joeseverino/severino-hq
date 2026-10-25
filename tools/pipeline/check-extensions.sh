@@ -27,33 +27,32 @@ mkdir -p "$host"
 git archive HEAD | tar -x -C "$host"
 chmod -R a+rwX "$host"
 
-checks=() results=()
-# Waits for the oldest check still running, so results keep the set's order.
-settle() {
-  if wait "${checks[${#results[@]}]}"; then results+=(passed); else results+=(failed); fi
-}
-
-while IFS=$'\t' read -r id repository package; do
-  [ $((${#checks[@]} - ${#results[@]})) -lt "$slots" ] || settle
+# check N ID REPOSITORY PACKAGE: the Nth extension's verdict goes to
+# result-N, so the counts keep the set's order whichever finishes first.
+check() {
   # A copy, so a coordinated build after this reads the branch as cloned
   # rather than as a check left it.
-  work="$scratch/check-$((${#checks[@]} + 1))"
-  cp -a "extensions/$(basename "$repository")" "$work"
+  local work="$scratch/check-$1" result=failed
+  cp -a "extensions/$(basename "$3")" "$work"
   docker run --rm --network bridge --user 10001:10001 \
-    --env HOME=/tmp --env UV_PYTHON_DOWNLOADS=never --env PLUGIN_REPOSITORY="$repository" \
+    --env HOME=/tmp --env UV_PYTHON_DOWNLOADS=never --env PLUGIN_REPOSITORY="$3" \
     --volume "$host:/host" --volume "$work:/src" \
     --entrypoint sh "$installer" \
-    /host/tools/pipeline/check-plugin.sh --plugin-root "/src/$package" \
-    >"$withheld/extension-check-$id.log" 2>&1 &
-  checks+=($!)
-done < <(jq -r '.extensions[] | [.id, .repository, (.path // ".")] | @tsv' "$set_file")
-while [ "${#results[@]}" -lt "${#checks[@]}" ]; do settle; done
+    /host/tools/pipeline/check-plugin.sh --plugin-root "/src/$4" \
+    >"$withheld/extension-check-$2.log" 2>&1 && result=passed
+  echo "$result" >"$scratch/result-$1"
+}
+export -f check
+export scratch withheld host installer
+jq -r '.extensions | to_entries[] | [.key + 1, .value.id, .value.repository, (.value.path // ".")] | @tsv' "$set_file" |
+  xargs -r -n 4 -P "$slots" bash -c 'check "$@"' check
 
 failed=0
-total=${#results[@]}
+total=$(jq '.extensions | length' "$set_file")
 for ((n = 1; n <= total; n++)); do
-  echo "extension $n: ${results[n - 1]}"
-  [ "${results[n - 1]}" = passed ] || failed=$((failed + 1))
+  result=$(cat "$scratch/result-$n" 2>/dev/null || echo failed)
+  echo "extension $n: $result"
+  [ "$result" = passed ] || failed=$((failed + 1))
 done
 
 if [ "$failed" -gt 0 ]; then

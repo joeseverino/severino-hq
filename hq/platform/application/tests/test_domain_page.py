@@ -10,7 +10,7 @@ from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.relationships import RelationGroup, Relationship, Relationships
 from hq.platform.application.zones import Zone, ZoneRecord
 
-from .markup import elements, text, texts
+from .markup import elements, select, text, texts
 
 
 def group(phrase: str, *ends: EntityLink) -> RelationGroup:
@@ -102,11 +102,12 @@ class RecordTableTests(SimpleTestCase):
         }
         return SimpleNamespace(**{**base, **fields})
 
-    def table(self, *rows, **context):
+    def table(self, *rows, policy=(), **context):
         return render_to_string(
             "control_plane/_zone_records.html",
             {
-                "rows": rows,
+                "routing": rows,
+                "policy": policy,
                 "zone": SimpleNamespace(managed=True),
                 "public_dns_enabled": True,
                 "request": SimpleNamespace(get_full_path=lambda: "/domains/example.com/"),
@@ -121,7 +122,7 @@ class RecordTableTests(SimpleTestCase):
         )
 
         self.assertNotIn("Healthy", html)
-        self.assertEqual(html.count("Needs attention"), 1)
+        self.assertEqual(text(html).count("Needs attention"), 1)
 
     def test_a_ttl_is_said_with_its_unit_and_only_when_it_was_set(self):
         html = self.table(self.record(), self.record(name="slow.example.com", ttl=300))
@@ -131,7 +132,17 @@ class RecordTableTests(SimpleTestCase):
 
     def test_an_empty_half_says_where_the_records_are(self):
         self.assertIn("No records.", self.table())
-        self.assertIn("They are all below.", self.table(empty_message="They are all below."))
+        self.assertIn("They are all below.", self.table(policy=(self.record(record_type="CAA"),)))
+
+    def test_policy_records_are_a_group_of_the_same_table_folded_away(self):
+        html = self.table(self.record(), policy=(self.record(name="example.com", record_type="CAA"),))
+
+        self.assertEqual(len(elements(html, "table")), 1)
+        (fold,) = select(html, "data-folds")
+        folded = select(html, "data-folded")
+        self.assertEqual([row.attrs["data-folded"] for row in folded], [fold.attrs["id"]])
+        self.assertIn("example.com", folded[0].words)
+        self.assertEqual(len(elements(html, "tbody")), 2)
 
     def test_two_records_of_one_name_and_type_say_what_tells_them_apart_where_their_value_has_left(self):
         records = (

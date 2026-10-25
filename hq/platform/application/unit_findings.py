@@ -35,7 +35,7 @@ from .moments import ago, duration
 from .reading_facts import FactRow, rows_of, state_on_controller, stated
 from .timestamps import moment
 from .topology_model import TopologyNode
-from .ui import counted
+from .ui import counted, ended
 
 UNIT_STATE = "unit-state"
 
@@ -337,7 +337,7 @@ def _stalled_finding(
         ),
         severity="serious",
         explanation=(
-            f"{stalled[0][1]}."
+            ended(stalled[0][1])
             if len(stalled) == 1
             else "Each timer is on and the job it starts is not running on schedule."
         ),

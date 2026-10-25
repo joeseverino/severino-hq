@@ -17,19 +17,16 @@ hq/platform/api/views.py      the transport
 
 There is no credential table in this repo, no minting UI, and no token to
 rotate. Access tokens are issued by **Pocket ID**, which already owns every
-other credential in the fleet, and HQ only checks them.
-
-That asymmetry buys three things a bespoke token store would not:
+other credential in the fleet, and HQ only checks them:
 
 | | |
 |---|---|
 | **Nothing to leak** | HQ stores no secret. A database dump yields no working credential. |
-| **Revocation is central** | Kill the client in Pocket ID and it is dead everywhere, immediately. |
+| **Revocation is central** | Revoke the client in Pocket ID and it stops working everywhere at once. |
 | **Real scoping** | A credential can be granted `example.write` and nothing else. |
 
-The last one is the point. A web operator holds every capability HQ has. A
-credential living on a phone should not, and here it does not: the principal's
-capabilities are *exactly* the token's granted permissions, never widened.
+A web operator holds every capability HQ has. A token's principal holds
+exactly the permissions the token was granted, never widened.
 
 ## Configuration
 
@@ -38,9 +35,9 @@ capabilities are *exactly* the token's granted permissions, never widened.
 | `SEVERINO_API_RESOURCE` | The Pocket ID API resource URI. **Empty disables the surface.** |
 | `SEVERINO_API_LEEWAY_SECONDS` | Clock-skew allowance: 30 seconds. |
 
-Empty must mean off, and does: without a resource to check `aud` against, a
-token minted for any *other* API on the same Pocket ID instance would verify
-here on signature alone. Signature is not identity.
+Empty turns the surface off because without a resource to check `aud`
+against, a token minted for any other API on the same Pocket ID instance
+would verify here on its signature alone.
 
 ## Setting up a client
 
@@ -69,8 +66,8 @@ An operator can allow, hold, or deny each capability per client. Handle all thre
 | Outcome | Response | Client should |
 |---|---|---|
 | Allowed | the capability's result | carry on |
-| Held | `status: "awaiting_approval"`, with `approval.review_url` | report it and stop; retrying returns the same request |
-| Refused | error code `denied_by_policy` | stop |
+| Held | `200`, `status: "awaiting_approval"`, with `approval.review_url` | report it and stop; retrying returns the same request |
+| Refused | `403`, error code `denied_by_policy` | stop |
 
 With no rules set, changes to gated infrastructure are held, and so is
 anything destructive, because an API client is an agent
@@ -225,7 +222,7 @@ principal holds; the `SEVERINO_MCP_ENABLE_*` switches gate writes, not reads.
 | Readings, schema-filtered (`hq/domains/control_plane/observations`) | Connections, entity pages | `readings` (`get <kind>`) |
 | Join engine (`facts.readings`) | Entity pages | inside `relationships`, `services`, `domains` |
 | Credential access | Connections | `credentials` (`get <provider>`) |
-| Connections page (`connection_context.connections_context`): rows with sight, freshness, refusals, what more scope would show, credential fix, reach, last activity, pending read now; summary counts; estate posture; HQ's path | Connections | `connection.standing` (`get <connection_ref>`) |
+| Connections page (`connection_context.connections_context`): rows with what each reads (with its sight and freshness) and may change, refusals, what more scope would show, credential fix, reach, last activity, pending read now; summary counts; estate posture; HQ's path | Connections | `connection.standing` (`get <connection_ref>`) |
 | Tailnet page (`tailnet_context.tailnet_context`): settings, grants, shell rules, groups, tags with machines, services, app connectors, tests, findings, unread readings and why | Tailnet | `tailnet` |
 | HQ itself (`hq_context.hq_context`): release and whether its branch is ahead of production, extensions composed, its machine and container, its units and credentials refresh, its scheduled work with each piece's recent runs and next due, every reading's state and age, its open problems as the items | System > HQ | `hq` |
 | Estate and record search (command center) | Search | `search` |
@@ -333,17 +330,22 @@ version replaces the old one rather than running beside it.
 
 ### Errors
 
-Always `{"ok": false, "error": {"code", "message", "details"}}`.
+Always `{"ok": false, "error": {"code", "message", "details"}}`. Branch on the
+status; the code says which cause. The OpenAPI document lists, on each
+capability's operation, every code a capability answers with each status,
+derived from the one map the view answers from (`CAPABILITY_STATUS` in
+`hq/platform/api/views.py`). The ones that need a word:
 
 | Status | Means |
 |---|---|
-| `400` | `invalid_input`: the request did not match its schema. Fix the fields it names. |
+| `400` | `invalid_input`: the request did not match its schema. Fix the fields it names. Any code a capability answers with that is not in the map is a `400` too. |
 | `401` | No token, or it failed verification. Mint a new one. |
-| `403` | Verified, but this client was not granted that capability. Fix its scope. |
-| `404` | `unknown_capability`: no such capability on this deployment, or `not_found`: the record the command names does not exist. |
-| `409` | `conflict`: the record changed after it was read or clashes with another, `operation_failed`: the domain refused the command, or `idempotency_conflict`: a retry key was reused with different input. |
+| `403` | `forbidden`: verified, but this client was not granted that capability; fix its scope. `denied_by_policy`: an operator's rule at `/agents/` refuses it. `agents_paused`: the operator has paused every agent; nothing runs until they resume. |
+| `404` | `unknown_capability`: no such capability on this deployment. `not_found`: the record the command names does not exist. `approval_subject_unreadable`: the call has to be held, and the record it names could not be read to show the person deciding. |
+| `409` | `conflict`: the record changed after it was read or clashes with another. `operation_failed`: the domain refused the command. `idempotency_conflict`: a retry key was reused with different input. `precondition`: the request is valid, but the record it acts on refuses it until something about it changes; the message says what. |
 | `413` | The request exceeds the deployment's body-size safety limit. |
 | `415` | A capability request was not sent as `application/json`. |
+| `429` | `too_many_pending_approvals`: this client already has ten requests waiting for a person. Nothing more is held for it until those are answered. |
 | `503` | `SEVERINO_API_RESOURCE` is unset here. |
 
 An `invalid_input` message names every offending field and why, in one
@@ -362,7 +364,10 @@ when retrying that operation. HQ stores the actor, canonical request hash, HTTP
 status, and response in the same database transaction as the domain write. A
 retry therefore receives the committed response without running the command a
 second time, even after a process restart. Reusing the key with different input
-returns `409 idempotency_conflict`.
+returns `409 idempotency_conflict`. Only a call that ran keeps its answer: an
+error, a refusal, or a call held for approval keeps nothing under its key, so
+the same key runs once the rule, the grant or the record that stopped it has
+changed.
 
 Records expire after 24 hours (`SEVERINO_API_IDEMPOTENCY_TTL_SECONDS`) and
 expired records are pruned by the next machine write. Domain-level idempotency remains useful:
@@ -376,8 +381,9 @@ says so. The rule is declared once, from the capability's effect, so no command
 rejects the field and none requires it. A repeat by the same actor with the
 same key and the same request returns the first result without running the
 command again; the same key with a different request returns
-`idempotency_conflict`. A request that is refused, or held for approval, keeps
-nothing under its key, so the corrected or approved request runs. A command
+`idempotency_conflict`. A request that is refused, held for approval, or
+answered with an error keeps nothing under its key, so the corrected or allowed
+request runs. A command
 that queues controller work stores the key with the operation it queues, and
 generates one when the caller sent none. A command form in the browser
 generates its key and keeps it hidden. A `read` capability takes no key.
@@ -421,7 +427,7 @@ it does; a patch release adds no features. No compatibility
 translation is applied. Resource filters emit individual query parameters;
 `x-hq-query-schema` retains the aggregate schema, including unknown-field policy.
 
-`mise run checks:openapi` installs the locked Redocly from `tools/openapi` and
+`mise run lint:openapi` installs the locked Redocly from `tools/lint` and
 validates every description against the specification.
 
 `manage.py test tests.fuzz.api_properties` generates bounded requests through Django's
@@ -433,12 +439,12 @@ gates; production test discovery does not require development dependencies.
 
 All MCP tool input schemas and descriptions consume the live deployment's
 OpenAPI document after Django initialization. `x-hq-mcp-tools` records MCP-only
-metadata; it does not invent HTTP operations for those tools. Argument types
-and defaults are emitted from the declared service signatures with the MCP
-SDK and Pydantic. Resource names, identifiers and catalogs consume the
-already-emitted resource paths. Registration fails if the document disagrees
-with the execution signature, and calls validate against the documented
-constraints before entering application code. Unknown arguments, mistyped
+metadata; it does not invent HTTP operations for those tools. Each tool's
+`inputSchema` is generated from one Pydantic model, built from the handler's
+signature, and a call is validated by that same model before entering
+application code; `mise run lint` holds the written document to it. A
+resource tool's `name` takes only the resources the document's paths serve,
+and catalogs consume those paths too. Unknown arguments, mistyped
 values and stringified JSON objects are rejected; validation errors do not
 include rejected input values. Authorization and thread-sensitive execution
 remain on the shared service path.

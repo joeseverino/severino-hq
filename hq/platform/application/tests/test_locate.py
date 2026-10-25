@@ -15,6 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..infrastructure import declared_machines
 from ..locate import index_of, machines_index, split_endpoint
@@ -261,19 +262,19 @@ class ProxyPageTests(TestCase):
     def test_the_board_names_the_machine_a_proxy_forwards_to_at_one_cost_for_every_row(self):
         """Read once for the page: per row it would grow with the estate."""
 
-        from django.db import connection
-        from django.test.utils import CaptureQueriesContext
+        def arrange(count):
+            ManagedResource.objects.filter(kind="npm.proxy_host").delete()
+            for index in range(count):
+                a_proxy(f"example-proxy-{index}", f"a{index}.example.com", "10.0.0.5")
 
-        a_proxy("example-proxy-0", "a0.example.com", "10.0.0.5")
-        with CaptureQueriesContext(connection) as one_row:
+        def draw(_count):
             response = self.board()
-        self.assertContains(response, reverse("control_plane:machine", kwargs={"name": "example-alpha"}))
-        for index in range(1, 7):
-            a_proxy(f"example-proxy-{index}", f"a{index}.example.com", "10.0.0.5")
-        with CaptureQueriesContext(connection) as seven_rows:
-            self.board()
+            self.assertContains(response, reverse("control_plane:machine", kwargs={"name": "example-alpha"}))
+            return response
 
-        self.assertEqual(len(seven_rows), len(one_row))
+        assert_cost_does_not_grow(
+            self, sizes=(1, 7), arrange=arrange, draw=draw, rows=distinct(r"\bexample-proxy-\d+\b")
+        )
 
 
 class EvidenceTests(TestCase):

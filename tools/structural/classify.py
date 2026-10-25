@@ -8,8 +8,11 @@ import re
 import shlex
 import subprocess
 import sys
-from functools import cached_property
+from collections import defaultdict
+from functools import cache, cached_property
+from itertools import combinations
 from pathlib import Path
+from typing import NamedTuple
 
 CONSTRUCTORS = {
     "hq.platform.application.integration_specs.ResourceSpec",
@@ -102,6 +105,7 @@ class Classifier:
         if str(path.relative_to(self.root)) not in self.tracked_files:
             raise ValueError(f"not tracked: {path}")
 
+    @cache  # noqa: B019 - one classifier per run, and a path's provenance does not change within it
     def generated(self, path):
         if not self.go(path)["Generated"]:
             return False
@@ -132,40 +136,111 @@ class Classifier:
         return False
 
     def pair(self, a, b):
-        self.source(a[0])
-        self.source(b[0])
-        if a[0].endswith(".go") and b[0].endswith(".go"):
-            if not self.go(a[0])["Functions"].get(a[1]) or not self.go(b[0])["Functions"].get(b[1]):
-                raise ValueError("graph symbol absent from parsed Go source")
-            if self.generated(a[0]) and self.generated(b[0]):
-                return "generated provenance (adjacent tracked directive/config/schema; regeneration gate required)"
-            x = self.go(a[0])["Wrappers"].get(a[1])
-            y = self.go(b[0])["Wrappers"].get(b[1])
-            if (
-                x
-                and y
-                and x["Producer"] != y["Producer"]
-                and x["ProducerSignature"] != y["ProducerSignature"]
-                and x["Signature"] != y["Signature"]
-                and x["Forward"] == y["Forward"]
-            ):
-                return "typed delegation (distinct local string/error producer signatures; identical forward)"
-        if a[0].endswith(".py") and b[0].endswith(".py") and metadata(self.root, *a) and metadata(self.root, *b):
-            return "immutable metadata constructor declarations (no arguments/control/computed calls)"
+        """Why a near pair of units is no duplicate, or None when it is one."""
+
+        self.source(a.path)
+        self.source(b.path)
+        if a.path.endswith(".go") and b.path.endswith(".go"):
+            return self.go_pair(a.path, a.name, b.path, b.name)
+        if a.path.endswith(".py") and b.path.endswith(".py"):
+            if metadata(self.root, a.path, a.name) and metadata(self.root, b.path, b.name):
+                return "immutable metadata constructor declarations (no arguments/control/computed calls)"
+            x = projection(self.root, a)
+            y = projection(self.root, b)
+            if x and y and not x & y:
+                return "dict projections over disjoint keys"
+        return None
+
+    def go_pair(self, a, a_name, b, b_name):
+        one, other = self.go(a), self.go(b)
+        if not one["Functions"].get(a_name) or not other["Functions"].get(b_name):
+            raise ValueError("graph symbol absent from parsed Go source")
+        if self.generated(a) and self.generated(b):
+            return "generated provenance (adjacent tracked directive/config/schema; regeneration gate required)"
+        x = one["Wrappers"].get(a_name)
+        y = other["Wrappers"].get(b_name)
+        if (
+            x
+            and y
+            and x["Producer"] != y["Producer"]
+            and x["ProducerSignature"] != y["ProducerSignature"]
+            and x["Signature"] != y["Signature"]
+            and x["Forward"] == y["Forward"]
+        ):
+            return "typed delegation (distinct local string/error producer signatures; identical forward)"
+        # Both sides already share their logic: each body is one call of the same function.
+        if (
+            a == b
+            and one["Delegations"].get(a_name)
+            and one["Delegations"].get(a_name) == other["Delegations"].get(b_name)
+        ):
+            return "delegation to one shared same-file function"
+        x = one["Tables"].get(a_name)
+        y = other["Tables"].get(b_name)
+        if x and y and x["Return"] == y["Return"] and x["Cases"] and not set(x["Cases"]) & set(y["Cases"]):
+            return "switch tables over disjoint cases"
         return None
 
 
-def graph_pairs(pages):
-    """The similarity rows of one query, from every page of its answer, refused
-    unless the pages are whole: a partial answer would read as fewer duplicates
-    than there are."""
+def projection(root: Path, unit) -> frozenset[str] | None:
+    """The keys of a function that only returns a dict literal with string
+    keys, or None. Two such projections over different keys share only the
+    literal's shape."""
+
+    tree = ast.parse((root / unit.path).read_text())
+    scopes = (
+        [tree] if not unit.owner else [n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == unit.owner]
+    )
+    candidates = [
+        n
+        for scope in scopes
+        for n in scope.body
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == unit.name
+    ]
+    if len(candidates) != 1:
+        return None
+    body = candidates[0].body
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+        body = body[1:]
+    if len(body) != 1 or not isinstance(body[0], ast.Return) or not isinstance(body[0].value, ast.Dict):
+        return None
+    keys = body[0].value.keys
+    if not keys or not all(isinstance(k, ast.Constant) and isinstance(k.value, str) for k in keys):
+        return None
+    return frozenset(k.value for k in keys)
+
+
+COLUMNS = ["f.file_path", "f.name", "f.parent_class", "f.fp"]
+SLOTS = 64
+# A pair is near when this share of its MinHash slots agree. The graph draws
+# SIMILAR_TO only at 0.95, where every pair outside tests is generated code;
+# 0.85 is where the pairs a reader finds by hand appear and the shapes that
+# are not duplicates can still be named.
+THRESHOLD = 0.85
+BANDS = 32
+
+
+class Unit(NamedTuple):
+    path: str
+    name: str
+    owner: str
+    slots: tuple[str, ...]
+
+    def label(self) -> str:
+        return f"{self.path}::{self.owner + '.' if self.owner else ''}{self.name}"
+
+
+def fingerprints(pages):
+    """The fingerprinted functions of one query, from every page of its answer,
+    refused unless the pages are whole: a partial answer would read as fewer
+    duplicates than there are."""
 
     rows, total = [], None
     for payload in pages:
         if payload.get("isError"):
             raise ValueError("graph query failed")
         answer = json.loads(payload["content"][0]["text"])
-        if answer.get("columns") != ["a.file_path", "b.file_path", "a.name", "b.name"]:
+        if answer.get("columns") != COLUMNS:
             raise ValueError("unexpected graph columns")
         if answer.get("total_relation") != "eq" or total not in (None, answer.get("total")):
             raise ValueError("graph total is not exact")
@@ -175,15 +250,53 @@ def graph_pairs(pages):
         raise ValueError("graph answer is not whole")
     if len(rows) != total:
         raise ValueError("graph row count mismatch")
-    result = []
+    units = []
     for row in rows:
-        if len(row) != 4 or not all(isinstance(cell, str) and cell for cell in row):
-            raise ValueError("malformed similarity row")
-        result.append(((row[0], row[2]), (row[1], row[3])))
-    return result
+        if len(row) != 4 or not all(isinstance(cell, str) for cell in row) or not row[0] or not row[1]:
+            raise ValueError("malformed function row")
+        path, name, owner, fp = row
+        if not fp:
+            # The graph leaves a body too small to compare without one.
+            continue
+        # 64 slots of 8 hex digits; the query answers all but the last digit,
+        # so the last slot compares on its first seven, as the graph's own
+        # SIMILAR_TO scores agree.
+        if not re.fullmatch(f"[0-9a-f]{{{SLOTS * 8 - 1},{SLOTS * 8}}}", fp):
+            raise ValueError("malformed fingerprint")
+        units.append(Unit(path, name, owner.rsplit(".", 1)[-1], tuple(fp[i : i + 8] for i in range(0, SLOTS * 8, 8))))
+    if not units:
+        raise ValueError("graph holds no fingerprinted function: the index is empty")
+    return units
+
+
+def near_pairs(units):
+    """Each pair of same-language units whose fingerprints agree on THRESHOLD
+    of their slots. Agreeing on 55 of 64 slots leaves at most 9 that differ, so
+    at least 23 of the 32 two-slot bands match whole: banding finds every such
+    pair, never a sample of them."""
+
+    buckets = defaultdict(list)
+    for index, unit in enumerate(units):
+        for band in range(BANDS):
+            buckets[(band, unit.slots[2 * band], unit.slots[2 * band + 1])].append(index)
+    seen = set()
+    for members in buckets.values():
+        for i, j in combinations(members, 2):
+            if (i, j) in seen:
+                continue
+            seen.add((i, j))
+            a, b = units[i], units[j]
+            if Path(a.path).suffix != Path(b.path).suffix:
+                continue
+            if sum(x == y for x, y in zip(a.slots, b.slots, strict=True)) >= THRESHOLD * SLOTS:
+                yield a, b
 
 
 TEST = re.compile(r"(^|/)(test_[^/]*|tests|[^/]*_tests)\.py$|(^|/)tests/|_test\.go$")
+
+
+def is_test(unit):
+    return bool(TEST.search(unit.path)) or (unit.path.endswith(".py") and unit.name.startswith("test_"))
 
 
 def similar_pairs(root: Path, inspector: Path, pages: list[dict]) -> list[str]:
@@ -192,15 +305,11 @@ def similar_pairs(root: Path, inspector: Path, pages: list[dict]) -> list[str]:
     classifier = Classifier(root, inspector)
     pairs = set()
     explained = 0
-    for a, b in graph_pairs(pages):
-        if TEST.search(a[0]) or TEST.search(b[0]):
-            continue
-        reason = classifier.pair(a, b)
-        pair = " <> ".join(sorted(f"{path}::{name}" for path, name in (a, b)))
-        if reason:
+    for a, b in near_pairs([unit for unit in fingerprints(pages) if not is_test(unit)]):
+        if classifier.pair(a, b):
             explained += 1
         else:
-            pairs.add("similar " + pair)
+            pairs.add("similar " + " <> ".join(sorted((a.label(), b.label()))))
     # One line, so a gate's verdict is never pushed out of view by pairs that pass.
     print(f"{explained} similar pairs explained by a classification", file=sys.stderr)
     return sorted(pairs)

@@ -13,11 +13,12 @@ that is not shown.
 
 import hashlib
 import logging
+from collections.abc import Iterator
 from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
 
-import requests
+import httpx2
 from django.db import transaction
 from django.utils import timezone
 
@@ -34,7 +35,7 @@ MAX_BYTES = 512 * 1024
 # A session is renewed every few minutes and each renewal is a sign-in. The
 # picture is asked for again only once it is this old.
 REFRESH_AFTER = timedelta(days=1)
-_TIMEOUT = (3, 5)
+_TIMEOUT = httpx2.Timeout(5, connect=3)
 # What the file starts with, not what the response says it is. SVG is absent
 # on purpose: it is a document that can carry script.
 _KINDS = (
@@ -59,6 +60,17 @@ def _origin(url: str) -> tuple[str, str, int | None]:
     return parts.scheme.lower(), (parts.hostname or "").lower(), parts.port
 
 
+def _at_most(chunks: Iterator[bytes], limit: int) -> bytes:
+    """The body's first ``limit`` bytes, reading no further than it takes."""
+
+    body = b""
+    for chunk in chunks:
+        body += chunk
+        if len(body) >= limit:
+            return body[:limit]
+    return body
+
+
 def picture_allowed(url: str, issuer: str) -> bool:
     """Whether ``url`` is the provider's own: same scheme, host and port."""
 
@@ -76,18 +88,13 @@ def fetch_picture(url: str, *, access_token: str = "") -> tuple[str, bytes] | No
     take the request somewhere the origin check never saw.
     """
 
+    headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
     try:
-        response = requests.get(
-            url,
-            headers={"Authorization": f"Bearer {access_token}"} if access_token else {},
-            timeout=_TIMEOUT,
-            allow_redirects=False,
-            stream=True,
-        )
-        if response.status_code != 200:
-            return None
-        image = response.raw.read(MAX_BYTES + 1, decode_content=True)
-    except requests.RequestException, OSError, ValueError:
+        with httpx2.stream("GET", url, headers=headers, timeout=_TIMEOUT, follow_redirects=False) as response:
+            if response.status_code != 200:
+                return None
+            image = _at_most(response.iter_bytes(), MAX_BYTES + 1)
+    except httpx2.HTTPError, httpx2.InvalidURL, httpx2.StreamError, OSError, ValueError:
         return None
     if not image or len(image) > MAX_BYTES:
         return None

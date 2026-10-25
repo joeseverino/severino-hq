@@ -19,18 +19,30 @@ runs:
         set -euo pipefail
         mise="$("$HOST/.github/actions/toolchain/mise-version.sh" "$HOST/mise.toml")"
         echo "mise=$mise" >> "$GITHUB_OUTPUT"
+    # mise's download of uv, which it checks against the host's mise.lock
+    # before installing (as the toolchain action's downloads are).
+    - id: mise-downloads
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/mise/downloads-cas
+        key: mise-downloads-uv-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(format('{0}/mise.lock', inputs.host)) }}
     # Only uv: the host's other tools and its [env] are not this job's.
     - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
-      env:
-        MISE_LOCKED: "1"
       with:
         version: ${{ steps.read.outputs.mise }}
         working_directory: ${{ inputs.host }}
         install_args: uv
-        # Saved from the default branch only, which every branch reads.
-        cache_save: ${{ github.ref_name == github.event.repository.default_branch }}
+        cache: false
         env: false
         add_shims_to_path: false
+    # Saved from the default branch only, which every branch reads.
+    - if: >-
+        github.ref_name == github.event.repository.default_branch &&
+        steps.mise-downloads.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/mise/downloads-cas
+        key: ${{ steps.mise-downloads.outputs.cache-primary-key }}
     - shell: bash
       working-directory: ${{ inputs.host }}
       run: dirname "$(mise which uv)" >> "$GITHUB_PATH"

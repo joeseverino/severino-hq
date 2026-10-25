@@ -6,9 +6,7 @@
   <img class="auth-logo" src="{% static 'img/logo.png' %}" alt="{{ SITE_NAME }}" width="64" height="64">
   <h1>Sign in to {{ SITE_NAME|breakable }}</h1>
 
-  {% if form.non_field_errors %}
-    <div class="msg msg-error">{{ form.non_field_errors }}</div>
-  {% endif %}
+  {% include "partials/_form_errors.html" %}
 
   {% comment %}
   Reached on purpose, not by default. Under SSO the view redirects straight to

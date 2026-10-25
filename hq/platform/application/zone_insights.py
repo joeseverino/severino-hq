@@ -89,7 +89,7 @@ def services(zone) -> ZoneInsight | None:
     if len(parked) == len(members):
         handlers = sorted({service.provider_answers for service in parked} - {""})
         value = "Parked"
-        detail = f"Handled at {', '.join(handlers)}." if handlers else "Nothing answers there."
+        detail = ended(f"Handled at {', '.join(handlers)}") if handlers else "Nothing answers there."
     else:
         value = counted(len(members), "service")
         detail = f"{len(unhealthy)} missing something behind it." if unhealthy else "All fully wired."
@@ -161,7 +161,7 @@ def certificates(zone) -> ZoneInsight | None:
             return ZoneInsight(
                 label="Certificates",
                 value="None managed here",
-                detail=("Issuance is restricted to " + ", ".join(sorted(permitted)) + "."),
+                detail=ended("Issuance is restricted to " + ", ".join(sorted(permitted))),
             )
         return ZoneInsight(
             label="Certificates",
@@ -194,7 +194,7 @@ def certificates(zone) -> ZoneInsight | None:
     return ZoneInsight(
         label="Certificates",
         value=f"{resource.key}{extra}",
-        detail=f"Expires {expires}." if expires else "",
+        detail=ended(f"Expires {expires}") if expires else "",
         url=entity_link("resource", resource.key).url,
         note=_edge_certificates(edge).detail if edge else "",
     )
@@ -358,7 +358,7 @@ def email(zone) -> ZoneInsight | None:
     if not mail:
         sentences.append("A null MX says it takes no mail." if refuses else "Nothing accepts mail for this domain.")
     sentences.append("SPF is published." if spf else "No SPF record.")
-    sentences.append(f"{_dmarc_policy(dmarc[0].content)}." if dmarc else "No DMARC record.")
+    sentences.append(ended(_dmarc_policy(dmarc[0].content)) if dmarc else "No DMARC record.")
     return ZoneInsight(
         label="Email",
         url=reverse("zones:mail", kwargs={"zone": zone.zone}),
@@ -502,7 +502,7 @@ def posture(zone) -> ZoneInsight | None:
         return ZoneInsight(
             label="TLS posture",
             value="Not readable",
-            detail=f"{refused.phrase}.",
+            detail=ended(refused.phrase),
             concern=True,
         )
     if not found:
@@ -551,7 +551,7 @@ def registration(zone) -> ZoneInsight | None:
         label="Registration",
         value=expiry_phrase(when.isoformat()),
         detail=(
-            f"Renews itself through {registrar or 'the registrar'}."
+            ended(f"Renews itself through {registrar or 'the registrar'}")
             if renews
             else f"Auto-renew is off{f' at {registrar}' if registrar else ''}, so this has to be renewed by hand."
         ),

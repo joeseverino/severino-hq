@@ -2,7 +2,7 @@
 its field, and by the database against every writer."""
 
 import hashlib
-import sqlite3
+import shutil
 import tempfile
 from datetime import date, time
 from io import StringIO
@@ -111,7 +111,7 @@ class RuleTests(TestCase):
             "job_percent_at_most_100": changed(job, percent=101),
             "job_state_is_declared": changed(job, state="paused"),
             "analytics_rumdaily_sample_interval": changed(row, sample_interval=0),
-            "documentation_status_fits_its_type": changed(runbook, status="open"),
+            "documentation_status_is_a_doc_status": changed(runbook, status="open"),
             "agent_access_is_one_row": lambda: AgentAccess.objects.create(pk=2),
             "dashboard_configuration_is_one_row": lambda: DashboardConfiguration.objects.create(pk=2),
             "analytics_vitalsdaily_sample_interval": lambda: site.vitals.create(date=DAY, sample_interval=0),
@@ -174,30 +174,34 @@ def _rules() -> set[str]:
 
 
 class PreflightTests(TestCase):
-    """The count that is read before a constraint is added."""
+    """The count, on a migrated copy, of the rows each pending check refuses
+    at the point in the plan where it is added."""
 
-    TABLES = (
-        "CREATE TABLE calendars_entry (id integer PRIMARY KEY, title text, starts_on date, ends_on date,"
-        " starts_at time, ends_at time, interval integer, weekdays text, repeat text, repeat_until date)",
-        "CREATE TABLE jobs_job (id text PRIMARY KEY, percent integer, state text)",
-        "CREATE TABLE assets_asset (id integer PRIMARY KEY, total_cost decimal, business_use_percentage integer)",
-        "CREATE TABLE django_migrations (app text, name text)",
-        "INSERT INTO calendars_entry VALUES (1, 'Kept', '2026-10-01', NULL, NULL, NULL, 1, '', '', NULL)",
-        "INSERT INTO calendars_entry VALUES (2, 'Backwards', '2026-10-01', '2026-09-01', NULL, NULL, 1, '', '', NULL)",
-        "INSERT INTO calendars_entry VALUES (3, 'Never', '2026-10-01', NULL, NULL, NULL, 0, '', '', NULL)",
-        "INSERT INTO jobs_job VALUES ('a', 250, 'running')",
-        "INSERT INTO assets_asset VALUES (1, -5, 50)",
-    )
+    BEFORE = ("docs_index", "0009_doc_type_queue_report")
 
-    def database(self, *more: str) -> Path:
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         folder = Path(tempfile.mkdtemp())
-        self.addCleanup(lambda: [item.unlink() for item in folder.iterdir()] and folder.rmdir())
+        cls.addClassCleanup(shutil.rmtree, folder)
+        cls.base = folder / "base.sqlite3"
+        with constraint_preflight.connected(cls.base):
+            call_command("migrate", verbosity=0)
+            call_command("migrate", *cls.BEFORE, verbosity=0)
+
+    def database(self, *rows: dict[str, str]) -> Path:
+        """A copy of the base, migrated to ``BEFORE``, holding ``rows``, which
+        are written past the checks the table already has."""
+
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, folder)
         path = folder / "copy.sqlite3"
-        scratch = sqlite3.connect(path)
-        for statement in (*self.TABLES, *more):
-            scratch.execute(statement)
-        scratch.commit()
-        scratch.close()
+        shutil.copyfile(self.base, path)
+        with constraint_preflight.connected(path):
+            with connection.cursor() as cursor:
+                cursor.execute("PRAGMA ignore_check_constraints = ON")
+            for index, row in enumerate(rows):
+                DocumentationRecord.objects.create(doc_id=f"rb-{index}", title=f"Doc {index}", **row)
         return path
 
     def run_on(self, path: Path) -> str:
@@ -208,44 +212,40 @@ class PreflightTests(TestCase):
             return f"{out.getvalue()}{refused}"
         return out.getvalue()
 
-    def test_it_counts_the_rows_each_pending_constraint_would_refuse(self):
-        report = self.run_on(self.database())
-
-        self.assertIn("calendars.0002_rules (pending)", report)
-        self.assertIn("  #1 calendar_entry_has_a_title: 0 of calendars_entry refused", report)
-        self.assertIn(
-            "  #2 calendar_entry_ends_after_it_starts: 1 of calendars_entry refused (for example id 2)",
-            report,
-        )
-        self.assertIn("  #5 calendar_entry_interval_in_range: 1 of calendars_entry refused (for example id 3)", report)
-        self.assertIn("  #1 job_percent_at_most_100: 1 of jobs_job refused (for example id a)", report)
-        self.assertIn("  #7 operation_state_is_declared: no table control_plane_operationrequest", report)
-        self.assertIn("3 pending constraints would be refused by a stored row.", report)
-
-    def test_money_below_zero_is_counted_and_refuses_nothing(self):
-        report = self.run_on(self.database("DELETE FROM calendars_entry WHERE id > 1", "DELETE FROM jobs_job"))
-
-        self.assertIn("informational (no constraint is added)", report)
-        self.assertIn("  assets_asset.total_cost below zero: 1", report)
-        self.assertIn("  receipts_receipt.amount below zero: no table", report)
-        self.assertNotIn("would be refused", report)
-
-    def test_a_constraint_already_applied_does_not_fail_the_run(self):
-        applied = "INSERT INTO django_migrations VALUES ('calendars', '0002_rules'), ('jobs', '0002_rules')"
-
-        report = self.run_on(self.database(applied))
-
-        self.assertIn("calendars.0002_rules (applied)", report)
-        self.assertNotIn("would be refused", report)
-
-    def test_it_changes_nothing_in_the_database_it_reads(self):
-        path = self.database()
+    def test_a_row_an_earlier_operation_deletes_is_not_counted(self):
+        path = self.database({"doc_type": "task", "status": "open"})
         before = hashlib.sha256(path.read_bytes()).hexdigest()
 
-        self.run_on(path)
+        report = self.run_on(path)
 
+        self.assertIn("docs_index.0011_task_retired (pending)", report)
+        self.assertIn("documentation_status_is_a_doc_status: 0 of docs_index_documentationrecord refused", report)
+        self.assertNotIn("would be refused", report)
+        # Reading a WAL database opens its shared-memory index; the data is the file.
         self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), before)
-        self.assertEqual(sorted(item.name for item in path.parent.iterdir()), ["copy.sqlite3"])
+        with constraint_preflight.connected(path):
+            self.assertTrue(DocumentationRecord.objects.filter(doc_type="task").exists())
+
+    def test_a_row_nothing_deletes_is_counted_and_fails_the_run(self):
+        report = self.run_on(self.database({"doc_type": "runbook", "status": "open"}))
+
+        self.assertIn(
+            "documentation_status_is_a_doc_status: 1 of docs_index_documentationrecord refused (for example id ",
+            report,
+        )
+        self.assertIn("1 pending constraint would be refused by a stored row.", report)
+
+    def test_a_database_with_nothing_pending_passes_and_counts_money(self):
+        path = self.database()
+        with constraint_preflight.connected(path):
+            call_command("migrate", verbosity=0)
+
+        report = self.run_on(path)
+
+        self.assertIn("0 pending migrations run on a copy", report)
+        self.assertIn("informational (no constraint is added)", report)
+        self.assertIn("  assets_asset.total_cost below zero: 0", report)
+        self.assertNotIn("would be refused", report)
 
     def test_it_lists_one_line_for_each_added_check_in_migration_order(self):
         loader = MigrationLoader(None, ignore_no_migrations=True)

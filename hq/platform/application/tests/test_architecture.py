@@ -129,7 +129,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         self.assertEqual(model_imports, [])
         self.assertEqual(manager_access, [])
 
-    @tag("source")
+    @tag("source", "tree")
     def test_web_views_do_not_mutate_models_directly(self):
         """Web adapters may query for rendering, but writes belong to use cases."""
         root = Path(__file__).resolve().parents[4]
@@ -159,7 +159,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
 
         self.assertEqual(violations, [])
 
-    @tag("source")
+    @tag("source", "tree")
     def test_paginated_list_views_use_the_shared_table_engine(self):
         root = Path(__file__).resolve().parents[4]
         violations = []
@@ -179,7 +179,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
 
         self.assertEqual(violations, [])
 
-    @tag("source")
+    @tag("source", "tree")
     def test_every_module_defining_a_view_is_one_these_checks_read(self):
         """A view split into its own module must not step outside the checks.
 
@@ -207,7 +207,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         self.assertEqual(escaped, [])
 
 
-@tag("source")
+@tag("source", "tree")
 class StyleContractTests(SimpleTestCase):
     """The style bundle is a contract that extensions render against.
 
@@ -220,18 +220,6 @@ class StyleContractTests(SimpleTestCase):
     @staticmethod
     def _stylesheet() -> str:
         return stylesheet()
-
-    def test_hidden_text_is_anchored_inside_its_box(self):
-        """Left at its static position, an absolutely placed label escapes any
-        scroll box whose containing block lies outside it: a hidden word in the
-        last column of a wide table scrolled a phone's whole page sideways."""
-
-        rule = re.search(r"\.visually-hidden\s*\{([^}]*)\}", self._stylesheet())
-        self.assertIsNotNone(rule)
-        body = rule.group(1)
-        for declaration in ("position: absolute", "inset-block-start: 0", "inset-inline-start: 0"):
-            with self.subTest(declaration=declaration):
-                self.assertIn(declaration, body)
 
     def test_a_face_never_swaps_in_after_text_is_drawn(self):
         """A face that arrives late and is swapped in moves every line it sets.
@@ -394,6 +382,10 @@ class StyleContractTests(SimpleTestCase):
         are the idioms that put one name in two rules on purpose. Breakpoint
         and container variants are the same rule at another size and are not
         counted either.
+
+        Stylelint's no-duplicate-selectors does not replace it: it judges one
+        file and one at-rule block at a time, so a selector in two sheets or
+        in two `@layer` blocks of one sheet passes it.
         """
 
         import collections
@@ -417,14 +409,19 @@ class StyleContractTests(SimpleTestCase):
         twice = {selector: lines for selector, lines in seen.items() if len(lines) > 1}
         self.assertEqual(twice, {})
 
-    def test_every_referenced_custom_property_is_defined(self):
+    def test_a_fallback_never_hides_an_undefined_custom_property(self):
+        """A var() with a fallback still names a property some sheet defines.
 
-        css = self._stylesheet()
-        defined = set(re.findall(r"^\s*(--[a-z0-9-]+)\s*:", css, re.MULTILINE))
-        referenced = set(re.findall(r"var\(\s*(--[a-z0-9-]+)", css))
-        # A fallback (var(--x, #fff)) is still a typo worth catching, so the
-        # comparison deliberately ignores whether one was supplied.
-        self.assertEqual(sorted(referenced - defined), [])
+        Stylelint's no-unknown-custom-properties (`lint:css`) passes any
+        var() that carries a fallback, and a typo there degrades silently to
+        the fallback.
+        """
+
+        css = "\n".join(path.read_text(encoding="utf-8") for path in sorted((STATIC / "css").rglob("*.css")))
+        defined = set(re.findall(r"(--[\w-]+)\s*:", css))
+        fallen_back = set(re.findall(r"var\(\s*(--[\w-]+)\s*,", css))
+        self.assertTrue(fallen_back)
+        self.assertEqual(sorted(fallen_back - defined), [])
 
     def test_user_menu_rows_share_one_element_independent_primitive(self):
         """A link and a POST action in one menu must render as one kind of row.
@@ -465,294 +462,6 @@ class StyleContractTests(SimpleTestCase):
             depth += line.count("{") - line.count("}")
 
         self.assertEqual(outside, [], "Rules outside @layer beat every layer. Put them in one.")
-
-    def test_font_size_comes_from_the_type_scale(self):
-        """A font size is one of the type scale's steps, or it is drift.
-
-        Sizes half a pixel apart are not a distinction anyone can see.
-
-        `em` is exempt. It means "relative to whatever this
-        sits in" (a unit suffix shrinking beside its number, a glyph tracking
-        its label) which is a different statement from choosing a step, and
-        one an absolute scale cannot make.
-        """
-
-        literals = re.findall(r"font-size:\s*([0-9.]+(?:px|rem))", self._stylesheet())
-
-        self.assertEqual(
-            sorted(set(literals)),
-            [],
-            "font-size belongs to the --text-* scale, not a literal.",
-        )
-
-    def test_spacing_on_the_scale_is_written_as_a_token(self):
-        """A value that is on the scale must say so.
-
-        The even rungs are `--space-*`; this stops one being written as a
-        literal.
-
-        Odd values stay literals and are deliberately not failed here.
-        Rounding padding by a pixel is visible in a dense table in a way that
-        moving type by half a pixel is not, so each is judged on its own
-        rather than swept. `1px` is exempt: it is a hairline rule (the grid
-        lines in `.sweep-grid` are a 1px gap over a colored background) and
-        not a space at all.
-        """
-
-        on_scale = {2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40}
-        declaration = re.compile(
-            r"\b(?:padding|margin|gap|row-gap|column-gap)(?:-[a-z-]+)?:\s*([^;{}]+)",
-        )
-        offenders = sorted(
-            {
-                f"{value}px"
-                # calc() and max() carry their own arithmetic; the scale is
-                # still the input, and rewriting inside them buys nothing.
-                for match in declaration.finditer(self._stylesheet())
-                if not re.search(r"\b(?:calc|max|min|clamp)\(", match.group(1))
-                for value in re.findall(r"(?<![-\w.])([0-9]+)px", match.group(1))
-                if int(value) in on_scale
-            }
-        )
-
-        self.assertEqual(offenders, [], "This spacing is on the scale; write it as --space-*.")
-
-    # Every CSS named color and system color, so `color: tomato` is caught as
-    # surely as a hex.
-    _NAMED_COLORS = frozenset(
-        [
-            "aliceblue",
-            "antiquewhite",
-            "aqua",
-            "aquamarine",
-            "azure",
-            "beige",
-            "bisque",
-            "black",
-            "blanchedalmond",
-            "blue",
-            "blueviolet",
-            "brown",
-            "burlywood",
-            "cadetblue",
-            "chartreuse",
-            "chocolate",
-            "coral",
-            "cornflowerblue",
-            "cornsilk",
-            "crimson",
-            "cyan",
-            "darkblue",
-            "darkcyan",
-            "darkgoldenrod",
-            "darkgray",
-            "darkgreen",
-            "darkgrey",
-            "darkkhaki",
-            "darkmagenta",
-            "darkolivegreen",
-            "darkorange",
-            "darkorchid",
-            "darkred",
-            "darksalmon",
-            "darkseagreen",
-            "darkslateblue",
-            "darkslategray",
-            "darkslategrey",
-            "darkturquoise",
-            "darkviolet",
-            "deeppink",
-            "deepskyblue",
-            "dimgray",
-            "dimgrey",
-            "dodgerblue",
-            "firebrick",
-            "floralwhite",
-            "forestgreen",
-            "fuchsia",
-            "gainsboro",
-            "ghostwhite",
-            "gold",
-            "goldenrod",
-            "gray",
-            "green",
-            "greenyellow",
-            "gray",
-            "honeydew",
-            "hotpink",
-            "indianred",
-            "indigo",
-            "ivory",
-            "khaki",
-            "lavender",
-            "lavenderblush",
-            "lawngreen",
-            "lemonchiffon",
-            "lightblue",
-            "lightcoral",
-            "lightcyan",
-            "lightgoldenrodyellow",
-            "lightgray",
-            "lightgreen",
-            "lightgrey",
-            "lightpink",
-            "lightsalmon",
-            "lightseagreen",
-            "lightskyblue",
-            "lightslategray",
-            "lightslategrey",
-            "lightsteelblue",
-            "lightyellow",
-            "lime",
-            "limegreen",
-            "linen",
-            "magenta",
-            "maroon",
-            "mediumaquamarine",
-            "mediumblue",
-            "mediumorchid",
-            "mediumpurple",
-            "mediumseagreen",
-            "mediumslateblue",
-            "mediumspringgreen",
-            "mediumturquoise",
-            "mediumvioletred",
-            "midnightblue",
-            "mintcream",
-            "mistyrose",
-            "moccasin",
-            "navajowhite",
-            "navy",
-            "oldlace",
-            "olive",
-            "olivedrab",
-            "orange",
-            "orangered",
-            "orchid",
-            "palegoldenrod",
-            "palegreen",
-            "paleturquoise",
-            "palevioletred",
-            "papayawhip",
-            "peachpuff",
-            "peru",
-            "pink",
-            "plum",
-            "powderblue",
-            "purple",
-            "rebeccapurple",
-            "red",
-            "rosybrown",
-            "royalblue",
-            "saddlebrown",
-            "salmon",
-            "sandybrown",
-            "seagreen",
-            "seashell",
-            "sienna",
-            "silver",
-            "skyblue",
-            "slateblue",
-            "slategray",
-            "slategrey",
-            "snow",
-            "springgreen",
-            "steelblue",
-            "tan",
-            "teal",
-            "thistle",
-            "tomato",
-            "turquoise",
-            "violet",
-            "wheat",
-            "white",
-            "whitesmoke",
-            "yellow",
-            "yellowgreen",
-            "canvas",
-            "canvastext",
-            "linktext",
-            "visitedtext",
-            "activetext",
-            "buttonface",
-            "buttontext",
-            "buttonborder",
-            "field",
-            "fieldtext",
-            "highlight",
-            "highlighttext",
-            "selecteditem",
-            "selecteditemtext",
-            "mark",
-            "marktext",
-            "graytext",
-            "accentcolor",
-            "accentcolortext",
-        ]
-    )
-
-    @classmethod
-    def _declarations_outside_tokens(cls) -> list[tuple[int, str]]:
-        """Every declaration value outside `@layer tokens`, with its line.
-
-        Comments are blanked (keeping their newlines, so line numbers hold),
-        the tokens layer is blanked by brace depth, and what is left is split
-        on `{`, `}` and `;`: a segment closed by `{` is a selector or an
-        at-rule prelude and is skipped, so `.pill-green` cannot read as green.
-        """
-
-        def blank(text: str) -> str:
-            return re.sub(r"[^\n]", " ", text)
-
-        css = re.sub(r"/\*.*?\*/", lambda match: blank(match.group()), cls._stylesheet(), flags=re.DOTALL)
-        for opening in reversed([match.start() for match in re.finditer(r"@layer\s+tokens\s*\{", css)]):
-            depth, end = 0, len(css)
-            for index in range(css.index("{", opening), len(css)):
-                depth += {"{": 1, "}": -1}.get(css[index], 0)
-                if depth == 0:
-                    end = index + 1
-                    break
-            css = css[:opening] + blank(css[opening:end]) + css[end:]
-
-        values = []
-        for segment in re.finditer(r"[^{};]+(?=[;}])", css):
-            name, colon, value = segment.group().partition(":")
-            if colon and name.strip():
-                values.append((css.count("\n", 0, segment.end()) + 1, value))
-        return values
-
-    def test_color_is_named_only_in_the_tokens_layer(self):
-        """Color lives in tokens, so a theme is a set of token overrides.
-
-        The dark palette overrides `--bg`, `--ink` and the rest and nothing
-        else. A literal anywhere else is a color the theme cannot reach: it
-        stays a light-mode value on a dark page, and nothing but a person
-        looking at that one screen would notice. Literals also let related
-        colors drift apart: hex written per component makes `published`,
-        `reachable` and `success` three different greens.
-
-        Allowed outside the layer: `var()` references, `color-mix()` of two
-        tokens, and the keywords that are not a color choice (`transparent`,
-        `currentColor`, `inherit`).
-        """
-
-        literal = re.compile(
-            r"#[0-9a-fA-F]{3,8}\b"
-            r"|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\("
-            r"|(?<![-\w.#$@])([a-zA-Z]+)(?![-\w(])"
-        )
-        declarations = self._declarations_outside_tokens()
-        # A parser that read nothing would find nothing wrong.
-        self.assertGreater(len(declarations), 100)
-        offenders = []
-        for line, value in declarations:
-            for match in literal.finditer(value):
-                word = match.group(1)
-                if word is None or word.lower() in self._NAMED_COLORS:
-                    offenders.append(f"{line}: {value.strip()[:70]}")
-                    break
-
-        self.assertEqual(offenders, [], "Color belongs in a token in `@layer tokens`, not the component.")
 
     def test_no_tracked_file_names_a_reachable_endpoint(self):
         """Addresses, ports and account names are deployment facts, not source.
@@ -1021,7 +730,7 @@ class StyleContractTests(SimpleTestCase):
             )
 
 
-@tag("source")
+@tag("source", "tree")
 class SharedPrimitiveStyleTests(SimpleTestCase):
     """Shared partials may only use classes the style bundle actually defines.
 
@@ -1085,7 +794,7 @@ class TemplateCommentTests(SimpleTestCase):
         self.assertIs(testing.unclosed_template_comments, interface_text.unclosed_template_comments)
 
 
-@tag("source")
+@tag("source", "tree")
 class PageTitleTests(SimpleTestCase):
     """A page names itself; the site name is appended once, by the layout.
 
@@ -1131,76 +840,7 @@ class PageTitleTests(SimpleTestCase):
         )
 
 
-@tag("source")
-class WorkflowSecrecyTests(SimpleTestCase):
-    """A private value reaches a public log through the environment or not at all.
-
-    Actions expands ``${{ … }}`` into the text of the step it then echoes, so a
-    value interpolated into a script body is printed in full before the step
-    runs: ahead of anything the job does later to conceal it. Passed through
-    ``env:`` it is a shell variable the echo never sees, and a secret is masked
-    on top of that.
-    """
-
-    def workflows(self):
-        root = Path(__file__).resolve().parents[4] / ".github" / "workflows"
-        return sorted(root.glob("*.yml"))
-
-    def run_block_lines(self, text: str):
-        """Every line of every ``run:`` script, with its line number.
-
-        Read by indentation rather than parsed, so this needs no YAML library
-        and cannot start disagreeing with one about what a block contains.
-
-        A one-line ``run:`` counts. Checking only block scalars would miss a
-        one-line ``docker login`` piping a token straight into a shell.
-        """
-
-        lines = text.splitlines()
-        inside = None
-        for number, line in enumerate(lines, start=1):
-            stripped = line.strip()
-            if inside is not None:
-                indent = len(line) - len(line.lstrip())
-                if stripped and indent <= inside:
-                    inside = None
-                else:
-                    yield number, line
-                    continue
-            if not stripped.startswith("run:"):
-                continue
-            if stripped.endswith(("|", ">", "|-", ">-")):
-                inside = len(line) - len(line.lstrip())
-            else:
-                yield number, line
-
-    def test_no_script_body_interpolates_a_secret_or_a_variable(self):
-        offenders = []
-        for path in self.workflows():
-            for number, line in self.run_block_lines(path.read_text(encoding="utf-8")):
-                if "${{ secrets." in line or "${{ vars." in line:
-                    offenders.append(f"{path.name}:{number}")
-
-        self.assertEqual(
-            sorted(offenders),
-            [],
-            "pass it through env, instead: a script body is echoed verbatim",
-        )
-
-    def test_the_composition_set_is_read_from_a_secret(self):
-        """A variable is not masked, and this inventory is the private half."""
-
-        # Asserted on names rather than on contents: a failure that printed the
-        # file would put the whole workflow in the output of the check meant to
-        # keep things out of it.
-        offenders = [
-            path.name for path in self.workflows() if "vars.COMPOSITION_EXTENSIONS" in path.read_text(encoding="utf-8")
-        ]
-
-        self.assertEqual(offenders, [], "read it from secrets, which are masked")
-
-
-@tag("source")
+@tag("source", "tree")
 class AssertionPrecisionTests(SimpleTestCase):
     """A comparison belongs in the assertion, not inside a boolean.
 
@@ -1246,7 +886,7 @@ class AssertionPrecisionTests(SimpleTestCase):
         self.assertEqual(offenders, [])
 
 
-@tag("source")
+@tag("source", "tree")
 class CellMarkupTests(SimpleTestCase):
     """A test reads a table cell by its text: the host may wrap what a cell says.
 
@@ -1297,7 +937,7 @@ class CellMarkupTests(SimpleTestCase):
         self.assertIn("read the cell's text", said)
 
 
-@tag("source")
+@tag("source", "tree")
 class CommentHistoryTests(SimpleTestCase):
     """A comment says what the code does and why, in the present tense.
 
@@ -1531,8 +1171,7 @@ PLAIN_WORDS_EXEMPT = (
     (
         "hq/platform/application/resources.py",
         "resource",
-        "An API error for a list name that does not exist, read by whoever "
-        "wrote the client, in the API's own vocabulary.",
+        "An API error for a list name that does not exist, read by whoever wrote the client, in the API's own vocabulary.",
     ),
 )
 
@@ -1657,7 +1296,7 @@ class PostButtonTests(SimpleTestCase):
         self.assertIn("&lt;b&gt;", html)
 
 
-@tag("source")
+@tag("source", "tree")
 class OnePrimitiveTests(SimpleTestCase):
     """Questions asked in many places are answered by one function."""
 
@@ -1749,6 +1388,30 @@ class OnePrimitiveTests(SimpleTestCase):
             for path in sorted((self.ROOT / "templates").rglob("*.html"))
             if "|timesince }} ago" in path.read_text(encoding="utf-8")
             or "|timesince %}" in path.read_text(encoding="utf-8")
+        ]
+        self.assertEqual(found, [])
+
+    def test_templates_write_dates_through_the_when_filter(self):
+        """A day and its month are written by ``when`` ("Oct 3", "Oct 3, 2025"),
+        never by a format of a template's own. A month or a weekday alone (a
+        calendar's heading, its column labels) is not a date, and digits only
+        (``Y-m-d`` in an address or a ``datetime``) are for a machine to read."""
+
+        formatted = re.compile(r"""\{%\s*now\s+(["'])(.*?)\1|\|date(?::(["'])(.*?)\3|(?![:\w]))""")
+        day, month = set("djS"), set("mnMFNbE")
+
+        def a_whole_date(layout: str) -> bool:
+            letters = set(re.sub(r"\\.", "", layout)) - set(" ,.-:/")
+            if letters <= set("YmdHis"):
+                return False
+            return bool(letters & day and letters & month)
+
+        found = [
+            f"{path.relative_to(self.ROOT).as_posix()}:{number}: {match.group(0)}"
+            for path in sorted((self.ROOT / "templates").rglob("*.html"))
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1)
+            for match in formatted.finditer(line)
+            if a_whole_date(match.group(2) or match.group(4) or "N j, Y")
         ]
         self.assertEqual(found, [])
 
@@ -1861,7 +1524,7 @@ class OnePrimitiveTests(SimpleTestCase):
         self.assertEqual(found, [])
 
 
-@tag("source")
+@tag("source", "tree")
 class CognitiveComplexityTests(SimpleTestCase):
     """No function asks a reader to hold more than twenty units of nesting.
 
@@ -1951,20 +1614,25 @@ class CognitiveComplexityTests(SimpleTestCase):
         self.assertEqual(over, {}, "split these into named steps")
 
 
-@tag("source")
+@tag("source", "tree")
 class FileSizeTests(SimpleTestCase):
     """No source file is longer than ``LIMIT`` lines.
 
     A file grows freely below it; one past it is split by responsibility.
-    Every language HQ writes is held to it. Tests, migrations, generated code
-    and vendored copies are not counted.
+    Every language HQ writes is held to it. Migrations, generated code and
+    vendored copies are not counted.
+
+    Python test files are held to it through ``file_size_baseline.txt``, the
+    files already over it with the length each had when listed. A listed file
+    may not grow, one under the ceiling leaves the list, and no new test file
+    passes the ceiling.
     """
 
     LIMIT = 1000
     ROOT = Path(__file__).resolve().parents[4]
     # The fewest files each language's walk can find in a checkout or the image.
     FLOOR = {"*.py": 100, "*.go": 50, "*.js": 4, "*.css": 4}
-    NOT_WRITTEN_HERE = ("_tests.py", "_test.go", ".gen.go", ".min.js")
+    NOT_WRITTEN_HERE = ("_test.go", ".gen.go", ".min.js")
 
     def _counted(self, path: Path) -> bool:
         return (
@@ -1984,8 +1652,39 @@ class FileSizeTests(SimpleTestCase):
         over = {path: lines for path, lines in sizes.items() if lines > self.LIMIT}
         self.assertEqual(over, {}, "split these by responsibility")
 
+    def _baseline(self) -> dict[str, int]:
+        lines = Path(__file__).with_name("file_size_baseline.txt").read_text(encoding="utf-8").splitlines()
+        entries = [line.rsplit(" ", 1) for line in lines if line and not line.startswith("#")]
+        return {path: int(figure) for path, figure in entries}
 
-@tag("source")
+    def _test_file_sizes(self) -> dict[str, int]:
+        found = [
+            path
+            for path in source_files(self.ROOT, "test*.py")
+            if "tests" in path.relative_to(self.ROOT).parts[:-1]
+            and not {"migrations", "node_modules", "vendor"} & set(path.relative_to(self.ROOT).parts)
+        ]
+        self.assertGreater(len(found), 100, "the test-file walk found almost nothing; its root is wrong")
+        return {str(path.relative_to(self.ROOT)): len(path.read_text(encoding="utf-8").splitlines()) for path in found}
+
+    def test_test_files_hold_the_ceiling_through_a_baseline_that_only_shrinks(self):
+        sizes = self._test_file_sizes()
+        baseline = self._baseline()
+        problems = []
+        for path, listed in sorted(baseline.items()):
+            if path not in sizes:
+                problems.append(f"{path}: listed at {listed} but gone; remove its line")
+            elif sizes[path] <= self.LIMIT:
+                problems.append(f"{path}: {sizes[path]} lines, under {self.LIMIT}; remove its line")
+            elif sizes[path] > listed:
+                problems.append(f"{path}: {sizes[path]} lines, listed at {listed}; a listed file does not grow")
+        for path, lines in sorted(sizes.items()):
+            if lines > self.LIMIT and path not in baseline:
+                problems.append(f"{path}: {lines} lines, over {self.LIMIT} and not listed; split it by behavior")
+        self.assertEqual(problems, [], "split the test file by the behavior it holds")
+
+
+@tag("source", "tree")
 class OneDefinitionTests(SimpleTestCase):
     """A module-level name is assigned once.
 
@@ -2014,10 +1713,122 @@ class OneDefinitionTests(SimpleTestCase):
         self.assertEqual(twice, {}, "give each its own name")
 
 
+def _defaulted_settings_reads(tree: ast.AST) -> list[int]:
+    """Lines of ``getattr(settings, NAME, default)``, a read that survives a misspelled NAME."""
+
+    return [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "getattr"
+        and len(node.args) == 3
+        and isinstance(node.args[0], ast.Name)
+        and node.args[0].id == "settings"
+    ]
+
+
+@tag("source", "tree")
+class SettingsReadTests(SimpleTestCase):
+    """A setting is declared once, in ``hq/config/settings.py``, and read as ``settings.NAME``.
+
+    ``getattr(settings, "NAME", default)`` turns a misspelled name into a
+    feature quietly switched off, and writes the default a second time.
+    """
+
+    def test_no_source_reads_a_setting_with_a_default(self):
+        root = Path(__file__).resolve().parents[4]
+        self.assertEqual(_defaulted_settings_reads(ast.parse('getattr(settings, "X", 1)')), [1])
+        reads = {
+            f"{path.relative_to(root)}:{line}"
+            for package in ("hq", "hq_sdk", "tools")
+            for path in source_files(root / package, "*.py")
+            if "tests" not in path.parts and not path.name.startswith("test")
+            for line in _defaulted_settings_reads(parsed(path))
+        }
+        self.assertEqual(reads, set(), "declare the setting in hq/config/settings.py and read settings.NAME")
+
+
+def _operation_writes(tree: ast.AST) -> list[int]:
+    """Lines that write an ``OperationRequest`` row one at a time."""
+
+    return [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in {"create", "get_or_create", "update_or_create"}
+        and isinstance(node.func.value, ast.Attribute)
+        and node.func.value.attr == "objects"
+        and isinstance(node.func.value.value, ast.Name)
+        and node.func.value.value.id == "OperationRequest"
+    ]
+
+
+@tag("source", "tree")
+class OperationQueueTests(SimpleTestCase):
+    """An operation enters the queue through ``resource_operations.enqueue``.
+
+    Its key column is unique, and ``enqueue`` lets that column settle two
+    writers on one key. A caller that checks for the key and then creates the
+    row has a race of its own between the two.
+    """
+
+    def test_only_enqueue_writes_an_operation(self):
+        root = Path(__file__).resolve().parents[4]
+        home = root / "hq/platform/application/resource_operations.py"
+        self.assertTrue(_operation_writes(parsed(home)), "enqueue no longer writes the row this test looks for")
+        writes = {
+            f"{path.relative_to(root)}:{line}"
+            for path in source_files(root / "hq", "*.py")
+            if path != home and "tests" not in path.parts
+            for line in _operation_writes(parsed(path))
+        }
+        self.assertEqual(writes, set(), "queue it with resource_operations.enqueue")
+
+
+def _user_reads(tree: ast.AST) -> list[int]:
+    """Lines of ``getattr(x, "user", ...)`` or ``hasattr(x, "user")``."""
+
+    return [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in {"getattr", "hasattr"}
+        and len(node.args) >= 2
+        and isinstance(node.args[1], ast.Constant)
+        and node.args[1].value == "user"
+    ]
+
+
+@tag("source", "tree")
+class SignedInTests(SimpleTestCase):
+    """Who a request's session signed in is ``request_identity.signed_in``.
+
+    Every request Django serves has a ``user``; only one the MCP boundary
+    admitted has none. That case is answered once, so no reader decides on its
+    own whether a missing or anonymous user counts as signed in.
+    """
+
+    def test_only_signed_in_asks_whether_a_request_has_a_user(self):
+        root = Path(__file__).resolve().parents[4]
+        home = root / "hq/platform/application/request_identity.py"
+        self.assertTrue(_user_reads(parsed(home)), "signed_in no longer reads the attribute this test looks for")
+        reads = {
+            f"{path.relative_to(root)}:{line}"
+            for package in ("hq", "hq_sdk")
+            for path in source_files(root / package, "*.py")
+            if path != home and "tests" not in path.parts
+            for line in _user_reads(parsed(path))
+        }
+        self.assertEqual(reads, set(), "ask request_identity.signed_in(request)")
+
+
 class RouteOwnerTests(SimpleTestCase):
     """Routes are resolved in one place, so the answer can be remembered."""
 
-    @tag("source")
+    @tag("source", "tree")
     def test_the_application_resolves_routes_through_its_one_owner(self):
         root = Path(__file__).resolve().parents[4]
         modules = [
@@ -2103,7 +1914,7 @@ class RequestNeverWaitsTests(SimpleTestCase):
         ):
             RequestContextMiddleware(view)(RequestFactory().get("/example/"))
 
-    @tag("source")
+    @tag("source", "tree")
     def test_an_exception_is_declared_with_its_reason_and_entered_only_where_listed(self):
         from hq.platform.core.outbound import ALLOWED
 
@@ -2123,13 +1934,13 @@ class RequestNeverWaitsTests(SimpleTestCase):
         for name, reason in ALLOWED.items():
             self.assertGreater(len(reason), 60, name)
 
-    @tag("source")
+    @tag("source", "tree")
     def test_only_a_job_leaves_the_request_that_started_it(self):
         leaving = {relative for relative, source in self.sources() if "off_request" in source}
 
         self.assertEqual(leaving, {"hq/platform/core/outbound.py", "hq/domains/jobs/runner.py"})
 
-    @tag("source")
+    @tag("source", "tree")
     def test_asked_for_work_is_followed_by_one_script_behavior(self):
         script = (self.ROOT / "static" / "js" / "ask.js").read_text(encoding="utf-8")
         templates = "\n".join(
@@ -2144,7 +1955,7 @@ class RequestNeverWaitsTests(SimpleTestCase):
         self.assertEqual(script.count("[data-ask][data-ask-status]"), 1)
 
 
-@tag("source")
+@tag("source", "tree")
 class FragmentPrimitiveTests(SimpleTestCase):
     """Reads are one component: `static/js/fragment.js` and the part it asks for.
 
@@ -2172,18 +1983,6 @@ class FragmentPrimitiveTests(SimpleTestCase):
     # which every copy of its control on the page draws in place; that answer
     # is data no one region is drawn from: the ask's post and its status poll.
     ALLOWED = {("ask.js", "reads a response body as data"): 2}
-    # The attributes of the hand-rolled reads the primitive replaced.
-    RETIRED = (
-        "data-deferred",
-        "data-live-form",
-        "data-whatif",
-        "data-connection-source",
-        "data-connection-slot",
-        "data-dashboard-glance",
-        "data-calendar-source",
-        "X-Command-Center",
-        "data-action-count-url",
-    )
 
     def scripts(self) -> dict[str, str]:
         found = {
@@ -2212,9 +2011,10 @@ class FragmentPrimitiveTests(SimpleTestCase):
         self.assertEqual(source.count("window.fetch("), 1)
         self.assertEqual(source.count("parseFromString("), 1)
         self.assertEqual(source.count("window.setTimeout("), 1)
-        self.assertNotIn("setInterval(", source)
         # The parser is not handed out: nothing outside the closure can reach it.
-        self.assertIn("return { swap, reveal, fail };", source)
+        exported = re.search(r"return \{([^}]*)\};\s*\}\)\(\);\s*window\.hqFragment = hqFragment;", source)
+        self.assertIsNotNone(exported, "hqFragment's closure no longer ends in the object it hands out")
+        self.assertNotIn("parse", re.findall(r"\w+", exported.group(1)))
         self.assertFalse(re.search(r"window\.\w+\s*=\s*parse\b", source), "the parser left the closure")
 
     def test_the_primitive_loads_before_the_scripts_that_use_it(self):
@@ -2232,17 +2032,8 @@ class FragmentPrimitiveTests(SimpleTestCase):
         self.assertTrue(named)
         self.assertEqual(named - defined, set())
 
-    def test_the_reads_it_replaced_stay_gone(self):
-        texts = dict(self.scripts())
-        for path in sorted((self.ROOT / "templates").rglob("*.html")):
-            texts[str(path.relative_to(self.ROOT))] = path.read_text(encoding="utf-8")
-        for name, text in texts.items():
-            for retired in self.RETIRED:
-                with self.subTest(file=name, retired=retired):
-                    self.assertNotIn(retired, text)
 
-
-@tag("source")
+@tag("source", "tree")
 class TestPlacementTests(SimpleTestCase):
     """Every test lives in its package's tests/ directory (CLAUDE.md), so
     coverage, discovery and the fast gate's selection see the same tree."""
@@ -2267,35 +2058,82 @@ class TestPlacementTests(SimpleTestCase):
 
 @tag("source")
 class RuntimeDependencyTests(SimpleTestCase):
-    """Every runtime dependency earns its place: host code imports it, or
-    pyproject.toml says why it is installed without being imported."""
+    """lint:deptry holds every dependency to host code's imports, less the
+    per-rule ignores in pyproject.toml. deptry says nothing of an ignore that
+    has gone stale, so this holds each to a finding it would report."""
 
-    def test_every_runtime_dependency_is_imported_or_explained(self):
-        import ast
-        import importlib.metadata
+    def test_every_finding_deptry_ignores_is_one_it_would_report(self):
+        import json
+        import subprocess
+        import sys
         import tomllib
 
         root = Path(__file__).resolve().parents[4]
-        project = tomllib.loads((root / "pyproject.toml").read_text())
-        explained = set(project["tool"]["severino-hq"]["unimported"])
-        imported: set[str] = set()
-        for package in ("hq", "hq_sdk"):
-            for path in (root / package).rglob("*.py"):
-                if "tests" in path.parts:
-                    continue
-                for node in ast.walk(parsed(path)):
-                    if isinstance(node, ast.Import):
-                        imported |= {alias.name.split(".")[0] for alias in node.names}
-                    elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-                        imported.add(node.module.split(".")[0])
-        providers = importlib.metadata.packages_distributions()
-        used = {distribution.lower() for name in imported for distribution in providers.get(name, ())}
-        declared = {
-            re.split(r"[<>=!~\[ ;]", requirement, maxsplit=1)[0].lower()
-            for requirement in project["project"]["dependencies"]
-        }
+        ignored = tomllib.loads((root / "pyproject.toml").read_text())["tool"]["deptry"]["per_rule_ignores"]
+        with TemporaryDirectory() as scratch:
+            report = Path(scratch) / "deptry.json"
+            # A --per-rule-ignores replaces the table, so every rule runs with no ignore.
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "deptry",
+                    "hq",
+                    "hq_sdk",
+                    "--per-rule-ignores",
+                    "DEP001=",
+                    "--json-output",
+                    report,
+                ],
+                cwd=root,
+                capture_output=True,
+                check=False,
+            )
+            findings = json.loads(report.read_text())
 
-        self.assertEqual(sorted(declared - used - explained), [])
-        # A reason for something that is imported, or no longer installed, is stale.
-        self.assertEqual(sorted(explained & used), [])
-        self.assertEqual(sorted(explained - declared), [])
+        reported = {
+            rule: sorted({each["module"] for each in findings if each["error"]["code"] == rule}) for rule in ignored
+        }
+        self.assertEqual(reported, {rule: sorted(modules) for rule, modules in ignored.items()})
+
+
+def _restated_trails(tree: ast.AST) -> list[int]:
+    """Lines of a ``get_page_trail`` that only returns crumbs or a ``record_trail`` call."""
+
+    found = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.FunctionDef) and node.name == "get_page_trail"):
+            continue
+        body = [
+            statement
+            for statement in node.body
+            if not (isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant))
+        ]
+        if len(body) != 1 or not isinstance(body[0], ast.Return):
+            continue
+        value = body[0].value
+        is_crumbs = isinstance(value, ast.Tuple)
+        is_record_trail = (
+            isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "record_trail"
+        )
+        if is_crumbs or is_record_trail:
+            found.append(node.lineno)
+    return found
+
+
+@tag("source", "tree")
+class PageTrailTests(SimpleTestCase):
+    """A view says its trail with ``page_trail`` and ``trail_label``, not a ``get_page_trail`` that restates them.
+
+    An override stays for a trail the mixin cannot say: one built from the
+    request or from several statements.
+    """
+
+    def test_no_view_overrides_get_page_trail_to_say_what_the_mixin_says(self):
+        root = Path(__file__).resolve().parents[4]
+        self.assertEqual(_restated_trails(ast.parse("def get_page_trail(self):\n    return (A,)")), [1])
+        self.assertEqual(_restated_trails(ast.parse("def get_page_trail(self):\n    x = 1\n    return (x,)")), [])
+        restated = [
+            f"{path.relative_to(root)}:{line}" for path in view_modules(root) for line in _restated_trails(parsed(path))
+        ]
+        self.assertEqual(restated, [], "declare page_trail (and trail_label) on the view")

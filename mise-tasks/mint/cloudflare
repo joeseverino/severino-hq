@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="Mint a read-only Cloudflare token for the cloudflare_api connection (docs/Secrets.md)"
+#MISE hide=true
 #USAGE flag "--account <id>" required_unless="--list-groups" help="Cloudflare account the token reads"
 #USAGE flag "--name <name>" default="hq-observer" help="Token name"
 #USAGE flag "--days <n>" default="90" help="Days until expiry"

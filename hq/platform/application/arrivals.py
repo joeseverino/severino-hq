@@ -62,7 +62,7 @@ _lock = threading.Lock()
 
 
 def _every() -> int:
-    return int(getattr(settings, "SEVERINO_REQUEST_PATH_SECONDS", 0) or 0)
+    return settings.SEVERINO_REQUEST_PATH_SECONDS
 
 
 def note(request) -> None:

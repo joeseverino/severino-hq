@@ -10,7 +10,7 @@ from django.db import transaction
 from hq.domains.assets.models import Asset
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
-from hq.domains.receipts.validation import validate_receipt_file
+from hq.domains.receipts.validation import is_new_upload, validate_receipt_file
 from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.models import AuditLog
 
@@ -74,7 +74,7 @@ def update_receipt(
         if expected_updated_at and receipt.updated_at.isoformat() != expected_updated_at:
             raise RecordConflict("That receipt changed after it was read.")
         expense, asset = _relations(command)
-        if upload is not None and hasattr(upload, "content_type"):
+        if is_new_upload(upload):
             validate_receipt_file(upload)
             receipt.file = upload
             receipt.original_filename = upload.name[:255]

@@ -128,7 +128,7 @@ def allowed(name: str) -> Iterator[None]:
 def mode() -> str:
     """What happens to a request that reaches out: refused, or reported."""
 
-    return REPORT if getattr(settings, "SEVERINO_OUTBOUND_IN_REQUEST", REFUSE) == REPORT else REFUSE
+    return REPORT if settings.SEVERINO_OUTBOUND_IN_REQUEST == REPORT else REFUSE
 
 
 def _sends_nothing(event: str, args: tuple[Any, ...]) -> bool:

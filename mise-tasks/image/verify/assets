@@ -1,5 +1,6 @@
 #!/bin/sh
-#MISE description="It carries its collected assets and their manifest, readable by the account that serves them"
+#MISE description="It carries its collected assets, their brotli and gzip copies and their manifest, readable by the account that serves them"
+#MISE hide=true
 #MISE depends=["image:build"]
 set -eu
 
@@ -7,6 +8,9 @@ set -eu
 docker run --rm --entrypoint sh "${IMAGE:-severino-hq:ci-local}" -c '
     root="${DJANGO_STATIC_ROOT:?}"
     [ -s "$root/staticfiles.json" ] || { echo "$root has no manifest, so a page falls back to plain names." >&2; exit 1; }
+    for copy in br gz; do
+        [ -n "$(find "$root" -name "*.css.$copy" | head -n 1)" ] || { echo "$root has no .$copy copies, so every request for one is sent uncompressed." >&2; exit 1; }
+    done
     unreadable="$(find "$root" ! -readable | head -n 5)"
     [ -z "$unreadable" ] || { printf "%s\n" "$unreadable" >&2; echo "Collected assets the serving account cannot read." >&2; exit 1; }
 '

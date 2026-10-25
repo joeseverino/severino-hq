@@ -1,15 +1,20 @@
 #!/bin/sh
-#MISE description="Write what checks:ruff and checks:mise-format hold: Ruff's fixes and format, and mise.toml and its task files as mise fmt writes them"
+#MISE description="When a lint gate fails, a derived file is behind its source, or a rebase conflicts in one: rewrite every derived file, then Ruff's fixes and format and mise fmt's"
 
-# The same file set the two gates read, so a fix run leaves them nothing to
-# report.
+# The same file set the format gates read, so a fix run leaves them nothing
+# to report. The derived files load Django, so fix:derived writes them on an
+# empty database inside the heavy turn.
 set -eu
+# shellcheck source=tools/lib/mise-files.sh
+. ./tools/lib/mise-files.sh
 
+mise run fix:derived
 uv run ruff check --fix .
 uv run ruff format .
-includes="$(yq -p toml -oy '.task_config.includes[] | select(test("\.toml$"))' mise.toml)"
-# shellcheck disable=SC2086  # each include is a glob for the shell to expand
-for file in mise.toml ${includes}; do
+files="$(mktemp)"
+trap 'rm -f "${files}"' EXIT
+mise_files "${files}"
+while IFS= read -r file; do
     formatted="$(mise fmt --stdin <"${file}")"
     printf '%s\n' "${formatted}" >"${file}"
-done
+done <"${files}"

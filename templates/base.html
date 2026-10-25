@@ -1,6 +1,8 @@
 {% load static %}
 {% load humanize %}
 {% load stylesheet_tags %}
+{% load value_tags %}
+{% rendered_copy as saved_copy %}
 <!doctype html>
 <html lang="en"{% if THEME == "light" or THEME == "dark" %} data-theme="{{ THEME }}"{% endif %}>
 <head>
@@ -40,8 +42,16 @@
   text never changes face, and therefore never moves, after it is drawn.
   {% endcomment %}
   <link rel="preload" href="{% static 'fonts/inter/inter-variable-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
+  {% comment %}
+  Nothing is drawn until the content is parsed whole: Chromium may paint a
+  partly parsed page, and a table's later rows, or a toolbar's later parts,
+  would then widen what is already drawn. The target follows `</main>`, since
+  Chromium lets go once the element it names is inserted.
+  {% endcomment %}
+  <link rel="expect" href="#parsed" blocking="render">
   {% stylesheets %}
-  <script src="{% static 'js/transitions.js' %}"></script>
+  <script src="{% static 'js/transitions.js' %}" {% csp_nonce_attr %}></script>
+  <script src="{% static 'js/tables.js' %}" {% csp_nonce_attr %}></script>
   {% block head_extra %}{% endblock %}
 </head>
 <body data-sign-in="{% url 'login' %}">
@@ -250,15 +260,30 @@
     {% if messages %}
       <ul class="messages">
         {% for message in messages %}
-          <li class="msg msg-{{ message.tags|default:'info' }}">{{ message|breakable }}</li>
+          <li class="msg msg-{{ message.tags|default:'info' }}">{{ message.message|breakable }}</li>
         {% endfor %}
       </ul>
     {% endif %}
 
     {% block content %}{% endblock %}
   </main>
+  {# What the head's expect link waits for: the content above is parsed. #}
+  <template id="parsed"></template>
 
-  {% block site_footer %}{% endblock %}
+  {% block site_footer %}
+    {% if saved_copy and user.is_authenticated %}
+      {% comment %}
+      A saved copy of HQ (the public demo) says what it is from the corner of
+      every page. The control comes after the content in the tab order, and
+      its footer is the room the page ends with, so nothing stays under it.
+      Without script it is a link to the demo's README, so no page is made
+      for the copy alone.
+      {% endcomment %}
+      <footer class="demo-foot">
+        {% outside_link url="https://github.com/joeseverino/severino-hq/blob/main/demo/README.md" css="demo-about" modal="demo-about" %}<span class="demo-about-dot" aria-hidden="true"></span>About this demo{% endoutside_link %}
+      </footer>
+    {% endif %}
+  {% endblock %}
 
   {% if user.is_authenticated %}
     {% comment %}
@@ -274,14 +299,16 @@
     nobody opens.
     {% endcomment %}
     {% include "partials/_modal.html" with id="connection" title="Your connection" lede="How you are connected to HQ right now." body_template="core/_connection_loading.html" modal_class="modal-wide" %}
+    {% if saved_copy %}
+      {% include "partials/_modal.html" with id="demo-about" title="About this demo" body_template="partials/_demo_about.html" %}
+    {% endif %}
   {% endif %}
 
-  <script src="{% static 'js/fragment.js' %}" defer></script>
-  <script src="{% static 'js/app.js' %}" defer></script>
-  <script src="{% static 'js/ask.js' %}" defer></script>
-  <script src="{% static 'js/connection.js' %}" defer></script>
-  <script src="{% static 'js/topology.js' %}" defer></script>
-  <script src="{% static 'js/tables.js' %}" defer></script>
+  <script src="{% static 'js/fragment.js' %}" {% csp_nonce_attr %} defer></script>
+  <script src="{% static 'js/app.js' %}" {% csp_nonce_attr %} defer></script>
+  <script src="{% static 'js/ask.js' %}" {% csp_nonce_attr %} defer></script>
+  <script src="{% static 'js/connection.js' %}" {% csp_nonce_attr %} defer></script>
+  <script src="{% static 'js/topology.js' %}" {% csp_nonce_attr %} defer></script>
   {% block scripts_extra %}{% endblock %}
 </body>
 </html>

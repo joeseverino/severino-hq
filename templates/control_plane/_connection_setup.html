@@ -13,11 +13,8 @@ connected is in one place.
 {% endcomment %}
 {% load value_tags %}
 <section class="card connection-setup" aria-labelledby="connection-setup-heading">
-  <div class="section-head">
-    <h2 id="connection-setup-heading">{% if again %}Connect another account{% else %}Connect a service{% endif %}</h2>
-    <span class="count">{% if again %}{{ setups|length|counted:"service" }} connected{% else %}{{ count|breakable }} not connected yet{% endif %}</span>
-  </div>
-  <p class="muted">Each connection is a 1Password item the controller is given. Open one to see what to make.{% if guide %} <a href="{{ guide }}" rel="noopener">How connections work</a>{% endif %}</p>
+  {% section_head id="connection-setup-heading" %}{% if again %}Connect another account{% else %}Connect a service{% endif %}{% aside %}<span class="count">{% if again %}{{ setups|length|counted:"service" }} connected{% else %}{{ count|breakable }} not connected yet{% endif %}</span>{% endsection_head %}
+  <p class="muted">Each connection is a 1Password item the controller is given. Open one to see what to make.{% if guide %} {% entity guide|outside label="How connections work" %}{% endif %}</p>
   <ul class="setup-list">
     {% for setup in setups %}
       <li id="setup-{{ setup.provider }}">
@@ -29,7 +26,7 @@ connected is in one place.
           <ol class="resolution-workflow">
             <li>
               <strong>Create</strong>
-              <p>{{ setup.create|breakable }}{% if setup.create_url|web_url %} <a class="external-link" href="{{ setup.create_url|web_url }}" rel="noopener">Where to make it</a>{% endif %}</p>
+              <p>{{ setup.create|breakable }}{% if setup.create_url|web_url %} {% entity setup.create_url|outside label="Where to make it" %}{% endif %}</p>
               {% if setup.permissions %}
                 <p>Give it these permissions, and no others:</p>
                 <ul class="setup-permissions">{% for permission in setup.permissions %}<li><code>{{ permission|breakable }}</code></li>{% endfor %}</ul>
@@ -44,7 +41,7 @@ connected is in one place.
             <li>
               <strong>Store it</strong>
               <p>In the vault the controller reads, as {{ setup.item|breakable }} with these fields:</p>
-              {% table_region "Fields of "|add:setup.item narrow=1 %}
+              {% table_region "Fields of "|add:setup.item %}
                 <table class="data-table">
                   <thead><tr>{% table_heading "Field" "identifier" gutter=True local_sort=setup.fields|sortable %}{% table_heading "Value" "identifier" drop=2 local_sort=setup.fields|sortable %}{% table_heading "What it is" css="optional-col" drop=1 local_sort=setup.fields|sortable %}</tr></thead>
                   <tbody>
@@ -72,7 +69,7 @@ connected is in one place.
       <li class="setup-other">
         <strong>{{ group.spec.label|breakable }}</strong>
         <span class="muted">{{ group.spec.empty_message|breakable }}</span>
-        {% if group.spec.setup_route %}<a href="{% url group.spec.setup_route %}">Connect</a>{% elif group.spec.documentation_url %}<a class="external-link" href="{{ group.spec.documentation_url }}" rel="noopener">Docs</a>{% endif %}
+        {% if group.spec.setup_route %}<a href="{% url group.spec.setup_route %}">Connect</a>{% elif group.spec.documentation_url %}{% entity group.spec.documentation_url|outside label="Docs" %}{% endif %}
       </li>
     {% endfor %}
   </ul>

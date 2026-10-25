@@ -393,7 +393,7 @@ def save_managed_resource(
         and not copied_from_live
         and provider.public_effect
         and _can_change_the_public_internet(command.kind)
-        and not getattr(settings, "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS", False)
+        and not settings.SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS
     ):
         raise PolicyError(
             "Public DNS changes are off in HQ's settings. Turn them on there "

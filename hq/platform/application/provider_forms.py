@@ -26,6 +26,7 @@ from typing import Any, ClassVar, override
 from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
+from django.utils.datastructures import MultiValueDict
 lazy from django.utils.html import format_html, format_html_join
 lazy from django.utils.safestring import mark_safe
 
@@ -58,7 +59,7 @@ class NameListWidget(forms.Widget):
 
     @override
     def value_from_datadict(self, data, files, name):
-        if hasattr(data, "getlist"):
+        if isinstance(data, MultiValueDict):
             return [item for item in data.getlist(name) if str(item).strip()]
         return data.get(name)
 

@@ -7,12 +7,14 @@ from typing import Any, ClassVar, override
 from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
+from django.utils.datastructures import MultiValueDict
 
 from .capabilities import CapabilitySpec
 from .command_targets import CommandTargetOption
 from .forms import LinesField
 from .integration_specs import command_schema
 from .records import as_its_model_declares
+from .ui import ended
 
 _EXECUTION_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
@@ -155,7 +157,7 @@ class CapabilityCommandForm(forms.Form):
         super().__init__(*args, **kwargs)
         if "idempotency_key" in self.fields and not self.is_bound:
             self.fields["idempotency_key"].initial = f"command:{secrets.token_urlsafe(18)}"
-        if not self.is_bound or not hasattr(self.data, "getlist"):
+        if not self.is_bound or not isinstance(self.data, MultiValueDict):
             return
         allowed = set(self.fields) | {"csrfmiddlewaretoken"}
         unknown = sorted(set(self.data) - allowed)
@@ -165,8 +167,8 @@ class CapabilityCommandForm(forms.Form):
             if name in allowed and name != "csrfmiddlewaretoken" and len(self.data.getlist(name)) > 1
         )
         self.submission_errors = (
-            *(f"Unknown field: {name}." for name in unknown),
-            *(f"Repeated field: {name}." for name in repeated),
+            *(ended(f"Unknown field: {name}") for name in unknown),
+            *(ended(f"Repeated field: {name}") for name in repeated),
         )
 
     @override
@@ -246,6 +248,8 @@ def command_form_class(
                 else "I understand this deletes data."
             )
         )
+        # Read by templates/django/forms/field.html, which draws it as the callout closing the form.
+        fields["__confirm_effect"].confirms = True
     return type(
         f"{schema.get('title', 'Capability')}WebForm",
         (CapabilityCommandForm,),

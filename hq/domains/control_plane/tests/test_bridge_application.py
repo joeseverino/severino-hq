@@ -372,7 +372,7 @@ class ReachabilityTests(TestCase):
         self.assertEqual(answer.body, json.dumps(answer.json(), sort_keys=True).encode())
 
 
-@tag("source")
+@tag("source", "tree")
 class ListenerSourceTests(SimpleTestCase):
     """Which listener is handed the bridge, read from the launcher source."""
 

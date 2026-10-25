@@ -60,7 +60,7 @@ class OneEmptyStateTests(SimpleTestCase):
         self.assertEqual(page.remedy.label, "New asset")
 
 
-@tag("source")
+@tag("source", "tree")
 class EmptyStateTemplateTests(SimpleTestCase):
     """Templates draw an empty state only through the partial."""
 

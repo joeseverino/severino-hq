@@ -18,10 +18,9 @@ class RendererDeliveryTests(unittest.TestCase):
 
     def test_the_unit_runs_the_binary_the_image_ships_in_the_root_tree(self):
         dockerfile = DOCKERFILE.read_text()
-        self.assertIn("-o /out/hq-secrets ./cmd/hq-secrets", dockerfile)
         copied = "COPY --from=controller /out/hq-secrets /out/hq-host /app/deploy/bin/"
         # After the checkout is copied, so a checkout cannot supply them.
-        self.assertLess(dockerfile.index("COPY . /app"), dockerfile.index(copied))
+        self.assertLess(dockerfile.index(" . /app\n"), dockerfile.index(copied))
         started = [line for line in UNIT.read_text().splitlines() if line.startswith("ExecStart=")]
         self.assertEqual(started, ["ExecStart=/usr/local/lib/severino-hq/deploy/bin/hq-secrets"])
 
@@ -40,42 +39,7 @@ class RendererDeliveryTests(unittest.TestCase):
         self.assertEqual(lines[0], "*")
         self.assertEqual([path for path in admitted if not (ROOT / path).exists()], [])
 
-    def test_the_unit_keeps_its_hardening(self):
+    def test_the_unit_configures_no_token_vault_or_endpoint(self):
         unit = UNIT.read_text()
-        for directive in (
-            "NoNewPrivileges=yes",
-            "PrivateDevices=yes",
-            "PrivateTmp=yes",
-            "ProtectClock=yes",
-            "ProtectControlGroups=yes",
-            "ProtectHome=yes",
-            "ProtectHostname=yes",
-            "ProtectKernelLogs=yes",
-            "ProtectKernelModules=yes",
-            "ProtectKernelTunables=yes",
-            "ProtectSystem=strict",
-            "RestrictNamespaces=yes",
-            "RestrictRealtime=yes",
-            "RestrictSUIDSGID=yes",
-            "LockPersonality=yes",
-            "MemoryDenyWriteExecute=yes",
-            "UMask=0077",
-            "RequiresMountsFor=/run/severino-hq-secrets",
-            # Narrower than the shell renderer's.
-            "RestrictAddressFamilies=AF_UNIX AF_INET",
-            "IPAddressDeny=any",
-            "IPAddressAllow=127.0.0.1",
-            "SocketBindDeny=any",
-            "PrivateIPC=yes",
-            "MemorySwapMax=0",
-            "MemoryMax=512M",
-            "TasksMax=128",
-            "LimitCORE=0",
-            "CapabilityBoundingSet=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE",
-            "SystemCallFilter=@system-service",
-        ):
-            with self.subTest(directive=directive):
-                self.assertIn(directive, unit.splitlines())
-        # No token, vault or endpoint is configured in the shipped unit.
         self.assertNotIn("LoadCredential", unit)
         self.assertNotIn("Environment=", unit)

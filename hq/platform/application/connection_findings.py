@@ -14,6 +14,7 @@ from .finding_model import (
     reconcile_remedy,
 )
 from .moments import elapsed
+from .ui import ended
 
 
 def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -43,7 +44,7 @@ def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
                 ),
                 severity="attention",
                 explanation=(
-                    (f"{reason.rstrip('.')}. " if reason else "")
+                    (f"{ended(reason)} " if reason else "")
                     + "HQ cannot read anything through it, so what it shows from "
                     f"{node.label} may be out of date."
                 ),
@@ -106,7 +107,7 @@ def _unreachable_consumer(estate: FindingEstate) -> tuple[Finding, ...]:
                         if len(names) == 1
                         else "These did not, so HQ cannot say which certificate they are serving."
                     )
-                    + (f" The tailnet policy does not allow {', '.join(refused)}." if refused else "")
+                    + (ended(f" The tailnet policy does not allow {', '.join(refused)}") if refused else "")
                 ),
                 evidence=(
                     *(("Did not answer", name) for name in names),

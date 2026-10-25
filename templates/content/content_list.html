@@ -10,7 +10,7 @@
   <td class="muted">{{ row.updated_at|when:"ago" }}</td>
   <td class="actions-col">
     {% if row.published_url|web_url %}
-      <a class="icon-link" href="{{ row.published_url|web_url }}" target="_blank" rel="noopener noreferrer" title="Open live page" aria-label="Open live page">↗</a>
+      {% outside_link url=row.published_url css="icon-link" title="Open live page" label="Open live page" %}↗{% endoutside_link %}
     {% else %}
       {% empty_value %}
     {% endif %}

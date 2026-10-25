@@ -9,13 +9,14 @@ from pathlib import Path
 
 from django.test import TestCase, override_settings
 
-from hq.domains.control_plane.models import ManagedResource, OperationRequest, ReadRequest
+from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest, ReadRequest
+from hq.domains.projects.models import Project
 from hq.platform.api.models import IdempotencyRecord
 
 from ..adoption_testing import managing_everything
 from ..capabilities import capability_registry, describe_capabilities, execute_capability
 from ..integration_specs import IDEMPOTENCY_FIELD, capability_schema
-from ..security import Principal, cli_principal
+from ..security import Capability, Principal, cli_principal
 
 REFRESH = "infrastructure.controller.refresh"
 RECONCILE = "infrastructure.reconcile"
@@ -166,3 +167,52 @@ class ReconcileTests(TestCase):
 
         self.assertEqual(second, first)
         self.assertEqual(OperationRequest.objects.count(), 1)
+
+
+class PolicyTests(TestCase):
+    """A call refused or held by policy keeps nothing under its key."""
+
+    AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, "write_projects"}))
+
+    def rule(self, rule):
+        CapabilityRule.objects.update_or_create(
+            scope=CapabilityRule.Scope.AGENT,
+            subject="example-agent",
+            capability="project.create",
+            defaults={"rule": rule},
+        )
+
+    def create(self):
+        payload = {"name": "Example", "slug": "example", IDEMPOTENCY_FIELD: "create-once"}
+        return execute_capability("project.create", payload, principal=self.AGENT)
+
+    def test_the_same_key_runs_once_a_refusing_rule_is_lifted(self):
+        self.rule(CapabilityRule.Rule.DENY)
+        self.assertEqual(self.create()["error"]["code"], "denied_by_policy")
+        self.rule(CapabilityRule.Rule.ALLOW)
+
+        self.assertTrue(self.create()["ok"])
+        self.assertTrue(Project.objects.filter(slug="example").exists())
+
+    def test_a_handlers_own_refusal_keeps_nothing_under_its_key(self):
+        from hq.platform.application.projects import DEPENDENCY_UPDATES
+
+        project = Project.objects.create(name="Example", slug="example")
+        payload = {"enabled": False, IDEMPOTENCY_FIELD: "switch-once"}
+
+        def switch():
+            return execute_capability(DEPENDENCY_UPDATES, payload, principal=cli_principal(), target="example")
+
+        self.assertEqual(switch()["error"]["code"], "precondition")
+        project.repository_url = "https://github.com/example/example"
+        project.save()
+
+        self.assertTrue(switch()["ok"])
+
+    def test_the_same_key_runs_once_a_holding_rule_is_lifted(self):
+        self.rule(CapabilityRule.Rule.APPROVE)
+        self.assertEqual(self.create()["status"], "awaiting_approval")
+        self.rule(CapabilityRule.Rule.ALLOW)
+
+        self.assertNotIn("status", self.create())
+        self.assertTrue(Project.objects.filter(slug="example").exists())

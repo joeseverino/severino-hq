@@ -29,7 +29,7 @@ from hq.domains.control_plane.providers import (
     PROVIDERS,
     validate_spec,
 )
-from hq.platform.application.derivations import uncached
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..adoption import (
     AdoptCommand,
@@ -962,29 +962,20 @@ class DomainPageCostTests(TestCase):
             },
         )
 
-    def _queries(self, count):
-        from django.db import connection
-        from django.test.utils import CaptureQueriesContext
-
+    def arrange(self, count):
+        ManagedResource.objects.filter(kind=RECORD_KIND).delete()
         self._zone_with(count)
-        user = get_user_model().objects.create_user(f"op{count}", password="x" * 20)
-        self.client.force_login(user)
-        with CaptureQueriesContext(connection) as captured, uncached():
-            response = self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
+
+    def draw(self, _count):
+        response = self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
         self.assertEqual(response.status_code, 200)
-        return len(captured)
+        return response
 
     def test_the_page_does_not_cost_more_per_record(self):
-        small = self._queries(5)
-        ManagedResource.objects.filter(kind=RECORD_KIND).delete()
-        large = self._queries(60)
+        self.client.force_login(get_user_model().objects.create_user("operator", password="x" * 20))
 
-        # Counts only, never the SQL: this repository is public and a failure
-        # message carrying a query would put an extension's schema in a log.
-        self.assertLessEqual(
-            large,
-            small,
-            f"the domain page scales with record count ({small} then {large})",
+        assert_cost_does_not_grow(
+            self, sizes=(5, 60), arrange=self.arrange, draw=self.draw, rows=distinct(r"\bh\d+\.example\.com")
         )
 
 

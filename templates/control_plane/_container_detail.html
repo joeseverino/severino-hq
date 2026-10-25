@@ -9,38 +9,22 @@ standard. Each said once; the band above has its version and standing.
 <section id="upgrade" class="page-section" data-page-section>
   <h2>Upgrade <span class="heading-aside">{{ plan.change_label|breakable }} · upgrade risk {% with mark=plan.risk_reason|then:"," %}{{ plan.risk|breakable:mark }}{% endwith %}{% if plan.risk_reason %} because {{ plan.risk_reason|breakable }}{% endif %}</span></h2>
   <div class="fact-band upgrade-band">
-    <div class="band-fact">
-      <span class="band-icon">{% include "partials/_icon.html" with name="deploy" %}</span>
-      <div>
-        <span class="band-label">To</span>
-        <strong>{% if plan.release %}<a class="external-link" href="{{ plan.release.url }}" rel="noopener"><code>{{ plan.target_tag|breakable }}</code></a>{% else %}<code>{{ plan.target_tag|breakable }}</code>{% endif %}</strong>
-        <small>{% if plan.target_digest %}<span tabindex="0" data-tip="{{ plan.target_digest }}">{{ plan.target_digest|slice:":19"|breakable }}…</span>{% else %}Exact build not read yet{% endif %}{% if plan.release.published %} · released {{ plan.release.published|ago_short }}{% endif %}</small>
-      </div>
-    </div>
-    <div class="band-fact{% if plan.fixes %} tone-good{% endif %}">
-      <span class="band-icon">{% include "partials/_icon.html" with name="shield" %}</span>
-      <div>
-        <span class="band-label">Fixes</span>
-        <strong>{% if plan.fixes %}{{ plan.fixes|length|counted:"known vulnerability,known vulnerabilities" }}{% elif item.standing.source %}None known{% else %}Cannot check{% endif %}</strong>
-        <small>{% for advisory in plan.fixes|slice:":2" %}<a class="external-link" href="{{ advisory.url }}" rel="noopener">{{ advisory.id|breakable }}</a> {% endfor %}{% if not plan.fixes %}{% if item.standing.source %}Nothing known against the running version.{% else %}The image does not say where its source is.{% endif %}{% endif %}</small>
-      </div>
-    </div>
-    <div class="band-fact{% if plan.stateful %} tone-attention{% endif %}">
-      <span class="band-icon">{% include "partials/_icon.html" with name="layers" %}</span>
-      <div>
-        <span class="band-label">Its data</span>
-        <strong>{% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}</strong>
-        <small>{% for mount in plan.data %}<code>{{ mount.source|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}It has no writable mount.{% endfor %}</small>
-      </div>
-    </div>
-    <div class="band-fact{% if not plan.verified_by %} tone-attention{% endif %}">
-      <span class="band-icon">{% include "partials/_icon.html" with name="check-circle" %}</span>
-      <div>
-        <span class="band-label">Checked afterwards by</span>
-        <strong>{% if plan.verified_by %}{{ plan.verified_by.0|capfirst|breakable }}{% else %}Nothing{% endif %}</strong>
-        <small>{% for what in plan.verified_by|slice:"1:" %}{{ what|capfirst|breakable }}{% if not forloop.last %} · {% endif %}{% empty %}{% if not plan.verified_by %}HQ can only see that it stays running.{% endif %}{% endfor %}</small>
-      </div>
-    </div>
+    {% band_fact icon="deploy" label="To" %}
+      <strong>{% entity plan.release.url|outside label=plan.target_tag code=True %}</strong>
+      <small>{% if plan.target_digest %}<span tabindex="0" data-tip="{{ plan.target_digest }}">{{ plan.target_digest|slice:":19"|breakable }}…</span>{% else %}Exact build not read yet{% endif %}{% if plan.release.published %} · released {{ plan.release.published|ago_short }}{% endif %}</small>
+    {% endband_fact %}
+    {% band_fact icon="shield" label="Fixes" tone=plan.fixes_tone %}
+      <strong>{% if plan.fixes %}{{ plan.fixes|length|counted:"known vulnerability,known vulnerabilities" }}{% elif item.standing.source %}None known{% else %}Cannot check{% endif %}</strong>
+      <small>{% for advisory in plan.fixes|slice:":2" %}{% entity advisory.url|outside label=advisory.id %} {% endfor %}{% if not plan.fixes %}{% if item.standing.source %}Nothing known against the running version.{% else %}The image does not say where its source is.{% endif %}{% endif %}</small>
+    {% endband_fact %}
+    {% band_fact icon="layers" label="Its data" tone=plan.data_tone %}
+      <strong>{% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}</strong>
+      <small>{% for mount in plan.data %}<code>{{ mount.source|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}It has no writable mount.{% endfor %}</small>
+    {% endband_fact %}
+    {% band_fact icon="check-circle" label="Checked afterwards by" tone=plan.verified_tone %}
+      <strong>{% if plan.verified_by %}{{ plan.verified_by.0|capfirst|breakable }}{% else %}Nothing{% endif %}</strong>
+      <small>{% for what in plan.verified_by|slice:"1:" %}{{ what|capfirst|breakable }}{% if not forloop.last %} · {% endif %}{% empty %}{% if not plan.verified_by %}HQ can only see that it stays running.{% endif %}{% endfor %}</small>
+    {% endband_fact %}
   </div>
   <div class="upgrade-detail boxed-facts">
     <ol class="upgrade-steps">
@@ -86,30 +70,18 @@ standard. Each said once; the band above has its version and standing.
 <section id="upgrade" class="page-section" data-page-section>
   <h2>When a new version comes out <span class="heading-aside">{% if readiness.automatic %}Upgrades automatically{% else %}Waits for you{% endif %}</span></h2>
   <div class="fact-band upgrade-band readiness-band">
-    <div class="band-fact{% if not readiness.verified_by %} tone-attention{% else %} tone-good{% endif %}">
-      <span class="band-icon">{% include "partials/_icon.html" with name="check-circle" %}</span>
-      <div>
-        <span class="band-label">Checked afterwards by</span>
-        <strong>{% if readiness.verified_by %}{{ readiness.verified_by.0|capfirst|breakable }}{% else %}Nothing{% endif %}</strong>
-        <small>{% for what in readiness.verified_by|slice:"1:" %}{{ what|capfirst|breakable }}{% if not forloop.last %} · {% endif %}{% empty %}{% if not readiness.verified_by %}Add a health check to change that.{% endif %}{% endfor %}</small>
-      </div>
-    </div>
-    <div class="band-fact">
-      <span class="band-icon">{% include "partials/_icon.html" with name="layers" %}</span>
-      <div>
-        <span class="band-label">Its data</span>
-        <strong>{% if readiness.data %}{{ readiness.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}</strong>
-        <small>{% for mount in readiness.data %}<code>{{ mount.source|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}Nothing to restore on a rollback.{% endfor %}</small>
-      </div>
-    </div>
-    <div class="band-fact{% if readiness.automatic %} tone-good{% endif %}">
-      <span class="band-icon">{% include "partials/_icon.html" with name="deploy" %}</span>
-      <div>
-        <span class="band-label">Automatic upgrades</span>
-        <strong>{% if readiness.automatic %}Patch updates apply{% else %}Not yet{% endif %}</strong>
-        <small>{% if readiness.not_automatic %}{{ readiness.not_automatic|length|counted:"reason,reasons" }}, listed below{% endif %}</small>
-      </div>
-    </div>
+    {% band_fact icon="check-circle" label="Checked afterwards by" tone=readiness.verified_tone %}
+      <strong>{% if readiness.verified_by %}{{ readiness.verified_by.0|capfirst|breakable }}{% else %}Nothing{% endif %}</strong>
+      <small>{% for what in readiness.verified_by|slice:"1:" %}{{ what|capfirst|breakable }}{% if not forloop.last %} · {% endif %}{% empty %}{% if not readiness.verified_by %}Add a health check to change that.{% endif %}{% endfor %}</small>
+    {% endband_fact %}
+    {% band_fact icon="layers" label="Its data" %}
+      <strong>{% if readiness.data %}{{ readiness.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}</strong>
+      <small>{% for mount in readiness.data %}<code>{{ mount.source|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}Nothing to restore on a rollback.{% endfor %}</small>
+    {% endband_fact %}
+    {% band_fact icon="deploy" label="Automatic upgrades" tone=readiness.automatic_tone %}
+      <strong>{% if readiness.automatic %}Patch updates apply{% else %}Not yet{% endif %}</strong>
+      <small>{% if readiness.not_automatic %}{{ readiness.not_automatic|length|counted:"reason,reasons" }}, listed below{% endif %}</small>
+    {% endband_fact %}
     <ul class="band-meta upgrade-reasons">{% for blocker in readiness.not_automatic %}<li>{{ blocker.reason|breakable }}</li>{% endfor %}</ul>
   </div>
 </section>
@@ -120,10 +92,10 @@ standard. Each said once; the band above has its version and standing.
   <h2>Where it came from <span class="heading-aside">{% if chain.measured %}{{ chain.met|breakable }} of {{ chain.measured|breakable }} checks pass{% endif %}</span></h2>
   {% include "partials/_standard_gaps.html" with posture=chain %}
   <dl class="github-facts container-facts boxed-facts">
-    <div><dt>Built from</dt><dd>{% if standing.source|web_url %}<a class="external-link" href="{{ standing.source|web_url }}" rel="noopener">{{ standing.upstream|breakable }}</a> <span class="muted">{{ standing.source_known_by|breakable }}</span>{% elif edit_url %}<a href="{{ edit_url }}">Name its source repository</a> <span class="muted">· the image does not say</span>{% else %}<span class="muted">The image does not say.</span>{% endif %}</dd></div>
-    {% if standing.commit_url or standing.provenance.builder or standing.built_on %}<div><dt>Built</dt><dd>{% if standing.commit_url|web_url %}<span class="muted">at</span> <a class="external-link" href="{{ standing.commit_url|web_url }}" rel="noopener"><code>{{ standing.provenance.revision|slice:":7"|breakable }}</code></a> {% endif %}{% if standing.provenance.builder|web_url %}<span class="muted">by</span> <a class="external-link" href="{{ standing.provenance.builder|web_url }}" rel="noopener">a workflow run</a> {% endif %}{% if standing.built_on %}<span class="muted">on</span> {% for base in standing.built_on %}<code>{{ base|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}</dd></div>{% endif %}
-    {% if standing.packages %}<div><dt>Packages</dt><dd>{{ standing.packages|breakable }} <span class="muted">listed by its publisher{% if standing.checked %}, checked against <a class="external-link" href="https://osv.dev" rel="noopener">OSV</a>{% if standing.checked_at %} {{ standing.checked_at|ago_short }}{% endif %}{% endif %}</span></dd></div>{% endif %}
-    {% if standing.findings %}<div><dt>Known in them</dt><dd>{% for finding in standing.findings|slice:":6" %}{% if finding.url|web_url %}<a class="external-link" href="{{ finding.url|web_url }}" rel="noopener">{{ finding.id|breakable }}</a>{% else %}{{ finding.id|breakable }}{% endif %} <span class="muted">{{ finding.package|breakable }} {{ finding.installed|breakable }}{% if finding.fixed %} → {{ finding.fixed|join:", "|breakable }}{% endif %}{% if finding.severity %} · {{ finding.severity|breakable }}{% endif %}</span>{% if not forloop.last %}<br>{% endif %}{% endfor %}{% if standing.findings|length > 6 %}<br><span class="muted">and {{ standing.findings|length|add:"-6"|breakable }} more</span>{% endif %}</dd></div>{% endif %}
+    <div><dt>Built from</dt><dd>{% if standing.source|web_url %}{% entity standing.source|outside label=standing.upstream %} <span class="muted">{{ standing.source_known_by|breakable }}</span>{% elif edit_url %}<a href="{{ edit_url }}">Name its source repository</a> <span class="muted">· the image does not say</span>{% else %}<span class="muted">The image does not say.</span>{% endif %}</dd></div>
+    {% if standing.commit_url or standing.provenance.builder or standing.built_on %}<div><dt>Built</dt><dd>{% if standing.commit_url|web_url %}<span class="muted">at</span> {% entity standing.commit_url|outside code=True label=standing.provenance.revision|slice:":7" %} {% endif %}{% if standing.provenance.builder|web_url %}<span class="muted">by</span> {% entity standing.provenance.builder|outside label="a workflow run" %} {% endif %}{% if standing.built_on %}<span class="muted">on</span> {% for base in standing.built_on %}<code>{{ base|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}</dd></div>{% endif %}
+    {% if standing.packages %}<div><dt>Packages</dt><dd>{{ standing.packages|breakable }} <span class="muted">listed by its publisher{% if standing.checked %}, checked against {% entity "https://osv.dev"|outside label="OSV" %}{% if standing.checked_at %} {{ standing.checked_at|ago_short }}{% endif %}{% endif %}</span></dd></div>{% endif %}
+    {% if standing.findings %}<div><dt>Known in them</dt><dd>{% for finding in standing.findings|slice:":6" %}{% entity finding.url|outside label=finding.id %} <span class="muted">{{ finding.package|breakable }} {{ finding.installed|breakable }}{% if finding.fixed %} → {{ finding.fixed|join:", "|breakable }}{% endif %}{% if finding.severity %} · {{ finding.severity|breakable }}{% endif %}</span>{% if not forloop.last %}<br>{% endif %}{% endfor %}{% if standing.findings|length > 6 %}<br><span class="muted">and {{ standing.findings|length|add:"-6"|breakable }} more</span>{% endif %}</dd></div>{% endif %}
   </dl>
   <p class="conn-scope-note">Read from its public registry{% if standing.checked %} and OSV{% endif %}, without a login. Nothing was pulled or run.</p>
 </section>

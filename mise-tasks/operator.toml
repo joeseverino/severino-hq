@@ -1,0 +1,49 @@
+# The steps of what a developer runs by hand beside the servers: CI's timings
+# and caches, the derived files, the docs' pictures, an extension's contract
+# check.
+
+["ci:timings"]
+description = "Where a CI run's time went: each job's and step's seconds, and the jobs on its critical path"
+hide = true
+usage = 'arg "<run>" help="The run id, as gh run list prints it"'
+run = 'uv run python -m tools.pipeline.ci_timings "${usage_run}"'
+
+["ci:caches"]
+description = "Fill the caches CI's jobs restore: every Python group, the Go controller's builds, the npm tools"
+hide = true
+depends = ["setup:lint-tools"]
+run = [
+  "uv sync --all-groups",
+  "go -C controller build ./... tool",
+  "go -C controller test -race -run '^$' ./...",
+  "go -C controller vet ./...",
+]
+
+# `mise run dev:look --docs`.
+["dev:look:docs"]
+description = "Redraw every docs screenshot from the showcase demo: mise run dev:look --docs"
+hide = true
+depends = [{ task = "setup:browser", args = ["webkit"] }, "demo:build"]
+extends = "heavy"
+run = "uv run --group browser python -m demo.screenshot"
+
+# `mise run fix` writes every derived file, in the order each reads the last:
+# the bridge contract feeds the Go types. lint:drift-* holds each.
+["fix:derived"]
+description = "Rewrite every derived file from its source (docs/Development.md, Derived files): mise run fix"
+hide = true
+extends = "django-heavy"
+run = [
+  "uv run python manage.py sdk_contract",
+  "uv run python manage.py api_openapi",
+  "uv run python manage.py bridge_contract",
+  "cd controller && go generate ./...",
+  "uv run python manage.py connections_reference",
+  "uv run python -m tools.fonts.subset",
+]
+
+["plugin:check"]
+description = "One extension package's contract check against this host, as its CI runs it"
+hide = true
+dir = "{{cwd}}"
+run = "{{config_root}}/tools/pipeline/check-plugin.sh"

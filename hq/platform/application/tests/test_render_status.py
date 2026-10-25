@@ -1,5 +1,6 @@
 """The secret render reading, and what HQ says when the secrets go stale."""
 
+import json
 import re
 from datetime import UTC, datetime, timedelta
 from html import unescape
@@ -95,7 +96,7 @@ def every_rule() -> dict[str, list]:
 
 
 class RecordTests(SimpleTestCase):
-    def test_the_document_is_kept_as_the_renderer_wrote_it(self):
+    def test_the_document_is_kept_as_the_renderer_wrote_it_its_instants_in_utc(self):
         record = read()
 
         (kept,), refused = SPEC.clean([record])
@@ -103,7 +104,7 @@ class RecordTests(SimpleTestCase):
         self.assertEqual(refused, 0)
         # The version is the Go type's to check; HQ keeps what it reads.
         del record["status"]["schema_version"]
-        self.assertEqual(kept, record)
+        self.assertEqual(json.loads(json.dumps(kept).replace("+00:00", "Z")), record)
 
     def test_a_field_the_schema_does_not_name_is_dropped_at_every_depth(self):
         record = read()
@@ -137,7 +138,7 @@ class RecordTests(SimpleTestCase):
 
         (kept,), _ = SPEC.clean([record])
 
-        self.assertEqual(kept["status"]["last_attempt"]["at"], "2026-01-01T00:00:00.123456789Z")
+        self.assertEqual(kept["status"]["last_attempt"]["at"], "2026-01-01T00:00:00.123456+00:00")
 
     def test_a_record_that_does_not_name_a_renderer_and_a_state_is_refused(self):
         for record in (

@@ -34,6 +34,7 @@ from hq.domains.control_plane.observations.public_registry import (
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .container_words import UP_TO_DATE, UPDATE_AVAILABLE, ImageStandingWords
+from .display_words import display
 from .github_public import github_repository
 from .images import ImageRef, affected, compare, newer, version
 from .projection import projection_scope, read_once
@@ -193,6 +194,10 @@ class Running:
     @property
     def healthy(self) -> bool:
         return self.state == "running"
+
+    @property
+    def state_tone(self) -> str:
+        return "good" if self.healthy else "serious"
 
     @property
     def uptime(self) -> str:
@@ -436,6 +441,34 @@ class ImageStanding(ImageStandingWords):
         return self.worst in SERIOUS
 
     @property
+    def vulnerability_tone(self) -> str:
+        """What is known against it as a tone: none where nothing could be checked."""
+
+        if self.serious:
+            return "serious"
+        if self.state == VULNERABLE:
+            return "attention"
+        return "good" if self.checkable else ""
+
+    @property
+    def update_tone(self) -> str:
+        """Whether a newer version is out as a tone: none while that is unknown."""
+
+        if self.newer:
+            return "attention"
+        return "good" if self.update_state == UP_TO_DATE else ""
+
+    @property
+    def alerts_tone(self) -> str:
+        """Its repository's open alerts as a tone, none being good: "" without one."""
+
+        if self.repository is None:
+            return ""
+        if self.repository.serious_alerts:
+            return "serious"
+        return "attention" if self.repository.open_alerts else "good"
+
+    @property
     def latest(self) -> str:
         return self.newer[0] if self.newer else ""
 
@@ -578,6 +611,73 @@ def _containers() -> list[Container]:
     )
 
 
+@display
+class Tally:
+    """What a set of running containers comes to, as a band counts it."""
+
+    running: int
+    # Containers with a known vulnerability, and the images they run.
+    vulnerable: int
+    vulnerable_images: int
+    # Counted per container and apart from vulnerabilities, so with the
+    # unknown they add up to the containers counted.
+    update_available: int
+    up_to_date: int
+    pinned: int
+    # Checked against its source's advisories or its packages against OSV.
+    checkable: int
+    stopped: int
+
+    @property
+    def update_unknown(self) -> int:
+        return self.running - self.update_available - self.up_to_date
+
+    @property
+    def unchecked(self) -> int:
+        return self.running - self.checkable
+
+    @property
+    def vulnerable_tone(self) -> str:
+        return "serious" if self.vulnerable else "good"
+
+    @property
+    def updates_tone(self) -> str:
+        """Updates as a tone: none until every one is known up to date."""
+
+        if self.update_available:
+            return "attention"
+        return "good" if self.up_to_date == self.running else ""
+
+    @property
+    def pinned_tone(self) -> str:
+        return "good" if self.pinned == self.running else ""
+
+    @property
+    def tone(self) -> str:
+        """All of it in one tone, as a machine's band says it."""
+
+        if self.vulnerable or self.stopped:
+            return "serious"
+        return "attention" if self.update_available else "good"
+
+
+def tally(found: list[Container]) -> Tally:
+    """What ``found`` comes to."""
+
+    vulnerable = [item.standing for item in found if item.standing.state == VULNERABLE]
+    updates = [item.standing.update_state for item in found]
+    return Tally(
+        running=len(found),
+        vulnerable=len(vulnerable),
+        vulnerable_images=len({standing.label for standing in vulnerable}),
+        update_available=updates.count(UPDATE_AVAILABLE),
+        up_to_date=updates.count(UP_TO_DATE),
+        pinned=sum(1 for item in found if item.standing.pinned),
+        checkable=sum(1 for item in found if item.standing.checkable),
+        stopped=sum(1 for item in found if not item.running.healthy),
+    )
+
+
 def standings_on(machine: str) -> dict[str, ImageStanding]:
     """Each container on one machine's standing, by container name."""
 
@@ -591,20 +691,11 @@ def on_machine(machine: Any) -> dict[str, Any]:
 
     here = [item for item in containers() if item.machine.name == machine.name]
     standings = {item.running.name: item.standing for item in here}
-    states = [standing.state for standing in standings.values()]
     unused = unused_images(machine)
     return {
         "standings": standings,
         "uptimes": {item.running.name: item.uptime for item in here},
-        "container_counts": {
-            "behind": states.count(BEHIND),
-            "current": states.count(CURRENT),
-            "vulnerable": states.count(VULNERABLE),
-            # Counted apart from vulnerabilities, as the containers page counts them.
-            "update": sum(1 for standing in standings.values() if standing.update_state == UPDATE_AVAILABLE),
-            "up_to_date": sum(1 for standing in standings.values() if standing.update_state == UP_TO_DATE),
-            "stopped": sum(1 for item in machine.containers if not item.healthy),
-        },
+        "container_counts": tally(here),
         "unused_images": unused,
         "unused_size": human_bytes(sum(record.get("size") or 0 for record in unused)),
     }

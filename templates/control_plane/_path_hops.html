@@ -17,7 +17,7 @@ where they would not.
       <span class="hop-label">{{ hop.label|breakable }}</span>
       <span class="hop-body"><strong>{% if hop.link and hop.link.url %}{% entity hop.link %}{% elif hop.name %}<span>{{ hop.name|breakable }}</span>{% elif hop.detail %}<span>{{ hop.detail|breakable }}</span>{% else %}{% empty_value %}{% endif %}{% if hop.certificate and not hop.certificate.unread %}{% with certificate=hop.certificate %}{% include "control_plane/_certificate_mark.html" %}{% endwith %}{% endif %}</strong>
       {% if hop.certificate.unread %}<small>{{ hop.certificate.line|breakable }}</small>{% endif %}
-      {% if hop.facts %}<small class="hop-facts">{% for text, url in hop.facts %}{% if url %}<a class="external-link" href="{{ url }}" rel="noopener">{{ text|breakable }}</a>{% else %}{{ text|breakable }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</small>{% endif %}
+      {% if hop.facts %}<small class="hop-facts">{% for text, url in hop.facts %}{% if url %}{% entity url|outside label=text %}{% else %}{{ text|breakable }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</small>{% endif %}
       {% if hop.unread %}<small>{{ hop.unread|capfirst|breakable }}</small>{% endif %}</span>
     </li>
   {% endfor %}

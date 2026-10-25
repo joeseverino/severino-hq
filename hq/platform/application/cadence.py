@@ -51,6 +51,7 @@ from .derivations import asked_ahead, holds_until
 from .integration_specs import requested
 from .moments import duration
 from .security import Capability, Principal
+from .ui import ended
 lazy from .action_links import READ_NOW_CAPABILITY
 lazy from .capabilities import capability_registry
 lazy from .credential_sight import fed_kinds
@@ -70,15 +71,12 @@ class ControllerSweepCommand:
     every_connection: bool = False
 
 
-def _seconds(name: str, fallback: int) -> int:
-    try:
-        return max(0, int(getattr(settings, name, fallback)))
-    except TypeError, ValueError:
-        return fallback
+def _seconds(name: str) -> int:
+    return max(0, int(getattr(settings, name)))
 
 
 def _path(name: str, filename: str) -> Path:
-    configured = str(getattr(settings, name, "") or "").strip()
+    configured = getattr(settings, name).strip()
     if configured:
         return Path(configured)
     # Beside the database, which is the volume both sides share. Anywhere else
@@ -99,7 +97,7 @@ def note_activity() -> None:
     """
 
     marker = _path("SEVERINO_ACTIVITY_MARKER", "hq-activity")
-    throttle = _seconds("SEVERINO_ACTIVITY_THROTTLE_SECONDS", 60)
+    throttle = _seconds("SEVERINO_ACTIVITY_THROTTLE_SECONDS")
     try:
         if marker.exists() and time.time() - marker.stat().st_mtime < throttle:
             return
@@ -115,7 +113,7 @@ def recently_used(now: float | None = None) -> bool:
         # Asked on behalf of the next request, which is itself use.
         return True
     marker = _path("SEVERINO_ACTIVITY_MARKER", "hq-activity")
-    window = _seconds("SEVERINO_ACTIVE_WINDOW_SECONDS", 900)
+    window = _seconds("SEVERINO_ACTIVE_WINDOW_SECONDS")
     try:
         touched = marker.stat().st_mtime
     except OSError:
@@ -199,8 +197,8 @@ def sweep_interval() -> timedelta:
     nothing and saves the calls.
     """
 
-    active = _seconds("SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS", 300)
-    idle = _seconds("SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS", 12 * 60 * 60)
+    active = _seconds("SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS")
+    idle = _seconds("SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS")
     return timedelta(seconds=active if recently_used() else idle)
 
 
@@ -212,7 +210,7 @@ def slowest_sweep_interval() -> timedelta:
     the thing it is measuring.
     """
 
-    return timedelta(seconds=_seconds("SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS", 12 * 60 * 60))
+    return timedelta(seconds=_seconds("SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS"))
 
 
 def ssh_probe_interval() -> timedelta:
@@ -225,7 +223,7 @@ def ssh_probe_interval() -> timedelta:
     a sweep reads is cheap enough to keep on the sweep's own clock.
     """
 
-    return timedelta(seconds=_seconds("SEVERINO_SSH_PROBE_INTERVAL_SECONDS", 60 * 60))
+    return timedelta(seconds=_seconds("SEVERINO_SSH_PROBE_INTERVAL_SECONDS"))
 
 
 def carried_connections(controller_id: str, *, failing: bool = False) -> list[str]:
@@ -326,7 +324,7 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
         f"every {duration(interval)}: {'due' if due else 'not due'}."
     )
     if not due and forced:
-        reason += f" A refresh was asked for {', '.join(read.subject for read in forced)}."
+        reason += ended(f" A refresh was asked for {', '.join(read.subject for read in forced)}")
         if controller_id:
             # Due only because somebody asked: SSH is left as it was last
             # found, working or not, unless it is what they asked for.
@@ -349,7 +347,7 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
 def read_request_lifetime() -> timedelta:
     """How long an unanswered read request keeps forcing sweeps."""
 
-    return timedelta(seconds=_seconds("SEVERINO_READ_REQUEST_SECONDS", 15 * 60))
+    return timedelta(seconds=_seconds("SEVERINO_READ_REQUEST_SECONDS"))
 
 
 @dataclass(frozen=True, slots=True)

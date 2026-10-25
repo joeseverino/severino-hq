@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import Field
 
+from hq.platform.application.ui import ended
+
 from ..connection_shapes import OAUTH_CLIENT
 from ..consoles import tailscale_machine
 from ..observations.contract import ReadingPart
@@ -177,7 +179,7 @@ DEVICE = ProviderSpec(
         ),
     ),
     removal_note=lambda spec: (
-        f"HQ stops managing {spec.get('name', 'this device')}. Its current settings stay as they are."
+        f"HQ stops managing {ended(spec.get('name', 'this device'))} Its current settings stay as they are."
     ),
 )
 

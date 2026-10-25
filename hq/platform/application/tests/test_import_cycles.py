@@ -87,7 +87,7 @@ def cycle_in(graph: dict[str, set[str]]) -> list[str]:
     return []
 
 
-@tag("source")
+@tag("source", "tree")
 class ImportCycleTests(SimpleTestCase):
     def test_no_module_imports_itself_back_while_it_runs(self):
         cycle = cycle_in(import_graph())

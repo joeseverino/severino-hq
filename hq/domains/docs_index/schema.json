@@ -5,16 +5,18 @@
     "report-",
     "project-",
     "note-",
-    "task-"
+    "task-",
+    "queue-"
   ],
   "doc_types": [
     "architecture_note",
     "decision_record",
     "deployment_guide",
     "public_article_draft",
+    "queue",
     "recovery_procedure",
+    "report",
     "runbook",
-    "task",
     "troubleshooting_guide"
   ],
   "environments": [
@@ -48,18 +50,5 @@
     "archived",
     "deprecated",
     "draft"
-  ],
-  "task_required_fields": [
-    "doc_id",
-    "title",
-    "doc_type",
-    "status"
-  ],
-  "task_statuses": [
-    "active",
-    "done",
-    "open",
-    "parked",
-    "wontfix"
   ]
 }

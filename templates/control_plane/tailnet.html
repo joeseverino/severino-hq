@@ -37,10 +37,8 @@
     </dl>
   {% endif %}
 
-  <div class="section-head">
-    <h2>Grants</h2>
-  </div>
-  {% table_region "Grants" narrow=1 %}
+  {% section_head %}Grants{% endsection_head %}
+  {% table_region "Grants" %}
     <table class="data-table">
       <thead><tr>{% table_heading "From" gutter=True local_sort=tailnet.grants|sortable %}{% table_heading "To" local_sort=tailnet.grants|sortable %}{% table_heading "Ports" "identifier" drop=1 local_sort=tailnet.grants|sortable %}</tr></thead>
       <tbody>
@@ -56,7 +54,7 @@
   {% endtable_region %}
 
   <h2>Groups and tags</h2>
-  {% table_region "Groups and tags" room="snug" narrow=1 %}
+  {% table_region "Groups and tags" room="snug" %}
     <table class="data-table">
       <thead><tr>{% table_heading "Name" "identifier" local_sort=tailnet.group_rows|sortable %}{% table_heading "Members" "identifier" local_sort=tailnet.group_rows|sortable %}{% table_heading "Devices" drop=1 local_sort=tailnet.group_rows|sortable %}</tr></thead>
       <tbody>
@@ -90,7 +88,7 @@
   {% endcomment %}
   {% if tailnet.policy.services %}
     <h2>Services</h2>
-    {% table_region "Tailnet services" room="snug" narrow=2 %}
+    {% table_region "Tailnet services" room="snug" %}
       <table class="data-table">
         <thead><tr>{% table_heading "Service" "identifier" gutter=True local_sort=tailnet.policy.services|sortable %}{% table_heading "Answers at" "identifier" local_sort=tailnet.policy.services|sortable %}{% table_heading "Ports" "identifier" drop=2 local_sort=tailnet.policy.services|sortable %}{% table_heading "Note" drop=1 local_sort=tailnet.policy.services|sortable %}</tr></thead>
         <tbody>
@@ -115,7 +113,7 @@
     they are not.
     {% endcomment %}
     <h2>Shell access</h2>
-    {% table_region "Shell access" room="snug" mid=1 narrow=2 %}
+    {% table_region "Shell access" room="snug" %}
       <table class="data-table">
         <thead><tr>{% table_heading "From" gutter=True local_sort=tailnet.ssh_rules|sortable %}{% table_heading "To" local_sort=tailnet.ssh_rules|sortable %}{% table_heading "As" "identifier" drop=2 local_sort=tailnet.ssh_rules|sortable %}{% table_heading "Re-authenticate" "status" drop=1 local_sort=tailnet.ssh_rules|sortable %}</tr></thead>
         <tbody>

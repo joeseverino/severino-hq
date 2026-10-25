@@ -7,6 +7,7 @@ from django.test import SimpleTestCase
 from hq.platform.api.openapi import document
 
 from ..binding import bind_tools
+from ..contract import resource_contract
 from ..declarations import HANDLERS, argument_model
 
 
@@ -22,11 +23,13 @@ class DocumentToolTests(SimpleTestCase):
             self.assertFalse(tool.input_schema["additionalProperties"])
         self.assertEqual(set(value["x-hq-mcp-tools"]), {fn.__name__ for fn in HANDLERS})
 
-    def test_altered_document_owns_advertisement_and_runtime_constraints(self):
+    def test_a_resource_tool_takes_only_the_resources_the_document_serves(self):
         value = deepcopy(document())
+        paths = value["paths"]
+        for path in [path for path, item in paths.items() if item.get("get", {}).get("x-hq-resource") == "projects"]:
+            del paths[path]
         entry = value["x-hq-mcp-tools"]["list_resource"]
         entry["description"] = "An injected catalog description."
-        entry["inputSchema"]["properties"]["name"]["enum"] = ["example.injected"]
         execute = AsyncMock(return_value={"items": [], "count": 0})
         with (
             patch("hq.platform.mcp.binding.sync_to_async", return_value=execute),
@@ -34,45 +37,37 @@ class DocumentToolTests(SimpleTestCase):
         ):
             tool = bind_tools(value)["list_resource"]
         self.assertEqual(tool.description, entry["description"])
-        with self.assertRaises(ValueError):
-            async_to_sync(tool.call)({"name": "projects"})
-        with self.assertRaises(ValueError):
-            async_to_sync(tool.call)({"name": "example.injected", "filters": "{}"})
+        for arguments in ({"name": "projects"}, {"name": "assets", "filters": "{}"}):
+            with self.subTest(arguments=arguments), self.assertRaises(ValueError):
+                async_to_sync(tool.call)(arguments)
         execute.assert_not_awaited()
-        async_to_sync(tool.call)({"name": "example.injected"})
-        execute.assert_awaited_once_with(name="example.injected", filters=None, fields=None)
+        async_to_sync(tool.call)({"name": "assets"})
+        execute.assert_awaited_once_with(name="assets", filters=None, fields=None)
 
     def test_unknown_and_invalid_arguments_never_invoke_execution(self):
-        value = document()
-        value["x-hq-mcp-tools"]["recent_activity"]["inputSchema"]["properties"]["limit"]["minimum"] = 2
         execute = AsyncMock()
         with patch("hq.platform.mcp.binding.sync_to_async", return_value=execute):
-            tool = bind_tools(value)["recent_activity"]
-        for arguments in ({"limit": 1}, {"limit": "2"}, {"limit": True}, {"unknown": 1}):
+            tool = bind_tools(document())["recent_activity"]
+        for arguments in ({"limit": "2"}, {"limit": True}, {"limit": None}, {"unknown": 1}):
             with self.subTest(arguments=arguments), self.assertRaises(ValueError):
                 async_to_sync(tool.call)(arguments)
         execute.assert_not_awaited()
 
-    def test_signature_or_handler_set_drift_fails_before_registration(self):
-        for mutate in (
-            lambda value: value["x-hq-mcp-tools"].pop("system_health"),
-            lambda value: value["x-hq-mcp-tools"]["recent_activity"]["inputSchema"]["properties"]["limit"].update(
-                type="string"
-            ),
-            lambda value: value["x-hq-mcp-tools"]["recent_activity"]["inputSchema"].update(required=["limit"]),
-        ):
-            value = document()
-            mutate(value)
-            with self.assertRaises(ValueError):
-                bind_tools(value)
-
-    def test_arguments_are_derived_from_each_execution_signature(self):
+    def test_handler_set_drift_fails_before_registration(self):
         value = document()
+        value["x-hq-mcp-tools"].pop("system_health")
+        with self.assertRaises(ValueError):
+            bind_tools(value)
+
+    def test_each_published_schema_is_its_argument_model(self):
+        value = document()
+        resources = resource_contract(value)
         for handler in HANDLERS:
-            actual = value["x-hq-mcp-tools"][handler.__name__]["inputSchema"]
-            expected = argument_model(handler).model_json_schema(by_alias=True)
-            self.assertEqual(set(actual["properties"]), set(expected["properties"]))
-            self.assertEqual(actual.get("required"), expected.get("required"))
+            with self.subTest(tool=handler.__name__):
+                self.assertEqual(
+                    value["x-hq-mcp-tools"][handler.__name__]["inputSchema"],
+                    argument_model(handler, resources).model_json_schema(by_alias=True),
+                )
 
     def test_rejected_input_values_do_not_enter_tool_errors(self):
         value = document()

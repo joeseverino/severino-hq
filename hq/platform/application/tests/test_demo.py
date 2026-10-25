@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hq.platform.core.models import AuditLog
@@ -168,6 +168,26 @@ class ToggleTests(TestCase):
         page = self.client.get(reverse("dashboard"))
         (flag,) = with_class(page, "demo-flag")
         self.assertIn("Demo", flag.words)
+
+    def test_only_a_saved_copy_says_what_the_copy_is(self):
+        """The About dialog describes the public demo; an operator's own HQ
+        with demo data on is still a running HQ, so it shows the plain mark."""
+
+        self.client.post(reverse("demo_mode"))
+
+        live = self.client.get(reverse("dashboard"))
+        self.assertNotContains(live, 'data-modal-open="demo-about"')
+        self.assertNotContains(live, 'id="modal-demo-about"')
+
+        with override_settings(SEVERINO_RENDERED_COPY=True):
+            copy = self.client.get(reverse("dashboard"))
+        (opener,) = with_class(copy, "demo-about")
+        self.assertEqual(opener.attrs["data-modal-open"], "demo-about")
+        self.assertTrue(opener.attrs["href"].startswith("https://"), "without script it is a link")
+        self.assertContains(copy, 'id="modal-demo-about"')
+        # The header's mark stays a label: the corner control is the one way in.
+        (flag,) = with_class(copy, "demo-flag")
+        self.assertEqual(flag.tag, "span")
 
     def test_the_switch_carries_the_state_rather_than_the_label(self):
         """A menu entry that renames itself makes you read the button to work

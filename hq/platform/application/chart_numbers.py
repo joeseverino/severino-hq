@@ -2,7 +2,7 @@
 
 import math
 
-from .money import MINUS
+from .money import signed
 
 # Round numbers an axis may end on. The intermediate steps keep the labels
 # round while landing close to the data, so bars fill the plot rather than half
@@ -38,7 +38,7 @@ def _format_reading(value: float, unit: str) -> str:
     """One reading with its unit, as a tooltip says it: "52 bpm", "$1,250"."""
     if unit in _CURRENCY:
         # Whole units and a true minus sign, as ``money`` writes a figure that is scanned.
-        return f"{MINUS if value < 0 else ''}{unit}{abs(value):,.0f}"
+        return signed(f"{unit}{abs(value):,.0f}", negative=value < 0)
     return f"{_format_tooltip_value(value)} {unit}".rstrip()
 
 

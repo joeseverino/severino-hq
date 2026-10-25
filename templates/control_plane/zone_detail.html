@@ -88,8 +88,7 @@ four domains behind a click and then need a second one to go anywhere.
   </section>
 {% endfor %}
 
-<div class="section-head">
-  <h2>Records <span class="heading-aside">{{ records_lede|breakable }}{% include "partials/_sweep_freshness.html" with inventory=inventory only_kind=record_kind inline=True %}</span></h2>
+{% section_head %}Records <span class="heading-aside">{{ records_lede|breakable }}{% include "partials/_sweep_freshness.html" with inventory=inventory only_kind=record_kind inline=True %}</span>{% aside %}
   {% comment %}
   No "adopt" button: the sweep adopts records in a managed domain
   (``zones.adopt_discovered_records``).
@@ -97,23 +96,15 @@ four domains behind a click and then need a second one to go anywhere.
   {% if zone.managed and public_dns_enabled %}
     <a class="btn primary" href="{{ create_url }}?kind={{ record_kind }}&amp;zone={{ zone.zone|urlencode }}">Add record</a>
   {% endif %}
-</div>
-
-{% if zone.policy %}{% include "control_plane/_zone_records.html" with rows=zone.routing zone=zone public_dns_enabled=public_dns_enabled label="Records that send traffic" empty_message="None of this domain's records sends traffic anywhere. They are all below." %}{% else %}{% include "control_plane/_zone_records.html" with rows=zone.routing zone=zone public_dns_enabled=public_dns_enabled label="Records that send traffic" %}{% endif %}
+{% endsection_head %}
 
 {% comment %}
-Verification strings and issuance rules, folded away. A domain apex answers
-"where does traffic go" underneath CAA records and ownership proofs, and
-sorted with the rest they would come first: the least interesting rows in the
-zone at the top of the page.
+Verification strings and issuance rules are folded away last. A domain apex
+answers "where does traffic go" underneath CAA records and ownership proofs,
+and sorted with the rest they would come first: the least interesting rows in
+the zone at the top of the page.
 {% endcomment %}
-{% if zone.policy %}
-  <details class="control-diagnostics zone-policy">
-    <summary>Policy and verification records ({{ zone.policy|length }})</summary>
-    {% include "control_plane/_zone_records.html" with rows=zone.policy zone=zone public_dns_enabled=public_dns_enabled label="Policy and verification records" drop_mid=1 %}
-  </details>
-{% endif %}
-
+{% include "control_plane/_zone_records.html" with routing=zone.routing policy=zone.policy zone=zone public_dns_enabled=public_dns_enabled %}
 
 {% comment %}
 What the domain relates to, each thing once (`zone_views._page_relationships`).

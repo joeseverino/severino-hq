@@ -1,29 +1,17 @@
 {% load nav_tags %}
 {% comment %}
-One table of DNS records, used for both halves of a zone: the records that send
-traffic somewhere, and the policy records folded away beneath them. Shared so
-the two cannot drift into looking like different things.
+A zone's DNS records as one table: the records that send traffic somewhere,
+then the policy and verification records folded away under their own group,
+so both halves share one set of columns and sort alike.
 
-Expects `rows`, `zone`, `public_dns_enabled`, and the region's `label`. A state is said only where
-it is not healthy, and a TTL only where it is not automatic: seventeen rows
-that each say "Healthy" and "Auto" say nothing. Where the Value column has
-left, a record that shares its name and type with another says its value
-under its name (`record.summary`), so the two still read as two.
+Expects `routing`, `policy`, `zone` and `public_dns_enabled`. A state is said
+only where it is not healthy, and a TTL only where it is not automatic:
+seventeen rows that each say "Healthy" and "Auto" say nothing. Where the Value
+column has left, a record that shares its name and type with another says its
+value under its name (`record.summary`), so the two still read as two.
 {% endcomment %}
-{% table_region label|default:"Records" mid=drop_mid narrow=4 %}
-  <table class="data-table zone-record-table">
-    <thead>
-      <tr>
-        {% table_heading "Name" "identifier" gutter=True local_sort=rows|sortable %}
-        {% table_heading "Type" "identifier" css="key-col" local_sort=rows|sortable %}
-        {% table_heading "Value" "identifier" drop=4 local_sort=rows|sortable %}
-        {% table_heading "TTL" "status" drop=3 local_sort=rows|sortable %}
-        {% if zone.managed %}{% table_heading "State" "status" drop=2 local_sort=rows|sortable %}{% table_heading "Actions" css="actions-col" drop=1 hidden=True %}{% endif %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for record in rows %}
-        <tr>
+{% partialdef record_row %}
+        <tr{% if folded %} data-folded="{{ folded }}"{% endif %}>
           <td class="row-gutter">
             {% if record.service_url %}
               <strong>{% entity "service"|entity_of:record.name %}</strong>
@@ -38,7 +26,7 @@ under its name (`record.summary`), so the two still read as two.
             <span class="zone-value">{{ record.value|breakable }}</span>
             {% if record.proxied %}<span class="pill pill-neutral">Proxied</span>{% endif %}
           </td>
-          <td>{% if record.ttl != 1 %}{{ record.ttl|breakable }} s{% endif %}</td>
+          <td>{% if record.ttl != 1 %}{{ record.ttl|breakable }}&nbsp;s{% endif %}</td>
           {% if zone.managed %}
             <td>
               {% comment %}
@@ -66,11 +54,35 @@ under its name (`record.summary`), so the two still read as two.
             </td>
           {% endif %}
         </tr>
+{% endpartialdef %}
+{% table_region "Records" %}
+  <table class="data-table zone-record-table">
+    <thead>
+      <tr>
+        {% table_heading "Name" "identifier" gutter=True local_sort=routing|add:policy|sortable %}
+        {% table_heading "Type" "identifier" css="key-col" local_sort=routing|add:policy|sortable %}
+        {% table_heading "Value" "identifier" drop=4 local_sort=routing|add:policy|sortable %}
+        {% table_heading "TTL" "status" drop=3 local_sort=routing|add:policy|sortable %}
+        {% if zone.managed %}{% table_heading "State" "status" drop=2 local_sort=routing|add:policy|sortable %}{% table_heading "Actions" css="actions-col" drop=1 hidden=True %}{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% if policy %}{% row_group "Records that send traffic" routing|length %}{% endif %}
+      {% for record in routing %}
+        {% partial record_row %}
       {% empty %}
         <tr><td colspan="6">
-          {% include "partials/_empty_state.html" with message=empty_message|default:"No records." %}
+          {% if policy %}{% include "partials/_empty_state.html" with message="None of this domain's records sends traffic anywhere. They are all below." %}{% else %}{% include "partials/_empty_state.html" with message="No records." %}{% endif %}
         </td></tr>
       {% endfor %}
     </tbody>
+    {% if policy %}
+      <tbody>
+        {% row_group "Policy and verification records" policy|length folds="zone-policy-records" %}
+        {% for record in policy %}
+          {% with folded="zone-policy-records" %}{% partial record_row %}{% endwith %}
+        {% endfor %}
+      </tbody>
+    {% endif %}
   </table>
 {% endtable_region %}

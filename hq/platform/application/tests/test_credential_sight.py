@@ -3,9 +3,7 @@
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.db import connection
 from django.test import SimpleTestCase, TestCase
-from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import escape
@@ -20,6 +18,7 @@ from hq.domains.control_plane.provider_adapters.contracts import (
 )
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.tests.markup import text
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..connections import _controller_contract
 from ..credential_sight import (
@@ -33,12 +32,6 @@ from ..credential_sight import (
 )
 from ..inventory import record_inventory
 from ..security import cli_principal
-
-
-def _cost(call) -> int:
-    with CaptureQueriesContext(connection) as queries:
-        call()
-    return len(queries)
 
 
 class ExampleRecord(ObservationRecord):
@@ -192,11 +185,20 @@ class CredentialSightTests(TestCase):
     def test_more_inventory_rows_cost_no_more_queries(self):
         now = timezone.now()
         ProviderInventory.objects.create(kind="host.perimeter", reachable=False, error="refused", observed_at=now)
-        one_row = _cost(credential_sight)
-        for kind in list(PROVIDERS)[:5]:
-            ProviderInventory.objects.create(kind=kind, records=[{}], observed_at=now)
+        # Kinds a credential sees, so each one read is a sight the answer counts.
+        kinds = [sight.kind for provider in credential_sight() for sight in provider.sights][:5]
 
-        self.assertEqual(_cost(credential_sight), one_row)
+        def arrange(count):
+            ProviderInventory.objects.filter(kind__in=kinds).delete()
+            for kind in kinds[:count]:
+                ProviderInventory.objects.create(kind=kind, records=[{}], observed_at=now)
+
+        def read(found):
+            return len({sight.kind for provider in found for sight in provider.sights if sight.records})
+
+        assert_cost_does_not_grow(
+            self, sizes=(1, 5), arrange=arrange, draw=lambda _count: credential_sight(), rows=read
+        )
 
     def test_providers_without_a_connection_are_split_out(self):
         connected, unconnected = sight_by_connection({"edge": "ssh"})
@@ -257,11 +259,13 @@ class PerConnectionSightTests(TestCase):
             self.assertEqual(states["host.perimeter"], UNREADABLE)
 
     def test_more_connections_cost_no_more_queries(self):
-        one = _cost(lambda: sight_by_connection({"edge": "ssh"}))
+        connections = (("edge", "ssh"), ("shared-host", "ssh"), ("dns", "cloudflare_dns"))
 
-        self.assertEqual(
-            _cost(lambda: sight_by_connection({"edge": "ssh", "shared-host": "ssh", "dns": "cloudflare_dns"})),
-            one,
+        assert_cost_does_not_grow(
+            self,
+            sizes=(1, 3),
+            draw=lambda count: sight_by_connection(dict(connections[:count])),
+            rows=lambda found: len(found[0]),
         )
 
     def test_a_per_connection_kind_that_names_no_connection_is_refused(self):
@@ -505,8 +509,10 @@ class PartReasonTests(SimpleTestCase):
         self.assertEqual(
             sight.part_reasons,
             (
-                "Code scanning alerts, Branch rules not read on app, site: "
-                "not available on this repository (its plan or settings leave it off)",
+                (
+                    "Code scanning alerts, Branch rules not read on app, site: "
+                    "not available on this repository (its plan or settings leave it off)"
+                ),
                 "Branch rules not read on app: GitHub timed out",
                 "Code scanning alerts, Branch rules not read on web: hidden from HQ's connection",
             ),

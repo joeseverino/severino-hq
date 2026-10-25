@@ -29,7 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 # a merge. A subprocess here starts with no DJANGO_DEBUG, so admission switches
 # itself on, looks for the signed lock a composed image would have supplied, and
 # refuses to start: a true statement about a situation none of these tests are
-# describing. It is the failure the composed suite (`mise run suite:as-image`)
+# describing. It is the failure the composed suite (`mise run test --composed`)
 # exists to catch: a host test that quietly assumes nothing is installed.
 PLUGIN_ENV = (
     "SEVERINO_HQ_PLUGINS",
@@ -254,7 +254,7 @@ def product_sources():
                 yield path.read_text(encoding="utf-8")
 
 
-@tag("source")
+@tag("source", "tree")
 class ConfigurationTableTests(SimpleTestCase):
     """Every variable HQ reads is in docs/Deployment.md's table, and nothing else is."""
 

@@ -36,7 +36,7 @@ deploy/bin/
 # Claude Code's local state, never published: its settings, and agent
 # worktrees, where being untracked rather than ignored is a trap (a `git add
 # -A` commits a nested copy of the repository into the repository).
-.claude/
+/.claude/
 # Which local files a new agent worktree copies in (mise.local.toml).
 .worktreeinclude
 

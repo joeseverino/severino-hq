@@ -1,15 +1,14 @@
 """The machine page with a realistic tailnet: reached-through, the facts panel, relations."""
 
 from django.contrib.auth import get_user_model
-from django.db import connection
 from django.test import TestCase
-from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..connections import connection_readings
 from ..facts import facts_about
@@ -230,18 +229,18 @@ class RelationTests(TestCase):
 
 
 class CatalogQueryCountTests(TestCase):
-    def _count(self, devices):
+    def arrange(self, devices):
         ProviderConnection.objects.all().delete()
         tailnet_connection()
         store(
             TAILNET_KIND,
             *(device(f"example-host-{i}", f"100.64.0.{i + 1}") for i in range(devices)),
         )
-        with CaptureQueriesContext(connection) as captured:
-            catalog = machine_catalog()
-        self.assertEqual(len(catalog), devices)
+
+    def draw(self, _devices):
+        catalog = machine_catalog()
         self.assertTrue(all(item.reached_by == (TAILNET_REF,) for item in catalog))
-        return len(captured)
+        return catalog
 
     def test_reached_through_costs_no_more_queries_for_more_machines(self):
-        self.assertEqual(self._count(2), self._count(20))
+        assert_cost_does_not_grow(self, sizes=(2, 20), arrange=self.arrange, draw=self.draw, rows=len)

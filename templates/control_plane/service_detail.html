@@ -10,14 +10,10 @@ readings. The path is the next section, drawn once.
 {% endcomment %}
 <div class="service-band">
   {% for item in summary %}
-    <div class="band-fact{% if item.pill %} tone-{{ item.tone }}{% endif %}">
-      <span class="band-icon">{% include "partials/_icon.html" with name=item.icon %}</span>
-      <div>
-        <span class="band-label">{{ item.label|breakable }}</span>
-        <strong>{% if item.link and item.link.url %}{% entity item.link label=item.value %}{% else %}{{ item.value|breakable }}{% endif %}</strong>
-        {% if item.detail %}<small>{{ item.detail|breakable }}</small>{% endif %}
-      </div>
-    </div>
+    {% band_fact icon=item.icon label=item.label tone=item.tone %}
+      <strong>{% if item.link and item.link.url %}{% entity item.link label=item.value %}{% else %}{{ item.value|breakable }}{% endif %}</strong>
+      {% if item.detail %}<small>{{ item.detail|breakable }}</small>{% endif %}
+    {% endband_fact %}
   {% endfor %}
   {% if service.aliases %}
     <p class="band-meta"><span>Also at {% for alias in service.aliases %}<code>{{ alias|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></p>
@@ -35,10 +31,7 @@ is open.
 </section>
 
 <section id="path" class="page-section" data-page-section>
-<div class="section-head">
-  <h2>Path{% if routes|length == 1 %} <span class="heading-aside">via {{ routes.0.via_phrase|breakable }}</span>{% endif %}</h2>
-  {% if topology_url %}<a class="btn ghost compact" href="{{ topology_url }}">See on the map</a>{% endif %}
-</div>
+{% section_head %}Path{% if routes|length == 1 %} <span class="heading-aside">via {{ routes.0.via_phrase|breakable }}</span>{% endif %}{% aside %}{% if topology_url %}<a class="btn ghost compact" href="{{ topology_url }}">See on the map</a>{% endif %}{% endsection_head %}
 <p class="path-reach"><span class="exposure exposure-{{ exposure.level }}">{{ exposure.label|breakable }}</span>{% if exposure.worst.path_gates %} <span class="muted">· login only at {% for path in exposure.worst.path_gates %}<code>{{ path|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span>{% endif %}</p>
 {% if gate_fixes and not read_only %}
   <div class="notice notice-attention">
@@ -283,7 +276,7 @@ it is not what anyone opens this page to read.
 {% endcomment %}
   <details class="control-diagnostics">
     <summary>{{ service.alias_summary|breakable }}</summary>
-    {% table_region "Other names" narrow=2 %}
+    {% table_region "Other names" %}
       <table class="data-table">
         <thead><tr>{% table_heading "Record" "identifier" gutter=True local_sort=service.alias_claims|sortable %}{% table_heading "Type" drop=2 local_sort=service.alias_claims|sortable %}{% table_heading "For" "identifier" drop=1 local_sort=service.alias_claims|sortable %}{% table_heading "State" "status" css="key-col" local_sort=service.alias_claims|sortable %}</tr></thead>
         <tbody>

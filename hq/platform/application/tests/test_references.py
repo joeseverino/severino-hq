@@ -17,6 +17,7 @@ from hq.domains.calendars.models import Entry
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from .. import references
 from ..assets import AssetCommand, save_asset
@@ -233,15 +234,16 @@ class ResolveTests(TestCase):
         Project.objects.create(name="An Example Project", slug="an-example")
         expense = an_expense()
 
-        with CaptureQueriesContext(connection) as one:
-            references.resolve_many([("asset:a-router", "")], principal=self.principal)
-        with CaptureQueriesContext(connection) as queries:
-            links = references.resolve_many(
-                [("asset:a-router", ""), ("project:an-example", ""), (f"expense:{expense.pk}", ""), ("", "")],
-                principal=self.principal,
-            )
+        named = [("asset:a-router", ""), ("project:an-example", ""), (f"expense:{expense.pk}", "")]
 
-        self.assertEqual(len(queries), len(one))
+        def draw(count):
+            return references.resolve_many([*named[:count], ("", "")], principal=self.principal)
+
+        assert_cost_does_not_grow(
+            self, sizes=(1, len(named)), draw=draw, rows=lambda links: sum(link is not None for link in links)
+        )
+
+        links = draw(len(named))
         self.assertEqual(
             [link.label if link else None for link in links],
             ["A router", "An Example Project", "Example Registrar · Renewal", None],
@@ -407,18 +409,19 @@ class ReferencedByTests(TestCase):
     def test_it_costs_the_same_however_many_models_hold_a_reference(self):
         Entry.objects.create(title="Replace the fan", starts_on=date(2026, 3, 1), about="machine:lab-1")
         an_expense(about="machine:lab-1")
-        every = tuple(field for field in references.reference_fields() if field.accepts("machine"))
+        # The fields of the models holding a row that names the machine, so each adds a group.
+        every = tuple(
+            field
+            for field in references.reference_fields()
+            if field.accepts("machine") and field.model in (Asset, Entry, Expense)
+        )
         self.assertGreater(len(every), 2)
 
-        def cost(fields):
-            with (
-                mock.patch("hq.platform.application.references.reference_fields", return_value=fields),
-                CaptureQueriesContext(connection) as queries,
-            ):
-                references.referenced_by("machine", "lab-1", principal=self.principal)
-            return len(queries)
+        def draw(count):
+            with mock.patch("hq.platform.application.references.reference_fields", return_value=every[:count]):
+                return references.referenced_by("machine", "lab-1", principal=self.principal)
 
-        self.assertEqual(cost(every), cost(every[:1]))
+        assert_cost_does_not_grow(self, sizes=(1, len(every)), draw=draw, rows=len)
 
     def test_a_repeating_event_says_how_it_repeats(self):
         Entry.objects.create(

@@ -115,7 +115,7 @@ DEBUG = env_bool("DJANGO_DEBUG", default=False)
 # mise task that runs Django sets both.
 _STARTED_WRONG = (
     "Locally, run Django through a mise task, which sets it: `mise run manage -- <command>`, "
-    "or `mise run dev:scratch` and `mise run dev:manage -- <command>` for the scratch server."
+    "or `mise run dev:scratch` and `mise run manage --scratch -- <command>` for the scratch server."
 )
 
 SECRET_KEY = env_str("DJANGO_SECRET_KEY")
@@ -238,8 +238,16 @@ SEVERINO_CSP_REPORT_PATH = "/csp-report/"
 # extensions have not yet moved such work to a job.
 SEVERINO_OUTBOUND_IN_REQUEST = "refuse"
 
-# Django owns the browser security boundary. Scripts are limited to same-origin
-# assets or per-response nonces; objects and framing are disabled outright.
+# Django owns the browser security boundary. A script runs only when HQ
+# rendered its tag: each carries the response's nonce (TemplateSourceTests), and
+# 'strict-dynamic' makes the nonce, and scripts a nonced one adds, all a CSP3
+# browser trusts, so a same-origin file cannot run as script just by being
+# here. 'self' is for a browser without 'strict-dynamic'. A response that took
+# no nonce drops the sentinel (django.utils.csp.build_policy) and so permits no
+# script, which is right: it renders no script tag.
+# https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/script-src
+# https://web.dev/articles/strict-csp
+# Objects and framing are disabled outright.
 # Inline styles remain allowed so a chart can place a mark with a per-datum
 # custom property; application templates keep styles in the static bundle.
 #
@@ -259,7 +267,7 @@ SEVERINO_OUTBOUND_IN_REQUEST = "refuse"
 # audited sink worth more than a blanket ban nobody could satisfy.
 SECURE_CSP = {
     "default-src": [CSP.SELF],
-    "script-src": [CSP.SELF, CSP.NONCE],
+    "script-src": [CSP.NONCE, CSP.STRICT_DYNAMIC, CSP.SELF],
     "style-src": [CSP.SELF, CSP.UNSAFE_INLINE],
     "img-src": [CSP.SELF, "data:"],
     "font-src": [CSP.SELF],
@@ -344,6 +352,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.humanize",
+    # Django's own form and widget templates, for the renderer below.
+    "django.forms",
     "mozilla_django_oidc",
     # Severino HQ: the machinery, then every app a host domain declares in
     # application/domains.py, then the extensions.
@@ -372,7 +382,6 @@ MIDDLEWARE = [
     # every number is decided before a template sees it.
     "hq.platform.core.middleware.DemoModeMiddleware",
     "hq.platform.core.middleware.LoginRequiredMiddleware",
-    "hq.platform.core.middleware.CurrentUserMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "hq.platform.core.middleware.ProjectionMiddleware",
@@ -382,9 +391,9 @@ ROOT_URLCONF = "hq.config.urls"
 
 # Whether a rendered template is reused rather than re-read from disk. Left
 # implicit, Django always wraps the loaders in the cached loader, whatever DEBUG
-# says, and only runserver's autoreloader clears it; under uvicorn an edited
-# template would not show until a restart. Explicit loaders make caching a
-# switch of its own, on by default only with DEBUG off.
+# says, and only runserver's autoreloader clears it. Explicit loaders make
+# caching a switch of its own, on by default only with DEBUG off; there the
+# development server restarts on a template edit (tools/dev/dev.sh).
 TEMPLATE_CACHE = env_bool("DJANGO_TEMPLATE_CACHE", default=not DEBUG)
 
 _TEMPLATE_LOADERS = [
@@ -425,6 +434,10 @@ TEMPLATES = [
     },
 ]
 
+# Forms render through the template loaders, so templates/django/forms/ holds
+# HQ's field markup and every {{ form }} or {{ field.as_field_group }} wears it.
+FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
+
 WSGI_APPLICATION = "hq.config.wsgi.application"
 
 
@@ -458,17 +471,16 @@ if not _DATABASE_PATH:
 
 DATABASES = {
     "default": {
-        # Django's SQLite backend, switching each connection to WAL so that
-        # processes opening a new file together wait for each other.
-        "ENGINE": "hq.platform.core.sqlite",
+        "ENGINE": "django.db.backends.sqlite3",
         "NAME": _DATABASE_PATH,
         "OPTIONS": {
-            # No foreign_keys pragma: Django turns it on for every connection,
-            # and no journal_mode: the engine sets it. synchronous=FULL so a
-            # power cut cannot undo a save HQ already reported; NORMAL in WAL
-            # mode can lose the last commits, and HQ commits too rarely for the
-            # wait to matter. temp_store=MEMORY: HQ's sorts are small.
-            "init_command": "PRAGMA synchronous=FULL;PRAGMA temp_store=MEMORY;",
+            # No foreign_keys pragma: Django turns it on for every connection.
+            # WAL lets readers carry on through a write; it persists in the
+            # file, so on a WAL file the pragma changes nothing. synchronous=FULL
+            # so a power cut cannot undo a save HQ already reported; NORMAL in
+            # WAL mode can lose the last commits, and HQ commits too rarely for
+            # the wait to matter. temp_store=MEMORY: HQ's sorts are small.
+            "init_command": "PRAGMA journal_mode=WAL;PRAGMA synchronous=FULL;PRAGMA temp_store=MEMORY;",
             "transaction_mode": "IMMEDIATE",
             # How long a writer waits for another writer before giving up.
             # WAL lets readers carry on through a write, but writers are still
@@ -493,7 +505,7 @@ DATABASES = {
             #
             # Named for the process, because two suites on one machine would
             # otherwise share the file: two worktrees' gates, or `mise run
-            # fast` beside `mise run ci`. A shared file makes them fail each
+            # fast` beside `mise run check`. A shared file makes them fail each
             # other with a locked table: a failure that says nothing about the
             # change and costs a while to attribute. Django's parallel workers
             # suffix this name per worker, so they stay distinct within a run
@@ -515,6 +527,9 @@ RUNNING_TESTS = sys.argv[1:2] == ["test"]
 # Whether a list read raises on a relation or deferred field it did not fetch
 # (see ``application.projection.guarded``). On where a developer sees it.
 SEVERINO_STRICT_FETCH = DEBUG or RUNNING_TESTS
+# Whether a template printing a value that is neither text nor a number raises
+# (see ``application.printable``); elsewhere it prints the missing mark and logs.
+SEVERINO_STRICT_PRINT = DEBUG or RUNNING_TESTS
 if RUNNING_TESTS:
     from hq.config.warning_policy import enforce as _enforce_warning_policy
 
@@ -624,8 +639,9 @@ if _sign_in.scheme in {"http", "https"} and _sign_in.netloc:
 # strings into innerHTML through Vue and its markdown renderer, and no
 # configuration of it creates only the `hq-fragment` policy. Spelled as a
 # derivation rather than a second literal policy, so tightening the real one
-# cannot leave a stale copy behind. Its sources are the real policy's; it needs no
-# inline script and, configured jitless, no eval.
+# cannot leave a stale copy behind. Its sources are the real policy's, the
+# nonce and 'strict-dynamic' included; it needs no inline script and,
+# configured jitless, no eval.
 SEVERINO_API_REFERENCE_CSP = without_trusted_types(SECURE_CSP)
 OIDC_CREATE_USER = env_bool("SEVERINO_OIDC_CREATE_USER", default=True)
 # Where a sign-in that did not finish lands: the login page, told to stop and
@@ -720,6 +736,10 @@ SEVERINO_AUDIT_ROUTINE_DAYS = 30
 # How often the in-use marker is rewritten. Every request checks it; only the
 # first in each interval writes.
 SEVERINO_ACTIVITY_THROTTLE_SECONDS = 60
+# How often each source's SSH reachability is probed.
+SEVERINO_SSH_PROBE_INTERVAL_SECONDS = 60 * 60
+# How long a requested read stands before HQ stops forcing it.
+SEVERINO_READ_REQUEST_SECONDS = 15 * 60
 # How often each source's arrival is written to HQ's request-path reading, per
 # process. Every request is counted in memory; 0 records nothing. Nothing under
 # test, so no test's query count depends on which request came first; the
@@ -767,8 +787,8 @@ STATIC_ROOT = Path(env_str("DJANGO_STATIC_ROOT", str(BASE_DIR / "var" / "static"
 STATIC_LIVE = env_bool("DJANGO_WHITENOISE_AUTOREFRESH", default=DEBUG)
 
 # Collected assets are named by their content (css/app.3f2a1b9c0d4e.css), so
-# core.static can cache them forever, and each has a gzip copy beside it, so
-# nothing is compressed while serving. Live serving keeps plain names: the
+# core.static can cache them forever, and each has a brotli and a gzip copy
+# beside it, so nothing is compressed while serving. Live serving keeps plain names: the
 # source trees it reads have no hashed copies, and it sends no-cache anyway.
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
@@ -831,8 +851,8 @@ LOGGING = {
 SEVERINO_SITE_NAME = env_str("SEVERINO_SITE_NAME", "Severino HQ")
 # True only for a saved copy of HQ's pages (the public demo): what a page says
 # about the reader's connection then describes the visit the copy was rendered
-# for. Set in code by hq.platform.core.example_estate.as_production, never from
-# the environment, so a live HQ cannot be switched into it.
+# for. Set in code by demo/build.py, never from the environment, so a live HQ
+# cannot be switched into it.
 SEVERINO_RENDERED_COPY = False
 # The month the fiscal year starts, for the dashboard's expense window.
 SEVERINO_FISCAL_YEAR_START_MONTH = 1

@@ -76,7 +76,7 @@ class EveryItemComesWithHelpTests(SimpleTestCase):
             FindingRule("example", "Example", "attention", lambda estate: (), "Do it.", no_help_reason=" ")
 
 
-@tag("source")
+@tag("source", "tree")
 class ItemHelpSourceTests(SimpleTestCase):
     """Every attention item the host source builds carries help."""
 

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Open a failed Compose run's sealed logs"
+#MISE hide=true
 #MISE raw=true
+#MISE env={SEVERINO_FAILURE_LOG_IDENTITY={required="The identity that decrypts sealed logs, an op:// reference or a file (tools/dev/mise.local.example.toml)"}}
 #USAGE arg "<run>" help="The Compose run whose logs were sealed"
 #USAGE arg "[dir]" help="Where to unpack them; a private temporary directory by default"
 
@@ -9,7 +11,7 @@
 # sets it) and unpacks it.
 set -euo pipefail
 
-identity="${SEVERINO_FAILURE_LOG_IDENTITY:?set SEVERINO_FAILURE_LOG_IDENTITY (see tools/dev/mise.local.example.toml)}"
+identity="$SEVERINO_FAILURE_LOG_IDENTITY"
 
 umask 077
 dir="${usage_dir:-$(mktemp -d)}"

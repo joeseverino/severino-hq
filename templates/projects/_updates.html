@@ -14,7 +14,7 @@ queue's alert item and the projects list link here.
       {% for pull in pulls %}
         <li data-updates>
           <span class="github-mark">{% include "partials/_icon.html" with name="pull" %}</span>
-          {% if pull.url|web_url %}<a href="{{ pull.url|web_url }}" rel="noopener">{{ pull.title|breakable }}</a>{% else %}{{ pull.title|breakable }}{% endif %}
+          {% entity pull.url|outside label=pull.title %}
           <span class="muted">#{{ pull.number|breakable }}{% if pull.opened %} · opened {{ pull.opened|when:"ago" }}{% endif %}</span>
           {% with state=pull.checks.state %}
             {% if state == "failure" %}<span class="pill pill-serious" title="{{ pull.checks.failing|join:', ' }}">Checks failing</span>
@@ -27,7 +27,7 @@ queue's alert item and the projects list link here.
       {% for alert in unmatched %}
         <li data-unmatched-alerts>
           <span class="github-mark">{% include "partials/_icon.html" with name="shield" %}</span>
-          {% if alert.url|web_url %}<a href="{{ alert.url|web_url }}" rel="noopener"><code>{{ alert.package|breakable }}</code></a>{% else %}<code>{{ alert.package|breakable }}</code>{% endif %}
+          {% entity alert.url|outside label=alert.package code=True %}
           <span class="pill {% if alert.severity == 'critical' or alert.severity == 'high' %}pill-serious{% elif alert.severity == 'medium' or alert.severity == 'moderate' %}pill-attention{% endif %}">{{ alert.severity|capfirst|breakable }}</span>
           <span class="muted">No update open · {% if alert.first_patched_version %}fixed in {{ alert.first_patched_version|breakable }}{% else %}no fixed version yet{% endif %} · {{ alert.manifest_path|breakable }}</span>
         </li>

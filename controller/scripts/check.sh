@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Run Go formatting, the generated-code check, vet, and the unit tests under the race detector.
+# Go formatting, the generated-code check, the vendor slicer, vet and the advisory guard:
+# the controller's static half, lint:controller. Its race tests are test:controller.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -12,32 +13,33 @@ if [ -n "$out" ]; then
 fi
 
 echo "==> generated types match their specs"
-# Each generated file and the spec it comes from.
-generated=(
-    "runtime/bridge.gen.go:api/hq-controller.openapi.json"
-    "connections/document.gen.go:api/hq-connections.openapi.json"
-    "providers/cfapi/cloudflare.gen.go:api/vendor/cloudflare/openapi.slice.json"
-    "providers/adguardapi/adguard.gen.go:api/vendor/adguard/openapi.yaml"
-    "providers/npmapi/npm.gen.go:api/vendor/npm/openapi.bundled.json"
-    "providers/githubapi/github.gen.go:api/vendor/github/openapi.slice.json"
-    "secrets/connectapi/connect.gen.go:api/vendor/onepassword-connect/openapi.yaml"
-)
+# Every *.gen.go in the tree, before and after go generate, so a generated file
+# is checked from the moment it exists, and one generate writes anew is caught.
 snapshot=$(mktemp -d)
-for pair in "${generated[@]}"; do
-    file=${pair%%:*}
+find . -name '*.gen.go' | sort >"$snapshot/before"
+while IFS= read -r file; do
     mkdir -p "$snapshot/$(dirname "$file")"
     cp "$file" "$snapshot/$file"
-done
+done <"$snapshot/before"
 go generate ./...
+find . -name '*.gen.go' | sort >"$snapshot/after"
 stale=0
-for pair in "${generated[@]}"; do
-    file=${pair%%:*} spec=${pair#*:}
+while IFS= read -r file; do
     if ! diff -u "$snapshot/$file" "$file" >&2; then
         cp "$snapshot/$file" "$file"
-        echo "$file is out of date with $spec." >&2
+        echo "$file is out of date with its spec (its go:generate line names it)." >&2
         stale=1
     fi
-done
+done <"$snapshot/before"
+while IFS= read -r file; do
+    rm "$file"
+    echo "$file is generated but not in the tree." >&2
+    stale=1
+done < <(comm -13 "$snapshot/before" "$snapshot/after")
+if [ ! -s "$snapshot/before" ]; then
+    echo "no *.gen.go found under controller/." >&2
+    stale=1
+fi
 rm -rf "$snapshot"
 if [ "$stale" -ne 0 ]; then
     echo "Run: go generate ./... (in controller/) and commit the result." >&2
@@ -58,7 +60,4 @@ if go list -deps -test ./... tool | grep -q '^golang.org/x/crypto/openpgp'; then
     exit 1
 fi
 
-echo "==> go test (race detector)"
-go test -race ./...
-
-echo "All controller checks passed cleanly."
+echo "All controller lint checks passed."

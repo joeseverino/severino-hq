@@ -28,7 +28,7 @@ from hq.domains.expenses.models import Expense
 from hq.platform.application.deletion import DeleteCommand
 from hq.platform.application.moments import when
 from hq.platform.application.money import money
-from hq.platform.application.pages import PageAction, PageMixin, record_trail
+from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.receipts import (
     ReceiptMetadataCommand,
     receipt_command_from_cleaned_data,
@@ -38,6 +38,7 @@ from hq.platform.application.receipts import (
 from hq.platform.application.records import deleter
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import TableColumn, TableListMixin, TableToggle
+from hq.platform.application.ui import ended
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 from hq.platform.core.templatetags.value_tags import breakable
@@ -60,9 +61,6 @@ class ReceiptListView(PageMixin, TableListMixin, ListView):
     page_title = "Receipts"
     table_search_scope = "receipts"
     table_selectable = True
-    # A vendor and the expense a receipt is for each run to a sentence, so a
-    # phone keeps the vendor and the amount.
-    table_drop_narrow = 4
     table_columns = (
         TableColumn("Vendor", "vendor"),
         TableColumn("Date", "date", "Oldest receipt date", "Newest receipt date"),
@@ -90,12 +88,14 @@ class ReceiptListView(PageMixin, TableListMixin, ListView):
 class ReceiptPage(PageMixin):
     """A page about one receipt, or a new one: its trail runs back to the list."""
 
+    page_trail = RECEIPTS_TRAIL
+
     def get_receipt(self):
         return getattr(self, "object", None)
 
     @override
-    def get_page_trail(self):
-        return record_trail(RECEIPTS_TRAIL, self.get_receipt(), str)
+    def trail_label(self, record):
+        return str(record)
 
 
 class ReceiptDetailView(PageMixin, DetailView):
@@ -112,10 +112,6 @@ class ReceiptDetailView(PageMixin, DetailView):
         receipt = self.object
         named = f"{receipt.original_filename} · " if receipt.original_filename else ""
         return f"{named}uploaded {when(receipt.uploaded_at)}"
-
-    @override
-    def get_page_trail(self):
-        return (RECEIPTS_TRAIL,)
 
     @override
     def get_page_actions(self):
@@ -148,6 +144,10 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
         if not hasattr(self, "receipt"):
             self.receipt = get_object_or_404(Receipt, pk=self.kwargs["pk"])
         return self.receipt
+
+    @property
+    def object(self):
+        return self.get_receipt()
 
     @override
     def get_page_lede(self):
@@ -212,7 +212,7 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
                 principal=web_principal(request.user),
                 current_id=receipt.id,
             )
-            messages.success(request, f"Receipt linked to {expense.label}.")
+            messages.success(request, ended(f"Receipt linked to {expense.label}"))
 
         return redirect(receipt.get_absolute_url())
 

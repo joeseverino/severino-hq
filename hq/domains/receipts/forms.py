@@ -7,6 +7,7 @@ from .models import Receipt
 from .validation import (
     ALLOWED_RECEIPT_CONTENT_TYPES,
     MAX_RECEIPT_BYTES,
+    is_new_upload,
     validate_receipt_file,
 )
 
@@ -73,5 +74,6 @@ class ReceiptUploadForm(forms.ModelForm):
 
     def clean_file(self):
         f = self.cleaned_data["file"]
-        validate_receipt_file(f)
+        if is_new_upload(f):
+            validate_receipt_file(f)
         return f

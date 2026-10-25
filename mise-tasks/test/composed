@@ -1,0 +1,74 @@
+#!/bin/sh
+#MISE description="The suite composed with the set mise.local.toml names, as the image runs it; mise run test --composed"
+#MISE hide=true
+#MISE extends="django"
+#MISE env={DJANGO_DEBUG=false, SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION="0", SEVERINO_HQ_PLUGINS="{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH="{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"}
+#MISE timeout="30m"
+#USAGE arg "[arguments]..." var=#true help="Passed on to manage.py test: test labels, --tag, --parallel"
+
+# The suite runs in a copy of only what the image is built from (the paths
+# Dockerfile.dockerignore admits, tracked or new), so a test that reads docs/,
+# .git or anything else the image leaves out fails here rather than in Compose.
+# It runs as the image configures it: DEBUG off, the extension set
+# mise.local.toml names, admission off since a checkout has no admitted wheels,
+# with SEVERINO_HQ_SOURCE and SEVERINO_HQ_REVISION stamped. Without an extension set it runs the host alone
+# and says so; REQUIRE_COMPOSED=1 fails instead.
+set -eu
+
+# The whole suite takes the heavy turn; a run its arguments narrow goes ahead
+# at once (tools/gate/turn.py).
+test_arguments="${usage_arguments:-}"
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+
+# shellcheck source=tools/lib/export-tree.sh
+. ./tools/lib/export-tree.sh
+# shellcheck source=tools/lib/source-url.sh
+. ./tools/lib/source-url.sh
+if [ -z "${HQ_LOCAL_PLUGINS:-}" ]; then
+    if [ "${REQUIRE_COMPOSED:-0}" = 1 ]; then
+        echo "The composed suite is required and HQ_LOCAL_PLUGINS is unset (tools/dev/mise.local.example.toml)." >&2
+        exit 1
+    fi
+    echo "No HQ_LOCAL_PLUGINS supplied: the host alone, as the image runs it (tools/dev/mise.local.example.toml)."
+fi
+
+source_url="$(source_url)"
+# Named as a test run's scratch is, for this shell, so a copy left by a killed
+# run is swept by the next test run (hq/config/sandbox.py).
+tree="$(mktemp -d "${TMPDIR:-/tmp}/severino-test-tree-$$-XXXXXX")"
+# This shell outlives the suite so the copy goes however it ends. A signal is
+# acted on once the suite has stopped (a terminal's interrupt reaches both),
+# and the exit says which signal it was.
+trap 'rm -rf "${tree}"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+admitted="$(sed -n 's|^!\([^*]*[^/]\)/*$|\1|p' Dockerfile.dockerignore)"
+[ -n "${admitted}" ] || { echo "Dockerfile.dockerignore admits nothing." >&2; exit 1; }
+# shellcheck disable=SC2086  # one pathspec per admitted path
+export_tree "${tree}" ${admitted}
+# What the image's copy of the checkout leaves out of /app, another stage's
+# input only, the suite's copy leaves out too.
+excluded="$(sed -nE 's|^COPY ((--exclude=[^ ]+ )+)\. /app$|\1|p' Dockerfile | tr ' ' '\n' | sed -n 's|^--exclude=||p')"
+for path in ${excluded}; do
+    rm -rf "${tree:?}/${path}"
+done
+
+# The image installs the runtime dependencies alone, so the suite runs in an
+# environment of the checkout's that holds only those: a test module that loads
+# a development tool fails here as it does in the image. It lives beside the
+# checkout's own environment, not in the copy, so it outlives the run.
+environment="${UV_PROJECT_ENVIRONMENT:-.venv}-image"
+case "${environment}" in /*) ;; *) environment="${MISE_CONFIG_ROOT}/${environment}" ;; esac
+
+revision="$(git rev-parse HEAD)"
+cd "${tree}"
+status=0
+env \
+    UV_PROJECT_ENVIRONMENT="${environment}" \
+    SEVERINO_HQ_SOURCE="${source_url}" \
+    SEVERINO_HQ_REVISION="${revision}" \
+    uv run --locked --no-default-groups python manage.py test --noinput --parallel auto "$@" || status=$?
+exit "${status}"

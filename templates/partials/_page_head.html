@@ -32,7 +32,7 @@ glance (how it is doing, where it runs), beside its name rather than under it.
       {% endfor %}
       {% if page.actions|length > 1 %}
         <details class="overflow-menu" data-menu>
-          <summary aria-label="More actions"><span aria-hidden="true">⋯</span></summary>
+          <summary aria-label="More actions">{% include "partials/_icon.html" with name="more" %}</summary>
           <div class="overflow-menu-panel">
             {% for action in page.actions %}{% if action != lead %}{% include "partials/_page_action.html" with extra="" %}{% endif %}{% endfor %}
           </div>

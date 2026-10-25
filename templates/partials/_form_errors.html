@@ -1,0 +1,5 @@
+{% comment %}
+What was wrong with a submitted form as a whole, with no field to sit under:
+a notice above the fields, where the page includes it with the form.
+{% endcomment %}
+{% if form.non_field_errors %}<div class="msg msg-error" role="alert">{{ form.non_field_errors }}</div>{% endif %}

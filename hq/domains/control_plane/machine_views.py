@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 
 from django.http import Http404
 from django.shortcuts import redirect
+from django.urls import reverse_lazy
 from django.views.generic import TemplateView
 
 from hq.platform.application.capabilities import capability_words
@@ -166,9 +167,7 @@ class MachineDetailView(PageMixin, TemplateView):
     def get_page_title(self):
         return self.found.name
 
-    @override
-    def get_page_trail(self):
-        return (("Machines", reverse("control_plane:machines")),)
+    page_trail = ("Machines", reverse_lazy("control_plane:machines"))
 
     @override
     def get_page_actions(self):

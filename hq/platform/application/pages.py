@@ -12,9 +12,13 @@ to ``render``.
 
 import re
 from collections.abc import Iterable
+from copy import copy
 from dataclasses import dataclass, field
 from typing import Any
 
+from django.utils.functional import Promise
+
+from .asks import Ask
 from .fragments import FragmentMixin
 from .ui import PageNavigation
 lazy from .page_reads import remedy
@@ -106,7 +110,7 @@ class PageBadge:
 class Page:
     title: str
     lede: str = ""
-    actions: tuple[PageAction, ...] = ()
+    actions: tuple[PageAction | Ask, ...] = ()
     navigation: PageNavigation | None = None
     # Where the page sits, as (label, url) pairs, when it is reached from a parent.
     trail: tuple[tuple[str, str], ...] = field(default_factory=tuple)
@@ -126,7 +130,8 @@ class Page:
     def lead(self) -> PageAction | None:
         """The page's own way to add what it lists: its primary link."""
 
-        return next((action for action in self.actions if action.primary and action.method == "get"), None)
+        links = (action for action in self.actions if isinstance(action, PageAction))
+        return next((action for action in links if action.primary and action.method == "get"), None)
 
     @property
     def dialogs(self) -> tuple[PageDialog, ...]:
@@ -140,7 +145,7 @@ def page_context(
     title: str,
     lede: str = "",
     *,
-    actions: Iterable[PageAction] = (),
+    actions: Iterable[PageAction | Ask] = (),
     navigation: PageNavigation | None = None,
     trail: Iterable[tuple[str, str]] = (),
     reads: Iterable[str] = (),
@@ -159,12 +164,12 @@ def page_context(
 
 
 def record_trail(list_crumb: tuple[str, str], record, label) -> tuple[tuple[str, str], ...]:
-    """A list page's crumb, then the record's own when there is one."""
+    """A list page's crumb, then the record's own when there is one and ``label`` names it."""
 
-    crumbs = [list_crumb]
-    if record is not None:
-        crumbs.append((label(record), record.get_absolute_url()))
-    return tuple(crumbs)
+    words = None if record is None else label(record)
+    if words is None:
+        return (list_crumb,)
+    return (list_crumb, (words, record.get_absolute_url()))
 
 
 class PageMixin(FragmentMixin):
@@ -179,6 +184,8 @@ class PageMixin(FragmentMixin):
     # What the page shows (``application.page_reads``), so an empty one can
     # name the connection that would fill it.
     page_reads: tuple[str, ...] = ()
+    # The list a record's page sits under, as its trail's first crumb.
+    page_trail: tuple[str, str | Promise] | None = None
 
     def get_page_title(self) -> str:
         return self.page_title
@@ -186,14 +193,41 @@ class PageMixin(FragmentMixin):
     def get_page_lede(self) -> str:
         return self.page_lede
 
-    def get_page_actions(self) -> tuple[PageAction, ...]:
+    def get_page_actions(self) -> tuple[PageAction | Ask, ...]:
         return ()
 
     def get_page_navigation(self) -> PageNavigation | None:
         return None
 
+    def trail_label(self, record: Any) -> str | None:
+        """The record's crumb after the list's; None, the default, leaves it off.
+
+        ``record`` is ``self.object``, the record as stored: an edit page's
+        form changes a copy (``get_form_kwargs``).
+        """
+
+        return None
+
     def get_page_trail(self) -> tuple[tuple[str, str], ...]:
-        return ()
+        if self.page_trail is None:
+            return ()
+        record = getattr(self, "object", None)
+        return record_trail(self.page_trail, record, self.trail_label)
+
+    def get_form_kwargs(self) -> dict[str, Any]:
+        """An edit page's form changes a copy of its record, so the head reads
+        the record as stored.
+
+        A ``ModelForm`` writes what it cleaned onto its instance before it knows
+        the whole form is valid (``BaseModelForm._post_clean``), and an edit
+        view's instance is ``self.object``: a refused edit would title the page
+        and link its trail by the values it refused.
+        """
+
+        kwargs = super().get_form_kwargs()
+        if kwargs.get("instance") is not None:
+            kwargs["instance"] = copy(kwargs["instance"])
+        return kwargs
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)

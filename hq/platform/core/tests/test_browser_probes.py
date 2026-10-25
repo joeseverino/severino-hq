@@ -4,9 +4,72 @@ import re
 
 from django.test import SimpleTestCase
 
-from hq.platform.core import browser_tests
-from hq.platform.core.browser_tests import AUDIT, LINE_CONTRAST, lost_fills, static_file
 from hq.platform.core.stylesheets import SHEETS
+from hq.platform.core.tests.browser import (
+    components,
+    estate,
+    fragments,
+    gate,
+    in_flight,
+    layout,
+    page_errors,
+    reading,
+    reference,
+    selectors,
+    serving,
+    stress,
+    survey,
+    sweeps,
+    uncaught,
+    widths,
+)
+from hq.platform.core.tests.browser.probes import (
+    boxes,
+    cut_names,
+    describe,
+    palette,
+    parts,
+    settle,
+    shifts,
+    tables,
+    text,
+    tokens,
+)
+from hq.platform.core.tests.browser.probes.palette import LINE_CONTRAST, lost_fills
+from hq.platform.core.tests.browser.serving import static_file
+from hq.platform.core.tests.browser.survey import AUDIT
+from hq.platform.core.tests.browser_modules import browser_modules
+
+# Imported by name rather than found, so a change to any of them selects these
+# tests in the fast gate; test_every_browser_module_is_read holds the list whole.
+MODULES = (
+    components,
+    estate,
+    fragments,
+    gate,
+    in_flight,
+    layout,
+    page_errors,
+    reading,
+    reference,
+    selectors,
+    serving,
+    stress,
+    survey,
+    sweeps,
+    uncaught,
+    widths,
+    boxes,
+    cut_names,
+    describe,
+    palette,
+    parts,
+    settle,
+    shifts,
+    tables,
+    text,
+    tokens,
+)
 
 _WALK = re.compile(r"\bcreate(?:TreeWalker|NodeIterator)\(")
 
@@ -46,12 +109,18 @@ def probes() -> dict[str, str]:
     """Every probe source the gate holds, and the audit's."""
 
     held = {
-        name: value for name, value in vars(browser_tests).items() if name.startswith("_") and isinstance(value, str)
+        f"{module.__name__}.{name}": value
+        for module in MODULES
+        for name, value in vars(module).items()
+        if name.startswith("_") and isinstance(value, str)
     }
     return held | {AUDIT.name: AUDIT.read_text(encoding="utf-8")}
 
 
 class ProbeTests(SimpleTestCase):
+    def test_every_browser_module_is_read(self):
+        self.assertEqual(sorted(module.__name__ for module in MODULES), sorted(browser_modules()))
+
     def test_no_probe_walks_the_page_with_a_callback(self):
         """An engine with script off refuses to call a page function back, so
         a walk with a filter throws there instead of reading the page."""

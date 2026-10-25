@@ -66,6 +66,7 @@ def _examples() -> dict[str, list[tuple[str, Callable[[], str]]]]:
             ("1234.5", lambda: money(Decimal("1234.5"))),
             ("-5", lambda: money(Decimal(-5))),
             ("1234.4, cents=False", lambda: money(Decimal("1234.4"), cents=False)),
+            ("5, plus=True", lambda: money(Decimal(5), plus=True)),
             ("None", lambda: money(None)),
         ],
         "ago": [

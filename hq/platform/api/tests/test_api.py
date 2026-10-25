@@ -168,6 +168,23 @@ class GrantTests(SimpleTestCase):
         self.assertEqual(principal.actor, "example-automation")
 
 
+class RefusalStatusTests(SimpleTestCase):
+    def test_every_refusal_a_capability_can_raise_has_its_own_status(self):
+        """A refusal code with no status would answer 400, "you sent nonsense"."""
+
+        from hq.platform.application.approvals import RefusedHold
+
+        def tree(base):
+            return {base}.union(*(tree(sub) for sub in base.__subclasses__()))
+
+        # RefusedHold itself is only ever raised as one of its kinds.
+        refusals = tree(AuthorizationError) | (tree(RefusedHold) - {RefusedHold})
+        self.assertGreaterEqual(len(refusals), 4)
+        for refusal in refusals:
+            with self.subTest(refusal=refusal.__name__):
+                self.assertIn(refusal.code, views.CAPABILITY_STATUS)
+
+
 class CompositionCheckTests(SimpleTestCase):
     def test_compiler_violations_are_reported_together(self):
         from hq.platform.application.integrations import (
@@ -469,6 +486,98 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertEqual(conflict.status_code, 409)
         self.assertEqual(conflict.json()["error"]["code"], "idempotency_conflict")
 
+    def _rule(self, rule, capability="project.create"):
+        from hq.domains.control_plane.models import CapabilityRule
+
+        CapabilityRule.objects.update_or_create(
+            scope=CapabilityRule.Scope.AGENT,
+            subject="example-automation",
+            capability=capability,
+            defaults={"rule": rule},
+        )
+
+    def test_a_policy_denial_is_403_and_names_its_code(self):
+        from hq.domains.control_plane.models import CapabilityRule
+        from hq.domains.projects.models import Project
+
+        self._rule(CapabilityRule.Rule.DENY)
+        with _serving():
+            response = self._post(
+                "project.create",
+                {"payload": {"name": "Denied", "slug": "denied", "status": "active"}},
+                token=_token(scope="write_projects"),
+            )
+        self.assertEqual(response.status_code, 403, response.content)
+        self.assertEqual(response.json()["error"]["code"], "denied_by_policy")
+        self.assertFalse(Project.objects.filter(slug="denied").exists())
+
+    def test_a_state_that_refuses_a_valid_request_is_409(self):
+        from hq.domains.projects.models import Project
+
+        Project.objects.create(name="Example", slug="example")
+        with _serving():
+            response = self.client.post(
+                "/api/v2/capabilities/project.dependency_updates/",
+                data=json.dumps({"target": "example", "payload": {"enabled": False}}),
+                content_type="application/json",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
+                HTTP_IDEMPOTENCY_KEY="k0",
+            )
+        self.assertEqual(response.status_code, 409, response.content)
+        self.assertEqual(response.json()["error"]["code"], "precondition")
+
+    def test_a_refusal_keeps_nothing_under_its_key(self):
+        """The same key runs once the operator lifts the rule that refused it."""
+
+        from hq.domains.control_plane.models import CapabilityRule
+        from hq.domains.projects.models import Project
+
+        body = {"payload": {"name": "Lifted", "slug": "lifted", "status": "active"}}
+        self._rule(CapabilityRule.Rule.DENY)
+        with _serving():
+            refused = self._post("project.create", body, token=_token(scope="write_projects"), idempotency_key="k1")
+            CapabilityRule.objects.all().delete()
+            ran = self._post("project.create", body, token=_token(scope="write_projects"), idempotency_key="k1")
+        self.assertEqual(refused.status_code, 403)
+        self.assertEqual(ran.status_code, 200, ran.content)
+        self.assertNotIn("Idempotency-Replayed", ran)
+        self.assertTrue(Project.objects.filter(slug="lifted").exists())
+
+    def test_a_held_call_keeps_nothing_under_its_key(self):
+        """Allowed after it was held, the same key runs the command."""
+
+        from hq.domains.control_plane.models import CapabilityRule
+        from hq.domains.projects.models import Project
+
+        body = {"payload": {"name": "Allowed", "slug": "allowed", "status": "active"}}
+        self._rule(CapabilityRule.Rule.APPROVE)
+        with _serving():
+            held = self._post("project.create", body, token=_token(scope="write_projects"), idempotency_key="k2")
+            self._rule(CapabilityRule.Rule.ALLOW)
+            ran = self._post("project.create", body, token=_token(scope="write_projects"), idempotency_key="k2")
+        self.assertEqual(held.json()["data"]["status"], "awaiting_approval")
+        self.assertNotIn("Idempotency-Replayed", ran)
+        self.assertNotIn("status", ran.json()["data"])
+        self.assertTrue(Project.objects.filter(slug="allowed").exists())
+
+    def test_the_same_key_after_an_approval_is_answered_afresh_and_runs_nothing_twice(self):
+        from django.contrib.auth import get_user_model
+
+        from hq.domains.control_plane.models import CapabilityRule
+        from hq.domains.projects.models import Project
+        from hq.platform.application.approvals import approve
+        from hq.platform.application.security import web_principal
+
+        body = {"payload": {"name": "Approved", "slug": "approved", "status": "active"}}
+        operator = web_principal(get_user_model().objects.create_user("example-operator", password="x" * 20))
+        self._rule(CapabilityRule.Rule.APPROVE)
+        with _serving():
+            held = self._post("project.create", body, token=_token(scope="write_projects"), idempotency_key="k3")
+            approve(held.json()["data"]["approval"]["id"], principal=operator)
+            again = self._post("project.create", body, token=_token(scope="write_projects"), idempotency_key="k3")
+        self.assertNotIn("Idempotency-Replayed", again)
+        self.assertEqual(Project.objects.filter(slug="approved").count(), 1)
+
     def test_the_audit_trail_names_the_client_not_the_operator(self):
         """Revocability is worth little if you cannot tell what a token did."""
 
@@ -486,7 +595,9 @@ class TransportTests(SentinelMixin, TestCase):
                 },
                 token=_token(scope="write_projects"),
             )
-        self.assertTrue(AuditLog.objects.filter(object_repr__icontains="Audited").exists())
+        event = AuditLog.objects.get(object_repr__icontains="Audited")
+        self.assertEqual(event.metadata["actor"], "example-automation")
+        self.assertEqual(event.metadata["interface"], "api")
 
     def test_an_unknown_capability_is_404(self):
         with _serving():

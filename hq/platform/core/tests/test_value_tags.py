@@ -1,9 +1,11 @@
 import re
 
+from django import forms
 from django.test import SimpleTestCase
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.entity_links import EntityLink
+from hq.platform.application.printable import Unprintable
 from hq.platform.application.tests.markup import with_class
 from hq.platform.core.templatetags.value_tags import breakable, cell_line, entity, or_empty, readout
 
@@ -103,6 +105,13 @@ class BreakableTests(SimpleTestCase):
         self.assertNotIn("<b>", str(breakable("<b>x</b>.y")))
         self.assertEqual("".join(pieces(breakable("<b>x</b>.y"))), "&lt;b&gt;x&lt;/b&gt;.y")
 
+    def test_a_form_field_passes_as_the_markup_it_renders(self):
+        class Form(forms.Form):
+            key = forms.CharField(widget=forms.HiddenInput, initial="web:example-key")
+
+        field = Form()["key"]
+        self.assertEqual(str(breakable(field)), str(field))
+
     def test_nothing_is_added_at_either_end(self):
         self.assertEqual(pieces(breakable("dev/app.hidden:")), ["dev/", "app.hidden:"])
 
@@ -134,10 +143,23 @@ class BreakableTests(SimpleTestCase):
         a sentence, has nothing to cut inside and no box."""
 
         cut = '<span class="token" data-sole><span class="cut"><span class="whole">'
-        self.assertTrue(str(breakable("example-docker-host-01")).startswith(cut))
+        self.assertIn(cut, breakable("example-docker-host-01"))
         self.assertNotIn('class="cut"', breakable("hq.example.com"))
         self.assertNotIn('class="cut"', breakable("Receipt for example-docker-host-01"))
         self.assertIn('class="cut"', cell_line("on example-web"))
+
+    def test_a_name_a_cell_may_cut_carries_an_unseen_strut_of_its_pieces(self):
+        """A cell sizes its column by the strut, so it holds the longest piece
+        an opened row cannot break; the strut says nothing a reader hears or
+        copies, and a word of a sentence has none."""
+
+        (strut,) = with_class(str(breakable("example.com/example-path")), "strut")
+        self.assertEqual(strut.attrs.get("aria-hidden"), "true")
+        self.assertEqual(strut.words, "")
+        pieces = strut.attrs["data-strut"].split("​")
+        self.assertEqual("".join(pieces), "example.com/example-path")
+        self.assertGreater(len(pieces), 1)
+        self.assertEqual(with_class(str(breakable("Receipt for example-docker-host-01")), "strut"), [])
 
     def test_a_word_that_breaks_nowhere_stays_text(self):
         self.assertEqual(breakable("Example Finance"), "Example Finance")
@@ -152,7 +174,8 @@ class BreakableTests(SimpleTestCase):
         self.assertIn("empty-value", or_empty(None))
         self.assertEqual(or_empty(0), 0)
         named = type("Named", (), {"__str__": lambda self: "example-operator"})()
-        self.assertIn('<span class="whole">example-operator</span>', or_empty(named))
+        with self.assertRaises(Unprintable):
+            or_empty(named)
         self.assertEqual(or_empty(mark_safe("<b>x-y</b>")), "<b>x-y</b>")
 
     def test_a_cell_line_holds_each_name_in_it(self):

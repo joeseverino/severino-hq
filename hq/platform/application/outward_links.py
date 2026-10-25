@@ -116,7 +116,7 @@ def operator_links() -> list[dict[str, str]]:
     render it over a bad link is the least useful moment to fail.
     """
 
-    raw = str(getattr(settings, "SEVERINO_DASHBOARD_LINKS", "") or "").strip()
+    raw = settings.SEVERINO_DASHBOARD_LINKS.strip()
     if not raw:
         return []
     try:

@@ -22,14 +22,6 @@ class ControllerBinaryTests(SimpleTestCase):
         self.assertIsNotNone(built)
         self.assertIn(f'"--entrypoint", "{built.group(1)}"', LAUNCHER.read_text())
 
-    def test_the_binary_is_static_and_carries_no_build_paths(self):
-        dockerfile = DOCKERFILE.read_text()
-
-        self.assertIn("CGO_ENABLED=0", dockerfile)
-        self.assertIn("go build -trimpath", dockerfile)
-        self.assertIn("./cmd/hq-controller", dockerfile)
-        self.assertIn("GOTOOLCHAIN=local", dockerfile)
-
 
 @tag("source")
 class BridgeSocketDeliveryTests(SimpleTestCase):

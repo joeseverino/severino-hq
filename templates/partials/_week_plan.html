@@ -7,10 +7,7 @@ Week plan, which days of the week a thing is scheduled for.
 of one: use _activity_calendar.html for what actually happened on given dates.
 {% endcomment %}
 <section class="card week-plan-card">
-  <div class="section-head">
-    <h2>{{ plan.title|breakable }}</h2>
-    {% if plan.url %}<a class="subtle-link" href="{{ plan.url }}">Change plan</a>{% endif %}
-  </div>
+  {% section_head %}{{ plan.title|breakable }}{% aside %}{% if plan.url %}<a class="subtle-link" href="{{ plan.url }}">Change plan</a>{% endif %}{% endsection_head %}
   <ol class="week-plan">
     {% for day in plan.days %}
       <li class="week-plan-day{% if day.planned %} is-planned{% endif %}">

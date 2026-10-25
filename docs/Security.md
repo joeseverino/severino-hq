@@ -2,16 +2,20 @@
 
 ## Posture
 
-- Single-user / very-small internal app.
-- Tailscale-only network exposure. No path from the public internet.
-- Tailnet-only is stated by the application, not only inherited from the
+- A single-user internal app.
+- Reachable over Tailscale only, with no path from the public internet.
+- HQ states the tailnet-only rule itself as well as inheriting it from the
   network. The shipped `SEVERINO_TRUSTED_NETWORKS` default is Tailscale's IPv4
-  and IPv6 ranges plus loopback: deliberately **not** RFC 1918. A LAN holds
-  printers, televisions and guests; it is not a boundary anyone maintains, and
-  a host firewall that is the only thing enforcing the rule is one `ufw
+  and IPv6 ranges plus loopback, and leaves out RFC 1918 on purpose. A LAN
+  holds printers, televisions and guests and is a boundary nobody maintains,
+  and a host firewall that is the only thing enforcing the rule is one `ufw
   disable` from silently admitting all of it.
-- Django authentication required on **every** URL except `/accounts/login/`,
-  `/accounts/logout/`, `/oidc/`, and `/static/`.
+- Every URL requires a signed-in session except sign-in and sign-out
+  (`/accounts/login/`, `/accounts/logout/`), the SSO handshake (`/oidc/`), the
+  container's probes (`/health/`), the browser's policy reports
+  (`/csp-report/`), the icons a browser asks for at the root, and `/static/`.
+  The machine API (`/api/v2/`) and `/mcp/` take a bearer token instead.
+  `PUBLIC_SURFACE` in `hq/platform/core/tests/test_security.py` is the list.
 - No public registration. New users are created via `manage.py createsuperuser`
   only.
 - No Django admin. `django.contrib.admin` is not installed and nothing is
@@ -28,9 +32,9 @@
 - `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` come from environment variables.
 - `SESSION_COOKIE_SECURE` and `CSRF_COOKIE_SECURE` default ON in production,
   and where they are on the cookies are named `__Host-sessionid` and
-  `__Host-csrftoken`. The prefix is enforced by the browser rather than by HQ:
-  no other host or path under the domain can set a cookie of that name, so a
-  session cannot be planted by a neighbor for HQ to read back.
+  `__Host-csrftoken`. The browser enforces the prefix: no other host or path
+  under the domain can set a cookie of that name, so a session cannot be
+  planted by a neighbor for HQ to read back.
 - `SECURE_CONTENT_TYPE_NOSNIFF`, `X-Frame-Options:
   DENY`, `Referrer-Policy: same-origin`, `Cross-Origin-Opener-Policy:
   same-origin` and `Cross-Origin-Resource-Policy: same-origin` enabled. The
@@ -58,26 +62,33 @@
   The node keys, handshake age, endpoint and counters remain observer-relative;
   missing placement evidence stays visibly unverified.
 - Django's native Content Security Policy middleware enforces same-origin
-  assets, nonce-authorized scripts, no object embedding, and no framing.
-  Application JavaScript is external; a regression test rejects inline scripts
-  and event handlers before they can weaken the policy.
+  assets, no object embedding, and no framing. Scripts are admitted by nonce
+  alone: `script-src` is the response's nonce and `'strict-dynamic'`, so a
+  browser that supports it ignores `'self'` (kept for one that does not) and a
+  same-origin file, a receipt or any static file, cannot run as script from
+  markup HQ did not write. Every `<script>` a template renders carries
+  `{% csp_nonce_attr %}`, held by a source test over every template; a script a
+  nonced one adds is trusted through it. Application JavaScript is external; a
+  regression test rejects inline scripts and event handlers before they can
+  weaken the policy.
 - The policy also requires Trusted Types, so assigning a string to `innerHTML`,
   `outerHTML`, `srcdoc` or a script URL throws instead of parsing: a DOM-based
   XSS sink cannot execute even if one is introduced, and `trusted-types 'none'`
-  means no policy can be declared to opt back out. It costs nothing today
-  because every dynamic node HQ builds uses `createElement`/`textContent`.
+  means no policy can be declared to opt back out. It costs nothing, because
+  every dynamic node HQ builds uses `createElement`/`textContent`.
   The API reference at `/api/docs/` is the one exception: the
   vendored Scalar bundle (`static/vendor/scalar`, version and SHA-256 in
   `UPSTREAM`, checked by a test) renders through `innerHTML`. Its policy is
   derived from the main one (`SEVERINO_API_REFERENCE_CSP`), keeps scripts to
-  `'self'` with no inline code or `eval`, and fetches nothing off-origin.
+  the nonce and `'strict-dynamic'` with no inline code or `eval`, and fetches
+  nothing off-origin.
 - Violations are reported back. The policy carries `report-to` and `report-uri`
   pointing at `/csp-report/`, which records the directive, the blocked URI and
   the reporting address to the audit log: bounded body size, truncated fields,
   and one row per distinct complaint per hour. It is the only way HQ learns
   that a directive enforced in someone else's browser has stopped holding.
-- Django 6.1's secure default rejects legacy cookies using the ambiguous
-  pre-6.0.6 signing-salt derivation.
+- HQ keeps Django's default `SIGNED_COOKIE_LEGACY_SALT_FALLBACK = False`, so a
+  signed cookie made with the older, ambiguous salt derivation is refused.
 - HSTS on by default for a year, including subdomains. Preload stays opt-in:
   it is slow to undo and meaningless for a name the public internet cannot
   resolve.
@@ -133,9 +144,17 @@
   Docker bridge address.
 - Agents authenticate to `/mcp/` with identity-provider access tokens, verified
   as the machine API verifies them, so each agent is its own attributable,
-  revocable principal. It holds its grant capped by the `SEVERINO_MCP_ENABLE_*`
-  flags. There is no second credential and no shared static bearer, and a
-  request with no verified caller reaches no tool.
+  revocable principal. On `/mcp/` it holds its grant capped by the
+  `SEVERINO_MCP_ENABLE_*` flags (`hq/platform/mcp/identity.py`). The machine
+  API (`/api/`) applies no such cap: a client there holds exactly what its
+  token grants (`api_principal` in `hq/platform/api/security.py`), so the
+  identity provider's grant is that surface's ceiling. There is no second
+  credential and no shared static bearer, and a request with no verified
+  caller reaches no tool.
+- A token's lifetime is the identity provider's to set. HQ requires `exp`,
+  `iss` and `aud` and refuses an expired token, with
+  `SEVERINO_API_LEEWAY_SECONDS` of clock skew, but sets no maximum lifetime
+  of its own.
 - An operator can pause every agent from the menu. The switch is global, read
   on every request to `/mcp/` and to the machine API (`/api/`), and fails
   closed. Both surfaces accept the same Pocket ID tokens, so a brake on one
@@ -155,12 +174,18 @@
   record that changes meanwhile supersedes the request. Requests lapse after
   24 hours (`SEVERINO_APPROVAL_WINDOW_HOURS`), each actor may hold ten,
   and approval requires the web interface, so no token can approve its own.
+  The change runs as the agent that asked, so its audit events name that
+  agent; the person who approved or declined it is the request's
+  `decided_actor`, which a decided request cannot be saved without.
+- Every capability's audit events name its caller: the capability runner
+  sets the actor, interface and capability name for whatever the handler
+  records (`_run` in `hq/platform/application/capabilities.py`).
 
 ## Production checklist
 
-- [ ] Generated a strong `DJANGO_SECRET_KEY` (≥ 50 random bytes).
+- [ ] Generated a strong `DJANGO_SECRET_KEY` (50 random bytes or more).
 - [ ] `DJANGO_DEBUG=0`.
-- [ ] `DJANGO_ALLOWED_HOSTS` contains only your Tailnet hostname (+ `127.0.0.1`).
+- [ ] `DJANGO_ALLOWED_HOSTS` contains only your Tailnet hostname and `127.0.0.1`.
 - [ ] `DJANGO_CSRF_TRUSTED_ORIGINS` matches the full origin you actually serve.
 - [ ] The browser UI reaches port 8000 only through the reverse proxy. If host
       networking leaves Uvicorn on `0.0.0.0` so direct Tailnet MCP can preserve

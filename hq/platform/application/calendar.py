@@ -230,7 +230,13 @@ class CalendarCell:
     def url(self) -> str:
         """This day, open beside its month."""
 
-        return f"{reverse('calendar:month')}?month={self.day:%Y-%m}&day={self.day.isoformat()}"
+        return month_url(self.day, self.day)
+
+    @property
+    def anchor(self) -> str:
+        """The id of this day in its month, which a day's links target."""
+
+        return f"day-{self.day.isoformat()}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,12 +275,30 @@ class CalendarDayView:
     groups: tuple[tuple[SourceView, tuple[CalendarEvent, ...]], ...] = field(default=())
 
     @property
-    def previous(self) -> date:
-        return self.day - timedelta(days=1)
+    def previous_url(self) -> str:
+        previous = self.day - timedelta(days=1)
+        return month_url(previous, previous)
 
     @property
-    def next(self) -> date:
-        return self.day + timedelta(days=1)
+    def next_url(self) -> str:
+        following = self.day + timedelta(days=1)
+        return month_url(following, following)
+
+    @property
+    def new_entry_url(self) -> str:
+        return new_entry_url(self.day)
+
+
+def month_url(month: date, day: date | None = None) -> str:
+    """A month, with ``day`` open beside it."""
+
+    return f"{reverse('calendar:month')}?month={month:%Y-%m}{f'&day={day.isoformat()}' if day else ''}"
+
+
+def new_entry_url(day: date) -> str:
+    """The form for a new entry, on ``day``."""
+
+    return f"{reverse('calendar:entry_new')}?on={day.isoformat()}"
 
 
 # ----- Sources ----------------------------------------------------------------

@@ -3,12 +3,9 @@ Middleware for Severino HQ.
 
 - LoginRequiredMiddleware: this is a single-user / internal app; every view
   requires a session unless it is marked ``@login_not_required``.
-- CurrentUserMiddleware: scopes the request user to the active ASGI context so
-  ORM signals can attribute audit events without leaking across requests.
 """
 
 import logging
-from contextvars import ContextVar
 from time import monotonic
 from typing import override
 from uuid import uuid4
@@ -26,13 +23,13 @@ from hq.platform.core.outbound import serving
 lazy from hq.platform.application import hq_self
 lazy from hq.platform.application.plugins import plugin_token_authenticated_prefixes
 lazy from hq.platform.application.projection import projection_scope
+lazy from hq.platform.application.request_identity import signed_in
 
 # Where the browser's own answer to "show me stand-ins" is kept. Named here
 # because the middleware that reads it and the view that writes it are the only
 # two things that may know the spelling.
 DEMO_SESSION_KEY = "showing_demo"
 
-_current_user = ContextVar("severino_current_user", default=None)
 _request_logger = logging.getLogger("severino.request")
 
 
@@ -54,9 +51,7 @@ class DemoModeMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        showing = bool(
-            getattr(request, "user", None) and request.user.is_authenticated and request.session.get(DEMO_SESSION_KEY)
-        )
+        showing = bool(signed_in(request) is not None and request.session.get(DEMO_SESSION_KEY))
         request.showing_demo = showing
         with demo_scope(showing):
             return self.get_response(request)
@@ -154,35 +149,6 @@ class RequestContextMiddleware:
 
     def process_exception(self, request, exception):
         return speculation.on_exception(exception)
-
-
-def get_current_user():
-    return _current_user.get()
-
-
-def set_current_user(user) -> None:
-    _current_user.set(user)
-
-
-class CurrentUserMiddleware:
-    def __init__(self, get_response):
-        self.get_response = get_response
-
-    def __call__(self, request):
-        user = getattr(request, "user", None)
-        if user is not None:
-            # AuthenticationMiddleware exposes a SimpleLazyObject. Keeping it
-            # in a ContextVar lets ASGI's context restoration evaluate the
-            # session-backed object on the event-loop thread (Django 6.1 then
-            # correctly raises SynchronousOnlyOperation). Resolve it while
-            # this synchronous middleware is still running in its worker.
-            _ = user.is_authenticated
-            user = getattr(request, "_cached_user", user)
-        token = _current_user.set(user)
-        try:
-            return self.get_response(request)
-        finally:
-            _current_user.reset(token)
 
 
 class LoginRequiredMiddleware(auth_middleware.LoginRequiredMiddleware):

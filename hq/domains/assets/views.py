@@ -15,7 +15,7 @@ from hq.platform.application import related
 from hq.platform.application.assets import managed_domain
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.expenses import cost_totals
-from hq.platform.application.pages import PageAction, PageMixin, record_trail
+from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.references import ReferencePickerMixin, reference_of, referenced_by_row
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
@@ -23,6 +23,8 @@ from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 
 from .forms import AssetForm
 from .models import ASSET_CATEGORY_CHOICES, Asset
+
+ASSETS_TRAIL = ("Assets", reverse_lazy("assets:list"))
 
 
 class AssetListView(PageMixin, TableListMixin, ListView):
@@ -37,8 +39,6 @@ class AssetListView(PageMixin, TableListMixin, ListView):
         TableFilter("status", "Status", "status", Asset.Status.choices),
         TableFilter("category", "Category", "category", ASSET_CATEGORY_CHOICES),
     )
-    # An item and its vendor each run to a sentence, so a phone keeps the item and its cost.
-    table_drop_mid, table_drop_narrow = 3, 6
     table_columns = (
         TableColumn("Item", "item_name", "Name A–Z", "Name Z–A"),
         TableColumn("Vendor", "vendor", "Vendor A–Z", "Vendor Z–A"),
@@ -75,17 +75,16 @@ class AssetListView(PageMixin, TableListMixin, ListView):
 class AssetPage(PageMixin):
     """A page about one asset, or a new one: its trail runs back to the list."""
 
+    page_trail = ASSETS_TRAIL
+
     @override
-    def get_page_trail(self):
-        return record_trail(
-            ("Assets", reverse("assets:list")),
-            getattr(self, "object", None),
-            lambda asset: asset.item_name,
-        )
+    def trail_label(self, record):
+        return record.item_name
 
 
 class AssetDetailView(PageMixin, DetailView):
     model = Asset
+    page_trail = ASSETS_TRAIL
     template_name = "assets/asset_detail.html"
     slug_field = "slug"
     slug_url_kwarg = "slug"
@@ -101,10 +100,6 @@ class AssetDetailView(PageMixin, DetailView):
     @override
     def get_page_title(self):
         return self.object.item_name
-
-    @override
-    def get_page_trail(self):
-        return (("Assets", reverse("assets:list")),)
 
     @override
     def get_context_data(self, **kwargs):

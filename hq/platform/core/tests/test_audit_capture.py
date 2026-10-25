@@ -42,6 +42,7 @@ from ..audit import (
     register_audit,
 )
 from ..models import AuditLog
+from .estate_sizes import assert_cost_does_not_grow
 
 COMPARED = ("action", "object_type", "object_id", "object_repr", "message", "connection", "metadata")
 SIGNALS = (post_init, post_save, post_delete)
@@ -629,19 +630,17 @@ class ReadCostTests(TestCase):
     """Reading rows pays for a capture, never for a query or a conversion."""
 
     def test_reading_rows_costs_the_same_at_any_count_and_the_diff_is_none(self):
-        def read(queryset):
-            with CaptureQueriesContext(connection) as queries:
-                rows = list(queryset)
-            return rows, len(queries)
+        def arrange(count):
+            for day in range(Expense.objects.count() + 1, count + 1):
+                an_expense(date=date(2026, 1, day))
 
-        an_expense(date=date(2026, 1, 1))
-        _, full_once = read(Expense.objects.order_by("pk"))
-        _, narrow_once = read(Expense.objects.only("vendor").order_by("pk"))
-        for day in range(2, 21):
-            an_expense(date=date(2026, 1, day))
-        rows, full = read(Expense.objects.order_by("pk"))
-        narrow, narrowed = read(Expense.objects.only("vendor").order_by("pk"))
-        self.assertEqual((full, narrowed), (full_once, narrow_once))
+        def read(_count):
+            return list(Expense.objects.order_by("pk")), list(Expense.objects.only("vendor").order_by("pk"))
+
+        assert_cost_does_not_grow(
+            self, sizes=(1, 20), arrange=arrange, draw=read, rows=lambda drawn: min(map(len, drawn))
+        )
+        rows, narrow = read(20)
         names = _tracked(Expense)
         narrow[1].vendor = "Moved"
         # Everything the save receiver computes, on a full and a narrow row.

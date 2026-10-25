@@ -7,8 +7,8 @@ model validates the submission. Nothing here knows what kind of resource this is
 <form method="post" class="form">
   {% csrf_token %}
   {% if not resource %}<input type="hidden" name="kind" value="{{ kind }}">{% endif %}
-  {% if identity.non_field_errors %}<div class="msg msg-error">{{ identity.non_field_errors }}</div>{% endif %}
-  {% if spec.non_field_errors %}<div class="msg msg-error">{{ spec.non_field_errors }}</div>{% endif %}
+  {% include "partials/_form_errors.html" with form=identity %}
+  {% include "partials/_form_errors.html" with form=spec %}
 
   {% comment %}
   What the thing already is, before what can be changed about it. Read from the
@@ -24,15 +24,15 @@ model validates the submission. Nothing here knows what kind of resource this is
     </dl>
   {% endif %}
 
-  {% for field in spec.primary %}{% include "partials/_form_field.html" %}{% endfor %}
+  {% for field in spec.primary %}{{ field.as_field_group }}{% endfor %}
 
   {% comment %}
   Material the operator has to supply, on the same page as the rest of it. A
   resource that cannot work without this should not be creatable without it.
   {% endcomment %}
   {% if material %}
-    {% if material.non_field_errors %}<div class="msg msg-error">{{ material.non_field_errors }}</div>{% endif %}
-    {% for field in material %}{% include "partials/_form_field.html" %}{% endfor %}
+    {% include "partials/_form_errors.html" with form=material %}
+    {{ material }}
   {% endif %}
 
   {% comment %}
@@ -50,9 +50,9 @@ model validates the submission. Nothing here knows what kind of resource this is
   {% if spec.advanced or resource %}
     <details class="control-diagnostics"{% if spec.errors or identity.errors %} open{% endif %}>
       <summary>Options</summary>
-      {% for field in spec.advanced %}{% include "partials/_form_field.html" %}{% endfor %}
+      {% for field in spec.advanced %}{{ field.as_field_group }}{% endfor %}
       {% if resource %}
-        {% for field in identity %}{% include "partials/_form_field.html" %}{% endfor %}
+        {{ identity }}
         {% if kind == "machine" %}
           <div class="field">
             <label for="id_show_on_dashboard">Show on dashboard</label>

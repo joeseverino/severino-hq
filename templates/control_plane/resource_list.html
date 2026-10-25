@@ -18,14 +18,14 @@ offers every type.
     <strong>{% if records.filtered %}{{ records.shown|breakable }} of {% endif %}{{ records.total|counted:"record" }}</strong>{% if records.unsettled %}, {{ records.unsettled|counted:"needs a look,need a look" }}{% endif %}
   </p>
 </form>
-{% table_region "Records" narrow=1 %}
+{% table_region "Records" %}
   <table class="data-table">
     <thead>
       <tr>{% table_heading "Name" "identifier" gutter=True local_sort=records.shown|sortable %}{% table_heading "State" "status" css="key-col" local_sort=records.shown|sortable %}{% table_heading "Last read" "status" drop=1 local_sort=records.shown|sortable %}</tr>
     </thead>
     {% for group in records.groups %}
     <tbody>
-      <tr class="row-group"><th colspan="3" scope="rowgroup">{{ group.label|breakable }} <span class="count">{{ group.rows|length }}</span></th></tr>
+      {% row_group group.label group.rows|length %}
       {% for resource in group.rows %}
         <tr>
           <td class="row-gutter">
@@ -59,7 +59,7 @@ is not a row, so an unchanged minute-by-minute result is one line.
 {% endcomment %}
 {% if changes %}
 <h2>Recent changes</h2>
-{% table_region "Recent changes" narrow=3 %}
+{% table_region "Recent changes" %}
   <table class="data-table">
     <thead><tr>{% table_heading "What" "identifier" gutter=True local_sort=changes|sortable %}{% table_heading "Change" drop=3 local_sort=changes|sortable %}{% table_heading "Result" css="key-col" local_sort=changes|sortable %}{% table_heading "By" drop=2 local_sort=changes|sortable %}{% table_heading "When" "status" drop=1 local_sort=changes|sortable %}</tr></thead>
     <tbody>

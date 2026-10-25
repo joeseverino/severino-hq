@@ -2,10 +2,8 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.db import connection
 from django.template.loader import render_to_string
 from django.test import TestCase
-from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -18,6 +16,7 @@ from hq.domains.control_plane.models import (
     WeatherObservation,
 )
 from hq.platform.core.models import AuditLog
+from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_grow
 
 from .. import readings
 from ..glance import (
@@ -280,23 +279,17 @@ class DashboardGlanceTests(TestCase):
         )
 
     def test_glance_query_cost_does_not_grow_with_machine_count(self):
-        with CaptureQueriesContext(connection) as baseline:
-            dashboard_panels()
-        ManagedResource.objects.bulk_create(
-            [
-                ManagedResource(
-                    key=f"other-{number}",
-                    kind="machine",
-                    spec={"name": f"other-{number}"},
-                )
-                for number in range(20)
-            ]
-        )
+        def arrange(count):
+            ManagedResource.objects.filter(key__startswith="other-").delete()
+            ManagedResource.objects.bulk_create(
+                [
+                    ManagedResource(key=f"other-{number}", kind="machine", spec={"name": f"other-{number}"})
+                    for number in range(count)
+                ]
+            )
 
-        with CaptureQueriesContext(connection) as expanded:
-            dashboard_panels()
-
-        self.assertEqual(len(expanded), len(baseline))
+        # The glance reads the one machine it was asked about, never the rest.
+        assert_subject_cost_does_not_grow(self, sizes=(1, 20), arrange=arrange, draw=lambda _count: dashboard_panels())
 
     def test_snapshot_age_is_explicit_at_the_freshness_boundary(self):
         """Due at one refresh interval; out of date only past the tolerance.

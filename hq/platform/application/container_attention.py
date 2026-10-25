@@ -22,7 +22,7 @@ from .exposure import LEVELS, OPEN, UNKNOWN, UNROUTED, exposure_of_container, st
 from .finding_model import on_machine
 from .images import version
 from .item_help import do_step, run_step, steps
-from .ui import Insight, counted
+from .ui import Insight, counted, ended
 from .workflow_contracts import ActionLink, WorkflowPlan, WorkflowStep
 lazy from .container_standard import STANDARD
 lazy from .standards import UNMET
@@ -59,7 +59,7 @@ def attention() -> tuple[Insight, ...]:
                 title=f"{counted(len(behind), 'running image has', 'running images have')} an update",
                 value=str(len(behind)),
                 magnitude=len(behind),
-                body=", ".join(sorted(behind)) + "." + _brings(behind_running),
+                body=ended(", ".join(sorted(behind))) + _brings(behind_running),
                 action="Open containers",
                 url=reverse("control_plane:containers"),
                 workflow=by_hand("container-updates", behind_running),
@@ -141,7 +141,8 @@ def _advisory(label: str, standing: ImageStanding, running: list[Container]) -> 
     waiting = not standing.newer
     plans = _plans(running)
     key = f"container-advisory:{standing.image.name}:{standing.tag}"
-    body = f"Worst severity: {standing.worst}. Running as {where}.{f' Fixed in {fixed}.' if fixed else ''}"
+    fixed_in = f" {ended(f'Fixed in {fixed}')}" if fixed else ""
+    body = f"Worst severity: {ended(standing.worst)} {ended(f'Running as {where}')}{fixed_in}"
     body += _brings(running)
     watched = next((item for item in running if item.running.watcher), None)
     level, reached = _reach(running)
@@ -236,7 +237,7 @@ def _reach_attention() -> list[Insight]:
                     title=f"{check.label}: {counted(len(failing), 'container fails', 'containers fail')}",
                     value=str(len(failing)),
                     magnitude=len(failing),
-                    body=f"{', '.join(f'{item.running.name} on {item.machine.name}' for item in failing)}. "
+                    body=f"{ended(', '.join(f'{item.running.name} on {item.machine.name}' for item in failing))} "
                     f"{check.why} {check.fix} {_help(check.id)}{reached}",
                     action="Open containers",
                     url=reverse("control_plane:containers"),
@@ -265,7 +266,10 @@ def _reach(running) -> tuple[str, str]:
     item, exposure = worst
     return (
         level,
-        f" Most exposed: {item.running.name} on {item.machine.name}, {exposure.sentence[:1].lower()}{exposure.sentence[1:]}.",
+        ended(
+            f" Most exposed: {item.running.name} on {item.machine.name}, "
+            f"{exposure.sentence[:1].lower()}{exposure.sentence[1:]}"
+        ),
     )
 
 

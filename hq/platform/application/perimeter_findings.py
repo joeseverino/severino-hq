@@ -8,6 +8,7 @@ from .finding_model import (
     cannot_run_commands,
     fact_values,
 )
+from .ui import ended
 
 
 def _reached_but_unmeasured(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -125,9 +126,10 @@ def _perimeter_unchecked(estate: FindingEstate) -> tuple[Finding, ...]:
                 title=f"HQ could not test whether {node.label} is open to the internet",
                 severity="attention",
                 explanation=(
-                    "The test did not run because "
-                    + " and ".join(_UNCHECKED.get(reason, reason) for reason in reasons)
-                    + "."
+                    ended(
+                        "The test did not run because "
+                        + " and ".join(_UNCHECKED.get(reason, reason) for reason in reasons)
+                    )
                 ),
                 evidence=tuple(("Not tested", _UNCHECKED.get(reason, reason)) for reason in reasons),
             )

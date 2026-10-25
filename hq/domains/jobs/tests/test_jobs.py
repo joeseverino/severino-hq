@@ -340,6 +340,14 @@ class RunOnTheCallingThreadTests(TestCase):
         self.assertIn("Traceback", job.error)
 
 
+class JobIdTests(TestCase):
+    def test_ids_sort_in_the_order_jobs_were_made(self):
+        """So each insert lands at the end of the primary key's index."""
+
+        made = [Job.objects.create(kind=f"example.work-{n}", label="Example work").pk for n in range(20)]
+        self.assertEqual(sorted(made), made)
+
+
 class JobListOrderTests(TestCase):
     """What failed on its last run leads the list and is named above it."""
 

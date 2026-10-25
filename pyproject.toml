@@ -2,13 +2,19 @@
 name = "severino-hq"
 version = "0.0.0"
 requires-python = ">=3.15,<3.16"
-# Each is imported by host code, or listed under [tool.severino-hq.unimported]
-# with the reason it is installed anyway (a test holds that).
+# Each is imported by host code, or ignored for deptry's DEP002 under
+# [tool.deptry.per_rule_ignores] with the reason it is installed anyway.
 dependencies = [
     "argon2-cffi==25.1.0",
+    # Django's own async adapters, which it documents under this name: the ASGI
+    # application, the bridge, MCP's tools and hq_call cross with them.
+    "asgiref==3.13.0",
+    # Imported by WhiteNoise's compressor, which writes a .br copy beside each
+    # collected asset when it is installed.
+    "brotli==1.2.1",
     "cryptography==50.0.2",
     "django==6.1.2",
-    "httpx2==2.13.1",
+    "httpx2==2.16.0",
     # Imported directly: the bridge and MCP hold payloads to their schemas.
     "jsonschema==4.26.0",
     "mcp==2.3.0",
@@ -20,16 +26,45 @@ dependencies = [
     # regex cannot tell a comment from a string or regex literal.
     "rjsmin==1.3.0",
     # Imported directly: the ASGI application, its static mount and the bridge.
-    "starlette==1.8.0",
+    "starlette==1.10.0",
     "tblib==3.2.2",
     "uvicorn==0.54.0",
     "whitenoise==6.12.0",
 ]
 
+# lint:deptry: host code is hq/ and hq_sdk/, which the task names, less every
+# tests/ directory. The groups under [dependency-groups] are development
+# dependencies, which DEP002 leaves alone.
+[tool.deptry]
+known_first_party = ["hq", "hq_sdk"]
+extend_exclude = [".*/tests/"]
+[tool.deptry.per_rule_ignores]
 # Runtime dependencies no host code imports, and why each is installed anyway.
-[tool.severino-hq.unimported]
-httpx2 = "The HTTP client extensions import: admitted wheels install with --no-deps, so the host provides it."
-tblib = "Django's parallel test runner pickles a failure's traceback with it, in the image as well."
+DEP002 = [
+    # WhiteNoise's compressor imports it when collectstatic runs, in the image
+    # build as well, and writes each asset's .br copy with it.
+    "brotli",
+    # Django's parallel test runner pickles a failure's traceback with it, in
+    # the image as well.
+    "tblib",
+]
+# Transitive dependencies host code imports, each where its version belongs to
+# the dependency that installs it.
+DEP003 = [
+    # pydantic's core, pinned exactly by pydantic: core_schema is where pydantic
+    # keeps the schema and error types it does not re-export. A pin of our own
+    # would stop the weekly update whenever pydantic-core releases first.
+    "pydantic_core",
+    # hq/platform/core/oidc.py catches the error mozilla-django-oidc raises from
+    # its own requests calls; the client is the library's choice.
+    "requests",
+]
+# Development dependencies host code imports.
+DEP004 = [
+    # hq/config/urls.py mounts the toolbar only when SEVERINO_DEBUG_TOOLBAR is
+    # on, which development alone sets; the image installs no toolbar.
+    "debug_toolbar",
+]
 
 [tool.uv]
 package = false
@@ -38,21 +73,28 @@ default-groups = ["dev", "tools"]
 [dependency-groups]
 dev = [
     "django-debug-toolbar==8.0.0",
+    "watchfiles==1.3.0",
 ]
 tools = [
-    "coverage==7.16.2",
+    "coverage==7.17.0",
+    # Holds the runtime dependencies to what host code imports (lint:deptry).
+    "deptry==0.25.1",
     "django-stubs==6.1.2",
-    "hypothesis==6.170.0",
+    # Writes the served font from its source (tools/fonts), and the font tests read it.
+    "fonttools==4.67.0",
+    "hypothesis==6.170.9",
     "mypy==2.4.0",
     "openapi-spec-validator==0.9.0",
-    "ruff==0.17.1",
-    "schemathesis==4.31.1",
+    # The pipeline tests read the workflows through it.
+    "pyyaml==6.0.3",
+    "ruff==0.17.2",
+    "schemathesis==4.32.4",
     "types-jsonschema==4.26.0.20261006",
 ]
 browser = [
-    "playwright==1.64.0",
+    "playwright==1.64.1",
 ]
-# Run by `mise run checks:audit`; never installed into the development environment.
+# Run by `mise run lint:audit`; never installed into the development environment.
 audit = [
     "pip-audit==2.10.1",
 ]
@@ -65,21 +107,20 @@ line-length = 120
 extend-include = ["deploy/targets/severino-hq-cpanel-controller"]
 
 [tool.ruff.per-file-target-version]
-# The python3 of the hosted runner (RUNNER_IMAGE in tools/pipeline/toolchain.env), stdlib
+# The python3 of the hosted runner (the ubuntu label every workflow names), stdlib
 # only: the jobs and the action that run them set up no toolchain first.
-"tools/pipeline/ci_report.py" = "py312"
 "tools/pipeline/compose_plugins.py" = "py312"
 "tools/pipeline/composition_set.py" = "py312"
 "tools/pipeline/plugin_identity.py" = "py312"
 "tools/pipeline/verify_admissions.py" = "py312"
-# Its shell suite runs it, and the verdict and ci_report it imports, on that same python3.
-"tools/gate/preflight.py" = "py312"
+# Its shell suite runs it, and the verdict it imports, on that same python3.
+"tools/gate/check.py" = "py312"
 "tools/gate/verdict.py" = "py312"
 "deploy/targets/severino-hq-cpanel-controller" = "py37"
 
 [tool.ruff.lint]
 # Keep the contract explicit and stable across developer machines and CI.
-select = ["E4", "E7", "E9", "W605", "F", "C90", "I", "UP", "B", "SIM", "PTH", "C4", "PERF", "RUF", "FURB", "DJ", "BLE", "TID251", "PLC0415"]
+select = ["E4", "E7", "E9", "W605", "F", "C90", "I", "UP", "B", "SIM", "PTH", "C4", "PERF", "RUF", "FURB", "DJ", "BLE", "TID251", "PLC0415", "ISC004"]
 ignore = [
     # En dashes, multiplication signs and curly quotes are deliberate typography in user-facing copy.
     "RUF001",
@@ -93,8 +134,6 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Development and CI code imports its own package.
 "tools/**" = ["TID251"]
-# A fuzzing harness run by hand from a checkout, with atheris installed.
-"tests/fuzz/**" = ["TID251"]
 # Django's declarative class bodies: Meta options, form fields and migration operations are lists by contract.
 "**/migrations/*.py" = ["RUF012", "PLC0415"]
 "**/models.py" = ["RUF012"]
@@ -102,7 +141,6 @@ ignore = [
 # Test classes hold fixtures as plain class attributes. A test imports inside
 # the test; converting the suite to lazy imports is its own pass.
 "**/tests/**" = ["RUF012", "PLC0415"]
-"hq/platform/core/browser_tests.py" = ["RUF012", "PLC0415"]
 "demo/check.py" = ["PLC0415"]
 # Django's AppConfig.create reads every name an apps module binds
 # (inspect.getmembers), which reifies a lazy import before the app registry is
@@ -126,7 +164,7 @@ max-complexity = 15
 
 [tool.pyright]
 # The editor's language server, for navigation and for an import that is
-# actually broken. Types are mypy's (checks:mypy): a second checker with its
+# actually broken. Types are mypy's (lint:mypy): a second checker with its
 # own opinions only contradicts the one the gates enforce. Each checkout,
 # worktrees included, resolves against its own environment; an agent's
 # worktree is checked by its own gates, not by the server rooted here.
@@ -137,9 +175,10 @@ ignore = [".claude/worktrees"]
 
 [tool.mypy]
 # The interpreter it runs on is the one requires-python admits. Every module
-# below is held to the strict flags; an import they follow is read for its
-# types and never reported, so the flags reach nothing else.
-files = ["hq/platform/application/security.py", "hq/platform/application/integration_specs.py", "hq/platform/application/plugins.py", "hq/platform/application/outbound_work.py", "hq/platform/application/capabilities.py", "hq/platform/application/resources.py", "hq/platform/application/sensitivity.py", "hq/platform/application/domains.py", "hq/platform/application/records.py", "hq/domains/control_plane/bridge_actions.py", "hq/domains/control_plane/bridge_application.py", "hq/domains/control_plane/bridge_contract.py", "hq/domains/control_plane/bridge_registry.py", "hq/domains/control_plane/connection_shapes.py", "hq/platform/core/unix_server.py", "hq/domains/control_plane/connection_kinds.py", "hq/domains/control_plane/credential_reads.py", "hq/domains/control_plane/names.py", "hq/domains/control_plane/provider_adapters/cloudflare.py", "hq/domains/control_plane/provider_adapters/declarations.py", "hq/domains/control_plane/provider_adapters/portainer.py", "hq/domains/control_plane/provider_adapters/tailscale.py", "hq/domains/control_plane/provider_adapters/tls.py", "hq/domains/control_plane/provider_spec.py", "hq/domains/control_plane/providers.py", "hq_sdk", "hq/platform/api", "hq/platform/mcp", "tests/sdk_consumer", "tools/credentials.py", "tools/pipeline/ci_report.py"]
+# below but the browser test package (its override says why) is held to the
+# strict flags; an import they follow is read for its types and never
+# reported, so the flags reach nothing else.
+files = ["hq/platform/application/security.py", "hq/platform/application/integration_specs.py", "hq/platform/application/plugins.py", "hq/platform/application/outbound_work.py", "hq/platform/application/capabilities.py", "hq/platform/application/resources.py", "hq/platform/application/sensitivity.py", "hq/platform/application/domains.py", "hq/platform/application/records.py", "hq/domains/control_plane/bridge_actions.py", "hq/domains/control_plane/bridge_application.py", "hq/domains/control_plane/bridge_contract.py", "hq/domains/control_plane/bridge_registry.py", "hq/domains/control_plane/connection_shapes.py", "hq/platform/core/unix_server.py", "hq/domains/control_plane/connection_kinds.py", "hq/domains/control_plane/credential_reads.py", "hq/domains/control_plane/names.py", "hq/domains/control_plane/provider_adapters/cloudflare.py", "hq/domains/control_plane/provider_adapters/declarations.py", "hq/domains/control_plane/provider_adapters/portainer.py", "hq/domains/control_plane/provider_adapters/tailscale.py", "hq/domains/control_plane/provider_adapters/tls.py", "hq/domains/control_plane/provider_spec.py", "hq/domains/control_plane/providers.py", "hq_sdk", "hq/platform/api", "hq/platform/mcp", "tests/sdk_consumer", "tools/credentials.py", "hq/platform/core/tests/browser"]
 exclude = "(^|/)(tests\\.py|test_[^/]*\\.py|migrations/)"
 follow_imports = "silent"
 plugins = ["mypy_django_plugin.main"]
@@ -155,6 +194,23 @@ disallow_untyped_decorators = true
 disallow_any_generics = true
 warn_return_any = true
 
+# The browser gate's package is held to calls that exist: its bodies are
+# checked as written, without the annotations the seams above must carry.
+[[tool.mypy.overrides]]
+module = ["hq.platform.core.tests.browser.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_decorators = false
+disallow_any_generics = false
+warn_return_any = false
+
+# Playwright is in the optional browser group, which lint:mypy does not
+# install; it reads as Any whether or not it is installed, so one result holds.
+[[tool.mypy.overrides]]
+module = ["playwright.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
 [tool.django-stubs]
 django_settings_module = "hq.config.settings_typecheck"
 
@@ -165,10 +221,13 @@ source = ["."]
 parallel = true
 concurrency = ["multiprocessing", "thread"]
 sigterm = true
-# tools/ and demo/ are development tooling, tested by checks:source, which the
+# tools/ and demo/ are development tooling, tested by lint:source, which the
 # suite this measures leaves out.
 omit = ["*/migrations/*", "*/tests/*", "manage.py", "hq/config/*", ".venv/*", "tools/*", "demo/*"]
 
 [tool.coverage.report]
+# The point below which the build fails. Raise it on purpose; a run that
+# measures higher changes nothing.
+fail_under = 90
 show_missing = false
 skip_covered = false

@@ -8,7 +8,7 @@ from a checkout.
 
 ![How changes reach HQ: a host pull request and an extension's admission both lead to Compose, which publishes the signed composition; Deploy waits for approval and the self-hosted runner hands it to hq-host on the host](diagrams/changes-reach-hq.png)
 
-<sup>Diagram source: [`diagrams/changes-reach-hq.mmd`](diagrams/changes-reach-hq.mmd).</sup>
+<sup>Source: [`docs/diagrams/changes-reach-hq.mmd`](diagrams/changes-reach-hq.mmd), pre-rendered with [`diagram`](https://github.com/joeseverino/tools/tree/main/lib/diagram).</sup>
 
 ## The pipeline
 
@@ -17,12 +17,12 @@ waits on a schedule.
 
 | Workflow | Started by | Does |
 | :--- | :--- | :--- |
-| **CI** (`ci.yml`) | every pull request and push to `main` | Checks, Tests, Browser, Controller, CodeQL and Image (build, boot healthy, publish and sign the host image); on a pull request the image's checks and its composition beside them, then **Ready**, which writes HQ's review from their results; on `main`, **Release**, which starts Compose |
+| **CI** (`ci.yml`) | every pull request and push to `main` | Lint, Test, Browser, Scan and Build (build, boot healthy, publish and sign the host image), each running the task of its name; on a pull request Build verify and the composition beside them, then **Ready**, which passes only when every job did; on `main`, **Release**, which starts Compose |
 | **Compose** (`compose.yml`) | CI on a pull request (verify only); CI's Release on `main`; an extension's admission; a person | the host image plus every admitted extension, verified as one application; on `main`, published and signed |
 | **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits for approval in the `production` environment, then deploys on the self-hosted runner |
 
-Each CI job runs the `mise` aggregate of its name, so the gates are declared
-once, as tasks in their job's file under [`tasks/`](../tasks) ([Development](Development.md)).
+Each CI job is named for the `mise` task it runs, so the gates are declared
+once, as tasks in their job's file under [`mise-tasks/`](../mise-tasks) ([Development](Development.md)).
 
 Production runs the composed image (`ghcr.io/joeseverino/severino-hq/composition`),
 never the host image alone. How Compose admits, fingerprints and assembles
@@ -35,7 +35,8 @@ self-hosted runner. The runner dials out to GitHub; nothing inbound is opened.
 To redeploy or roll back, run **Deploy** with the commit to put back. To
 rebuild the current set, run **Compose**. A rollback to a composition from
 before an extension was added drops it, so Deploy refuses it; run Compose at
-that commit instead, which composes today's extensions onto that host commit.
+that commit instead, which composes the extensions admitted now onto that host
+commit.
 
 A release that fails is undone whole. Its boot keeps a copy of the database
 before migrating it (`manage.py boot_migrate`, at the path `hq-host run-web`
@@ -51,29 +52,32 @@ release that cannot serve and proves the previous one comes back on its schema.
 ### Checked once
 
 When a pull request merges, the push to `main` asks
-`tools/pipeline/proven-on-pr.sh` whether the pull request already proved it: its last
-CI run passed, its image carries a `dev.severino.hq.tree` label equal to the
-pushed commit's tree, and it is signed by that run. With all three, Checks,
-Tests and Browser are skipped and Image promotes that image by digest to the
+`tools/pipeline/proven-on-pr.sh` whether the pull request already proved it:
+its last CI run passed, its image carries a `dev.severino.hq.tree` label equal to the
+pushed commit's tree, and it is signed by that run. With all three, Lint,
+Test and Browser are skipped and Build promotes that image by digest to the
 commit's tag. Short of all three, every gate runs again.
 
-### Where HQ says it stands
+### Where a change stands
 
-HQ's GitHub App posts one check, linked to the run behind it:
+GitHub's own records say it:
 
-- **Severino HQ · Review** on a pull request: *Checking*, then *Ready to
-  merge* or *Held* with why and what fixes it. It is the one check the
-  ruleset requires, and only HQ's app can post it.
-- **Severino HQ · Production** on a commit to `main`: *Building HQ*, *Waiting
-  for approval*, then *Live in production* or *Not deployed* with the reason,
-  and one comment on the merged pull request.
-- **Severino HQ · Production** on an extension's commit: posted by its
-  admission, and marked live by the controller once production runs it, when
-  its connection manages `github.delivery`.
-
-Why a run failed comes from `deploy/diagnoses.json`: `tools/pipeline/ci_report.py`
-matches the failed job's log against it and prints only the catalog's words.
-A new failure is added there once, and named with its fix every time after.
+- **Ready** on a pull request is the one check the `main` ruleset requires,
+  expected from GitHub Actions. It fails when a job it needs did not pass, and
+  its summary lists each job's result.
+- A **deployment** to the `production` environment, on the commit Deploy was
+  handed: *queued* while it waits for approval, *in progress* once approved,
+  then *success* when it passed its health check, *failure* when it did not
+  (production still runs the previous image), or *inactive* when it was not
+  approved or a newer release took its place. GitHub shows it on the commit,
+  the merged pull request and the environment's page. Resolve records it
+  itself: the environment's job sets `deployment: false`, since the
+  deployment GitHub would record names the commit `main` was at when the run
+  started and succeeds once approved.
+- **Severino HQ · Production** on an extension's commit: opened by its
+  admission and moved on by HQ's controller, through HQ's GitHub App, until
+  production runs it, when its connection manages `github.delivery`. That is
+  HQ reporting on what it runs, not a CI verdict.
 
 ### When a run fails
 
@@ -86,7 +90,7 @@ Every log is public, so each failure is reported at two levels:
 
 | Where | Says | Holds |
 | :--- | :--- | :--- |
-| the run's log and HQ's check | the failed step, its diagnosis and fix, failing host test ids, counts | nothing that names an extension or the host |
+| the run's log and summary | the failed step and its error, failing host test ids, counts | nothing that names an extension or the host |
 | the sealed `failure-logs` artifact | what the log withheld: the composed suite's output, a refused composition's reason, a container's log | readable only with the operator's identity |
 | the host, `/var/log/severino-hq/` | the pull, sync, install and failed-health output, root-only | the host's own detail |
 
@@ -112,7 +116,7 @@ use mints an hour-long token for only what it does:
 | :--- | :--- | :--- |
 | the controller | an SSH Key item in the vault, rendered for openssl only | what each read or report needs |
 | an extension's admission | `HQ_APP_KEY` on its `admission` environment, `main` only | Actions write here: start Compose |
-| Compose, Deploy and CI | `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` repository secrets | Actions and Contents read; Checks write |
+| Compose and CI's Release | `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` repository secrets | Actions and Contents read the extensions; Actions write here: start the next workflow |
 
 `mise run wire-github-app` reads the key from 1Password and sets those
 secrets on this repository and each extension's `admission` environment,
@@ -166,7 +170,7 @@ from the tree, and every unit and the deploy call it.
 | `bootstrap` | renders the drop-ins and sudo rule `host.json` decides |
 | `backup` | snapshots and archives HQ's volumes, where docker says they are ([Backup](Backup.md)) |
 | `upgrade ARGS` | moves one compose service to a pinned image, through its own sudo rule ([Container upgrades](#container-upgrades)) |
-| `check` | the host's half of `mise run preflight`, as any account and read-only: the runner's sudo rule, and that `sudo -l` lists it no command HQ does not render (a failure names the command and the grep that finds its file), `verify` (or the drift unit's run since the release was installed), every program a sudo rule names is root's alone, the established units, free disk, and, where sudo lets it read nftables, that a loaded Renovate egress table is the one `hq-host` renders (an absent one waits for the next run, which loads it). Preflight builds it from HEAD for the host's platform and runs it from a temporary directory over SSH, so the release being checked is the one checking. Exits 0 ready, 1 a fault, 3 unverified |
+| `check` | the host's half of `mise run check --release`, as any account and read-only: the runner's sudo rule, and that `sudo -l` lists it no command HQ does not render (a failure names the command and the grep that finds its file), `verify` (or the drift unit's run since the release was installed), every program a sudo rule names is root's alone, the established units, free disk, and, where sudo lets it read nftables, that a loaded Renovate egress table is the one `hq-host` renders (an absent one waits for the next run, which loads it). `check --release` builds it from HEAD for the host's platform and runs it from a temporary directory over SSH, so the release being checked is the one checking. Exits 0 ready, 1 a fault, 3 unverified |
 
 ### Units
 
@@ -325,10 +329,8 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `SEVERINO_TEST_MARKERS` | development | the directory a test run keeps the controller's markers in |
 | `SEVERINO_TEST_BUILDS` | development | the directory a test run builds programs into |
 | `SEVERINO_TEST_LEAK_LEDGER` | development | the file parallel test workers record leaked resources in |
-| `HQ_BROWSER_ENGINE` | development | the browser gates' engine: `webkit` by default, `chromium` or `firefox` |
-| `HQ_BROWSER_CHANNEL` | development | a Playwright browser channel for that engine |
-| `HQ_BROWSER_FACE` | development | `fallback` draws the browser gates with Inter withheld, in the stack's next face (`--fallback-face`) |
-| `HQ_BROWSER_SLOW` | development | milliseconds each animation frame comes late in the browser gates, idle callbacks waiting three times their timeout (`dev:look --slow`) |
+| `HQ_TEST_STALL_SECONDS` | development | seconds a test process may go without progress before it prints what it is running, every stack and the browser's log, and fails that test; 300 when unset, `0` turns it off |
+| `HQ_TEST_REPORTS` | development | the folder a gate names for a test run to write each failed test into, with its exception and traceback; set by `tools/gate/verdict.py` |
 | `HQ_API_RECORD_EXAMPLES` | development | `1`, with `--parallel 1`, writes the API responses a run receives to `openapi-examples.json` |
 
 ## Network exposure
@@ -389,8 +391,8 @@ account cannot already reach Docker. HQ's own host has `hq-host` in its tree.
 Any other machine needs its own root-owned copy: the plan's fetch step takes
 it from the composed image HQ runs, by digest, after `cosign` verifies the
 compose workflow's signature, and stops if the image's platform is not the
-machine's. HQ does not yet queue an upgrade to another machine, so the helper
-is run by hand with the plan's values.
+machine's. HQ queues no upgrade to another machine, so there the helper is
+run by hand with the plan's values.
 
 A machine whose rule names a program other than `hq-host upgrade` admits
 nothing: re-run the plan's allow step there to write the current rule.
@@ -415,4 +417,8 @@ you sign in; the audit log records the sign-in.
 | CSRF errors on sign-in | `DJANGO_CSRF_TRUSTED_ORIGINS` lacks the full origin, scheme and host, or `DJANGO_BEHIND_TLS_PROXY` is not `1` |
 | Compose fails in "Resolve the host image" | CI for that commit failed, so the host image was never published |
 | an extension merged and nothing deployed | its admission did not dispatch Compose, or found nothing new: run Compose |
-| the Deploy step failed | the detail is in `/var/log/severino-hq/` on the host |
+| the Deploy step failed | production still runs the previous image; the detail is in `/var/log/severino-hq/` on the host |
+| a deploy refuses an image that drops an extension | the composition does not say it was meant: name the extension in `retired` in `COMPOSITION_EXTENSIONS` and run Compose, or restore it to the set |
+| a push says `permission_denied: write_package` | the package does not give this repository write: in its settings, under Manage Actions access, give it the Write role |
+| minting HQ's token says `Bad credentials` or `could not create installation access token` | the key or client ID in the secrets is not the app's: run `mise run wire-github-app` |
+| a step as HQ's app says `Resource not accessible by integration` | the installation lacks a permission: compare it with `deploy/github-apps.json` and accept the change |

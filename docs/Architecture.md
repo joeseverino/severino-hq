@@ -1,15 +1,12 @@
 # Architecture
 
 HQ has one application core and several delivery adapters over it: the web UI,
-the `/api/v2/` machine API, MCP, the CLI and the extension SDK. A fourth or
-fifth interface adds an adapter, never a second implementation.
+the `/api/v2/` machine API, MCP, the CLI and the extension SDK. Another
+interface adds an adapter, never a second implementation.
 
 ![Web, MCP, and CLI converging on one application core and the domain-specific sources of truth](diagrams/application-core.png)
 
-<sup>Diagram source:
-[`application-core.mmd`](diagrams/application-core.mmd), rendered with the
-canonical [`diagram`](https://github.com/joeseverino/tools/tree/main/bin/diagram)
-tool.</sup>
+<sup>Source: [`docs/diagrams/application-core.mmd`](diagrams/application-core.mmd), pre-rendered with [`diagram`](https://github.com/joeseverino/tools/tree/main/lib/diagram).</sup>
 
 ## The boundary
 
@@ -36,8 +33,7 @@ writes around the service.
 
 ![A mutation is validated, locked, written, audited, and committed once; any failure rolls the whole operation back](diagrams/operation-lifecycle.png)
 
-<sup>Diagram source:
-[`operation-lifecycle.mmd`](diagrams/operation-lifecycle.mmd).</sup>
+<sup>Source: [`docs/diagrams/operation-lifecycle.mmd`](diagrams/operation-lifecycle.mmd), pre-rendered with [`diagram`](https://github.com/joeseverino/tools/tree/main/lib/diagram).</sup>
 
 A browser submit, an API call, an MCP tool call and a CLI command follow the
 same lifecycle. The adapter parses and steps aside. The service validates,
@@ -102,9 +98,14 @@ refresh keeps the previous reading visible until a new one arrives.
 
 Dashboard cards are grouped by contributing domain. Card providers run once per
 projection scope and are still checked for cross-domain collisions. A
-contributor with several metrics may supply a typed `DomainOverview`. The host
-never infers a domain from a card ID or invents a contributor's reporting
-window. The machine snapshot keeps flat cards; the grouping is presentation.
+contributor with several metrics may supply a typed `DomainOverview`. A domain
+holds a highlight card of its own when it has a chart to lead with or at least
+three figures (`dashboard.CARD_FIGURES`); one with fewer reads its figures in
+the compact strip. Below the highlights, each domain's leading chart takes a
+row of its own, and the calendar, recent projects and the rest share the next,
+as many to a row as fit. The host never infers a domain from a card ID or
+invents a contributor's reporting window. The machine snapshot keeps flat
+cards; the grouping is presentation.
 
 ### Priority work
 
@@ -282,10 +283,8 @@ delete triggers on every model table move it inside the writing statement, so
 `save()`, `QuerySet.update()`, `bulk_create()`, a cascade and raw SQL all move
 it, and a counter never commits apart from its rows.
 `hq.platform.core.revisions.install` restores the triggers after every
-`migrate` (SQLite drops them when a migration rebuilds a table), creates the
-cache table. A value an older build stored is never read: the cache's key
-carries the identity of the running code (`hq.platform.application.code_identity`).
-Reading the revisions also reads which triggers exist, in one statement; a
+`migrate` (SQLite drops them when a migration rebuilds a table) and creates
+the cache table. Reading the revisions also reads which triggers exist, in one statement; a
 table without its triggers has no revision, and its derivations run on every
 call.
 
@@ -450,8 +449,8 @@ record, so a rollback removes all three changes. The backend is replaceable
 without changing table views, query parameters, CLI output or models.
 
 ```bash
-mise run dev:manage -- search_hq projects "certificate automation"
-mise run dev:manage -- rebuild_search_index
+mise run manage --scratch -- search_hq projects "certificate automation"
+mise run manage --scratch -- rebuild_search_index
 ```
 
 `hq.platform.application.tables.TableListMixin` composes indexed search with
@@ -463,8 +462,7 @@ requests; plain links and forms remain the complete fallback.
 
 ![One typed command declaration deriving JSON Schema, validation, MCP and CLI surfaces, and parity tests](diagrams/emit-once-capabilities.png)
 
-<sup>Diagram source:
-[`emit-once-capabilities.mmd`](diagrams/emit-once-capabilities.mmd).</sup>
+<sup>Source: [`docs/diagrams/emit-once-capabilities.mmd`](diagrams/emit-once-capabilities.mmd), pre-rendered with [`diagram`](https://github.com/joeseverino/tools/tree/main/lib/diagram).</sup>
 
 Three registries declare everything an adapter offers. What an extension
 declares in each, and the fields it sets, is in [Plugins](Plugins.md#contract-boundary).
@@ -495,7 +493,7 @@ locally cached instances. Static discovery never calls instance providers; the
 Connections workspace and machine list do, after authorization. Instances have
 no secret field; links are local or HTTP(S); URL userinfo, query strings and
 fragments are rejected when controller inventory enters HQ and when an
-extension's instance leaves its provider. Permission is evidence, not a label:
+extension's instance leaves its provider. A permission is something proven:
 an ability declares how its authority is proven, an instance reports the
 credential observed, and HQ derives per-ability evidence and a per-connection
 lifecycle from the two, failing closed on a missing or rejected grant and
@@ -555,8 +553,8 @@ boundaries. How readings become edges is in
 
 ## Source of truth
 
-Each domain has its own source of truth. One database owning everything would
-make the system less honest, not more unified.
+Each domain has its own source of truth, and HQ's database holds only what
+nothing else is the authority for.
 
 | Domain | Source of truth | What HQ stores |
 |---|---|---|
@@ -639,6 +637,8 @@ is an architecture regression.
 
 ![Infrastructure control plane](diagrams/infrastructure-control-plane.png)
 
+<sup>Source: [`docs/diagrams/infrastructure-control-plane.mmd`](diagrams/infrastructure-control-plane.mmd), pre-rendered with [`diagram`](https://github.com/joeseverino/tools/tree/main/lib/diagram).</sup>
+
 **HQ owns the topology.** A machine is derived from what a credential reaches
 and what a sweep found, and declared only where nothing can observe it (a
 printer, an offline CA). A certificate states its names and the targets it
@@ -664,7 +664,7 @@ to the registry appears on all of them.
 
 ![Provider registry: one declaration derives the schema, validation, controller contract, forms, service view, and adoption](diagrams/provider-registry.png)
 
-<sup>Diagram source: [`diagrams/provider-registry.mmd`](diagrams/provider-registry.mmd).</sup>
+<sup>Source: [`docs/diagrams/provider-registry.mmd`](diagrams/provider-registry.mmd), pre-rendered with [`diagram`](https://github.com/joeseverino/tools/tree/main/lib/diagram).</sup>
 
 Each provider is one module in `hq/domains/control_plane/provider_adapters/`:
 its spec models, kind constants, the functions its declaration names, and the

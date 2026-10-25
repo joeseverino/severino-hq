@@ -42,6 +42,7 @@ from .integration_validation import required_capability_names
 from .integrations import integration_graph
 from .moments import ago
 from .security import Capability, Principal
+from .ui import ended
 lazy from . import machines
 lazy from .infrastructure import enabled_resources
 lazy from .locate import index_of
@@ -311,8 +312,8 @@ def _controller_contract() -> tuple[tuple[ConnectionAbility, ...], dict[str, tup
                 label=reading.label,
                 summary=" ".join(
                     (
-                        f"Reads {reading.label}.",
-                        *((f"Needs {', '.join(reading.requires)}.",) if reading.requires else ()),
+                        ended(f"Reads {reading.label}"),
+                        *((ended(f"Needs {', '.join(reading.requires)}"),) if reading.requires else ()),
                     )
                 ),
                 effect="read",

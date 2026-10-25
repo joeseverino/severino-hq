@@ -21,6 +21,7 @@ lazy from django.conf import settings
 
 from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
 from .images import affected, version
+from .ui import ended
 lazy from . import exposure, hq_self
 lazy from .container_standard import DOCKER_SOCKETS, runtime_path, system_path
 lazy from .exposure import LEVELS
@@ -90,6 +91,18 @@ class Plan:
     @property
     def stateful(self) -> bool:
         return bool(self.data)
+
+    @property
+    def fixes_tone(self) -> str:
+        return "good" if self.fixes else ""
+
+    @property
+    def data_tone(self) -> str:
+        return "attention" if self.stateful else ""
+
+    @property
+    def verified_tone(self) -> str:
+        return "" if self.verified_by else "attention"
 
     @property
     def risk(self) -> str:
@@ -333,7 +346,7 @@ def _steps(item: Container, target: str, digest: str, data, verified_by) -> tupl
             + (", against a copy of its data" if data else "")
             + ", until it proves itself. The service stays stopped, and is started unchanged if it fails.",
         ),
-        Step("pin", "Pin the digest in its compose override", f"{where}. The compose file itself is not edited."),
+        Step("pin", "Pin the digest in its compose override", f"{ended(where)} The compose file itself is not edited."),
         Step("apply", "Recreate the service", f"compose up for {item.running.name} only"),
         Step("verify", "Verify", ", ".join(verified_by) if verified_by else "That it keeps running."),
         Step(
@@ -364,6 +377,14 @@ class Readiness:
     @property
     def automatic(self) -> bool:
         return not self.not_automatic
+
+    @property
+    def automatic_tone(self) -> str:
+        return "good" if self.automatic else ""
+
+    @property
+    def verified_tone(self) -> str:
+        return "good" if self.verified_by else "attention"
 
 
 def readiness_of(item: Container) -> Readiness:
@@ -436,7 +457,7 @@ def _copy_steps(machine: str) -> tuple[Step, ...]:
     release is built for another platform than the machine's."""
 
     image = _running_image()
-    identity = signer(str(getattr(settings, "SEVERINO_HQ_SOURCE", "") or ""))
+    identity = signer(settings.SEVERINO_HQ_SOURCE)
     if not (image and identity):
         fetch = Step(
             "fetch",

@@ -28,7 +28,7 @@ def _collections(tree: ast.AST):
             yield node, node.elts
 
 
-@tag("source")
+@tag("source", "tree")
 class LifecycleDeclaredOnceTests(SimpleTestCase):
     def modules(self):
         found = [

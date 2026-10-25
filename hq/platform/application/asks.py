@@ -30,6 +30,7 @@ lazy from hq.domains.control_plane.reading_parts import WHOLE, refused_parts
 
 from .moments import duration
 from .routes import reverse
+from .ui import ended
 lazy from . import cadence
 lazy from .cadence import every_sweep, read_request_lifetime
 lazy from .security import safe_next
@@ -51,7 +52,7 @@ REFRESHING = "Refreshing…"
 # What a read asked of the controller says while it waits for one to arrive,
 # and when none is arriving to take it.
 READ_WAITING = "Refresh asked for; waiting for the controller."
-READ_UNTAKEN = "Cannot refresh: {absent}."
+READ_UNTAKEN = "Cannot refresh: {absent}"
 # What a saved change says of when it reaches the live system.
 APPLIES_SHORTLY = "HQ applies it shortly."
 
@@ -201,12 +202,12 @@ def _untried(asked: datetime) -> Standing:
 
     controller = cadence.controller_standing()
     if controller.seen_at is None:
-        return Standing(FAILED, READ_UNTAKEN.format(absent="no controller has ever reported"), since=asked)
+        return Standing(FAILED, ended(READ_UNTAKEN.format(absent="no controller has ever reported")), since=asked)
     if controller.seen_at > asked:
         return Standing(RUNNING, REFRESHING, since=asked)
     if controller.silent:
         silence = duration(timezone.now() - controller.seen_at)
-        return Standing(FAILED, READ_UNTAKEN.format(absent=f"no controller seen in {silence}"), since=asked)
+        return Standing(FAILED, ended(READ_UNTAKEN.format(absent=f"no controller seen in {silence}")), since=asked)
     return Standing(QUEUED, READ_WAITING, since=asked)
 
 
@@ -254,7 +255,7 @@ def read_standing(kinds: Iterable[str], asked: datetime, *, connection_ref: str 
         if refusal.part.name == WHOLE and not refusal.scope
     ]
     if refused:
-        return Standing(FAILED, f"{refused[0].phrase}.", since=asked)
+        return Standing(FAILED, ended(refused[0].phrase), since=asked)
     return Standing(DONE, "Refreshed just now.", since=asked)
 
 

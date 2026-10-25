@@ -1,5 +1,7 @@
-# The homelab deploy runner. Declared so actionlint stops reporting the label
-# as unknown on every workflow that deploys.
+# The homelab deploy runner, and the hosted image every workflow names while
+# actionlint's bundled label list predates it. Declared so actionlint stops
+# reporting them as unknown on every workflow that uses them.
 self-hosted-runner:
   labels:
     - severino-hq
+    - ubuntu-26.04

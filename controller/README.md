@@ -47,8 +47,9 @@ OpenAPI document supply the shared vocabulary. The document also carries the
 record of every reading a controller takes, from the model HQ validates it
 with; the readers still build their own record structs.
 
-Run `mise run controller` from the repository root (it runs
-`controller/scripts/check.sh`) and `go test -race ./...` from `controller/`.
+From the repository root, `mise run lint:controller` runs
+`controller/scripts/check.sh` (format, generated types, vendor slices, vet) and
+`mise run test:controller` the race tests, `go test -race ./...` here.
 Generated contracts and vendor slices must regenerate without a diff. The full
 repository gate is `mise run check`.
 

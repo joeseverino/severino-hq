@@ -328,8 +328,9 @@ func TestGitHubProbe(t *testing.T) {
 }
 
 // The app is registered with exactly what the controller's code asks for,
-// a dependency update run's grant included, plus Actions write for an
-// admission starting the host's composition.
+// a dependency update run's grant included, plus the pipeline's: Actions
+// write for an admission starting the host's composition, and Deployments
+// write for Deploy recording production's deployment.
 func TestTheAppHoldsExactlyWhatHQAsksFor(t *testing.T) {
 	data, err := os.ReadFile("../../deploy/github-apps.json")
 	if err != nil {
@@ -344,7 +345,7 @@ func TestTheAppHoldsExactlyWhatHQAsksFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	wanted := map[string]string{}
-	for _, grant := range []githubapi.AppPermissions{githubRead, githubChecksWrite, githubPullsWrite, githubRenovate, {Actions: githubapi.AppPermissionsActionsWrite}} {
+	for _, grant := range []githubapi.AppPermissions{githubRead, githubChecksWrite, githubPullsWrite, githubRenovate, {Actions: githubapi.AppPermissionsActionsWrite}, {Deployments: githubapi.AppPermissionsDeploymentsWrite}} {
 		encoded, _ := json.Marshal(grant)
 		var names map[string]string
 		_ = json.Unmarshal(encoded, &names)
@@ -914,8 +915,9 @@ func TestGitHubDeliveryWithoutASourceRepositoryReadsNothing(t *testing.T) {
 	}
 }
 
-// The workflows and scripts that report delivery name the check and the
-// comment marker the controller writes.
+// The admission opens the check the controller moves on, under the same name,
+// and the Deploy runs it reads wait for approval on the production
+// environment, which is what a run's "waiting" status is.
 func TestDeliveryNamesAgreeWithThePipeline(t *testing.T) {
 	read := func(path string) string {
 		t.Helper()
@@ -925,14 +927,11 @@ func TestDeliveryNamesAgreeWithThePipeline(t *testing.T) {
 		}
 		return string(data)
 	}
-	for _, path := range []string{".github/workflows/deploy.yml", ".github/actions/admit-plugin/action.yml", "tools/pipeline/ci_report.py"} {
-		if !strings.Contains(read(path), githubCheckName) {
-			t.Errorf("%s does not name the check %q", path, githubCheckName)
-		}
+	if !strings.Contains(read(".github/actions/admit-plugin/action.yml"), githubCheckName) {
+		t.Errorf("the admission does not name the check %q", githubCheckName)
 	}
-	marker := strings.Replace(githubDeliveryMark, "%s", "{}", 1)
-	if !strings.Contains(read("tools/pipeline/ci_report.py"), `DELIVERY_MARK = "`+marker+`"`) {
-		t.Errorf("ci_report.py does not write the marker %q", marker)
+	if !strings.Contains(read(githubDeploy), "environment:\n      name: production\n") {
+		t.Errorf("%s has no job that waits on the production environment", githubDeploy)
 	}
 }
 

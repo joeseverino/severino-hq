@@ -60,49 +60,59 @@ url = "https://github.com/FiloSottile/age/releases/download/v1.3.2/age-v1.3.2-da
 url_api = "https://api.github.com/repos/FiloSottile/age/releases/assets/535541887"
 provenance = "github-attestations"
 
-[[tools."github:DeusData/codebase-memory-mcp"]]
-version = "0.12.0"
-backend = "github:DeusData/codebase-memory-mcp"
-specifiers = ["0.12.0"]
+[[tools.crane]]
+version = "0.22.1"
+backend = "aqua:google/go-containerregistry"
+specifiers = ["0.22.1"]
 
-[tools."github:DeusData/codebase-memory-mcp"."platforms.macos-arm64"]
-checksum = "sha256:1be41a9dd6902e3633eb0b280189117dc3db3be623bdd3dd4c6ea74372b5a50b"
-url = "https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.12.0/codebase-memory-mcp-darwin-arm64.tar.gz"
-url_api = "https://api.github.com/repos/DeusData/codebase-memory-mcp/releases/assets/645294145"
-provenance = "github-attestations"
+[tools.crane."platforms.linux-x64"]
+checksum = "sha256:0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0"
+url = "https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/google/go-containerregistry/releases/assets/543544389"
 
-[tools."github:DeusData/codebase-memory-mcp"."platforms.macos-x64"]
-checksum = "sha256:af3beeeaca53204faf350402ddacee04780a53d0fa510dc31941fb5c2202ff35"
-url = "https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.12.0/codebase-memory-mcp-darwin-amd64.tar.gz"
-url_api = "https://api.github.com/repos/DeusData/codebase-memory-mcp/releases/assets/645294148"
-provenance = "github-attestations"
+[tools.crane."platforms.macos-arm64"]
+checksum = "sha256:2231fc8df8806d20d680ff1225db44e095a55dd6ac1ae8eced4faf4b278b78fb"
+url = "https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/google/go-containerregistry/releases/assets/543544436"
 
 [[tools."github:DeusData/codebase-memory-mcp"]]
-version = "0.12.0"
+version = "0.12.1"
 backend = "github:DeusData/codebase-memory-mcp"
-specifiers = ["0.12.0"]
+specifiers = ["0.12.1"]
 
 [tools."github:DeusData/codebase-memory-mcp".options]
 asset_pattern = "codebase-memory-mcp-linux-amd64-portable.tar.gz"
 
 [tools."github:DeusData/codebase-memory-mcp"."platforms.linux-x64"]
-checksum = "sha256:7024e585132760f383e3e25237e2b2ac6f5185f7e466f8dc66a085bb25f8d0be"
-url = "https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.12.0/codebase-memory-mcp-linux-amd64-portable.tar.gz"
-url_api = "https://api.github.com/repos/DeusData/codebase-memory-mcp/releases/assets/645294141"
+checksum = "sha256:8c3d0341064301e78ecc84cf7348d4e2c6562a0f57448243ea560aaa34de36c1"
+url = "https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.12.1/codebase-memory-mcp-linux-amd64-portable.tar.gz"
+url_api = "https://api.github.com/repos/DeusData/codebase-memory-mcp/releases/assets/648934878"
 provenance = "github-attestations"
 
 [[tools."github:DeusData/codebase-memory-mcp"]]
-version = "0.12.0"
+version = "0.12.1"
 backend = "github:DeusData/codebase-memory-mcp"
-specifiers = ["0.12.0"]
+specifiers = ["0.12.1"]
 
-[tools."github:DeusData/codebase-memory-mcp".options]
-asset_pattern = "codebase-memory-mcp-linux-arm64-portable.tar.gz"
+[tools."github:DeusData/codebase-memory-mcp"."platforms.macos-arm64"]
+checksum = "sha256:9bfcbe38414b47969a3e1d1c1999f5357409387c86fa3d24221b5458267660d2"
+url = "https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.12.1/codebase-memory-mcp-darwin-arm64.tar.gz"
+url_api = "https://api.github.com/repos/DeusData/codebase-memory-mcp/releases/assets/648934881"
+provenance = "github-attestations"
 
-[tools."github:DeusData/codebase-memory-mcp"."platforms.linux-arm64"]
-checksum = "sha256:8e603f32c9c84b5dc5a6b4a0d23516817d5de199e30f8dcc9bdb128c39386cd8"
-url = "https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.12.0/codebase-memory-mcp-linux-arm64-portable.tar.gz"
-url_api = "https://api.github.com/repos/DeusData/codebase-memory-mcp/releases/assets/645294139"
+[[tools."github:github/codeql-action"]]
+version = "2.27.2"
+backend = "github:github/codeql-action"
+specifiers = ["2.27.2"]
+
+[tools."github:github/codeql-action".options]
+asset_pattern = "codeql-bundle-linux64.tar.zst"
+version_prefix = "codeql-bundle-v"
+
+[tools."github:github/codeql-action"."platforms.linux-x64"]
+checksum = "sha256:f24406b1557c506133db1f972758ee64f14eb3587a53367a1bd737f24495ea97"
+url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.2/codeql-bundle-linux64.tar.zst"
+url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/603160650"
 provenance = "github-attestations"
 
 [[tools."github:github/codeql-action"]]
@@ -138,21 +148,6 @@ version_prefix = "codeql-bundle-v"
 checksum = "sha256:05edcc33992b383aa8daeea1c45e7b3192a95ff4a63883563b41ead6386f7d89"
 url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.2/codeql-bundle-linux-arm64.tar.zst"
 url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/603161381"
-provenance = "github-attestations"
-
-[[tools."github:github/codeql-action"]]
-version = "2.27.2"
-backend = "github:github/codeql-action"
-specifiers = ["2.27.2"]
-
-[tools."github:github/codeql-action".options]
-asset_pattern = "codeql-bundle-linux64.tar.zst"
-version_prefix = "codeql-bundle-v"
-
-[tools."github:github/codeql-action"."platforms.linux-x64"]
-checksum = "sha256:f24406b1557c506133db1f972758ee64f14eb3587a53367a1bd737f24495ea97"
-url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.2/codeql-bundle-linux64.tar.zst"
-url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/603160650"
 provenance = "github-attestations"
 
 [[tools.go]]
@@ -206,25 +201,17 @@ url_api = "https://api.github.com/repos/jqlang/jq/releases/assets/453012782"
 provenance = "github-attestations"
 
 [[tools.node]]
-version = "24.22.0"
+version = "26.12.1"
 backend = "core:node"
-specifiers = ["24.22.0"]
-
-[tools.node."platforms.linux-arm64"]
-checksum = "sha256:b7e7991d5407815adfa74a2a9cd4db683552c8ce32ff4a295c22e972849c3f5d"
-url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-linux-arm64.tar.gz"
+specifiers = ["26.12.1"]
 
 [tools.node."platforms.linux-x64"]
-checksum = "sha256:28ea0a438de9a13bd7891fd758eee6c7819ee8af5442dfd8d45bd65e56d4228c"
-url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-linux-x64.tar.gz"
+checksum = "sha256:0fd1eb7770598f52a21995edf6ed35fc690400fa437c2386af329519e9143132"
+url = "https://nodejs.org/dist/v26.12.1/node-v26.12.1-linux-x64.tar.gz"
 
 [tools.node."platforms.macos-arm64"]
-checksum = "sha256:6a9724d9b50a5f22b4816cded441b5a8d9ddae546191a5e5b7efa5a5e2ee26d5"
-url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-darwin-arm64.tar.gz"
-
-[tools.node."platforms.macos-x64"]
-checksum = "sha256:495e3f273c645f3c4677d438304cdfc701729ea5dec5728f5c8e76a2dece4b91"
-url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-darwin-x64.tar.gz"
+checksum = "sha256:1901d539912c02afa10d1cc126943a8855a7eedebe830119463470db5e6c59e8"
+url = "https://nodejs.org/dist/v26.12.1/node-v26.12.1-darwin-arm64.tar.gz"
 
 [[tools.scorecard]]
 version = "5.6.0"
@@ -276,33 +263,38 @@ checksum = "sha256:3c89db4edcab7cf1c27bff178882e0f6f27f7afdf54e859fa041fca10febe
 url = "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.darwin.x86_64.tar.xz"
 url_api = "https://api.github.com/repos/koalaman/shellcheck/releases/assets/279056930"
 
-[[tools.uv]]
-version = "0.13.4"
-backend = "aqua:astral-sh/uv"
-specifiers = ["0.13.4"]
+[[tools.trivy]]
+version = "0.76.0"
+backend = "aqua:aquasecurity/trivy"
+specifiers = ["0.76.0"]
 
-[tools.uv."platforms.linux-arm64"]
-checksum = "sha256:1ae72b4718729e2ccc4f1ae2c6d1e531ca8467800e0546e9130b3886023a60ab"
-url = "https://github.com/astral-sh/uv/releases/download/0.13.4/uv-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/659693320"
-provenance = "github-attestations"
+[tools.trivy."platforms.linux-x64"]
+checksum = "sha256:e24b1c51293c1b15e4ba8d45bbc7891ba053f90278ec2698f3562c993e145fe7"
+url = "https://github.com/aquasecurity/trivy/releases/download/v0.76.0/trivy_0.76.0_Linux-64bit.tar.gz"
+url_api = "https://api.github.com/repos/aquasecurity/trivy/releases/assets/640213415"
+provenance = "cosign"
+
+[tools.trivy."platforms.macos-arm64"]
+checksum = "sha256:e7ec0d21fe842553f59af99aba2efbcc822369fbaed27019c575408b6d135fce"
+url = "https://github.com/aquasecurity/trivy/releases/download/v0.76.0/trivy_0.76.0_macOS-ARM64.tar.gz"
+url_api = "https://api.github.com/repos/aquasecurity/trivy/releases/assets/640213409"
+provenance = "cosign"
+
+[[tools.uv]]
+version = "0.13.5"
+backend = "aqua:astral-sh/uv"
+specifiers = ["0.13.5"]
 
 [tools.uv."platforms.linux-x64"]
-checksum = "sha256:2b428396f12572d4429cf210ca234dd599a33b3af0958a4d5ed569d63e3f344f"
-url = "https://github.com/astral-sh/uv/releases/download/0.13.4/uv-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/659693663"
+checksum = "sha256:f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
+url = "https://github.com/astral-sh/uv/releases/download/0.13.5/uv-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/664336023"
 provenance = "github-attestations"
 
 [tools.uv."platforms.macos-arm64"]
-checksum = "sha256:e0b1d4743ce64c55d9f0f4a444afa6b81125680070ee04e853fcd0f6c1ebf8f1"
-url = "https://github.com/astral-sh/uv/releases/download/0.13.4/uv-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/659693291"
-provenance = "github-attestations"
-
-[tools.uv."platforms.macos-x64"]
-checksum = "sha256:7be2dcd316122f4b3e5a0a7889f6248266c14425374e105ff7dc9779184603a6"
-url = "https://github.com/astral-sh/uv/releases/download/0.13.4/uv-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/659693620"
+checksum = "sha256:743f85035a1996ecb350659e01cd9faea9709829be09b1b4b03c73eaf3c9cd73"
+url = "https://github.com/astral-sh/uv/releases/download/0.13.5/uv-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/664335803"
 provenance = "github-attestations"
 
 [[tools.yq]]
@@ -333,3 +325,20 @@ checksum = "sha256:3a812fce205a4d67014fb71b7fa297092210e580df3d8f52dddc2cf3a599c
 url = "https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_darwin_amd64"
 url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/597222619"
 provenance = "cosign"
+
+[[tools.zizmor]]
+version = "1.31.1"
+backend = "aqua:zizmorcore/zizmor"
+specifiers = ["1.31.1"]
+
+[tools.zizmor."platforms.linux-x64"]
+checksum = "sha256:d185f726bdaf92df78273217dfdd24ebcd6b0ef48cf3ce776ff5762b6e138c99"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.31.1/zizmor-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/645467284"
+provenance = "github-attestations"
+
+[tools.zizmor."platforms.macos-arm64"]
+checksum = "sha256:ad5aa633cd56215b11e6c51d51f90c7e6b22904a75047d1215abbd422f61d698"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.31.1/zizmor-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/645467283"
+provenance = "github-attestations"

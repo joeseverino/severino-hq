@@ -1,0 +1,12 @@
+{% comment %}
+One fact in a fact band, drawn by {% band_fact %}:
+{% band_fact icon="shield" label="Security" tone=fact.tone %}<strong>value</strong><small>detail</small>{% endband_fact %}.
+The tone, when there is one, colors the fact by what it means.
+{% endcomment %}
+<div class="band-fact{% if tone %} tone-{{ tone }}{% endif %}">
+  {% if icon %}<span class="band-icon">{% include "partials/_icon.html" with name=icon %}</span>{% endif %}
+  <div>
+    <span class="band-label">{{ label|breakable }}</span>
+    {{ value|safe }}
+  </div>
+</div>

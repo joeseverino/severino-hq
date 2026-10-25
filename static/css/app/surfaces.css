@@ -141,7 +141,7 @@
   main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary { list-style: none; cursor: pointer; }
   main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary::-webkit-details-marker { display: none; }
   main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary::before {
-    content: "▸"; display: inline-block; width: 1em; margin-inline-end: var(--space-1);
+    content: "\203A"; display: inline-block; width: 1em; margin-inline-end: var(--space-1);
     color: var(--muted); font-size: 1.05em; line-height: 1; text-align: center;
     transition: transform .12s ease;
   }
@@ -172,10 +172,7 @@
     .page-head .page-actions { flex-wrap: nowrap; }
   }
 
-  /* A row's toggle: the one tables.js adds where a row says more than it
-     shows, or the one a row heading rows folded under it carries. Either is
-     the one disclosure a row has, so it is sized to be found and hit, and
-     turns when open. */
+  /* A row's toggle, drawn by the server where a row holds something back or heads rows folded under it: the one disclosure a row has, sized to be hit, turned when open. */
   :is(.row-expand, .row-fold) {
     display: inline-grid; place-items: center;
     width: 1.5rem; height: 1.5rem; min-height: 0; padding: 0; margin: 0;
@@ -188,12 +185,10 @@
      cell moved to the line beneath an open row is open too. */
   .data-table tr:not(.is-expanded, .row-detail) .row-more,
   .data-table tr:is(.is-expanded, .row-detail) .row-less { display: none; }
-  :is(.row-expand, .row-fold) > svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .12s ease; }
-  :is(.row-expand, .row-fold)[aria-expanded="true"] > svg { transform: rotate(90deg); }
-  @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold) > svg { transition: none; } }
-  /* Every clamp in the row lifted at once. The rules it lifts are scattered and
-     each is specific to its column, so this one outranks them on purpose: an
-     expanded row shows everything, whatever clamped it. */
+  :is(.row-expand, .row-fold) > .icon { width: 7px; height: 11px; transition: transform .12s ease; }
+  :is(.row-expand, .row-fold)[aria-expanded="true"] > .icon { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold) > .icon { transition: none; } }
+  /* Every clamp in the row lifted at once; the rules it lifts are each specific to a column, so this one outranks them on purpose. */
   .data-table tr.is-expanded :is(td, th),
   .data-table tr.is-expanded :is(td, th) *:not(.visually-hidden, .visually-hidden *) {
     white-space: normal !important;
@@ -204,14 +199,10 @@
     max-height: none !important;
     max-width: none !important;
   }
-  /* With its columns held, an uncut value breaks inside its column rather
-     than running under the next, whatever kept it whole: inside a word only
-     where the word alone is longer than its line, so what a box holds out for
-     is still its longest word. Free text (`cell-data`) already breaks
-     anywhere, open or not. */
-  .data-table tr.is-expanded :is(td, th):not(.cell-data),
-  .data-table tr.is-expanded :is(td, th) *:not(.visually-hidden, .visually-hidden *, .cell-data, .cell-data *) {
-    overflow-wrap: break-word !important;
+  /* An uncut value breaks inside its held column (tables.js) rather than under the next: `anywhere` breaks count toward min-content, so a box sized to its content (a part, a code chip) does not hold out for its longest word, wider than the column. */
+  .data-table tr.is-expanded :is(td, th),
+  .data-table tr.is-expanded :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *) {
+    overflow-wrap: anywhere !important;
   }
 
   /* A band too narrow for two cells is a list, like every other summary:

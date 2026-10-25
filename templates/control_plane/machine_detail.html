@@ -7,15 +7,11 @@
 
 {% if load_metrics %}
   <section class="machine-telemetry" aria-labelledby="machine-telemetry-heading">
-    <div class="section-head">
-      <div>
-        <h2 id="machine-telemetry-heading">Current load</h2>
-        {% if machine.telemetry.summary %}<p class="muted">{{ machine.telemetry.summary|breakable }}</p>{% endif %}
-      </div>
+    {% section_head id="machine-telemetry-heading" lede=machine.telemetry.summary %}Current load{% aside %}
       {% if machine.telemetry_observed_at %}
         <span class="muted">{% include "partials/_reading_age.html" with at=machine.telemetry_observed_at only %}</span>
       {% endif %}
-    </div>
+    {% endsection_head %}
     <dl class="machine-telemetry-metrics">
       {% for metric in load_metrics %}
         <div title="{{ metric.detail }}">
@@ -52,8 +48,7 @@
 
 {% if machine.presence %}
 <section class="card">
-  <div class="section-head">
-    <h2>Tailnet</h2>
+  {% section_head %}Tailnet{% aside %}
     {% comment %}
     The question sits beside the facts it is asked about rather than under a
     heading of its own, because it is asked about this machine.
@@ -61,7 +56,7 @@
     {% if device_names %}
       <a class="btn" href="{% url 'control_plane:tailnet' %}?source={{ asked.source|urlencode }}&amp;target={{ asked.target|urlencode }}" data-modal-open="whatif">Policy test</a>
     {% endif %}
-  </div>
+  {% endsection_head %}
   <dl class="kv">
         {% comment %}
         Every address, here and nowhere else. A machine on a tailnet has a LAN

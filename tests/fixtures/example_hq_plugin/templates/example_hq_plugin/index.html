@@ -3,9 +3,9 @@
 {% include "partials/_kpi_grid.html" with label="Notes summary" items=example_metrics %}
 <section class="card" id="example-notes">
   <div class="section-head"><h2>Notes</h2></div>
-  <div class="table-scroll">
+  {% table_region "Notes" %}
     <table class="data-table">
-      <thead><tr><th scope="col">Note</th><th scope="col">The registry lists</th><th scope="col"></th></tr></thead>
+      <thead><tr>{% table_heading "Note" "identifier" %}{% table_heading "The registry lists" %}{% table_heading "Look up" "control" hidden=True %}</tr></thead>
       <tbody>
         {% for note in notes %}
         <tr>
@@ -16,6 +16,6 @@
         {% endfor %}
       </tbody>
     </table>
-  </div>
+  {% endtable_region %}
 </section>
 {% endblock %}

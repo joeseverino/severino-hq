@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
+from hq.platform.application.ui import ended
 from hq.platform.core.network import split_host_port
 
 from ..connection_shapes import LOGIN
@@ -164,7 +165,7 @@ DEFINITION = ProviderSpec(
     actions={"reconcile": applies(automatic=True), "delete": applies()},
     label="Proxy host",
     connection_providers=("npm",),
-    removal_note=lambda spec: "These names stop being served: " + ", ".join(spec.get("domain_names", ())) + ".",
+    removal_note=lambda spec: ended("These names stop being served: " + ", ".join(spec.get("domain_names", ()))),
     choices="hq.platform.application.provider_choices:proxy_choices",
     required_on_create=("certificate_resource",),
     unobservable_fields=("certificate_resource",),

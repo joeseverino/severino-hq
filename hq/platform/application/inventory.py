@@ -496,7 +496,7 @@ def _difference_phrase(field: str, asked: str, live: str) -> str:
     """
 
     if len(asked) <= _QUOTABLE and len(live) <= _QUOTABLE:
-        return f"{field} is now {live or 'blank'}. HQ set it to {asked or 'blank'}."
+        return f"{field} is now {ended(live or 'blank')} HQ set it to {ended(asked or 'blank')}"
     try:
         wanted, found = json.loads(asked), json.loads(live)
     except ValueError:
@@ -510,7 +510,7 @@ def _difference_phrase(field: str, asked: str, live: str) -> str:
             *(f"- {key}" for key in missing),
             *(f"{key} changed" for key in changed),
         ]
-        return f"{field} differs from HQ's copy: {', '.join(parts) or 'layout only'}."
+        return ended(f"{field} differs from HQ's copy: {', '.join(parts) or 'layout only'}")
     return f"{field} differs from HQ's copy ({len(live)} characters live, {len(asked)} in HQ)."
 
 

@@ -10,14 +10,13 @@ from datetime import UTC, datetime
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.db import connection as database_connection
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
-from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import escape
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_grow
 
 from ..moments import when
 from ..request_addresses import addresses_of, addresses_of_hq
@@ -816,23 +815,21 @@ class CostTests(TestCase):
         with self.assertNumQueries(0):
             badge(request)
 
-    def cost(self) -> int:
-        with CaptureQueriesContext(database_connection) as queries:
-            self.client.get(reverse("connection"))
-        return len(queries)
-
     def test_the_panel_costs_the_same_however_many_devices_there_are(self):
         """Not once per device, per address, per layer or per header."""
 
-        self.client.force_login(self.user)
-        few = self.cost()
-        a_tailnet(
-            a_device("a-laptop", A_TAILNET_ADDRESS, user="someone@example.test"),
-            a_device("hq-host", "100.64.0.9", observer=True),
-            *(a_device(f"another-{index}", f"100.64.1.{index}") for index in range(12)),
-        )
+        def arrange(count):
+            a_tailnet(
+                a_device("a-laptop", A_TAILNET_ADDRESS, user="someone@example.test"),
+                a_device("hq-host", "100.64.0.9", observer=True),
+                *(a_device(f"another-{index}", f"100.64.1.{index}") for index in range(count)),
+            )
 
-        self.assertLessEqual(self.cost(), few)
+        self.client.force_login(self.user)
+        # The panel names the requester's device and HQ's, never the others.
+        assert_subject_cost_does_not_grow(
+            self, sizes=(1, 12), arrange=arrange, draw=lambda _count: self.client.get(reverse("connection"))
+        )
 
 
 @override_settings(

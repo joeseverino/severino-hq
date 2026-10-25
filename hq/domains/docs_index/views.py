@@ -18,7 +18,7 @@ from hq.platform.application import related
 from hq.platform.application.documentation import (
     sync_documentation,
 )
-from hq.platform.application.pages import PageAction, PageMixin, page_context, record_trail
+from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import (
     TableColumn,
@@ -45,7 +45,6 @@ class DocsListView(PageMixin, TableListMixin, ListView):
     page_title = "Docs"
     table_search_scope = "documentation"
     table_selectable = True
-    table_drop_mid, table_drop_narrow = 2, 6
     # The ID sits beside a title of a dozen words, which it leaves the room.
     table_room = "shared"
     table_columns = (
@@ -122,13 +121,16 @@ class DocsListView(PageMixin, TableListMixin, ListView):
 class DocsPage(PageMixin):
     """A page about one doc record, or a new one: its trail runs back to the list."""
 
+    page_trail = DOCS_TRAIL
+
     @override
-    def get_page_trail(self):
-        return record_trail(DOCS_TRAIL, getattr(self, "object", None), lambda record: record.doc_id)
+    def trail_label(self, record):
+        return record.doc_id
 
 
 class DocsDetailView(PageMixin, DetailView):
     model = DocumentationRecord
+    page_trail = DOCS_TRAIL
     template_name = "docs_index/docs_detail.html"
     slug_field = "doc_id"
     slug_url_kwarg = "doc_id"
@@ -169,10 +171,6 @@ class DocsDetailView(PageMixin, DetailView):
             record.sensitivity,
             record.get_sensitivity_display(),
         )
-
-    @override
-    def get_page_trail(self):
-        return (DOCS_TRAIL,)
 
     @override
     def get_page_actions(self):

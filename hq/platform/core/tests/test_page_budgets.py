@@ -16,32 +16,24 @@ from hq.domains.expenses.models import Expense
 from hq.domains.reports.exports import year_summary
 from hq.platform.application import routes
 from hq.platform.application.derivation_testing import frozen
-from hq.platform.application.derivations import counting, uncached
+from hq.platform.application.derivations import counting
 from hq.platform.application.projection import projection_scope, years_of
 from hq.platform.application.services import service_catalog
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.core.bench import Seeded, seed
 from hq.platform.core.management.commands.bench_pages import SAMPLES, _pages
 
-from .estate_sizes import SMALL, at_both_sizes
+from .estate_sizes import SMALL, assert_estate_cost_does_not_grow, at_both_sizes
 
 
-def _queries(run) -> list[str]:
-    with host_only(), CaptureQueriesContext(connection) as captured:
-        run()
-    return [query["sql"] for query in captured.captured_queries]
-
-
-def _catalog() -> None:
-    with projection_scope(), uncached():
-        service_catalog()
+def _catalog(_seeded: Seeded) -> tuple:
+    with host_only(), projection_scope():
+        return service_catalog()
 
 
 class ServiceCatalogBudgetTests(TestCase):
     def test_the_catalog_costs_the_same_at_any_size(self):
-        small, large = at_both_sizes(lambda _seeded: len(_queries(_catalog)))
-
-        self.assertEqual(large, small)
+        assert_estate_cost_does_not_grow(self, draw=_catalog, rows=len)
 
     def test_a_service_still_names_the_container_found_running_it(self):
         seed(SMALL)
@@ -62,14 +54,11 @@ class YearSummaryBudgetTests(TestCase):
         year = timezone.localdate().year
         summaries = []
 
-        def cost(_seeded: Seeded) -> int:
-            with CaptureQueriesContext(connection) as captured:
-                summaries.append(year_summary(year))
-            return len(captured)
+        def draw(_seeded: Seeded) -> dict:
+            summaries.append(year_summary(year))
+            return summaries[-1]
 
-        small, large = at_both_sizes(cost)
-
-        self.assertEqual(large, small)
+        assert_estate_cost_does_not_grow(self, draw=draw, rows=lambda summary: len(summary["content"]))
         summary = summaries[-1]
         linked = [row for row in summary["documentation"] if row["related_projects"]]
         self.assertTrue(linked)

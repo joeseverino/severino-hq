@@ -4,6 +4,6 @@ once, with every value it was given; a value that is a web address is a link.
 {% endcomment %}
 <dl class="attention-facts">
   {% for fact in facts %}
-  <div><dt>{{ fact.label|breakable }}</dt><dd><ul class="dot-list">{% for value in fact.values %}<li>{% if value.url %}<a class="external-link" href="{{ value.url }}" rel="noopener">{{ value.text|breakable }}</a>{% else %}{{ value.text|readable }}{% endif %}</li>{% endfor %}</ul></dd></div>
+  <div><dt>{{ fact.label|breakable }}</dt><dd><ul class="dot-list">{% for value in fact.values %}<li>{% if value.url %}{% entity value.url|outside label=value.text %}{% else %}{{ value.text|readable }}{% endif %}</li>{% endfor %}</ul></dd></div>
   {% endfor %}
 </dl>

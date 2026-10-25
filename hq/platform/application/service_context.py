@@ -31,10 +31,11 @@ lazy from hq.domains.projects.models import Project
 lazy from hq.platform.core.network import split_host_port
 
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
+from .display_words import display
 from .entity_links import EntityLink, entity_link, kind_label
 from .moments import ago
 from .published_sites import projects_by_hostname
-from .ui import MISSING, PAGE_SECTION_ID, counted
+from .ui import MISSING, PAGE_SECTION_ID, counted, ended
 lazy from . import machines
 lazy from .containers import standings_on
 lazy from .github_estate import repository_for
@@ -45,7 +46,7 @@ lazy from .path_dependencies import consequence_of
 lazy from .paths import hq_path
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class Cell:
     """One value in a section's table, and where it goes if anywhere."""
 
@@ -207,8 +208,6 @@ class SummaryItem:
     link: EntityLink | None = None
     detail: str = ""
     tone: str = ""
-    # Shown as a pill in ``tone``: a state never carried by color alone.
-    pill: bool = False
     # What kind of fact it is, drawn as its tile: a name in partials/_icon.html.
     icon: str = ""
 
@@ -229,7 +228,6 @@ def service_summary(service) -> tuple[SummaryItem, ...]:
                 service.health.label,
                 detail=_health_detail(service),
                 tone=service.health.state,
-                pill=True,
                 icon="activity",
             ),
             # Where it runs only when there is no path to show it: the path
@@ -267,7 +265,7 @@ def _what(service) -> str:
                 f"{hop.source.label} {hop.name}".strip() if hop.source else hop.name for hop in service.path.observed
             )
         )
-        return f"Read through {seen}. Not in HQ's settings." if seen else "Read"
+        return f"Read through {ended(seen)} Not in HQ's settings." if seen else "Read"
     # Declared or not is what Health already says ("Nothing declared"), so
     # repeating it here would be the same fact twice.
     return ""

@@ -150,7 +150,7 @@ class FiguresInChipsTests(SimpleTestCase):
         self.assertEqual(self.values('{% comment %}<span class="pill">{{ n|length }}</span>{% endcomment %}'), [])
 
 
-@tag("source")
+@tag("source", "tree")
 class TemplateChipTests(SimpleTestCase):
     def test_no_template_prints_a_figure_in_a_chip(self):
         root = Path(settings.BASE_DIR)

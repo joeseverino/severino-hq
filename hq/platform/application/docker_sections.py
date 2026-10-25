@@ -21,6 +21,7 @@ from .docker_estate import IMAGE_BEHIND, image_verdicts
 from .entity_links import entity_link
 from .facts import Subject, readings
 from .labels import human_bytes
+from .moments import when_day
 from .service_context import Cell, ServiceSection
 from .timestamps import moment
 from .ui import MISSING, counted
@@ -192,7 +193,7 @@ def _images(machine) -> ServiceSection | None:
         records=tuple(
             (
                 Cell(image_title(record)),
-                _text(created.date().isoformat() if (created := moment(record.get("created_at"))) else ""),
+                _text(when_day(created) if (created := moment(record.get("created_at"))) else ""),
                 _text(human_bytes(record["size"]) if isinstance(record.get("size"), int) else ""),
                 state,
             )

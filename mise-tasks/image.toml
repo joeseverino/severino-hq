@@ -1,0 +1,21 @@
+# The build job's steps: image:build (mise-tasks/image/), then each
+# image:verify:* check, which `mise run build` runs in turn.
+# IMAGE names the image under test; the pipeline passes the one it built.
+
+["image:verify:healthy"]
+description = "It comes up healthy"
+hide = true
+depends = ["image:build"]
+run = 'tools/pipeline/image-health.sh "${IMAGE:-severino-hq:ci-local}"'
+
+["image:verify:host-boot"]
+description = "It boots under its unit: waits for its environment, survives a crash and a reboot"
+hide = true
+depends = ["image:build"]
+run = 'tools/pipeline/host-boot-drill.sh "${IMAGE:-severino-hq:ci-local}"'
+
+["image:docker"]
+description = "A Docker daemon answers, or one line says how to start one"
+hide = true
+quiet = true
+run = 'docker info >/dev/null 2>&1 || { echo "No Docker daemon answers: colima start runs one, and colima stop after the work that needed it." >&2; exit 1; }'

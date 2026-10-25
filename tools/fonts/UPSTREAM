@@ -1,0 +1,7 @@
+package: Inter
+version: 4.1
+license: OFL-1.1 (static/fonts/inter/LICENSE.txt, the release's own)
+file: web/InterVariable.woff2
+archive: https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip
+archive_sha256: 9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e
+sha256: 693b77d4f32ee9b8bfc995589b5fad5e99adf2832738661f5402f9978429a8e3

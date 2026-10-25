@@ -1,6 +1,6 @@
 """Readings from the tailnet credential."""
 
-from .contract import ObservationRecord, ObservationSpec, ReadingPart
+from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
 
 # The routes that make a device an exit node: everything, in both families.
 EXIT_ROUTES = frozenset({"0.0.0.0/0", "::/0"})
@@ -57,8 +57,8 @@ class TailnetUserRecord(ObservationRecord):
     login_name: str = ""
     role: str = ""
     status: str = ""
-    created: str = ""
-    last_seen: str = ""
+    created: Stamp = None
+    last_seen: Stamp = None
 
 
 def _resolvers(record) -> tuple[str, ...]:

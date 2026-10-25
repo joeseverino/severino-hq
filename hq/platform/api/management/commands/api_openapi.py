@@ -35,9 +35,7 @@ class Command(BaseCommand):
                     ),
                     ending="",
                 )
-                raise CommandError(
-                    f"{DOCUMENT_PATH.name} is behind the API; run `mise run regen` and commit the result."
-                )
+                raise CommandError(f"{DOCUMENT_PATH.name} is behind the API; run `mise run fix` and commit the result.")
             self.stdout.write(f"{DOCUMENT_PATH.name} is current.")
             return
         DOCUMENT_PATH.write_text(current, encoding="utf-8")

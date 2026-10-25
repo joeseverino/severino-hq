@@ -14,10 +14,8 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
-from django.db import connection
 from django.http import HttpResponse
 from django.test import RequestFactory, SimpleTestCase, TestCase, modify_settings, override_settings
-from django.test.utils import CaptureQueriesContext
 from django.urls import include, path, reverse
 from django.utils import timezone
 
@@ -32,6 +30,7 @@ from hq.platform.application.plugins import PluginIntegration, clear_plugin_comp
 from hq.platform.application.security import Principal, cli_principal, internal_principal
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import serving
+from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_grow
 from hq_sdk.outbound import Failed, ask, run_now
 from hq_sdk.testing import OutboundInRequest, held_jobs, reaches_out
 from tests.fixtures.example_hq_plugin import outbound as example, registry
@@ -143,22 +142,20 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
         self.assertEqual(Job.objects.get().state, "queued")
 
     def test_the_page_reaches_nothing_and_a_control_costs_the_same_however_often_it_ran(self):
-        def cost_after_a_run():
-            with held_jobs() as held:
-                self.press(headers=SCRIPT)
-                held.run()
+        def arrange(runs):
+            for _ in range(Job.objects.filter(kind=example.LOOKUP).count(), runs):
+                with held_jobs() as held:
+                    self.press(headers=SCRIPT)
+                    held.run()
             self.registry.asked.clear()
-            with CaptureQueriesContext(connection) as queries:
-                found = ask(example.LOOKUP, "first-note")
-            return found, len(queries)
 
-        _, once = cost_after_a_run()
-        cost_after_a_run()
-        control, thrice = cost_after_a_run()
-
-        self.assertEqual(thrice, once)
+        # A control is about its one piece of work, whatever its runs were.
+        assert_subject_cost_does_not_grow(
+            self, sizes=(1, 3), arrange=arrange, draw=lambda _runs: ask(example.LOOKUP, "first-note")
+        )
         self.assertContains(self.client.get(self.page), "Look up")
 
+        control = ask(example.LOOKUP, "first-note")
         self.assertEqual((control.standing.state, control.url, control.value), ("idle", self.route, "first-note"))
         self.assertEqual(self.registry.asked, [])
 

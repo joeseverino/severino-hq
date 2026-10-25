@@ -209,7 +209,7 @@ def refresh_project(
         raise RecordNotFound("That project was not found.") from exc
 
     result: dict[str, Any] = {"ok": True, "content": None, "github": None, "github_app": None}
-    if slug == getattr(settings, "CONTENT_INDEX_PROJECT_SLUG", ""):
+    if slug == settings.CONTENT_INDEX_PROJECT_SLUG:
         try:
             with operation_context(
                 interface=principal.interface,
@@ -376,10 +376,14 @@ def outbound_work() -> tuple[OutboundWork, ...]:
             refuse=_known,
             verb="Refresh",
             execution_notes=(
-                "Where the GitHub App reads the repository, ask the controller to read that "
-                "connection now, through infrastructure.controller.refresh.",
-                "For a repository the App does not read, read its last push from GitHub's "
-                "public API, which needs no credential.",
+                (
+                    "Where the GitHub App reads the repository, ask the controller to read that "
+                    "connection now, through infrastructure.controller.refresh."
+                ),
+                (
+                    "For a repository the App does not read, read its last push from GitHub's "
+                    "public API, which needs no credential."
+                ),
                 "Save when it was last pushed to, and record who asked.",
             ),
         ),
@@ -454,15 +458,14 @@ def set_dependency_updates(
     """
 
     principal.require(records_of("projects").write)
-    with operation_context(interface=principal.interface, actor=principal.actor, operation=DEPENDENCY_UPDATES):
-        project = _locked(current_slug, expected_updated_at)
-        refused = _updates_refusal(project, enabling=command.enabled)
-        if refused:
-            return {"ok": False, "error": {"code": "precondition", "message": refused}}
-        if project.dependency_updates != command.enabled:
-            project.dependency_updates = command.enabled
-            project.full_clean()
-            project.save()
+    project = _locked(current_slug, expected_updated_at)
+    refused = _updates_refusal(project, enabling=command.enabled)
+    if refused:
+        return {"ok": False, "error": {"code": "precondition", "message": refused}}
+    if project.dependency_updates != command.enabled:
+        project.dependency_updates = command.enabled
+        project.full_clean()
+        project.save()
     return {"ok": True, "project": serialize_project(project, relationships=True)}
 
 

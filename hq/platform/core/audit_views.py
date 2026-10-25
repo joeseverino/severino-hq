@@ -3,7 +3,7 @@
 from typing import override
 lazy from datetime import date, datetime, time, timedelta
 
-from django.urls import reverse
+from django.urls import reverse, reverse_lazy
 from django.views.generic import DetailView, ListView
 lazy from django.utils import timezone
 
@@ -35,8 +35,6 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     )
     # Off until asked for: an ask for a fresh reading changes nothing.
     table_toggles = (TableToggle(READS, "Read requests"),)
-    table_drop_mid = 1
-    table_drop_narrow = 3
     # The Message column is prose, so what a row names gets what it leaves.
     table_room = "shared"
     table_columns = (
@@ -220,9 +218,7 @@ class AuditLogDetailView(PageMixin, DetailView):
     def get_page_title(self):
         return "Approval" if self.held_approval() is not None else "Audit event"
 
-    @override
-    def get_page_trail(self):
-        return (("Audit log", reverse("core:audit_list")),)
+    page_trail = ("Audit log", reverse_lazy("core:audit_list"))
 
     @override
     def get_context_data(self, **kwargs):
@@ -235,23 +231,31 @@ class AuditLogDetailView(PageMixin, DetailView):
             path_words((key,)): value_words(value) for key, value in sorted(event.metadata.items()) if key != "changes"
         }
 
-        # The rest of the same operation: what `operation_id` is for. One
-        # action can touch many rows, and matching them up by timestamp alone
-        # is guesswork.
-        if event.operation_id:
-            context["siblings"] = (
-                AuditLog.objects.filter(operation_id=event.operation_id)
-                .exclude(pk=event.pk)
-                .select_related("user")[:50]
-            )
-        # Everything else that ever happened to this object.
-        if event.object_type and event.object_id:
-            context["history"] = (
-                AuditLog.objects.filter(object_type=event.object_type, object_id=event.object_id)
-                .exclude(pk=event.pk)
-                .select_related("user")[:20]
-            )
         approval = self.held_approval()
         if approval is not None:
             context["approval"] = approval
+        context["other_events"] = self._other_events(event, approval is None)
+        context["other_rows"] = sum(len(rows) for _label, rows, _folds in context["other_events"])
         return context
+
+    @staticmethod
+    def _other_events(event: AuditLog, with_operation: bool) -> list[tuple[str, list[AuditLog], str]]:
+        """The other events beside this one, one group each: the rest of its
+        operation, then everything else to its object, which folds away under
+        the first. Each is ``(label, rows, folds)``."""
+
+        others = AuditLog.objects.exclude(pk=event.pk).select_related("user")
+        groups = []
+        # The rest of the same operation: what `operation_id` is for. One
+        # action can touch many rows, and matching them up by timestamp alone
+        # is guesswork. An approval's card already says what it covers.
+        if with_operation and event.operation_id:
+            siblings = list(others.filter(operation_id=event.operation_id)[:50])
+            if siblings:
+                groups.append(("Rest of this operation", siblings, ""))
+                others = others.exclude(operation_id=event.operation_id)
+        if event.object_type and event.object_id:
+            to_object = list(others.filter(object_type=event.object_type, object_id=event.object_id)[:20])
+            if to_object:
+                groups.append(("Everything else to this object", to_object, "audit-object-history" if groups else ""))
+        return groups

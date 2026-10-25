@@ -620,8 +620,6 @@ class Mentions:
 
     heading: str
     items: tuple[Mention, ...]
-    # Counted in the heading and listed when opened: what is done with.
-    folded: bool = False
 
 
 def referenced_by(kind: str, identity: str, *, principal: Principal) -> tuple[Mentions, ...]:

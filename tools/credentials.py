@@ -4,8 +4,8 @@
     mise run mint:tailscale [--store REF --store-id REF]
     mise run wire-github-app --vault VAULT --item ITEM --client-id ID [--extension OWNER/REPO ...]
 
-Each task's usage spec parses its flags and mise hands them over as
-``usage_<flag>`` variables, which is all this module reads of them.
+Each task's usage spec parses its flags, which this module reads through
+``hq.platform.core.tests.task.Usage``.
 
 A mint creates nothing unless it can store what it creates: a provider shows a
 secret once, so a credential created without being stored could never be used.
@@ -23,7 +23,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shlex
 import subprocess
 import sys
 import urllib.error
@@ -34,6 +33,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import IO, Any, override
+
+from hq.platform.core.tests.task import Usage
 
 HERE = Path(__file__).resolve().parent
 STORED = "Stored in {item} ({vault}); the controller reads it on its next render."
@@ -47,31 +48,6 @@ class Refused(Exception):
 
 class UsageError(Refused):
     status = 2
-
-
-# ------------------------------------------------------------------- the usage
-
-
-@dataclass(frozen=True, slots=True)
-class Usage:
-    """The flags mise parsed, as the ``usage_*`` variables it sets."""
-
-    values: Mapping[str, str]
-
-    @classmethod
-    def from_environment(cls, environ: Mapping[str, str]) -> Usage:
-        return cls({key.removeprefix("usage_"): value for key, value in environ.items() if key.startswith("usage_")})
-
-    def text(self, flag: str, default: str = "") -> str:
-        return self.values.get(flag, default)
-
-    def switch(self, flag: str) -> bool:
-        return self.values.get(flag) == "true"
-
-    def repeated(self, flag: str) -> tuple[str, ...]:
-        """A flag given more than once: mise joins its values shell-quoted."""
-
-        return tuple(shlex.split(self.values.get(flag, "")))
 
 
 # ------------------------------------------------------------------- 1Password

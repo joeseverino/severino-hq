@@ -13,10 +13,7 @@
 {% if relationships %}
 <section{% if relationships.groups %} id="relationships"{% endif %} class="page-section"{% if relationships.groups %} data-page-section{% endif %}>
   {% if relationships.groups %}
-  <div class="section-head">
-    <h2>Relationships</h2>
-    {% if relationships.focus_url and not topology_url %}<a class="btn ghost compact" href="{{ relationships.focus_url }}">See in topology</a>{% endif %}
-  </div>
+  {% section_head %}Relationships{% aside %}{% if relationships.focus_url and not topology_url %}<a class="btn ghost compact" href="{{ relationships.focus_url }}">See in topology</a>{% endif %}{% endsection_head %}
   {% comment %}
     A list of what this is related to, not a table: each relation is named
     once with its ends beside it, and under it on a narrow screen. Who read

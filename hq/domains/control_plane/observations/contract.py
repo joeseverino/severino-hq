@@ -2,12 +2,29 @@
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from datetime import timedelta
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, BeforeValidator, ConfigDict, PlainSerializer, ValidationError, WithJsonSchema
+
+lazy from hq.platform.application.timestamps import moment
 
 lazy from . import OBSERVATIONS
+
+
+def _iso(value: datetime | None) -> str:
+    return value.astimezone(UTC).isoformat() if value is not None else ""
+
+
+# An instant a provider wrote: read as one when it parses, nothing when it
+# does not, and stored as ISO 8601 in UTC, so every reader parses one shape and
+# no record carries a provider's own spelling of a time.
+Stamp = Annotated[
+    datetime | None,
+    BeforeValidator(moment),
+    PlainSerializer(_iso, return_type=str),
+    WithJsonSchema({"type": ["string", "null"]}),
+]
 
 
 class ObservationRecord(BaseModel):

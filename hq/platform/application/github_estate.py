@@ -23,10 +23,12 @@ from hq.domains.control_plane.observations.github import (
 
 from .containers import SERIOUS
 from .derivations import reached, whole
+from .display_words import display
 from .entity_links import web_url
 from .expiry import days_until
 from .freshness import Freshness, freshness
 from .item_help import cannot_help, commands
+from .moments import ago
 from .projection import read_once
 from .timestamps import moment
 from .ui import Insight, counted
@@ -58,8 +60,56 @@ ALERT_PAGES: Mapping[ReadingPart, str] = {
     DEPENDABOT: "dependabot",
     LEAKED_CREDENTIALS: "secret-scanning",
 }
+# The tone of the head's combined check state.
+_CHECKS_TONES = {"failure": "serious", "success": "good", "pending": "attention"}
+# The tone of a deployment's state; any other state of one is still going.
+_DEPLOY_TONES = {"success": "good", "failure": "serious", "error": "serious"}
 # The branches Renovate opens its pull requests from.
 UPDATE_BRANCH = "renovate/"
+
+
+@display
+class WorkflowRun:
+    """A workflow's newest run, as its chip on a repository's panel shows it."""
+
+    name: str
+    url: str
+    # What it came to, or where it is while it has not finished: "Success".
+    state: str
+    # The run's color: good, serious, attention, or none while it says nothing.
+    tone: str
+    # Shown on hover: what it came to, then its branch, commit and age.
+    tip: str
+    # Read out after its name: what it came to, its branch, and its age.
+    said: str
+
+
+def workflow_run(run: Mapping[str, Any]) -> WorkflowRun:
+    """One run of the reading's ``runs``, as its chip says it."""
+
+    conclusion, status = str(run.get("conclusion") or ""), str(run.get("status") or "")
+    if conclusion == "success":
+        tone = "good"
+    elif conclusion in ("failure", "timed_out"):
+        tone = "serious"
+    elif status != "completed":
+        tone = "attention"
+    else:
+        tone = ""
+    word = (conclusion or status).replace("_", " ")
+    state = word.capitalize()
+    branch = str(run.get("branch") or "")
+    created = moment(str(run.get("created_at") or ""))
+    age = ago(created) if created else ""
+    where = " · ".join(part for part in (branch, str(run.get("sha") or "")[:7], age) if part)
+    return WorkflowRun(
+        name=str(run.get("name") or "Workflow"),
+        url=web_url(run.get("url")),
+        state=state,
+        tone=tone,
+        tip=f"{state}\n{where}" if where else state,
+        said=", ".join(part for part in (word, branch, age) if part),
+    )
 
 
 def _severity_rank(level: str) -> int:
@@ -97,6 +147,12 @@ class Repository:
         return self.record.get("checks", {}).get("state") == "failure"
 
     @property
+    def checks_tone(self) -> str:
+        """The head's checks as a tone: none while nothing runs on it."""
+
+        return _CHECKS_TONES.get(self.record.get("checks", {}).get("state"), "")
+
+    @property
     def failing_runs(self) -> tuple[ActionLink, ...]:
         """A link to each workflow run that failed on the default branch's head,
         as far as the reading holds them: its newest run of each workflow."""
@@ -111,6 +167,12 @@ class Repository:
                     ActionLink("failing-run", f"{name} run", "read", url, reason=f"{name} failed on this commit.")
                 )
         return tuple(found)
+
+    @property
+    def workflow_runs(self) -> tuple[WorkflowRun, ...]:
+        """Each workflow's newest run, as the repository's panel shows it."""
+
+        return tuple(workflow_run(run) for run in self.record.get("runs") or ())
 
     @property
     def serious_alerts(self) -> int:
@@ -132,6 +194,16 @@ class Repository:
             for level, n in counts.items():
                 totals[level] = totals.get(level, 0) + n
         return sorted(((n, level) for level, n in totals.items()), key=lambda item: _severity_rank(item[1]))
+
+    @property
+    def alerts_tone(self) -> str:
+        """The open alerts as a tone: none where GitHub offers no alerts."""
+
+        if self.serious_alerts:
+            return "serious"
+        if self.open_alerts:
+            return "attention"
+        return "good" if self.record.get("alerts") else ""
 
     @property
     def update_pulls(self) -> list[dict[str, Any]]:
@@ -230,6 +302,20 @@ class Repository:
             (item for item in self.record.get("deployments") or () if item.get("environment") == "production"),
             None,
         )
+
+    @property
+    def production_tone(self) -> str:
+        """Production's last deploy as a tone: none where there is none."""
+
+        if not self.production:
+            return ""
+        return _DEPLOY_TONES.get(self.production.get("state"), "attention")
+
+    @property
+    def verified_tone(self) -> str:
+        """``production_verified`` as a tone: none where the deploy ran no check."""
+
+        return {True: "good", False: "serious"}.get(self.production_verified, "")
 
     @property
     def deployed_cleanly(self) -> bool:

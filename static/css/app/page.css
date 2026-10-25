@@ -195,7 +195,9 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .glance-hours strong { color: var(--ink); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .glance-hours small { color: var(--muted-2); }
 .glance-hours small.is-wet { color: var(--accent); font-weight: 600; }
-.glance-expanded-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line-2); font-size: var(--text-xs); }
+/* Each link and button in the foot is a flex item a line tall, so a line
+   the target size (`--target-min`) is each one's box. */
+.glance-expanded-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line-2); font-size: var(--text-xs); line-height: var(--target-min); }
 .glance-expanded-foot > span { display: flex; gap: var(--space-5); margin-left: auto; }
 /* A link in look: the panel's one action besides going somewhere. */
 .glance-refresh { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; color: var(--accent); font: inherit; cursor: pointer; }
@@ -218,8 +220,6 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   border-block-end: 1px solid var(--line);
   backdrop-filter: saturate(160%) blur(8px);
 }
-/* Named for screen readers; to the eye a row of section links already says it. */
-.page-nav-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .page-nav-list {
   display: flex;
   align-items: center;
@@ -337,11 +337,13 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    down to the mark alone: squeezed, the name wraps to a second line that the
    control does not show. So the name is there on every phone that fits it and
    on none that does not, all of it or none of it, without a width being named. */
-.user-menu { position: relative; flex: 0 0 auto; }
+/* Its track is as wide as the bar allows: a short name keeps the control to
+   its own width at the bar's end, and a long one is cut to the track. */
+.user-menu { position: relative; grid-area: user; justify-self: stretch; max-width: 100%; }
 /* The badge is one size whatever it counts, so the count arriving after the
    page (a fragment on every page but the two that count it) moves nothing in
    the bar: it is pinned to the corner, outside the flow. */
-.action-badge { position: relative; display: inline-flex; flex: none; align-items: center; justify-content: center; width: var(--control-size); height: var(--control-size); border: 1px solid var(--bar-control-line); border-radius: var(--radius-sm); background: var(--bar-control-bg); color: var(--ink-2); text-decoration: none; }
+.action-badge { position: relative; display: inline-flex; grid-area: badge; align-items: center; justify-content: center; width: var(--control-size); height: var(--control-size); border: 1px solid var(--bar-control-line); border-radius: var(--radius-sm); background: var(--bar-control-bg); color: var(--ink-2); text-decoration: none; }
 .action-badge [data-action-count] { position: absolute; inset-block-start: -7px; inset-inline-end: -7px; box-sizing: border-box; min-width: 18px; height: 18px; padding: 0 var(--space-2); border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-size: var(--text-2xs); font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .action-badge:hover { background: var(--bar-control-bg-hover); color: var(--ink); text-decoration: none; }
 .action-badge svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }

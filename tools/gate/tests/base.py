@@ -16,6 +16,21 @@ from django.test import SimpleTestCase
 from tools.gate import verdict as gate_verdict
 
 REAL_VERDICTS = gate_verdict.VERDICTS
+# `python -m unittest` with the suite's failure record, so a gate reads the
+# failed tests of a real loader and runner as it reads the suite's.
+UNITTEST = """
+import sys, unittest
+from hq.platform.core.test_runner import FailureRecord, write_failures
+
+class Result(FailureRecord, unittest.TextTestResult):
+    pass
+
+run = unittest.main(
+    module=None, argv=["unittest", *sys.argv[1:]], exit=False, testRunner=unittest.TextTestRunner(resultclass=Result)
+)
+write_failures(run.result)
+sys.exit(not run.result.wasSuccessful())
+"""
 
 
 def verdicts_kept() -> dict[str, tuple[int, int]]:

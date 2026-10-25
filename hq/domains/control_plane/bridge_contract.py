@@ -33,6 +33,8 @@ from jsonschema.exceptions import ValidationError, best_match
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
+from hq.platform.application.ui import ended
+
 lazy from .bridge_registry import connections_document, schemas
 lazy from .connection_shapes import renderer_registry
 
@@ -192,7 +194,7 @@ def _violation(validator: Any, subject: str, value: Any) -> str | None:
         reason = _REASONS.get(keyword, "does not match the contract").format(
             expected=" or ".join(expected) if isinstance(expected, list) else expected
         )
-    return f"The {subject} at {pointer or '/'} {reason}."
+    return ended(f"The {subject} at {pointer or '/'} {reason}")
 
 
 def _members(error: ValidationError) -> str:

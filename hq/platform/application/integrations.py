@@ -20,6 +20,7 @@ from .integration_validation import (
     validate_resource_spec,
 )
 from .search_contracts import SearchDefinition
+from .ui import ended
 lazy from . import outbound_work, plugins
 lazy from .core_capabilities import CORE_CAPABILITY_SPECS
 lazy from .domains import host_specs
@@ -70,7 +71,7 @@ def _index[Spec](
         violations.append(
             IntegrationViolation(
                 f"duplicate.{label}",
-                f"Duplicate {label} names: {', '.join(duplicates)}.",
+                ended(f"Duplicate {label} names: {', '.join(duplicates)}"),
                 duplicates,
             )
         )
@@ -90,8 +91,10 @@ def _validated_index[Spec](
             violations.append(
                 IntegrationViolation(
                     f"invalid.{label}",
-                    f"{label.title()} contribution {position} returned "
-                    f"{type(candidate).__name__}, expected {expected_type.__name__}.",
+                    ended(
+                        f"{label.title()} contribution {position} returned "
+                        f"{type(candidate).__name__}, expected {expected_type.__name__}"
+                    ),
                     (f"{label} contribution {position}",),
                 )
             )
@@ -121,7 +124,7 @@ def _validate_capability_resources(
         violations.append(
             IntegrationViolation(
                 "capability.unknown_resource",
-                f"Capabilities reference unknown resources: {', '.join(missing)}.",
+                ended(f"Capabilities reference unknown resources: {', '.join(missing)}"),
                 tuple(missing),
             )
         )
@@ -171,7 +174,7 @@ def _validate_connection_edges(
         violations.append(
             IntegrationViolation(
                 "connection.unknown_capability",
-                f"Connection abilities reference unknown capabilities: {', '.join(unknown_capabilities)}.",
+                ended(f"Connection abilities reference unknown capabilities: {', '.join(unknown_capabilities)}"),
                 tuple(unknown_capabilities),
             )
         )
@@ -188,7 +191,7 @@ def _validate_connection_edges(
         violations.append(
             IntegrationViolation(
                 "connection.unknown_resource",
-                f"Connection abilities reference unknown resources: {', '.join(unknown_resources)}.",
+                ended(f"Connection abilities reference unknown resources: {', '.join(unknown_resources)}"),
                 tuple(unknown_resources),
             )
         )
@@ -236,7 +239,7 @@ def _index_search(
         violations.append(
             IntegrationViolation(
                 "search.invalid_definition",
-                f"Search contributions must be SearchDefinition instances: {', '.join(invalid)}.",
+                ended(f"Search contributions must be SearchDefinition instances: {', '.join(invalid)}"),
                 invalid,
             )
         )
@@ -248,7 +251,7 @@ def _index_search(
         violations.append(
             IntegrationViolation(
                 "search.invalid_scope",
-                f"Invalid search scopes: {', '.join(invalid_scopes)}.",
+                ended(f"Invalid search scopes: {', '.join(invalid_scopes)}"),
                 invalid_scopes,
             )
         )
@@ -259,7 +262,7 @@ def _index_search(
         violations.append(
             IntegrationViolation(
                 "duplicate.search",
-                f"Duplicate search scopes: {', '.join(duplicates)}.",
+                ended(f"Duplicate search scopes: {', '.join(duplicates)}"),
                 duplicates,
             )
         )

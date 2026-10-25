@@ -16,11 +16,142 @@
 
   const selectedIds = new Set(readSelection());
 
+  // A table fits its box. While it is wider than its region, a ranked column
+  // showing leaves (`data-drop` 1 first, the rightmost of a rank first);
+  // once none is left to go the table is in a narrow box, and if it is still
+  // wider, what keeps its line whole gives way too (`data-tight`); as the
+  // region grows they come back, the last to leave first, each only if the
+  // table still fits. A row's toggle shows what left. Only the browser
+  // knows how wide a table is, so a table is measured as its rows arrive,
+  // in the microtask after the parser or a script adds them, before the
+  // frame that would draw them: this script loads in the head without
+  // `defer`, so every region is fitted from the moment it is parsed and
+  // nothing moves once a page is drawn.
+  const REGION = ".table-scroll";
+  const headingsOf = (table) => [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
+  // The order the table's columns leave in, by place.
+  const dropOrder = (table) => headingsOf(table)
+    .map((heading, place) => [Number(heading.dataset.drop) || 0, place, heading])
+    .filter(([rank, , heading]) => rank && !heading.hasAttribute("data-blank-column"))
+    .sort((left, right) => left[0] - right[0] || right[1] - left[1])
+    .map(([, place]) => place);
+  // How far each table has given way: how many of its columns have left, one
+  // more once it is in a narrow box, and one more once it is tight.
+  const gaveWay = new WeakMap();
+  const giveWay = (table, steps) => {
+    const order = dropOrder(table);
+    const left = new Set(order.slice(0, steps));
+    const width = headingsOf(table).length;
+    // Every row is marked, since the parser adds a long table's later rows
+    // after its first are fitted; a cell already marked so is not changed.
+    table.querySelectorAll(":scope > * > tr").forEach((row) => {
+      if (row.children.length !== width) return;
+      order.forEach((place) => row.children[place].toggleAttribute("data-dropped", left.has(place)));
+    });
+    // A column's part of each row's line beneath shows while the column is gone.
+    table.querySelectorAll(":scope > tbody > tr.row-detail [data-column]").forEach((part) => {
+      part.toggleAttribute("data-dropped", left.has(Number(part.dataset.column)));
+    });
+    table.toggleAttribute("data-narrow", steps > order.length);
+    table.toggleAttribute("data-tight", steps > order.length + 1);
+    // The columns that share the region's width (tables.css, `--share`).
+    const sharing = headingsOf(table).filter((heading) => !left.has(heading.cellIndex)
+      && !heading.matches(".select-column, [data-blank-column]")).length;
+    table.style.setProperty("--showing", Math.min(Math.max(sharing, 1), 16));
+    gaveWay.set(table, steps);
+  };
+  const overflows = (table) => table.offsetWidth > table.parentElement.clientWidth;
+  // A hidden region has none.
+  const widthOf = (region) => region.clientWidth;
+  // A table that overflows gives way until it fits. One that fits takes back
+  // what left, the last first, while it still fits; a region that only
+  // narrowed has nothing to give back, so that is not tried.
+  const fit = (table, mayReturn = true) => {
+    const was = gaveWay.get(table);
+    const most = dropOrder(table).length + 2;
+    let steps = Math.min(was ?? 0, most);
+    // Every row is marked for how far the table has given way before it is
+    // measured: a table first fitted is told how many columns share its
+    // region, so its first measure is the one it keeps, and rows the parser
+    // added since are measured without the columns that left, at any step,
+    // the last one too.
+    giveWay(table, steps);
+    if (overflows(table)) {
+      while (steps < most && overflows(table)) giveWay(table, ++steps);
+      return;
+    }
+    while (mayReturn && steps > 0) {
+      giveWay(table, steps - 1);
+      if (overflows(table)) {
+        giveWay(table, steps);
+        return;
+      }
+      steps -= 1;
+    }
+  };
+  const tableIn = (region) => region.querySelector(":scope > .data-table");
+  // The width each region was last fitted at.
+  const regionWidths = new WeakMap();
+  // A region's table fitted at the width the region has now. One whose
+  // content changed (`changed`) may take back what left; otherwise only a
+  // change of width fits again. A table whose columns are held while a row
+  // is open, or pinned while it is swapped in, is fitted as it lets them go.
+  const fitIn = (region, changed = false) => {
+    const table = tableIn(region);
+    if (!table || "rowsHeld" in table.dataset || pinned.has(table)) return;
+    const width = widthOf(region);
+    const before = regionWidths.get(region);
+    if (width === before && !changed) return;
+    regionWidths.set(region, width);
+    if (width > 0) fit(table, changed || before === undefined || width > before);
+  };
+  const refit = (table) => {
+    if (table?.parentElement?.matches(REGION)) fitIn(table.parentElement, true);
+  };
+  // The region is an inline-size container, so its width never follows the
+  // table's. Chromium counts what a ResizeObserver's callback moves as a
+  // layout shift, even before the frame is painted, and a table that grows
+  // taller there resizes its region again in the same frame, which the
+  // browser reports as an error. So every region is fitted before the frame
+  // is laid out: in the microtask after the parser or a script changes the
+  // page, since what it adds may be the region's rows or a scrollbar that
+  // narrows it, and in the window's resize event, which runs before layout.
+  // What holds a region's width otherwise (a region shown, a fold, a row
+  // closing, its faces arriving) fits it where it happens, and the observer
+  // answers only a width none of those saw. WebKit lays out a resized window
+  // and delivers the observer before the resize event, so there the observer
+  // fits it, and a region its fit made taller would be reported again in the
+  // same frame, which the browser raises as an error: a region the observer
+  // fitted is let go until the next frame, whose first report of it is the
+  // width it was just fitted at.
+  const fitted = new ResizeObserver((entries) => entries.forEach(({ target: region }) => {
+    if (!region.isConnected) {
+      fitted.unobserve(region);
+      return;
+    }
+    const was = regionWidths.get(region);
+    fitIn(region);
+    if (regionWidths.get(region) === was) return;
+    fitted.unobserve(region);
+    requestAnimationFrame(() => fitted.observe(region));
+  }));
+  const watched = new WeakSet();
+  const fitEvery = (changed = new Set()) => document.querySelectorAll(REGION).forEach((region) => {
+    if (!watched.has(region)) {
+      watched.add(region);
+      fitted.observe(region);
+    }
+    fitIn(region, changed.has(region));
+  });
+  new MutationObserver((changes) => fitEvery(new Set(changes.map(({ target }) => target.closest?.(REGION)))))
+    .observe(document.documentElement, { childList: true, subtree: true });
+  window.addEventListener("resize", () => fitEvery());
+
   // A row can say more than it shows: a clamped name, an ellipsis, a list
-  // folded behind "+5 more". Such a row's toggle shows all of it, every
-  // cut-off value in full and every folded part open, and puts it back. The
-  // parts keep their own toggles too; this is the row's, not a replacement.
-  // A value cut short is measured (`markCut`); everything else a row holds
+  // folded behind "+5 more", a column that left. Such a row's toggle shows
+  // all of it: every cut value in full, every folded part open, and the line
+  // beneath the row that the server drew with what the row holds back. A
+  // value cut short is measured (`markCut`); everything else a row holds
   // back the stylesheet reads from the HTML.
   // Screen-reader text is clipped to a pixel on purpose, and a decoration
   // hidden from assistive technology says nothing a reader could miss, so
@@ -34,28 +165,11 @@
     return el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
   };
 
-  // Cells of this row that are not shown at all: a column a narrow table
-  // dropped. One without words says nothing to list, so it is not something
-  // held back.
-  const droppedCells = (row) =>
-    [...row.children].filter(
-      (cell) =>
-        cell.tagName === "TD"
-        && getComputedStyle(cell).display === "none"
-        && !cell.hasAttribute("data-blank")
-        && cell.textContent.trim() !== "",
-    );
-
-  // Within a cell that is showing, what a narrow table holds back.
-  const heldBack = (cell) =>
-    [...cell.querySelectorAll(".narrow-more")].filter(
-      (el) => getComputedStyle(el).display === "none",
-    );
-
   // A list whose server sorts it has links in its headings; any other table
   // whose rows are worth sorting has buttons that sort the rows on the page.
-  // Both are drawn by the server (`table_heading`). A press sorts
-  // ascending, the next descending, the third puts the rows back as they came.
+  // Both are drawn by the server (`table_heading`), in an extension's table
+  // too (hand_drawn_tables). A press sorts ascending, the next descending,
+  // the third puts the rows back as they came.
   // Rows keep to their own section, a section's heading row stays on top of
   // it, and an open row takes the line beneath it along.
   const UNIT_SECONDS = { second: 1, minute: 60, hour: 3600, day: 86400, week: 604800, month: 2629800, year: 31557600 };
@@ -79,7 +193,7 @@
     const span = text.match(/^(?:up |in |about )?(\d+(?:\.\d+)?)\s*(second|minute|hour|day|week|month|year)s?\b/i);
     if (span) return Number(span[1]) * UNIT_SECONDS[span[2].toLowerCase()];
     // An amount: a sign, a currency mark, digits, a unit after.
-    const amount = text.replace(/\u2212/g, "-").match(/^([-+]?)[$\u00a3\u20ac]?\s?(\d[\d,]*(?:\.\d+)?)\s*(?:[%a-z\u00b0/ ]{0,12})$/i);
+    const amount = text.replace(/\u2060/g, "").replace(/\u2212/g, "-").match(/^([-+]?)[$\u00a3\u20ac]?\s?(\d[\d,]*(?:\.\d+)?)\s*(?:[%a-z\u00b0/ ]{0,12})$/i);
     if (amount) return Number(amount[2].replace(/,/g, "")) * (amount[1] === "-" ? -1 : 1);
     if (/\d/.test(text) && text.length < 32 && /[/,:-]|[a-z]{3}/i.test(text)) {
       const when = Date.parse(text);
@@ -110,13 +224,13 @@
   };
 
   // Opening a row must not move the table. Left to itself the browser sizes
-  // every column again around whatever the open row now shows, and each row
-  // on the page shifts. So the columns are held at the widths they have, for
-  // as long as any row is open, and let go when the last one closes or the
-  // window changes.
+  // every column again around what the open row now shows whole, and each
+  // row on the page shifts. So the columns are held at the widths they have,
+  // for as long as any row is open, and let go when the last one closes or
+  // the window changes.
   const holdColumns = (table) => {
     if ("rowsHeld" in table.dataset) return;
-    const headings = [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
+    const headings = headingsOf(table);
     if (!headings.length) return;
     const widths = headings.map((heading) => heading.getBoundingClientRect().width);
     table.style.width = `${table.getBoundingClientRect().width}px`;
@@ -128,130 +242,12 @@
   };
   const releaseColumns = (table) => {
     if (!("rowsHeld" in table.dataset)) return;
-    table.querySelectorAll(":scope > thead > tr:last-child > th").forEach((heading) => {
+    headingsOf(table).forEach((heading) => {
       heading.style.width = "";
     });
     table.style.width = "";
     table.style.tableLayout = "";
     delete table.dataset.rowsHeld;
-  };
-
-  // What an open row was holding back, in a line of its own beneath it and
-  // the full width of the table: the columns a narrow table dropped, and the
-  // parts of the columns that stayed, each under its column's name. Beneath,
-  // not inside, so the row itself stays exactly as it was. Built when the row
-  // opens and removed when it closes, so it is never stale and never a second
-  // copy of something that is showing.
-  // A heading's words, without the sort arrow beside them.
-  const headingName = (heading) => {
-    if (!heading) return "";
-    const copy = heading.cloneNode(true);
-    copy.querySelectorAll("[aria-hidden=true]").forEach((mark) => mark.remove());
-    return copy.textContent.trim().replace(/\s+/g, " ");
-  };
-
-  // What the line beneath shows is the row's own content, moved there and
-  // moved back when it closes, never a copy: a control copied into the line
-  // would be a second control of the same name in the same form.
-  const restore = new WeakMap();
-  const closeDetail = (row) => {
-    const detail = row.nextElementSibling;
-    if (!detail?.classList.contains("row-detail")) return;
-    restore.get(detail)?.forEach((putBack) => putBack());
-    detail.remove();
-  };
-  const openDetail = (row) => {
-    closeDetail(row);
-    const table = row.closest("table");
-    const headings = [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
-    const cells = [...row.children];
-    const dropped = droppedCells(row);
-    const parts = [];
-    const undo = [];
-    cells.forEach((cell, index) => {
-      // A column of controls has no heading to read; it is still named here.
-      const name = headingName(headings[index])
-        || (cell.querySelector("a, button, select, input") ? "Actions" : "");
-      if (dropped.includes(cell)) {
-        const nodes = [...cell.childNodes];
-        parts.push([name, nodes, cell.classList.contains("cell-data")]);
-        undo.push(() => cell.append(...nodes));
-        return;
-      }
-      const held = heldBack(cell);
-      if (held.length) {
-        parts.push([name, held]);
-        held.forEach((el) => {
-          const place = document.createComment("");
-          el.replaceWith(place);
-          el.classList.remove("narrow-more");
-          undo.push(() => {
-            el.classList.add("narrow-more");
-            place.replaceWith(el);
-          });
-        });
-      }
-    });
-    // What the row keeps for this line at any width. A part that names itself
-    // (`data-label`) joins the named list, so the line reads as one set of
-    // facts on one edge; any other is set in under the cell it came from,
-    // where its words started.
-    const rowLeft = row.getBoundingClientRect().left;
-    row.querySelectorAll(":is(td, th) .row-below[data-label]").forEach((el) => {
-      const place = document.createComment("");
-      el.replaceWith(place);
-      undo.push(() => place.replaceWith(el));
-      parts.push([el.dataset.label, [el]]);
-    });
-    const below = [...row.querySelectorAll(":is(td, th) .row-below")].map((el) => {
-      const from = el.closest("td, th");
-      const indent = from.getBoundingClientRect().left + parseFloat(getComputedStyle(from).paddingLeft) - rowLeft;
-      const place = document.createComment("");
-      el.replaceWith(place);
-      undo.push(() => {
-        el.style.removeProperty("margin-inline-start");
-        place.replaceWith(el);
-      });
-      return [el, indent];
-    });
-    if (!parts.length && !below.length) return;
-    const cell = document.createElement("td");
-    cell.colSpan = cells.length;
-    cell.append(...below.map(([el]) => el));
-    if (parts.length) {
-      const list = document.createElement("dl");
-      list.className = "row-columns";
-      parts.forEach(([name, nodes, words]) => {
-        const term = document.createElement("dt");
-        term.textContent = name;
-        const value = document.createElement("dd");
-        // A cell of free text keeps its rule where its words go.
-        if (words) value.className = "cell-data";
-        value.append(...nodes);
-        list.append(term, value);
-      });
-      cell.append(list);
-    }
-    const detail = document.createElement("tr");
-    detail.className = "row-detail";
-    // Named by attribute as well, for anything that has to tell a record from
-    // the line beneath it without knowing how either is styled.
-    detail.dataset.rowDetail = "";
-    detail.append(cell);
-    restore.set(detail, undo);
-    row.after(detail);
-    // A name over nothing that shows (a column whose words moved to a part of
-    // their own, a preview the open row does without) is not drawn.
-    detail.querySelectorAll(".row-columns > dd").forEach((value) => {
-      const shows = [...value.childNodes].some((node) => (node.nodeType === Node.TEXT_NODE
-        ? node.textContent.trim() !== ""
-        : node.nodeType === Node.ELEMENT_NODE && node.getBoundingClientRect().height > 0));
-      if (shows) return;
-      value.previousElementSibling?.remove();
-      value.hidden = true;
-    });
-    const start = cell.getBoundingClientRect().left + parseFloat(getComputedStyle(cell).paddingLeft) - rowLeft;
-    below.forEach(([el, indent]) => el.style.setProperty("margin-inline-start", `${Math.max(0, indent - start)}px`));
   };
 
   document.addEventListener("click", (event) => {
@@ -262,14 +258,12 @@
     const table = row.closest("table");
     // Held before anything in the row changes, so what is held is the table
     // as the reader was looking at it.
-    if (expanding) {
-      holdColumns(table);
-      openDetail(row);
-    } else {
-      closeDetail(row);
-    }
+    if (expanding) holdColumns(table);
     row.classList.toggle("is-expanded", expanding);
-    if (!table.querySelector(":scope > tbody > tr.is-expanded")) releaseColumns(table);
+    if (!table.querySelector(":scope > tbody > tr.is-expanded")) {
+      releaseColumns(table);
+      refit(table);
+    }
     button.setAttribute("aria-expanded", String(expanding));
     button.setAttribute("aria-label", expanding ? "Show less of this row" : "Show all of this row");
     // Open what was folded, and on the way back close only what this opened.
@@ -296,6 +290,7 @@
       if (!opening && row.classList.contains("is-expanded")) row.querySelector(".row-expand")?.click();
       row.toggleAttribute("data-open", opening);
     });
+    refit(head.closest("table"));
     markTablesSoon();
   };
   document.addEventListener("click", (event) => {
@@ -354,40 +349,6 @@
     });
   };
 
-  // A table drawn through the table tags has its sort controls in the HTML
-  // (`table_heading local_sort=…`), and its headings declare a kind. One drawn
-  // by hand, as an extension's template still does, gets them here.
-  const HAND_DRAWN = ".table-scroll > .data-table:not(:has(> thead th[data-kind]))";
-  function markSortable() {
-    document.querySelectorAll(HAND_DRAWN).forEach((table) => {
-      if (table.parentElement.hasAttribute("data-chart") || table.parentElement.parentElement?.classList.contains("chart-data")) return;
-      const headings = [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
-      if (!headings.length || table.querySelector(":scope > thead a.table-sort-link")) return;
-      if (table.querySelector(":scope > thead > tr:only-child") === null) return;
-      if (table.querySelector(":scope > tbody > tr > [rowspan]")) return;
-      const records = table.querySelectorAll(":scope > tbody > tr:not(.row-group):not(.row-detail)");
-      if (records.length < 2) return;
-      headings.forEach((heading) => {
-        if ("sortReady" in heading.dataset || heading.colSpan > 1) return;
-        const name = headingName(heading);
-        if (!name || heading.querySelector("input, button, a, select")) return;
-        heading.dataset.sortReady = "";
-        heading.setAttribute("aria-sort", "none");
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "table-sort-link";
-        button.dataset.sortLocal = "";
-        button.append(...heading.childNodes);
-        const mark = document.createElement("span");
-        mark.className = "sort-indicator";
-        mark.setAttribute("aria-hidden", "true");
-        button.append(mark);
-        button.setAttribute("aria-label", `Sort by ${name}`);
-        heading.append(button);
-      });
-    });
-  }
-
   document.addEventListener("click", (event) => {
     const button = event.target.closest("[data-sort-local]");
     if (!button) return;
@@ -399,32 +360,25 @@
     sortRows(table, heading.cellIndex, next);
   });
 
-  let rowsTimer = null;
-  // A window that changes size changes what shows, so widths held for the old
-  // size are let go and taken again, and each open row lists what is held
-  // back now, which may be nothing if its columns came back.
+  // A table held while its rows are open is fitted again as it would stand
+  // with them closed, the width the window now gives it, and held there.
   const settleOpenRows = () => {
     document.querySelectorAll(".data-table[data-rows-held]").forEach((table) => {
       releaseColumns(table);
       const open = [...table.querySelectorAll(":scope > tbody > tr.is-expanded")];
-      open.forEach((row) => {
-        row.classList.remove("is-expanded");
-        closeDetail(row);
-      });
+      open.forEach((row) => row.classList.remove("is-expanded"));
+      refit(table);
       if (!open.length) return;
       holdColumns(table);
-      open.forEach((row) => {
-        openDetail(row);
-        row.classList.add("is-expanded");
-      });
+      open.forEach((row) => row.classList.add("is-expanded"));
     });
   };
 
   const markTables = () => {
     settleOpenRows();
-    markSortable();
     markCuts();
   };
+  let rowsTimer = null;
   const markTablesSoon = () => {
     window.clearTimeout(rowsTimer);
     rowsTimer = window.setTimeout(markTables, 120);
@@ -441,23 +395,14 @@
     });
   }
 
-  function preserveDisclosureState(next, url) {
-    const currentQuery = new URL(window.location.href).searchParams.get("q");
-    const nextQuery = new URL(url, window.location.href).searchParams.get("q");
-    if (!currentQuery || !nextQuery) return;
-    document.querySelectorAll("details[data-preserve-open]").forEach((details) => {
-      const key = details.dataset.preserveOpen;
-      const replacement = next.querySelector(`[data-preserve-open="${key}"]`);
-      if (replacement) replacement.open = details.open;
-    });
-  }
-
-  markTables();
-  landOnRow();
   window.addEventListener("resize", markTablesSoon);
-  // Whether a value is cut depends on the face it is drawn in, so it is asked
-  // again when the faces are in.
-  document.fonts?.ready.then(markTables);
+  // Whether a value is cut depends on the face it is drawn in, and so does
+  // how wide a table is in a region whose width did not change, so both are
+  // asked again when the faces are in.
+  document.fonts?.ready.then(() => {
+    document.querySelectorAll(REGION).forEach((region) => fitIn(region, true));
+    markTables();
+  });
 
   const persistSelection = () => {
     try {
@@ -514,8 +459,17 @@
   }
 
   // Auto table layout recomputes column widths from whichever rows are
-  // visible, so sorting or paging makes columns jitter. Pin the incoming
-  // table to the current widths; a full page load re-derives natural widths.
+  // visible, so sorting or paging makes columns jitter. The incoming table is
+  // pinned to the current widths while it is swapped in, and let go once it
+  // is in, so it fits its region again as the window changes.
+  const pinned = new WeakSet();
+  const unpin = (table) => {
+    if (!pinned.has(table)) return;
+    pinned.delete(table);
+    table.querySelectorAll("thead th").forEach((heading) => heading.style.removeProperty("width"));
+    table.style.removeProperty("table-layout");
+    refit(table);
+  };
   function pinColumnWidths(next) {
     const currentTables = document.querySelectorAll(".table-scroll table");
     const nextTables = next.querySelectorAll(".table-scroll table");
@@ -525,11 +479,13 @@
       const currentHeads = table.querySelectorAll("thead th");
       const nextHeads = nextTable.querySelectorAll("thead th");
       if (!currentHeads.length || currentHeads.length !== nextHeads.length) return;
+      giveWay(nextTable, gaveWay.get(table) ?? 0);
       currentHeads.forEach((th, index) => {
         const width = th.getBoundingClientRect().width;
         if (width) nextHeads[index].style.width = `${width}px`;
       });
       nextTable.style.tableLayout = "fixed";
+      pinned.add(nextTable);
     });
   }
 
@@ -558,7 +514,6 @@
         strict: false,
         busy: document.querySelector("main"),
         before: (next) => {
-          preserveDisclosureState(next, url);
           keepFilterOpen(next);
           pinColumnWidths(next);
         },
@@ -566,6 +521,7 @@
         history,
       });
       tableLocation = `${window.location.pathname}${window.location.search}`;
+      document.querySelectorAll(".table-scroll table").forEach(unpin);
       initializeSelection();
       markTables();
     } catch (error) {
@@ -635,5 +591,6 @@
   document.addEventListener("DOMContentLoaded", () => {
     initializeSelection();
     markTables();
+    landOnRow();
   });
 })();

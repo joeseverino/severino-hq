@@ -9,9 +9,7 @@ being given a credential rather than by anything here being edited.
 from collections import Counter
 
 from django.contrib.auth import get_user_model
-from django.db import connection
 from django.test import TestCase, override_settings
-from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
@@ -19,6 +17,7 @@ from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_STACK_KIND
 from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..connection_catalog import AUTHORITY_LABELS, CONTROLLER_CONNECTIONS, connection_catalog
 from ..connections import connection_readings, connections_for, reachable_through
@@ -27,7 +26,7 @@ from ..derivations import counting
 from ..provider_choices import container_stack, zone
 from ..report_testing import report_connections
 from ..security import cli_principal
-from .markup import hrefs, text
+from .markup import all_elements, hrefs, text
 from .sentinel import CONNECTION, SentinelMixin, plant_credentials
 
 A_PORTAINER = {
@@ -260,6 +259,41 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         self.assertContains(response, A_PORTAINER["endpoint"])
         self.assertContains(response, AUTHORITY_LABELS["whole_account"])
 
+    def test_the_reads_column_names_what_the_tally_counts_and_nothing_it_only_changes(self):
+        """The row's three, its "Also reads" and its tally are one list: each
+        reading the sweep counts is named once, in one set of words, and a kind
+        the credential may change but no sweep reads is under "Changes"."""
+
+        sweep(A_PORTAINER)
+
+        response = self.client.get(reverse("control_plane:connections"))
+
+        (row,) = [
+            row
+            for _purpose, rows in response.context["connections"].purposes
+            for row in rows
+            if row.instance.connection_ref == "a-portainer"
+        ]
+        page = all_elements(response)
+        (tr,) = [element for element in page if element.tag == "tr" and "a-portainer" in element.attrs.get("id", "")]
+        reads_cell = [element for element in page if element.tag == "td" and element.ancestors[-1:] == (tr,)][1]
+        items = [
+            element for element in page if element.tag == "li" and element.ancestors[-1].ancestors[-1:] == (reads_cell,)
+        ]
+        # Each item's name is its first element; a state word may follow it.
+        named = [
+            next(element for element in page if element.ancestors[-1:] == (item,)).words
+            for item in items
+            if item.ancestors[-1].attrs.get("data-label") != "Changes"
+        ]
+        changes = [item.words for item in items if item.ancestors[-1].attrs.get("data-label") == "Changes"]
+
+        self.assertTrue(named)
+        self.assertEqual(sorted(named), sorted(sight.label for sight in row.sight.sights))
+        self.assertEqual(len(named), sum(count for count, _state in row.sight.tally))
+        self.assertIn(PROVIDERS[CONTAINER_STACK_KIND].label, changes)
+        self.assertNotIn(PROVIDERS[CONTAINER_STACK_KIND].label, named)
+
     def test_the_page_never_carries_a_secret(self):
         plant_credentials()
 
@@ -295,24 +329,21 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         # reads, so the invariant is growth rather than one host-only absolute.
         # It never probes a provider and twenty more rows cost no more queries
         # than one. No connection at all skips the activity read entirely.
-        sweep(A_PORTAINER)
-        with CaptureQueriesContext(connection) as baseline:
-            self.client.get(reverse("control_plane:connections"))
-
-        sweep(
-            *(
-                {
-                    **A_PORTAINER,
-                    "connection_ref": f"portainer-{index}",
-                    "reaches": [f"host-{index}"],
-                }
-                for index in range(20)
+        def arrange(count):
+            sweep(
+                *(
+                    {**A_PORTAINER, "connection_ref": f"portainer-{index}", "reaches": [f"host-{index}"]}
+                    for index in range(count)
+                )
             )
-        )
-        with CaptureQueriesContext(connection) as expanded:
-            self.client.get(reverse("control_plane:connections"))
 
-        self.assertLessEqual(len(expanded), len(baseline))
+        assert_cost_does_not_grow(
+            self,
+            sizes=(1, 20),
+            arrange=arrange,
+            draw=lambda _count: self.client.get(reverse("control_plane:connections")),
+            rows=distinct(r"\bportainer-\d+\b"),
+        )
 
     def test_a_second_visit_derives_nothing(self):
         sweep(A_PORTAINER, A_DNS_TOKEN)

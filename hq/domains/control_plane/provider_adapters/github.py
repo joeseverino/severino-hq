@@ -10,6 +10,8 @@ from typing import Any, Literal
 
 from pydantic import Field
 
+from hq.platform.application.ui import ended
+
 from ..connection_shapes import GITHUB_APP
 from ..observations.github import PROVIDER
 from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, SharedValue, applies
@@ -41,7 +43,7 @@ def _plugin_state(item: Mapping[str, Any]) -> str:
     if not approved or approved == running:
         return f"Live at {running}" if running else "Live"
     stage = str(item.get("stage", "")).strip()
-    return f"Runs {running}, latest approved is {approved}" + (f". {stage}." if stage else ".")
+    return " ".join(ended(said) for said in (f"Runs {running}, latest approved is {approved}", stage) if said)
 
 
 def _readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
@@ -110,7 +112,7 @@ DEFINITION = ProviderSpec(
     declaration_only=True,
     removal_note=lambda spec: (
         "HQ stops reporting on plugin commits. Their approvals still "
-        f"start the deploy in {spec.get('repository', 'the repository')}."
+        f"start the deploy in {ended(spec.get('repository', 'the repository'))}"
     ),
 )
 DEFINITIONS = (DEFINITION,)

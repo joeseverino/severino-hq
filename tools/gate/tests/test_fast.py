@@ -8,20 +8,24 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from fnmatch import fnmatch
 from pathlib import Path
 from unittest.mock import patch
 
 from django.test import tag
 
 from hq.config.sandbox import PREFIX, sweep_abandoned
+from hq.platform.core.test_runner import excluded_tags
+from hq.platform.core.tests.task import Usage
 from tests.mise_tasks import mise_tasks
 from tools.gate import fast as fast_gate, verdict as gate_verdict
-from tools.gate.tests.base import GateTestCase
+from tools.gate.tests.base import UNITTEST, GateTestCase
+from tools.gate.verdict import FailedTest
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
-@tag("source")
+@tag("source", "tree")
 class FastGateMappingTests(GateTestCase):
     def setUp(self):
         self.files = fast_gate.python_files()
@@ -91,8 +95,8 @@ class FastGateMappingTests(GateTestCase):
             self.assertEqual(chosen, ["test_arguments", "test_segments", "test_string"])
 
     def test_a_task_definition_change_selects_the_tests_that_read_the_tasks(self):
-        """A task moved between mise.toml, tasks/ and mise-tasks/ is read through tests.mise_tasks, by no path."""
-        for changed in ("mise.toml", "tasks/browser.toml", "mise-tasks/suite/as-image"):
+        """A task moved between mise.toml and mise-tasks/ is read through tests.mise_tasks, by no path."""
+        for changed in ("mise.toml", "mise-tasks/browser.toml", "mise-tasks/test/composed"):
             with self.subTest(changed=changed):
                 self.assertIn("hq.platform.core.tests.test_browser_gate_tasks", self.labels(changed))
         self.assertNotIn("hq.platform.core.tests.test_browser_gate_tasks", self.labels("docs/Development.md"))
@@ -108,6 +112,72 @@ class FastGateMappingTests(GateTestCase):
 
     def test_apps_are_derived_from_the_tree(self):
         self.assertLessEqual({"expenses", "core", "projects"}, set(fast_gate.django_apps().values()))
+
+
+@tag("source", "tree")
+class FastGateTaskSelectionTests(GateTestCase):
+    def test_every_quick_gate_declares_paths_that_name_files_of_this_tree(self):
+        tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, check=True, capture_output=True, text=True)
+        files = tracked.stdout.splitlines()
+        for task, patterns in fast_gate.TASKS.items():
+            with self.subTest(task=task):
+                self.assertTrue(patterns, f"{task} declares no paths, so fast would never run it")
+                for pattern in patterns:
+                    self.assertTrue(any(fnmatch(path, pattern) for path in files), f"{task}: {pattern} names no file")
+
+    def test_the_quick_gates_are_tasks_and_every_drift_gate_is_one(self):
+        tasks = mise_tasks()
+        self.assertLessEqual(set(fast_gate.TASKS), set(tasks))
+        self.assertLessEqual({name for name in tasks if name.startswith("drift:")}, set(fast_gate.TASKS))
+
+    def test_a_docs_change_runs_only_the_gate_that_derives_it(self):
+        self.assertEqual(fast_gate.selected_tasks(["docs/Example.md"]), ())
+        self.assertEqual(fast_gate.selected_tasks(["docs/Connections.md"]), ("lint:drift-connections-reference",))
+
+    def test_a_python_change_runs_the_python_gates_and_not_the_stylesheet_ones(self):
+        selected = fast_gate.selected_tasks(["hq/domains/docs_index/importer.py"])
+        self.assertLessEqual({"lint:ruff", "lint:mypy", "test:migrations", "lint:drift-api-document"}, set(selected))
+        self.assertNotIn("lint:css", selected)
+        self.assertNotIn("lint:drift-font", selected)
+
+    def test_a_change_to_tests_alone_leaves_out_the_structural_bar_which_never_reads_them(self):
+        self.assertNotIn("lint:structural", fast_gate.selected_tasks(["hq/platform/core/tests/test_example.py"]))
+        self.assertIn("lint:structural", fast_gate.selected_tasks(["hq/platform/core/example.py"]))
+        both = ["hq/platform/core/tests/test_example.py", "hq/platform/core/example.py"]
+        self.assertIn("lint:structural", fast_gate.selected_tasks(both))
+
+    def test_a_change_to_what_every_gate_reads_runs_them_all(self):
+        for changed in ("uv.lock", "mise-tasks/lint.toml"):
+            with self.subTest(changed=changed):
+                self.assertEqual(fast_gate.selected_tasks([changed]), tuple(fast_gate.TASKS))
+
+
+@tag("source")
+class FastGateTreeTests(GateTestCase):
+    def test_a_module_under_hq_or_hq_sdk_reaches_the_tree_tests(self):
+        for path in ("hq/domains/example/models.py", "hq_sdk/ui.py", "hq/platform/core/tests/task.py"):
+            with self.subTest(path=path):
+                self.assertTrue(fast_gate.reaches_tree(["docs/Example.md", path]))
+        for path in ("tools/gate/fast.py", "static/css/app.css", "templates/base.html", "docs/Example.md"):
+            with self.subTest(path=path):
+                self.assertFalse(fast_gate.reaches_tree([path]))
+
+    def test_the_tree_tests_run_once_in_a_pass_that_finds_them(self):
+        (selected, selected_cmd), (walk, walk_cmd) = fast_gate.test_commands(["hq.a.tests.test_b"], "2", tree=True)
+        self.assertEqual((selected, walk), ("tests", "tree tests"))
+        self.assertIn("--exclude-tag tree", " ".join(selected_cmd))
+        self.assertIn("--tag tree", " ".join(walk_cmd))
+        # A labeled run keeps the source tests a bare whole-suite run leaves out.
+        labels = walk_cmd[walk_cmd.index("tree") + 1 :]
+        self.assertEqual(excluded_tags(labels, {"tree"}, set()), set())
+
+    def test_without_a_module_change_the_selected_tests_run_whole(self):
+        ((label, cmd),) = fast_gate.test_commands(["hq.a.tests.test_b"], "2", tree=False)
+        self.assertEqual(label, "tests")
+        self.assertNotIn("tree", cmd)
+
+    def test_fast_installs_the_lint_tools_its_gates_and_tests_run(self):
+        self.assertIn("setup:lint-tools", mise_tasks()["fast"]["depends"])
 
 
 @tag("source")
@@ -141,7 +211,7 @@ class FastGateBaseTests(GateTestCase):
         self.assertEqual(self.resolve(None), "aaa")
 
 
-@tag("source")
+@tag("source", "tree")
 class FastGateNestedLayoutTests(GateTestCase):
     def test_app_config_label_can_differ_from_source_directory(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -175,29 +245,35 @@ class FastGateNestedLayoutTests(GateTestCase):
         self.assertFalse(fast_gate.is_test(Path("tests/fixtures/example_hq_plugin/views.py")))
         self.assertFalse(fast_gate.is_test(Path("tests/fuzz/__init__.py")))
 
-    def test_an_atheris_harness_is_not_a_test_label(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            fuzz = root / "tests" / "fuzz"
-            fuzz.mkdir(parents=True)
-            for package in (root / "tests", fuzz):
-                (package / "__init__.py").write_text("")
-            (fuzz / "harness.py").write_text("import atheris\n")
-            (fuzz / "properties.py").write_text("from hypothesis import given\n")
-            with patch.object(fast_gate, "ROOT", root):
-                self.assertFalse(fast_gate.is_test(Path("tests/fuzz/harness.py")))
-                self.assertTrue(fast_gate.is_test(Path("tests/fuzz/properties.py")))
 
-
-# What a failing `mise run -c` and a failing test run print, as they print it.
+# What a failing `mise run -c` prints at its end, as it prints it.
 FAILING = r"""
 import sys
 sys.stdout.write("..F")
 sys.stdout.flush()
-sys.stderr.write("\nFAIL: test_z (hq.x.tests.test_y.Case.test_z)\n")
-sys.stderr.write("ERROR: setUpClass (hq.x.tests.test_w.Other)\n")
-print("[checks] [checks:ruff] exited with status 1")
+print("\nFinished in 1.0s")
+print("ERROR 2 task(s) failed:")
+print("[checks] exited with status 1")
+print("[lint:ruff] exited with status 1")
 sys.exit(1)
+"""
+
+
+# A failure and an error, for the runner to report as it reports them.
+RUNNER_FAILURES = """
+import unittest
+
+
+def missing():
+    raise LookupError("no example.invalid record")
+
+
+class Case(unittest.TestCase):
+    def test_compares(self):
+        self.assertEqual("expected", "found")
+
+    def test_raises(self):
+        missing()
 """
 
 
@@ -208,7 +284,7 @@ VERDICT_IN = (
 )
 
 
-@tag("source")
+@tag("source", "tree")
 class GateVerdictTests(GateTestCase):
     def gate(self, *cmd: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -219,19 +295,18 @@ class GateVerdictTests(GateTestCase):
             check=False,
         )
 
-    def test_the_last_line_names_the_failed_task_and_tests_after_the_output_unchanged(self):
+    def test_the_last_line_names_the_tasks_mise_says_failed_after_the_output_unchanged(self):
         result = self.gate(sys.executable, "-c", FAILING)
         self.assertEqual(result.returncode, 1)
         *output, last = result.stdout.splitlines()
         self.assertIn("..F", output)
-        self.assertIn("FAIL: test_z (hq.x.tests.test_y.Case.test_z)", output)
+        self.assertIn("[lint:ruff] exited with status 1", output)
         self.assertTrue(last.startswith("[check] FAILED"), last)
-        for named in ("checks:ruff", "hq.x.tests.test_y.Case.test_z", "hq.x.tests.test_w.Other.setUpClass"):
-            self.assertIn(named, last)
+        self.assertIn("checks; lint:ruff", last)
 
     def test_the_verdict_is_kept_whole_in_the_file_it_names(self):
         tests = [f"hq.x.tests.test_y.Case.test_{n}" for n in range(gate_verdict.SHOWN + 2)]
-        failed = gate_verdict.Step("tests", ok=False, tasks=["checks:ruff"], tests=tests)
+        failed = gate_verdict.Step("tests", ok=False, tasks=["lint:ruff"], tests=[FailedTest(test) for test in tests])
         with patch("sys.stdout", new_callable=io.StringIO) as out:
             gate_verdict.close("test at main", 0.0, [failed])
         *_, named, last = out.getvalue().splitlines()
@@ -240,29 +315,95 @@ class GateVerdictTests(GateTestCase):
         line, *every = path.read_text().splitlines()
         self.assertEqual(line, last)
         self.assertIn("and 2 more", last)
-        self.assertEqual(every, ["checks:ruff", *tests])
+        self.assertEqual(every, ["lint:ruff", *tests])
+
+    def test_the_last_line_names_the_tests_the_runner_says_failed_and_the_file_says_why(self):
+        with tempfile.TemporaryDirectory() as folder:
+            Path(folder, "test_example.py").write_text(RUNNER_FAILURES)
+            result = self.gate(sys.executable, "-c", UNITTEST, "discover", "-s", folder, "-t", folder)
+        self.assertEqual(result.returncode, 1)
+        last = result.stdout.splitlines()[-1]
+        self.assertIn("tests: test_example.Case.test_compares, test_example.Case.test_raises", last)
+        kept = Path(gate_verdict.VERDICTS, "check.txt").read_text().splitlines()
+        self.assertIn("test_example.Case.test_compares: AssertionError: 'expected' != 'found'", kept)
+        self.assertIn("test_example.Case.test_raises: LookupError: no example.invalid record", kept)
+        traceback = kept[kept.index("test_example.Case.test_raises:") :]
+        self.assertTrue(any("missing()" in line for line in traceback), traceback)
 
     def test_a_pass_says_passed(self):
-        result = self.gate(sys.executable, "-c", "print('FAIL: test_z (a.B.test_z)')")
+        result = self.gate(sys.executable, "-c", "print('[lint:ruff] exited with status 1')")
         self.assertEqual(result.returncode, 0)
         self.assertTrue(result.stdout.splitlines()[-1].startswith("[check] passed in"))
 
+    def test_a_nested_mise_run_keeps_each_passed_tasks_time(self):
+        """Inside a task mise turns its timings off; the verdict turns them back on and keeps them.
+
+        Colored, as mise writes on a CI runner even into a pipe."""
+        (ROOT / "var").mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=ROOT / "var") as config:
+            Path(config, "mise.toml").write_text(
+                '[tasks."gate:one"]\nrun = "true"\n[tasks."gate:two"]\nrun = "exit 3"\n'
+            )
+            mise = [shutil.which("mise") or "mise", "-C", config, "run", "-c", "gate:*"]
+            env = {**os.environ, "MISE_TRUSTED_CONFIG_PATHS": config, "MISE_TASK_TIMINGS": "0", "CLICOLOR_FORCE": "1"}
+            result = subprocess.run(
+                [sys.executable, "-c", VERDICT_IN, str(gate_verdict.VERDICTS), "check", *mise],
+                cwd=ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 1, result.stdout)
+        kept = Path(gate_verdict.VERDICTS, "check.txt").read_text().splitlines()
+        timed = kept[kept.index("Slowest first:") + 1 :]
+        self.assertEqual([line.split()[-1] for line in timed], ["gate:one"])
+        self.assertIn("gate:two", kept[: kept.index("Slowest first:")])
+
+    def test_each_time_is_read_in_its_unit_and_kept_slowest_first(self):
+        step = gate_verdict.Step("checks")
+        for line in ("[a] Finished in 9.3ms", "[b] Finished in 61.01s", "[c] Finished in 12µs", "[d] Finished in 1.5s"):
+            step.read(f"[checks] {line}")
+        self.assertEqual(
+            {task: round(seconds, 6) for task, seconds in step.took.items()},
+            {"a": 0.0093, "b": 61.01, "c": 0.000012, "d": 1.5},
+        )
+        ranked = [line.split()[-1] for line in gate_verdict.timings([step])[2:]]
+        self.assertEqual(ranked, ["b", "d", "a", "c"])
+
+    def test_steps_run_in_turn_and_a_failure_without_a_task_is_named_by_its_label(self):
+        result = self.gate(
+            "--step", "Python one", sys.executable, "-c", "pass",
+            "--step", "Python two", sys.executable, "-c", "raise SystemExit(1)",
+        )  # fmt: skip
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("[check] Python one", result.stdout.splitlines())
+        self.assertTrue(result.stdout.splitlines()[-1].endswith(": Python two"), result.stdout)
+        kept = Path(gate_verdict.VERDICTS, "check.txt").read_text()
+        self.assertIn("Python one", kept[kept.index("Slowest first:") :])
+
+    def test_a_step_without_its_command_is_refused(self):
+        result = self.gate("--step", "Python one")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("usage", result.stderr)
+
     def test_fast_names_each_failed_step_and_keeps_its_pass_line(self):
-        ruff = gate_verdict.Step("tasks", ok=False, tasks=["checks:ruff"])
-        tests = gate_verdict.Step("tests", ok=False, tests=["hq.x.tests.test_y.Case.test_z"])
+        ruff = gate_verdict.Step("tasks", ok=False, tasks=["lint:ruff"])
+        tests = gate_verdict.Step("tests", ok=False, tests=[FailedTest("hq.x.tests.test_y.Case.test_z")])
         integrity = gate_verdict.Step("patch integrity", ok=False)
         for steps, expected in (
-            ([ruff, tests, integrity], ": checks:ruff; tests: hq.x.tests.test_y.Case.test_z; patch integrity"),
+            ([ruff, tests, integrity], ": lint:ruff; tests: hq.x.tests.test_y.Case.test_z; patch integrity"),
             ([gate_verdict.Step("tests")], "passed in"),
         ):
             with (
                 self.subTest(expected=expected),
                 patch.object(fast_gate, "merge_base", return_value="0" * 40),
                 patch.object(fast_gate, "changed_files", return_value=([], [])),
+                patch.object(fast_gate, "selected_tasks", return_value=("lint:ruff",)),
                 patch.object(fast_gate, "step", side_effect=[*steps, *[gate_verdict.Step("more")] * 3]),
                 patch("sys.stdout", new_callable=io.StringIO) as out,
             ):
-                code = fast_gate.main([])
+                code = fast_gate.main(Usage({}))
             self.assertEqual(code, 0 if expected == "passed in" else 1)
             self.assertIn(expected, out.getvalue().splitlines()[-1])
 

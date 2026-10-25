@@ -20,6 +20,7 @@ from hq.platform.application import analytics as service
 from hq.platform.application.resources import InvalidResourceInput, list_resource
 from hq.platform.application.security import AuthorizationError, Capability, Principal
 from hq.platform.application.tests.markup import hrefs, text
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 SITE_TAG = "0" * 32
 HOST = "example.test"
@@ -94,12 +95,6 @@ A_DAY_OF_VITALS = {
 }
 
 
-def _queries(call) -> int:
-    with CaptureQueriesContext(connection) as captured:
-        call()
-    return len(captured.captured_queries)
-
-
 class IngestTests(TestCase):
     """A report is stored in one statement per table, however many rows it has."""
 
@@ -110,19 +105,23 @@ class IngestTests(TestCase):
 
     def test_its_statements_do_not_grow_with_the_rows(self):
         tables = {AnalyticsSite, AnalyticsCoverage, RumDaily, VitalsDaily}
-        counts = {}
-        for size in (50, 300):
-            rows = [_row(value=f"/page-{index}/") for index in range(size)]
-            vitals = [{"date": _day(0), **A_DAY_OF_VITALS}]
-            self.ingest(rows, vitals)
-            _result, restated = self.ingest(rows, vitals)
-            counts[size] = len(restated)
+        vitals = [{"date": _day(0), **A_DAY_OF_VITALS}]
+
+        def report(size):
+            return [_row(value=f"/page-{index}/") for index in range(size)]
+
+        def arrange(size):
+            RumDaily.objects.all().delete()
+            self.ingest(report(size), vitals)
+
+        def restate(size):
+            _result, restated = self.ingest(report(size), vitals)
             written = [sql for sql in restated if sql.startswith(("INSERT", "UPDATE"))]
             self.assertLessEqual(len(written), len(tables), written)
-            self.assertEqual(RumDaily.objects.count(), size)
-            RumDaily.objects.all().delete()
 
-        self.assertEqual(counts[50], counts[300])
+        assert_cost_does_not_grow(
+            self, sizes=(50, 300), arrange=arrange, draw=restate, rows=lambda _drawn: RumDaily.objects.count()
+        )
 
     def test_a_restated_grain_keeps_its_identity_and_takes_what_was_last_said(self):
         """A replayed sweep restates a day, a later one corrects it, and a grain
@@ -257,9 +256,11 @@ class CoveragePlanningTests(TestCase):
     def test_a_new_site_is_offered_one_bounded_quarter_in_queries_that_do_not_grow(self):
         identities = [{"connection_ref": "example-api", "site_tag": f"site-{index}"} for index in range(30)]
 
-        self.assertEqual(
-            _queries(lambda: service.analytics_plan(identities[:1])),
-            _queries(lambda: service.analytics_plan(identities)),
+        assert_cost_does_not_grow(
+            self,
+            sizes=(1, len(identities)),
+            draw=lambda count: service.analytics_plan(identities[:count]),
+            rows=lambda plan: len(plan["windows"]),
         )
         windows = service.analytics_plan(identities)["windows"]
 
@@ -588,9 +589,11 @@ class ContentSectionTrafficTests(TestCase):
         # about the queryset the table engine already paid for.
         items = list(ContentItem.objects.all())
 
-        self.assertEqual(
-            _queries(lambda: service.attach_traffic(items[:1])),
-            _queries(lambda: service.attach_traffic(items)),
+        assert_cost_does_not_grow(
+            self,
+            sizes=(1, len(items)),
+            draw=lambda count: service.attach_traffic(items[:count]),
+            rows=lambda attached: sum(hasattr(item, "pageviews") for item in attached),
         )
 
     def test_nothing_measured_leaves_the_section_readable(self):

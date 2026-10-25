@@ -5,9 +5,7 @@ from unittest import mock
 from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
-from django.db import connection
 from django.test import TestCase
-from django.test.utils import CaptureQueriesContext
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
@@ -18,6 +16,7 @@ from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.markup import elements, links, select, text, texts, with_class, within
 from hq.platform.application.ui import MISSING
 from hq.platform.core.models import AuditLog
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 User = get_user_model()
 
@@ -164,7 +163,7 @@ class CommandViewTests(TestCase):
         response = self.client.get("/commands/certificate.renew/")
 
         (label,) = select(response, "for", "id___target")
-        self.assertEqual(label.words, "Certificate")
+        self.assertEqual(label.words.removesuffix(" *"), "Certificate")
         self.assertIn("The certificate to renew.", text(response))
         self.assertIn("example-certificate", options(response))
         self.assertNotIn("example-zone", options(response))
@@ -181,20 +180,19 @@ class CommandViewTests(TestCase):
             frozenset({Capability.READ, Capability.REQUEST_CERTIFICATE_RENEWAL}),
         )
 
-        def options_and_cost():
-            with CaptureQueriesContext(connection) as queries:
-                options = capability_target_options(capability_registry()["certificate.renew"], principal=principal)
-            return [option.value for option in options or ()], len(queries)
+        def arrange(count):
+            for index in range(ManagedResource.objects.count(), count):
+                ManagedResource.objects.create(key=f"example-certificate-{index}", kind="tls.certificate", spec={})
 
-        ManagedResource.objects.create(key="example-certificate", kind="tls.certificate", spec={})
-        one, one_cost = options_and_cost()
-        for index in range(4):
-            ManagedResource.objects.create(key=f"example-certificate-{index}", kind="tls.certificate", spec={})
-        many, many_cost = options_and_cost()
-
-        self.assertEqual(one, ["example-certificate"])
-        self.assertEqual(len(many), 5)
-        self.assertEqual(many_cost, one_cost)
+        assert_cost_does_not_grow(
+            self,
+            sizes=(1, 5),
+            arrange=arrange,
+            draw=lambda _count: capability_target_options(
+                capability_registry()["certificate.renew"], principal=principal
+            ),
+            rows=lambda options: len(options or ()),
+        )
 
     def test_discovery_context_filters_and_explains_infrastructure_targets(self):
         ManagedResource.objects.create(
@@ -290,6 +288,20 @@ class CommandViewTests(TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertContains(response, "already used for a different request", status_code=409)
         self.assertFalse(Project.objects.filter(slug="changed-request").exists())
+
+    def test_a_refused_command_keeps_nothing_under_its_key(self):
+        """The same key runs once what refused it has gone."""
+
+        taken = Project.objects.create(name="Taken", slug="taken-slug")
+        payload = self._create_payload(name="Second", slug="taken-slug")
+
+        refused = self.client.post("/commands/project.create/", payload)
+        taken.delete()
+        ran = self.client.post("/commands/project.create/", payload)
+
+        self.assertNotEqual(refused.status_code, 302)
+        self.assertEqual(ran.status_code, 302)
+        self.assertTrue(Project.objects.filter(name="Second").exists())
 
     def test_unknown_and_repeated_fields_fail_before_execution(self):
         payload = self._create_payload(slug="strict-browser")

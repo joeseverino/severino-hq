@@ -93,6 +93,8 @@ PUBLIC_RECORDS = (
     ),
 )
 RENEWS_IN = timedelta(days=200)
+# The zone's declaration, keyed by its name the way a key is written.
+ZONE_KEY = ZONE.replace(".", "-")
 
 
 def declare_rewrites():
@@ -107,11 +109,9 @@ def _rewrite(hostname):
 
 
 def declare_zone():
-    ManagedResource.objects.create(
-        key="example-zone", kind="cloudflare.zone", spec={"zone": ZONE, "connection_ref": DNS}
-    )
+    ManagedResource.objects.create(key=ZONE_KEY, kind="cloudflare.zone", spec={"zone": ZONE, "connection_ref": DNS})
     for key, *fields in PUBLIC_RECORDS:
-        ManagedResource.objects.create(key=f"example-{key}", kind="cloudflare.dns_record", spec=_record(*fields))
+        ManagedResource.objects.create(key=f"{ZONE_KEY}-{key}", kind="cloudflare.dns_record", spec=_record(*fields))
 
 
 def _record(name, kind, content, priority, proxied):
@@ -139,14 +139,14 @@ def zone():
             "zone": ZONE,
             "connection_ref": DNS,
             "posture": {"ssl": "strict", "min_tls_version": "1.2", "always_use_https": "on"},
-            "registration": {"registrar": "Example Registrar", "expires_at": expires, "auto_renew": True},
+            "registration": {"registrar": "Cloudflare, Inc.", "expires_at": expires, "auto_renew": True},
         },
     )
     store(
         "registry.domain",
         {
             "domain": ZONE,
-            "registrar": "Example Registrar",
+            "registrar": "Cloudflare, Inc.",
             "registered_at": "2019-04-02T00:00:00Z",
             "expires_at": expires,
             "status": ["client transfer prohibited"],
@@ -268,9 +268,9 @@ def tailnet():
             self=True,
             tags=["tag:server"],
             reach=reach,
-            # Its LAN offered as a subnet route that nobody has approved yet.
+            # Its LAN offered as a subnet route, and approved.
             advertised_routes=[LAN_SUBNET],
-            enabled_routes=[],
+            enabled_routes=[LAN_SUBNET],
             endpoints=[f"{LAN}:41641", f"{PUBLIC}:41641", "[2001:db8:4f1a:2e00:5054:ff:fe12:3456]:41641"],
         ),
         device(

@@ -27,7 +27,7 @@ from .approvals import AGENT_SURFACES
 from .conditions import stamped
 from .infrastructure import controller_contract, resolved_spec, serialize_resource
 from .plugin_admission import admitted_sources
-from .resource_operations import serialize_operation
+from .resource_operations import enqueue, serialize_operation
 lazy from .dependency_updates import plan as dependency_updates
 lazy from .expiry import certificate_expiry, renewal_opens_at, renewal_window
 lazy from .findings import auto_remediable
@@ -220,7 +220,7 @@ def _finding_repairs(controller_id: str, now) -> list[str]:
     changed and nothing looked broken.
     """
 
-    if not getattr(settings, "SEVERINO_FINDINGS_AUTO_REMEDY", False):
+    if not settings.SEVERINO_FINDINGS_AUTO_REMEDY:
         return []
 
     queued: list[str] = []
@@ -231,24 +231,17 @@ def _finding_repairs(controller_id: str, now) -> list[str]:
             continue
         # Keyed on the evidence, not the attempt.
         idempotency_key = (f"finding:{repair.rule}:{resource.pk}:g{resource.generation}:{now.date().isoformat()}")[:200]
-        if OperationRequest.objects.filter(idempotency_key=idempotency_key).exists():
-            continue
-        if OperationRequest.objects.filter(
-            resource=resource,
-            action=OperationRequest.Action.RECONCILE,
-            state__in=(OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED),
-        ).exists():
-            continue
-        OperationRequest.objects.create(
-            resource=resource,
-            action=OperationRequest.Action.RECONCILE,
+        _, created = enqueue(
+            resource,
+            OperationRequest.Action.RECONCILE,
+            idempotency_key=idempotency_key,
             requested_actor=controller_id,
             requested_interface="controller",
             reason=repair.reason,
-            idempotency_key=idempotency_key,
             input={"generation": resource.generation},
         )
-        queued.append(resource.key)
+        if created:
+            queued.append(resource.key)
     return queued
 
 
@@ -282,24 +275,17 @@ def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
         idempotency_key = (
             f"controller:{action}:{resource.pk}:g{resource.generation}:{identity}:{now.date().isoformat()}"
         )[:200]
-        if OperationRequest.objects.filter(idempotency_key=idempotency_key).exists():
-            continue
-        if OperationRequest.objects.filter(
-            resource=resource,
-            action=action,
-            state__in=(OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED),
-        ).exists():
-            continue
-        operation = OperationRequest.objects.create(
-            resource=resource,
-            action=action,
+        operation, created = enqueue(
+            resource,
+            action,
+            idempotency_key=idempotency_key,
             requested_actor=controller_id,
             requested_interface="controller",
             reason=reason,
-            idempotency_key=idempotency_key,
             input={"generation": resource.generation},
         )
-        scheduled.append(str(operation.id))
+        if created:
+            scheduled.append(str(operation.id))
     # The second source, after the contract-driven pass so anything already
     # queued is deduped by the guards above rather than queued twice.
     repaired = _finding_repairs(controller_id, now)

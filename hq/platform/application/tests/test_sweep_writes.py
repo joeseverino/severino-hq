@@ -17,6 +17,7 @@ from django.test.utils import CaptureQueriesContext
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.platform.core import revisions
 from hq.platform.core.models import AuditLog
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from hq.platform.search_index.models import SearchDocument
 
 from ..derived_inputs import ESTATE_READS
@@ -79,12 +80,18 @@ class NoChangeSweepTests(TestCase):
         self.assertEqual(set(moved) - estate, set())
 
     def test_its_statements_do_not_grow_with_the_declarations(self):
-        few = sum(_measured(self.declare(5))[1].values())
-        ManagedResource.objects.all().delete()
-        many = sum(_measured(self.declare(40))[1].values())
+        def arrange(count):
+            ManagedResource.objects.all().delete()
+            self.declare(count)
 
-        self.assertEqual(few, many)
-        self.assertLessEqual(many, 25)
+        assert_cost_does_not_grow(
+            self,
+            sizes=(5, 40),
+            arrange=arrange,
+            draw=lambda count: _sweep(_records(count)),
+            rows=lambda result: result["confirmed"],
+        )
+        self.assertLessEqual(sum(_measured(_records(40))[1].values()), 25)
 
     def test_the_moment_still_advances(self):
         records = self.declare(1)

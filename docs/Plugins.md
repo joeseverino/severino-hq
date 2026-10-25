@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=4,
+    api_version=5,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -90,8 +90,8 @@ export's parameters, fields, enum members and public methods, without
 annotations so it is identical across the interpreter matrix. A test fails when
 the exports drift from the file, because an extension's binding to a renamed
 field or a new required parameter is a change this repository cannot otherwise
-see. Regenerate it with `mise run regen`, read the diff as the review, and
-decide there whether `PLUGIN_API_VERSION` moves; `mise run drift` fails on
+see. Regenerate it with `mise run fix`, read the diff as the review, and
+decide there whether `PLUGIN_API_VERSION` moves; `mise run lint` fails on
 drift.
 
 What the annotations promise is held from an extension's side by
@@ -118,7 +118,7 @@ jobs:
     name: Admit
     if: github.event_name != 'pull_request'
     needs: checks
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     environment: admission
     permissions:
       contents: read
@@ -226,7 +226,7 @@ conflicts and tests that assume no sibling exists fail before publication.
 
 ![How the public host and its private extensions become one application: extensions import only hq_sdk and release signed wheels; Compose assembles them with the scanned host image and a runtime-supplied extension list](diagrams/host-and-extensions.png)
 
-<sup>Diagram source: [`diagrams/host-and-extensions.mmd`](diagrams/host-and-extensions.mmd).</sup>
+<sup>Source: [`docs/diagrams/host-and-extensions.mmd`](diagrams/host-and-extensions.mmd), pre-rendered with [`diagram`](https://github.com/joeseverino/tools/tree/main/lib/diagram).</sup>
 
 Production runs one image carrying every admitted plugin. Plugins build no
 images: each admits itself and publishes its signed bundle, and the host
@@ -282,7 +282,7 @@ An extension leaves production only by being named. `hq-host deploy` reads the
 lock in the running image and in the one being deployed, both covered by the
 signature over their digests, and refuses an image that drops an extension the
 running release carries unless the image's composition lists its id under
-`retired` (shipped in the image as `/opt/severino/plugin-retired.json`).  To remove one, move
+`retired` (shipped in the image as `/opt/severino/plugin-retired.json`). To remove one, move
 its id from `extensions` to `retired`, run Compose and deploy; once production
 runs without it, the `retired` entry may go.
 
@@ -479,6 +479,13 @@ in scope, or a host tag, filter, class or `data-` hook not listed. The record is
 `templates` section of `hq_sdk/contract.json`, derived from the host's own
 templates by `manage.py sdk_contract`, which writes these tables too.
 
+Every view model `hq_sdk.ui` hands an extension says its values in words, and
+refuses one that is not with a `ValueError` where it is built: a date-time
+stamp, a dumped record or list, a bare `True` or `False`, markup, a flag or
+`None` where text belongs, or a field's snake_case name as a label. A moment
+goes in its typed field (`ListRow.at`, `Insight.since`) or through
+`hq_sdk.ui.when`.
+
 A page extends a frame and fills its blocks. It never extends `base.html` or
 draws its own head: the view declares the page (`hq_sdk.pages`), and a head
 action that opens a dialog declares that as well,
@@ -488,9 +495,9 @@ list is the host's, and an override of it is refused rather than silently
 ignored the day the frame stops rendering it.
 
 A data table is declared through the table tags, so its shape is in the HTML on
-first paint. `{% table_region "Label" mid=1 narrow=3 %}…{% endtable_region %}`
-wraps it in its labeled scroll region, saying how many columns, by rank,
-leave in a box under 1000px and under 640px; each column heading is
+first paint. `{% table_region "Label" %}…{% endtable_region %}` wraps it in
+its labeled region, which derives from what each column holds the width its
+columns leave at, by rank ([Design](Design.md)); each column heading is
 `{% table_heading "Name" "identifier" %}`, with its kind (`prose`,
 `identifier`, `numeric`, `status` or `control`, following from `num-col`,
 `date-col` or `actions-col` when left out), `drop=` the order a narrow table
@@ -501,10 +508,17 @@ the page. A row that holds more than it shows ends its naming cell with
 carry `row-gutter`; the stylesheet shows the toggle only where the row holds
 something back. A `TableListMixin` list declares the same through
 `TableColumn(kind=)`, its ranks derived from the columns unless one says
-`drop=`, its counts as `table_drop_mid` and `table_drop_narrow`, and its region's
-`room=` as `table_room`.
+`drop=`, and its region's `room=` as `table_room`.
 
-<!-- sdk_contract: shared UI contract, written by `mise run regen` from hq_sdk/template_contract.py -->
+A form renders as `{{ form }}`, and one field as `{{ field.as_field_group }}`:
+HQ's form renderer draws every field in its own markup, with the help text and
+errors the control's `aria-describedby` names, and a checkbox inside its label.
+The page draws `form.non_field_errors` where it says them. A form field may
+set `wide = True` to take the whole row, `change_effect` to the sentence
+saying what changing it causes, or `confirms = True` to close the form as the
+callout a submission is confirmed in.
+
+<!-- sdk_contract: shared UI contract, written by `mise run fix` from hq_sdk/template_contract.py -->
 
 | Frame | Blocks a page fills | What it is |
 | --- | --- | --- |
@@ -532,7 +546,7 @@ something back. A `TableListMixin` list declares the same through
 | `partials/_timeline.html` | nothing | `plain`, `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
 | `partials/_week_plan.html` | `plan` | nothing | Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`. |
 
-Host tags: `{% empty_value %}`, `{% entity %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_toggle %}`, `{% table_heading %}`, `{% table_region %}`. Host filters: `|ago`, `|counted:arg`, `|money[:arg]`, `|or_empty`, `|sortable`, `|span`, `|web_url`, `|when[:arg]`. Django's own tags and filters, and `{% load %}` of `humanize`, `static` or the extension's own libraries.
+Host tags: `{% empty_value %}`, `{% entity %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_toggle %}`, `{% table_heading %}`, `{% table_region %}`. Host filters: `|ago`, `|breakable[:arg]`, `|counted:arg`, `|day`, `|money[:arg]`, `|or_empty`, `|readout`, `|sortable`, `|span`, `|web_url`, `|when[:arg]`. Django's own tags and filters, and `{% load %}` of `humanize`, `static` or the extension's own libraries.
 
 Classes: `actions-col`, `allocation`, `allocation-legend`, `btn`, `card`, `card-columns`, `cell-data`, `chart-axis`, `chart-card`, `chart-data`, `chart-legend`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `domain-head`, `domain-head-copy`, `domain-stack`, `errors`, `eyebrow`, `field`, `field-row`, `figure-hero`, `figure-hero-note`, `figure-stats`, `finding`, `finding-evidence`, `form`, `form-actions`, `ghost`, `help`, `inline`, `key-col`, `kv`, `list-rows`, `msg`, `msg-error`, `msg-warning`, `muted`, `narrow-more`, `notice`, `notice-attention`, `num-col`, `optional-col`, `page-lede`, `pie-chart`, `pie-row`, `pill`, `pill-attention`, `pill-good`, `pill-neutral`, `pill-serious`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `section-head`, `section-period`, `split`, `stacked`, `status-tabs`, `subtle-link`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `worth`, `worth-attention`, `worth-good`, `worth-neutral`.
 
@@ -556,7 +570,10 @@ deployment reads `hq_sdk.site.host()`, never a setting.
 
 An amount is written by `{{ amount|money }}` in a template and
 `hq_sdk.money.money` in Python: "$1,234.50", a true minus sign before the
-dollar, `money:"whole"` or `cents=False` for a figure that is scanned. An
+dollar, `money:"whole"` or `cents=False` for a figure that is scanned, and
+`plus=True` for a change signed either way. A debt is a negative value: no
+extension writes a sign of its own, since the host holds the sign to its
+figure so a line never ends between them. An
 overview says what it is built from with `hq_sdk.pages.built_from(plugin.id)`,
 a link to the project that names the extension's repository. An extension's
 suite checks its templates for a `{# #}` comment left open with
@@ -576,6 +593,24 @@ page, `navigation=PageNavigation((PageSection("overview", "Overview"), ...))`,
 which `page.html` draws, and put the stable `id` on each section; HQ owns overflow, sticky positioning,
 scroll-aware current state and fragment history. Labels may change; section
 IDs are durable links.
+
+### What a template prints
+
+A `{{ value }}` in an extension's templates prints text, markup, a number
+(not a flag), a UUID or a path. Anything else is refused: a flag, None, a date
+or a length of time, a mapping, a list, bytes, a plain enum member, a model
+instance or any other object. The view or projection says it in words first:
+`when` or `when_day` for a moment, the missing mark for nothing, a count, a
+name. The same holds for `{% firstof %}`, `{% cycle %}`, the translation tags
+and a `simple_tag`'s result. Text always prints as it is, even text that looks
+like a date.
+
+Under test and with DEBUG a refusal raises `Unprintable`, naming the template
+and line, so an extension's suite finds it. In production the page prints the
+missing mark and logs the value's type and place. The host holds only its own
+and its extensions' templates, so Django's widgets and other third-party
+templates print as they always have. The rule arrives with
+`PLUGIN_API_VERSION` 5.
 
 ## Outbound work
 

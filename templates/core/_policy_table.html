@@ -4,7 +4,7 @@ resource, so they are headed once rather than once per resource. A column per
 surface and per agent, so a rule is read and changed where it sits. On a
 narrow page the surfaces go from the far end, then the default.
 {% endcomment %}
-{% table_region "Rules" mid=2 narrow=column_heads|length|add:1 %}
+{% table_region "Rules" %}
   <table class="data-table policy-table">
     <thead>
       <tr>
@@ -15,7 +15,7 @@ narrow page the surfaces go from the far end, then the default.
     </thead>
     {% for group in groups %}
       <tbody>
-        <tr class="row-group"><th colspan="{{ column_heads|length|add:2 }}" scope="rowgroup">{{ group.label|breakable }}</th></tr>
+        {% row_group group.label %}
         {% for row in group.rows %}
           <tr>
             <th scope="row" class="row-gutter">{{ row.label|breakable }}{% if row.effect_label %} <span class="policy-effect effect-{{ row.effect }}">{{ row.effect_label|breakable }}</span>{% endif %}{% row_toggle %}</th>

@@ -17,6 +17,8 @@ from typing import Any
 from pydantic import TypeAdapter
 from pydantic.json_schema import JsonSchemaMode
 
+from hq.platform.application.ui import ended
+
 from .connection_shapes import SHAPES
 from .observations import _SPEC_MODULES, OBSERVATIONS
 from .provider_adapters import ADMITTED, CONNECTIONS
@@ -221,7 +223,7 @@ def _records() -> Iterable[dict[str, dict[str, Any]]]:
         name = record_name(kind)
         described = " ".join((spec.record.__doc__ or "").split())
         found = components(name, spec.record, owner=name.removesuffix("Record"))
-        found[name]["description"] = described or f"One {kind} record: {spec.label}."
+        found[name]["description"] = described or ended(f"One {kind} record: {spec.label}")
         yield found
 
 

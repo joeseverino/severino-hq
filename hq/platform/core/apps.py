@@ -13,10 +13,13 @@ class CoreConfig(AppConfig):
         from django.db.models.signals import post_migrate
 
         from . import checks, signals  # noqa: F401 - imported to register checks and receivers
-        from .outbound import install
+        from .outbound import install as hold_requests
+        from .print_gate import install as gate_prints
 
         # From here on a request cannot wait on anything outside the process.
-        install()
+        hold_requests()
+        # And a page prints only text and numbers.
+        gate_prints()
         from .revisions import after_migrate
 
         # Sent after the whole migrate, so every app's tables exist.

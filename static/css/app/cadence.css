@@ -7,10 +7,6 @@
    One chronological primitive for every domain. A two-column horizon uses the
    desktop canvas without turning eight dates into a full page of vertical rail;
    source order remains chronological and collapses to one column on phones. */
-.timeline-head { align-items: flex-start; }
-.timeline-head > div { min-width: 0; }
-.timeline-head .count { margin-left: auto; }
-.timeline-description { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
 .timeline-list {
   list-style: none;
   margin: var(--space-2) 0 0;
@@ -53,7 +49,8 @@
 .notice-body { margin: 0 0 var(--space-10); color: var(--muted); line-height: 1.6; }
 .notice-page .page-actions { justify-content: center; display: flex; }
 
-/* In a narrow box (its region's width, not the screen's) the cadence matrix drops its oldest periods rather than scrolling. A
+/* In a narrow box (tables.js) the cadence matrix drops its oldest
+   periods rather than scrolling. A
    sideways scrollbar under a five-column grid of dots is both ugly and
    useless: the columns only mean anything lined up against each other, and
    half of them parked off-screen are not lined up against anything. The
@@ -62,7 +59,7 @@
    on the page this panel links to.
    Counted from the end, so it is "the last three" whatever the window
    length happens to be, rather than a fixed set of column numbers. */
-@container table-region (width < 640px) {
+@container style(--box: narrow) {
   .cadence-matrix th:nth-child(n+2):nth-last-child(n+5),
   .cadence-matrix td:nth-child(n+2):nth-last-child(n+5) { display: none; }
   /* The "last trained" line is what pushes the label column past a narrow box.
@@ -103,8 +100,9 @@
    outside both the table's scroll box and main's clip, and scroll the whole
    page sideways. */
 .visually-hidden { position: absolute; inset-block-start: 0; inset-inline-start: 0; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-/* Text only a screen reader hears has no lines for a name to hold. */
-.visually-hidden :is(.token, .whole) { display: inline; }
+/* Text only a screen reader hears has no lines for a name to hold, and no
+   part of it draws a box past the one pixel that clips it. */
+.visually-hidden :is(.token, .whole, .part) { display: contents; }
 
 /* Cadence matrix: the same marks as a single strip, aligned in columns so the
    rows can be read against each other. Deliberately not stacked on a phone: a
@@ -350,10 +348,14 @@
      toner on paper. */
   h1, h2, h3, .section-head h2, .page-head h1 { color: var(--print-ink) !important; }
   .data-table th, .data-table td { border-bottom: 0.5pt solid var(--print-rule); padding: 4pt 6pt; }
-  .data-table thead th { background: none; border-bottom: 1pt solid var(--print-ink); }
+  /* The heading is pinned to a viewport that does not exist on paper. */
+  .data-table thead th {
+    background: none;
+    border-bottom: 1pt solid var(--print-ink);
+    position: static;
+    box-shadow: none;
+  }
   .table-scroll { overflow: visible; }
-  /* A heading pinned to a viewport that does not exist on paper. */
-  .data-table thead th { position: static; box-shadow: none; }
 
   /* Disclosures print closed, silently dropping their contents, and those
      are the numbers behind every drawing. */

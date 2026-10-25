@@ -20,7 +20,6 @@ from datetime import timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from django.contrib.auth import get_user_model
 from django.test import Client, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -44,7 +43,9 @@ from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import Capability, Principal, cli_principal
 from hq.platform.application.services import CONTAINER_KIND
+from hq.platform.core import seeds
 from hq.platform.core.models import AuditLog
+from hq.platform.core.tests.browser.gate import answered
 from hq.platform.core.tests.test_browser_fixtures import (
     _THROUGH_THE_PROXY,
     CALLER,
@@ -52,7 +53,6 @@ from hq.platform.core.tests.test_browser_fixtures import (
     _asked_through_the_proxy,
     _dashboard,
     _healthy,
-    render_pages,
 )
 
 # Hyphenated on purpose: a browser breaks a name at a hyphen, and a name that
@@ -373,17 +373,14 @@ def _asked_on_opening(user):
     if asked.json()["note"] != READ_WAITING or followed.json()["note"] != READ_WAITING:
         raise AssertionError(f"the dashboard's ask was answered {asked.json()} and then {followed.json()}")
     return {
-        reverse("control_plane:visit").strip("/"): asked.content.decode(),
-        urlsplit(status).path.strip("/"): followed.content.decode(),
+        reverse("control_plane:visit").strip("/"): answered(asked),
+        urlsplit(status).path.strip("/"): answered(followed),
     }
 
 
-def build_dense_estate():
-    """The dense estate, and the user its pages are rendered for."""
+def build_dense_estate(user):
+    """The dense estate, owned by ``user``."""
 
-    user = get_user_model().objects.create_user(
-        username="example-dense", password="not-a-real-password", first_name="Example"
-    )
     for index in range(8):
         Project.objects.create(
             name=f"An-example-project-with-a-deliberately-long-hyphenated-name-{index}",
@@ -467,7 +464,9 @@ def build_dense_estate():
     _unmanaged()
     _tailnet_policy()
     _held()
-    return user
+
+
+seeds.register("dense", seeds.Seed(build_dense_estate))
 
 
 # A record whose history and queued work fill the records list, its own page
@@ -759,8 +758,3 @@ DENSE_PAGES = {
         ExitStack,
     ),
 }
-
-
-def render_dense_pages(user):
-    # Asked after every page is drawn, so each is drawn before anything was asked.
-    return render_pages(user, DENSE_PAGES) | _asked_on_opening(user)

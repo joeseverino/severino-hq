@@ -1,0 +1,21 @@
+#!/bin/sh
+#MISE description="For a performance claim: each page's weight, server and Chromium time, memory and cold start; --base compares with a base"
+#MISE extends="django"
+#MISE depends=[{task="setup:browser", args=["chromium"]}]
+#MISE env={SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION="0", SEVERINO_HQ_PLUGINS="{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH="{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"}
+#MISE timeout="2h"
+#USAGE arg "<pages>" var=#true help="Pages as dev:look names them: estate/<path>, a path (/infrastructure/containers/), a route name (control_plane:containers), or estate/all or all for every page the navigation lists"
+#USAGE flag "--image" help="Measure the built image instead of dev:scratch: the one IMAGE names, else one image:build makes for the commit"
+#USAGE flag "--seed <name>" default="showcase" help="The data set every server measured is seeded with, as dev:scratch --seed names it (hq/platform/core/seeds.py)"
+#USAGE flag "--base <ref>" help="Also measure <ref>, in a temporary worktree removed however the run ends: each number beside how far it moved, and each page's server time asked of both servers in turn, marked where it moved past its spread"
+#USAGE flag "--host-alone" help="Measure the host with no extension composed, on both sides; a base that refuses the extension set for its plugin API is measured so on its own"
+#USAGE flag "--fresh" help="Measure the base's browser, memory and cold start even when an earlier run kept a complete report of its commit holding these pages, under the same plan"
+#USAGE flag "--requests <n>" default="30" help="Rounds of asking every page, of both servers in turn with a base, for each server's p50 and p95 and the difference's spread"
+
+# The harness is tools/perf/report.py; each run is kept as var/perf/<run>.json.
+set -eu
+
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+
+exec uv run --group browser python -m tools.perf.report

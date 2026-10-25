@@ -55,7 +55,7 @@ WRITE = re.compile(r'^\s*(INSERT(?: OR \w+)? INTO|UPDATE|DELETE FROM|REPLACE INT
 
 
 @dataclass
-class Tally:
+class RoleTimings:
     """What one role saw in one phase, gathered from all its threads."""
 
     times: list[float] = field(default_factory=list)
@@ -100,7 +100,7 @@ def _statements() -> Iterator[dict[str, Any]]:
         yield seen
 
 
-def _once(tally: Tally, work: Callable[[], None], what: str = "") -> None:
+def _once(tally: RoleTimings, work: Callable[[], None], what: str = "") -> None:
     """Run ``work`` once on this thread and add what it cost to ``tally``."""
 
     with _statements() as seen:
@@ -124,7 +124,7 @@ def _loop(go: threading.Event, stop: threading.Event, step: Callable[[], None]) 
         connection.close()
 
 
-def _reader(seeded: Seeded, urls: list[str], tally: Tally, headers: dict[str, str], seed_value: int):
+def _reader(seeded: Seeded, urls: list[str], tally: RoleTimings, headers: dict[str, str], seed_value: int):
     client = Client(headers=headers, raise_request_exception=False)
     client.force_login(seeded.user)
     order = random.Random(seed_value)
@@ -146,7 +146,7 @@ def _reader(seeded: Seeded, urls: list[str], tally: Tally, headers: dict[str, st
     return step
 
 
-def _controller(tally: Tally, every: float, stop: threading.Event):
+def _controller(tally: RoleTimings, every: float, stop: threading.Event):
     """A report every ``every`` seconds; none at all is back to back."""
 
     def step() -> None:
@@ -156,7 +156,7 @@ def _controller(tally: Tally, every: float, stop: threading.Event):
     return step
 
 
-def _importer(seeded: Seeded, tally: Tally, batch: int, stop: threading.Event):
+def _importer(seeded: Seeded, tally: RoleTimings, batch: int, stop: threading.Event):
     """An import job into a table pages read, run as the runner runs one.
 
     ``batch`` rows in one transaction, then the next transaction takes them out
@@ -236,7 +236,7 @@ class Command(BaseCommand):
             teardown_databases(databases, verbosity=0)
 
     def _phase(self, seeded: Seeded, urls: list[str], options: dict[str, Any], writers: bool) -> None:
-        reading, sweeping, importing = Tally(), Tally(), Tally()
+        reading, sweeping, importing = RoleTimings(), RoleTimings(), RoleTimings()
         go, stop = threading.Event(), threading.Event()
         with _machine_client() as headers:
             steps = [_reader(seeded, urls, reading, headers, index) for index in range(options["readers"])]
@@ -267,7 +267,7 @@ class Command(BaseCommand):
         for name, times in ran.most_common(5):
             self.stdout.write(f"    {times:5d}x {name}")
 
-    def _report(self, phase: str, reading: Tally, sweeping: Tally, importing: Tally) -> None:
+    def _report(self, phase: str, reading: RoleTimings, sweeping: RoleTimings, importing: RoleTimings) -> None:
         timeout = settings.DATABASES["default"]["OPTIONS"].get("timeout", 5) * 1000
         self.stdout.write(f"\n{phase}")
         for role, tally in (("page", reading), ("controller sweep", sweeping), ("import batch", importing)):

@@ -11,8 +11,11 @@ from unittest.mock import patch
 
 from django.test import tag
 
+from hq.platform.core.tests.task import Usage
 from tools.gate import at
-from tools.gate.tests.base import GateTestCase
+from tools.gate.tests.base import UNITTEST, GateTestCase
+
+CHECKOUT = Path(__file__).resolve().parents[3]
 
 # Stands in for manage.py test: records what it ran on, then exits with the status it is given.
 PROBE = """
@@ -22,13 +25,14 @@ seen = {
     "code": (here / "app.py").read_text(),
     "tests": sorted(str(p.relative_to(here)) for p in here.rglob("*.py") if p.name != "app.py"),
     "changed": (here / "tests" / "test_app.py").read_text(),
+    "support": (here / "hq" / "core" / "tests" / "browser" / "estate.py").read_text(),
 }
 pathlib.Path(sys.argv[1]).write_text(json.dumps(seen))
 sys.exit(int(sys.argv[2]))
 """
 
 
-@tag("source")
+@tag("source", "tree")
 class TestAtRefTests(GateTestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
@@ -40,10 +44,10 @@ class TestAtRefTests(GateTestCase):
         self.write("app.py", "VALUE = 1\n")
         self.write("tests/test_app.py", "old\n")
         self.write("tests/test_gone.py", "gone\n")
-        self.write("hq/core/estate_browser_tests.py", "old browser\n")
+        self.write("hq/core/tests/browser/estate.py", "old browser\n")
         self.old = self.commit("old")
         self.write("app.py", "VALUE = 2\n")
-        self.write("hq/core/estate_browser_tests.py", "new browser\n")
+        self.write("hq/core/tests/browser/estate.py", "new browser\n")
         self.commit("new")
         # Uncommitted work counts: a test being written, one edited, one removed.
         self.write("tests/test_app.py", "edited\n")
@@ -72,18 +76,17 @@ class TestAtRefTests(GateTestCase):
         self.git("commit", "--quiet", "--no-verify", "-m", message)
         return self.git("rev-parse", "HEAD")
 
-    def run_main(self, *argv: str) -> tuple[int, str]:
+    def run_main(self, *args: str, at_ref: str, keep: tuple[str, ...] = ()) -> tuple[int, str]:
         out = io.TextIOWrapper(io.BytesIO(), write_through=True)
         with patch("sys.stdout", out):
-            code = at.main(list(argv))
+            code = at.main(at.Typed(at=at_ref, keep=list(keep), args=list(args)))
         return code, out.buffer.getvalue().decode()
 
     def assert_nothing_left(self):
-        self.assertEqual(list(Path(self.root, "var", "test-at").glob("*")), [])
         self.assertEqual(len(self.git("worktree", "list").splitlines()), 1)
 
     def test_the_refs_code_runs_under_this_trees_tests_and_its_status_comes_back(self):
-        code, out = self.run_main("--at", self.old, str(self.seen), "3")
+        code, out = self.run_main(str(self.seen), "3", at_ref=self.old)
 
         self.assertEqual(code, 3)
         seen = json.loads(self.seen.read_text())
@@ -91,47 +94,147 @@ class TestAtRefTests(GateTestCase):
         self.assertEqual(seen["changed"], "edited\n")
         self.assertIn("tests/test_new.py", seen["tests"])
         self.assertNotIn("tests/test_gone.py", seen["tests"])
-        self.assertEqual(Path(self.root, "hq/core/estate_browser_tests.py").read_text(), "new browser\n")
+        self.assertEqual(Path(self.root, "hq/core/tests/browser/estate.py").read_text(), "new browser\n")
         verdict = out.strip().splitlines()[-1]
         self.assertIn(self.old[:12], verdict)
         self.assertIn("FAILED", verdict)
         self.assert_nothing_left()
 
+    def test_support_is_laid_over_and_named_and_test_modules_are_counted(self):
+        code, out = self.run_main(str(self.seen), "1", at_ref=self.old)
+
+        self.assertEqual(code, 1)
+        self.assertEqual(json.loads(self.seen.read_text())["support"], "new browser\n")
+        verdict = out.strip().splitlines()[-1]
+        self.assertIn("3 test modules and support hq/core/tests/browser/estate.py from this tree", verdict)
+        self.assertNotIn("kept at the ref", verdict)
+
+    def test_kept_support_runs_as_the_ref_has_it_and_the_line_says_so(self):
+        code, out = self.run_main(str(self.seen), "0", at_ref=self.old, keep=("hq/core/tests/browser/estate.py",))
+
+        self.assertEqual(code, 0)
+        seen = json.loads(self.seen.read_text())
+        self.assertEqual(seen["support"], "old browser\n")
+        self.assertEqual(seen["changed"], "edited\n")
+        verdict = out.strip().splitlines()[-1]
+        self.assertIn("kept at the ref: hq/core/tests/browser/estate.py", verdict)
+        self.assertNotIn("and support", verdict)
+        self.assert_nothing_left()
+
+    def test_a_module_a_label_names_is_a_test_module_whatever_its_name(self):
+        label = "hq.core.tests.browser.estate.EstateTests"
+        code, out = self.run_main(str(self.seen), "0", label, at_ref=self.old)
+
+        self.assertEqual(code, 0)
+        self.assertIn("4 test modules from this tree", out.strip().splitlines()[-1])
+        with patch("sys.stderr", io.StringIO()) as err:
+            code, _ = self.run_main(label, at_ref=self.old, keep=("hq/core/tests/browser/estate.py",))
+        self.assertEqual(code, 2)
+        self.assertIn("is a test module", err.getvalue())
+        self.assert_nothing_left()
+
+    def test_a_keep_that_names_no_changed_support_is_refused(self):
+        for keep in ("tests/test_app.py", "app.py", "hq/core/tests/browser/missing.py"):
+            with self.subTest(keep=keep), patch("sys.stderr", io.StringIO()) as err:
+                code, _ = self.run_main(str(self.seen), "0", at_ref=self.old, keep=(keep,))
+                self.assertEqual(code, 2)
+                self.assertIn(keep, err.getvalue())
+                self.assertFalse(self.seen.exists())
+        with patch("sys.stderr", io.StringIO()) as err:
+            self.assertEqual(self.run_main("label", at_ref=self.old, keep=("",))[0], 2)
+        self.assertIn("--keep", err.getvalue().splitlines()[-1])
+        self.assert_nothing_left()
+
     def test_a_pass_at_the_ref_names_it(self):
-        code, out = self.run_main(f"--at={self.old}", str(self.seen), "0")
+        code, out = self.run_main(str(self.seen), "0", at_ref=self.old)
 
         self.assertEqual(code, 0)
         self.assertIn(f"at {self.old} ", out.strip().splitlines()[-1])
         self.assert_nothing_left()
 
+    def run_unittest_at_old(self, test: str) -> tuple[int, str]:
+        """The label run by the real test loader, so its failures read as a real run's do."""
+        self.write("tests/test_app.py", test)
+        # A package, so `tests` is this one rather than the checkout's the runner is imported from.
+        self.write("tests/__init__.py", "")
+        os.environ["PYTHONPATH"] = str(CHECKOUT)
+        with patch.object(at, "UV_RUN", [sys.executable, "-c", UNITTEST]):
+            return self.run_main("tests.test_app", at_ref=self.old)
+
+    def test_a_label_that_does_not_import_at_the_ref_is_not_a_failing_test(self):
+        code, out = self.run_unittest_at_old(
+            "import unittest\nfrom app import RENAMED\n\n"
+            "class Case(unittest.TestCase):\n    def test_renamed(self):\n        self.assertTrue(RENAMED)\n"
+        )
+
+        self.assertEqual(code, 3)
+        verdict = out.strip().splitlines()[-1]
+        self.assertIn("DOES NOT IMPORT", verdict)
+        self.assertIn(self.old, verdict)
+        self.assertIn("test_app", verdict)
+        kept = Path(out.strip().splitlines()[-2].rsplit(" ", 1)[-1]).read_text()
+        self.assertIn("cannot import name 'RENAMED'", kept)
+        self.assert_nothing_left()
+
+    def test_a_test_that_imports_and_fails_at_the_ref_is_a_failure(self):
+        code, out = self.run_unittest_at_old(
+            "import unittest\nfrom app import VALUE\n\n"
+            "class Case(unittest.TestCase):\n    def test_value(self):\n        self.assertEqual(VALUE, 2)\n"
+        )
+
+        self.assertEqual(code, 1)
+        verdict = out.strip().splitlines()[-1]
+        self.assertIn("FAILED", verdict)
+        self.assertNotIn("DOES NOT IMPORT", verdict)
+
     def test_an_interrupted_run_leaves_no_worktree(self):
         with patch.object(at, "run", side_effect=KeyboardInterrupt):
-            code, _ = self.run_main("--at", self.old, "label")
+            code, _ = self.run_main("label", at_ref=self.old)
 
         self.assertEqual(code, 130)
         self.assert_nothing_left()
 
     def test_a_ref_that_names_no_commit_is_refused(self):
         with patch("sys.stderr", io.StringIO()) as err:
-            code, _ = self.run_main("--at", "no-such-ref", "label")
+            code, _ = self.run_main("label", at_ref="no-such-ref")
 
         self.assertEqual(code, 2)
         self.assertIn("no-such-ref", err.getvalue())
         self.assert_nothing_left()
 
-    def test_at_needs_a_ref(self):
+    def test_an_empty_ref_is_refused(self):
         with patch("sys.stderr", io.StringIO()):
-            self.assertEqual(self.run_main("--at")[0], 2)
+            self.assertEqual(self.run_main("label", at_ref="")[0], 2)
 
 
-@tag("source")
+@tag("source", "tree")
 class TestHereTests(GateTestCase):
     def test_without_at_what_follows_the_labels_reaches_manage_py_test_as_typed(self):
         typed = ["hq.example.tests", "--parallel", "1", "-k", "example"]
-        with patch.object(at.os, "execv", side_effect=SystemExit) as execv, self.assertRaises(SystemExit):
-            at.main(typed)
+        with (
+            patch.object(at, "run", return_value=at.Step("test", ok=False, code=1)) as run,
+            patch("sys.stdout", io.StringIO()) as out,
+        ):
+            code = at.main(at.Typed(args=typed))
 
-        program, argv = execv.call_args.args
-        self.assertEqual(program, sys.executable)
-        self.assertEqual(argv[1:3], ["manage.py", "test"])
+        self.assertEqual(code, 1)
+        argv = run.call_args.args[1]
+        self.assertEqual(argv[:3], [sys.executable, "manage.py", "test"])
         self.assertEqual(argv[-len(typed) :], typed)
+        self.assertTrue(out.getvalue().splitlines()[-1].startswith("[test] FAILED"))
+
+
+@tag("source")
+class TestTypedTests(GateTestCase):
+    def test_the_arguments_are_read_as_mise_exports_them(self):
+        # As mise exports `--at HEAD --keep 'x y' --keep z a.b -k "it's"`.
+        environ = {"usage_at": "HEAD", "usage_keep": "'x y' z", "usage_arguments": "a.b -k 'it'\\''s'"}
+
+        self.assertEqual(
+            at.Typed.from_usage(Usage.from_environment(environ)),
+            at.Typed(at="HEAD", keep=["x y", "z"], args=["a.b", "-k", "it's"]),
+        )
+
+    def test_without_at_there_is_no_ref(self):
+        self.assertIsNone(at.Typed.from_usage(Usage.from_environment({"usage_arguments": "a.b"})).at)
+        self.assertEqual(at.Typed.from_usage(Usage.from_environment({"usage_at": ""})).at, "")

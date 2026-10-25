@@ -31,7 +31,7 @@
 {% else %}
 <p class="muted">{{ submissions|length|counted:"message" }}{% if selected_status or q %} match{% endif %}.</p>
 
-{% table_region "Messages" mid=1 narrow=4 %}
+{% table_region "Messages" %}
 <table class="data-table">
   <thead>
     <tr>
@@ -51,7 +51,7 @@
         <td class="muted">{{ s.created_at|when }}</td>
         <td>
           <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name|breakable }}</strong></a>
-          <div class="muted">{{ s.email|breakable }}</div>
+          <div class="muted">{% cell_line s.email %}</div>
         </td>
         <td class="msg-preview">{% url 'contacts:detail' s.id as message_url %}{% cell_line s.message_preview message_url %}</td>
         <td><span class="pill pill-{{ s.status }}">{{ s.status|capfirst|breakable }}</span>{% if s.pending %} <span class="pill pill-attention">Waiting</span>{% endif %}</td>

@@ -1,6 +1,7 @@
 """Findings about the controller's own work: kinds it stopped sweeping, records it skipped or never saw, and changes it keeps applying without effect."""
 
 import re
+from datetime import date
 
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.providers import PROVIDERS
@@ -29,7 +30,7 @@ from .moments import ago, duration
 from .render_status_findings import RENDERER_UNITS
 from .topology_lenses import _STALE_AFTER
 from .topology_model import TopologyNode
-from .ui import counted
+from .ui import counted, ended
 lazy from .timestamps import moment
 
 # The background job that runs the controller on its machine (deploy/systemd).
@@ -49,6 +50,12 @@ def _the_others(count: int, noun: str) -> str:
     if count == 1:
         return f"The one other {noun} was"
     return f"The other {count} {plural(noun)} were"
+
+
+def _when(label: str, at: date | str | None) -> tuple[str, str]:
+    """A "last read" or "last seen" fact: how long ago, or never."""
+
+    return (label, "never" if at is None else ago(at))
 
 
 def _read_again(variant: str = "") -> FindingRemedy:
@@ -93,8 +100,8 @@ def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
                     "removed or renamed."
                 ),
                 evidence=(
-                    ("Last seen", node.observed_at),
-                    ("Others read", newest.isoformat()),
+                    _when("Last seen", node.observed_at),
+                    _when("Others read", newest),
                 ),
                 remedies=_skipped_remedies(node),
             )
@@ -155,7 +162,7 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
                 severity="serious",
                 explanation="Refresh them. If that fails, the connection that reads them needs fixing.",
                 evidence=(
-                    ("Last read", newest.isoformat()),
+                    _when("Last read", newest),
                     ("Read every", duration(sweep_interval())),
                 ),
                 remedies=(_read_again(),),
@@ -179,7 +186,7 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
                     "them. If that fails, the connection that reads them needs fixing."
                 ),
                 evidence=(
-                    ("Last read", "never"),
+                    _when("Last read", None),
                     ("In HQ", str(estate.declared_counts.get(kind_key, 0))),
                     ("Read every", duration(sweep_interval())),
                 ),
@@ -417,7 +424,7 @@ def _never_observed(estate: FindingEstate) -> tuple[Finding, ...]:
                 f"HQ found the other {lower_first(_many(node.kind_key))} but never this one. "
                 "What you see for it is only what was entered in HQ."
             ),
-            evidence=(("Last seen", "never"),),
+            evidence=(_when("Last seen", None),),
             remedies=reconcile_remedy(node),
         )
         for node in estate.nodes()
@@ -449,13 +456,13 @@ def _weakly_verified(estate: FindingEstate) -> tuple[Finding, ...]:
             title=(f"HQ could not confirm {counted(len(node.unconfirmed_fields), 'setting')} of {node_name(node)}"),
             severity="attention",
             explanation=(
-                f"HQ set these and the last reading did not include them: {_settings(node)}. "
+                f"HQ set these and the last reading did not include them: {ended(_settings(node))} "
                 "Apply HQ's settings to set them and read them back. If this stays after applying, "
                 "HQ cannot read them from the service."
             ),
             evidence=(
                 ("Could not check", _settings(node)),
-                ("Last read", node.observed_at),
+                _when("Last read", node.observed_at),
             ),
             remedies=reconcile_remedy(node),
         )
@@ -506,9 +513,9 @@ def _work_that_keeps_failing(estate: FindingEstate) -> tuple[Finding, ...]:
                     f"{counted(len(unfinished), 'thing it does keeps failing', 'things it does keep failing')}"
                 ),
                 severity="attention",
-                explanation=(
+                explanation=ended(
                     "It retries every few minutes and has not succeeded. The reason is "
-                    f"in the controller's log{f' on {machine}' if machine else ''}."
+                    f"in the controller's log{f' on {machine}' if machine else ''}"
                 ),
                 evidence=tuple(("Keeps failing", item) for item in unfinished),
                 steps=journal_step("Read the controller's log", machine, CONTROLLER_UNIT),

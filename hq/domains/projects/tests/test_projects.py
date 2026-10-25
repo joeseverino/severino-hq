@@ -32,9 +32,7 @@ class ProjectPageTests(TestCase):
     def test_documents_are_grouped_by_type_and_named_by_title(self):
         for record in (
             _document("rb-example-deploy", "Deploy the example tool"),
-            _document("task-example-open", "Write the example guide", "task", "open"),
-            _document("task-example-done", "Ship the example tool", "task", "done"),
-            _document("task-example-dropped", "Port the example tool", "task", "wontfix"),
+            _document("note-example-design", "Design the example tool", "architecture_note"),
         ):
             record.related_projects.add(self.project)
 
@@ -42,14 +40,12 @@ class ProjectPageTests(TestCase):
 
         headings = [" ".join(heading.text.split()) for heading in elements(response, "h2")]
         self.assertIn("Runbooks 1", headings)
-        self.assertIn("Open tasks 1", headings)
-        # Closed tasks wait behind their count.
-        self.assertIn("Done tasks 2", [" ".join(fold.text.split()) for fold in elements(response, "summary")])
+        self.assertIn("Architecture notes 1", headings)
         (link,) = select(response, "title", "rb-example-deploy")
         self.assertEqual(link.text.strip(), "Deploy the example tool")
         # The id is on hover, never the words of the link.
         self.assertNotContains(response, "rb-example-deploy ·")
-        self.assertNotContains(response, ">task-example-open")
+        self.assertNotContains(response, ">note-example-design")
 
     def test_a_project_note_links_the_project_and_its_own_note_is_left_out(self):
         for record in (

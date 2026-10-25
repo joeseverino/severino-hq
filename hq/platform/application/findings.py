@@ -90,6 +90,7 @@ from .topology_model import (
     Topology,
     TopologyNode,
 )
+from .ui import ended
 from .workflows import (
     claim_identity,
     claim_resolution_plan,
@@ -694,7 +695,7 @@ def auto_remediable(*, principal: Principal, limit: int = 10) -> tuple[Repair, .
             Repair(
                 resource_key=node.label,
                 rule=finding.rule,
-                reason=f"Automatic repair of a problem HQ found: {finding.rule}.",
+                reason=ended(f"Automatic repair of a problem HQ found: {finding.rule}"),
             )
         )
         if len(repairs) >= limit:

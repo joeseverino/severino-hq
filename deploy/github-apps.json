@@ -11,7 +11,7 @@
         "administration": "read",
         "checks": "write",
         "contents": "write",
-        "deployments": "read",
+        "deployments": "write",
         "issues": "write",
         "metadata": "read",
         "packages": "read",

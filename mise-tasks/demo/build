@@ -1,14 +1,17 @@
 #!/bin/sh
-#MISE description="Build the public demo into var/demo; another seed into var/demo-<seed>"
+#MISE description="Build the public demo's static site into var/demo, another seed into var/demo-<seed>; nothing when that site is newer than its sources"
+#MISE hide=true
 #MISE extends="django"
 #MISE timeout="30m"
+#MISE sources=["hq/**/*", "hq_sdk/**/*", "templates/**/*", "static/**/*", "demo/**/*", "manage.py", "uv.lock", "!**/__pycache__/**"]
+#MISE outputs=["var/demo{% if usage.seed != 'showcase' %}-{{ usage.seed }}{% endif %}/index.html"]
 #USAGE arg "[seed]" default="showcase" {
 #USAGE     choices "showcase" "standard" "empty"
 #USAGE }
 set -eu
 
-# shellcheck source=tools/lib/heavy-turn.sh
-. ./tools/lib/heavy-turn.sh
+# One process renders the pages through the test client, a narrow run that
+# goes ahead beside heavy work (tools/gate/turn.py).
 
 seed="${usage_seed:?}"
 out=var/demo

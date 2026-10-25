@@ -1,0 +1,9 @@
+#!/bin/sh
+#MISE description="To record a measurement made by hand: one line in var/perf/notes.jsonl, which the session log shows under Measured"
+#MISE hide=true
+#USAGE arg "<label>" help="What was measured"
+#USAGE arg "<value>" help="What it measured, a number or text"
+#USAGE arg "[unit]" help="Its unit"
+set -eu
+
+exec uv run python -m tools.perf.notes "${usage_label:?}" "${usage_value:?}" "${usage_unit:-}"

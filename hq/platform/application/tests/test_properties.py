@@ -3,14 +3,14 @@
 Each reads text HQ did not write: an image reference a container reports, a
 package URL an SBOM lists, a provenance source a build attests. Examples
 cover the shapes seen so far; these generate thousands of inputs each, so a
-shape nobody thought of fails here rather than in a sweep. The diagnosis of a
-failed run's log has its own, in tools/pipeline/tests.
+shape nobody thought of fails here rather than in a sweep.
 
 Hypothesis is a development tool (the tools dependency group), not part of the
 image, so inside the image these are skipped and the suite runs them on every
 interpreter in the CI matrix.
 """
 
+import random
 import string
 import tempfile
 from pathlib import Path
@@ -45,18 +45,41 @@ if HYPOTHESIS:
     TAG = st.text(string.ascii_letters + string.digits + "._-", min_size=1, max_size=20)
     FAST = settings(max_examples=300, deadline=None)
 
+    # A function rather than a test method: Hypothesis's fuzz_one_input calls
+    # the test with no arguments of its own, so a method's `self` is missing.
+    # The fuzzing harness (tests/fuzz/parsers.py) drives this same property.
+    @FAST
+    @given(st.text())
+    def every_parser_answers_any_text(text):
+        """Every parser takes any text and answers, or declines; none raises."""
+
+        image = ImageRef.parse(text)
+        if image is not None:
+            assert image.repository == image.repository.lower()
+            assert image.name
+        query = query_of(text)
+        if query is not None:
+            assert "package" in query
+        source = github_source(text)
+        assert source == "" or source.count("/") == 1
+
+
+@skipUnless(HYPOTHESIS, "hypothesis is a development tool")
+class AnyTextProperties(SimpleTestCase):
+    def test_every_parser_answers_any_text(self):
+        every_parser_answers_any_text()
+
+    def test_the_fuzzer_entry_point_takes_any_bytes(self):
+        fuzz_one_input = every_parser_answers_any_text.hypothesis.fuzz_one_input
+        seeds = random.Random(0)
+        for seed in (b"", bytes(range(256)), *(seeds.randbytes(64) for _ in range(20))):
+            with self.subTest(seed=seed[:16]):
+                fuzz_one_input(seed)
+
 
 @skipUnless(HYPOTHESIS, "hypothesis is a development tool")
 class ImageRefProperties(SimpleTestCase):
     if HYPOTHESIS:
-
-        @FAST
-        @given(st.text())
-        def test_any_text_parses_or_is_refused_never_raises(self, text):
-            parsed = ImageRef.parse(text)
-            if parsed is not None:
-                self.assertEqual(parsed.repository, parsed.repository.lower())
-                self.assertTrue(parsed.name)
 
         @FAST
         @given(SEGMENT, st.lists(SEGMENT, min_size=1, max_size=3), TAG)
@@ -73,13 +96,6 @@ class PackageUrlProperties(SimpleTestCase):
     if HYPOTHESIS:
 
         @FAST
-        @given(st.text())
-        def test_any_text_is_a_query_or_nothing_never_raises(self, text):
-            query = query_of(text)
-            if query is not None:
-                self.assertIn("package", query)
-
-        @FAST
         @given(SEGMENT, TAG, SEGMENT)
         def test_a_language_package_is_queried_without_its_qualifiers(self, name, version, arch):
             query = query_of(f"pkg:pypi/{name}@{version}?arch={arch}")
@@ -91,12 +107,6 @@ class PackageUrlProperties(SimpleTestCase):
 @skipUnless(HYPOTHESIS, "hypothesis is a development tool")
 class ProvenanceSourceProperties(SimpleTestCase):
     if HYPOTHESIS:
-
-        @FAST
-        @given(st.text())
-        def test_any_source_is_one_repository_or_none(self, text):
-            found = github_source(text)
-            self.assertTrue(found == "" or found.count("/") == 1)
 
         @FAST
         @given(

@@ -16,44 +16,11 @@ from typing import Any
 
 lazy from django.template.base import Lexer, TokenType
 
-# These are implementation packages in the public host repository. Plugins get
-# their supported equivalents from hq_sdk; importing one of these makes a host
-# refactor a coordinated multi-repository migration.
-#
-# A list written out by hand drifts: a new host app missing from it lets a
-# plugin import that app while the boundary check passes. A check that silently
-# stops checking is worse than no check, because the architecture test suite
-# reports it as green.
-#
-# So the set is *derived* from the host tree and *floored* by this list. Union,
-# never replacement: a new host app is caught the day it appears, and a host
-# tree that cannot be read (an SDK installed without its host, a future
-# packaging change) still enforces everything known at the time this shipped.
-# The boundary can get stricter on its own. It cannot get weaker on its own.
-_FLOOR = frozenset(
-    {
-        "analytics",
-        "application",
-        "assets",
-        "calendars",
-        "config",
-        "contacts",
-        "content",
-        "control_plane",
-        "core",
-        "docs_index",
-        "example_hq_plugin",
-        "expenses",
-        "hq",
-        "hq_api",
-        "hq_mcp",
-        "jobs",
-        "projects",
-        "receipts",
-        "reports",
-        "search_index",
-    }
-)
+# The host's implementation packages: every top-level package of the host tree,
+# which plugins reach through hq_sdk instead. The tree is read where the SDK sits
+# beside it; `hq` is the one name that holds where it does not, so an SDK
+# installed without its host still refuses the host's namespace.
+_FLOOR = frozenset({"hq"})
 
 # hq_sdk is the supported surface; it is the one host package a plugin may name.
 _SUPPORTED_FACADE = "hq_sdk"

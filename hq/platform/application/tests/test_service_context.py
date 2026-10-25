@@ -14,6 +14,7 @@ from django.urls import reverse
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
 from hq.platform.core.models import AuditLog
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..service_context import Cell, ServiceSection, sections_for
 from ..services import service_or_prospect
@@ -211,21 +212,24 @@ class TrafficSectionTests(TestCase):
         )
 
     def test_traffic_for_many_hosts_costs_no_more_than_for_one(self):
-        from django.db import connection
-        from django.test.utils import CaptureQueriesContext
-
         from ..analytics import traffic_for_hosts
 
-        hosts = {f"h{index}.example.com" for index in range(5)}
-        for host in hosts:
-            self._measure(host)
+        def hosts(count):
+            return {f"h{index}.example.com" for index in range(count)}
 
-        with CaptureQueriesContext(connection) as one:
-            self.assertEqual(len(traffic_for_hosts({"h0.example.com"}, days=7)), 1)
-        with CaptureQueriesContext(connection) as many:
-            self.assertEqual(len(traffic_for_hosts(hosts, days=7)), 5)
+        def arrange(count):
+            from hq.domains.analytics.models import AnalyticsSite
 
-        self.assertEqual(len(many), len(one))
+            for host in hosts(count) - set(AnalyticsSite.objects.values_list("host", flat=True)):
+                self._measure(host)
+
+        assert_cost_does_not_grow(
+            self,
+            sizes=(1, 5),
+            arrange=arrange,
+            draw=lambda count: traffic_for_hosts(hosts(count), days=7),
+            rows=len,
+        )
 
 
 class OneWindowTests(TestCase):
@@ -259,14 +263,39 @@ class OneWindowSourceTests(SimpleTestCase):
         ]
         self.assertEqual(offenders, [])
 
-    def test_the_template_does_not_restate_the_window(self):
-        import pathlib
 
-        template = (
-            pathlib.Path(__file__).resolve().parents[4] / "templates/control_plane/_topology_node_body.html"
-        ).read_text()
-        self.assertIn("{{ traffic_window_days|counted", template)
-        self.assertNotIn("Traffic · 7 days", template)
+class TopologyWindowTests(TestCase):
+    def test_a_node_names_the_window_its_traffic_was_counted_over(self):
+        from datetime import timedelta
+        from unittest import mock
+
+        from django.utils import timezone
+
+        from hq.domains.analytics.models import AnalyticsSite, RumDaily
+
+        from ..security import web_principal
+        from ..topology import derive_topology
+        from .markup import text
+
+        user = get_user_model().objects.create_superuser("operator", password="x" * 20)
+        self.client.force_login(user)
+        a_service("measured.example.com")
+        site = AnalyticsSite.objects.create(site_tag="tag-measured", host="measured.example.com")
+        RumDaily.objects.create(
+            site=site,
+            date=timezone.now().date() - timedelta(days=1),
+            dimension=RumDaily.Dimension.PATH,
+            value="/",
+            pageviews=412,
+            visits=300,
+            sample_interval=1,
+        )
+        (node,) = [node for node in derive_topology(principal=web_principal(user)).nodes if node.pageviews]
+
+        with mock.patch("hq.domains.control_plane.topology_views.HOST_TRAFFIC_DAYS", 30):
+            body = self.client.get(reverse("control_plane:topology_node"), {"node": node.id})
+
+        self.assertIn("Traffic · 30 days", text(body))
 
 
 class PartRowTests(TestCase):

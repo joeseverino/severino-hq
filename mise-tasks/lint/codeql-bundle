@@ -1,0 +1,16 @@
+#!/bin/sh
+#MISE description="The local CodeQL is the one the pinned action runs"
+#MISE hide=true
+
+# scan:codeql and CI must run the same queries: the bundle mise.toml pins is
+# the one the action's commit defaults to (its src/defaults.json).
+set -eu
+
+sha="$(sed -nE 's#^.*github/codeql-action/init@([0-9a-f]{40}) .*$#\1#p' .github/workflows/ci.yml)"
+[ -n "$sha" ] || { echo "No pinned codeql-action/init in ci.yml." >&2; exit 1; }
+want="$(curl -fsSL --retry 3 "https://raw.githubusercontent.com/github/codeql-action/${sha}/src/defaults.json" | jq -r .cliVersion)"
+have="$(yq -p toml -oy '.tools."github:github/codeql-action".version' mise.toml)"
+if [ "$want" != "$have" ]; then
+    echo "mise.toml pins CodeQL ${have}; the action at ${sha} runs ${want}." >&2
+    exit 1
+fi

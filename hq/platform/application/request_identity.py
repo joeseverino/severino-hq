@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 lazy from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -88,9 +89,24 @@ class Identity:
         )
 
 
-def identity_of(request, device: tailnet.Device | None) -> Identity:
+def signed_in(request) -> Any:
+    """The person this request's session signed in, or None.
+
+    None for a request signed out, and for one no session reached: a request
+    the MCP boundary admitted carries no ``user`` at all. Reading
+    ``is_authenticated`` here also resolves Django's lazy user in the thread
+    serving the request.
+    """
+
     user = getattr(request, "user", None)
-    backends = tuple(getattr(settings, "AUTHENTICATION_BACKENDS", ()))
+    if user is None or not user.is_authenticated:
+        return None
+    return user
+
+
+def identity_of(request, device: tailnet.Device | None) -> Identity:
+    user = signed_in(request)
+    backends = tuple(settings.AUTHENTICATION_BACKENDS)
     session = getattr(request, "session", None)
     expiry = None
     if session is not None:
@@ -129,5 +145,5 @@ def identity_of(request, device: tailnet.Device | None) -> Identity:
 def _provider_host() -> str:
     """The identity provider, named by where sign-in is actually sent."""
 
-    endpoint = str(getattr(settings, "OIDC_OP_AUTHORIZATION_ENDPOINT", "") or "")
+    endpoint = settings.OIDC_OP_AUTHORIZATION_ENDPOINT
     return urlsplit(endpoint).hostname or ""

@@ -5,7 +5,7 @@
 {% else %}
   {% if matches %}
     <p class="page-lede">Expenses without a receipt that match this vendor or amount:</p>
-    {% table_region "Matching expenses" narrow=2 %}
+    {% table_region "Matching expenses" %}
       <table class="data-table">
         <thead>
           <tr>
@@ -35,9 +35,7 @@
 {% endif %}
 
 <section class="card mt-2">
-  <div class="section-head">
-    <h2>Receipt details</h2>
-  </div>
+  {% section_head %}Receipt details{% endsection_head %}
   <dl class="kv">
     <dt>Vendor</dt><dd>{{ receipt.vendor|or_empty }}</dd>
     <dt>Date</dt><dd>{{ receipt.date|when }}</dd>
