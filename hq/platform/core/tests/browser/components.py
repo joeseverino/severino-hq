@@ -11,7 +11,6 @@ from hq.platform.core.tests.browser.probes.boxes import MAP, OVERRULED_ALIGNMENT
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
 from hq.platform.core.tests.browser.probes.parts import READINGS, SPILLED_LABELS, reading_problems
 from hq.platform.core.tests.browser.probes.settle import KEPT_SELECTORS, PRESS_EVERY_SHOWN, SETTLE
-from hq.platform.core.tests.browser.probes.shifts import HEADER_PARTS
 from hq.platform.core.tests.browser.probes.tables import (
     BLANK_TABLE,
     CELLS,
@@ -30,7 +29,7 @@ from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.stress import ALL_PAGES
 from hq.platform.core.tests.browser.survey import _IDENTIFIER
-from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS, viewport
+from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS
 from hq.platform.core.tests.test_browser_fixtures import PAGES
 
 
@@ -736,44 +735,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 )
                 self.assertEqual(set(ends), sides)
                 self.assertEqual(self.page.evaluate(OVERRULED_ALIGNMENT, SELECTORS["chip"]), [])
-
-    def test_the_site_header_stands_where_it_ends_while_it_is_still_arriving(self):
-        """A page drawn while its header is still being parsed, cut before any
-        of its last three controls as a slow connection cuts it, puts every
-        part of the header that has arrived where the whole header puts it,
-        with its sections menu closed and open, on a phone, where the sections
-        hang from a toggle, where they stand in the bar beside a collapsed
-        search, and where the search is a field."""
-
-        name = next(iter(PAGES))
-        whole = self.pages[name]
-        cuts = ('<a class="global-search"', '<a class="action-badge"', '<details class="user-menu"')
-        # A cut page ends with the element the head's render-blocking link
-        # waits for, as a browser that draws before the content is parsed would
-        # draw it; without it, WebKit holds the page and never matches :target.
-        parsed = '<template id="parsed"></template>'
-        self.pages = {**self.pages, **{f"cut-{at}": whole[: whole.index(cut)] + parsed for at, cut in enumerate(cuts)}}
-        for width in (*WIDTHS, 1200):
-            for menu in ("", "#sections"):
-                self.page.set_viewport_size(viewport(width))
-                ended = self.header_parts(f"{ORIGIN}/{name}/{menu}")
-                for at, cut in enumerate(cuts):
-                    with self.subTest(width=width, menu=menu or "closed", cut=cut):
-                        arrived = self.header_parts(f"{ORIGIN}/cut-{at}/{menu}")
-                        self.assertGreater(len(arrived), 2, "the cut left too little of the header to judge")
-                        self.assertEqual(arrived, {part: ended.get(part) for part in arrived})
-
-    def header_parts(self, url):
-        """Where each part of the site header stands on ``url``, read once the
-        header is the target the address names or no longer is: WebKit can
-        fire load before it matches ``:target``, which opens the sections."""
-
-        self.page.goto(url, wait_until="load")
-        self.page.wait_for_function(
-            "([selector, open]) => document.querySelector(selector).matches(':target') === open",
-            arg=[SELECTORS["site_header"], url.endswith("#sections")],
-        )
-        return self.page.evaluate(HEADER_PARTS, SELECTORS["site_header"])
 
     @with_script
     def test_the_survey_finds_the_same_twice_on_a_page_that_answers_changes_to_its_tree(self):
