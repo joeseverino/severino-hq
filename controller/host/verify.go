@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -97,7 +98,7 @@ func (m *Machine) runnerRules(ctx context.Context) []string {
 	}
 	rules, err := output("sudo", "-n", "-l", "-U", user)
 	if err != nil {
-		return []string{"could not list " + user + "'s sudo rules"}
+		return []string{fmt.Sprintf("could not list %s's sudo rules: %s", user, refusal(err))}
 	}
 	program := filepath.Join(m.Lib, hostRelative)
 	deploy := program + " deploy *"
@@ -109,6 +110,17 @@ func (m *Machine) runnerRules(ctx context.Context) []string {
 		drift = append(drift, fmt.Sprintf("%s has no NOPASSWD sudo rule for %s", user, deploy))
 	}
 	return append(drift, onlyRendered(user, rules, program)...)
+}
+
+// refusal is why a command run through Output failed: what it wrote to
+// stderr, which Output keeps on the error, or the error itself.
+func refusal(err error) string {
+	if exited, ok := errors.AsType[*exec.ExitError](err); ok {
+		if said := strings.TrimSpace(string(exited.Stderr)); said != "" {
+			return said
+		}
+	}
+	return err.Error()
 }
 
 // onlyRendered: every command sudo lists for the runner is one HQ renders a

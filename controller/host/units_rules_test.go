@@ -3,6 +3,11 @@ package host
 import (
 	"bufio"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -160,6 +165,128 @@ func mountFailureBreaks(t *testing.T, dir, where, name string) []string {
 func TestTheShippedUnitsKeepTheirRules(t *testing.T) {
 	for _, broken := range unitRuleBreaks(t, shippedUnits) {
 		t.Error(broken)
+	}
+	for _, broken := range sudoUnitBreaks(t, shippedUnits) {
+		t.Error(broken)
+	}
+}
+
+// execsSudo is each controller file that runs sudo, and the hq-host
+// subcommand that reaches it. TestOnlyTheseFilesRunSudo holds the list
+// whole, so a new caller of sudo names the subcommand a unit must let run it.
+var execsSudo = map[string]string{
+	filepath.Join("host", "verify.go"): "verify",
+	filepath.Join("host", "check.go"):  "check",
+}
+
+// sudoUnitBreaks is each shipped unit that runs a subcommand which execs
+// sudo, under a setting that keeps sudo from starting: sudo-rs refuses to run
+// with the no-new-privileges flag set, which NoNewPrivileges= sets and
+// DynamicUser= implies (systemd.exec(5)). A drop-in's setting counts too.
+func sudoUnitBreaks(t *testing.T, dir string) []string {
+	t.Helper()
+	shipped, err := Shipped(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var breaks []string
+	for _, unit := range shipped {
+		if strings.Contains(unit, "/") {
+			continue
+		}
+		subcommand := hqHostSubcommand(unitValue(t, filepath.Join(dir, unit), "ExecStart"))
+		if !slices.Contains(slices.Collect(maps.Values(execsSudo)), subcommand) {
+			continue
+		}
+		kind := unit[strings.LastIndex(unit, "."):]
+		for _, name := range shipped {
+			owner, _, _ := strings.Cut(name, ".d/")
+			if name != unit && owner != unit && owner != "severino-hq-"+kind {
+				continue
+			}
+			for _, key := range []string{"NoNewPrivileges", "DynamicUser"} {
+				if value := unitValue(t, filepath.Join(dir, name), key); systemdTrue(value) {
+					breaks = append(breaks, fmt.Sprintf("%s sets %s=%s, but %s runs hq-host %s, which runs sudo, and sudo-rs refuses to start under no-new-privileges", name, key, value, unit, subcommand))
+				}
+			}
+		}
+	}
+	return breaks
+}
+
+// hqHostSubcommand is the subcommand an ExecStart line gives hq-host, or ""
+// for a line that runs another program.
+func hqHostSubcommand(exec string) string {
+	fields := strings.Fields(exec)
+	for i, field := range fields[:max(len(fields)-1, 0)] {
+		if filepath.Base(strings.TrimLeft(field, "@-:+!")) == "hq-host" {
+			return fields[i+1]
+		}
+	}
+	return ""
+}
+
+func systemdTrue(value string) bool {
+	return slices.Contains([]string{"1", "yes", "y", "true", "t", "on"}, strings.ToLower(value))
+}
+
+func TestOnlyTheseFilesRunSudo(t *testing.T) {
+	root := ".."
+	found := map[string]bool{}
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return err
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if err != nil {
+			return err
+		}
+		ast.Inspect(file, func(node ast.Node) bool {
+			if call, ok := node.(*ast.CallExpr); ok {
+				for _, arg := range call.Args {
+					if literal, ok := arg.(*ast.BasicLit); ok && literal.Kind == token.STRING && literal.Value == `"sudo"` {
+						relative, _ := filepath.Rel(root, path)
+						found[relative] = true
+					}
+				}
+			}
+			return true
+		})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for file := range found {
+		if _, listed := execsSudo[file]; !listed {
+			t.Errorf("%s runs sudo: name it in execsSudo with the hq-host subcommand that reaches it", file)
+		}
+	}
+	for file := range execsSudo {
+		if _, runs := found[file]; !runs {
+			t.Errorf("%s no longer runs sudo: drop it from execsSudo", file)
+		}
+	}
+}
+
+func TestAUnitThatKeepsSudoFromStartingIsNamed(t *testing.T) {
+	for name, body := range map[string]string{
+		"severino-hq-script-drift.service.d/20-harden.conf":  "[Service]\nNoNewPrivileges=yes\n",
+		"severino-hq-.service.d/20-harden.conf":              "[Service]\nNoNewPrivileges=true\n",
+		"severino-hq-script-drift.service.d/20-dynamic.conf": "[Service]\nDynamicUser=on\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := copyUnits(t)
+			if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if breaks := sudoUnitBreaks(t, dir); len(breaks) != 1 || !strings.Contains(breaks[0], name) {
+				t.Errorf("named %v, want %s alone", breaks, name)
+			}
+		})
 	}
 }
 

@@ -140,7 +140,8 @@ func TestEachRunnerSudoFaultIsDrift(t *testing.T) {
 		}, "has no list of commands"},
 		"a runner whose sudo rules cannot be listed": {func(f *fakeHost, _ string) {
 			f.fail = []string{"sudo -n -l"}
-		}, "could not list deployer's sudo rules"},
+			f.failSays = "sudo-rs: The \"no new privileges\" flag is set, which prevents sudo from running as root.\n"
+		}, "could not list deployer's sudo rules: sudo-rs: The \"no new privileges\" flag is set"},
 		"a runner that runs as root": {func(f *fakeHost, _ string) { f.runnerUser = "root" }, "the Actions runner runs as 'root'"},
 		"two runners": {func(f *fakeHost, _ string) {
 			f.runners = append(f.runners, "actions.runner.other.service")
