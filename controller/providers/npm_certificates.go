@@ -79,15 +79,10 @@ func (r *Registry) npmCertificateList(ctx context.Context, base string, headers 
 	if err != nil {
 		return nil, err
 	}
-	list := make([]npmCertificateSummary, 0, len(certificates))
-	for _, certificate := range certificates {
+	return recordsOf(certificates, func(certificate npmapi.CertificateObject) (npmCertificateSummary, error) {
 		id, err := npmID(certificate.Id, "certificate")
-		if err != nil {
-			return nil, err
-		}
-		list = append(list, npmCertificateSummary{ID: id, NiceName: certificate.NiceName, Provider: certificate.Provider})
-	}
-	return list, nil
+		return npmCertificateSummary{ID: id, NiceName: certificate.NiceName, Provider: certificate.Provider}, err
+	})
 }
 
 // npmManagedCertificate uploads into the certificate HQ installed for this

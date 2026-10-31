@@ -1,14 +1,10 @@
 """What the site earned, and which published thing earned it.
 
 The controller reads Cloudflare and posts what it found; this records it and
-answers questions about it. Two halves, and the split matters: recording is an
-observation arriving from outside, reading is every surface in HQ, and neither
-knows how the other works.
-
-One join runs through the whole module. Cloudflare reports a request path; HQ
-already knows what it publishes and where. Matching those is what turns "this
-path was requested 412 times" into "that writeup was read 412 times", and it is
-the only reason this is more useful than the dashboard it reads from.
+answers every surface in HQ that asks. Matching a requested path to what HQ
+publishes there (``location_of``) turns "this path was requested 412 times"
+into "that writeup was read 412 times", the reason this exists beside
+Cloudflare's own dashboard.
 """
 
 from datetime import date, timedelta
@@ -162,21 +158,18 @@ def _restate_vitals(site: AnalyticsSite, reported: list[dict[str, Any]]) -> int:
 
 
 @transaction.atomic
-def record_analytics(payload: dict[str, Any], *, principal: Principal, controller_id: str = "") -> dict[str, Any]:
+def record_analytics(
+    payload: dict[str, Any],
+    *,
+    principal: Principal,
+    controller_id: str = "",  # noqa: ARG001 - the bridge passes every report its controller_id
+) -> dict[str, Any]:
     """Store one controller's reading of every site it can see.
 
-    Accumulates rather than replaces, which is the one way this differs from
-    every other controller report. A connection HQ can no longer reach should
-    stop being listed; a day of traffic that already happened should not stop
-    having happened because the window moved past it. Only days inside the
-    reported window are touched.
-
-    Idempotent by construction: the grain is unique, so re-running a sweep
-    (or replaying an older one) restates a day rather than doubling it.
-
-    ``payload`` is the contract's ``AnalyticsReadings``, which the bridge holds
-    every report to before this runs: counts are integers no less than zero, a
-    sample interval is at least one, and a dimension is one HQ stores.
+    Accumulates rather than replaces, unlike every other controller report: a
+    day of traffic that happened should not stop having happened because the
+    window moved past it. ``payload`` is the contract's ``AnalyticsReadings``,
+    which the bridge holds every report to before this runs.
     """
 
     # The same capability every controller report carries. Analytics arrives by
@@ -210,6 +203,8 @@ def record_analytics(payload: dict[str, Any], *, principal: Principal, controlle
             AnalyticsCoverage.objects.bulk_create(covered, ignore_conflicts=True)
             recorded["coverage"] += len(covered)
 
+        # Only the days reported are touched, each restated at its unique
+        # grain, so replaying a sweep, or an older one, never doubles a day.
         recorded["rows"] += _restate_rows(site, entry["rows"])
         recorded["vitals"] += _restate_vitals(site, entry["vitals"])
 
@@ -357,13 +352,8 @@ def traffic_for_hosts(hosts: set[str], *, days: int = DEFAULT_WINDOW_DAYS) -> di
     """Traffic for whole hosts in one bounded query.
 
     The host-grain sibling of :func:`_traffic_for_locations`. A service in HQ
-    *is* a hostname, and an observed connection target is one too, so a host is
-    the key the rest of HQ already identifies these things by: no new
-    identifier, and no table joining one to the other.
-
-    Summed over the path dimension rather than across every dimension, for the
-    same reason :func:`site_totals` does: a row exists once per dimension, so
-    adding them all would count each visit six times.
+    *is* a hostname, and an observed connection target is one too, so a host
+    is the key the rest of HQ already names these things by.
     """
 
     hosts = {normalized_hostname(host) for host in hosts if host and host.strip()}
@@ -373,6 +363,8 @@ def traffic_for_hosts(hosts: set[str], *, days: int = DEFAULT_WINDOW_DAYS) -> di
     rows = (
         RumDaily.objects.filter(
             site__host__in=hosts,
+            # One dimension, as in ``site_totals``: a row exists once per
+            # dimension, so summing them all would count each visit six times.
             dimension=RumDaily.Dimension.PATH,
             date__gte=start,
             date__lte=end,
@@ -410,24 +402,20 @@ def measured_path_count(*, days: int = DEFAULT_WINDOW_DAYS) -> int:
 
 
 def attach_traffic(items, *, days: int = CONTENT_TRAFFIC_DAYS):
-    """Give each content item what its published URL earned.
+    """Give each content item what its published URL earned, in one query.
 
-    Annotates in place rather than returning rows, so a list already paginated
-    and sorted by the table engine keeps both. The join is one query for the
-    whole page regardless of how many items are on it: the alternative,
-    asking per row, is the N+1 the frontend bar exists to prevent.
-
-    ``pageviews`` is None where nothing was measured, which a template can tell
-    from a real zero: one means nobody visited, the other means nobody looked.
+    Annotates in place, so a list the table engine already paginated and
+    sorted keeps both. ``pageviews`` is None where nothing was measured, so a
+    template tells nobody looking from a real zero, nobody visiting.
     """
 
     items = list(items)
     if not items:
         return items
-    locations = {location_of(getattr(item, "published_url", "")) for item in items}
+    locations = {location_of(item.published_url) for item in items}
     traffic = _traffic_for_locations(locations, days=days)
     for item in items:
-        measured = traffic.get(location_of(getattr(item, "published_url", "")))
+        measured = traffic.get(location_of(item.published_url))
         item.pageviews = measured["pageviews"] if measured else None
         item.visits = measured["visits"] if measured else None
     return items
@@ -442,7 +430,7 @@ def item_traffic(item, *, days: int = CONTENT_TRAFFIC_DAYS) -> dict[str, Any]:
     an item nobody opens are different facts and a 0 says the wrong one.
     """
 
-    host, path = location_of(getattr(item, "published_url", ""))
+    host, path = location_of(item.published_url)
     if not host or not path:
         return {
             "path": "",
@@ -513,8 +501,7 @@ def vitals_summary(*, days: int = DEFAULT_WINDOW_DAYS) -> dict[str, Any]:
 def latest_reading() -> date | None:
     """The most recent day any site reported, or None before the first sweep."""
 
-    newest = RumDaily.objects.order_by("-date").values_list("date", flat=True).first()
-    return newest
+    return RumDaily.objects.order_by("-date").values_list("date", flat=True).first()
 
 
 def last_observed_at():

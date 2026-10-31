@@ -1,0 +1,19 @@
+# MCP is a delivery adapter over the application's use cases and projections:
+# its services neither import a models module nor touch a model's manager.
+id: mcp-services-reach-no-model
+language: python
+severity: error
+message: The MCP services reach a Django model directly.
+note: Read and write through an application service or projection.
+files:
+  - "**/platform/mcp/services.py"
+rule:
+  any:
+    - kind: import_from_statement
+      has:
+        field: module_name
+        regex: (^|\.)models$
+    - kind: attribute
+      has:
+        field: attribute
+        regex: ^objects$

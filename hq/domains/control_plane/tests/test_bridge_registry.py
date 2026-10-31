@@ -24,6 +24,7 @@ from hq.domains.control_plane import bridge_contract, bridge_registry
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.connection_shapes import SHAPES, projections
 from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.domains.control_plane.provider_adapters import caddy
 from hq.domains.control_plane.provider_spec import ConnectionShape, Setting
 from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS
 from hq.platform.application.tests.source import parsed
@@ -70,9 +71,8 @@ class JoinTests(SimpleTestCase):
             bridge_contract.joined(_base(), {})
 
     def test_two_declarations_under_one_name_are_refused(self):
-        twice = [{"Example": {"type": "string"}}, {"Example": {"type": "integer"}}]
         with (
-            patch.object(bridge_registry, "_declared", return_value=twice),
+            patch.object(caddy, "SHARED", (*caddy.SHARED, caddy.SHARED[0])),
             self.assertRaisesMessage(ValueError, "Two declarations"),
         ):
             bridge_registry.schemas()

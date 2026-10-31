@@ -6,4 +6,24 @@ which carries where to return to.
 {% endcomment %}
 {% block consequences %}
 <p><strong>{{ name|breakable }}</strong> stops running, and whatever it serves stops answering until it is started again.</p>
+{% if supervision %}
+<p data-run-by-unit="{{ supervision.unit }}">The systemd unit <code>{{ supervision.unit|breakable }}</code> runs it, so HQ stops the unit, and anything else the unit runs stops with it.</p>
+{% endif %}
+{% comment %}
+A connection HQ reads and acts through that runs inside this container stops
+with it, and HQ may have no other way to start it: said before the press, with
+the command that starts it again on its machine.
+{% endcomment %}
+{% for channel in channels %}
+<div class="notice notice-attention" data-cuts-connection="{{ channel.connection_ref }}">
+  <strong>{% if channel.machines %}HQ reaches {% for machine in channel.machines %}{{ machine|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %} through this container{% else %}HQ reads through this container{% endif %}</strong>
+  <p>The connection <code>{{ channel.connection_ref|breakable }}</code> runs in it. Once it stops, HQ can no longer read or change anything through that connection{% if channel.carries_its_verbs %}, so it cannot start this container again either{% endif %}.</p>
+  {% if channel.start_command %}
+  <p>To start it again on {{ host|breakable:"," }} run:</p>
+  {% include "partials/_command.html" with command=channel.start_command only %}
+  {% else %}
+  <p>To start it again, start the container on {{ host|breakable }} itself.</p>
+  {% endif %}
+</div>
+{% endfor %}
 {% endblock %}

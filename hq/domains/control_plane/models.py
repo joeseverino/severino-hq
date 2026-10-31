@@ -9,12 +9,23 @@ from django.db.models.fields.json import KT
 from django.db.models.functions import Coalesce, Lower, NullIf, Trim
 from django.utils import timezone
 
-from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
 from hq.domains.jobs.models import JobState
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule, one_of, singleton
+lazy from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
 
 lazy from .providers import readout_rows, registry_label, resource_home
+
+
+# Choices as callables, which Django reads on first use: the contracts live in
+# the provider package, whose import loads every provider. Migrations name
+# them, so they keep their names.
+def refusal_choices() -> list[tuple[str, str]]:
+    return [(value, value) for value in REFUSALS]
+
+
+def failure_choices() -> list[tuple[str, str]]:
+    return [(value, value) for value in FAILURES]
 
 
 def _named(key: str) -> models.Expression:
@@ -127,14 +138,10 @@ class ManagedResource(TimestampedModel):
 class ProviderInventory(TimestampedModel):
     """What a provider actually holds, as a controller last saw it.
 
-    A cache, and named to stay one. HQ must not become a second copy of AdGuard
-    or Nginx Proxy Manager: those own their own state, and a stored mirror is
-    wrong the moment anything changes outside HQ. Nothing reconciles from this
-    and nothing is derived from it that outlives the next sweep; it exists so an
-    operator can see what is out there and adopt it.
-
-    ``observed_at`` is the point. A row here is only a claim about a moment, and
-    a surface showing it has to be able to say how old that moment is.
+    A cache, and named to stay one: AdGuard or Nginx Proxy Manager own their
+    state, so nothing reconciles from this or derives anything from it that
+    outlives the next sweep. It exists so an operator can see what is out there
+    and adopt it.
     """
 
     kind = models.CharField(primary_key=True, max_length=64)
@@ -145,10 +152,12 @@ class ProviderInventory(TimestampedModel):
     error = models.CharField(max_length=500, blank=True)
     # What the provider refused when unreachable: the credential, or one
     # permission. Blank when the read failed for another reason.
-    refusal = models.CharField(max_length=16, blank=True, choices=[(value, value) for value in REFUSALS])
+    refusal = models.CharField(max_length=16, blank=True, choices=refusal_choices)
     # Parts of the kind the last read could not read while the rest read, as
     # ``control_plane.reading_parts.clean_refused_parts`` stores them.
     refused_parts = models.JSONField(default=list, blank=True)
+    # A row is only a claim about a moment, and a surface showing it has to be
+    # able to say how old that moment is.
     observed_at = models.DateTimeField()
     controller_id = models.CharField(max_length=160, blank=True)
 
@@ -164,29 +173,19 @@ class ProviderInventory(TimestampedModel):
 class ProviderConnection(TimestampedModel):
     """One endpoint a controller can reach, as that controller last found it.
 
-    HQ holds no credential and never will. What it holds is the fact that one
-    exists, what kind of thing it opens, and what that thing said when asked,
-    which is enough to offer it as an answer and to say when it stopped working.
-
-    The credential itself is a 1Password item, and that item is the only place a
-    connection is created. Everything here is downstream of it: the controller
-    renders the vault into its own environment, reads back what it was given,
-    and reports that. So a page listing connections cannot drift from the vault,
-    because it is not a second copy of it.
-
-    ``reaches`` is what the credential can act on: the machines behind a
-    Portainer, the zones a DNS token may edit. It is why this is worth sweeping
-    rather than merely declaring: nothing in HQ can know it, and every menu that
-    asks "which machine" or "which domain" should be offering exactly this.
-
-    Keyed by controller as well as by ref, because two controllers render two
-    vaults and a ref means what its own vault says it means.
+    HQ holds no credential: the 1Password item is where a connection is made,
+    and this row is what the controller reports of it (that it exists, what it
+    opens, what it said when asked), so a page of connections cannot drift from
+    the vault.
     """
 
     connection_ref = models.CharField(max_length=160)
     controller_id = models.CharField(max_length=160, blank=True)
     provider = models.CharField(max_length=64, blank=True)
     endpoint = models.CharField(max_length=500, blank=True)
+    # What the credential can act on (the machines behind a Portainer, the zones a
+    # DNS token may edit), which nothing else in HQ can know: every menu that asks
+    # "which machine" or "which domain" offers this.
     reaches = models.JSONField(default=list, blank=True)
     reachable = models.BooleanField(default=True)
     # Whether anything was asked at all. An unprobed connection is not a broken
@@ -197,7 +196,7 @@ class ProviderConnection(TimestampedModel):
     # Why the last probe failed: a refusal, the address answering as something
     # other than the API, or no answer. Blank when it answered or the cause is
     # unknown.
-    failure = models.CharField(max_length=16, blank=True, choices=[(value, value) for value in FAILURES])
+    failure = models.CharField(max_length=16, blank=True, choices=failure_choices)
     # Whether the connection's item declares that HQ manages through it. False
     # means it only observes, and nothing it reads is adopted.
     manages = models.BooleanField(default=False)
@@ -232,6 +231,8 @@ class ProviderConnection(TimestampedModel):
     class Meta:
         ordering = ("provider", "connection_ref")
         constraints = [
+            # Keyed by controller too: two controllers render two vaults, and a ref means
+            # what its own vault says.
             models.UniqueConstraint(
                 fields=("controller_id", "connection_ref"),
                 name="one_row_per_connection_per_controller",
@@ -330,18 +331,16 @@ class WeatherObservation(TimestampedModel):
 class CertificateMaterial(TimestampedModel):
     """A certificate an operator generated elsewhere, held so it can be reused.
 
-    The one secret HQ keeps on purpose. An internally signed certificate is
-    produced on an air-gapped machine and has to reach a proxy somehow; without
-    this, that is a copy and paste into a provider's web form, and installing it
-    somewhere else later means another trip to the offline CA.
-
-    Sealed with a key that is not in this database (see ``core.secrets``) and
-    never returned by any serializer. The controller reads it through its own
-    bridge command, so it does not ride along in the contract that every other
-    resource's export prints.
+    The one secret HQ keeps on purpose: an internally signed certificate comes from
+    an air-gapped machine, and without this reaches a proxy by copy and paste into
+    a provider's web form, with another trip to the offline CA for each new place.
     """
 
     resource = models.OneToOneField(ManagedResource, on_delete=models.CASCADE, related_name="material")
+    # Sealed with a key that is not in this database (``core.secrets``) and
+    # never returned by any serializer. The controller reads it through its own
+    # bridge command, so it stays out of the contract every other resource's
+    # export prints.
     sealed_fullchain = models.TextField()
     sealed_private_key = models.TextField()
     # Held in the clear because they are printed, not protected: an operator has
@@ -473,28 +472,10 @@ class ApprovalState(models.TextChoices):
 class ApprovalRequest(TimestampedModel):
     """A change something other than a person asked for, held until one agrees.
 
-    A service token can hold every capability needed to amend a declaration
-    and push it, with nothing in between that a human has to see. Authority is
-    not the missing thing: consent is.
-
-    So this is not a second permission system. The caller already held the
-    capability; what it did not hold was a person's agreement, and that is the
-    only thing stored here. The requested call is kept verbatim, in
-    ``capability``, ``target`` and ``payload``, and is replayed unchanged when
-    somebody approves it. Nothing about the estate moves in the meantime: no
-    declaration is written, no operation is queued, so there is nothing for a
-    controller to find and apply. An unapproved request is inert by
-    construction rather than by a filter somebody has to remember to write.
-
-    ``content_fingerprint`` is what makes an approval an approval *of
-    something*. It covers the requested call and the state it was measured
-    against, so a declaration that moves between the request and the decision
-    invalidates the approval instead of quietly widening it. A person approves
-    the diff they were shown, and only that diff.
-
-    ``expires_at`` exists because a request nobody ever answers is not a
-    pending decision, it is litter, and litter that still applies a change if
-    it is clicked six weeks later.
+    The caller already holds the capability; what is stored is the call it made,
+    replayed unchanged on approval, and nothing about the estate moves until
+    then: no declaration is written and no operation queued, so an unapproved
+    request is inert by construction.
     """
 
     # Declared above the model so a rule in ``Meta`` can name its values.
@@ -513,11 +494,14 @@ class ApprovalRequest(TimestampedModel):
     # The diff a person is shown is rendered from this, so the page cannot show
     # one comparison and the fingerprint cover another.
     baseline = models.JSONField(default=dict, blank=True)
+    # Covers the requested call and the baseline, so a declaration that moves
+    # before the decision invalidates the approval instead of widening it.
     content_fingerprint = models.CharField(max_length=64)
     requested_actor = models.CharField(max_length=160)
     requested_interface = models.CharField(max_length=32)
     reason = models.CharField(max_length=300, blank=True)
     state = models.CharField(max_length=20, choices=State.choices, default=State.PENDING)
+    # A request nobody answers lapses, so a click weeks later applies nothing.
     expires_at = models.DateTimeField()
     # The decider is a name and an interface, not a user row. A foreign key
     # would be the obvious thing and would answer a question nobody asks: what
@@ -576,16 +560,11 @@ class ApprovalRequest(TimestampedModel):
 class AddressReading(models.Model):
     """What the public registries last said about one address.
 
-    Kept because the answer barely moves. An allocation changes when a block is
-    transferred between organizations; a PTR record changes when someone
-    reconfigures a network. Neither happens between two page loads, and
-    re-asking on every load spends a stranger's rate limit to be told the same
-    thing, and tells them, each time, which addresses HQ is interested in.
-
-    A cache rather than declared state: nothing here is HQ's to be right about,
-    the row is disposable, and an operator who thinks it has gone stale can ask
-    again. Stored by address so the connection panel and the tools page share
-    one answer rather than each keeping their own.
+    Kept because the answer barely moves (a block changes hands, a network's PTR
+    is reconfigured), and re-asking on every load spends a stranger's rate limit
+    and tells them which addresses HQ cares about. A disposable cache an operator
+    can refresh, keyed by address so the connection panel and the tools page share
+    one answer.
     """
 
     address = models.GenericIPAddressField(primary_key=True)

@@ -17,15 +17,16 @@ from hq.platform.application.controller import (
     report_operation,
     schedule_automatic_operations,
 )
+from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.finding_model import Finding
 from hq.platform.application.infrastructure import (
     ManagedResourceCommand,
-    PolicyError,
     controller_contract,
     delivery_targets,
     resolved_spec,
     save_managed_resource,
 )
+from hq.platform.application.record_errors import PolicyError
 from hq.platform.application.resource_operations import (
     OperationCommand,
     request_certificate_renewal,
@@ -702,13 +703,10 @@ class OperationPolicyTests(TestCase):
         managing_everything()
         declare_targets()
         save_managed_resource(
-            ManagedResourceCommand(
-                key="example-wildcard",
-                kind="tls.certificate",
-                spec=certificate_spec(),
-            ),
+            ManagedResourceCommand(key="example-wildcard", kind="tls.certificate", spec=certificate_spec()),
             principal=cli_principal(),
         )
+        OperationRequest.objects.all().delete()  # applied, so the reconcile its save queued is done
         self.resource = ManagedResource.objects.get(key="example-wildcard")
 
     def test_a_verb_returns_to_the_page_that_offered_it(self):
@@ -773,24 +771,23 @@ class OperationPolicyTests(TestCase):
             OperationRequest.Action.RECONCILE,
         )
 
-    @patch("hq.platform.application.controller._scheduler_now")
-    def test_failed_automatic_renewal_retries_once_on_the_next_day(self, now):
+    def test_failed_automatic_renewal_retries_once_on_the_next_day(self):
         current = timezone.now()
-        now.return_value = current
         self.resource.status = {"not_after": (current + timedelta(days=29)).isoformat()}
         self.resource.observed_generation = self.resource.generation
         self.resource.save()
 
-        schedule_automatic_operations("a-docker-host")
-        operation = OperationRequest.objects.get()
-        operation.state = OperationRequest.State.FAILED
-        operation.completed_at = timezone.now()
-        operation.save(update_fields=("state", "completed_at", "updated_at"))
-        schedule_automatic_operations("a-docker-host")
+        with frozen(current):
+            schedule_automatic_operations("a-docker-host")
+            operation = OperationRequest.objects.get()
+            operation.state = OperationRequest.State.FAILED
+            operation.completed_at = timezone.now()
+            operation.save(update_fields=("state", "completed_at", "updated_at"))
+            schedule_automatic_operations("a-docker-host")
         self.assertEqual(OperationRequest.objects.count(), 1)
 
-        now.return_value = current + timedelta(days=1)
-        schedule_automatic_operations("a-docker-host")
+        with frozen(current + timedelta(days=1)):
+            schedule_automatic_operations("a-docker-host")
         self.assertEqual(OperationRequest.objects.count(), 2)
 
     def test_active_controller_capability_queues_renewal_work(self):
@@ -888,6 +885,7 @@ class OperationPolicyTests(TestCase):
             ManagedResourceCommand(key="other-wildcard", kind="tls.certificate", spec=certificate_spec()),
             principal=cli_principal(),
         )
+        OperationRequest.objects.filter(resource__key="other-wildcard").delete()  # applied, as above
         with self.assertRaisesMessage(PolicyError, "already used by another operation"):
             request_reconcile(
                 OperationCommand(idempotency_key="finished-once"),

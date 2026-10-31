@@ -88,7 +88,7 @@
 .card:has(> .kpi-grid) { container: kpi / inline-size; }
 /* An overview card is that container too, under both names, since its own
    declaration replaces the one above. */
-.highlight-card.card { display: flex; flex-direction: column; min-width: 0; padding: var(--space-8); container: featured kpi / inline-size; }
+.highlight-card.card { display: flex; flex-direction: column; padding: var(--space-8); container: featured kpi / inline-size; }
 .highlight-card > .kpi-grid { flex: 1; }
 .card > .kpi-grid {
   --kpi-columns: 3;
@@ -122,7 +122,7 @@
 .dashboard-counts .kpi { display: flex; flex: 0 1 auto; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); padding: 0; background: none; }
 .dashboard-counts .kpi .value { font-size: var(--text-md); order: -1; }
 .dashboard-counts .kpi .muted { font-size: var(--text-2xs); }
-.dashboard-patterns > .card { display: flex; flex-direction: column; min-width: 0; margin: 0; padding: var(--space-6); }
+.dashboard-patterns > .card { display: flex; flex-direction: column; margin: 0; padding: var(--space-6); }
 .dashboard-patterns .chart-card figcaption p { min-height: 0; }
 /* A pair ends together, so a chart's data opens inside its card rather than
    growing it and stretching the card beside it: a pane of its own height. */
@@ -135,6 +135,10 @@
 .dashboard-patterns .calendar-dot { width: 5px; height: 5px; }
 .dashboard-patterns .calendar-legend { margin-block: var(--space-3); }
 .two-col > section, .two-col > div, .section-flow > :is(section, .page-section), .card { padding: var(--surface-inset, var(--space-8) var(--space-9)); }
+/* A card is as narrow as the column or track it is placed in, never as wide
+   as its longest line, so on a phone its content wraps inside it rather than
+   pushing it past the screen's edge. */
+.card { min-inline-size: 0; }
 /* A confirmation is as wide as what it says and the buttons under it, up to a
    line's measure, never a frame stretched across the page around them. */
 .card.confirm { inline-size: fit-content; max-inline-size: min(100%, var(--measure)); }
@@ -456,6 +460,9 @@
   margin: var(--space-6) 0 var(--space-3);
 }
 .calendar-card .chart-legend { margin-bottom: 0; }
+/* The count of planned days kept is one phrase: it keeps its line, beside the
+   legend while both fit and under it once they do not. */
+.calendar-legend > .count { flex: none; white-space: nowrap; }
 .calendar-key-missed {
   display: inline-block;
   width: 10px;
@@ -584,9 +591,11 @@ td > .subtle-link:not(:only-child) { display: inline-block; }
 .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(5rem, 8rem) minmax(min(13rem, 100% - 5rem - var(--space-6)), 1fr)); gap: var(--space-4) var(--space-6); padding: var(--surface-inset, var(--space-6) var(--space-8)); font-size: var(--text-sm); }
 .kv dt { color: var(--muted); font-weight: 500; }
 .kv dd { min-width: 0; margin: 0; color: var(--ink); overflow-wrap: anywhere; }
-/* A pair whose value is wider than a column of facts takes a row of its own. */
-.kv > .kv-whole { grid-column: 1; }
-.kv > .kv-whole + dd { grid-column: 2 / -1; }
+/* A pair whose value is a list of names (a machine's addresses, who a port is
+   open to) takes a row of its own: wrapped beside other pairs, it would make
+   their row as tall as itself and leave them a gap. */
+.kv > dt:has(+ dd > :is(.code-list, .address-list) > :nth-child(2)) { grid-column: 1; }
+.kv > dd:has(> :is(.code-list, .address-list) > :nth-child(2)) { grid-column: 2 / -1; }
 /* Addresses, one to a line, each beside its network: the networks in one
    column and the addresses in the next. */
 .address-list { display: grid; grid-template-columns: max-content minmax(0, max-content); gap: var(--space-1) var(--space-3); align-items: baseline; margin: 0; padding: 0; list-style: none; }

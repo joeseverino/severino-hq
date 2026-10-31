@@ -78,7 +78,7 @@ class Commands:
         self.stdin: list[str] = []
         self.edited: dict | None = None
 
-    def __call__(self, command, *, input=None, **_kwargs):
+    def __call__(self, command, *, input=None, **_kwargs):  # noqa: A002 - subprocess.run's own keyword
         self.argv.append(command)
         self.stdin.append(input or "")
         if command[:3] == ["op", "item", "get"]:

@@ -2,9 +2,8 @@
 
 Never imported: its text is run as `manage.py shell -c` where the server runs
 (a checkout, a worktree of the base, the image), so the count is that code's.
-It reads the pages from PERF_PAGES and prints one line, MARKER and a JSON
-object of page to count, or to None where the page did not answer 200. Each
-page is asked once first, so what a first request caches is not its cost.
+It prints one line, MARKER and a JSON object of each page in PERF_PAGES to its
+count, or to None where the page did not answer 200.
 """
 
 import json
@@ -19,9 +18,11 @@ MARKER = "perf-queries "
 
 
 def count(client: Client, page: str) -> int | None:
-    client.get(page)
+    # Asked once first, so what a first request caches is not its cost, and a
+    # redirect followed, as the server time follows it.
+    client.get(page, follow=True)
     with CaptureQueriesContext(connection) as captured:
-        response = client.get(page)
+        response = client.get(page, follow=True)
         response.getvalue()
     return len(captured.captured_queries) if response.status_code == 200 else None
 

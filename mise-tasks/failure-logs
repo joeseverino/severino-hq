@@ -2,13 +2,13 @@
 #MISE description="Open a failed Compose run's sealed logs"
 #MISE hide=true
 #MISE raw=true
-#MISE env={SEVERINO_FAILURE_LOG_IDENTITY={required="The identity that decrypts sealed logs, an op:// reference or a file (tools/dev/mise.local.example.toml)"}}
+#MISE env={SEVERINO_FAILURE_LOG_IDENTITY={required="The identity that decrypts sealed logs, an op:// reference or a file, set in mise.local.toml (docs/Development.md, The extension set)"}}
 #USAGE arg "<run>" help="The Compose run whose logs were sealed"
 #USAGE arg "[dir]" help="Where to unpack them; a private temporary directory by default"
 
-# Downloads the run's failure-logs artifact, decrypts it with the identity named
-# by SEVERINO_FAILURE_LOG_IDENTITY (an op:// reference or a file; mise.local.toml
-# sets it) and unpacks it.
+# Downloads the run's failure-logs artifacts, one from each Compose job that
+# failed, decrypts them with the identity named by SEVERINO_FAILURE_LOG_IDENTITY
+# (an op:// reference or a file; mise.local.toml sets it) and unpacks them.
 set -euo pipefail
 
 identity="$SEVERINO_FAILURE_LOG_IDENTITY"
@@ -17,7 +17,7 @@ umask 077
 dir="${usage_dir:-$(mktemp -d)}"
 download="$(mktemp -d)"
 trap 'rm -rf "$download"' EXIT
-gh run download "${usage_run:?}" --name failure-logs --dir "$download"
+gh run download "${usage_run:?}" --pattern 'failure-logs*' --dir "$download"
 
 # Read first, so a 1Password unlock that times out is reported as one.
 case "$identity" in
@@ -25,7 +25,9 @@ case "$identity" in
   *) key="$(cat "$identity")" ;;
 esac
 mkdir -p "$dir"
-age --decrypt --identity <(printf '%s\n' "$key") "$download/failure-logs.tar.age" | tar -xzf - -C "$dir"
+while IFS= read -r -d '' sealed; do
+  age --decrypt --identity <(printf '%s\n' "$key") "$sealed" | tar -xzf - -C "$dir"
+done < <(find "$download" -name failure-logs.tar.age -print0)
 unset key
 echo "$dir"
 find "$dir" -type f | sed "s|^$dir/|  |"

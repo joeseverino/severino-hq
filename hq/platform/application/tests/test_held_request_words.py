@@ -7,13 +7,15 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule
+from hq.platform.core.models import AuditLog
 
-from ..approvals import DECLARATIONS, preview
+from ..approvals import AUDIT_LABELS, DECLARATIONS, asked, preview
 from ..attention import _asked_change, waiting_for_approval
 from ..capabilities import capability_registry, execute_capability
 from ..integration_specs import capability_schema
+from ..projects import DEPENDENCY_UPDATES
 from ..security import Capability, Principal
-from .markup import text
+from .markup import select, text
 
 # What a Python dump of a dict or a list leaves in the text.
 DUMPED = ("{", "[", "'")
@@ -62,8 +64,18 @@ class HeldRequestWordsTests(TestCase):
         (item,) = waiting_for_approval()
 
         self.assertEqual(dumped(item.body), [], item.body)
-        self.assertIn("manifest to 4 entries", item.body)
-        self.assertIn("confirm prune to yes", item.body)
+        self.assertIn("manifest set to 4 entries", item.body)
+        self.assertIn("confirm prune set to yes", item.body)
+
+    def test_a_command_on_no_record_is_not_said_to_create_one(self):
+        (item,) = waiting_for_approval()
+
+        self.assertNotIn("created", item.body.lower(), item.body)
+
+    def test_the_audit_says_it_as_the_card_does(self):
+        event = AuditLog.objects.get(object_type__in=AUDIT_LABELS, object_id=str(self.held.id))
+
+        self.assertEqual(event.message, str(asked(self.held)))
 
     def test_the_decision_card_says_it_in_words(self):
         user = get_user_model().objects.create_user(username="reviewer", password="test-only-password")
@@ -75,6 +87,69 @@ class HeldRequestWordsTests(TestCase):
         self.assertIn("4 entries", shown)
         self.assertNotIn("{'doc_id'", shown)
         self.assertNotIn("True", shown)
+
+    def test_its_change_is_held_whole_beside_its_buttons(self):
+        """The dashboard's card and the queue's row mark what Approve decides
+        as never cut (the browser gate's what_a_button_decides_is_shown_whole
+        holds the mark to its layout)."""
+
+        user = get_user_model().objects.create_superuser("reviewer", "reviewer@example.test", "x" * 20)
+        self.client.force_login(user)
+        (item,) = waiting_for_approval()
+
+        for page in (reverse("dashboard"), reverse("action_items")):
+            with self.subTest(page=page):
+                details = [element.words for element in select(self.client.get(page), "data-whole")]
+                self.assertIn(" ".join(item.body.split()), details)
+
+
+class HeldSentenceTests(TestCase):
+    """What a held request wants done, said from what its command declares."""
+
+    def held(self, capability: str, payload: dict[str, Any], baseline: dict[str, Any] | None = None):
+        return ApprovalRequest(
+            capability=capability,
+            target="example-dns",
+            payload=payload,
+            baseline=baseline or {},
+            requested_actor="example-agent",
+        )
+
+    def test_a_change_of_one_value_is_said_as_that_change(self):
+        before = {"spec": {"answer": "192.0.2.1", "domain": "example.test"}}
+        moved = self.held(
+            "infrastructure.resource.update", {"spec": {"answer": "192.0.2.2", "domain": "example.test"}}, before
+        )
+        both = self.held(
+            "infrastructure.resource.update", {"spec": {"answer": "192.0.2.2", "domain": "example.org"}}, before
+        )
+
+        said = asked(moved)
+        self.assertTrue(said.whole)
+        self.assertEqual(said.target, "example-dns")
+        self.assertTrue(str(said).endswith("example-dns from 192.0.2.1 to 192.0.2.2"), said)
+        # Two values are left to the table beneath it.
+        self.assertFalse(asked(both).whole)
+        self.assertNotIn("192.0.2.2", str(asked(both)))
+
+    def test_a_record_is_named_as_a_person_knows_it_not_by_its_key(self):
+        before = {"spec": {"answer": "192.0.2.1", "domain": "app.example.test"}}
+        held = self.held(
+            "infrastructure.resource.update", {"spec": {"answer": "192.0.2.2", "domain": "app.example.test"}}, before
+        )
+        held.resource_kind = "adguard.rewrite"
+
+        said = asked(held)
+        self.assertEqual(said.target, "app.example.test")
+        self.assertNotIn("example-dns", str(said))
+
+    def test_a_switch_is_said_as_the_side_it_sets(self):
+        spec = capability_registry()[DEPENDENCY_UPDATES]
+        for value, variant in ((True, "on"), (False, "off")):
+            with self.subTest(value=value):
+                said = str(asked(self.held(DEPENDENCY_UPDATES, {"dependency_updates": value})))
+
+                self.assertIn(spec.words(variant).lower(), said)
 
 
 class EveryCapabilityPreviewTests(TestCase):

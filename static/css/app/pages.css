@@ -110,7 +110,7 @@
   display: inline-flex; align-items: center; gap: var(--space-1); min-height: 28px;
   padding: 0 var(--space-2); border-radius: 999px; color: var(--muted); text-decoration: none;
 }
-.topology-node-select::after { content: "\203A"; font-size: var(--text-sm); line-height: 1; }
+.topology-node-select::after { content: "\203A" / ""; font-size: var(--text-sm); line-height: 1; }
 .topology-node-select:hover, .topology-node-select:focus-visible, .topology-node-select[aria-current] { color: var(--accent); }
 .topology-node-degree {
   min-width: 20px; padding: var(--space-1) var(--space-2); border-radius: 999px; background: var(--surface-2);
@@ -321,9 +321,8 @@
 
 /* A held request: who asks, what would happen, the decision. */
 .approval-card { border-left: 3px solid var(--line); }
-.approval-card.is-pending { border-left-color: var(--warn); }
+.approval-card[data-state="pending"] { border-left-color: var(--warn); }
 .approval-head h2 { margin: 0; font-size: var(--text-xl); font-weight: 500; line-height: 1.4; text-transform: none; letter-spacing: 0; color: var(--ink); }
-.approval-what { font-weight: 650; }
 .approval-head > p { margin: var(--space-2) 0 0; font-size: var(--text-sm); }
 .approval-reason { margin: var(--space-6) 0 0; padding: var(--space-4) var(--space-6); border-left: 2px solid var(--line-strong); color: var(--ink-2); font-size: var(--text-sm); }
 .approval-label { margin: var(--space-10) 0 var(--space-4); font-size: var(--text-2xs); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
@@ -335,7 +334,7 @@
 .agent-state-main { display: flex; align-items: center; gap: var(--space-6); }
 .agent-state-main > .btn { margin: 0 0 0 auto; }
 .agent-state-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 16%, transparent); }
-.agent-state.is-paused .agent-state-dot { background: var(--warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 16%, transparent); }
+.agent-state[data-paused] .agent-state-dot { background: var(--warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 16%, transparent); }
 .agent-state-copy h2 { margin: 0; color: var(--ink); font-size: var(--text-lg); font-weight: 650; letter-spacing: 0; text-transform: none; }
 .agent-state-copy p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); }
 .agent-state-facts { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-10); margin: 0; padding-top: var(--space-6); border-top: 1px solid var(--line-2); color: var(--muted); font-size: var(--text-sm); }
@@ -372,17 +371,7 @@ form[data-clean] .save-bar { visibility: hidden; }
 /* ── Dashboard ──────────────────────────────────────────────────────
    A header, then rows. Each row is a grid whose cards share one width and one
    height, so the page stays even whichever domains an installation has. */
-:is(.dash-head, .dash-head + .ask-quiet) {
-  --head-room: calc(var(--stack-gap) + var(--space-4));
-}
-.dash-head { align-items: flex-end; margin-bottom: var(--head-room); }
-/* The dashboard has no trail, and its readings stand where that line would:
-   what the page says of its own readings takes the room under the head
-   instead, which is there whether or not it says anything. */
-.dash-head:has(+ .ask-quiet) { margin-bottom: 0; }
-.dash-head + .ask-quiet { position: relative; margin-top: 0; block-size: var(--head-room); }
-.dash-head + .ask-quiet + * { margin-top: 0; }
-.dash-head + .ask-quiet .visit-status { inset-block-start: 50%; inset-inline-end: 0; translate: 0 -50%; }
+.dash-head { --head-room: calc(var(--stack-gap) + var(--space-4)); align-items: flex-end; margin-bottom: var(--head-room); }
 .dash-hello { display: grid; gap: var(--space-2); min-width: 0; }
 .dash-hello h1 { font-size: clamp(20px, .6vw + 16px, 24px); letter-spacing: -0.02em; line-height: 1.1; }
 .dash-date { margin: 0; color: var(--muted); font-size: var(--text-2xs); font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
@@ -390,36 +379,52 @@ form[data-clean] .save-bar { visibility: hidden; }
 .dash-status a { color: var(--ink-2); }
 .dash-status strong { color: var(--accent); font-variant-numeric: tabular-nums; }
 /* What a page says while its own readings are being read, and once they are
-   in: one quiet line, never a banner. */
-.visit-status {
-  position: absolute; inset-block-start: var(--content-pad); inset-inline-end: var(--content-pad); margin: 0;
-  color: var(--muted); font-size: var(--text-xs); white-space: nowrap;
+   in: one quiet line at the end of the room between the head and the page,
+   never a banner. The room is there whether or not it says anything, in
+   place of the gap that would stand there anyway, so saying it moves
+   nothing. */
+.ask.ask-quiet {
+  --head-room: calc(var(--stack-gap) + var(--space-4));
+  display: flex; align-items: center; justify-content: flex-end;
+  min-block-size: var(--head-room);
 }
-.content:has(.ask-quiet) { position: relative; }
+.content > .ask-quiet, .content > .ask-quiet + * { margin-top: 0; }
+.content > :has(+ .ask-quiet) { margin-bottom: 0; }
+.visit-status { margin: 0; color: var(--muted); font-size: var(--text-xs); text-align: end; overflow-wrap: anywhere; }
 /* An ask: a button and how the work it asked for stands (partials/_ask.html).
-   Inline, so it sits wherever a button does, and exactly as large as its
-   button: what it says is drawn under the button, over the page, so pressing
-   it moves nothing. Nothing is drawn until something was asked. */
-.ask { position: relative; display: inline-flex; align-items: center; min-inline-size: 0; }
-/* One nobody presses: its line sits on the trail's line, at the far edge, so
-   it comes and goes without moving anything. */
-.ask-quiet { position: static; display: block; block-size: 0; }
+   It lays nothing out of its own, so its button stands wherever a button
+   does. What it says takes a line under the row the button stands in, as
+   wide as that row and adding nothing to its width, and reserved before
+   anything is said, so pressing moves nothing. */
+.ask { display: contents; }
 .ask-said {
-  position: absolute; inset-block-start: calc(100% + var(--space-2)); inset-inline-start: 0; z-index: 3;
-  display: flex; flex-wrap: wrap; gap: var(--space-3);
-  inline-size: max-content; max-inline-size: min(36ch, 100vw - 28px);
-  padding: var(--space-2) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-sm);
-  background: var(--surface); box-shadow: var(--shadow-sm);
+  display: flex; flex: 1 0 100%; flex-wrap: wrap; gap: 0 var(--space-3); order: 1; grid-column: 1 / -1;
+  contain: inline-size; min-block-size: 1lh;
   color: var(--muted); font-size: var(--text-xs); white-space: normal;
-  --ask-shift: 0px; translate: var(--ask-shift) 0;
 }
 /* A head's controls end at the page's edge, so what one says ends there too.
-   Anywhere else app.js sets --ask-shift to keep it on the screen. */
-.page-head .page-actions .ask { position: static; }
-.page-head .page-actions .ask-said { inset-inline: auto 0; }
-.ask-said:has(.ask-note:empty):has(.ask-elapsed:empty) { display: none; }
+   Its line makes the controls taller than their buttons, so the title stands
+   on their labels' baseline rather than at the middle of the two. */
+.page-head .page-actions > .ask > .ask-said { justify-content: flex-end; text-align: end; }
+.page-head:has(> .page-actions > .ask) { align-items: first baseline; }
+/* A menu is drawn over the page, so its copy of an ask says something only
+   once there is something to say, in the menu's own inset. */
+.overflow-menu-panel .ask-said { padding: 0 var(--space-5); }
+.overflow-menu-panel .ask-said span { padding: 0; white-space: normal; }
+.overflow-menu-panel .ask-said:has(.ask-note:empty):has(.ask-elapsed:empty) { display: none; }
 .ask-note { overflow-wrap: anywhere; }
+/* A note says its state's word and its sentence (_ask.html): the sentence
+   where the line is the row's, the word alone in a table's cell, whose line is
+   as wide as its button, so the row stays one line tall. There the sentence
+   is the button's title, and the clock is left to the open row. */
+.ask-word { display: none; }
+.data-table > tbody > tr:not(.row-detail) > td .ask-note > .ask-word { display: inline; }
+.data-table > tbody > tr:not(.row-detail) > td :is(.ask-note > .ask-sentence, .ask-elapsed) { display: none; }
 .ask-note:empty, .ask-elapsed:empty { display: none; }
+/* The word and the sentence again, for a row's open line alone, since
+   everywhere else the note says both. */
+.ask-why { display: none; }
+.row-detail .ask-why { display: inline; overflow-wrap: anywhere; }
 .ask-elapsed { font-variant-numeric: tabular-nums; }
 .ask[data-ask-state="failed"] .ask-note { color: var(--danger); }
 /* Busy keeps the button focusable, so it is marked rather than disabled. */

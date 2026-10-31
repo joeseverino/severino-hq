@@ -1,13 +1,8 @@
-"""Findings about the secrets a machine renders: a render that failed, one that
-stopped running, a Connect server that stopped syncing, and a status document
-nobody could read.
+"""Findings about the secrets a machine renders, from its ``host.render_status`` reading.
 
-Each secret renderer writes a status document after every run, and the
-controller on that machine reports it as the ``host.render_status`` reading
-(``docs/Secrets.md``). Cached files keep everything running while a renderer
-fails, so nothing else notices: a rotated credential never arrives and a
-revoked one keeps working. The reading is one fact per renderer on the node of
-the controller that read it, and the rules here read those facts.
+Cached files keep everything running while a renderer fails, so nothing else
+notices: a rotated credential never arrives and a revoked one keeps working.
+The reading and each finding: docs/Secrets.md#how-hq-reads-it.
 """
 
 import re
@@ -166,18 +161,17 @@ class Rendering(FactRow):
         """Whether ``stamp`` was more than ``within`` old when the document was
         read. A stamp that names no instant is: a renderer that has never
         succeeded has nothing current.
-
-        A document says how things stood when it was read. While HQ is not in
-        use the controller reads hours apart, and a renderer that has run every
-        hour since is not behind for that. A reading older than the slowest
-        the controller ever reads means it has stopped reading, and then what
-        the document described is measured against now, through ``passed``, so
-        the answer says when it stops holding.
         """
 
         when, read = moment(stamp), moment(self.read_at)
         if when is None:
             return True
+        # A document says how things stood when it was read. While HQ is not in
+        # use the controller reads hours apart, and a renderer that has run
+        # every hour since is not behind for that. A reading older than the
+        # slowest the controller ever reads means it has stopped reading, and
+        # then the document is measured against now, through ``passed``, so the
+        # answer says when it stops holding.
         if read is None or passed(read + slowest_sweep_interval(), now=now):
             return passed(when + within, now=now)
         return read - when > within
@@ -373,10 +367,9 @@ def _stale(estate: FindingEstate) -> tuple[Finding, ...]:
 
     The last run it recorded did not fail, and nothing has confirmed the
     installed files since: the timer is not firing, the unit does not start, or
-    it fails before taking the lock, which records nothing. Measured
-    against now and not against when the reading was taken, so a controller
-    that stopped sweeping because its secrets are gone still raises this.
-    A failed run is ``render-failing``'s to say.
+    it fails before taking the lock, which records nothing. A controller that
+    stopped sweeping still raises this (``Rendering._behind``); a failed run is
+    ``render-failing``'s to say.
     """
 
     found = []

@@ -1,11 +1,8 @@
-"""
-Contact submission review screens.
+"""Contact submission review screens.
 
-Submissions are stored in Cloudflare D1 by the example.com contact form. These
-views read the copy the controller last read (``inbox``) and never reach D1. A
-review or a deletion is queued for the controller, which applies it through
-the Cloudflare API connection; until it does, the message shows the change as
-waiting. Every change is recorded in the HQ audit log.
+They read the copy the controller last read (``inbox``) and never reach D1. A
+review or a deletion waits for the controller to apply it, the message showing
+it as waiting until then, and every change is recorded in the audit log.
 """
 
 from urllib.parse import quote
@@ -16,11 +13,10 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from hq.platform.application.asks import APPLIES_SHORTLY, WAITING
+from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.contact_submissions import (
-    ContactDeleteCommand,
-    ContactReviewCommand,
-    execute_contact_delete,
-    execute_contact_review,
+    DELETE,
+    REVIEW,
     find_submission,
     list_contact_submissions,
 )
@@ -92,15 +88,13 @@ def contact_list(request):
 contact_list.page_reads = ("cloudflare.contact_submission",)  # type: ignore[attr-defined]
 
 
-def _review(request, pk: int, command: ContactReviewCommand) -> bool:
+def _review(request, pk: int, review: dict[str, str]) -> bool:
     """Queue one review; say why not when it is refused."""
 
-    try:
-        execute_contact_review(command, principal=web_principal(request.user), current_id=pk)
-    except ValueError as exc:
-        messages.error(request, str(exc))
-        return False
-    return True
+    result = execute_capability(REVIEW, review, principal=web_principal(request.user), target=pk)
+    if not result["ok"]:
+        messages.error(request, result["error"]["message"])
+    return result["ok"]
 
 
 def contact_detail(request, pk: int):
@@ -112,12 +106,7 @@ def contact_detail(request, pk: int):
     if request.method == "POST":
         form = ContactReviewForm(request.POST)
         if form.is_valid():
-            command = ContactReviewCommand(
-                status=form.cleaned_data["status"],
-                assigned_to=form.cleaned_data["assigned_to"],
-                admin_notes=form.cleaned_data["admin_notes"],
-            )
-            if _review(request, pk, command):
+            if _review(request, pk, dict(form.cleaned_data)):
                 messages.success(request, f"Message saved. {QUEUED}")
             return redirect("contacts:detail", pk=pk)
     else:
@@ -164,12 +153,12 @@ def contact_set_status(request, pk: int):
     if not submission:
         messages.error(request, GONE)
         return redirect("contacts:list")
-    command = ContactReviewCommand(
-        status=status,
-        assigned_to=submission.get("assigned_to") or "",
-        admin_notes=submission.get("admin_notes") or "",
-    )
-    if _review(request, pk, command):
+    review = {
+        "status": status,
+        "assigned_to": submission.get("assigned_to") or "",
+        "admin_notes": submission.get("admin_notes") or "",
+    }
+    if _review(request, pk, review):
         messages.success(request, f"Message marked {ended(STATUS_LABELS[status].lower())} {QUEUED}")
     return redirect(_safe_next(request))
 
@@ -181,14 +170,9 @@ def contact_delete(request, pk: int):
         return redirect("contacts:list")
 
     if request.method == "POST":
-        try:
-            execute_contact_delete(
-                ContactDeleteCommand(confirm=str(pk)),
-                principal=web_principal(request.user),
-                current_id=pk,
-            )
-        except ValueError as exc:
-            messages.error(request, str(exc))
+        result = execute_capability(DELETE, {"confirm": str(pk)}, principal=web_principal(request.user), target=pk)
+        if not result["ok"]:
+            messages.error(request, result["error"]["message"])
             return redirect("contacts:detail", pk=pk)
         messages.success(request, f"Message deleted. {APPLIES_SHORTLY}")
         return redirect("contacts:list")

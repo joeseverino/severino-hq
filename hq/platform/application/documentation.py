@@ -1,33 +1,32 @@
 """Documentation synchronization use case shared by web, MCP, and CLI."""
 
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 from datetime import date
-from typing import Any
+from functools import partial
+from typing import Annotated, Any
 
-from django.db import transaction
-
-from hq.domains.assets.models import Asset
 from hq.domains.docs_index.importer import (
-    ManifestImportError,
     import_manifest_data,
     validate_manifest_data,
 )
 from hq.domains.docs_index.models import DocumentationRecord
-from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.models import AuditLog
 
-from .domains import records_of
+from .command_fields import Describe, Names
 from .entity_links import EntityLink, entity_link
 from .labels import plural
-from .record_errors import RecordConflict, RecordNotFound
-from .record_links import linked_records
+from .projection import listing
+from .record_errors import PolicyError
+from .record_saves import Held, Link, linked_saver
 from .references import Mention, Mentions
 from .security import Capability, Principal
+from .sensitivity import safe_records
 
 MAX_MANIFEST_ITEMS = 2000
+SYNC = "documentation.sync"
 
 # A project's own note in the vault is ``project-<slug>``: the document that
 # stands for the project, so a page links the project and not the note.
@@ -104,36 +103,38 @@ def related_documents(
 
 @dataclass(frozen=True, slots=True)
 class DocumentationSyncCommand:
-    manifest: list[dict[str, Any]]
-    update_existing: bool = True
-    report_orphans: bool = False
-    prune_orphans: bool = False
-    confirm_prune: bool = False
+    manifest: Annotated[list[dict[str, Any]], Describe("The documentation records to sync, one per doc.")]
+    update_existing: Annotated[bool, Describe("Update records HQ already holds.")] = True
+    report_orphans: Annotated[bool, Describe("Report records the manifest no longer lists.")] = False
+    prune_orphans: Annotated[bool, Describe("Delete records the manifest no longer lists.")] = False
+    confirm_prune: Annotated[bool, Describe("Confirms the delete that prune_orphans asks for.")] = False
 
 
 @dataclass(frozen=True, slots=True)
 class DocumentationCommand:
-    doc_id: str
-    title: str
-    doc_type: str = "runbook"
-    system_service: str = ""
-    environment: str = "other"
-    status: str = "draft"
-    sensitivity: str = "internal"
-    obsidian_path: str = ""
-    github_path: str = ""
-    external_url: str = ""
-    last_reviewed: date | None = None
-    published_at: date | None = None
-    notes: str = ""
-    related_projects: tuple[str, ...] = ()
-    related_assets: tuple[str, ...] = ()
-    related_expenses: tuple[int, ...] = ()
+    doc_id: Annotated[str, Describe("The doc's ID in the vault.")]
+    title: Annotated[str, Describe("The doc's title.")]
+    doc_type: Annotated[str, Describe("What type of doc it is.")] = "runbook"
+    system_service: Annotated[str, Describe("The system or service it is about.")] = ""
+    environment: Annotated[str, Describe("Where that system runs.")] = "other"
+    status: Annotated[str, Describe("Where the doc stands.")] = "draft"
+    sensitivity: Annotated[str, Describe("Who may read it; restricted docs never reach an agent.")] = "internal"
+    obsidian_path: Annotated[str, Describe("Its path in the vault.")] = ""
+    github_path: Annotated[str, Describe("Its path in a repository.")] = ""
+    external_url: Annotated[str, Describe("Where it is published outside HQ.")] = ""
+    last_reviewed: Annotated[date | None, Describe("When it was last checked against what it describes.")] = None
+    published_at: Annotated[date | None, Describe("When it was published.")] = None
+    notes: Annotated[str, Describe("Anything else worth keeping.")] = ""
+    related_projects: Annotated[tuple[str, ...], Names("projects"), Describe("The projects this doc covers.")] = ()
+    related_assets: Annotated[tuple[str, ...], Names("assets"), Describe("The assets this doc covers.")] = ()
+    related_expenses: Annotated[
+        tuple[int, ...], Names("expenses", key="id"), Describe("The expenses this doc records.")
+    ] = ()
 
 
-def serialize_documentation(record: DocumentationRecord) -> dict[str, Any]:
+def serialize_documentation(record: DocumentationRecord, *, relationships: bool = True) -> dict[str, Any]:
     safe = record.is_safe_for_ai_export
-    return {
+    fields: dict[str, Any] = {
         "doc_id": record.doc_id,
         "title": record.title,
         "doc_type": record.doc_type,
@@ -148,51 +149,41 @@ def serialize_documentation(record: DocumentationRecord) -> dict[str, Any]:
         "published_at": (record.published_at.isoformat() if record.published_at else None),
         "notes": record.notes if safe else "",
         "updated_at": record.updated_at.isoformat(),
-        "relationships": {
+    }
+    if relationships:
+        fields["relationships"] = {
             "projects": list(record.related_projects.order_by("slug").values_list("slug", flat=True)),
             "assets": list(record.related_assets.order_by("slug").values_list("slug", flat=True)),
             "expense_ids": list(record.related_expenses.order_by("id").values_list("id", flat=True)),
-        },
-    }
+        }
+    return fields
 
 
-@transaction.atomic
-def save_documentation(
-    command: DocumentationCommand,
-    *,
-    principal: Principal,
-    current_doc_id: str | None = None,
-    expected_updated_at: str | None = None,
-) -> dict[str, Any]:
-    principal.require(records_of("documentation").write)
-    operation = "documentation.create" if current_doc_id is None else "documentation.update"
-    with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
-        if current_doc_id is None:
-            record, created = DocumentationRecord(), True
-        else:
-            try:
-                record = DocumentationRecord.objects.select_for_update().get(doc_id=current_doc_id)
-            except DocumentationRecord.DoesNotExist as exc:
-                raise RecordNotFound("That documentation record was not found.") from exc
-            created = False
-            if expected_updated_at and record.updated_at.isoformat() != expected_updated_at:
-                raise RecordConflict("That documentation record changed after it was read.")
-        values = asdict(command)
-        projects = linked_records(Project, "slug", values.pop("related_projects"))
-        assets = linked_records(Asset, "slug", values.pop("related_assets"))
-        expenses = linked_records(Expense, "id", values.pop("related_expenses"))
-        for field, value in values.items():
-            setattr(record, field, value)
-        record.full_clean()
-        record.save()
-        record.related_projects.set(projects)
-        record.related_assets.set(assets)
-        record.related_expenses.set(expenses)
-    return {
-        "ok": True,
-        "created": created,
-        "documentation": serialize_documentation(record),
-    }
+def list_documentation(*, status: str | None = None, query: str | None = None, limit: int = 50) -> dict[str, Any]:
+    """The documentation records any reader may see, by the domain's own
+    sensitivity rule: a restricted record is never listed."""
+
+    return listing(
+        safe_records(),
+        partial(serialize_documentation, relationships=False),
+        search=("doc_id", "title", "system_service"),
+        status=status,
+        query=query,
+        order=("doc_id",),
+        limit=limit,
+    )
+
+
+save_documentation = linked_saver(
+    "documentation",
+    serialize_documentation,
+    refusals=Held("That documentation record was not found.", "That documentation record changed after it was read."),
+    links={
+        "related_projects": Link("slug", "A related project was not found."),
+        "related_assets": Link("slug", "A related asset was not found."),
+        "related_expenses": Link("id", "A related expense was not found."),
+    },
+)
 
 
 def sync_documentation(
@@ -210,19 +201,19 @@ def sync_documentation(
     if prune_orphans:
         principal.require(Capability.PRUNE_DOCUMENTATION)
     if len(manifest) > MAX_MANIFEST_ITEMS:
-        raise ManifestImportError(f"Manifest exceeds the {MAX_MANIFEST_ITEMS}-record safety limit.")
+        raise PolicyError(f"Manifest exceeds the {MAX_MANIFEST_ITEMS}-record safety limit.")
     if any(not isinstance(entry, dict) for entry in manifest):
-        raise ManifestImportError("Every manifest record must be a JSON object.")
+        raise PolicyError("Every manifest record must be a JSON object.")
     problems = validate_manifest_data(manifest)
     if problems:
         return {"ok": False, "problems": problems}
     if prune_orphans and not confirm_prune:
-        raise ManifestImportError("confirm_prune must be true when prune_orphans is true")
+        raise PolicyError("confirm_prune must be true when prune_orphans is true")
 
     with operation_context(
         interface=principal.interface,
         actor=principal.actor,
-        operation="documentation.sync",
+        operation=SYNC,
     ):
         stats = import_manifest_data(
             manifest,

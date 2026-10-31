@@ -1,22 +1,10 @@
 """A provider's own model is its form.
 
-``control_plane.providers`` already declares each provider once, as a pydantic
-model, and four things are derived from that declaration: the JSON Schema the
-API publishes, the contract the controller is handed, the validation every
-write passes through, and this form. Field types, choices, bounds, defaults and which
-fields are optional all come from the model, and a provider added to that tuple
-gets a working create-and-edit page with nothing written here.
-
-Two rules keep this honest:
-
-- **Rendering only.** The form decides what the inputs look like. It does not
-  decide what is valid: ``clean`` hands the assembled spec back to
-  ``validate_spec`` and reports whatever pydantic says. A second implementation
-  of the rules would be a second answer to the same question, and the two would
-  drift on the day someone tightened one of them.
-- **No provider is named.** Nothing below knows what a proxy host is. A field is
-  built from its annotation, so the day a provider declares a new one it is
-  rendered rather than dropped.
+``control_plane.providers`` declares each provider once, as a pydantic model,
+and the API's JSON Schema, the controller's contract, write validation and this
+form all derive from it, so a new provider gets a create-and-edit page with
+nothing written here. The form only renders (``clean`` asks ``validate_spec``)
+and names no provider: a field built from its annotation is never dropped.
 """
 
 import types
@@ -27,15 +15,17 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from django.utils.datastructures import MultiValueDict
+from pydantic import ValidationError as SpecError
 lazy from django.utils.html import format_html, format_html_join
 lazy from django.utils.safestring import mark_safe
 
-from hq.domains.control_plane.provider_spec import NameContext
+from hq.domains.control_plane.provider_spec import NameContext, ProviderSpec
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
 lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from .forms import LinesField
-from .plugins import _import
+from .plugins import import_reference
+from .references import keeping_held
 
 # Constraint attributes carried by annotated-types objects in a pydantic field's
 # metadata. Read by name rather than by isinstance so a constraint class this
@@ -46,15 +36,11 @@ _CONSTRAINTS = ("min_length", "max_length", "ge", "le", "pattern")
 class NameListWidget(forms.Widget):
     """One input per name, with a row to add and a control to remove.
 
-    A textarea holds a list the way a paragraph holds a shopping list: the
-    items are there, but nothing about it says where one ends, and editing the
-    middle of eight lines is a text-editing exercise rather than a choice.
-    A name is the thing being edited, so it gets a field of its own.
-
-    Rows post under the same name and are read back with `getlist`, so the
-    field receives an actual list and no parsing rules live in two places.
-    Without scripting the existing rows still edit and the spare row still
-    adds: only the extra add/remove convenience needs JavaScript.
+    In a textarea nothing says where one name ends, and editing the middle of
+    eight lines is text editing rather than a choice. Rows post under one name
+    and are read back with `getlist`, so the field receives a list and no parsing
+    rule lives in two places. Without scripting, rows still edit and the spare
+    row still adds; only adding and removing more needs JavaScript.
     """
 
     @override
@@ -81,12 +67,9 @@ class NameListWidget(forms.Widget):
     def _row(self, name: str, item: str):
         """One value, editable unless HQ is the one that found it.
 
-        A value carrying a note is a value a sweep reports, so HQ holds it
-        whether or not this field does, and removing it would mean deleting a
-        fact HQ does not own.
-
-        Submitted as a hidden input rather than left out, so a save keeps what
-        it did not ask about instead of quietly dropping it.
+        A value carrying a note is one a sweep reports, a fact HQ holds whether
+        or not this field does, so it cannot be removed here. It posts as a
+        hidden input, so a save keeps what it did not ask about.
         """
 
         note = self.notes.get(item, "")
@@ -195,6 +178,33 @@ class ProviderSpecForm(forms.Form):
     # The model's own fields, so the form can tell a default from an answer.
     provider_fields: ClassVar[dict] = {}
 
+    # The fields whose options come from live readings, and whether the form
+    # edits a record that exists: each such field holds its value as an option.
+    live_names: ClassVar[tuple[str, ...]] = ()
+    editing: ClassVar[bool] = False
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        for name in self.live_names:
+            field = self.fields[name]
+            self._hold(field, self.initial.get(name, field.initial))
+
+    def _hold(self, field: forms.ChoiceField, held: Any) -> None:
+        """Offer the value the record holds, whatever the live readings say.
+
+        A reading can lag the record or miss it altogether (no controller has
+        reported yet), and a menu without the held value shows nothing chosen
+        or posts its first option: a change nobody asked for. An edit with
+        nothing held starts blank for the same reason.
+        """
+
+        values = held if isinstance(held, (list, tuple)) else [held]
+        kept = [str(value) for value in values if value not in (None, "")]
+        field.choices = keeping_held(field.choices, [(value, value) for value in kept])
+        blank = any(value == "" for value, _label in field.choices)
+        if self.editing and not kept and not blank and not isinstance(field, forms.MultipleChoiceField):
+            field.choices = [("", "Choose one…" if field.required else "None"), *field.choices]
+
     def _is_routine(self, field) -> bool:
         """Whether this field is still just a default nobody chose.
 
@@ -223,15 +233,16 @@ class ProviderSpecForm(forms.Form):
         """Routine tuning, one disclosure away.
 
         A certificate asks which certificate; how many days before expiry to
-        start renewing is not part of that question.
-
-        Shown rather than hidden, because a default is only a good answer until
-        it is not, and a field that has been set comes out from behind the
-        disclosure.
+        start renewing is not part of that question. Shown rather than hidden,
+        since a default is only a good answer until it is not, and a field that
+        has been set comes out from behind the disclosure.
         """
 
         return [field for field in self if self._is_routine(field)]
 
+    # The form decides what the inputs look like, never what is valid: a
+    # second implementation of the model's rules would drift from it the day
+    # one of them tightened.
     @override
     def clean(self) -> dict[str, Any]:
         cleaned = super().clean()
@@ -256,26 +267,21 @@ class ProviderSpecForm(forms.Form):
 def identity_fields(kind: str) -> tuple[str, ...]:
     """The spec fields that decide which record this is at the provider.
 
-    A provider matches its own records by hostname, never by HQ's key:
-    AdGuard finds the rewrite whose ``domain`` equals the spec's, NPM the host
-    whose ``domain_names`` match. Changing one renames the record at the
-    provider on the next pass, so the form warns that the old name stops
-    resolving.
-
-    Read from ``seed`` rather than declared again, because seed already states
-    exactly which fields a hostname decides. Only its keys are used, which is
-    why a sentinel is safe to pass.
-
-    A covering provider is excluded. A certificate is not found at its provider
-    by a name it carries: it is a lineage HQ issues and re-issues, and editing
-    which names it covers is exactly how that is done. Warning that the change
-    "renames the record and the old name stops resolving" would describe a
-    provider that does not work that way, about an edit that is the point.
+    A provider matches its own records by hostname, never by HQ's key (AdGuard
+    a rewrite's ``domain``, NPM a host's ``domain_names``), so changing one
+    renames the record at the provider on the next pass, and the form warns
+    that the old name stops resolving.
     """
 
     provider = PROVIDERS[kind]
+    # A certificate is not found at its provider by a name it carries: it is a
+    # lineage HQ issues and re-issues, and editing which names it covers is how
+    # that is done, so the rename warning would describe a provider that does
+    # not work that way, about an edit that is the point.
     if provider.covers or provider.seed is None:
         return ()
+    # ``seed`` already states which fields a hostname decides. Only its keys
+    # are read, which is why a sentinel hostname is safe.
     return tuple(provider.seed(NameContext(hostname="hostname.invalid")))
 
 
@@ -287,33 +293,18 @@ def spec_form_class(
 ) -> type[ProviderSpecForm]:
     """Build the form for one provider kind.
 
-    ``lock_identity`` is for editing an existing record: see
-    ``identity_fields`` for why those cannot be changed in place.
-
-    Not cached. Building it is a dict comprehension over a handful of fields,
-    and a cache keyed on kind is wrong the moment a test registers a provider,
-    which is exactly how the plug-and-play property is proved.
+    ``lock_identity`` is for editing an existing record (``identity_fields``
+    says why). Not cached: building it is cheap, and a cache keyed on kind is
+    wrong the moment a test registers a provider, which is how the plug-and-play
+    property is proved.
     """
 
     provider = PROVIDERS[kind]
     context = context or NameContext()
     fields = {name: _field_for(field) for name, field in provider.spec_type.model_fields.items()}
-    for name, options in _live_choices(provider, context).items():
-        if name not in fields:
-            continue
-        original = fields[name]
-        # Offered rather than typed. An empty list means the thing this field
-        # has to name does not exist yet, and the field says so instead of
-        # presenting an empty menu that cannot be satisfied.
-        many = isinstance(original, NameList)
-        field_class = forms.MultipleChoiceField if many else forms.ChoiceField
-        fields[name] = field_class(
-            choices=options,
-            required=original.required,
-            label=original.label,
-            widget=forms.CheckboxSelectMultiple if many else None,
-            help_text=original.help_text or ("" if options else "Nothing to choose yet. Add one to HQ first."),
-        )
+    live = {name: options for name, options in _live_choices(provider, context).items() if name in fields}
+    for name, options in live.items():
+        fields[name] = _offered(fields[name], options)
     for name, effect in provider.change_effects:
         if name in fields:
             fields[name].change_effect = effect
@@ -344,8 +335,30 @@ def spec_form_class(
             "provider_kind": kind,
             "advanced_names": provider.advanced_fields,
             "provider_fields": dict(provider.spec_type.model_fields),
+            "live_names": tuple(live),
+            "editing": lock_identity,
             **fields,
         },
+    )
+
+
+def _offered(original: forms.Field, options: tuple[tuple[str, str], ...]) -> forms.ChoiceField:
+    """A field offered as a menu of what exists rather than typed.
+
+    An empty list means the thing this field has to name does not exist yet,
+    or has not been read, and the help says so beside the empty menu.
+    """
+
+    many = isinstance(original, NameList)
+    field_class = forms.MultipleChoiceField if many else forms.ChoiceField
+    empty = "" if options else "Nothing to choose from yet: HQ has not read or been given one."
+    return field_class(
+        choices=options,
+        required=original.required,
+        label=original.label,
+        initial=original.initial,
+        widget=forms.CheckboxSelectMultiple if many else None,
+        help_text=" ".join(part for part in (original.help_text, empty) if part),
     )
 
 
@@ -393,6 +406,10 @@ def _field_for(field: Any) -> forms.Field:
         )
     if origin is list:
         return NameList(**options)
+    if origin is dict:
+        # Written as JSON and read back as a mapping, so the model checks a
+        # mapping rather than refusing the text it was typed as.
+        return forms.JSONField(**options)
     if annotation is bool:
         # A checkbox is never "required": unchecked is a valid answer, and
         # Django reads required=True on a BooleanField as "must be ticked".
@@ -415,30 +432,30 @@ def _field_for(field: Any) -> forms.Field:
     )
 
 
-def _live_choices(provider: Any, context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
+def _live_choices(provider: ProviderSpec, context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """Options a provider says come from live data, resolved late.
 
     A failure here must not take the form down: the page is how an operator
     fixes things, and refusing to render it because a lookup failed is the
     least useful moment to fail. An empty list renders as "nothing to choose
-    yet", which is both true and actionable.
+    from yet", which is both true and actionable.
     """
 
     if not provider.choices:
         return {}
     try:
-        return _import(provider.choices)(context) or {}
+        return import_reference(provider.choices)(context) or {}
     except Exception:  # noqa: BLE001 - a broken lookup must not hide the form
         return {}
 
 
-def _live_notes(provider: Any) -> dict[str, dict[str, str]]:
+def _live_notes(provider: ProviderSpec) -> dict[str, dict[str, str]]:
     """``{field: {value: note}}`` for values a provider says HQ observes."""
 
-    if not getattr(provider, "notes", ""):
+    if not provider.notes:
         return {}
     try:
-        return _import(provider.notes)() or {}
+        return import_reference(provider.notes)() or {}
     except Exception:  # noqa: BLE001 - a broken lookup must not hide the form
         return {}
 
@@ -456,11 +473,10 @@ def _limits(metadata: Any) -> dict[str, Any]:
 def _reported(exc: Exception) -> tuple[tuple[str, str], ...]:
     """Pydantic's failures, paired with the field each belongs to."""
 
-    errors = getattr(exc, "errors", None)
-    if not callable(errors):
+    if not isinstance(exc, SpecError):
         return (("", str(exc)),)
     reported = []
-    for item in errors():
+    for item in exc.errors():
         location = ".".join(str(part) for part in item.get("loc", ()))
         reported.append((location, item.get("msg", "Invalid value.")))
     return tuple(reported) or (("", str(exc)),)

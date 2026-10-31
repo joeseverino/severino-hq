@@ -33,8 +33,8 @@ code { font-family: var(--font-mono); font-size: .88em; background: var(--bg-tin
 pre code { background: transparent; padding: 0; color: inherit; }
 /* An identifier (`|breakable`, or code): an address, a path, a key, an image.
    One that fits on its line moves to the next line whole; one longer than its
-   line wraps at the seams the filter marks; a hyphenated part (`.whole`) or a
-   seamless one breaks inside only when it alone is longer than its line. A
+   line wraps at the seams the filter marks; a hyphenated part (`.whole`) or one
+   with no seams breaks inside only when it alone is longer than its line. A
    table lays out its own identifiers. */
 :is(code, .token, .whole):not(pre *, td *, th *) {
   display: inline-block; max-width: 100%; overflow-wrap: break-word; text-decoration: inherit;
@@ -42,11 +42,11 @@ pre code { background: transparent; padding: 0; color: inherit; }
      and still sits where its container aligns its items. */
   inline-size: fit-content;
   /* Wrapped, it sits on its first line: an inline block's baseline is its
-     last, which a row aligned on baselines would lift over the rows above. */
+     last, which a row aligned on baselines would lift over the rows above.
+     An engine without it sets the chip on its last line's baseline, still
+     the baseline of the words around it; set from the top instead, a chip in
+     a smaller face would sit off the line. */
   baseline-source: first;
-}
-@supports not (baseline-source: first) {
-  :is(code, .token, .whole):not(pre *, td *, th *) { vertical-align: top; }
 }
 :is(code, .token):is(td *, th *) { overflow-wrap: break-word; }
 .whole:is(td *, th *) { display: inline-block; max-width: 100%; }
@@ -54,7 +54,7 @@ pre code { background: transparent; padding: 0; color: inherit; }
 /* Where the filter lets a token break (value_tags._SEAM): a zero-width space,
    so `white-space` governs it as it does any text, kept out of the name a
    reader hears. */
-.seam::after { content: "\200B"; content: "\200B" / ""; }
+.seam::after { content: "\200B" / ""; }
 /* A scrap of a part ("1" in "example-agent-1") never stands alone on a line.
    It holds its neighbor with no box of its own, so nothing about it can reach
    past a cell or open a break where the part around it is held whole. */
@@ -220,7 +220,6 @@ pre ::selection { color: var(--code-ink); }
   cursor: pointer; user-select: none;
   transition: background .12s ease, color .12s ease;
 }
-.nav-group > summary::-webkit-details-marker { display: none; }
 .nav-group > summary::marker { content: ""; }
 .nav-group-label { display: inline-flex; align-items: center; gap: var(--space-2); }
 .nav-group > summary:hover, .nav-group[open] > summary { color: var(--ink); background: var(--bg-tint); }

@@ -244,3 +244,41 @@ class CatalogQueryCountTests(TestCase):
 
     def test_reached_through_costs_no_more_queries_for_more_machines(self):
         assert_cost_does_not_grow(self, sizes=(2, 20), arrange=self.arrange, draw=self.draw, rows=len)
+
+
+class TailnetFactsTests(TestCase):
+    """What the tailnet says about a machine, as facts."""
+
+    def tailnet_facts(self, hostnames, addresses):
+        return [fact for fact in facts_about(hostnames, addresses) if fact.source_kind == TAILNET_KIND]
+
+    def test_a_device_says_its_name_addresses_system_and_presence(self):
+        tailnet_connection()
+        bare = device("example-box", "100.64.0.3")
+        del bare["os"]
+        store(TAILNET_KIND, device("example-host", "100.64.0.1"), bare, {"addresses": ["100.64.0.1"]})
+
+        host = {(fact.label, fact.value) for fact in self.tailnet_facts(("example-host",), ())}
+        box = {fact.label for fact in self.tailnet_facts((), ("100.64.0.3",))}
+
+        self.assertEqual(
+            host,
+            {
+                ("Tailnet name", "example-host"),
+                ("Address", "100.64.0.1"),
+                ("Operating system", "linux"),
+                ("Online", "yes"),
+            },
+        )
+        self.assertEqual(box, {"Tailnet name", "Address", "Online"})
+
+    def test_a_tailnet_that_could_not_be_read_says_so(self):
+        from ..facts import UNREADABLE
+
+        tailnet_connection()
+        store(TAILNET_KIND, reachable=False, error="The tailnet refused the key.")
+
+        facts = self.tailnet_facts(("example-host",), ())
+
+        self.assertEqual([fact.state for fact in facts], [UNREADABLE])
+        self.assertIn("refused the key", facts[0].detail)

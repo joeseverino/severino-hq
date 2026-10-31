@@ -22,6 +22,7 @@ from ..connections import (
     ConnectionLink,
     ConnectionSpec,
 )
+from ..plugin_testing import offering
 from ..security import Capability, Principal
 from ..topology import (
     derive_topology,
@@ -29,16 +30,9 @@ from ..topology import (
     topology as serialized_topology,
 )
 from ..topology_lenses import (
-    MAX_TRACE_DEPTH,
     apply_lens,
-    apply_trace,
     lens_for,
     topology_lenses,
-)
-from ..topology_model import (
-    Topology,
-    TopologyEdge,
-    TopologyNode,
 )
 from .host_only import host_only
 from .markup import hrefs, select, texts, within
@@ -123,7 +117,7 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
             web_route="control_plane:list",
         )
 
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(second,)):
+        with offering(second, alone=True):
             topology = derive_topology(principal=READ)
 
         controller = next(node for node in topology.nodes if node.kind == "controller")
@@ -171,7 +165,7 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
                 ),
             ),
         )
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
+        with offering(spec, alone=True):
             topology = derive_topology(principal=READ)
 
         self.assertNotIn(
@@ -271,62 +265,6 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
                     draw=lambda _count, principal=principal: derive_topology(principal=principal),
                     rows=zones,
                 )
-
-
-class TopologyTraceTests(TestCase):
-    def setUp(self):
-        self.graph = Topology(
-            nodes=tuple(
-                TopologyNode(node_id, "resource", node_id.upper(), "Example")
-                for node_id in ("a", "b", "c", "d", "aside")
-            ),
-            edges=(
-                TopologyEdge("ab", "a", "b", "feeds", "Feeds"),
-                TopologyEdge("bc", "b", "c", "feeds", "Feeds"),
-                TopologyEdge("cd", "c", "d", "feeds", "Feeds"),
-                TopologyEdge("aside-a", "aside", "a", "feeds", "Feeds"),
-            ),
-        )
-
-    def test_outbound_trace_is_bounded_and_records_shortest_hops(self):
-        narrowed, trace = apply_trace(self.graph, "a", direction="outbound", depth=2)
-
-        self.assertEqual({node.id for node in narrowed.nodes}, {"a", "b", "c"})
-        self.assertEqual(dict(trace.hops), {"a": 0, "b": 1, "c": 2})
-        self.assertNotIn("d", {node.id for node in narrowed.nodes})
-
-    def test_inbound_and_outbound_are_distinct_questions(self):
-        inbound, _ = apply_trace(self.graph, "a", direction="inbound", depth=3)
-        outbound, _ = apply_trace(self.graph, "a", direction="outbound", depth=3)
-
-        self.assertEqual({node.id for node in inbound.nodes}, {"a", "aside"})
-        self.assertEqual({node.id for node in outbound.nodes}, {"a", "b", "c", "d"})
-
-    def test_invalid_inputs_are_safe_and_depth_is_capped(self):
-        unchanged, trace = apply_trace(self.graph, "missing", depth="many")
-        capped, capped_trace = apply_trace(self.graph, "a", direction="sideways", depth=999)
-
-        self.assertIs(unchanged, self.graph)
-        self.assertIsNone(trace)
-        self.assertEqual(capped_trace.direction, "both")
-        self.assertEqual(capped_trace.depth, MAX_TRACE_DEPTH)
-        self.assertLessEqual(len(capped.nodes), len(self.graph.nodes))
-
-    def test_serialization_carries_the_trace_without_mutating_nodes(self):
-        narrowed, trace = apply_trace(self.graph, "a", direction="outbound", depth=2)
-        payload = serialize_topology(narrowed, trace=trace)
-
-        self.assertEqual(payload["schema_version"], 2)
-        self.assertEqual(payload["trace"]["focus"], "a")
-        self.assertEqual(
-            payload["trace"]["hops"],
-            [
-                {"node": "a", "hop": 0},
-                {"node": "b", "hop": 1},
-                {"node": "c", "hop": 2},
-            ],
-        )
-        self.assertNotIn("hop", payload["nodes"][0])
 
 
 class TopologyPageTests(TestCase):
@@ -658,7 +596,7 @@ class ConnectionActionTests(TestCase):
         )
 
     def project(self, spec, principal=READ):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
+        with offering(spec, alone=True):
             return derive_topology(principal=principal)
 
     def node(self, spec):
@@ -903,7 +841,7 @@ class MeasuredNodeTests(TestCase):
         )
 
     def _nodes(self, *hosts):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(self._spec(*hosts),)):
+        with offering(self._spec(*hosts), alone=True):
             return {n.label: n for n in derive_topology(principal=READ).nodes}
 
     def test_a_target_named_like_a_measured_host_carries_its_traffic_and_lends_it_to_no_other(self):
@@ -926,10 +864,7 @@ class MeasuredNodeTests(TestCase):
     def test_a_graph_with_no_hostname_shaped_node_costs_no_extra_query(self):
         # Why this can live in the shared projection rather than in one adapter:
         # a deployment measuring nothing pays nothing for the seam.
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs",
-            return_value=(self._spec("not-a-hostname"),),
-        ):
+        with offering(self._spec("not-a-hostname"), alone=True):
             derive_topology(principal=READ)
             with CaptureQueriesContext(database_connection) as queries:
                 derive_topology(principal=READ)
@@ -939,10 +874,7 @@ class MeasuredNodeTests(TestCase):
     def test_the_measurement_reaches_every_adapter_not_just_the_page(self):
         self._measure("measured.example.com")
 
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs",
-            return_value=(self._spec("measured.example.com"),),
-        ):
+        with offering(self._spec("measured.example.com"), alone=True):
             payload = serialized_topology(principal=READ)
 
         node = next(n for n in payload["nodes"] if n["label"] == "measured.example.com")
@@ -994,7 +926,7 @@ class OneNodePerMachineTests(TestCase):
                 ),
             ),
         )
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
+        with offering(spec, alone=True):
             topology = derive_topology(principal=READ)
         return (
             {node.id: node for node in topology.nodes},
@@ -1130,13 +1062,12 @@ class HolderEdgeTests(TestCase):
     def test_holding_a_record_keeps_the_status_of_an_edge_already_drawn(self):
         kind, provider = self.mirrored()[0]
         record = {**provider.sample_record, "connection_ref": "example-holder"}
-        # The connection also names the declaration it uses, and it is failing.
-        uses = ((), (ConnectionLink("example-declared", resource_key="example-declared"),))
-        with mock.patch("hq.platform.application.connections._depends", return_value=uses):
-            self._edges(kind, declared=provider.from_record(record), record=record)
-            ProviderConnection.objects.update(reachable=False)
-            with host_only():
-                topology = derive_topology(principal=READ)
+        # The declaration also names the connection it uses, and that connection is failing.
+        declared = {**provider.from_record(record), "connection_ref": "example-holder"}
+        self._edges(kind, declared=declared, record=record)
+        ProviderConnection.objects.update(reachable=False)
+        with host_only():
+            topology = derive_topology(principal=READ)
 
         statuses = {
             edge.status

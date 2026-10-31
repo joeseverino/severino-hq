@@ -15,7 +15,7 @@ one.
     it is noise. The ratio is not optional: it is the reading.
     {% endcomment %}
     {% if cadence.title %}<span class="cadence-title">{{ cadence.title|breakable }}</span>{% else %}<span></span>{% endif %}
-    <span class="cadence-count">{{ cadence.tally|breakable }}{% if cadence.streak > 1 %} · {{ cadence.streak|breakable }} in a row{% endif %}</span>
+    <span class="cadence-count">{{ cadence.tally|breakable }}{% if cadence.streak > 1 %}{% dot %}{{ cadence.streak|breakable }} in a row{% endif %}</span>
   </div>
   <ol class="cadence-strip" data-chart>
     {% for week in cadence.weeks %}

@@ -54,14 +54,11 @@ func (r *Registry) adguardRequest(ctx context.Context, ref, path, method string,
 // adguardDecode decodes one AdGuard answer into its generated type; an empty
 // answer is the zero value, a malformed one an error.
 func adguardDecode[T any](raw json.RawMessage, what string) (T, error) {
-	var answer T
 	if len(raw) == 0 {
-		return answer, nil
+		var empty T
+		return empty, nil
 	}
-	if err := json.Unmarshal(raw, &answer); err != nil {
-		return answer, &ProviderError{Message: "adguard " + what + " did not decode", Err: err}
-	}
-	return answer, nil
+	return decodeAs[T](raw, "adguard "+what+" did not decode")
 }
 
 // adguardGet reads one AdGuard endpoint into its response type. A sweep reads

@@ -1,13 +1,10 @@
 """The standard your repositories are held to, and whether each meets it.
 
-Two standards from one list. Every repository is held to what protects code
-wherever it lives (who has access, what keys can do, how Actions may run); a
-public one is held to more, because GitHub gives public repositories more:
-scanning, push protection, rules on the default branch. What a plan does not
-offer is "not available", never a failure.
-
-Checked against the GitHub App's own reading (``github_estate``), so nothing
-here asks GitHub anything, and a check HQ cannot read says so.
+Every repository is held to what protects code wherever it lives; a public one
+to more, because GitHub gives public repositories more (scanning, push
+protection, rules on the default branch), and what a plan does not offer is
+"not available", never a failure. Checked against the GitHub App's own reading
+(``github_estate``), so nothing here asks GitHub anything.
 """
 
 import json
@@ -81,7 +78,7 @@ def _keys_in_use(repo: Repository) -> bool | None:
     return None if access is None else not any(_idle(key) for key in access["deploy_keys"])
 
 
-def _setting(name: str, expected: Any) -> Callable[[Repository], bool | None]:
+def _setting(name: str, *, expected: Any) -> Callable[[Repository], bool | None]:
     def test(repo: Repository) -> bool | None:
         access = _access(repo)
         return None if access is None else access.get(name) == expected
@@ -148,7 +145,7 @@ STANDARD: tuple[Check, ...] = (
         "token-read-only",
         "The workflow token is read-only",
         BOTH,
-        _setting("token", "read"),
+        _setting("token", expected="read"),
         "A writable default token lets any workflow change the repository.",
         "Set workflow permissions to read in the Actions settings.",
         unmet="The workflow token can write",
@@ -157,7 +154,7 @@ STANDARD: tuple[Check, ...] = (
         "token-no-approvals",
         "Workflows cannot approve pull requests",
         BOTH,
-        _setting("token_approves_reviews", False),
+        _setting("token_approves_reviews", expected=False),
         "A workflow that approves its own pull request skips review.",
         "Turn off approving pull requests in the Actions settings.",
         unmet="Workflows can approve pull requests",
@@ -166,7 +163,7 @@ STANDARD: tuple[Check, ...] = (
         "actions-pinned",
         "Actions must be pinned to a commit",
         BOTH,
-        _setting("pinning_required", True),
+        _setting("pinning_required", expected=True),
         "A tag can be moved to different code; a commit cannot.",
         "Pin every action its workflows use to a commit, then require pinning in the Actions settings.",
         unmet="Actions need not be pinned to a commit",
@@ -175,7 +172,7 @@ STANDARD: tuple[Check, ...] = (
         "vulnerability-alerts",
         "Vulnerability alerts are on",
         BOTH,
-        _setting("vulnerability_alerts", True),
+        _setting("vulnerability_alerts", expected=True),
         "Renovate opens its security fixes from these alerts; without them a vulnerable dependency stays until you notice it.",
         "Turn on Dependabot alerts in the security settings.",
         unmet="Vulnerability alerts are off",
@@ -363,12 +360,7 @@ def _pin_edit(pin: dict[str, Any]) -> str:
 def _pinning(repo: Repository) -> Runs:
     """Each file's edit, as one command to paste in a checkout, then the setting.
 
-    The commit each tag names now, as the App read it. Perl rather than sed,
-    because ``sed -i`` takes its arguments differently on macOS and on Linux.
-    The setting comes last and only when every line could be resolved and no
-    workflow is called from another repository: requiring pinning before the
-    workflows are pinned stops every run, and it applies as much to what a
-    called workflow uses, which HQ did not read.
+    Each tag is pinned to the commit it names now, as the App read it.
     """
 
     if pins_unread(repo):
@@ -382,8 +374,12 @@ def _pinning(repo: Repository) -> Runs:
     for path, found in sorted(by_path.items()):
         edits = dict.fromkeys(_pin_edit(pin) for pin in found if pin.get("sha"))
         if edits:
+            # Perl rather than sed, because ``sed -i`` takes its arguments
+            # differently on macOS and on Linux.
             script = shlex.quote(" ".join(edits))
             runs.append((f"{repo.short}: pin {path}", f"perl -pi -e {script} {shlex.quote(path)}"))
+    # Requiring pinning before the workflows are pinned stops every run, and it
+    # applies as much to what a called workflow uses, which HQ did not read.
     if not pins_unresolved(repo) and not calls_workflows(repo):
         runs.append(
             (

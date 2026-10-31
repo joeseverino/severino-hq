@@ -1,15 +1,9 @@
 """How this request reached HQ: HQ's own path, each hop joined to the request.
 
-``paths.hq_path(request)`` walks the path from the readings and calls
-``joined`` here. Each hop is then compared with what the request itself shows:
-the address it came from, the proxy that forwarded it, the forwarded chain, the
-name it asked for, an Access assertion. A hop both agree on is proven by this
-request; one they disagree on is a finding with the step that fixes it; one the
-request cannot show says why. The admission layers of ``connection`` are
-attached to the hop they decide.
-
-``request_path(request)`` is the one projection the connection page, the API
-and MCP read.
+Each hop the readings walk is proven, contradicted or not shown by what the
+request itself shows (docs/Derived-Facts.md#request-paths), so the path is
+this request's evidence rather than the estate's claim. ``request_path`` is
+the one projection the connection page, the API and MCP read.
 """
 
 import re
@@ -38,7 +32,7 @@ lazy from .derived_reads import serialize_hop, serialize_layer
 lazy from .facts import Subject, readings
 lazy from .hq_self import own_addresses, served_at, served_port, site_label
 lazy from .locate import index_of
-lazy from .projection import iso
+lazy from .projection import complete, iso
 
 PROVEN = "proven"
 CONTRADICTED = "contradicted"
@@ -347,7 +341,7 @@ def _with_layers(route: Route, layers) -> Route:
 # ----- Each hop against the request --------------------------------------------
 
 
-def _device(hop: Hop, context: _Context):
+def _device(_hop: Hop, context: _Context):
     found = context.found
     chain = address_chain(context.request)
     evidence = tuple(item for item in chain if item.role != "proxy")
@@ -546,7 +540,7 @@ def _forwarding_headers(hop: Hop, context: _Context) -> tuple[Evidence, ...]:
     )
 
 
-def _edge(hop: Hop, context: _Context):
+def _edge(_hop: Hop, context: _Context):
     headers = _access_headers(context.host)
     if not headers:
         return (), HopCheck(
@@ -595,7 +589,7 @@ def own_container_id() -> str:
     return found.group(1)[:12] if found else ""
 
 
-def _container(hop: Hop, context: _Context):
+def _container(hop: Hop, _context: _Context):
     """Which container answered, from the one thing a process knows about its
     own: the container Docker started it in."""
 
@@ -622,7 +616,7 @@ def _container(hop: Hop, context: _Context):
     )
 
 
-def _hq(hop: Hop, context: _Context):
+def _hq(_hop: Hop, context: _Context):
     evidence = (
         Evidence("Host", context.host, "The name this request asked for. HQ answers only for names on its list."),
         Evidence(
@@ -716,8 +710,7 @@ def serialize_request_path(found: RequestPath) -> dict[str, Any]:
     hops = [serialize_hop(hop) for hop in found.hops]
     connection = found.connection
     return {
-        "items": hops,
-        "count": len(hops),
+        **complete(hops),
         "hostname": found.path.hostname,
         "proof": found.proof,
         "findings": [

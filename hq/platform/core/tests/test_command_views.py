@@ -113,7 +113,9 @@ class CommandViewTests(TestCase):
     def test_the_trail_names_where_the_form_lives(self):
         response = self.client.get("/commands/project.create/")
 
-        trail = [(link.words, link.attrs["href"]) for link in within(response, "class", "page-trail")]
+        trail = [
+            (link.words, link.attrs["href"]) for link in within(response, "class", "page-trail") if link.tag == "a"
+        ]
         self.assertEqual(trail, [("Projects", "/projects/")])
 
     def test_a_field_reads_as_its_model_declares_it(self):
@@ -405,3 +407,21 @@ class CommandResultProjectionTests(TestCase):
         self.assertEqual(facts, (("count", "2"), ("note", MISSING)))
         self.assertEqual(table["columns"], ("b", "a", "c"))
         self.assertEqual(table["rows"], (("1", "2", MISSING), (MISSING, MISSING, "3")))
+
+    def test_the_table_is_the_first_list_of_flat_records(self):
+        """An empty list, an empty or nested record and plain values are no table."""
+
+        from hq.platform.core.command_views import _result_projection
+
+        _, table = _result_projection(
+            {
+                "none": [],
+                "blank": [{}],
+                "nested": [{"a": [1]}],
+                "values": [1, 2],
+                "first_rows": [{"a": 1}],
+                "later_rows": [{"b": 2}],
+            }
+        )
+
+        self.assertEqual((table["label"], table["columns"], table["rows"]), ("first rows", ("a",), (("1",),)))

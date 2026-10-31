@@ -1,6 +1,5 @@
 #!/bin/sh
-# Prove the audit exports the named project's lock (the host's by default) and
-# audits that export with the host's own pip-audit.
+# Prove the audit runs uv's on the named project (the host's by default).
 set -eu
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
@@ -8,34 +7,28 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin" "$work/package"
 
-# uv: an export writes the project it was given into the file it names; a run
-# records its project and the file pip-audit reads.
+# uv: an audit records the project it was given.
 cat >"$work/bin/uv" <<EOF
 #!/bin/sh
 command=\$1; shift
-project=""; output=""; requirements=""
+project=""
 while [ "\$#" -gt 0 ]; do
     case "\$1" in
         --project) project=\$2; shift 2 ;;
-        --output-file) output=\$2; shift 2 ;;
-        -r) requirements=\$2; shift 2 ;;
         *) shift ;;
     esac
 done
-case "\$command" in
-    export) echo "\$project" >"\$output" ;;
-    run) echo "\$project \$(cat "\$requirements")" >"$work/audited" ;;
-esac
+[ "\$command" = audit ] && echo "\$project" >"$work/audited"
 EOF
 chmod +x "$work/bin/uv"
 
 fail() { echo "$1" >&2; exit 1; }
 
 PATH="$work/bin:$PATH" "$repo_dir/tools/pipeline/audit.sh" "$work/package"
-[ "$(cat "$work/audited")" = "$repo_dir $work/package" ] \
-    || fail "an extension's lock was not audited by the host's pip-audit: $(cat "$work/audited")"
+[ "$(cat "$work/audited")" = "$work/package" ] \
+    || fail "an extension's lock was not audited: $(cat "$work/audited")"
 
 PATH="$work/bin:$PATH" "$repo_dir/tools/pipeline/audit.sh"
-[ "$(cat "$work/audited")" = "$repo_dir $repo_dir" ] \
+[ "$(cat "$work/audited")" = "$repo_dir" ] \
     || fail "with no project named, the host's own lock was not audited: $(cat "$work/audited")"
 echo "audit tests passed"

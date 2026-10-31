@@ -12,7 +12,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderConnection, ProviderInventory
+from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.contact_submissions import (
+    DELETE,
+    REVIEW,
     ContactDeleteCommand,
     ContactReviewCommand,
     execute_contact_delete,
@@ -22,6 +25,7 @@ from hq.platform.application.contact_submissions import (
 from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.source import parsed
+from hq.platform.core.models import AuditLog
 
 from .. import inbox
 
@@ -55,7 +59,7 @@ def _read(*records, reachable=True, error=""):
     )
 
 
-def _manages(manages=True):
+def _manages(*, manages=True):
     ProviderConnection.objects.update_or_create(
         connection_ref=REF,
         defaults={"provider": "cloudflare_api", "manages": manages, "observed_at": timezone.now()},
@@ -160,41 +164,76 @@ class ContactViewTests(TestCase):
         response = self.client.get(reverse("contacts:detail", args=[99]))
         self.assertRedirects(response, reverse("contacts:list"), fetch_redirect_response=False)
 
-    @patch("hq.domains.contacts.views.execute_contact_review")
-    def test_set_status_queues_and_redirects_back(self, review):
+    def test_set_status_queues_and_redirects_back(self):
+        _manages()
         response = self.client.post(
             reverse("contacts:set_status", args=[1]),
             {"status": "read", "next": reverse("contacts:list") + "?status=unread"},
         )
-        self.assertEqual(review.call_args.args[0].status, "read")
-        self.assertEqual(review.call_args.kwargs["current_id"], 1)
         self.assertRedirects(response, reverse("contacts:list") + "?status=unread", fetch_redirect_response=False)
+        self.assertEqual(ManagedResource.objects.get(kind=inbox.DECLARATION).spec["reviews"][0]["status"], "read")
+        self.assertTrue(
+            AuditLog.objects.filter(
+                metadata__operation=REVIEW, metadata__interface="web", metadata__actor="joe", metadata__id=1
+            ).exists()
+        )
 
-    @patch("hq.domains.contacts.views.execute_contact_review")
-    def test_set_status_rejects_unknown_status(self, review):
+    def test_set_status_rejects_unknown_status(self):
+        _manages()
         self.client.post(reverse("contacts:set_status", args=[1]), {"status": "bogus"})
-        review.assert_not_called()
+        self.assertFalse(ManagedResource.objects.filter(kind=inbox.DECLARATION).exists())
 
-    @patch("hq.domains.contacts.views.execute_contact_review")
-    def test_set_status_ignores_offsite_next(self, review):
+    def test_set_status_ignores_offsite_next(self):
+        _manages()
         response = self.client.post(
             reverse("contacts:set_status", args=[1]), {"status": "read", "next": "https://evil.example/"}
         )
         self.assertRedirects(response, reverse("contacts:list"), fetch_redirect_response=False)
+
+    def test_a_principal_without_the_contacts_capability_is_refused_and_recorded(self):
+        _manages()
+        lacking = _principal(Capability.READ)
+        for url, data in (
+            (reverse("contacts:set_status", args=[1]), {"status": "read"}),
+            (reverse("contacts:delete", args=[1]), {}),
+        ):
+            with self.subTest(url=url), patch("hq.domains.contacts.views.web_principal", return_value=lacking):
+                response = self.client.post(url, data, follow=True)
+
+                self.assertContains(response, "manage_contacts")
+        self.assertFalse(ManagedResource.objects.filter(kind=inbox.DECLARATION).exists())
+        self.assertEqual(
+            set(AuditLog.objects.filter(action=AuditLog.Action.DENIED).values_list("metadata__capability", flat=True)),
+            {REVIEW, DELETE},
+        )
+
+    def test_the_detail_form_saves_through_the_review_capability(self):
+        _manages()
+        response = self.client.post(
+            reverse("contacts:detail", args=[1]), {"status": "replied", "assigned_to": "ada", "admin_notes": "done"}
+        )
+        self.assertRedirects(response, reverse("contacts:detail", args=[1]), fetch_redirect_response=False)
+        review = ManagedResource.objects.get(kind=inbox.DECLARATION).spec["reviews"][0]
+        self.assertEqual((review["status"], review["assigned_to"]), ("replied", "ada"))
 
     def test_delete_get_shows_confirm(self):
         response = self.client.get(reverse("contacts:delete", args=[1]))
         self.assertContains(response, "Delete message #1?")
         self.assertContains(response, f'formaction="{reverse("contacts:delete", args=[1])}"')
 
-    @patch("hq.domains.contacts.views.execute_contact_delete")
-    def test_delete_post_queues_and_redirects(self, delete):
+    def test_delete_post_queues_and_redirects(self):
+        _manages()
         response = self.client.post(reverse("contacts:delete", args=[1]))
-        self.assertEqual(delete.call_args.args[0].confirm, "1")
         self.assertRedirects(response, reverse("contacts:list"), fetch_redirect_response=False)
+        self.assertEqual(ManagedResource.objects.get(kind=inbox.DECLARATION).spec["deletions"], [1])
+        self.assertTrue(
+            AuditLog.objects.filter(
+                action=AuditLog.Action.DELETED, metadata__operation=DELETE, metadata__actor="joe"
+            ).exists()
+        )
 
     def test_a_refused_change_is_said_and_queues_nothing(self):
-        _manages(False)
+        _manages(manages=False)
 
         response = self.client.post(reverse("contacts:set_status", args=[1]), {"status": "read"}, follow=True)
 
@@ -254,20 +293,17 @@ class QueuedChangeTests(TestCase):
 
         self.assertEqual(inbox.current().refused, "cloudflare refused the request")
 
-    def test_a_reviewer_needs_the_contacts_capability(self):
-        from hq.platform.application.security import AuthorizationError
-
-        with self.assertRaises(AuthorizationError):
-            execute_contact_review(
-                ContactReviewCommand(status="read"), principal=_principal(Capability.READ), current_id=2
-            )
-        self.assertFalse(ManagedResource.objects.exists())
-
     def test_invalid_input_is_refused(self):
-        with self.assertRaisesMessage(ValueError, "Unknown contact status"):
-            execute_contact_review(ContactReviewCommand(status="bogus"), principal=OPERATOR, current_id=2)
-        with self.assertRaisesMessage(ValueError, "confirm must exactly match"):
-            execute_contact_delete(ContactDeleteCommand(confirm="1"), principal=OPERATOR, current_id=2)
+        for name, payload in (
+            (REVIEW, {"status": "bogus"}),
+            (REVIEW, {"status": "read", "assigned_to": "x" * 121}),
+            (DELETE, {"confirm": "1"}),
+        ):
+            with self.subTest(payload=payload):
+                result = execute_capability(name, payload, principal=OPERATOR, target=2)
+
+                self.assertEqual(result["error"]["code"], "invalid_input")
+        self.assertFalse(ManagedResource.objects.exists())
         with self.assertRaises(RecordNotFound):
             execute_contact_review(ContactReviewCommand(status="read"), principal=OPERATOR, current_id=99)
 
@@ -391,7 +427,8 @@ class WithheldSpecTests(TestCase):
         self.assertWithheld(str(rows))
 
     def test_the_generic_writer_refuses_the_kind(self):
-        from hq.platform.application.infrastructure import ManagedResourceCommand, PolicyError, save_managed_resource
+        from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
+        from hq.platform.application.record_errors import PolicyError
 
         with self.assertRaises(PolicyError):
             save_managed_resource(

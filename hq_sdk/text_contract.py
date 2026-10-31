@@ -1,15 +1,10 @@
 """How the host writes a value, pinned by example in text_examples.json.
 
-An extension's page says a length of time, a moment, a count or an amount
-through ``hq_sdk.ui`` and ``hq_sdk.money``, and its tests see the words the host
-chose. Those words are output, and output gets depended on: a no-break space
-added between a number and its unit fails a test in another repository. So the
-phrasing is recorded here, by example, and changes the way an export's shape
-does: ``manage.py sdk_contract`` rewrites the record, the diff is the review.
-
-An extension's test asserts what it composed (``f"Due in {span(days)}"``) or
-reads text through ``hq_sdk.testing.plain``; it never writes the host's words
-out itself.
+An extension's tests see the words ``hq_sdk.ui`` and ``hq_sdk.money`` choose,
+and output gets depended on: a no-break space added between a number and its
+unit fails a test in another repository. So the phrasing is recorded by example
+and changes the way an export's shape does, through ``manage.py sdk_contract``
+and its diff.
 """
 
 import json
@@ -22,8 +17,8 @@ from typing import Any
 lazy from django.utils import timezone
 
 lazy from hq.platform.application.derivation_testing import frozen
-lazy from hq_sdk.money import money
-lazy from hq_sdk.ui import ago, counted, span, when, when_day
+lazy from hq_sdk.money import money, signed_number
+lazy from hq_sdk.ui import ago, counted, ended, span, when, when_day
 
 EXAMPLES_PATH = Path(__file__).with_name("text_examples.json")
 
@@ -33,7 +28,7 @@ _YEAR = 2026
 
 def _examples() -> dict[str, list[tuple[str, Callable[[], str]]]]:
     def october(year: int, day: int, hour: int, minute: int) -> datetime:
-        return timezone.make_aware(datetime(year, 10, day, hour, minute))
+        return datetime(year, 10, day, hour, minute, tzinfo=timezone.get_current_timezone())
 
     def before(**length: float) -> Callable[[], str]:
         return lambda: ago(timezone.now() - timedelta(**length))
@@ -69,6 +64,15 @@ def _examples() -> dict[str, list[tuple[str, Callable[[], str]]]]:
             ("5, plus=True", lambda: money(Decimal(5), plus=True)),
             ("None", lambda: money(None)),
         ],
+        "signed_number": [
+            ("-29, '{} bpm'", lambda: signed_number(-29, "{} bpm".format)),
+            ("1.25, '{:.1f} min', plus=True", lambda: signed_number(1.25, "{:.1f} min".format, plus=True)),
+            ("-0.04, '{:.1f} min'", lambda: signed_number(-0.04, "{:.1f} min".format)),
+        ],
+        "ended": [
+            ("'Renews through Example'", lambda: ended("Renews through Example")),
+            ("'Renews through Example, Inc.'", lambda: ended("Renews through Example, Inc.")),
+        ],
         "ago": [
             ("30 seconds before", before(seconds=30)),
             ("2 hours before", before(hours=2)),
@@ -80,7 +84,7 @@ def _examples() -> dict[str, list[tuple[str, Callable[[], str]]]]:
 def describe() -> dict[str, Any]:
     """Each example's output, read with the clock in ``_YEAR``."""
 
-    with frozen(timezone.make_aware(datetime(_YEAR, 6, 15, 12))):
+    with frozen(datetime(_YEAR, 6, 15, 12, tzinfo=timezone.get_current_timezone())):
         return {
             function: [{"input": label, "output": example()} for label, example in examples]
             for function, examples in _examples().items()

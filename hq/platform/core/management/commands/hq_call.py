@@ -1,15 +1,10 @@
 """Call one MCP tool as the operator, from a shell on the host.
 
-The operator reaches HQ's tools through a shell on the host, which already
-requires their own credentials; there is no shared token. Agents use MCP, each
-under its own identity.
-
-The contract is the MCP tool surface itself, so the two cannot drift:
-
-    stdin   {"tool": "<name>", "arguments": {...}}
-    stdout  the tool's JSON result, exactly as an MCP caller receives it
-
-A tool that fails writes its message to stderr and exits non-zero.
+The shell already requires the operator's own credentials, so there is no
+shared token; agents use MCP, each under its own identity. The contract is the
+MCP tool surface itself, so the two cannot drift: ``{"tool": "<name>",
+"arguments": {...}}`` on stdin, the tool's JSON result as an MCP caller receives
+it on stdout, and a failing tool's message on stderr with a non-zero exit.
 """
 
 import json

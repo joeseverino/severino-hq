@@ -116,9 +116,7 @@ def identity_of(request, device: tailnet.Device | None) -> Identity:
             expiry = None
     signed_in_by = str((session or {}).get("_auth_user_backend", "") if session is not None else "")
     return Identity(
-        username=getattr(user, "username", "") or "",
-        email=getattr(user, "email", "") or "",
-        full_name=(getattr(user, "get_full_name", lambda: "")() or "").strip(),
+        **_person(user),
         sso_only=sso_only(),
         backends=backends,
         session_expires=expiry,
@@ -129,10 +127,6 @@ def identity_of(request, device: tailnet.Device | None) -> Identity:
         # provider did not vouch for a password session, so it must not appear
         # beside that session as though it did.
         provider=_provider_host() if "OIDC" in signed_in_by else "",
-        groups=tuple(getattr(user, "groups", None).values_list("name", flat=True) if getattr(user, "pk", None) else ()),
-        staff=bool(getattr(user, "is_staff", False)),
-        superuser=bool(getattr(user, "is_superuser", False)),
-        last_sign_in=getattr(user, "last_login", None),
         token_expires=str((session or {}).get("oidc_id_token_expiration", "") if session is not None else ""),
         provider_principal=(
             str((session or {}).get(TAILSCALE_PRINCIPAL_SESSION_KEY, ""))
@@ -140,6 +134,22 @@ def identity_of(request, device: tailnet.Device | None) -> Identity:
             else ""
         ),
     )
+
+
+def _person(user) -> dict[str, Any]:
+    """What an identity says of the person signed in; nothing, so the defaults, for nobody."""
+
+    if user is None:
+        return {}
+    return {
+        "username": user.username,
+        "email": user.email,
+        "full_name": user.get_full_name().strip(),
+        "groups": tuple(user.groups.values_list("name", flat=True)),
+        "staff": user.is_staff,
+        "superuser": user.is_superuser,
+        "last_sign_in": user.last_login,
+    }
 
 
 def _provider_host() -> str:

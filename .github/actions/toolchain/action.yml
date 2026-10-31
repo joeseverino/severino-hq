@@ -65,7 +65,7 @@ runs:
           echo "mise=$mise"
         } >> "$GITHUB_OUTPUT"
 
-    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
       with:
         python-version: ${{ inputs.python || steps.read.outputs.oldest-python }}
     # mise's downloads, never its installed tools: mise checks each download
@@ -80,7 +80,7 @@ runs:
         path: ~/.cache/mise/downloads-cas
         key: mise-downloads-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.lock') }}
         restore-keys: ${{ inputs.save != 'true' && format('mise-downloads-{0}-{1}-', runner.os, runner.arch) || '' }}
-    - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+    - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
       with:
         version: ${{ steps.read.outputs.mise }}
         cache: false

@@ -1,10 +1,12 @@
-"""A missing record is a 404 and a stale write a 409 over the machine API, read or written."""
+"""Over the machine API, a missing record is a 404, a stale write or a refused change a 409,
+and a value HQ cannot act on a 400."""
 
 import json
 
 from django.test import TestCase, override_settings
 
 from hq.domains.projects.models import Project
+from hq.platform.application.tests.test_refusal_text import refusal_of, switched_off
 
 from ..testing import ContractClient
 from .test_api import ISSUER, RESOURCE, _serving, _token
@@ -65,3 +67,31 @@ class RecordRefusalTransportTests(TestCase):
 
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(Project.objects.get(pk=project.pk).name, "Renamed")
+
+    def test_a_change_the_record_refuses_is_409_precondition_with_its_reason(self):
+        resource = switched_off()
+        reason = refusal_of(resource)
+
+        with _serving():
+            response = self.client.post(
+                "/api/v2/capabilities/infrastructure.reconcile/",
+                data=json.dumps({"payload": {}, "target": resource.key}),
+                content_type="application/json",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='manage_infrastructure')}",
+                HTTP_IDEMPOTENCY_KEY="key-refused",
+            )
+
+        self.assertEqual(response.status_code, 409, response.content)
+        self.assertEqual(response.json()["error"], {"code": "precondition", "message": reason})
+
+    def test_a_value_hq_cannot_act_on_is_400_invalid_input_in_its_own_words(self):
+        with _serving():
+            response = self.client.post(
+                "/api/v2/capabilities/lookup.address/",
+                data=json.dumps({"payload": {"address": SENT}}),
+                content_type="application/json",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='look_up_public_records')}",
+            )
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(response.json()["error"], {"code": "invalid_input", "message": "That is not an IP address."})

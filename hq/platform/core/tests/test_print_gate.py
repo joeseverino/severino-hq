@@ -198,7 +198,7 @@ class ScopeTests(SimpleTestCase):
         self.addCleanup(print_gate._ours.cache_clear)
 
     def test_an_extension_app_template_is_held_and_a_third_party_one_is_not(self):
-        app = apps.get_app_config("humanize")
+        app = apps.get_app_config("messages")
         origin = Origin(str(Path(app.path) / "templates" / "example.html"), template_name="example.html")
 
         self.assertEqual(printed("{{ value }}", origin=origin, value=True), "True")

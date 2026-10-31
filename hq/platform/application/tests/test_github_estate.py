@@ -1,5 +1,4 @@
 from datetime import UTC, datetime, timedelta
-from unittest import mock
 
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
@@ -8,6 +7,7 @@ from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations.github import PARTS, REPOSITORY_KIND
 
 from ..dashboard import work_queue
+from ..derivation_testing import frozen
 from ..freshness import stale_after
 from ..github_estate import ALERT_PAGES, Repository, attention, repository_for, workflow_run
 from ..item_help import RUN
@@ -253,7 +253,7 @@ class UpdateTests(SimpleTestCase):
         found = repository(pull_requests=[UPDATE, BUMP])
         opened = datetime(2030, 1, 3, tzinfo=UTC)
 
-        with mock.patch("hq.platform.application.derivations._clock", return_value=opened + timedelta(days=4, hours=2)):
+        with frozen(opened + timedelta(days=4, hours=2)):
             (update,) = found.update_pulls
             oldest = found.oldest_update_days
 

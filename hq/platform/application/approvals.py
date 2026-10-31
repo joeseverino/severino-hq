@@ -1,39 +1,10 @@
 """Changes a credential may ask for but only a person may allow.
 
-Authority answers "may this caller do it"; it cannot answer "does anybody want
-it done", and for a credential held on a workstation those are different
-questions. Anything that comes to hold the token (a compromised machine, an
-automated caller following instructions it read somewhere) inherits the
-authority. For the kinds that matter most, a person has to agree.
-
-Four decisions:
-
-**The unit is the resource kind, not the capability effect.** Effect describes
-how forceful an act is. It cannot describe how much stands behind the thing
-acted upon, and the two do not correlate: reconciling one DNS rewrite and
-pushing a new access policy are the same effect. Gating the effect would put a
-decision in front of a person for every container restart, which is how a
-decision stops being read. The kind carries the flag, so the estate's most
-valuable control is gated and the rest of the estate is untouched.
-
-**It holds the request, not the queued work.** A held request writes nothing:
-no declaration, no operation row. There is nothing for the controller to claim,
-so no filter has to remember to exclude it, and no later change to how work is
-claimed can accidentally let one through. The one place a held request could
-become real is the replay below, and the replay only happens from a decision.
-
-**It sits at the capability boundary.** Every non-interactive adapter (token
-API, machine bridge, local command line) funnels through one function to run a
-capability, so one check covers all of them and cannot be bypassed by adding
-another adapter. The operator's own surfaces call the use cases directly and are
-deliberately unaffected: a click behind an identity provider and a passkey is
-the signal this whole module exists to wait for.
-
-**An approval covers a diff, not a resource.** The requested call and the state
-it was measured against are fingerprinted together. Approving means approving
-that comparison; if the declaration moves in between, the fingerprint no longer
-matches and the request is superseded rather than silently applied to content
-nobody read.
+Authority answers "may this caller do it", never "does anybody want it done",
+and anything that comes to hold a workstation's token (a compromised machine,
+an agent following instructions it read somewhere) inherits its authority. So
+for the kinds that matter most a person has to agree; what a held request may
+and may not do is docs/Security.md#what-hq-enforces.
 """
 
 import hashlib
@@ -41,29 +12,37 @@ import json
 from dataclasses import dataclass
 from datetime import timedelta
 from difflib import unified_diff
-from typing import Any
+from typing import Annotated, Any
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ApprovalRequest, ManagedResource
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
 from hq.platform.application.routes import reverse
 from hq.platform.core.audit import operation_context
+lazy from hq.domains.control_plane.providers import PROVIDERS
 lazy from hq.platform.core.models import AuditLog
 
-from .derivations import reached
-from .entity_links import entity_link, kind_label
-from .integration_specs import capability_schema
+from . import derivations
+from .command_fields import Describe
+from .derivations import holds_until
 from .payload_words import ChangeRow, changed_words, document, field_words, value_words
-from .record_errors import RecordNotFound
+from .record_errors import PolicyError, RecordNotFound, Sentence
 from .security import AuthorizationError, Principal, internal_principal, is_interactive
 lazy from . import capabilities, resources
 lazy from .agent_access import agents_paused
-lazy from .capabilities import authorize_capability, capability_title, execute_approved, validate_command
+lazy from .capabilities import authorize_capability, execute_approved, validate_command
+lazy from .command_forms import switch_field
+lazy from .command_targets import item_name
+lazy from .entity_links import entity_link, record_name
+lazy from .integration_specs import TARGET, capability_schema
+lazy from .labels import human_label, lower_first
+lazy from .resource_capabilities import LIFECYCLE_VERBS
+lazy from .resource_operations import ACTION_CAPABILITY
 lazy from .resources import InvalidResourceInput, UnsupportedResourceOperation
+lazy from .ui import counted
 
 # How many outstanding requests one actor may hold. A caller that has already
 # asked for ten decisions and been answered none does not need an eleventh: it
@@ -75,6 +54,7 @@ MAX_PENDING_PER_ACTOR = 10
 # effects that are gated, so an effect introduced later is considered rather
 # than exempted by omission.
 READ_EFFECT = "read"
+# What takes something away from whoever is using it: a deletion, or a stop.
 DESTRUCTIVE_EFFECT = "destructive"
 # Payload fields that turn a write into deleting whatever it does not name: an
 # orphan prune removes every record the manifest leaves out, restricted ones
@@ -83,8 +63,8 @@ DESTRUCTIVE_EFFECT = "destructive"
 DELETING_FLAGS = ("prune_orphans",)
 
 
-def deletes(spec, command: Any) -> bool:
-    """Whether this call removes records: by its effect, or by what it asks for."""
+def is_destructive(spec, command: Any) -> bool:
+    """Whether this call takes something away: by its effect, or by what it asks for."""
 
     if spec.effect == DESTRUCTIVE_EFFECT:
         return True
@@ -98,7 +78,7 @@ AUDIT_LABEL = "Approval"
 AUDIT_LABELS = (AUDIT_LABEL, "Infrastructure approval")
 
 
-class ApprovalError(ValueError):
+class ApprovalError(PolicyError):
     """A decision could not be taken, and this says what a person should know."""
 
 
@@ -110,10 +90,6 @@ class RefusedHold(ApprovalError):
     """
 
     code = "refused_hold"
-
-    def __init__(self, reason: str) -> None:
-        super().__init__(reason)
-        self.reason = reason
 
 
 class TooManyPendingApprovals(RefusedHold):
@@ -252,23 +228,21 @@ def held_by_default(spec, command: Any, target: Any) -> bool:
 
 
 def _gated(kind: str) -> bool:
+    # The unit is the resource kind, never the capability effect: an effect says
+    # how forceful an act is, not how much stands behind what it acts on, and
+    # gating it would put every container restart in front of a person.
     provider = PROVIDERS.get(kind)
     return bool(provider is not None and provider.requires_approval)
 
 
-def consent_gap(kind: str, *, principal: Principal) -> str:
+def consent_gap(kind: str, *, principal: Principal) -> Sentence:
     """Why this act has no consent behind it, or "" when it has.
 
-    The same rule as the hold above, asked a second time from inside the use
-    cases that actually write. Two enforcement points rather than one, because
-    the hold knows only what it can see: it keys on a capability declaring that
-    it acts on an infrastructure resource, and a future capability, or an
-    extension's, could write one of these declarations without saying so. The
-    boundary is the useful check (it can answer "waiting for approval" instead
-    of refusing) and this is the one that cannot be walked around.
-
-    A string rather than an exception so the caller raises its own domain error,
-    which keeps this module free of imports from the use cases that call it.
+    The hold's rule, asked again from inside the use cases that write, since
+    the hold sees only capabilities that declare they act on an infrastructure
+    resource and one that writes a declaration without saying so would pass it.
+    A string, so the caller raises its own domain error and this module imports
+    none of the use cases that call it.
     """
 
     if not _gated(kind):
@@ -276,9 +250,8 @@ def consent_gap(kind: str, *, principal: Principal) -> str:
     if is_interactive(principal) or principal.approved_by:
         return ""
     return (
-        f"Changing a {kind_label(kind)} needs a person to approve it. Ask for the "
-        "change through the API or MCP, which records the request, then approve it "
-        "in the browser, signed in."
+        "This change needs a person to approve it. Ask for it through the API or "
+        "MCP, which records the request, then approve it in the browser, signed in."
     )
 
 
@@ -294,13 +267,16 @@ def hold_for_approval(
     What it is about is read from ``command``; ``payload`` is kept to replay.
     """
 
+    # Every non-interactive adapter runs a capability through the one runner,
+    # so this check covers each one and a new adapter cannot bypass it. The
+    # operator's own signed-in surfaces are the consent this waits for.
     if is_interactive(principal):
         return None
     subject = approval_subject(spec, command, target)
     if subject is None:
         raise UnreadableSubject(
-            f"{spec.name} needs a person to approve it, but HQ could not read what "
-            "it would change. Check the target and ask again."
+            "This needs a person to approve it, but HQ could not read what it "
+            "would change. Check the target and ask again."
         )
     digest = fingerprint(spec.name, target, payload, subject.baseline)
     existing = ApprovalRequest.objects.filter(
@@ -319,7 +295,7 @@ def hold_for_approval(
     ).count()
     if outstanding >= MAX_PENDING_PER_ACTOR:
         raise TooManyPendingApprovals(
-            f"{principal.actor!r} already has {outstanding} changes waiting for "
+            f"This caller already has {counted(outstanding, 'change')} waiting for "
             "approval. Nothing further is accepted from it until those are "
             "answered."
         )
@@ -329,7 +305,9 @@ def hold_for_approval(
         actor=principal.actor,
         operation="approval.request",
     ):
-        held = ApprovalRequest.objects.create(
+        # The request alone: no declaration and no operation row, so there is
+        # nothing for the controller to claim and no filter has to exclude it.
+        held = ApprovalRequest(
             capability=spec.name,
             target="" if target is None else str(target),
             payload=payload,
@@ -342,6 +320,9 @@ def hold_for_approval(
             reason=reason,
             expires_at=timezone.now() + _window(),
         )
+        # The audit says it as the card does.
+        held.audit_said = str(asked(held))
+        held.save(force_insert=True)
     return _awaiting(held, repeated=False)
 
 
@@ -357,12 +338,9 @@ def is_held(result: dict[str, Any]) -> bool:
 def _awaiting(held: ApprovalRequest, *, repeated: bool) -> dict[str, Any]:
     """What a non-interactive caller is told, which is not an error.
 
-    It asked for something legitimate and the answer is "a person has to agree
-    first". Reported as a success with a state rather than as a failure, because
-    a caller told this has nothing to fix and nothing to retry: the one useful
-    thing it can do is say so, name the request, and stop. A failure reads as
-    something to try again, and something that tries again is how a queue of
-    identical decisions gets built.
+    A success with a state, because the caller has nothing to fix and nothing
+    to retry: a failure reads as something to try again, and a caller that
+    tries again builds a queue of identical decisions.
     """
 
     return {
@@ -399,10 +377,14 @@ def serialize_approval(held: ApprovalRequest) -> dict[str, Any]:
     }
 
 
-def lapse_unanswered(ids: tuple[Any, ...]) -> int:
-    """Mark these requests lapsed, and say how many moved."""
+def lapse_expired() -> int:
+    """Mark every request past its expiry lapsed, and say how many moved.
 
-    return ApprovalRequest.objects.filter(pk__in=ids, state=ApprovalRequest.State.PENDING).update(
+    For the hourly sweep: an expired request is already out of ``pending`` and
+    refused by ``approve``, so this makes the record say what is already true.
+    """
+
+    return ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING, expires_at__lte=timezone.now()).update(
         state=ApprovalRequest.State.EXPIRED,
         decided_at=timezone.now(),
         decision_note="It expired without an answer.",
@@ -412,23 +394,20 @@ def lapse_unanswered(ids: tuple[Any, ...]) -> int:
 def pending(*, limit: int | None = 50) -> tuple[ApprovalRequest, ...]:
     """Every request still waiting for a person, oldest first.
 
-    Expiry happens here, on the way past, rather than on a timer. The only two
-    moments that matter are somebody reading the queue and somebody deciding,
-    and both go through this or through the check in ``approve``, so a lapsed
-    request is never approvable whether or not anything has swept it. A timer
-    would be a second thing to keep running for a guarantee that already holds.
-
-    One read, and a write only when there is something to write. This is called
-    once per dashboard assembly, where the page's whole cost is measured, and an
-    unconditional update to mark nothing would be a query spent on every load
-    for a queue that is almost always empty.
+    A read: one past its expiry is left out whether or not the sweep has
+    marked it lapsed (``lapse_expired``), so it is never offered for a
+    decision ``approve`` would refuse.
     """
 
-    waiting = tuple(ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING).order_by("created_at")[:limit])
-    lapsed = tuple(held.pk for held in waiting if reached(held.expires_at))
-    if lapsed:
-        lapse_unanswered(lapsed)
-    return tuple(held for held in waiting if held.pk not in lapsed)
+    waiting = tuple(
+        ApprovalRequest.objects.filter(
+            state=ApprovalRequest.State.PENDING, expires_at__gt=derivations.clock()
+        ).order_by("created_at")[:limit]
+    )
+    # The answer changes as the first of them expires.
+    for held in waiting:
+        holds_until(held.expires_at)
+    return waiting
 
 
 def _settle(held: ApprovalRequest, state: str, note: str = "") -> None:
@@ -494,26 +473,38 @@ def _require_agents_running(held) -> None:
         )
 
 
-def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
+APPROVE = "approval.approve"
+REJECT = "approval.reject"
+
+
+@dataclass(frozen=True, slots=True)
+class ApproveCommand:
+    """The held request to agree to."""
+
+    approval_id: Annotated[str, Describe("The held request to agree to.")]
+
+
+@dataclass(frozen=True, slots=True)
+class RejectCommand:
+    """The held request to refuse, and what to tell whoever asked."""
+
+    approval_id: Annotated[str, Describe("The held request to refuse.")]
+    note: Annotated[str, Describe("What to tell whoever asked.")] = ""
+
+
+def approve(command: ApproveCommand, *, principal: Principal) -> dict[str, Any]:
     """Agree to a held change and run exactly the call that was held.
 
-    The replay is the original call, under a principal that still names whoever
-    asked for it and also names who allowed it. Attribution is not moved
-    onto the approver: the audit trail has to keep saying that a token asked and
-    a person agreed, because those are two different facts.
-
-    Deliberately not one transaction from end to end. The checks may have to
-    record that a request has lapsed or been superseded and then refuse, and a
-    refusal that rolls back its own explanation leaves the request pending for
-    the next reader to be offered again. So the marks commit on their own, and
-    only the application (re-reading the row under a lock, because two people
-    may be looking at this page) is atomic.
+    The replay runs under a principal that names whoever asked and who allowed
+    it, so the audit trail keeps saying that a token asked and a person agreed.
+    Not one transaction end to end: a lapsed or superseded mark commits on its
+    own (``_settle``) before the refusal, and only the application is atomic.
     """
 
-    held = _decidable(approval_id)
+    held = _decidable(command.approval_id)
     spec = capabilities.capability_registry().get(held.capability)
     if spec is None:
-        raise ApprovalError(f"{held.capability!r} is no longer something HQ can do, so this request cannot be applied.")
+        raise ApprovalError("What this request asks for is no longer something HQ can do, so it cannot be applied.")
     _require_person(principal, held)
     _require_agents_running(held)
     # The approver has to be allowed to do the thing themselves. Otherwise this
@@ -526,7 +517,7 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
         _settle(
             held,
             ApprovalRequest.State.STALE,
-            "HQ's copy changed after this was requested.",
+            "What it would change moved after it was requested.",
         )
         raise ApprovalError(
             "This changed after the agent asked, so approving it would apply "
@@ -564,17 +555,17 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
     return {"ok": True, "approved": str(locked.id), "result": result}
 
 
-def reject(approval_id: str, *, principal: Principal, note: str = "") -> dict[str, Any]:
+def reject(command: RejectCommand, *, principal: Principal) -> dict[str, Any]:
     """Refuse a held change, so the caller's request has an answer either way."""
 
-    held = _decidable(approval_id)
+    held = _decidable(command.approval_id)
     _require_person(principal, held)
     with transaction.atomic():
         held.state = ApprovalRequest.State.REJECTED
         held.decided_actor = principal.actor
         held.decided_interface = principal.interface
         held.decided_at = timezone.now()
-        held.decision_note = note.strip()[:300]
+        held.decision_note = command.note.strip()[:300]
         held.save(
             update_fields=(
                 "state",
@@ -605,6 +596,9 @@ class ChangePreview:
     label: str
     rows: tuple[ChangeRow, ...]
     lines: tuple[str, ...]
+    # Whether the request sets these values on its record, so one that moves
+    # is said as the change itself.
+    amends: bool = False
 
     @property
     def empty(self) -> bool:
@@ -637,7 +631,7 @@ def _text_fields(before: dict[str, Any], after: dict[str, Any]) -> tuple[str, ..
     )
 
 
-def compare(before: dict[str, Any], after: dict[str, Any], *, label: str) -> ChangePreview:
+def compare(before: dict[str, Any], after: dict[str, Any], *, label: str, amends: bool = False) -> ChangePreview:
     """The values that differ between two specs, each named and said in words,
     and a line diff where a document will not parse.
     """
@@ -658,7 +652,7 @@ def compare(before: dict[str, Any], after: dict[str, Any], *, label: str) -> Cha
                 n=2,
             )
         )
-    return ChangePreview(label=label, rows=rows, lines=tuple(lines))
+    return ChangePreview(label=label, rows=rows, lines=tuple(lines), amends=amends)
 
 
 def preview(held: ApprovalRequest) -> ChangePreview:
@@ -678,9 +672,13 @@ def preview(held: ApprovalRequest) -> ChangePreview:
     provider = PROVIDERS.get(held.resource_kind)
     requested = held.payload.get("spec")
     if isinstance(requested, dict):
-        return compare(declared, requested, label="HQ's copy would change")
+        return compare(declared, requested, label="Would change", amends=True)
     if held.capability.endswith(".remove"):
-        return compare(declared, {}, label="This would be removed from HQ")
+        return compare(declared, {}, label="Would be removed")
+    if held.capability in _lifecycle_capabilities():
+        # A start, stop or restart leaves the declaration as it is: what is
+        # approved is the act its sentence names.
+        return ChangePreview(label="", rows=(), lines=())
     observed = held.baseline.get("observed") or {}
     if provider is not None and provider.from_record is not None and observed:
         try:
@@ -689,7 +687,11 @@ def preview(held: ApprovalRequest) -> ChangePreview:
             live = {}
         if live:
             return compare(live, declared, label="The live record would change")
-    return compare({}, declared, label="HQ's copy would be applied")
+    return compare({}, declared, label="Would be applied")
+
+
+def _lifecycle_capabilities() -> frozenset[str]:
+    return frozenset(ACTION_CAPABILITY[OperationRequest.Action(verb)] for verb in LIFECYCLE_VERBS)
 
 
 # Fields that steer a request rather than being written by it.
@@ -707,16 +709,21 @@ def _record_preview(spec, held: ApprovalRequest) -> ChangePreview:
         if key not in _CONTROL_FIELDS and value not in ("", None, [], {})
     }
     schemas = capability_schema(spec).get("properties") or {}
-    if spec.effect == "destructive":
+    if spec.effect == DESTRUCTIVE_EFFECT:
         return _field_rows(held.baseline, {}, schemas, label="Would be deleted")
     if not held.target:
-        return _field_rows({}, fields, schemas, label="Would be created")
+        # The sentence says what it wants; these are the values it sends.
+        return _field_rows({}, fields, schemas, label="Asked with")
     if fields:
-        return _field_rows({key: held.baseline.get(key) for key in fields}, fields, schemas, label="Would change")
-    return ChangePreview(label=f"Would run on {held.target}", rows=(), lines=())
+        return _field_rows(
+            {key: held.baseline.get(key) for key in fields}, fields, schemas, label="Would change", amends=True
+        )
+    return ChangePreview(label="", rows=(), lines=())
 
 
-def _field_rows(before: dict[str, Any], after: dict[str, Any], schemas: dict[str, Any], *, label: str) -> ChangePreview:
+def _field_rows(
+    before: dict[str, Any], after: dict[str, Any], schemas: dict[str, Any], *, label: str, amends: bool = False
+) -> ChangePreview:
     """Each field that moves, named and valued through the command's schema."""
 
     rows = []
@@ -733,19 +740,100 @@ def _field_rows(before: dict[str, Any], after: dict[str, Any], schemas: dict[str
                 change="added" if was is None else "removed" if now is None else "changed",
             )
         )
-    return ChangePreview(label=label, rows=tuple(rows), lines=())
+    return ChangePreview(label=label, rows=tuple(rows), lines=(), amends=amends)
 
 
 # Held requests are decided on their audit entry. State stays on ApprovalRequest.
 
 
+@dataclass(frozen=True, slots=True)
+class Asked:
+    """What a held request wants done, as the one sentence a person reads it
+    by, cut around its target so a page can link it."""
+
+    actor: str
+    before: str
+    target: str
+    after: str
+    # Whether it says the whole change, which is then not said again.
+    whole: bool = False
+
+    def __str__(self) -> str:
+        return f"{self.actor} {self.before}{self.target}{self.after}"
+
+
+# The longest value a sentence says inline; a longer one is left to the table.
+_SAID_INLINE = 60
+
+
+def asked(held: ApprovalRequest, shown: ChangePreview | None = None) -> Asked:
+    """The sentence for ``held``: what its capability says it wants
+    (``CapabilitySpec.wanted``), a switch as the side it sets, and a change of
+    one value as that change. ``shown`` is its preview, when already read."""
+
+    shown = preview(held) if shown is None else shown
+    spec = capabilities.capability_registry().get(held.capability)
+    # A switch is said as the side it sets, never as a value moving.
+    moved = _one_move(shown) if spec is not None and spec.target_kind and not switch_field(spec) else None
+    if moved is not None:
+        expected = "expected " if spec.subject_resource == DECLARATIONS else ""
+        phrase = f"change the {expected}{lower_first(moved.label)} of {TARGET} from {moved.before} to {moved.after}"
+    else:
+        phrase = _wanted(spec, held)
+    if not held.target:
+        phrase = phrase.replace(f" {TARGET}", "").replace(TARGET, "")
+    before, _, after = phrase.partition(TARGET)
+    return Asked(
+        held.requested_actor,
+        f"wants to {before}",
+        _named(held) if TARGET in phrase else "",
+        after,
+        whole=moved is not None,
+    )
+
+
+def _named(held: ApprovalRequest) -> str:
+    """What a person knows the target by: a record's name, or the name a
+    declaration answers for, from what was read when it was asked; its key
+    where neither says one."""
+
+    declared = held.baseline.get("spec")
+    if held.resource_kind and isinstance(declared, dict):
+        return record_name(held.resource_kind, declared, held.target, leads=False)
+    read = held.baseline.get("resource", held.baseline)
+    return (item_name(read) if isinstance(read, dict) else "") or held.target
+
+
+def _wanted(spec, held: ApprovalRequest) -> str:
+    if spec is None:
+        phrase = lower_first(human_label(held.capability))
+        return f"{phrase} {TARGET}" if held.target else phrase
+    switch = switch_field(spec)
+    if switch and isinstance(held.payload.get(switch), bool):
+        return spec.wanted("on" if held.payload[switch] else "off")
+    return spec.wanted()
+
+
+def _one_move(shown: ChangePreview) -> ChangeRow | None:
+    """The one value an amendment moves, when it moves one short enough to say."""
+
+    if not shown.amends or len(shown.rows) != 1 or shown.lines:
+        return None
+    (row,) = shown.rows
+    said = (row.before, row.after)
+    if row.change != "changed" or any(len(value) > _SAID_INLINE or "\n" in value for value in said):
+        return None
+    return row
+
+
 def review(held: ApprovalRequest) -> dict[str, Any]:
     """What the decision card shows."""
 
+    shown = preview(held)
     return {
         "held": held,
-        "title": capability_title(held.capability),
-        "preview": preview(held),
+        "asked": asked(held, shown),
+        "preview": shown,
         "warnings": _warnings(held),
         "resource_url": (
             entity_link("resource", held.resource_key).url

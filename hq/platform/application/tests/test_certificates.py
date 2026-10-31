@@ -14,18 +14,21 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from django.test import SimpleTestCase, TestCase, override_settings
 
-from hq.domains.control_plane.models import CertificateMaterial, ManagedResource
+from hq.domains.control_plane.models import ApprovalRequest, CertificateMaterial, ManagedResource
 from hq.platform.core import secrets
+from hq.platform.core.models import AuditLog
 
+from ..capabilities import execute_capability
 from ..certificates import (
-    CertificateError,
+    UPLOAD,
     UploadCertificateCommand,
     inspect,
     material_for,
     store_certificate,
 )
 from ..infrastructure import serialize_resource
-from ..security import cli_principal
+from ..record_errors import CertificateError, PolicyError
+from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, internal_principal, mcp_principal
 from .markup import all_elements
 
 A_KEY = "test-only-secret-store-key-long-enough"
@@ -107,11 +110,11 @@ class StorageTests(TestCase):
     def _store(self):
         return store_certificate(
             UploadCertificateCommand(
-                key=self.resource.key,
                 fullchain=self.fullchain,
                 private_key=self.private_key,
             ),
             principal=cli_principal(),
+            current_key=self.resource.key,
         )
 
     def test_the_key_is_encrypted_at_rest(self):
@@ -172,11 +175,11 @@ class StorageTests(TestCase):
         with self.assertRaises(CertificateError):
             store_certificate(
                 UploadCertificateCommand(
-                    key=self.resource.key,
                     fullchain=self.fullchain,
                     private_key=other_key,
                 ),
                 principal=cli_principal(),
+                current_key=self.resource.key,
             )
 
         self.assertFalse(CertificateMaterial.objects.exists())
@@ -194,10 +197,11 @@ class FailClosedTests(TestCase):
         )
         fullchain, private_key = a_certificate()
 
-        with self.assertRaises(secrets.SecretsUnavailable):
+        with self.assertRaises(PolicyError):
             store_certificate(
-                UploadCertificateCommand(key=resource.key, fullchain=fullchain, private_key=private_key),
+                UploadCertificateCommand(fullchain=fullchain, private_key=private_key),
                 principal=cli_principal(),
+                current_key=resource.key,
             )
 
         self.assertFalse(CertificateMaterial.objects.exists())
@@ -242,8 +246,9 @@ class CoverageTests(TestCase):
     def upload(self, name="grafana.example"):
         fullchain, private_key = a_certificate(name)
         store_certificate(
-            UploadCertificateCommand(key=self.resource.key, fullchain=fullchain, private_key=private_key),
+            UploadCertificateCommand(fullchain=fullchain, private_key=private_key),
             principal=cli_principal(),
+            current_key=self.resource.key,
         )
         self.resource.refresh_from_db()
 
@@ -345,3 +350,83 @@ class UploadFormTests(SimpleTestCase):
 
         self.assertNotIn("example-secret-material", rendered)
         self.assertEqual([field.tag for field in all_elements(rendered)], ["textarea"])
+
+
+@override_settings(SEVERINO_SECRET_STORE_KEY=A_KEY)
+class UploadCapabilityTests(TestCase):
+    """Who may hand HQ a private key: an operator in the browser or at the host, and nobody else."""
+
+    def setUp(self):
+        self.resource = ManagedResource.objects.create(
+            key="newhost-cert",
+            kind="tls.uploaded_certificate",
+            spec={"certificate_name": "newhost.example.test", "install_on": ["example-npm"]},
+        )
+        self.fullchain, self.private_key = a_certificate()
+
+    def upload(self, principal, *, target="newhost-cert", private_key=None):
+        return execute_capability(
+            UPLOAD,
+            {"fullchain": self.fullchain, "private_key": private_key or self.private_key},
+            principal=principal,
+            target=target,
+        )
+
+    def test_an_operator_uploads_from_the_browser_or_the_host(self):
+        for principal in (Principal("operator", "web", OPERATOR_CAPABILITIES), cli_principal()):
+            with self.subTest(interface=principal.interface):
+                result = self.upload(principal)
+
+                self.assertTrue(result["ok"], result)
+                self.assertEqual(result["domains"], ["newhost.example.test"])
+                self.assertNotIn(self.private_key, str(result))
+        self.assertEqual(CertificateMaterial.objects.count(), 1)
+
+    def test_a_token_is_refused_whatever_it_was_granted_before_anything_is_held(self):
+        granted = frozenset({Capability.UPLOAD_CERTIFICATE, Capability.MANAGE_INFRASTRUCTURE})
+        for principal in (
+            Principal("example-client", "api", granted, granted=granted),
+            Principal("example-agent", "mcp", granted, granted=granted),
+            mcp_principal(),
+            internal_principal("example-purpose"),
+        ):
+            with self.subTest(interface=principal.interface):
+                result = self.upload(principal)
+
+                self.assertEqual(result["error"]["code"], "forbidden")
+                self.assertNotIn(self.private_key, str(result))
+        self.assertFalse(CertificateMaterial.objects.exists())
+        self.assertFalse(ApprovalRequest.objects.exists())
+        self.assertEqual(AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=UPLOAD).count(), 4)
+
+    def test_unusable_material_is_refused_with_its_reason(self):
+        _, other_key = a_certificate("other.example.test")
+        try:
+            inspect(self.fullchain, other_key)
+        except CertificateError as exc:
+            reason = exc.reason
+
+        result = self.upload(cli_principal(), private_key=other_key)
+
+        self.assertEqual(result["error"], {"code": "invalid_material", "message": reason})
+        self.assertFalse(CertificateMaterial.objects.exists())
+
+    def test_only_an_uploaded_certificate_record_holds_material(self):
+        ManagedResource.objects.create(
+            key="app-dns", kind="adguard.rewrite", spec={"domain": "app.example.com", "answer": "192.0.2.10"}
+        )
+
+        missing = self.upload(cli_principal(), target="no-such-record")
+        elsewhere = self.upload(cli_principal(), target="app-dns")
+
+        self.assertEqual(missing["error"]["code"], "not_found")
+        self.assertEqual(elsewhere["error"]["code"], "precondition")
+        self.assertFalse(CertificateMaterial.objects.exists())
+
+    @override_settings(SEVERINO_SECRET_STORE_KEY="")
+    def test_nowhere_safe_to_put_it_is_said(self):
+        result = self.upload(cli_principal())
+
+        self.assertEqual(result["error"]["code"], "precondition")
+        self.assertIn("secret store key", result["error"]["message"])
+        self.assertFalse(CertificateMaterial.objects.exists())

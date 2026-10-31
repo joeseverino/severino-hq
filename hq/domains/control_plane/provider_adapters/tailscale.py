@@ -27,15 +27,9 @@ TAILNET_POLICY_KIND = "tailscale.policy"
 class TailnetDeviceSpec(ProviderModel):
     """A machine on the tailnet whose settings HQ keeps, not one it created.
 
-    The same shape as a watched container: the device joined the tailnet by
-    somebody running `tailscale up` on it, and HQ has no business pretending
-    otherwise. What it can hold is the handful of decisions about that device
-    which are made once and then quietly forgotten, and which have no symptom
-    until the day they matter.
-
-    Named as the tailnet names it. That is often not what HQ calls the machine,
-    and the join between the two is the address they share; using HQ's name here
-    would mean the controller had to guess which device was meant.
+    Like a watched container, it joined by somebody running `tailscale up` on
+    it. HQ holds the few decisions about it that are made once, then forgotten,
+    and have no symptom until the day they matter.
     """
 
     # Optional, like the policy's: a device is adopted from a reading the
@@ -48,6 +42,9 @@ class TailnetDeviceSpec(ProviderModel):
         title="Tailscale",
         description="The connection HQ uses to change this device.",
     )
+    # Named as the tailnet names it, often not what HQ calls the machine: the
+    # two join on the address they share, and HQ's name here would leave the
+    # controller guessing which device was meant.
     name: str = Field(
         min_length=1,
         max_length=200,
@@ -119,12 +116,10 @@ def _tailnet_device_readout(spec: dict[str, Any], status: dict[str, Any]) -> tup
 def _tailnet_device_from_record(record: dict[str, Any]) -> dict[str, Any]:
     """A tailnet device, as the declaration that would reproduce it.
 
-    Key expiry is read back, not dropped. The daemon reading is described as
-    holding "presence and key expiry, which are the two that go wrong quietly",
-    and this mapping kept only the name, so every device asserted a
-    ``key_expiry_disabled`` no sweep ever confirmed, which is the quiet way it
-    goes wrong. Absence of an expiry is the setting rather than an unknown
-    date, the same reading a reconcile makes.
+    Key expiry is read back, since a quietly wrong expiry is what the reading
+    exists to catch: a device adopted with its name alone would assert a
+    ``key_expiry_disabled`` no sweep confirmed. No expiry is the setting, not an
+    unknown date, the same reading a reconcile makes.
     """
 
     return {
@@ -231,9 +226,9 @@ POLICY = ProviderSpec(
     # the live policy and editing it is editing what is actually there.
     from_record=lambda record: {"document": record.get("document", "")},
     sample_record={"document": ""},
-    identity=lambda spec: ("tailnet",),
-    key_hint=lambda spec: "tailnet-policy",
-    name=lambda spec: "Tailnet policy",
+    identity=lambda _spec: ("tailnet",),
+    key_hint=lambda _spec: "tailnet-policy",
+    name=lambda _spec: "Tailnet policy",
     # As for a device: a policy reading returns the document, not how HQ
     # fetched it.
     unobservable_fields=("connection_ref",),

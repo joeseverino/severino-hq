@@ -1,12 +1,8 @@
 """What each connection provider's credential can see, as the last sweep found it.
 
-Derived from the two registries: ``OBSERVATIONS`` names the readings a
-provider feeds, and ``PROVIDERS`` names the resource kinds that list it in
-``connection_providers``. A resource kind that declares ``unobserved_reason``
-is read by no sweep and is left out. Each kind is joined to its
-``ProviderInventory`` row, read once for the whole page.
-
-A record that names its ``connection_ref`` belongs to that connection alone, so
+Derived from the ``OBSERVATIONS`` and ``PROVIDERS`` registries (``_fed``); the
+states a kind can be in are docs/Derived-Facts.md#what-a-credential-can-see. A
+record that names its ``connection_ref`` belongs to that connection alone, so
 two connections of one provider never show each other's readings.
 """
 
@@ -328,6 +324,7 @@ def _attributed(
     fed: tuple[str, str, str, tuple[str, ...]],
     row: ProviderInventory | None,
     connection_ref: str,
+    *,
     credential_valid: bool,
     provider: str,
 ) -> Sight | None:
@@ -389,7 +386,10 @@ def credential_sight(
             for kind, _label, source, _permissions in kinds
             if kind in inventory and source != PART_SOURCE
         )
-        sights = (_attributed(item, inventory.get(item[0]), connection_ref, not refused, provider) for item in kinds)
+        sights = (
+            _attributed(item, inventory.get(item[0]), connection_ref, credential_valid=not refused, provider=provider)
+            for item in kinds
+        )
         found.append(
             ProviderSight(
                 provider,

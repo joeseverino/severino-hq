@@ -108,19 +108,17 @@ class Presence:
     def peered(self) -> bool:
         """Whether HQ and this machine have actually completed a handshake.
 
-        Not whether the tailnet lists it. This reading comes from the daemon on
-        the machine HQ runs on, so a device appearing at all means HQ has it in
-        its network map, but a key in a map is a machine HQ *could* talk to.
-        A handshake is one it has.
-
-        Tailscale dates a peer it has never spoken to ``0001-01-01``, so the
-        timestamp is parsed rather than tested for emptiness. The observer is
-        excluded separately: its ``relay`` is the DERP region it homes to, not
-        a path to anywhere.
+        Not whether the tailnet lists it: this reading comes from the daemon on
+        HQ's machine, so any device here is in its network map, a machine HQ
+        *could* talk to. A handshake is one it has.
         """
 
+        # The observer's ``relay`` is the DERP region it homes to, not a path
+        # to anywhere.
         if self.observer:
             return False
+        # Tailscale dates a peer it has never spoken to ``0001-01-01``, so the
+        # timestamp is parsed rather than tested for emptiness.
         return bool(self.public_key and moment(self.last_handshake))
 
     @property
@@ -185,6 +183,14 @@ class Presence:
         return days_until(when) if when is not None else None
 
 
+def _instant(stamp: object) -> str:
+    """A reading's timestamp, or "" when it names no moment (Go's zero time
+    reads as year 1, which a connected device reports)."""
+
+    text = str(stamp or "")
+    return text if moment(text) is not None else ""
+
+
 def tailnet_presence() -> dict[str, Presence]:
     """Presence by machine name, as the tailnet last reported it."""
 
@@ -199,8 +205,8 @@ def tailnet_presence() -> dict[str, Presence]:
                 continue
             found[name] = Presence(
                 online=bool(record.get("online")),
-                last_seen=str(record.get("last_seen", "")),
-                key_expires=str(record.get("key_expires", "")),
+                last_seen=_instant(record.get("last_seen")),
+                key_expires=_instant(record.get("key_expires")),
                 addresses=tuple(str(a) for a in record.get("addresses") or ()),
                 endpoints=tuple(str(e) for e in record.get("endpoints") or ()),
                 tailnet_name=name,

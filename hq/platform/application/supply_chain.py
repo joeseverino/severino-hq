@@ -1,12 +1,10 @@
 """The standard an image's supply chain is held to: whether what runs can be
 traced, and whether anything known is wrong with it.
 
-Measured from what HQ reads about the image rather than from the container:
-its reference, the attestations its publisher attached to the digest that runs
-(``registry.digest``), those packages checked against OSV
-(``registry.vulnerabilities``) and the advisories on its source repository.
-Every one is read anonymously and none of it touches the image itself, so a
-check HQ could not read says so rather than failing.
+Measured from what HQ reads about the image rather than from the container
+(docs/Derived-Facts.md#containers-and-images), all of it anonymously and none
+of it touching the image itself, so a check HQ could not read says so rather
+than failing.
 """
 
 from typing import Any

@@ -223,21 +223,15 @@ def _consumer_at(
 ) -> dict[str, Any]:
     """One certificate's declaration of how it arrives at one target.
 
-    The name is the target's own only for the certificate that owns it. Any
-    other certificate installed there is named after itself, or the second
-    would land on top of the first.
-
-    Which names to check at that target is derived, not typed: a name is a
-    consumer at this target when the certificate covers it and it is observed
-    landing on that target's machine. The declared list is unioned in, because a
-    target may serve a name no sweep can see.
-
-    Derivation only proposes. Each name is still probed at the target and
-    matched on fingerprint by the controller, so a name derived wrongly shows up
-    as a mismatch rather than as a false claim of coverage.
+    The names to check there are derived: those the certificate covers that are
+    seen landing on the target's machine, plus the declared list for what no
+    sweep can see. Derivation only proposes: the controller probes each name and
+    matches its fingerprint, so a wrong one shows as a mismatch, not coverage.
     """
 
     kind = target["kind"]
+    # The target's own name is for the certificate that owns it; any other is
+    # named after itself, or the second would land on top of the first.
     owns_the_name = bool(certificate_key) and (target.get("certificate_resource") == certificate_key)
     covered = set(domains)
     landing = names_at(target["connection_ref"]) if names_at else ()
@@ -364,7 +358,7 @@ def _certificate_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
     return tuple(spec.get("domains", ()))
 
 
-def _certificate_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
+def _certificate_readout(_spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     # Compact on purpose. This readout is what a *service* page shows beside a
     # hostname, and there the question is whether this name is covered by
     # something healthy: who issued it and when it runs out. Where it is
@@ -481,7 +475,7 @@ UPLOADED_CERTIFICATE = ProviderSpec(
     connection_providers=("ssh",),
     choices="hq.platform.application.provider_choices:uploaded_certificate_choices",
     material_form="hq.platform.application.provider_forms:CertificateUploadForm",
-    material_handler="hq.platform.application.certificates:store_uploaded_material",
+    material_capability="certificate.upload",
     facet="certificate",
     hostnames=_uploaded_certificate_hostnames,
     covers=True,

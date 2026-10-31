@@ -18,12 +18,15 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory, ReadRequest
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.providers import registry_label
+from hq.platform.core.models import AuditLog
 
 from .. import visit_refresh
 from ..asks import READ_WAITING, Standing, read_standing, watched
+from ..capabilities import execute_capability
 from ..freshness import VISIT_EVERY
+from ..record_errors import PolicyError, RecordNotFound
 from ..security import Capability, Principal, cli_principal
-from ..visit_refresh import Reads, askable, request_visit_refresh
+from ..visit_refresh import VISIT_REFRESH, Reads, VisitRefreshCommand, askable, request_visit_refresh
 
 DIRECTORY = Path(tempfile.mkdtemp())
 (DIRECTORY / "heartbeat").touch()
@@ -66,7 +69,7 @@ def page(*kinds: str):
 
 
 # What a page is told when nothing is being read for it.
-NOTHING_ASKED = {**Standing().as_json(), "requested": [], "status": ""}
+NOTHING_ASKED = {"ok": True, **Standing().as_json(), "requested": [], "status": ""}
 
 
 def followed(status: str) -> Standing:
@@ -81,7 +84,7 @@ def followed(status: str) -> Standing:
 @MARKERS
 class VisitRefreshTests(TestCase):
     def ask(self, name: str = "known", principal: Principal | None = None):
-        return request_visit_refresh("example", name, principal=principal or cli_principal())
+        return request_visit_refresh(VisitRefreshCommand("example", name), principal=principal or cli_principal())
 
     def test_a_reading_older_than_its_cadence_is_asked_for(self):
         store(FAST, age=OLD)
@@ -129,7 +132,7 @@ class VisitRefreshTests(TestCase):
     def test_opening_the_dashboard_asks_again_for_what_its_queue_says_github_holds(self):
         store(REPOSITORY_KIND, age=OLD)
 
-        result = request_visit_refresh("page", "dashboard", principal=cli_principal())
+        result = request_visit_refresh(VisitRefreshCommand("page", "dashboard"), principal=cli_principal())
 
         self.assertEqual(result["requested"], [REPOSITORY_KIND])
 
@@ -192,19 +195,32 @@ class VisitRefreshTests(TestCase):
         store(FAST, age=OLD)
 
         with page(FAST):
-            self.assertIsNone(self.ask("unknown"))
-        self.assertIsNone(request_visit_refresh("no-such-subject", "known", principal=cli_principal()))
+            for subject, name in (("example", "unknown"), ("no-such-subject", "known")):
+                with self.subTest(subject=subject), self.assertRaises(RecordNotFound):
+                    request_visit_refresh(VisitRefreshCommand(subject, name), principal=cli_principal())
         self.assertEqual(asked(), set())
 
-    def test_somebody_who_could_not_press_read_now_reads_nothing_and_learns_nothing(self):
+    def test_somebody_who_could_not_press_read_now_is_refused_and_reads_nothing(self):
         store(FAST, age=OLD)
-        ReadRequest.objects.create(kind=FAST)
-        reader = Principal(interface="web", actor="reader", capabilities=frozenset({Capability.READ}))
+        reader = Principal(interface="mcp", actor="reader", capabilities=frozenset({Capability.READ}))
 
         with page(FAST):
-            result = self.ask(principal=reader)
+            result = execute_capability(VISIT_REFRESH, {"subject": "example", "name": "known"}, principal=reader)
 
-        self.assertEqual(result, NOTHING_ASKED)
+        self.assertEqual(result["error"]["code"], "forbidden")
+        self.assertNotIn("requested", result)
+        self.assertEqual(asked(), set())
+
+    def test_a_request_that_does_not_name_one_page_is_invalid(self):
+        store(FAST, age=OLD)
+
+        with page(FAST):
+            for payload in ({"subject": "example"}, {"subject": "example", "name": "known", "kind": FAST}):
+                with self.subTest(payload=sorted(payload)):
+                    result = execute_capability(VISIT_REFRESH, payload, principal=cli_principal())
+
+                    self.assertEqual(result["error"]["code"], "invalid_input")
+        self.assertEqual(asked(), set())
 
     def test_with_no_controller_arriving_nothing_is_asked_or_promised(self):
         store(FAST, age=OLD)
@@ -465,6 +481,8 @@ class VisitRefreshViewTests(TestCase):
         self.assertEqual(found["requested"], [FAST])
         self.assertTrue(found["live"])
         self.assertEqual(self.client.get(found["status"]).json()["state"], found["state"])
+        row = AuditLog.objects.get(object_type="Read request")
+        self.assertEqual((row.metadata["actor"], row.metadata["operation"]), (self.user.username, VISIT_REFRESH))
 
     def test_opening_or_prefetching_the_address_reads_nothing(self):
         self.client.force_login(self.user)
@@ -501,6 +519,19 @@ class VisitRefreshViewTests(TestCase):
                 with self.subTest(body=body):
                     self.assertEqual(self.post(**body).status_code, 404)
         self.assertEqual(asked(), set())
+
+    def test_a_refusal_answers_with_the_status_the_api_gives_its_code(self):
+        """A read the state refuses for now, or one that failed, is a conflict,
+        as the API answers the same codes, never a request somebody was
+        forbidden to make."""
+
+        self.client.force_login(self.user)
+
+        for raised, code in ((PolicyError("The example is busy."), "precondition"), (ValueError(), "operation_failed")):
+            with self.subTest(code=code), page(FAST), patch.object(visit_refresh, "request_reads", side_effect=raised):
+                response = self.post()
+                self.assertEqual(response.json()["error"]["code"], code)
+                self.assertEqual(response.status_code, 409)
 
     def test_the_service_page_carries_the_form(self):
         self.client.force_login(self.user)

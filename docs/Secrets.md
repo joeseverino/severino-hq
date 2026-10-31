@@ -163,11 +163,11 @@ that had nothing installed to keep.
 In the application environment a carriage return or a variable set twice is
 refused, because readers would disagree about the value. A connections
 document larger than the controller reads is refused as content, so the last
-good one stays. An SSH host or user that could read as an option, and an `env_prefix` in a namespace the controller's
+good one stays. An SSH host or user that is not a plain name, and an `env_prefix` in a namespace the controller's
 own settings use (`HQ`, `SEVERINO`, `DJANGO`, `PYTHON`, `OP`, `SSL`, `LC`), are
 refused. A bootstrap reference is compared to the vault's
 names without regard to case or surrounding spaces. `known_hosts` names a host
-as ssh looks it up: bare on port 22, `[host]:port` otherwise.
+as an SSH client looks it up: bare on port 22, `[host]:port` otherwise.
 
 Refresh takes an exclusive lock on the runtime tmpfs, checks the host, and
 only then reads Connect. Everything is read and validated in memory, and what is renamed into place is
@@ -216,7 +216,7 @@ in a root-owned 0700 directory. The directory must be a tmpfs mounted `noswap`;
 the renderer checks the mount table and the filesystem itself and refuses
 anything else, a link above the directory included. Replacement uses a
 same-filesystem rename. The directory is never mounted into the web container;
-`/run/severino-hq` is reserved for its doorbell.
+`/run/severino-hq` is reserved for its doorbells.
 `SEVERINO_CONTROLLER_SECRET_DIR`, if overridden, must be consistent across the
 renderer and all consumers, with matching systemd write permissions. A
 `SEVERINO_CONTROLLER_ENV` override is refused.
@@ -342,9 +342,11 @@ The allowance is three runs at their latest, derived from the timer's interval
 and randomized delay (`deploy/systemd/severino-hq-secrets.timer`), so a
 renderer two runs behind is raised as the third falls due. A full read is
 forced every 24 hours (`FullEvery`), so it is overdue that allowance later.
-Both are measured against the present moment, whenever the reading was
-taken, so a controller that cannot start because its secrets are gone still
-raises them. Each finding names the command
+Both are measured against when the reading was taken, so a quiet stretch
+between reads raises nothing; once the reading is older than the slowest the
+controller ever reads, they are measured against the present moment, so a
+controller that cannot start because its secrets are gone still raises them
+(`render_status_findings.Rendering._behind`). Each finding names the command
 to run on the machine for a renderer whose unit HQ knows (`RENDERER_UNITS`).
 
 ## Connections
@@ -487,8 +489,8 @@ The Go tests run against an in-process Connect and cannot show these.
 
 1. **Connect after a restart.** Restart Connect, start the unit, and read the
    journal: `secrets.connect.ready attempts=N` shows the retries.
-2. **Key formats.** `ssh -i` accepts a rendered identity and
-   `openssl pkey -in <ref>.key -noout` a rendered signing key.
+2. **Key format.** `openssl pkey -in <ref>.key -noout` accepts a rendered
+   signing key.
 3. **No credential in the container's configuration.** While a controller run
    is up, `docker inspect $(docker ps -q --filter label=severino-hq.role=controller) --format '{{json .Config.Env}}'`
    lists only paths, names and the run nonce.

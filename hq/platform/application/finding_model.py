@@ -6,10 +6,10 @@ vocabulary without importing the pipeline that collects it."""
 
 import re
 import shlex
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 from hq.domains.control_plane.providers import PROVIDERS
 
@@ -70,7 +70,7 @@ class Finding:
     # keeps its honesty: no synthetic node is invented to hang this on.
     scope: str = ""
     # Kinds this higher-order claim explains. They remain exact machine facts,
-    # while an effortless surface can lead with the shared cause once.
+    # while a page can lead with the shared cause once.
     affected_scopes: tuple[str, ...] = ()
     workflow: WorkflowPlan | None = None
     # Commands an operator runs on their own machine; HQ never runs them.
@@ -163,20 +163,11 @@ def reconcile_remedy(node: TopologyNode) -> tuple[FindingRemedy, ...]:
 def is_observable(kind_key: str) -> bool:
     """Whether anything can ever produce an observation of this kind.
 
-    A printer, a network, an offline CA, a certificate delivery target: HQ was
-    told about them, nothing adopts them from a sweep and no controller acts on
-    them. Judging one by when it was last observed asks for a reading that
-    cannot exist, so the claim it raises can never be cleared.
-
-    This rule measures against the sweep interval, so it only means anything
-    for a kind a sweep visits. A certificate is observed when an operation
-    issues or installs it, which is nothing like every sixty seconds: judged
-    on that cadence it is permanently overdue and no sweep or reconcile can
-    ever settle it. Its real risk, expiry, is reported where it belongs.
-
-    `unobserved_reason` is the provider's own statement that no collector
-    sweeps it, and the collector registry is joined to it by test, so this is
-    read rather than derived a second time.
+    Judging by the sweep interval a kind no sweep visits (a printer, an offline
+    CA, a delivery target, a certificate observed only when issued or
+    installed) asks for a reading that cannot arrive, so its claim could never
+    clear; a certificate's real risk, expiry, is reported elsewhere. Read from
+    the provider's ``unobserved_reason``, which a test joins to the collectors.
     """
 
     provider = PROVIDERS.get(kind_key)
@@ -187,6 +178,55 @@ def fact_values(node, key: str) -> tuple[str, ...]:
     """The non-empty values a node carries under one fact key."""
 
     return tuple(value for fact, value in node.facts if fact == key and value)
+
+
+def connections_carrying(estate: Any, key: str) -> Iterator[tuple[TopologyNode, tuple[str, ...]]]:
+    """Each connection that carries values under one fact key, with those values.
+
+    The walk every connection-fact finding starts from: a connection whose
+    reading said nothing under the key raises nothing.
+    """
+
+    for node in estate.nodes():
+        if node.kind == "connection" and (values := fact_values(node, key)):
+            yield node, values
+
+
+class Said(TypedDict):
+    """What a connection-fact finding says of one connection; the rest is its rule's."""
+
+    title: str
+    explanation: str
+    remedies: NotRequired[tuple[FindingRemedy, ...]]
+    steps: NotRequired[tuple[OperatorStep, ...]]
+
+
+def per_connection(
+    estate: Any,
+    key: str,
+    *,
+    rule: str,
+    severity: str,
+    shown_as: str,
+    says: Callable[[TopologyNode, tuple[str, ...]], Said],
+) -> tuple[Finding, ...]:
+    """A finding of ``rule`` for each connection that carries values under ``key``, in title order.
+
+    Each value is a line of evidence, labeled ``shown_as``, and ``says`` words
+    the title, the explanation and anything offered.
+    """
+
+    found = (
+        Finding(
+            rule=rule,
+            subject=node.id,
+            severity=severity,
+            evidence=tuple((shown_as, value) for value in values),
+            **says(node, values),
+        )
+        for node, values in connections_carrying(estate, key)
+    )
+    return tuple(sorted(found, key=lambda finding: finding.title))
 
 
 def built_findings(fields: tuple[dict[str, Any], ...]) -> tuple[Finding, ...]:

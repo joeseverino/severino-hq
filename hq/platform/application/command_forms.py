@@ -2,6 +2,7 @@
 
 import re
 import secrets
+from collections.abc import Mapping
 from typing import Any, ClassVar, override
 
 from django import forms
@@ -10,10 +11,12 @@ from django.core.validators import RegexValidator
 from django.utils.datastructures import MultiValueDict
 
 from .capabilities import CapabilitySpec
+from .command_fields import named_records, referred
 from .command_targets import CommandTargetOption
 from .forms import LinesField
 from .integration_specs import command_schema
 from .records import as_its_model_declares
+from .references import keeping_held, leave_off_unoffered
 from .ui import ended
 
 _EXECUTION_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -73,7 +76,35 @@ def _label(name: str, title: str | None) -> str:
     return words.capitalize()
 
 
-def _field_for_schema(name: str, schema: dict[str, Any], *, required: bool) -> forms.Field:
+def _record_choice(
+    effective: dict[str, Any], offered: tuple[CommandTargetOption, ...], options: dict[str, Any]
+) -> forms.Field:
+    """A field that names records, as a choice of those records.
+
+    The choices are the records the caller may read, so a value outside them
+    is refused here, before the command runs.
+    """
+
+    if effective.get("type") == "array":
+        coerce = int if effective.get("items", {}).get("type") == "integer" else str
+        return forms.TypedMultipleChoiceField(choices=grouped_choices(offered), coerce=coerce, **options)
+    empty = "Choose one…" if options["required"] else "None"
+    if not offered:
+        empty = "Nothing to choose from yet"
+    return forms.TypedChoiceField(
+        choices=(("", empty), *grouped_choices(offered)),
+        coerce=int if effective.get("type") == "integer" else str,
+        **options,
+    )
+
+
+def _field_for_schema(
+    name: str,
+    schema: dict[str, Any],
+    *,
+    required: bool,
+    offered: tuple[CommandTargetOption, ...] | None = None,
+) -> forms.Field:
     effective = _one_type(schema)
     kind = effective.get("type")
     options: dict[str, Any] = {
@@ -83,6 +114,8 @@ def _field_for_schema(name: str, schema: dict[str, Any], *, required: bool) -> f
     }
     if "default" in schema and schema["default"] is not None:
         options["initial"] = schema["default"]
+    if offered is not None:
+        return _record_choice(effective, offered, options)
 
     labeled = schema.get("oneOf")
     if labeled and all("const" in choice for choice in labeled):
@@ -138,16 +171,53 @@ def _field_for_schema(name: str, schema: dict[str, Any], *, required: bool) -> f
     )
 
 
+# Fields a command carries for its own bookkeeping, never as what it changes.
+_BOOKKEEPING = frozenset({"idempotency_key", "reason"})
+# The words a switch's two values are pressed by.
+SWITCH_VARIANTS = ("on", "off")
+
+
+def own_fields(schema: dict[str, Any]) -> set[str]:
+    """The fields a command's schema takes as what it changes."""
+
+    return set(schema.get("properties", {})) - _BOOKKEEPING
+
+
+def is_switch(schema: dict[str, Any]) -> bool:
+    """Whether a command sets one thing to yes or no: its one own field is a boolean."""
+
+    names = own_fields(schema)
+    return len(names) == 1 and _one_type(schema["properties"][next(iter(names))]).get("type") == "boolean"
+
+
+def switch_field(spec: CapabilitySpec) -> str:
+    """The field a switch sets, pressed as one of its declared ``on`` and
+    ``off`` words; "" for any other command, or a switch without both words,
+    which keeps its checkbox."""
+
+    schema = command_schema(spec.command_type)
+    if not is_switch(schema) or not set(SWITCH_VARIANTS) <= dict(spec.variants).keys():
+        return ""
+    return next(iter(own_fields(schema)))
+
+
 class CapabilityCommandForm(forms.Form):
     """Presentation from JSON Schema; execution still validates canonically."""
+
+    submission_errors: tuple[str, ...] = ()
 
     payload_names: tuple[str, ...] = ()
     payload_schema: ClassVar[dict[str, Any]] = {}
     effect = "read"
+    # The fields offered as a choice of the records they name.
+    record_names: tuple[str, ...] = ()
+    # The field a switch sets, which its buttons post instead of a checkbox.
+    switch = ""
 
     @property
     def primary_fields(self):
-        return tuple(field for field in self.visible_fields() if field.name not in {"__confirm_effect", "next"})
+        drawn_elsewhere = {"__confirm_effect", "next", self.switch}
+        return tuple(field for field in self.visible_fields() if field.name not in drawn_elsewhere)
 
     @property
     def confirmation_fields(self):
@@ -157,6 +227,11 @@ class CapabilityCommandForm(forms.Form):
         super().__init__(*args, **kwargs)
         if "idempotency_key" in self.fields and not self.is_bound:
             self.fields["idempotency_key"].initial = f"command:{secrets.token_urlsafe(18)}"
+        for name in self.record_names:
+            self._hold(self.fields[name], self.initial.get(name))
+        leave_off_unoffered(
+            self, [name for name in self.record_names if referred(self.payload_schema[name]) is not None]
+        )
         if not self.is_bound or not isinstance(self.data, MultiValueDict):
             return
         allowed = set(self.fields) | {"csrfmiddlewaretoken"}
@@ -171,10 +246,19 @@ class CapabilityCommandForm(forms.Form):
             *(ended(f"Repeated field: {name}") for name in repeated),
         )
 
+    @staticmethod
+    def _hold(field: forms.ChoiceField, held: Any) -> None:
+        """Offer what the record holds even when its source no longer lists it,
+        so saving the form unchanged keeps it."""
+
+        values = held if isinstance(held, (list, tuple)) else [held]
+        kept = [str(value) for value in values if value not in (None, "")]
+        field.choices = keeping_held(field.choices, [(value, value) for value in kept])
+
     @override
     def clean(self):
         cleaned = super().clean()
-        for message in getattr(self, "submission_errors", ()):
+        for message in self.submission_errors:
             self.add_error(None, message)
         if self.errors:
             return cleaned
@@ -205,13 +289,26 @@ def command_form_class(
     spec: CapabilitySpec,
     *,
     target_options: tuple[CommandTargetOption, ...] | None = None,
+    record_choices: Mapping[str, tuple[CommandTargetOption, ...] | None] | None = None,
 ) -> type[CapabilityCommandForm]:
-    """Build the complete browser form from one canonical capability spec."""
+    """Build the complete browser form from one canonical capability spec.
+
+    ``record_choices`` holds the records each record-naming field offers
+    (``command_targets.record_options``); a field without them is typed.
+    """
 
     schema = as_its_model_declares(spec.command_type, command_schema(spec.command_type))
     properties = schema.get("properties", {})
     required = frozenset(schema.get("required", ()))
-    fields = {name: _field_for_schema(name, field, required=name in required) for name, field in properties.items()}
+    offered = {
+        name: (record_choices or {}).get(name)
+        for name, field in properties.items()
+        if named_records(field) is not None or referred(field) is not None
+    }
+    fields = {
+        name: _field_for_schema(name, field, required=name in required, offered=offered.get(name))
+        for name, field in properties.items()
+    }
     if "idempotency_key" in fields:
         fields["idempotency_key"].widget = forms.HiddenInput()
     if spec.target_kind:
@@ -245,7 +342,7 @@ def command_form_class(
             label=(
                 "I understand this changes a live system."
                 if spec.effect == "infrastructure_change"
-                else "I understand this deletes data."
+                else "I understand this stops or deletes something."
             )
         )
         # Read by templates/django/forms/field.html, which draws it as the callout closing the form.
@@ -257,6 +354,8 @@ def command_form_class(
             "payload_names": tuple(properties),
             "payload_schema": {**properties, "required": tuple(required)},
             "effect": spec.effect,
+            "record_names": tuple(name for name, choices in offered.items() if choices is not None),
+            "switch": switch_field(spec),
             **fields,
         },
     )

@@ -34,6 +34,11 @@ from hq.domains.control_plane.models import (
     WeatherObservation,
 )
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
+from hq.domains.control_plane.observations.portainer import IMAGE_KIND as PULLED_KIND
+from hq.domains.control_plane.observations.public_registry import (
+    IMAGE_KIND as PUBLISHED_KIND,
+    VULNERABILITY_KIND,
+)
 from hq.domains.projects.models import Project
 from hq.platform.application import readings
 from hq.platform.application.approvals import entry_event
@@ -139,6 +144,22 @@ def _machines():
                     "online": True,
                     "public_key": f"test-key-{index}",
                     "endpoints": [f"{public}:41641"],
+                    # A port open to one name, and one open to several, which
+                    # wrap beside the facts on their row unless given a row.
+                    "reach": [
+                        {"port": 22, "who": ["group:an-example-group-of-administrators"]},
+                        {
+                            "port": 53,
+                            "who": [
+                                "autogroup:member",
+                                "group:an-example-group-of-administrators",
+                                "tag:an-example-server-tag",
+                                "example@example.com",
+                            ],
+                        },
+                    ]
+                    if name == MACHINE
+                    else [],
                 }
                 for index, (name, address, public) in enumerate(
                     (
@@ -244,6 +265,61 @@ def _containers():
         defaults={"records": records, "reachable": True, "observed_at": timezone.now()},
     )
     _hardening()
+    _behind()
+
+
+def _behind():
+    """The frontend's registry publishes a newer build, and OSV fixes a serious
+    finding in the build it runs: its row and its page each say a version it
+    changes into."""
+
+    image, tag = "registry.example.com/example/a-web-frontend-image-with-a-long-name", "2026.09.28"
+    running = f"sha256:{'a' * 64}"
+    now = timezone.now().isoformat()
+    for kind, record in (
+        (
+            PULLED_KIND,
+            {
+                "connection_ref": PORTAINER,
+                "host": MACHINE,
+                "id": f"sha256:{'b' * 64}",
+                "tags": [f"{image}:{tag}"],
+                "digests": [f"{image}@{running}"],
+                "containers": [{"container": FRONTEND, "reference": f"{image}:{tag}"}],
+            },
+        ),
+        (
+            PUBLISHED_KIND,
+            {
+                "image": image,
+                "tags": [tag, "2026.10.30"],
+                "digests": {tag: running, "2026.10.30": f"sha256:{'c' * 64}"},
+                "read_at": now,
+            },
+        ),
+        (
+            VULNERABILITY_KIND,
+            {
+                "digest": f"{image}@{running}",
+                "checked": 40,
+                "findings": [
+                    {
+                        "id": "GHSA-0000-0000-0000",
+                        "package": "an-example-package-with-a-long-name",
+                        "installed": "1.2.3",
+                        "fixed": ["1.2.4", "1.3.0"],
+                        "severity": "high",
+                        "summary": "An example finding with a fixed version",
+                        "url": "https://osv.dev/vulnerability/GHSA-0000-0000-0000",
+                    }
+                ],
+                "read_at": now,
+            },
+        ),
+    ):
+        ProviderInventory.objects.update_or_create(
+            kind=kind, defaults={"records": [record], "reachable": True, "observed_at": timezone.now()}
+        )
 
 
 def _hardening():
@@ -719,7 +795,7 @@ def _unbroken_words(user):
 # The same kind of table as test_browser_fixtures.PAGES, under dense/ so a
 # failure names which estate it came from.
 DENSE_PAGES = {
-    "dense/dashboard": (lambda: reverse("dashboard"), lambda: _dashboard(True)),
+    "dense/dashboard": (lambda: reverse("dashboard"), lambda: _dashboard(populated=True)),
     "dense/service": (
         lambda: reverse("control_plane:service", kwargs={"hostname": SERVICE}),
         ExitStack,

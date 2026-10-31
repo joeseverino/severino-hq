@@ -92,11 +92,11 @@ func apiToken(n int, ref, prefix string) item {
 	}}
 }
 
-func sshConnection(n int, ref, prefix, identity string) item {
+func sshConnection(n int) item {
 	return item{ID: id(n), Version: 1, Fields: []field{
-		f("connection_ref", ref), f("projection", "ssh_transport"), f("env_prefix", prefix),
+		f("connection_ref", "edge"), f("projection", "ssh_transport"), f("env_prefix", "EDGE"),
 		f("host", "edge.example.com"), f("port", "2222"), f("user", "deploy"),
-		f("host_key", hostKey), f("identity", identity),
+		f("host_key", hostKey), f("identity", "Edge deploy key"),
 	}}
 }
 
@@ -115,7 +115,7 @@ func newHost(t *testing.T, items ...item) *machine {
 			t.Fatal(err)
 		}
 	}
-	h.credential("op_connect_example", connecttest.Token+"\n")
+	h.credential(connecttest.Token + "\n")
 	h.runner = &Runner{
 		Config: Config{
 			Vault: connecttest.VaultName, EnvItem: "example env", Endpoint: h.fake.Server.URL,
@@ -137,11 +137,15 @@ func newHost(t *testing.T, items ...item) *machine {
 	return h
 }
 
-func (h *machine) credential(name, value string) {
+// credential writes the Connect token the example project's credential names.
+func (h *machine) credential(value string) {
 	h.t.Helper()
-	if err := os.WriteFile(filepath.Join(h.creds, name), []byte(value), 0o400); err != nil {
-		os.Chmod(filepath.Join(h.creds, name), 0o600)
-		if err := os.WriteFile(filepath.Join(h.creds, name), []byte(value), 0o400); err != nil {
+	path := filepath.Join(h.creds, "op_connect_example")
+	if err := os.WriteFile(path, []byte(value), 0o400); err != nil {
+		if err := os.Chmod(path, 0o600); err != nil {
+			h.t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(value), 0o400); err != nil {
 			h.t.Fatal(err)
 		}
 	}
@@ -253,13 +257,17 @@ func mode(t *testing.T, path string) os.FileMode {
 
 func TestAFirstRenderInstallsEveryConsumersFile(t *testing.T) {
 	key := connecttest.Ed25519Key(t)
-	h := newHost(t, apiToken(1, "example", "EXAMPLE"), sshConnection(2, "edge", "EDGE", "Edge deploy key"),
+	h := newHost(t, apiToken(1, "example", "EXAMPLE"), sshConnection(2),
 		connecttest.KeyItem(id(3), "Edge deploy key", key.PKCS8, key.Public))
 	h.web.installed = true
 	// A token file an earlier release kept: nothing accepts one.
-	os.MkdirAll(h.layout().SecretDir, 0o700)
+	if err := os.MkdirAll(h.layout().SecretDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	token := filepath.Join(h.layout().SecretDir, "severino_mcp_token")
-	os.WriteFile(token, []byte("previous-value"), 0o400)
+	if err := os.WriteFile(token, []byte("previous-value"), 0o400); err != nil {
+		t.Fatal(err)
+	}
 
 	result := h.ok()
 	if result.Outcome != "rendered" || !result.Changed || !result.WebChanged || !result.Restarted || h.web.restarts != 1 {
@@ -307,17 +315,19 @@ func TestAFirstRenderInstallsEveryConsumersFile(t *testing.T) {
 	}
 	// The token went to Connect and nowhere else: not to a file, not to the
 	// unauthenticated health read.
-	filepath.WalkDir(filepath.Dir(h.layout().RuntimeDir), func(path string, entry os.DirEntry, _ error) error {
+	if err := filepath.WalkDir(filepath.Dir(h.layout().RuntimeDir), func(path string, entry os.DirEntry, _ error) error {
 		if entry.Type().IsRegular() && !strings.HasPrefix(path, h.creds) && strings.Contains(read(t, path), connecttest.Token) {
 			t.Fatalf("the reader token was written to %s", path)
 		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestAnUnchangedVaultIsNotReReadItemByItem(t *testing.T) {
 	key := connecttest.Ed25519Key(t)
-	h := newHost(t, apiToken(1, "example", "EXAMPLE"), sshConnection(2, "edge", "EDGE", "Edge deploy key"),
+	h := newHost(t, apiToken(1, "example", "EXAMPLE"), sshConnection(2),
 		connecttest.KeyItem(id(3), "Edge deploy key", key.PKCS8, key.Public))
 	h.web.installed = true
 	h.ok()
@@ -386,18 +396,36 @@ func TestAnUnchangedVaultIsNotReReadItemByItem(t *testing.T) {
 	// Installed files are verified, not assumed.
 	for why, tamper := range map[string]func(){
 		"an edited document": func() {
-			os.Chmod(h.document(), 0o600)
-			os.WriteFile(h.document(), []byte("{}"), 0o400)
-			os.Chmod(h.document(), 0o400)
+			if err := os.Chmod(h.document(), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(h.document(), []byte("{}"), 0o400); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(h.document(), 0o400); err != nil {
+				t.Fatal(err)
+			}
 		},
 		"a removed identity":        func() { os.Remove(h.ssh("edge")) },
 		"a removed app environment": func() { os.Remove(h.appEnv()) },
-		"an added identity":         func() { os.WriteFile(h.ssh("planted"), []byte("x"), 0o400) },
-		"a loosened mode":           func() { os.Chmod(h.document(), 0o444) },
-		"a removed state file":      func() { os.Remove(filepath.Join(h.layout().RuntimeDir, stateName)) },
+		"an added identity": func() {
+			if err := os.WriteFile(h.ssh("planted"), []byte("x"), 0o400); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"a loosened mode": func() {
+			if err := os.Chmod(h.document(), 0o444); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"a removed state file": func() { os.Remove(filepath.Join(h.layout().RuntimeDir, stateName)) },
 		"a linked document": func() {
-			os.Rename(h.document(), h.document()+".moved")
-			os.Symlink(h.document()+".moved", h.document())
+			if err := os.Rename(h.document(), h.document()+".moved"); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(h.document()+".moved", h.document()); err != nil {
+				t.Fatal(err)
+			}
 		},
 	} {
 		unchanged("before " + why)
@@ -463,17 +491,23 @@ func TestTheRegistryAndConfigurationArePartOfWhatIsCurrent(t *testing.T) {
 	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
 	shipped := read(t, h.runner.Config.RegistryPath)
 	registry := filepath.Join(filepath.Dir(h.creds), "registry.json")
-	os.WriteFile(registry, []byte(shipped), 0o600)
+	if err := os.WriteFile(registry, []byte(shipped), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	h.runner.Config.RegistryPath = registry
 	h.ok()
 	if h.ok().Outcome != "current" {
 		t.Fatal("the second run was not current")
 	}
-	os.WriteFile(registry, []byte(strings.ReplaceAll(shipped, `"label": "website"`, `"label": "address"`)), 0o600)
+	if err := os.WriteFile(registry, []byte(strings.ReplaceAll(shipped, `"label": "website"`, `"label": "address"`)), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := h.run(); !errors.Is(err, project.ErrContent) {
 		t.Fatalf("a changed registry was not applied: %v", err)
 	}
-	os.WriteFile(registry, []byte(`{"schema_version":2,"projections":{},"required_app_variables":["EXAMPLE_A"],"connections":{}}`), 0o600)
+	if err := os.WriteFile(registry, []byte(`{"schema_version":2,"projections":{},"required_app_variables":["EXAMPLE_A"],"connections":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := h.run(); Class(err) != "config" {
 		t.Fatalf("a registry naming connections was accepted: %v", err)
 	}
@@ -487,11 +521,15 @@ func TestARefreshKeepsTheAppEnvironmentInodeAndReplacesTheDocuments(t *testing.T
 	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
 	layout := h.layout()
 	for _, dir := range []string{layout.SecretDir, layout.WebDir} {
-		os.MkdirAll(dir, 0o700)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
 	}
 	checkout := filepath.Join(layout.SecretDir, install.AppEnvName)
 	for _, path := range []string{h.appEnv(), checkout, h.document()} {
-		os.WriteFile(path, []byte("previous-value"), 0o400)
+		if err := os.WriteFile(path, []byte("previous-value"), 0o400); err != nil {
+			t.Fatal(err)
+		}
 	}
 	h.web.installed = true
 	before := []uint64{inode(t, h.appEnv()), inode(t, checkout), inode(t, h.document())}
@@ -532,7 +570,7 @@ func TestARefreshKeepsTheAppEnvironmentInodeAndReplacesTheDocuments(t *testing.T
 
 func TestAFailedRefreshPreservesEveryInstalledFile(t *testing.T) {
 	key, other := connecttest.Ed25519Key(t), connecttest.Ed25519Key(t)
-	edge := sshConnection(2, "edge", "EDGE", "Edge deploy key")
+	edge := sshConnection(2)
 	keyItem := connecttest.KeyItem(id(3), "Edge deploy key", key.PKCS8, key.Public)
 	items := "/v1/vaults/" + connecttest.VaultID + "/items"
 	answer := func(match func(*http.Request) bool, status int, body string) func(http.ResponseWriter, *http.Request) bool {
@@ -542,7 +580,7 @@ func TestAFailedRefreshPreservesEveryInstalledFile(t *testing.T) {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(status)
-			w.Write([]byte(body))
+			_, _ = w.Write([]byte(body))
 			return true
 		}
 	}
@@ -561,9 +599,9 @@ func TestAFailedRefreshPreservesEveryInstalledFile(t *testing.T) {
 			h.runner.Config.ConnectTimeout = 100 * time.Millisecond
 			h.fake.Server.Close()
 		}},
-		{"token refused", "connect_denied", func(h *machine) { h.credential("op_connect_example", "another.token\n") }},
-		{"empty token", "config", func(h *machine) { h.credential("op_connect_example", "\n") }},
-		{"malformed token", "config", func(h *machine) { h.credential("op_connect_example", "two words\n") }},
+		{"token refused", "connect_denied", func(h *machine) { h.credential("another.token\n") }},
+		{"empty token", "config", func(h *machine) { h.credential("\n") }},
+		{"malformed token", "config", func(h *machine) { h.credential("two words\n") }},
 		{"missing credential", "config", func(h *machine) { os.Remove(filepath.Join(h.creds, "op_connect_example")) }},
 		{"no credentials directory", "config", func(h *machine) { h.runner.Config.CredentialsDir = "" }},
 		{"credential name leaves the directory", "config", func(h *machine) { h.runner.Config.ConnectCredential = "../op_connect_example" }},
@@ -717,7 +755,9 @@ func TestAVaultWithNoConnectionsNeverReplacesInstalledOnes(t *testing.T) {
 		t.Fatalf("status: %+v", status.LastAttempt)
 	}
 	// An installed document that cannot be shown empty counts as holding some.
-	os.Chmod(h.document(), 0o600)
+	if err := os.Chmod(h.document(), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := h.run(); Class(err) != "content" {
 		t.Fatalf("an unreadable installed document was replaced by an empty one: %v", err)
 	}
@@ -726,14 +766,18 @@ func TestAVaultWithNoConnectionsNeverReplacesInstalledOnes(t *testing.T) {
 func TestAnUnsafeHostIsRefusedBeforeAnythingIsRead(t *testing.T) {
 	for name, change := range map[string]func(*machine){
 		"disk-backed runtime": func(h *machine) {
-			h.mountErr = errors.Join(install.ErrHost, errors.New("Controller secret directory must be on tmpfs."))
+			h.mountErr = errors.Join(install.ErrHost, errors.New("controller secret directory must be on tmpfs"))
 		},
 		"swappable runtime": func(h *machine) {
 			h.runner.Mounts = func(dir string) error {
 				return install.CheckMountInfo([]byte("90 25 0:50 / "+dir+" rw - tmpfs tmpfs rw,nosuid,noswapfile\n"), dir)
 			}
 		},
-		"runtime open to others":   func(h *machine) { os.Chmod(h.layout().RuntimeDir, 0o755) },
+		"runtime open to others": func(h *machine) {
+			if err := os.Chmod(h.layout().RuntimeDir, 0o755); err != nil {
+				h.t.Fatal(err)
+			}
+		},
 		"shared with the doorbell": func(h *machine) { h.runner.Config.Layout.RuntimeDir = "/run/severino-hq" },
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -756,30 +800,48 @@ func TestAnUnsafeHostIsRefusedBeforeAnythingIsRead(t *testing.T) {
 	}
 	// Public halves alone on disk do not stop the refresh.
 	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
-	os.MkdirAll(filepath.Join(h.layout().SecretDir, "ssh"), 0o700)
-	os.WriteFile(filepath.Join(h.layout().SecretDir, "ssh", "edge.pub"), []byte("ssh-ed25519 AAAA example\n"), 0o644)
+	if err := os.MkdirAll(filepath.Join(h.layout().SecretDir, "ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(h.layout().SecretDir, "ssh", "edge.pub"), []byte("ssh-ed25519 AAAA example\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	h.ok()
 }
 
 func TestDestinationsThatAreNotTheRenderersOwnAreRefused(t *testing.T) {
 	for name, plant := range map[string]func(h *machine, system string){
-		"a symlinked app environment": func(h *machine, system string) { os.Symlink(system, h.appEnv()) },
+		"a symlinked app environment": func(h *machine, system string) {
+			if err := os.Symlink(system, h.appEnv()); err != nil {
+				h.t.Fatal(err)
+			}
+		},
 		"a hard-linked app environment": func(h *machine, system string) {
 			if err := os.Link(system, h.appEnv()); err != nil {
 				h.t.Fatal(err)
 			}
 		},
-		"a directory at the app environment": func(h *machine, _ string) { os.Mkdir(h.appEnv(), 0o700) },
+		"a directory at the app environment": func(h *machine, _ string) {
+			if err := os.Mkdir(h.appEnv(), 0o700); err != nil {
+				h.t.Fatal(err)
+			}
+		},
 		"a symlinked checkout copy": func(h *machine, system string) {
-			os.Symlink(system, filepath.Join(h.layout().SecretDir, install.AppEnvName))
+			if err := os.Symlink(system, filepath.Join(h.layout().SecretDir, install.AppEnvName)); err != nil {
+				h.t.Fatal(err)
+			}
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newHost(t, apiToken(1, "example", "EXAMPLE"))
 			system := filepath.Join(filepath.Dir(h.creds), "system-file")
-			os.WriteFile(system, []byte("system"), 0o600)
+			if err := os.WriteFile(system, []byte("system"), 0o600); err != nil {
+				t.Fatal(err)
+			}
 			for _, dir := range []string{h.layout().SecretDir, h.layout().WebDir} {
-				os.MkdirAll(dir, 0o700)
+				if err := os.MkdirAll(dir, 0o700); err != nil {
+					t.Fatal(err)
+				}
 			}
 			plant(h, system)
 			if _, err := h.run(); Class(err) != "host" {
@@ -793,8 +855,12 @@ func TestDestinationsThatAreNotTheRenderersOwnAreRefused(t *testing.T) {
 	// The controller's own files are replaced, never written through.
 	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
 	system := filepath.Join(filepath.Dir(h.creds), "system-file")
-	os.WriteFile(system, []byte("system"), 0o600)
-	os.Symlink(system, h.document())
+	if err := os.WriteFile(system, []byte("system"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(system, h.document()); err != nil {
+		t.Fatal(err)
+	}
 	h.ok()
 	if read(t, system) != "system" || mode(t, h.document()) != 0o400 {
 		t.Fatal("a link at the connections document was written through")
@@ -804,15 +870,21 @@ func TestDestinationsThatAreNotTheRenderersOwnAreRefused(t *testing.T) {
 func TestIdentitiesFollowTheirConnections(t *testing.T) {
 	key, other := connecttest.Ed25519Key(t), connecttest.Ed25519Key(t)
 	signing := connecttest.RSAKey(t)
-	h := newHost(t, sshConnection(1, "edge", "EDGE", "Edge deploy key"),
+	h := newHost(t, sshConnection(1),
 		connecttest.KeyItem(id(2), "Edge deploy key", key.PKCS8, key.Public),
 		item{ID: id(3), Version: 1, Fields: []field{f("connection_ref", "github"), f("projection", "github_app"),
 			f("env_prefix", "GITHUB"), f("app_id", "12345"), f("signing_key", "Example app key")}},
 		connecttest.KeyItem(id(4), "Example app key", signing.PKCS8, signing.Public))
 	// What an earlier render left for a connection that no longer exists.
-	os.MkdirAll(filepath.Dir(h.ssh("x")), 0o700)
-	os.WriteFile(h.ssh("retired"), []byte("an old key"), 0o400)
-	os.WriteFile(h.ssh("retired.pub"), []byte("an old key"), 0o444)
+	if err := os.MkdirAll(filepath.Dir(h.ssh("x")), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(h.ssh("retired"), []byte("an old key"), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(h.ssh("retired.pub"), []byte("an old key"), 0o444); err != nil {
+		t.Fatal(err)
+	}
 	h.ok()
 	for _, name := range []string{"retired", "retired.pub"} {
 		if _, err := os.Lstat(h.ssh(name)); err == nil {
@@ -977,9 +1049,15 @@ func TestARestartIsNeverMadeOntoAFileThatWasNotWritten(t *testing.T) {
 		t.Fatalf("restarted onto an unwritten environment: %v %+v", err, result)
 	}
 	// Cut short by the write itself: the mark names another file.
-	os.Chmod(h.appEnv(), 0o600)
-	os.WriteFile(h.appEnv(), []byte("DJANGO_SECRET_KEY='cut"), 0o400)
-	os.Chmod(h.appEnv(), 0o400)
+	if err := os.Chmod(h.appEnv(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(h.appEnv(), []byte("DJANGO_SECRET_KEY='cut"), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(h.appEnv(), 0o400); err != nil {
+		t.Fatal(err)
+	}
 	h.runner.fault = func(string) error { return errors.New("injected failure") }
 	if result, _ := h.run(); result.Restarted || h.web.restarts != 1 {
 		t.Fatal("restarted onto a cut file")
@@ -1030,7 +1108,9 @@ func TestAnUnreadableRestartMarkForcesAFullRender(t *testing.T) {
 	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
 	h.web.installed = true
 	h.ok()
-	os.WriteFile(filepath.Join(h.layout().RuntimeDir, pendingName), []byte("not a mark"), 0o600)
+	if err := os.WriteFile(filepath.Join(h.layout().RuntimeDir, pendingName), []byte("not a mark"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if result := h.ok(); result.Outcome != "rendered" || !result.Restarted || h.web.restarts != 2 || h.owed() {
 		t.Fatalf("an unreadable mark was skipped over: %+v", result)
 	}
@@ -1079,7 +1159,9 @@ func TestNothingInstalledIsTouchedWhileALauncherHoldsTheLock(t *testing.T) {
 	if h.owed() || h.web.restarts != 1 {
 		t.Fatal("a run that wrote nothing owes or made a restart")
 	}
-	syscall.Flock(int(launcher.Fd()), syscall.LOCK_UN)
+	if err := syscall.Flock(int(launcher.Fd()), syscall.LOCK_UN); err != nil {
+		t.Fatal(err)
+	}
 	if result := h.ok(); !result.WebChanged || !result.Restarted {
 		t.Fatalf("after the launcher let go: %+v", result)
 	}
@@ -1089,13 +1171,15 @@ func TestNothingInstalledIsTouchedWhileALauncherHoldsTheLock(t *testing.T) {
 // there does not stop a render.
 func TestALockHeldInTheCheckoutDoesNotStopARender(t *testing.T) {
 	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
-	os.MkdirAll(h.layout().SecretDir, 0o700)
+	if err := os.MkdirAll(h.layout().SecretDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	for _, name := range []string{".refresh.lock", "refresh.lock"} {
 		planted, err := os.OpenFile(filepath.Join(h.layout().SecretDir, name), os.O_WRONLY|os.O_CREATE, 0o600)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer planted.Close()
+		t.Cleanup(func() { planted.Close() })
 		if err := syscall.Flock(int(planted.Fd()), syscall.LOCK_EX); err != nil {
 			t.Fatal(err)
 		}
@@ -1182,7 +1266,7 @@ func TestAVaultEditedMidReadIsReadAgain(t *testing.T) {
 	stale.fake.Intercept(func(w http.ResponseWriter, r *http.Request) bool {
 		if r.URL.Path == items+id(1) {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"id":"` + id(1) + `","version":99,"category":"LOGIN","vault":{"id":"` + connecttest.VaultID + `"}}`))
+			_, _ = w.Write([]byte(`{"id":"` + id(1) + `","version":99,"category":"LOGIN","vault":{"id":"` + connecttest.VaultID + `"}}`))
 			return true
 		}
 		return false

@@ -15,7 +15,7 @@ lazy from .network import client_ip
 
 
 @receiver(user_logged_in)
-def _on_login(sender, user, request, **kwargs):
+def _on_login(user, **kwargs):
     record_event(
         action=AuditLog.Action.LOGIN,
         obj=user,
@@ -26,7 +26,7 @@ def _on_login(sender, user, request, **kwargs):
 
 
 @receiver(user_logged_out)
-def _on_logout(sender, user, request, **kwargs):
+def _on_logout(user, **kwargs):
     if user is None:
         return
     record_event(
@@ -39,7 +39,7 @@ def _on_logout(sender, user, request, **kwargs):
 
 
 @receiver(user_login_failed)
-def _on_login_failed(sender, credentials, request=None, **kwargs):
+def _on_login_failed(credentials, request=None, **kwargs):
     """Record the attempt, including where it came from.
 
     The source address is not decoration. `core.throttle` reads these rows back

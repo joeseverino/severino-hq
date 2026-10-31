@@ -1,13 +1,9 @@
 """Versioned machine-client transport over the shared capability registry.
 
-This adapter adds no capability, no domain model, and no business rule. Every
-command it runs is already in HQ's registry, which is what keeps the web UI,
-the CLI, MCP and a Shortcut from drifting into four behaviors. A phone cannot
-develop its own idea of what a domain record is.
-
-The version is in the path, not a header: a Shortcut on a phone you have not
-opened in six months is a normal state, and a URL that quietly changed meaning
-is the failure this prevents.
+It adds no capability, domain model or business rule, so the web UI, the CLI,
+MCP and a Shortcut cannot drift into four behaviors. The version is in the
+path, not a header, so a Shortcut not opened in months never meets a URL that
+quietly changed meaning.
 """
 
 import json
@@ -28,6 +24,7 @@ from hq.platform.application.agent_registry import observe
 from hq.platform.application.approvals import is_held
 from hq.platform.application.capabilities import (
     CapabilityDescription,
+    InvalidCapabilityQuery,
     authorize_capability,
     capability_registry,
     describe_capabilities,
@@ -50,6 +47,7 @@ from hq.platform.application.idempotency import (
 from hq.platform.application.integration_specs import RESERVED_QUERY_FIELD
 from hq.platform.application.projection import QueryRefusal
 from hq.platform.application.record_errors import RecordNotFound
+from hq.platform.application.refusal_status import CAPABILITY_STATUS, refusal_status
 from hq.platform.application.request_identity import signed_in
 from hq.platform.application.resources import (
     InvalidResourceInput,
@@ -134,39 +132,19 @@ class ConnectionCatalog(TypedDict):
 
 @with_config(ConfigDict(extra="allow"))
 class ResourceCollection(TypedDict):
-    """Every list guarantees items/count and may include projection metadata."""
+    """Every list guarantees these and may include projection metadata."""
 
     items: list[dict[str, Any]]
     count: int
+    # How many matched, where the resource counts them cheaply; else null.
+    total: int | None
+    # More matched than this page holds; ``next`` says how to ask for the rest.
+    truncated: bool
+    next: str
 
 
 # An application projection with its own schema_version; HQ types it there.
 Projection = dict[str, Any]
-
-
-# HQ answers a failed capability with its own error code. Mapping the ones that
-# mean something other than "you sent nonsense" keeps a client on HTTP status
-# alone for control flow, which is all a Shortcut can branch on comfortably.
-CAPABILITY_STATUS = {
-    "unknown_capability": 404,
-    "forbidden": 403,
-    # The operator's standing rule refuses this client. Like a missing grant,
-    # no change to the request gets it through.
-    "denied_by_policy": 403,
-    "not_found": 404,
-    # The call had to be held, and the record it names could not be read to
-    # show the person deciding: the target is not there.
-    "approval_subject_unreadable": 404,
-    "conflict": 409,
-    "operation_failed": 409,
-    "idempotency_conflict": 409,
-    # The request is valid; the state it acts on refuses it until it changes.
-    "precondition": 409,
-    # Nothing is wrong with the request. This client is holding more decisions
-    # than a person has answered, so the honest status is the one that says
-    # "later", not the one that says "malformed".
-    "too_many_pending_approvals": 429,
-}
 
 
 def _reject_json_constant(_value: str) -> Any:
@@ -198,16 +176,17 @@ def _ok(data: Any, *, status: int = 200) -> HttpResponse:
     return _json({"ok": True, "data": data}, status=status)
 
 
+def _permitted(spec: Mapping[str, Any], held: set[str] | frozenset[str]) -> bool:
+    """Whether a token holding ``held`` may use a catalog entry: every catalog
+    answers this one way."""
+
+    return set(spec["required_capabilities"]) <= held
+
+
 def _permission_catalog(specs: list[dict[str, Any]], held: set[str] | frozenset[str]) -> list[dict[str, Any]]:
     """Annotate static registry entries without duplicating adapter policy."""
 
-    return [
-        {
-            **spec,
-            "permitted": set(spec["required_capabilities"]) <= held,
-        }
-        for spec in specs
-    ]
+    return [{**spec, "permitted": _permitted(spec, held)} for spec in specs]
 
 
 def _fail(message: str, *, code: str, status: int, details: Any = None) -> HttpResponse:
@@ -242,7 +221,7 @@ def _operator(request: HttpRequest) -> Principal | None:
     return None if user is None else web_principal(user)
 
 
-def _request_schema(spec: Mapping[str, Any]) -> dict[str, Any]:
+def request_schema(spec: Mapping[str, Any]) -> dict[str, Any]:
     # Pydantic emits local refs such as ``#/$defs/Record``. Once the command
     # schema is nested under ``payload`` those refs still resolve from the
     # document root, so hoist its definitions into the envelope root instead
@@ -277,6 +256,81 @@ def _request_schema(spec: Mapping[str, Any]) -> dict[str, Any]:
     return schema
 
 
+def _unserved(request: HttpRequest, methods: tuple[str, ...], *, configured: bool) -> HttpResponse | None:
+    """The refusal an endpoint answers before it asks who is calling, if any."""
+
+    if not configured:
+        return _fail(
+            "The machine API is not configured on this deployment.",
+            code="not_configured",
+            status=503,
+        )
+    if request.method not in methods:
+        response = _fail(
+            f"{request.method} is not allowed here.",
+            code="method_not_allowed",
+            status=405,
+        )
+        response["Allow"] = ", ".join(methods)
+        return response
+    return None
+
+
+def _authenticated(request: HttpRequest, principal: Principal, claims: dict[str, Any]) -> APIRequest:
+    # The one place these are set; every endpoint reads them.
+    authenticated = cast(APIRequest, request)
+    authenticated.principal = principal
+    authenticated.token_claims = claims
+    return authenticated
+
+
+def _admit_operator(request: HttpRequest, operator: Principal) -> APIRequest | HttpResponse:
+    """A signed-in operator's request, admitted while they hold READ."""
+
+    try:
+        operator.require(Capability.READ)
+    except AuthorizationError as exc:
+        return _fail(exc.reason, code=exc.code, status=403)
+    return _authenticated(request, operator, {})
+
+
+def _admit_token(request: HttpRequest) -> APIRequest | HttpResponse:
+    """A bearer token's request, admitted once the token verifies and agents run."""
+
+    try:
+        principal, claims = _principal(request)
+    except (TokenError, AuthorizationError) as exc:
+        # No identity was established, so these are counted per source.
+        record_denial(
+            interface="api",
+            reason=exc.code,
+            source=client_ip(request),
+            authenticated=False,
+        )
+        status = 401 if isinstance(exc, TokenError) else 403
+        return _fail(exc.reason, code=exc.code, status=status)
+    # Before the brake, so a paused agent is still registered.
+    observe(principal)
+    # The same brake /mcp/ applies, and for the same callers: every
+    # token here is a Pocket ID client, and the agents hold exactly
+    # these tokens.
+    # After authentication, so only a valid caller learns it; fails
+    # closed, because agents_paused() does.
+    if agents_paused():
+        record_denial(
+            interface="api",
+            reason="agents_paused",
+            actor=principal.actor,
+            source=client_ip(request),
+        )
+        return _fail(
+            "Agents are paused by the operator.",
+            code="agents_paused",
+            status=403,
+        )
+    return _authenticated(request, principal, claims)
+
+
 # Every endpoint can answer these before its view runs: an unverified token,
 # a refused grant or paused agents, a wrong method, an unconfigured surface.
 ENDPOINT_ERRORS = (401, 403, 405, 503)
@@ -293,87 +347,34 @@ def _endpoint(
 ) -> Callable[[APIView], View]:
     """Authenticate, then put every failure in the same envelope.
 
-    CSRF-exempt by construction rather than by concession: these views read the
-    Authorization header and never the session cookie, so a browser cannot make
-    an authenticated request to them at all. ``operator_session`` is the one
-    exception, for GET views only: a signed-in operator's session, holding
-    READ, is accepted as well, and works while the token surface is
-    unconfigured because it does not depend on it.
-
-    ``data`` is the type a success carries under ``data`` (None: the body is
-    not enveloped) and ``errors`` the statuses the view adds to
-    ENDPOINT_ERRORS, and ``codes`` maps each error code the view answers with
-    to its status. ``title`` names the operation in a few words, where the
-    docstring's first line says what it answers. All are read by
-    hq_api/openapi.py.
+    Every argument is the endpoint's declaration, which ``openapi.py`` reads:
+    ``data`` is what a success carries under ``data`` (None: not enveloped),
+    ``errors`` the statuses added to ENDPOINT_ERRORS, ``codes`` each error code
+    and its status, and ``title`` the operation in a few words.
     """
 
+    # ``operator_session`` lets a signed-in operator's session, holding READ,
+    # read a GET view too, and works while the token surface is unconfigured.
     if operator_session and set(methods) - {"GET", "HEAD"}:
         raise ValueError("A session is accepted only on a safe method.")
 
     def decorate(view: APIView) -> View:
+        # CSRF-exempt by construction rather than by concession: these views
+        # read the Authorization header and never the session cookie, so a
+        # browser cannot make an authenticated request to them at all; an
+        # operator's session is accepted only on a safe method, above.
         @csrf_exempt
         def wrapper(request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
             operator = _operator(request) if operator_session else None
-            if operator is None and not is_configured():
-                return _fail(
-                    "The machine API is not configured on this deployment.",
-                    code="not_configured",
-                    status=503,
-                )
-            if request.method not in methods:
-                response = _fail(
-                    f"{request.method} is not allowed here.",
-                    code="method_not_allowed",
-                    status=405,
-                )
-                response["Allow"] = ", ".join(methods)
-                return response
-            if operator is not None:
-                try:
-                    operator.require(Capability.READ)
-                except AuthorizationError as exc:
-                    return _fail(exc.reason, code=exc.code, status=403)
-                authenticated = cast(APIRequest, request)
-                authenticated.principal = operator
-                authenticated.token_claims = {}
-                return view(authenticated, *args, **kwargs)
-            try:
-                principal, claims = _principal(request)
-            except (TokenError, AuthorizationError) as exc:
-                # No identity was established, so these are counted per source.
-                record_denial(
-                    interface="api",
-                    reason=exc.code,
-                    source=client_ip(request),
-                    authenticated=False,
-                )
-                status = 401 if isinstance(exc, TokenError) else 403
-                return _fail(exc.reason, code=exc.code, status=status)
-            # Before the brake, so a paused agent is still registered.
-            observe(principal)
-            # The same brake /mcp/ applies, and for the same callers: every
-            # token here is a Pocket ID client, and the agents hold exactly
-            # these tokens.
-            # After authentication, so only a valid caller learns it; fails
-            # closed, because agents_paused() does.
-            if agents_paused():
-                record_denial(
-                    interface="api",
-                    reason="agents_paused",
-                    actor=principal.actor,
-                    source=client_ip(request),
-                )
-                return _fail(
-                    "Agents are paused by the operator.",
-                    code="agents_paused",
-                    status=403,
-                )
-            # The one place these are set; every endpoint reads them.
-            authenticated = cast(APIRequest, request)
-            authenticated.principal = principal
-            authenticated.token_claims = claims
-            return view(authenticated, *args, **kwargs)
+            # An operator's session does not depend on the token surface, so
+            # whether that is configured is asked only without one.
+            refused = _unserved(request, methods, configured=operator is not None or is_configured())
+            if refused is not None:
+                return refused
+            admitted = _admit_operator(request, operator) if operator is not None else _admit_token(request)
+            if isinstance(admitted, HttpResponse):
+                return admitted
+            return view(admitted, *args, **kwargs)
 
         wrapper.__name__ = view.__name__
         wrapper.__doc__ = view.__doc__
@@ -416,7 +417,7 @@ def root(request: APIRequest) -> HttpResponse:
 
 
 @_endpoint(("GET",), title="OpenAPI document", data=None, operator_session=True)
-def openapi(request: APIRequest) -> HttpResponse:
+def openapi(_request: APIRequest) -> HttpResponse:
     """This API as an OpenAPI 3.2 document, derived from its routes and registries.
 
     Never anonymous: it names every capability, grant and resource kind, which
@@ -428,16 +429,21 @@ def openapi(request: APIRequest) -> HttpResponse:
     return _json(document())
 
 
-@_endpoint(("GET",), title="List capabilities", data=CapabilityCatalog)
+@_endpoint(("GET",), title="List capabilities", data=CapabilityCatalog, errors=(400,))
 def capabilities(request: APIRequest) -> HttpResponse:
-    """Every capability HQ has, flagged by whether this token may run it.
+    """Every capability a token could ever hold, flagged by whether this one may run it.
 
-    The whole registry is returned, not just the permitted slice: a client
-    being told a capability exists but is not granted is the message that gets
-    someone to fix a scope, where an empty list looks like a broken server.
+    Not just the permitted slice: being told a capability exists but is not
+    granted is what gets someone to fix a scope, where an empty list looks like
+    a broken server.
     """
 
-    described = describe_capabilities()
+    # `?name=` narrows to a capability or a dotted prefix of whole segments,
+    # and `?resource=` to the capabilities acting on that resource.
+    try:
+        described = describe_capabilities(principal=request.principal, **_narrowing(request, CAPABILITY_QUERY))
+    except InvalidCapabilityQuery as exc:
+        return _fail(exc.reason, code="invalid_input", status=400)
     held = granted(request.token_claims)
     specs: list[CapabilityDescription] = described["capabilities"]
     catalog: CapabilityCatalog = {
@@ -445,14 +451,19 @@ def capabilities(request: APIRequest) -> HttpResponse:
         "capabilities": [
             {
                 **spec,
-                "permitted": set(spec["required_capabilities"]) <= held,
+                "permitted": _permitted(spec, held),
                 "idempotency_key_required": spec["effect"] != "read",
-                "request_schema": _request_schema(spec),
+                "request_schema": request_schema(spec),
             }
             for spec in specs
         ],
     }
     return _ok(catalog)
+
+
+CAPABILITY_QUERY: Mapping[str, Mapping[str, Any]] = {"name": {"type": "string"}, "resource": {"type": "string"}}
+# The narrowing inputs, for the OpenAPI document's query parameters.
+capabilities.__dict__.update(__hq_query_fields__=CAPABILITY_QUERY)
 
 
 @_endpoint(("GET",), title="List resources", data=ResourceCatalog)
@@ -464,7 +475,7 @@ def resources(request: APIRequest) -> HttpResponse:
     specs: list[ResourceDescription] = described["resources"]
     catalog: ResourceCatalog = {
         "schema_version": described["schema_version"],
-        "resources": [{**spec, "permitted": set(spec["required_capabilities"]) <= held} for spec in specs],
+        "resources": [{**spec, "permitted": _permitted(spec, held)} for spec in specs],
     }
     return _ok(catalog)
 
@@ -507,20 +518,16 @@ def _projection(
 ) -> View:
     """One principal-scoped projection, served with declared narrowing inputs.
 
-    `topology` and `findings` are the same adapter: authorize, read one query
-    parameters, hand them to the application layer, and turn a refusal into a
-    403. An adapter that adds no behavior of its own is not copied once per
-    read model. ``query_fields`` maps each parameter to its JSON schema, which
-    the OpenAPI document declares as is.
-
-    An unrecognized filter value is the application's business, not the
-    transport's: both projections answer it by returning everything and saying
-    which filter they applied, so a client can tell "matched nothing" from
-    "never applied". A value that cannot narrow at all (an integer that is not
-    one, or an application error in ``refusals``) is a 400, answered with the
-    refusal's ``reason``: HQ's own text, written for the caller, never the value sent.
+    `topology` and `findings` are the same adapter, so it is written once.
+    ``query_fields`` maps each parameter to its JSON schema, which the OpenAPI
+    document declares as is.
     """
 
+    # An unrecognized filter value is the application's business: both
+    # projections return everything and say which filter they applied. A value
+    # that cannot narrow at all (an integer that is not one, or an application
+    # error in ``refusals``) is a 400 with the refusal's ``reason``, HQ's own
+    # text and never the value sent.
     refused: tuple[type[QueryRefusal], ...] = (_UnreadableQuery, *refusals)
 
     def view(request: APIRequest) -> HttpResponse:
@@ -798,7 +805,7 @@ def execute(request: APIRequest, name: str) -> HttpResponse:
         }
         if error.get("details") is not None:
             detail["details"] = error["details"]
-        return {"ok": False, "error": detail}, CAPABILITY_STATUS.get(code, 400)
+        return {"ok": False, "error": detail}, refusal_status(code)
 
     spec = capability_registry().get(name)
     if spec is None or spec.effect == "read":

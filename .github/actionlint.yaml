@@ -1,5 +1,9 @@
+# The correctness profile is actionlint's own checks; the security audit is
+# zizmor's, so the stricter default profile would count it twice.
+profile: correctness
+
 # The homelab deploy runner, and the hosted image every workflow names while
-# actionlint's bundled label list predates it. Declared so actionlint stops
+# the bundled label list predates it. Declared so jactionlint stops
 # reporting them as unknown on every workflow that uses them.
 self-hosted-runner:
   labels:

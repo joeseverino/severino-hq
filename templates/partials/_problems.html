@@ -15,10 +15,10 @@ drawn when nothing is open.
 {% endcomment %}
 {% with urgent=problems|urgent rest=problems|not_urgent %}
 {% if urgent %}
-<section class="card problems-here tone-serious" id="problems-here" aria-labelledby="problems-here-heading">
+{% card css="problems-here tone-serious" id="problems-here" heading="problems-here-heading" %}
   <h2 class="visually-hidden" id="problems-here-heading">{{ urgent|length|counted:"urgent problem,urgent problems" }}</h2>
   {% include "partials/_work_queue.html" with items=urgent grouped=True here=True only %}
-</section>
+{% endcard %}
 {% endif %}
 {% if rest %}
 <ul class="problem-lines">

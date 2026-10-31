@@ -1,11 +1,10 @@
 """The months behind the estate: each record, and the audit event that says
 it was made, dated to when it was really made and by whom.
 
-The seed writes every record in one moment, so the audit log would read as a
-single run by the system. Here each event takes its record's own date and its
-real author: the operator for what they keep by hand and declare, the agent
-for the runbooks it mirrors from the vault, and the system for scheduled work
-and the controller's reads.
+The seed writes every record in one moment, so without this the audit log
+would read as a single run by the system. Each event's author is the operator
+for what they keep by hand and declare, the agent for the runbooks it mirrors
+from the vault, and the system for scheduled work and the controller's reads.
 """
 
 from datetime import datetime, time, timedelta

@@ -1,0 +1,10 @@
+# "Not X, but Y" sets up a reading nobody held in order to knock it down; say
+# what the thing is. A plain "X, but Y" concession is left alone.
+extends: existence
+message: "'%s' contrasts with a reading nobody held; say what it is"
+level: error
+nonword: true
+scope: raw
+tokens:
+  - '(?:^|[.:;!?#*/(]|--)\s*Not\b[^.;:\n]{1,60},\s*but\b'
+  - '(?i)\bnot\s+(?:just|only|merely|simply)\b[^.;:]{1,80}?\bbut\b'

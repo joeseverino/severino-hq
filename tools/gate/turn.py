@@ -1,17 +1,8 @@
 """Whether a run of manage.py test is narrow enough to go ahead without the
 machine's heavy turn (tools/lib/heavy.sh), for every task that runs tests on
-labels: `mise run test` (tools/gate/at.py), and a file task through
-tools/lib/heavy-turn.sh, which runs this module.
-
-A run is narrow when labels name what it runs, each a module or something in
-one, and none of the tests they load drives a browser. With no label it runs
-everything, a package label a whole tree of it, and a browser test starts a
-browser per worker: those are heavy, and so is a run manage.py refuses,
-since it says why in the turn.
-
-    python -m tools.gate.turn [manage.py test arguments...]
-
-exits 0 for a narrow run and 1 for a heavy one.
+labels: `python -m tools.gate.turn [manage.py test arguments...]` exits 0 for a
+narrow run and 1 for a heavy one. What narrow means: docs/Development.md, Heavy
+gates take turns.
 """
 
 import importlib.util

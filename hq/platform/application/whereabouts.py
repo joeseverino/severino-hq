@@ -42,33 +42,17 @@ class Origin:
 
     @property
     def external(self) -> bool:
-        """Whether this is served somewhere HQ does not reach.
-
-        A proxy forwards to ``host:port`` by construction; a DNS record names a
-        target with no port. So an address with no port came from the record
-        itself, which means the name is answered outside this network: a
-        Pages site, a mail host, someone else's server.
-
-        Worth separating from "unknown host", which is the same missing lookup
-        with a very different meaning: an ingress pointing at an address no host
-        claims is a thing HQ cannot describe and probably should.
-
-        Read through the shared endpoint parser rather than by looking for a
-        colon: a bare IPv6 answer is full of colons and carries no port at all.
-
-        The absent port is necessary but not sufficient. An internal rewrite
-        names an origin too, with a *private* address and no port, and a name
-        served one subnet away is not served outside this network.
-
-        So the question is asked of the address rather than of its spelling.
-        Where an address lives is ``reach``'s to answer and it already does, for
-        the badge on this same page; a private, tailnet or loopback answer is
-        inside by definition, and an unknown host inside the network is what
-        ``qualifier`` exists to say. A name rather than an address (a CNAME to
-        somewhere that hosts pages) classifies as nothing and stays external,
-        which is the case this property exists for.
+        """Whether this is served somewhere HQ does not reach: a Pages site, a mail
+        host, someone else's server. An unknown host inside the network is
+        ``qualifier``'s to say.
         """
 
+        # A proxy forwards to host:port and a DNS record names a target with no port,
+        # so a portless address came from the record itself (the endpoint parser reads
+        # the port, since a bare IPv6 answer is full of colons). A portless private,
+        # tailnet or loopback answer, an internal rewrite, is still inside, as
+        # network_of says; a name (a CNAME to a pages host) classifies as nothing and
+        # stays external.
         if self.known or split_endpoint(self.address)[1]:
             return False
         return network_of(host_of(self.address)) not in (
@@ -87,9 +71,9 @@ class Origin:
     def known(self) -> bool:
         """Whether the address belongs to a machine HQ knows.
 
-        An ingress forwarding to an address no host claims is not necessarily
-        broken, but it is somewhere HQ cannot describe, reconcile or reach, and
-        that is worth saying out loud rather than printing a bare IP.
+        An ingress forwarding to an address no host claims may work, yet it is
+        somewhere HQ cannot describe, reconcile or reach, which a page says in
+        words rather than as a bare IP.
         """
 
         return bool(self.host)
@@ -184,13 +168,9 @@ def machine_for(origin: Origin | None, machines: tuple[dict[str, Any], ...]):
 class Whereabouts:
     """What places an address: whose machine it is, and what answers there.
 
-    Both are estate-wide readings that every address in a pass shares: the
-    connections, the container sweep and the container declarations. Taken per
-    address, a catalog would pay for all three once per name.
-
-    Read at most once each and only if asked, for the same reason as the
-    certificates below: a dashboard listing no service resolves no address, and
-    a query nobody needs is one every page pays for.
+    The connections, the container sweep and the container declarations are
+    estate-wide, so a pass reads each at most once, and only if asked: a page
+    that resolves no address pays for none.
     """
 
     def __init__(self, machines: tuple[dict[str, Any], ...]):
@@ -231,24 +211,16 @@ def locate(
     machines: tuple[dict[str, Any], ...] | None = None,
     at: Whereabouts | None = None,
     near: str = "",
+    loopback_on: str = "",
 ) -> Origin:
     """Match a forwarding address to a machine, and if certain, a container.
 
-    Which machine an address belongs to is ``application.locate``'s question
-    and is asked of it here rather than answered again. What is left is the
-    part that is genuinely about a *service*: the loopback case, where the
-    address deliberately names no machine, and the container, which is observed
-    rather than declared.
-
-    The container is named only when exactly one claims the port. Ambiguity is
-    reported as silence: a guess printed beside four facts reads as a fifth.
-
-    ``at`` is passed by anything resolving more than one address, because both
-    readings behind this are estate-wide. Left out, they are taken here, which
-    is right for a single lookup and wrong in a loop.
-
-    ``near`` is the machine the forwarding proxy runs on: a container name on a
-    docker network resolves there first, since that network is on that machine.
+    The machine is ``application.locate``'s answer; this adds loopback and the
+    observed container. ``at`` carries the estate-wide readings across a loop of
+    lookups, and ``near`` is the machine the forwarding proxy runs on, where a
+    docker network's container name resolves first. ``loopback_on`` is the
+    machine the address was read on when the caller knows it (a controller
+    reporting its own connection): a loopback address is that machine.
     """
 
     machines = declared_machines() if machines is None else machines
@@ -256,10 +228,15 @@ def locate(
     host_address, port = split_endpoint(address)
     # A proxy forwarding to loopback is forwarding to itself: the request never
     # leaves the machine the ingress runs on. No machine is declared at
-    # 127.0.0.1 (every machine is) so matching by address cannot answer it,
-    # and the honest answer is the machine with something listening on that
-    # port. Silence when more than one qualifies, for the reason above.
+    # 127.0.0.1 (every machine is) so matching by address cannot answer it.
+    # When the caller knows which machine read it (``loopback_on``), that is the answer;
+    # otherwise it is the machine with something listening on that port.
+    # Silent when more than one qualifies, and a container is named only when
+    # exactly one claims the port: a guess beside four facts reads as a fifth.
     if _is_loopback(host_address):
+        if loopback_on:
+            claimed = _listening(loopback_on, port, at)
+            return Origin(address=address, host=loopback_on, container=claimed[0] if len(claimed) == 1 else "")
         found = [
             (machine, claimed)
             for machine in machines
@@ -275,7 +252,7 @@ def locate(
         return Origin(address=address)
     name = at.machine_index().resolve(host_address)
     if not name:
-        # Not an address at all, but a container name on a docker network,
+        # A container name on a docker network rather than an address,
         # which is how everything behind a proxy sharing that network is
         # addressed, and what a Caddy route hands off to. HQ sweeps containers,
         # so the name is not opaque: it names something HQ can already see, and

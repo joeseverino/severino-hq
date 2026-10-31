@@ -1,50 +1,22 @@
 """The check task: every gate CI runs, and with --release the one command
 whose exit 0 means ready to release.
 
-Runs, in order:
-
-1. Every gate CI runs (``lint``, ``test``, ``browser``, ``build``, ``scan``),
-   one at a time (one that cannot run fails); or, with --remote, what GitHub
-   ran on this exact commit, waited for and required to pass: CI's newest run,
-   which concludes success only when its verdict job (Ready, or Release on
-   main) passed, on main the Compose it starts, and every other run and check.
-   The commit must be pushed.
-
-With --release (or --skip-host, a release run without its last step), then:
-
-2. ``mise run test --composed``, the extensions required.
-3. ``hq-host check`` on the deploy host, read-only, as the SSH login: built
-   here for the host's platform from HEAD, so the release being checked is
-   the one that checks, and handed the units this release and main ship.
-
-The host is SEVERINO_HQ_DEPLOY_HOST, an SSH destination, set in the
-environment or in mise.local.toml (tools/dev/mise.local.example.toml). The
-release is HEAD, which must be committed: a check of uncommitted files proves
-nothing about the commit that ships.
-
-A release run keeps its verdict as ``check-release`` (var/gate/check-release.txt),
-apart from a plain run's ``check`` (var/gate/check.txt).
-
-Exit 0: passed, or ready. Exit 1: a gate failed. Exit 2: the host was skipped,
-or its release could not be verified, so whatever else passed, this is not a
-verdict on the release.
+What a plain, --release, --remote and --skip-host run each add, and where each
+keeps its verdict: docs/Development.md, What `check` runs.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import shlex
 import subprocess
 import sys
-import tarfile
-import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from hq.platform.core.tests.task import usage
+from hq.platform.core.tests.task import git, usage
 from tools.gate.verdict import Step, close, run
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -54,9 +26,7 @@ COMPOSE = ".github/workflows/compose.yml"
 DEPLOY = ".github/workflows/deploy.yml"
 # Deploy waits for an approval this gate comes before.
 PASSING = {"success", "skipped", "neutral"}
-# What `uname -m` says, as Go names it.
-ARCHITECTURES = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}
-# hq-host check's exits.
+# hq-host check's exit for a host whose release could not be verified.
 UNVERIFIED = 3
 # Watches that fail in a row before the watch, not the run, is the fault.
 WATCH_FAILURES = 5
@@ -66,6 +36,8 @@ WATCH_FAILURES = 5
 # suite starts a worker per core, and two at once exhaust a small machine.
 GATES = ["mise", "run", "-c", "-j", "1", "lint", ":::", "test", ":::", "browser", ":::", "build", ":::", "scan"]
 COMPOSED = ["env", "REQUIRE_COMPOSED=1", "mise", "run", "test", "--composed"]
+# The deploy host's half, tools/gate/host.py, which exits as hq-host check did.
+HOST = ["mise", "run", "check:host"]
 
 
 @dataclass
@@ -85,10 +57,6 @@ class Summary:
     def check(self, label: str, gate) -> None:
         print(f"[{self.name}] {label}", flush=True)
         self.add("passed" if gate() else "FAILED", Step(label))
-
-
-def git(*args: str) -> str:
-    return subprocess.run(["git", *args], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
 
 
 def gh(*args: str) -> str:
@@ -190,6 +158,8 @@ class GitHub:
         return lines[0] if lines else f"gh exited {watched.returncode}"
 
     def passed(self) -> bool:
+        # CI concludes success only when its verdict job (Ready, or Release on main)
+        # passed, and on main the Compose it starts must pass too.
         ok = True
         for item in self.runs:
             print(f"  {item.get('conclusion') or '-'}  {item['path']} ({item['event']}, run {item['id']})")
@@ -210,7 +180,7 @@ class GitHub:
 
 
 def github_gates() -> bool:
-    sha = git("rev-parse", "HEAD")
+    (sha,) = git("rev-parse", "HEAD")
     if not git("branch", "-r", "--contains", sha):
         print("HEAD is not pushed, so GitHub has checked nothing of it.", file=sys.stderr)
         return False
@@ -224,100 +194,14 @@ def github_gates() -> bool:
         return False
 
 
-def ssh(destination: str, *command: str, **options) -> subprocess.CompletedProcess:
-    return subprocess.run(["ssh", "-o", "BatchMode=yes", destination, *command], cwd=ROOT, **options)
-
-
-def build_check(work: Path, platform: tuple[str, str]) -> Path:
-    """hq-host as HEAD has it, built for the host's platform."""
-
-    source = work / "source"
-    source.mkdir()
-    archive = subprocess.run(["git", "archive", "HEAD", "controller"], cwd=ROOT, check=True, capture_output=True)
-    subprocess.run(["tar", "-x", "-C", str(source)], input=archive.stdout, check=True)
-    program = work / "payload" / "hq-host"
-    program.parent.mkdir()
-    goos, goarch = platform
-    subprocess.run(
-        ["go", "build", "-trimpath", "-o", str(program), "./cmd/hq-host"],
-        cwd=source / "controller",
-        env={**os.environ, "GOOS": goos, "GOARCH": goarch, "CGO_ENABLED": "0"},
-        check=True,
-    )
-    return program
-
-
-def unit_trees(payload: Path) -> None:
-    """The units this release and main ship, as release/ and main/."""
-
-    for name, ref in (("release", "HEAD"), ("main", os.environ.get("CHECK_RELEASE_BASE_REF", "origin/main"))):
-        into = payload / name
-        into.mkdir(parents=True)
-        archive = subprocess.run(["git", "archive", ref, "deploy/systemd"], cwd=ROOT, check=True, capture_output=True)
-        subprocess.run(["tar", "-x", "-C", str(into)], input=archive.stdout, check=True)
-
-
-# Run by the login shell: unpack, check, remove, exit as the check did.
-REMOTE = (
-    'dir="$(mktemp -d "${TMPDIR:-/tmp}/hq-check.XXXXXX")" || exit 1; '
-    'if tar -x -C "$dir"; then "$dir/hq-host" check --release "$dir/release/deploy/systemd" '
-    '--main "$dir/main/deploy/systemd"; status=$?; else status=1; fi; rm -rf "$dir"; exit "$status"'
-)
-
-
-def host_check(destination: str) -> int:
-    reported = ssh(destination, "uname", "-s", "-m", capture_output=True, text=True)
-    system, _, machine = reported.stdout.strip().partition(" ")
-    if reported.returncode != 0 or system != "Linux" or machine not in ARCHITECTURES:
-        print(f"The deploy host could not be reached, or runs {reported.stdout.strip() or 'nothing it names'}.")
-        return 1
-    with tempfile.TemporaryDirectory() as directory:
-        work = Path(directory)
-        try:
-            build_check(work, ("linux", ARCHITECTURES[machine]))
-            unit_trees(work / "payload")
-        except subprocess.CalledProcessError as error:
-            print(f"The check could not be built from HEAD: {shlex.join(map(str, error.cmd))} failed.")
-            return 1
-        # ssh's stderr goes to a file, so it cannot fill a pipe while the payload is written.
-        with (
-            tempfile.TemporaryFile() as said,
-            subprocess.Popen(
-                ["ssh", "-o", "BatchMode=yes", destination, REMOTE], cwd=ROOT, stdin=subprocess.PIPE, stderr=said
-            ) as proc,
-        ):
-            assert proc.stdin
-            sent = send(proc.stdin, work / "payload")
-            status = proc.wait()
-            said.seek(0)
-            stderr = said.read().decode("utf-8", "replace")
-        sys.stderr.write(stderr)
-        if not sent:
-            print(
-                f"The deploy host stopped reading the check (ssh exited {status}): {stderr.strip() or 'it said nothing'}"
-            )
-            return 1
-        return status
-
-
-def send(stdin, payload: Path) -> bool:
-    """Stream the payload as a tar; False when the host stopped reading first."""
-
-    try:
-        with stdin, tarfile.open(fileobj=stdin, mode="w|") as archive:
-            archive.add(payload, arcname=".")
-    except BrokenPipeError:
-        return False
-    return True
-
-
 def main() -> int:
     started = time.monotonic()
     asked = usage()
     release = asked.switch("release") or asked.switch("skip_host")
     summary = Summary("check-release" if release else "check")
     if release:
-        head = git("rev-parse", "--short", "HEAD")
+        (head,) = git("rev-parse", "--short", "HEAD")
+        # A check of uncommitted files proves nothing about the commit that ships.
         if git("status", "--porcelain"):
             summary.add("FAILED", Step("committed tree (uncommitted changes are not part of the release)"))
         else:
@@ -339,11 +223,11 @@ def main() -> int:
     else:
         label = f"deploy host {destination}, read-only"
         print(f"[{summary.name}] {label}", flush=True)
-        status = host_check(destination)
+        status = run(label, HOST).code
         if status == UNVERIFIED:
             summary.add("UNKNOWN", Step(f"{label}: the release it runs is unverified"))
         else:
-            summary.add("passed" if status == 0 else "FAILED", Step(label))
+            summary.add("passed" if status == 0 else "FAILED", Step(label, command=HOST))
     return report(summary, started, passed=": READY", failed=": NOT READY")
 
 

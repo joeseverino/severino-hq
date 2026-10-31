@@ -28,7 +28,7 @@ func TestClipCutsBetweenCharacters(t *testing.T) {
 }
 
 func TestActionRefusalTextIsCappedInTheReport(t *testing.T) {
-	w, b, p, _ := newWorker()
+	w, b, p := newWorker()
 	b.Pending = []Pending{pending("first")}
 	p.ExecErr = &ProviderError{Message: strings.Repeat("é", ReportTextLimit+50)}
 	if _, err := w.Run(t.Context(), true); err != nil {

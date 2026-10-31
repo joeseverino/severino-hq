@@ -1,0 +1,8 @@
+extends: existence
+message: "'%s' is HQ's own word; say what it means in that place"
+level: error
+ignorecase: true
+nonword: true
+scope: [shown, ~comment & ~code]
+tokens:
+  - '(?<![\w-])(?:capabilit(?:y|ies)|abilit(?:y|ies))(?![\w-])'

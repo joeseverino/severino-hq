@@ -327,9 +327,9 @@ func (f *dnsFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"success": true, "errors": []any{}, "result": result})
 	}
 	switch {
-	case r.Method == "GET" && r.URL.Path == "/zones":
+	case r.Method == http.MethodGet && r.URL.Path == "/zones":
 		ok([]map[string]any{{"id": "zone-outer", "name": "example"}, {"id": "zone-a", "name": "a.example"}})
-	case r.Method == "POST" && r.URL.Path == "/zones/zone-a/dns_records":
+	case r.Method == http.MethodPost && r.URL.Path == "/zones/zone-a/dns_records":
 		if f.refuseCreate >= 0 && len(f.created) >= f.refuseCreate {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "errors": []map[string]any{{"code": 81058, "message": "record refused"}}})
 			return
@@ -341,7 +341,7 @@ func (f *dnsFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.records[id] = [2]string{body.Name, body.Content}
 		f.created = append(f.created, id)
 		ok(map[string]any{"id": id, "type": body.Type, "name": body.Name, "content": body.Content, "ttl": 60})
-	case r.Method == "DELETE" && strings.HasPrefix(r.URL.Path, "/zones/zone-a/dns_records/"):
+	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/zones/zone-a/dns_records/"):
 		if f.refuseDelete {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "errors": []map[string]any{{"code": 81044, "message": "record busy"}}})
 			return

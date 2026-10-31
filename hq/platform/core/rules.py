@@ -1,21 +1,10 @@
 """A row-level rule, declared once on the model.
 
 ``Rule`` is a check constraint that also says which field its message belongs
-beside. From the one declaration in ``Meta.constraints``:
-
-- the database refuses a row that breaks it, whatever wrote the row: a form,
-  an importer, ``QuerySet.update()``, a bulk write or a shell;
-- ``full_clean`` reports it before the write, beside that field, so a form
-  shows it where the person typed and a command names the field.
-
-A rule holds for one row on its own: it compares the row's columns with each
-other or with constants. A rule about other rows is a unique constraint or a
-query. A bound on a single number that a form control should also carry is
-field validators with a check constraint behind them
-(``hq.platform.application.business_use``).
-
-Adding a rule to a model with rows is a migration that fails if a row breaks
-it. ``manage.py constraint_preflight`` counts those rows first, reading only.
+beside: the database refuses a row that breaks it, whatever wrote the row, and
+``full_clean`` reports it before the write, beside that field. A rule compares
+one row's columns with each other or with constants; one about other rows is a
+unique constraint or a query.
 """
 
 from typing import Any, override
@@ -24,8 +13,14 @@ from django.core.exceptions import ValidationError
 from django.db import DEFAULT_DB_ALIAS, models
 
 
-class Rule(models.CheckConstraint):
-    """A check constraint whose violation is reported beside ``field``."""
+class Rule(models.CheckConstraint):  # noqa: PLW1641 - unhashable, as Django's CheckConstraint is, since both compare by value
+    """A check constraint whose violation is reported beside ``field``.
+
+    A bound on one number a form control should also carry is field validators
+    with a check constraint behind them (``application.business_use``). Added to
+    a table with rows, its migration fails on a row that breaks it, so
+    ``manage.py constraint_preflight`` counts those first.
+    """
 
     def __init__(self, *, field: str = "", **kwargs: Any) -> None:
         if not kwargs.get("violation_error_message"):

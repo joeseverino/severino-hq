@@ -1,12 +1,8 @@
 """Pull the example.com published-content index into ContentItems.
 
-Mirrors the GitHub metadata refresh: HQ reaches an already-public external
-source over HTTP, authenticated with a Cloudflare Access service token, and
-reflects it locally. The live site is the owner of "what is published"; HQ
-reflects it, exactly as it reflects the GitHub repo for `last_push_at`.
-
-Idempotent, keyed by slug. Content type is set on create only, so a manual
-classification in HQ is never clobbered by a sync.
+The live site owns "what is published": HQ reaches it over HTTP, authenticated
+with a Cloudflare Access service token, and reflects it locally, as the GitHub
+metadata refresh reflects a repo's `last_push_at`. Idempotent, keyed by slug.
 """
 
 import json
@@ -54,8 +50,8 @@ _OPENER = urllib.request.build_opener(_SameOriginRedirects)
 MAX_INDEX_BYTES = 4 * 1024 * 1024
 
 
-def fetch_content_index(url: str | None = None, timeout: int = 10) -> dict:
-    """GET the content index with the Cloudflare Access service-token headers."""
+def fetch_content_index(url: str | None = None, timeout: int = 10) -> object:
+    """GET the content index with the Cloudflare Access service-token headers: whatever JSON it holds."""
     url = url or settings.CONTENT_INDEX_URL
     if not url:
         raise ContentSyncError("CONTENT_INDEX_URL is not set.")
@@ -139,15 +135,14 @@ def _upsert(slug: str, live_fields: dict) -> tuple[ContentItem, str]:
     return item, "updated"
 
 
-def sync_content_index(payload: dict | None = None) -> dict:
+def sync_content_index(payload: object = None) -> dict:
     """Upsert ContentItems from the index, related to the site project.
 
     Pass ``payload`` to sync a pre-fetched index (used by tests); otherwise the
     index is fetched live. Returns a stats dict.
     """
-    if payload is None:
-        payload = fetch_content_index()
-    items = payload.get("items") if isinstance(payload, dict) else None
+    index = fetch_content_index() if payload is None else payload
+    items = index.get("items") if isinstance(index, dict) else None
     if not isinstance(items, list):
         raise ContentSyncError("Content index payload has no 'items' list.")
 

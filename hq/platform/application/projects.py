@@ -8,7 +8,7 @@ shape; adapters only parse input and render output.
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, fields, replace
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -21,12 +21,14 @@ from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.models import AuditLog
 lazy from hq.platform.application.routes import reverse
 
+from .command_fields import Describe
 from .domains import records_of
 from .github_public import github_repository
 from .outbound_work import OutboundWork
 from .projection import addressable, iso, listing, projection_scope, read_once
 from .record_errors import RecordConflict, RecordNotFound
 from .record_links import linked
+from .record_saves import Held, held
 from .security import Principal
 from .standards import MET
 from .ui import counted
@@ -39,6 +41,8 @@ lazy from .github_estate import Repository, repositories, repository_for
 lazy from .github_posture import STANDARD, posture_of
 lazy from .plugins import installed_plugins
 lazy from .timestamps import moment
+
+_PROJECT = Held("That project was not found.", "That project changed after it was read.")
 
 
 def repository_key(repository: str) -> str:
@@ -112,17 +116,17 @@ ContentSync = Callable[[], dict[str, Any]]
 
 @dataclass(frozen=True, slots=True)
 class ProjectCommand:
-    name: str
-    slug: str = ""
-    category: str = "other"
-    status: str = Project.Status.IDEA
-    description: str = ""
-    technologies_used: str = ""
-    repository_url: str = ""
-    public_url: str = ""
-    deployment_notes: str = ""
-    security_notes: str = ""
-    notes: str = ""
+    name: Annotated[str, Describe("What the project is called.")]
+    slug: Annotated[str, Describe("Its address in HQ; blank derives one from the name.")] = ""
+    category: Annotated[str, Describe("What type of project it is.")] = "other"
+    status: Annotated[str, Describe("Where it stands, from idea to archived.")] = Project.Status.IDEA
+    description: Annotated[str, Describe("What it is, in a sentence or two.")] = ""
+    technologies_used: Annotated[str, Describe("What it is built with.")] = ""
+    repository_url: Annotated[str, Describe("Where its code lives.")] = ""
+    public_url: Annotated[str, Describe("Where it is published.")] = ""
+    deployment_notes: Annotated[str, Describe("How it is deployed.")] = ""
+    security_notes: Annotated[str, Describe("What protects it, and what to watch.")] = ""
+    notes: Annotated[str, Describe("Anything else worth keeping.")] = ""
 
 
 def serialize_project(project: Project, *, relationships: bool = False) -> dict[str, Any]:
@@ -136,6 +140,7 @@ def serialize_project(project: Project, *, relationships: bool = False) -> dict[
         "repository_url": project.repository_url,
         "public_url": project.public_url,
         "last_push_at": iso(project.last_push_at),
+        "dependency_updates": project.dependency_updates,
         "updated_at": iso(project.updated_at),
     }
     if repository_key(project.repository_url):
@@ -144,7 +149,7 @@ def serialize_project(project: Project, *, relationships: bool = False) -> dict[
 
 
 def _updates(project: Project) -> dict[str, Any]:
-    """Whether HQ's update run covers the repository, and what it has open there.
+    """What HQ's update run has open in the repository, and when it last ran.
 
     A count the reading does not hold is None: a repository the App does not
     read, or whose Dependabot alerts GitHub refused, is not one with none.
@@ -154,7 +159,6 @@ def _updates(project: Project) -> dict[str, Any]:
     read = repository is not None
     run = last_run(project.repository_url)
     return {
-        "enabled": project.dependency_updates,
         "open_pulls": len(repository.update_pulls) if read else None,
         "oldest_pull_days": repository.oldest_update_days if read else None,
         "unmatched_alerts": (
@@ -255,12 +259,11 @@ def refresh_project(
 def request_app_read(repository_url: str, *, principal: Principal) -> dict[str, Any] | None:
     """Ask the controller to read the GitHub App connection that reads this repository.
 
-    None when the App does not read it, which leaves the anonymous public read
-    as the only source. Otherwise the same request the Connections page's Read
-    now makes, through the same capability: whether this principal may wake the
-    controller, and whether policy holds the request for a person, are decided
-    there and nowhere else. The pull requests, checks and workflows on the
-    project page follow on the controller's next pass.
+    None when the App does not read it, leaving the anonymous public read the
+    only source. Otherwise the Connections page's Read now, through the same
+    capability, which alone decides whether this principal may wake the
+    controller and whether policy holds the request for a person. The project
+    page's pull requests, checks and workflows follow on the controller's next pass.
     """
 
     repository = repository_for(repository_url)
@@ -304,7 +307,7 @@ def _record_push(project: Project, pushed_at: datetime | None, principal: Princi
             operation="project.refresh",
         ),
     ):
-        project = Project.objects.select_for_update().get(pk=project.pk)
+        project = held(Project, _PROJECT, {"pk": project.pk}, None)
         project.last_push_at = pushed_at
         # `updated_at` is left out on purpose: it is the "Updated" column, the
         # default sort and this model's ordering, and reading GitHub is not an
@@ -404,7 +407,9 @@ def save_project(
     operation = "project.create" if current_slug is None else "project.update"
     with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
         created = current_slug is None
-        project = Project() if current_slug is None else _locked(current_slug, expected_updated_at)
+        project = (
+            Project() if current_slug is None else held(Project, _PROJECT, {"slug": current_slug}, expected_updated_at)
+        )
         for field, value in asdict(command).items():
             setattr(project, field, value)
         project.full_clean()
@@ -417,18 +422,6 @@ def save_project(
     }
 
 
-def _locked(slug: str, expected_updated_at: str | None) -> Project:
-    """The project to change, held for this transaction, as the caller last read it."""
-
-    try:
-        project = Project.objects.select_for_update().get(slug=slug)
-    except Project.DoesNotExist as exc:
-        raise RecordNotFound("That project was not found.") from exc
-    if expected_updated_at and project.updated_at.isoformat() != expected_updated_at:
-        raise RecordConflict("That project changed after it was read.")
-    return project
-
-
 DEPENDENCY_UPDATES = "project.dependency_updates"
 # The repository check updates rest on: Renovate opens its security fixes from
 # these alerts.
@@ -439,7 +432,11 @@ UPDATES_NEED = "vulnerability-alerts"
 class DependencyUpdatesCommand:
     """Whether HQ's dependency update run covers the project's repository."""
 
-    enabled: bool
+    # Named as the project's own field, so a form opened on a project reads
+    # its current value from the project's detail.
+    dependency_updates: Annotated[
+        bool, Describe("Whether HQ's dependency update run opens pull requests in this project's repository.")
+    ]
 
 
 @transaction.atomic
@@ -457,13 +454,13 @@ def set_dependency_updates(
     that acts on it reads it later.
     """
 
-    principal.require(records_of("projects").write)
-    project = _locked(current_slug, expected_updated_at)
-    refused = _updates_refusal(project, enabling=command.enabled)
+    del principal
+    project = held(Project, _PROJECT, {"slug": current_slug}, expected_updated_at)
+    refused = _updates_refusal(project, enabling=command.dependency_updates)
     if refused:
         return {"ok": False, "error": {"code": "precondition", "message": refused}}
-    if project.dependency_updates != command.enabled:
-        project.dependency_updates = command.enabled
+    if project.dependency_updates != command.dependency_updates:
+        project.dependency_updates = command.dependency_updates
         project.full_clean()
         project.save()
     return {"ok": True, "project": serialize_project(project, relationships=True)}

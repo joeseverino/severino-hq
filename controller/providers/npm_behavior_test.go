@@ -40,17 +40,17 @@ func newNPMServer(t *testing.T) *npmServer {
 		}
 		switch {
 		case path == "/api/tokens":
-			io.WriteString(w, `{"token":"short-lived","expires":"2030-01-01T00:00:00Z"}`)
+			_, _ = io.WriteString(w, `{"token":"short-lived","expires":"2030-01-01T00:00:00Z"}`)
 		case req.Method == http.MethodGet:
 			raw, ok := s.lists[path]
 			if !ok {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
-			io.WriteString(w, raw)
+			_, _ = io.WriteString(w, raw)
 		default:
 			s.written = append(s.written, req.Method+" "+path+" "+string(body))
-			io.WriteString(w, `{"id":99}`)
+			_, _ = io.WriteString(w, `{"id":99}`)
 		}
 	}))
 	t.Cleanup(s.Close)
@@ -78,11 +78,11 @@ func npmRegistry(t *testing.T, held ...connections.Connection) *Registry {
 
 // heldHost is a proxy host as NPM answers it for sampleProxySpec, with flags
 // spelled as given.
-func heldHost(yes, no string, extra string) string {
+func heldHost(yes, no string) string {
 	return `[{"id":9,"domain_names":["hq.example"],"forward_scheme":"http","forward_host":"192.0.2.10","forward_port":8000,` +
 		`"caching_enabled":` + no + `,"block_exploits":` + yes + `,"allow_websocket_upgrade":` + no + `,"access_list_id":0,` +
 		`"certificate_id":0,"ssl_forced":` + no + `,"http2_support":` + yes + `,"hsts_enabled":` + no + `,"hsts_subdomains":` + no + `,` +
-		`"trust_forwarded_proto":` + no + `,"advanced_config":"","locations":[],"enabled":` + yes + `,"meta":{}` + extra + `}]`
+		`"trust_forwarded_proto":` + no + `,"advanced_config":"","locations":[],"enabled":` + yes + `,"meta":{}}]`
 }
 
 func TestNPMReconcileDecisions(t *testing.T) {
@@ -93,10 +93,10 @@ func TestNPMReconcileDecisions(t *testing.T) {
 		write    string // METHOD path, or "" for none
 	}{
 		{"absent host is created", `[]`, nil, "POST /api/nginx/proxy-hosts"},
-		{"matching host is left alone", heldHost("true", "false", ""), nil, ""},
-		{"flags written as 1 and 0 match", heldHost("1", "0", ""), nil, ""},
-		{"a changed port is updated", strings.Replace(heldHost("true", "false", ""), `"forward_port":8000`, `"forward_port":9000`, 1), nil, "PUT /api/nginx/proxy-hosts/9"},
-		{"a renamed host is found by its previous names", strings.Replace(heldHost("true", "false", ""), "hq.example", "old.example", 1), Object{"domain_names": []string{"old.example"}}, "PUT /api/nginx/proxy-hosts/9"},
+		{"matching host is left alone", heldHost("true", "false"), nil, ""},
+		{"flags written as 1 and 0 match", heldHost("1", "0"), nil, ""},
+		{"a changed port is updated", strings.Replace(heldHost("true", "false"), `"forward_port":8000`, `"forward_port":9000`, 1), nil, "PUT /api/nginx/proxy-hosts/9"},
+		{"a renamed host is found by its previous names", strings.Replace(heldHost("true", "false"), "hq.example", "old.example", 1), Object{"domain_names": []string{"old.example"}}, "PUT /api/nginx/proxy-hosts/9"},
 	}
 	for _, c := range cases {
 		for _, apply := range []bool{false, true} {
@@ -104,7 +104,7 @@ func TestNPMReconcileDecisions(t *testing.T) {
 				server := newNPMServer(t)
 				server.lists["/api/nginx/proxy-hosts"] = c.live
 				r := npmRegistry(t, npmAt(server.URL))
-				res, err := r.runAction(runtime.ResourceKindNPMProxyHost, "reconcile", t.Context(), sampleProxySpec(), c.observed, apply)
+				res, err := r.runAction(t.Context(), runtime.ResourceKindNPMProxyHost, "reconcile", sampleProxySpec(), c.observed, apply)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -128,11 +128,11 @@ func TestNPMReconcileDecisions(t *testing.T) {
 
 func TestNPMUpdateCarriesNPMsOwnLocationsAndCertificate(t *testing.T) {
 	server := newNPMServer(t)
-	held := strings.Replace(heldHost("true", "false", ""), `"locations":[]`, `"locations":[{"path":"/app","forward_scheme":"http","forward_host":"192.0.2.11","forward_port":81}]`, 1)
+	held := strings.Replace(heldHost("true", "false"), `"locations":[]`, `"locations":[{"path":"/app","forward_scheme":"http","forward_host":"192.0.2.11","forward_port":81}]`, 1)
 	held = strings.Replace(held, `"certificate_id":0`, `"certificate_id":"12"`, 1)
 	server.lists["/api/nginx/proxy-hosts"] = strings.Replace(held, `"forward_port":8000`, `"forward_port":9000`, 1)
 	r := npmRegistry(t, npmAt(server.URL))
-	if _, err := r.runAction(runtime.ResourceKindNPMProxyHost, "reconcile", t.Context(), sampleProxySpec(), nil, true); err != nil {
+	if _, err := r.runAction(t.Context(), runtime.ResourceKindNPMProxyHost, "reconcile", sampleProxySpec(), nil, true); err != nil {
 		t.Fatal(err)
 	}
 	writes := server.writes()
@@ -158,7 +158,7 @@ func TestNPMWriteUsesTheNamedConnection(t *testing.T) {
 	spec := sampleProxySpec()
 	spec["connection_ref"] = "proxy-home"
 	for _, action := range []string{"reconcile", "delete"} {
-		if _, err := r.runAction(runtime.ResourceKindNPMProxyHost, action, t.Context(), spec, nil, true); err != nil {
+		if _, err := r.runAction(t.Context(), runtime.ResourceKindNPMProxyHost, action, spec, nil, true); err != nil {
 			t.Fatalf("%s: %v", action, err)
 		}
 	}
@@ -177,9 +177,9 @@ func TestNPMRefusesWithoutWriting(t *testing.T) {
 		spec func(Object)
 		want string
 	}{
-		{"duplicate hosts", `[` + strings.Trim(heldHost("true", "false", ""), "[]") + `,` + strings.Replace(strings.Trim(heldHost("true", "false", ""), "[]"), `"id":9`, `"id":10`, 1) + `]`, func(Object) {}, npmDuplicateHosts},
+		{"duplicate hosts", `[` + strings.Trim(heldHost("true", "false"), "[]") + `,` + strings.Replace(strings.Trim(heldHost("true", "false"), "[]"), `"id":9`, `"id":10`, 1) + `]`, func(Object) {}, npmDuplicateHosts},
 		{"https host without a certificate", `[]`, func(s Object) { s["force_ssl"] = true }, "needs an issued certificate"},
-		{"forced https on a held host without a certificate", heldHost("true", "false", ""), func(s Object) { s["force_ssl"] = true }, "has no certificate"},
+		{"forced https on a held host without a certificate", heldHost("true", "false"), func(s Object) { s["force_ssl"] = true }, "has no certificate"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -187,7 +187,7 @@ func TestNPMRefusesWithoutWriting(t *testing.T) {
 			server.lists["/api/nginx/proxy-hosts"] = c.live
 			spec := sampleProxySpec()
 			c.spec(spec)
-			_, err := npmRegistry(t, npmAt(server.URL)).runAction(runtime.ResourceKindNPMProxyHost, "reconcile", t.Context(), spec, nil, true)
+			_, err := npmRegistry(t, npmAt(server.URL)).runAction(t.Context(), runtime.ResourceKindNPMProxyHost, "reconcile", spec, nil, true)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Errorf("err = %v, want %q", err, c.want)
 			}
@@ -249,7 +249,7 @@ func TestNPMMalformedAnswersAreErrors(t *testing.T) {
 
 func TestNPMProxyHostRecordIsTyped(t *testing.T) {
 	server := newNPMServer(t)
-	server.lists["/api/nginx/proxy-hosts"] = strings.Replace(heldHost("1", "0", ""), `"enabled":1`, `"enabled":0`, 1)
+	server.lists["/api/nginx/proxy-hosts"] = strings.Replace(heldHost("1", "0"), `"enabled":1`, `"enabled":0`, 1)
 	server.lists["/api/nginx/access-lists?expand=items,clients"] = `[]`
 	server.lists["/api/nginx/certificates"] = `[]`
 	r := npmRegistry(t, npmAt(server.URL))

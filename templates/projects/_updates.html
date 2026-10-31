@@ -9,13 +9,13 @@ queue's alert item and the projects list link here.
 {% with pulls=repo.update_pulls unmatched=repo.unmatched_alerts %}
 {% if pulls or unmatched %}
   <div id="updates">
-    <h3 class="section-heading">Open updates <span class="heading-aside">{% if pulls %}{{ pulls|length|counted:"pull request,pull requests" }}{% endif %}{% if pulls and unmatched %} · {% endif %}{% if unmatched %}{{ unmatched|length|counted:"alert with no update,alerts with no update" }}{% endif %}</span></h3>
+    <h3 class="section-heading">Open updates <span class="heading-aside">{% if pulls %}{{ pulls|length|counted:"pull request,pull requests" }}{% endif %}{% if pulls and unmatched %}{% dot %}{% endif %}{% if unmatched %}{{ unmatched|length|counted:"alert with no update,alerts with no update" }}{% endif %}</span></h3>
     <ul class="github-list">
       {% for pull in pulls %}
         <li data-updates>
           <span class="github-mark">{% include "partials/_icon.html" with name="pull" %}</span>
           {% entity pull.url|outside label=pull.title %}
-          <span class="muted">#{{ pull.number|breakable }}{% if pull.opened %} · opened {{ pull.opened|when:"ago" }}{% endif %}</span>
+          <span class="muted">#{{ pull.number|breakable }}{% if pull.opened %}{% dot %}opened {{ pull.opened|when:"ago" }}{% endif %}</span>
           {% with state=pull.checks.state %}
             {% if state == "failure" %}<span class="pill pill-serious" title="{{ pull.checks.failing|join:', ' }}">Checks failing</span>
             {% elif state == "pending" %}<span class="pill pill-attention">Checks running</span>
@@ -29,7 +29,7 @@ queue's alert item and the projects list link here.
           <span class="github-mark">{% include "partials/_icon.html" with name="shield" %}</span>
           {% entity alert.url|outside label=alert.package code=True %}
           <span class="pill {% if alert.severity == 'critical' or alert.severity == 'high' %}pill-serious{% elif alert.severity == 'medium' or alert.severity == 'moderate' %}pill-attention{% endif %}">{{ alert.severity|capfirst|breakable }}</span>
-          <span class="muted">No update open · {% if alert.first_patched_version %}fixed in {{ alert.first_patched_version|breakable }}{% else %}no fixed version yet{% endif %} · {{ alert.manifest_path|breakable }}</span>
+          <span class="muted">No update open{% dot %}{% if alert.first_patched_version %}fixed in {{ alert.first_patched_version|breakable }}{% else %}no fixed version yet{% endif %}{% dot %}{{ alert.manifest_path|breakable }}</span>
         </li>
       {% endfor %}
     </ul>

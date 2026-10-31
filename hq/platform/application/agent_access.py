@@ -1,17 +1,23 @@
 """The operator's switch that pauses every agent, on /mcp/ and on the machine API."""
 
 import logging
+from dataclasses import dataclass
+from typing import Annotated, Any
 
 from django.db import DatabaseError, transaction
 from django.utils import timezone
 
-from hq.platform.application.security import AuthorizationError, Principal, is_interactive
+from hq.platform.application.security import Principal, person
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AgentAccess, AuditLog
+
+from .command_fields import Describe
 
 logger = logging.getLogger("severino.agents")
 
 AUDIT_LABEL = "Agent access"
+
+SET_AGENT_ACCESS = "agents.access.set"
 
 
 def agents_paused() -> bool:
@@ -25,16 +31,22 @@ def agents_paused() -> bool:
     return bool(row and row.paused)
 
 
-def set_agents_paused(paused: bool, *, principal: Principal, user) -> AgentAccess:
-    """Set, not toggle, so a repeated request cannot undo itself. Operators only."""
+@dataclass(frozen=True, slots=True)
+class AgentAccessCommand:
+    """Whether every agent is paused."""
 
-    if not is_interactive(principal):
-        raise AuthorizationError(f"{principal.interface} principal {principal.actor!r} cannot change agent access.")
+    paused: Annotated[bool, Describe("Whether every agent is paused.")]
 
+
+def set_agents_paused(command: AgentAccessCommand, *, principal: Principal) -> dict[str, Any]:
+    """Set, not toggle, so a repeated request cannot undo itself. People only."""
+
+    user = person(principal)
+    paused = command.paused
     with transaction.atomic():
         row, _ = AgentAccess.objects.select_for_update().get_or_create(pk=1)
         if row.paused == paused:
-            return row
+            return {"ok": True, "paused": paused}
         row.paused = paused
         row.changed_by = user
         row.changed_at = timezone.now()
@@ -47,4 +59,4 @@ def set_agents_paused(paused: bool, *, principal: Principal, user) -> AgentAcces
             user=user,
             required=True,
         )
-    return row
+    return {"ok": True, "paused": paused}

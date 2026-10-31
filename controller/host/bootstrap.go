@@ -13,11 +13,11 @@ import (
 	"regexp"
 )
 
-// HostConfig is everything about one host that the repository does not hold:
+// Config is everything about one host that the repository does not hold:
 // which vault and items HQ's secrets come from, how the renderer reaches the
 // Connect server on this machine, and which runner deploys. It lives at
 // /etc/severino-hq/host.json; deploy/host.example.json shows its shape.
-type HostConfig struct {
+type Config struct {
 	Vault   string        `json:"vault"`
 	EnvItem string        `json:"env_item"`
 	Connect ConnectConfig `json:"connect"`
@@ -48,34 +48,34 @@ var (
 	plainValue = regexp.MustCompile(`^[^"\\\n\r%$]+$`)
 )
 
-// ReadHostConfig reads and checks the host's configuration. A field it does
+// ReadConfig reads and checks the host's configuration. A field it does
 // not know, a value systemd or sudo would read as something else, or a
 // Connect that is not on loopback is refused.
-func ReadHostConfig(data []byte) (HostConfig, error) {
-	var config HostConfig
+func ReadConfig(data []byte) (Config, error) {
+	var config Config
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&config); err != nil {
-		return HostConfig{}, fmt.Errorf("the host configuration is not readable: %w", err)
+		return Config{}, fmt.Errorf("the host configuration is not readable: %w", err)
 	}
 	for name, value := range map[string]string{"vault": config.Vault, "env_item": config.EnvItem} {
 		if !plainValue.MatchString(value) {
-			return HostConfig{}, fmt.Errorf("%s must be set, on one line, without quotes, backslashes, %% or $", name)
+			return Config{}, fmt.Errorf("%s must be set, on one line, without quotes, backslashes, %% or $", name)
 		}
 	}
 	if !unitNamed.MatchString(config.Connect.Unit) || !unitNamed.MatchString(config.Runner.Unit) {
-		return HostConfig{}, errors.New("connect.unit and runner.unit must be service unit names")
+		return Config{}, errors.New("connect.unit and runner.unit must be service unit names")
 	}
 	if !credNamed.MatchString(config.Connect.Credential) {
-		return HostConfig{}, errors.New("connect.credential must be a credential name")
+		return Config{}, errors.New("connect.credential must be a credential name")
 	}
 	if !userNamed.MatchString(config.Runner.User) || config.Runner.User == "root" {
-		return HostConfig{}, errors.New("runner.user must be an unprivileged account name")
+		return Config{}, errors.New("runner.user must be an unprivileged account name")
 	}
 	address, err := url.Parse(config.Connect.URL)
 	if err != nil || address.Scheme != "http" || address.Hostname() != "127.0.0.1" || address.Port() == "" ||
 		address.Path != "" || address.User != nil || address.RawQuery != "" {
-		return HostConfig{}, errors.New("connect.url must be http://127.0.0.1:PORT")
+		return Config{}, errors.New("connect.url must be http://127.0.0.1:PORT")
 	}
 	return config, nil
 }
@@ -84,7 +84,7 @@ func ReadHostConfig(data []byte) (HostConfig, error) {
 // renderer's vault and Connect, the runner's identity and its one sudo rule.
 // Run on a new host and whenever the host's configuration changes; a deploy
 // installs everything else.
-func (m *Machine) Bootstrap(ctx context.Context, config HostConfig) error {
+func (m *Machine) Bootstrap(ctx context.Context, config Config) error {
 	secrets := filepath.Join(m.Systemd, SecretsUnit+".d")
 	runner := filepath.Join(m.Systemd, config.Runner.Unit+".d")
 	files := map[string]string{

@@ -1,0 +1,25 @@
+[Unit]
+Description=Severino HQ dashboard glance
+After=network-online.target docker.service severino-hq-secrets.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+# Root executes only root-owned code, as the controller unit does.
+WorkingDirectory=/usr/local/lib/severino-hq
+# Removed before the pass asks for its plan, so a refresh asked for while it
+# reads rings again, and its path unit starts the next pass when this ends.
+ExecStartPre=/bin/rm -f /run/severino-hq/glance-doorbell
+ExecStart=/usr/local/lib/severino-hq/deploy/bin/hq-host controller --glance
+# A pass is a few readings of seconds each; one that hangs would hold every
+# refresh after it.
+TimeoutStartSec=5min
+
+# Never more than the controller unit is given, and no certificate state.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/run

@@ -148,7 +148,7 @@ def scratch_env(tree: Path, *, trusted: bool, alone: bool) -> dict[str, str]:
 class Scratch:
     """`mise run dev:scratch --seed <seed>` in ``tree``, on a port of its own."""
 
-    def __init__(self, tree: Path, log: Path, seed: str, trusted: bool = False, alone: bool = False) -> None:
+    def __init__(self, tree: Path, log: Path, seed: str, *, trusted: bool = False, alone: bool = False) -> None:
         self.tree, self.log, self.seed = tree, log, seed
         self.env = scratch_env(tree, trusted=trusted, alone=alone)
         self.port = free_port()

@@ -15,7 +15,7 @@ from typing import Any
 
 from django.test import SimpleTestCase, tag
 
-from tests.mise_tasks import body, mise_tasks
+from tests.mise_tasks import body, mise_tasks, runs
 
 ROOT = Path(__file__).resolve().parents[4]
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -154,7 +154,8 @@ def label(step: Node) -> str:
 @tag("source")
 class ActionPinTests(SimpleTestCase):
     def test_every_docker_action_is_pinned_by_digest(self):
-        """zizmor's unpinned-uses passes over a ``docker://`` action, tagged or not."""
+        """zizmor's unpinned-images refuses an untagged ``docker://`` action at
+        its default persona and a tagged one only at pedantic."""
         for path in [*workflows(), *composite_actions()]:
             for action in uses(load(path)):
                 if action.startswith("docker://"):
@@ -172,7 +173,8 @@ class ActionPinTests(SimpleTestCase):
 
     def test_every_pinned_commit_carries_its_version_beside_it(self):
         """The comment is what Renovate rewrites with the commit, and what a reader
-        checks. A comment is no part of the parsed document, so this reads lines."""
+        checks. zizmor's ref-version-mismatch asks GitHub's API, so the offline
+        run skips it. A comment is no part of the parsed document, so this reads lines."""
         pinned = [
             (path.name, line.strip())
             for path in [*workflows(), *composite_actions()]
@@ -191,12 +193,9 @@ def saves_a_cache(step: Node) -> bool:
 
 @tag("source")
 class CacheWriterTests(SimpleTestCase):
-    """A branch reads the default branch's caches and writes none, so a pull request adds no entries."""
+    """A branch reads the default branch's caches and writes none, so a pull request adds no entries.
 
-    def test_no_cache_is_saved_by_the_action_that_saves_on_every_run(self):
-        for path in [*workflows(), *composite_actions()]:
-            with self.subTest(file=path.name):
-                self.assertNotIn("actions/cache", [action.split("@")[0] for action in uses(load(path))])
+    zizmor's forbidden-uses refuses actions/cache, which saves on every run."""
 
     def test_a_cache_is_saved_only_from_the_default_branch(self):
         """A job that runs only on a push is on main: ci.yml pushes nowhere else."""
@@ -272,10 +271,12 @@ class BrowserInstallTests(SimpleTestCase):
         system libraries, so a job installs nothing from apt or a browser download only
         while that release is the one uv.lock pins. A bump of one without the other
         fails here rather than downloading at run time. Pinned by digest, which
-        Renovate moves with the tag."""
+        Renovate moves with the tag. The image is built on the runner's own Ubuntu
+        release, since setup-python takes the runner's tool cache, whose Python
+        links against that release's libraries."""
         tasks = mise_tasks()
         gates = {name for name, task in tasks.items() if name != BROWSER_SETUP and needs_a_browser(task)}
-        image = f"mcr.microsoft.com/playwright/python:v{locked_version('playwright')}-noble"
+        codenames = {"ubuntu-24.04": "noble", "ubuntu-26.04": "resolute"}
         checked = 0
         for path, name, job in all_jobs():
             ran = {task for step in steps(job) for task in tasks if any(p.fullmatch(task) for p in step_tasks(step))}
@@ -283,6 +284,9 @@ class BrowserInstallTests(SimpleTestCase):
                 continue
             checked += 1
             with self.subTest(workflow=path, job=name):
+                self.assertIn(job.get("runs-on"), codenames)
+                codename = codenames[job["runs-on"]]
+                image = f"mcr.microsoft.com/playwright/python:v{locked_version('playwright')}-{codename}"
                 self.assertRegex(container_image(job), rf"^{re.escape(image)}@sha256:[0-9a-f]{{64}}$")
         self.assertGreater(checked, 1)
 
@@ -537,6 +541,29 @@ class ReleaseTests(SimpleTestCase):
                 self.assertNotIn(absent, branches["build"])
 
 
+@tag("source")
+class SbomAttestationTests(SimpleTestCase):
+    """Every image a workflow signs, the host image and the composition, carries a signed SBOM."""
+
+    def test_each_signed_image_is_attested_by_the_reference_it_is_signed_at(self):
+        signers = set()
+        for name, job_id, job in all_jobs():
+            found = steps(job)
+            # An image's signature; sign-blob signs a file, which has no SBOM.
+            signs = [step for step in found if re.search(r"\bcosign sign\s", script(step))]
+            attests = [step for step in found if re.search(r"\bcosign attest\b.*--type cyclonedx", script(step))]
+            for sign in signs:
+                signers.add(name)
+                with self.subTest(workflow=name, job=job_id, step=label(sign)):
+                    self.assertTrue(
+                        any(
+                            attest.get("env") == sign.get("env") and condition(attest) == condition(sign)
+                            for attest in attests
+                        )
+                    )
+        self.assertLessEqual({"ci.yml", "compose.yml"}, signers)
+
+
 # The jobs in ci.yml that gate nothing: the cache writer and the two verdicts.
 NOT_GATES = {"caches", "ready", "release"}
 # Gates Ready waits for and Release does not: code scanning holds a merge, not a release.
@@ -571,23 +598,36 @@ class ExtensionsAgainstHostTests(SimpleTestCase):
     """A pull request cannot pass its composition while an extension fails its checks against that host."""
 
     def setUp(self):
-        self.steps = steps(jobs(workflow("compose.yml"))["compose"])
+        self.jobs = jobs(workflow("compose.yml"))
+        (self.name,) = [name for name, job in self.jobs.items() if "tools/pipeline/check-extensions.sh" in text(job)]
+        self.job = self.jobs[self.name]
+        self.steps = steps(self.job)
 
     def index(self, command: str) -> int:
         (found,) = [index for index, step in enumerate(self.steps) if command in script(step)]
         return found
 
-    def test_every_listed_extension_runs_this_hosts_checks_before_the_composition_passes(self):
-        """tests/shell/test-check-extensions.sh holds what the check runs; this holds where it runs."""
+    def test_every_listed_extension_runs_this_hosts_checks_on_every_pull_request_it_composes(self):
+        """tests/shell/test-check-extensions.sh holds what the check runs; this holds where it runs.
+
+        A job of the composition, so the composition a pull request's Ready
+        reads fails with it."""
+        checks = {term.strip() for term in condition(self.job).split("&&")}
+        composes = {term.strip() for term in condition(self.jobs["compose"]).split("||")}
+        # The pull requests the composition builds: every one but a fork's.
+        self.assertEqual(checks - composes, {"github.event_name == 'pull_request'"})
         check = self.index("tools/pipeline/check-extensions.sh composition-set.json")
-        self.assertEqual(condition(self.steps[check]), "github.event_name == 'pull_request'")
-        self.assertNotIn("continue-on-error", self.steps[check])
+        for node in (self.job, self.steps[check]):
+            self.assertNotIn("continue-on-error", node)
         self.assertNotIn("GH_TOKEN", text(self.steps[check]))
-        self.assertLess(check, self.index("tools/pipeline/composed-suite.sh"))
+
+    def test_the_extension_code_it_runs_shares_no_job_with_a_credential_that_writes(self):
+        self.assertEqual(self.job["permissions"], {"contents": "read"})
+        self.assertNotIn(self.name, needed(self.jobs["compose"]))
+        self.assertFalse(needed(self.job))
 
     def test_an_extension_is_checked_from_its_coordinated_branch_or_its_default_branch(self):
         clone = self.index("tools/pipeline/extension-branches.sh checkout")
-        self.assertEqual(condition(self.steps[clone]), "github.event_name == 'pull_request'")
         self.assertIn("coordinated.txt", script(self.steps[clone]))
         self.assertLess(self.index("tools/pipeline/coordinated-branches.sh"), clone)
         self.assertLess(clone, self.index("tools/pipeline/check-extensions.sh"))
@@ -659,7 +699,8 @@ class PublicLogTests(SimpleTestCase):
 
     def setUp(self):
         self.compose = code((WORKFLOWS / "compose.yml").read_text())
-        self.steps = steps(jobs(workflow("compose.yml"))["compose"])
+        self.jobs = [steps(job) for job in jobs(workflow("compose.yml")).values()]
+        self.steps = [step for job in self.jobs for step in job]
 
     def test_the_composed_suite_prints_through_the_filter(self):
         self.assertNotIn("manage.py test", self.compose)
@@ -679,6 +720,11 @@ class PublicLogTests(SimpleTestCase):
         for upload in uploads:
             with self.subTest(step=label(upload)):
                 self.assertRegex(upload["with"]["path"], r"\.age$")
+                # What `mise run failure-logs` downloads.
+                self.assertTrue(upload["with"]["name"].startswith("failure-logs"))
+        names = [upload["with"]["name"] for upload in uploads]
+        self.assertEqual(len(names), len(set(names)), "two jobs that fail in one run upload under one name")
+        self.assertIn("--pattern 'failure-logs*'", (ROOT / "mise-tasks" / "failure-logs").read_text())
         self.assertIn("tools/pipeline/seal-failure-logs.sh", self.compose)
         self.assertTrue((ROOT / "tools" / "pipeline" / "seal-failure-logs.sh").is_file())
 
@@ -700,19 +746,25 @@ class PublicLogTests(SimpleTestCase):
                         self.assertNotRegex(str(value), r"^\$\{\{")
 
     def test_the_extensions_are_masked_before_any_step_can_name_one(self):
-        """tools/pipeline/tests/test_composition_set.py holds every spelling; this holds when they are masked."""
-        (mask,) = [
-            index
-            for index, step in enumerate(self.steps)
-            if "tools.pipeline.composition_set mask composition-set.json" in script(step)
-        ]
-        speaking = [
-            index
-            for index, step in enumerate(self.steps)
-            if re.search(r"\bgh\b|\buv\b|GH_TOKEN|docker|manage\.py", text(step))
-        ]
-        self.assertTrue(speaking)
-        self.assertLess(mask, min(speaking))
+        """tools/pipeline/tests/test_composition_set.py holds every spelling; this holds when they are masked.
+
+        In each job that reads the set, since a mask lasts only the job."""
+        reading = [job for job in self.jobs if any("composition_set write" in script(step) for step in job)]
+        self.assertGreater(len(reading), 1)
+        for number, job in enumerate(reading):
+            (mask,) = [
+                index
+                for index, step in enumerate(job)
+                if "tools.pipeline.composition_set mask composition-set.json" in script(step)
+            ]
+            speaking = [
+                index
+                for index, step in enumerate(job)
+                if re.search(r"\bgh\b|\buv\b|GH_TOKEN|docker|manage\.py", text(step))
+            ]
+            with self.subTest(job=number):
+                self.assertTrue(speaking)
+                self.assertLess(mask, min(speaking))
 
 
 @tag("source")
@@ -767,20 +819,7 @@ class GateReferenceTests(SimpleTestCase):
                         self.assertRegex(body(task), r"(?m)^#USAGE ", "takes arguments; declare usage")
                 continue
             run = body(task)
-            scripts = [ROOT / path for path in re.findall(r"[\w/.-]+\.(?:sh|py)\b", run) if (ROOT / path).is_file()]
-            # A test module named the dotted way (`manage.py test a.b.c.Case`).
-            for dotted in re.findall(r"\b[a-z_]+(?:\.\w+)+", run):
-                parts = dotted.split(".")
-                found = next(
-                    (
-                        ROOT.joinpath(*parts[:end]).with_suffix(".py")
-                        for end in range(len(parts), 0, -1)
-                        if ROOT.joinpath(*parts[:end]).with_suffix(".py").is_file()
-                    ),
-                    None,
-                )
-                if found and found not in scripts:
-                    scripts.append(found)
+            scripts = runs(task)
             declared = re.findall(r'(?:arg|flag)\s+"[<\[]?(?:--)?([\w-]+)', task["usage"] or "")
             with self.subTest(task=name):
                 if declared:

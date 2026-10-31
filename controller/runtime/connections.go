@@ -49,6 +49,10 @@ type Environment struct {
 	RenderStatus string `env:"SEVERINO_RENDER_STATUS"`
 	// HostUnits is what `systemctl show` printed for the shipped units.
 	HostUnits string `env:"SEVERINO_HOST_UNITS"`
+	// UnitSocket is where root's `hq-host unit --serve` answers on the
+	// machine the controller runs on: the one way a run asks a container's
+	// systemd unit to stop, start or restart.
+	UnitSocket string `env:"SEVERINO_UNIT_SOCKET"`
 	// DependencyRun is root's result of the last dependency update run, given
 	// read-only.
 	DependencyRun string `env:"SEVERINO_DEPENDENCY_RUN"`
@@ -282,8 +286,10 @@ type SSHTarget struct {
 	Port                int
 }
 
-// SSH is a connection's SSH endpoint. Host and user become ssh's destination
-// argument, so each is checked before it can be read as an option.
+// SSH is a connection's SSH endpoint. The host is dialed and looked up in
+// known_hosts, where a wildcard, a negation or a list would match hosts it
+// does not name, so it is a name or an address alone; the user is a login
+// name, as the secrets renderer holds both when it writes known_hosts.
 func (c Connections) SSH(ref string) (SSHTarget, error) {
 	transport := c.byRef[ref].SSHTransport
 	if transport == nil || transport.Host == "" {

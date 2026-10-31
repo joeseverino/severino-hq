@@ -20,7 +20,7 @@ extends = "django-browser"
 vars.classes = """\
   hq.platform.core.tests.browser.sweeps.ScriptedSparseLayoutTests \
   hq.platform.core.tests.browser.components.ComponentLayoutTests \
-  hq.platform.core.tests.browser.sweeps.LongestValueLayoutTests \
+  hq.platform.core.tests.browser.heads.HeadLayoutTests \
   hq.platform.core.tests.browser.sweeps.UnscriptedDenseLayoutTests"""
 
 ["browser:layout-2"]
@@ -31,8 +31,7 @@ vars.classes = """\
   hq.platform.core.tests.browser.sweeps.ScriptedDenseFirstLayoutTests \
   hq.platform.core.tests.browser.sweeps.ScriptedDenseSecondLayoutTests \
   hq.platform.core.tests.browser.sweeps.UnscriptedSparseLayoutTests \
-  hq.platform.core.tests.browser.sweeps.SettledDenseLayoutTests \
-  hq.platform.core.tests.browser.sweeps.SettledSparseLayoutTests \
+  hq.platform.core.tests.browser.sweeps.LongestValueLayoutTests \
   hq.platform.core.tests.browser.page_errors.PageErrorBrowserTests"""
 
 # The layout legs in Chromium, so a break WebKit happens not to show still
@@ -68,7 +67,7 @@ hide = true
 extends = "django-browser"
 vars.classes = """\
   hq.platform.core.tests.browser.estate.ExampleEstateBrowserTests \
-  hq.platform.core.tests.browser.estate.ExampleEstateDrawnTests \
   hq.platform.core.tests.browser.estate.ExampleEstateControlTests \
   hq.platform.core.tests.browser.reference.ReferenceBrowserTests \
-  hq.platform.core.tests.browser.fragments.FragmentBrowserTests"""
+  hq.platform.core.tests.browser.fragments.FragmentBrowserTests \
+  hq.platform.core.tests.browser.command_forms.CommandFormBrowserTests"""

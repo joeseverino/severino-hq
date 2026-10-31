@@ -54,24 +54,12 @@ type cfEnvelope struct {
 // cloudflareDecode decodes one answer into T; an answer of another shape is an
 // error that names what was being read.
 func cloudflareDecode[T any](raw json.RawMessage, what string) (T, error) {
-	var target T
-	if err := json.Unmarshal(raw, &target); err != nil {
-		return target, &ProviderError{Message: "cloudflare returned an invalid " + what, Err: err}
-	}
-	return target, nil
+	return decodeAs[T](raw, "cloudflare returned an invalid "+what)
 }
 
 // cloudflareItems decodes each list entry into T.
 func cloudflareItems[T any](items []json.RawMessage, what string) ([]T, error) {
-	found := make([]T, 0, len(items))
-	for _, item := range items {
-		decoded, err := cloudflareDecode[T](item, what)
-		if err != nil {
-			return nil, err
-		}
-		found = append(found, decoded)
-	}
-	return found, nil
+	return recordsOf(items, func(item json.RawMessage) (T, error) { return cloudflareDecode[T](item, what) })
 }
 
 // present is whether a raw result carries a value: absent and null do not.
@@ -364,9 +352,16 @@ func (r *Registry) cloudflareCachedList(ctx context.Context, key string, read fu
 	return cloudflareDecode[[]json.RawMessage](raw, "list")
 }
 
+// cloudflareAPIZones is every zone the account credential ref can see.
 func (r *Registry) cloudflareAPIZones(ctx context.Context, ref string) ([]cfapi.ZonesZone, error) {
-	items, err := r.cloudflareCachedList(ctx, "cloudflare-api-zones:"+ref, func() ([]json.RawMessage, error) {
-		return r.cloudflareList(ctx, runtime.ConnectionProviderCloudflareAPI, "/zones", ref, cloudflareAccountPerPage)
+	return r.cloudflareZoneList(ctx, runtime.ConnectionProviderCloudflareAPI, ref, cloudflareAccountPerPage)
+}
+
+// cloudflareZoneList is every zone one Cloudflare credential can see, read
+// once per snapshot for that credential.
+func (r *Registry) cloudflareZoneList(ctx context.Context, provider runtime.ConnectionProvider, ref string, perPage int) ([]cfapi.ZonesZone, error) {
+	items, err := r.cloudflareCachedList(ctx, "cloudflare-zones:"+string(provider)+":"+ref, func() ([]json.RawMessage, error) {
+		return r.cloudflareList(ctx, provider, "/zones", ref, perPage)
 	})
 	if err != nil {
 		return nil, err

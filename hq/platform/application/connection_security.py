@@ -358,7 +358,7 @@ class _Admission:
 REQUEST_CONTROLS = frozenset({"network", "transport", "proxy"})
 
 
-def _admission(request, gate: bool) -> _Admission:
+def _admission(request, *, gate: bool) -> _Admission:
     channel = channel_for_request(request)
     secure = bool(request.is_secure())
 
@@ -404,6 +404,26 @@ def _admission(request, gate: bool) -> _Admission:
         trusted_proxies=trusted_proxies,
         secure=secure,
     )
+
+
+def _posture_state(
+    admission: _Admission | None,
+    attested: tuple[SecurityControl, SecurityControl],
+    *,
+    wrong: int,
+    unvouched: int,
+) -> str:
+    """The posture's one word: serious when the request's admission fails,
+    something is ``wrong`` or an attested control is serious; neutral when
+    something is ``unvouched``; good otherwise."""
+
+    if (
+        (admission is not None and not admission.holds)
+        or wrong
+        or any(control.state == "serious" for control in attested)
+    ):
+        return "serious"
+    return "neutral" if unvouched else "good"
 
 
 def _headline(admission: _Admission | None) -> str:
@@ -558,7 +578,7 @@ def connection_security_posture(
     dependencies = sum(len(connection.instance.dependencies) for connection in connections)
 
     gate = settings.SEVERINO_ENFORCE_TRUSTED_NETWORK
-    admission = _admission(request, gate) if request is not None else None
+    admission = _admission(request, gate=gate) if request is not None else None
     tailnet_policy_control = tailnet_policy or _unattested_tailnet_policy()
     edge_control = edge or _unattested_edge()
 
@@ -571,20 +591,13 @@ def connection_security_posture(
         _freshness_control(connections),
         edge_control,
     )
-
-    state = (
-        "serious"
-        if (admission is not None and not admission.holds)
-        or attention
-        or scope_missing
-        or tailnet_policy_control.state == "serious"
-        or edge_control.state == "serious"
-        else "neutral"
-        if unverified or scope_unknown or scope_undeclared or scope_coarse
-        else "good"
-    )
     return ConnectionSecurityPosture(
-        state=state,
+        state=_posture_state(
+            admission,
+            (tailnet_policy_control, edge_control),
+            wrong=attention + scope_missing,
+            unvouched=unverified + scope_unknown + scope_undeclared + scope_coarse,
+        ),
         headline=_headline(admission),
         summary=(
             "How this request reached HQ, and what each connection could reach the last time it was read."

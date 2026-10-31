@@ -122,8 +122,7 @@ func (m *Machine) takeOver(ctx context.Context) error {
 		return nil
 	}
 	out, err := m.Command(ctx, "docker", "inspect", "--format", "{{.Config.Image}}", Container).Output()
-	switch {
-	case err == nil:
+	if err == nil {
 		image, err := Pinned(strings.TrimSpace(string(out)))
 		if err != nil {
 			return err
@@ -131,10 +130,8 @@ func (m *Machine) takeOver(ctx context.Context) error {
 		if err := m.Record(image); err != nil {
 			return err
 		}
-	default:
-		if _, statErr := os.Stat(m.ReleasePath()); statErr != nil {
-			return fmt.Errorf("no container is running and no release is recorded: %w", err)
-		}
+	} else if _, statErr := os.Stat(m.ReleasePath()); statErr != nil {
+		return fmt.Errorf("no container is running and no release is recorded: %w", err)
 	}
 	if err := m.run(ctx, "systemctl", "enable", "--now", WebUnit); err != nil {
 		ctx := context.WithoutCancel(ctx)

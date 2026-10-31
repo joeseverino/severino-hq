@@ -13,7 +13,7 @@ from django.urls import reverse
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 
 from ..controller import ControllerReport, claim_next_operation, report_operation
-from ..infrastructure import PolicyError
+from ..record_errors import PolicyError
 from ..resource_operations import OperationCommand, request_removal
 from ..security import cli_principal
 

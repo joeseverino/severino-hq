@@ -2,6 +2,7 @@
 
 import math
 import re
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from .chart_numbers import (
@@ -11,6 +12,7 @@ from .chart_numbers import (
     _format_table_value,
     _nice_ceiling,
     _table_heading,
+    fitted_range,
 )
 from .display_words import display, in_words
 from .drawings import Dots, Trend
@@ -220,13 +222,10 @@ class Insight:
 class ListRow:
     """One line of a compact record list: what it is, and when.
 
-    The shape ``partials/_record_list.html`` renders. Surfaces that list recent
-    records: history panels, queues, "latest N with a way to see the rest",
-    emit this instead of restating the row markup, so rows align and read the
-    same wherever they appear and a change to the row lands everywhere at once.
-
-    Use ``_insight_grid.html`` instead when each entry needs interpreting; a row
-    is for records that speak for themselves.
+    The shape ``partials/_record_list.html`` renders, so history panels, queues
+    and "latest N" lists read the same everywhere and a change to the row lands
+    everywhere at once. A row is for records that speak for themselves; one
+    that needs interpreting belongs in ``_insight_grid.html``.
     """
 
     title: str
@@ -392,13 +391,9 @@ class ChartTableRow:
 class Chart:
     """What every chart in HQ is, and the one place its axis is derived.
 
-    A bar chart and a line chart differ in what they draw (rectangles or a
-    path) and in nothing else. They share a plot rectangle, a set of ticks, a
-    set of categories, the table underneath, and the four derivations that turn
-    those into something a template can position. The shared part is one class
-    and the difference is the subclass, so a new chart type inherits a correct
-    axis.
-
+    A bar chart and a line chart differ only in what they draw (rectangles or a
+    path); the plot, ticks, categories, table and the derivations that position
+    them are this class, so a new chart type inherits a correct axis.
     Keyword-only, so subclasses can add required fields after defaulted ones.
     """
 
@@ -409,6 +404,8 @@ class Chart:
     categories: tuple[ChartCategory, ...]
     rows: tuple[ChartRow, ...]
     empty: bool
+    # What each subclass draws: bars stacked from one, lines from the other.
+    series: tuple[ChartSeries | LineSeries, ...] = ()
     width: int = STANDARD_SVG
     height: int = STANDARD_HEIGHT
     # The plot's own edges, carried so no template hardcodes them.
@@ -421,15 +418,12 @@ class Chart:
     def dense(self) -> bool:
         """Whether these labels can fit a narrow card side by side.
 
-        Measured, not counted: the width they need is the sum of what each one
-        costs, and that is knowable here because the text is here. How much
-        room they actually get is knowable only to the browser, so this says
-        its half (these labels want more than a narrow card has) and a
-        container query says the other half, whether the card they landed in
-        is that narrow.
+        This says the half knowable here, that the labels want more than a
+        narrow card has; a container query says whether the card is that narrow.
         """
         if not self.categories:
             return False
+        # Measured, not counted: the sum of what each label's text costs.
         text = sum(len(item.label) for item in self.categories) * LABEL_CHAR_PX
         gaps = (len(self.categories) - 1) * LABEL_GAP_PX
         return text + gaps > NARROW_PLOT_PX
@@ -438,20 +432,17 @@ class Chart:
     def gutter(self) -> float:
         """Where the plot starts, as a share of the drawing.
 
-        The y-axis labels sit in the strip to the left of it. A share rather
-        than a fixed width, so the strip scales with the drawing's own gutter
-        and the first date label clears the bottom tick on a phone.
-
-        Read from `plot_left` rather than the module constant, so a chart that
-        is given a plot different from the standard one reports the gutter it
-        actually has rather than the one this file happens to default to.
+        The y-axis labels sit in the strip left of it, and a share scales with
+        the drawing so the first date label clears the bottom tick on a phone.
         """
+        # From `plot_left` rather than the module constant, so a chart given a
+        # non-standard plot reports the gutter it actually has.
         return self.plot_left / self.width * 100
 
     @property
     def table_headings(self) -> tuple[str, ...]:
         """The data table's value columns, one per series."""
-        return tuple(_table_heading(series.label, self.unit) for series in getattr(self, "series", ()))
+        return tuple(_table_heading(series.label, self.unit) for series in self.series)
 
     @property
     def table_rows(self) -> tuple[ChartTableRow, ...]:
@@ -526,20 +517,10 @@ class LineMark:
 class LineChart(Chart):
     """A measure over time, on an axis fitted to the measure.
 
-    Not a bar chart with the bars removed. `stacked_bar_chart` is zero-based by
-    contract, which is right for quantities that add up (minutes trained,
-    volume lifted) and wrong for anything that varies around a level. Every
-    mile of a run sits between 140 and 160 bpm, and drawn from zero those are
-    identical bars: the chart says nothing changed, which is the opposite of
-    what the numbers say. This axis is fitted to the data's own range, so the
-    variation is the drawing.
-
-    The trade is real and worth stating: a fitted axis exaggerates small
-    movements, which is exactly why the range is printed on the axis and the
-    numbers stay in the table underneath.
-
-    Everything about where its axis sits comes from `Chart`. What is declared
-    here is only what a line has and a bar does not.
+    For anything that varies around a level, where `stacked_bar_chart`'s
+    zero-based axis would draw a run's 140 to 160 bpm as identical bars. Where
+    its axis sits comes from `Chart`; this declares only what a line has and a
+    bar does not.
     """
 
     series: tuple[LineSeries, ...]
@@ -552,10 +533,14 @@ class LineChart(Chart):
 LABEL_GAP = 52.0
 
 
+type DatedPoints = tuple[tuple[date, float], ...]
+type DatedSeries = tuple[str, DatedPoints, int]
+
+
 def line_chart(
     title: str,
     description: str,
-    series: tuple[tuple[str, tuple[tuple[date, float], ...], int], ...],
+    series: tuple[DatedSeries, ...],
     *,
     unit: str,
     marks: tuple[tuple[date, str], ...] = (),
@@ -569,18 +554,10 @@ def line_chart(
     positions: readings are not evenly spaced, and plotting against index
     silently restates a month's gap as one step.
     """
-    cleaned = [(label, tuple(sorted(points)), slot) for label, points, slot in series if points]
-    if any(item[2] not in range(1, 6) for item in cleaned):
-        raise ValueError("Chart series slots must be between 1 and 5.")
-    slots = [item[2] for item in cleaned]
-    if len(set(slots)) != len(slots):
-        # The slot is the color. Two series sharing one draws a legend with
-        # the same swatch twice and two indistinguishable lines under it,
-        # a chart that looks finished and cannot be read. Caught here because
-        # it is invisible in the data and only shows up on the rendered page.
-        raise ValueError(f"Chart series must not share a color slot: {sorted(slots)}.")
+    cleaned = tuple((label, tuple(sorted(points)), slot) for label, points, slot in series if points)
+    _check_line_slots([slot for _, _, slot in cleaned])
     every = [value for _, points, _ in cleaned for _, value in points]
-    if not every or len(every) < 2:
+    if len(every) < 2:
         return LineChart(
             title=title,
             description=description,
@@ -592,107 +569,126 @@ def line_chart(
             rows=(),
             empty=True,
         )
-
     days = [day for _, points, _ in cleaned for day, _ in points]
-    first_day, last_day = min(days), max(days)
-    span = max(1, (last_day - first_day).days)
-
-    low = minimum if minimum is not None else min(every)
-    high = maximum if maximum is not None else max(every)
-    if high == low:
-        # A flat series still has to be drawn somewhere other than on the axis
-        # itself. Half a unit either side keeps the line in the middle of the
-        # plot and keeps the ticks distinct.
-        low, high = low - 0.5, high + 0.5
-    else:
-        padding = (high - low) * 0.08
-        floor, ceiling = low, high
-        low, high = low - padding, high + padding
-        # Do not invent axis below a floor the measure cannot cross. Walking
-        # asymmetry is a percentage of steps and cannot be negative; padding it
-        # to -0.3 draws a region no reading could ever occupy and makes the
-        # data look like it is hovering above some boundary that means nothing.
-        if floor >= 0 > low:
-            low = 0.0
-        if ceiling <= 100 and high > 100 and floor >= 0:
-            high = 100.0
-
-    def place_x(day) -> float:
-        return PLOT_LEFT + PLOT_WIDTH * ((day - first_day).days / span)
-
-    def place_y(value: float) -> float:
-        return PLOT_TOP + PLOT_HEIGHT * (1 - (value - low) / (high - low))
-
-    lines = []
-    for label, points, slot in cleaned:
-        placed = tuple(
-            LinePoint(
-                x=place_x(day),
-                y=place_y(value),
-                value=value,
-                label=f"{day:%b %-d, %Y}",
-                tooltip=f"{day:%b %-d, %Y} · {label}: {_format_reading(value, unit)}",
-            )
-            for day, value in points
-        )
-        path = " ".join(f"{'M' if index == 0 else 'L'} {p.x:.1f} {p.y:.1f}" for index, p in enumerate(placed))
-        lines.append(
-            LineSeries(
-                label=label,
-                slot=slot,
-                path=path,
-                points=placed,
-                trend=_trend_path(points, place_x, place_y) if trend else "",
-            )
-        )
-
-    ticks = tuple(
-        ChartTick(place_y(value), _format_fitted_value(value, high - low)) for value in (low, (low + high) / 2, high)
-    )
-    # Six labels at most: a date every few pixels is a smear, not an axis.
-    step = max(1, (span + 1) // 5)
-    stamps = []
-    cursor = first_day
-    while cursor <= last_day:
-        stamps.append(cursor)
-        cursor += timedelta(days=step)
-    # The last day is always labeled (it is the one an eye goes to) but
-    # stepping from the first rarely lands on it, so the step before it can
-    # fall a couple of days short and the two labels print on top of each
-    # other. Whichever of the pair is not the last day gives way.
-    if stamps[-1] != last_day:
-        while len(stamps) > 1 and place_x(last_day) - place_x(stamps[-1]) < (LABEL_GAP):
-            stamps.pop()
-        stamps.append(last_day)
-    # Day and month where the chart covers less than a year, month and year
-    # where it covers more. "Sep 15" across six years of history reads as a
-    # single year, which hides the thing the chart is for.
-    span_days = (last_day - first_day).days
-    stamp = "%b %Y" if span_days > 400 else "%b %-d"
-    categories = tuple(ChartCategory(place_x(day), f"{day:{stamp}}") for day in stamps)
-
-    dated: dict = {}
-    for label, points, _ in cleaned:
-        for day, value in points:
-            dated.setdefault(day, {})[label] = value
-    rows = tuple(
-        ChartRow(
-            f"{day:%b %-d, %Y}",
-            tuple(dated[day].get(label, 0.0) for label, _, _ in cleaned),
-        )
-        for day in sorted(dated)
-    )
-
+    # Fitted to the data's own range, so the variation is the drawing. A fitted
+    # axis exaggerates small movements, which is why the range is printed on
+    # the axis and the numbers stay in the table underneath.
+    plot = DatePlot(min(days), max(days), *fitted_range(every, minimum, maximum))
     return LineChart(
         title=title,
         description=description,
         unit=unit,
-        series=tuple(lines),
-        ticks=ticks,
-        categories=categories,
-        marks=tuple(LineMark(place_x(day), label) for day, label in marks if first_day <= day <= last_day),
-        rows=rows,
+        series=tuple(_placed_line(item, plot, unit=unit, trend=trend) for item in cleaned),
+        ticks=plot.ticks(),
+        categories=plot.categories(),
+        marks=tuple(LineMark(plot.x(day), label) for day, label in marks if plot.first_day <= day <= plot.last_day),
+        rows=_dated_rows(cleaned),
         empty=False,
+    )
+
+
+def _check_line_slots(slots: list[int]) -> None:
+    """Refuse a slot outside the palette, or two lines drawn in one color."""
+    if any(slot not in range(1, 6) for slot in slots):
+        raise ValueError("Chart series slots must be between 1 and 5.")
+    if len(set(slots)) != len(slots):
+        # The slot is the color. Two series sharing one draws a legend with
+        # the same swatch twice and two indistinguishable lines under it,
+        # a chart that looks finished and cannot be read. Caught here because
+        # it is invisible in the data and only shows up on the rendered page.
+        raise ValueError(f"Chart series must not share a color slot: {sorted(slots)}.")
+
+
+@dataclass(frozen=True)
+class DatePlot:
+    """Where a dated reading lands in the plot: days across, the fitted range up."""
+
+    first_day: date
+    last_day: date
+    low: float
+    high: float
+
+    @property
+    def span(self) -> int:
+        return max(1, (self.last_day - self.first_day).days)
+
+    def x(self, day: date) -> float:
+        return PLOT_LEFT + PLOT_WIDTH * ((day - self.first_day).days / self.span)
+
+    def y(self, value: float) -> float:
+        return PLOT_TOP + PLOT_HEIGHT * (1 - (value - self.low) / (self.high - self.low))
+
+    def ticks(self) -> tuple[ChartTick, ...]:
+        """The bottom, middle and top of the fitted range, labeled at its precision."""
+        low, high = self.low, self.high
+        return tuple(
+            ChartTick(self.y(value), _format_fitted_value(value, high - low)) for value in (low, (low + high) / 2, high)
+        )
+
+    def stamps(self) -> list[date]:
+        """The days the axis labels: six at most, always ending on the last day."""
+        # Six labels at most: a date every few pixels is a smear, not an axis.
+        step = timedelta(days=max(1, (self.span + 1) // 5))
+        stamps = []
+        cursor = self.first_day
+        while cursor <= self.last_day:
+            stamps.append(cursor)
+            cursor += step
+        if stamps[-1] == self.last_day:
+            return stamps
+        # The last day is always labeled (it is the one an eye goes to) but
+        # stepping from the first rarely lands on it, so the step before it can
+        # fall a couple of days short and the two labels print on top of each
+        # other. Whichever of the pair is not the last day gives way.
+        while len(stamps) > 1 and self.x(self.last_day) - self.x(stamps[-1]) < LABEL_GAP:
+            stamps.pop()
+        stamps.append(self.last_day)
+        return stamps
+
+    def categories(self) -> tuple[ChartCategory, ...]:
+        """The labeled days, placed."""
+        # Day and month where the chart covers less than a year, month and year
+        # where it covers more. "Sep 15" across six years of history reads as a
+        # single year, which hides the thing the chart is for.
+        stamp = "%b %Y" if (self.last_day - self.first_day).days > 400 else "%b %-d"
+        return tuple(ChartCategory(self.x(day), f"{day:{stamp}}") for day in self.stamps())
+
+
+def _placed_line(series: DatedSeries, plot: DatePlot, *, unit: str, trend: bool) -> LineSeries:
+    """One series' readings projected into the plot, as a path and its points."""
+    label, points, slot = series
+    placed = tuple(
+        LinePoint(
+            x=plot.x(day),
+            y=plot.y(value),
+            value=value,
+            label=f"{day:%b %-d, %Y}",
+            tooltip=f"{day:%b %-d, %Y} · {label}: {_format_reading(value, unit)}",
+        )
+        for day, value in points
+    )
+    path = " ".join(f"{'M' if index == 0 else 'L'} {p.x:.1f} {p.y:.1f}" for index, p in enumerate(placed))
+    return LineSeries(
+        label=label,
+        slot=slot,
+        path=path,
+        points=placed,
+        trend=_trend_path(points, plot.x, plot.y) if trend else "",
+    )
+
+
+def _dated_rows(series: tuple[DatedSeries, ...]) -> tuple[ChartRow, ...]:
+    """The data table: one row per day any series has a reading, zero where one has none."""
+    dated: dict[date, dict[str, float]] = {}
+    for label, points, _ in series:
+        for day, value in points:
+            dated.setdefault(day, {})[label] = value
+    return tuple(
+        ChartRow(
+            f"{day:%b %-d, %Y}",
+            tuple(dated[day].get(label, 0.0) for label, _, _ in series),
+        )
+        for day in sorted(dated)
     )
 
 
@@ -859,14 +855,10 @@ class WeekPlan:
 class DomainOverview:
     """One plugin's useful contribution to a cross-domain surface.
 
-    The domain owns readings and interpretation. HQ owns rendering primitives,
-    so adding a domain requires no import or template change in the composer.
-
-    Deliberately carries no insights. A domain says "this needs a decision"
-    through `PluginIntegration.attention` and nowhere else, because that channel is
-    complete and severity-ordered by the host. An overview is a display
-    surface, and display surfaces truncate, so a serious insight must never
-    depend on one.
+    The domain owns readings and interpretation and HQ the rendering, so adding
+    a domain changes nothing in the composer. It carries no insights: a display
+    surface truncates, so "this needs a decision" goes only through
+    `PluginIntegration.attention`, which the host keeps complete and ordered.
     """
 
     description: str
@@ -894,52 +886,31 @@ def stacked_bar_chart(
     ``maximum`` fixes the axis top instead of deriving a round ceiling from the
     data, for scales that are known rather than observed.
     """
-    if any(item.slot not in range(1, 6) for item in series):
-        raise ValueError("Chart series slots must be between 1 and 5.")
-    if any(len(item.values) != len(labels) for item in series):
-        raise ValueError("Every chart series must align with the category labels.")
-    if any(value < 0 or not math.isfinite(value) for item in series for value in item.values):
-        raise ValueError("Chart values must be finite and non-negative.")
-
-    plot_left, plot_top, plot_width, plot_height = (
-        PLOT_LEFT,
-        PLOT_TOP,
-        PLOT_WIDTH,
-        PLOT_HEIGHT,
-    )
-    svg_width = STANDARD_SVG
+    _check_stacked_series(labels, series)
     totals = tuple(sum(item.values[index] for item in series) for index in range(len(labels)))
     # A caller that knows the scale says so. Shares of a whole always run to
     # 100, and letting the axis round up to 150 leaves a third of the plot
     # permanently empty and makes a full bar look like a partial one.
     scale_max = maximum or _nice_ceiling(max(totals, default=0.0))
-    column = plot_width / max(len(labels), 1)
+    column = PLOT_WIDTH / max(len(labels), 1)
     bar_width = min(34.0, column * 0.62)
-    bars: list[ChartBar] = []
-    categories: list[ChartCategory] = []
-    for index, label in enumerate(labels):
-        x = plot_left + index * column + (column - bar_width) / 2
-        categories.append(ChartCategory(x + bar_width / 2, label))
-        stacked = 0.0
-        for item in series:
-            value = float(item.values[index])
-            height = (value / scale_max) * plot_height if scale_max else 0.0
-            stacked += height
-            bars.append(
-                ChartBar(
-                    x=x,
-                    y=plot_top + plot_height - stacked,
-                    width=bar_width,
-                    height=height,
-                    value=value,
-                    label=item.label,
-                    slot=item.slot,
-                    tooltip=(f"{label} · {item.label}: {_format_reading(value, unit)}"),
-                )
-            )
+    lefts = tuple(PLOT_LEFT + index * column + (column - bar_width) / 2 for index in range(len(labels)))
+    bars = tuple(
+        bar
+        for index, label in enumerate(labels)
+        for bar in _stacked_column(
+            label,
+            tuple(float(item.values[index]) for item in series),
+            series,
+            x=lefts[index],
+            width=bar_width,
+            scale_max=scale_max,
+            unit=unit,
+        )
+    )
     ticks = tuple(
         ChartTick(
-            plot_top + plot_height - (value / scale_max) * plot_height,
+            PLOT_TOP + PLOT_HEIGHT - (value / scale_max) * PLOT_HEIGHT,
             _format_chart_value(value),
         )
         for value in (0.0, scale_max / 2, scale_max)
@@ -952,11 +923,52 @@ def stacked_bar_chart(
         description=description,
         unit=unit,
         series=series,
-        bars=tuple(bars),
+        bars=bars,
         ticks=ticks,
-        categories=tuple(categories),
+        categories=tuple(ChartCategory(x + bar_width / 2, label) for x, label in zip(lefts, labels, strict=True)),
         rows=rows,
         empty=not any(totals),
-        width=svg_width,
-        plot_right=plot_left + plot_width,
+        width=STANDARD_SVG,
+        plot_right=PLOT_LEFT + PLOT_WIDTH,
     )
+
+
+def _check_stacked_series(labels: tuple[str, ...], series: tuple[ChartSeries, ...]) -> None:
+    """Refuse series a stacked bar cannot draw: off the palette, misaligned, or not a quantity."""
+    if any(item.slot not in range(1, 6) for item in series):
+        raise ValueError("Chart series slots must be between 1 and 5.")
+    if any(len(item.values) != len(labels) for item in series):
+        raise ValueError("Every chart series must align with the category labels.")
+    if any(value < 0 or not math.isfinite(value) for item in series for value in item.values):
+        raise ValueError("Chart values must be finite and non-negative.")
+
+
+def _stacked_column(
+    label: str,
+    values: tuple[float, ...],
+    series: tuple[ChartSeries, ...],
+    *,
+    x: float,
+    width: float,
+    scale_max: float,
+    unit: str,
+) -> list[ChartBar]:
+    """One category's bars, each series' value stacked on the ones before it."""
+    bars = []
+    stacked = 0.0
+    for item, value in zip(series, values, strict=True):
+        height = (value / scale_max) * PLOT_HEIGHT if scale_max else 0.0
+        stacked += height
+        bars.append(
+            ChartBar(
+                x=x,
+                y=PLOT_TOP + PLOT_HEIGHT - stacked,
+                width=width,
+                height=height,
+                value=value,
+                label=item.label,
+                slot=item.slot,
+                tooltip=f"{label} · {item.label}: {_format_reading(value, unit)}",
+            )
+        )
+    return bars

@@ -97,7 +97,8 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    sharing the next row while they fit (the browser decides, not a count of
    controls), and the lede the full width under both. Actions wrap under the
    title only when they cannot fit beside it. */
-.page-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); margin-bottom: var(--stack-gap); }
+/* A container, so its controls fold by the head's width (surfaces.css). */
+.page-head { container: page-head / inline-size; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); margin-bottom: var(--stack-gap); }
 .page-head-copy { display: contents; }
 .page-head .page-trail { flex: 1 1 100%; order: 0; margin-bottom: calc(-1 * var(--space-2)); }
 /* The title yields width before the controls do: a long name wraps in its
@@ -116,14 +117,18 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .page-trail { margin: 0 0 var(--space-2); color: var(--muted); font-size: var(--text-xs); }
 .page-trail a { color: var(--muted); }
 /* A slash between the steps of a trail, drawn here so the last step ends the
-   line rather than a slash pointing at nothing. */
-.page-trail a + a::before { content: "/"; display: inline-block; margin-inline: var(--space-3); color: var(--muted-2); }
+   line rather than a slash pointing at nothing. It stands outside each link,
+   so a step is hit through its words alone and a short one stays spaced
+   clear of the next. */
+.page-trail > span + span::before { content: "/" / ""; display: inline-block; margin-inline: var(--space-3); color: var(--muted-2); }
 .page-trail a:hover { color: var(--ink); }
 
 /* Never squeezed by the lede beside it. A flex item defaults to shrinking at
    its content, which would wrap a control's label onto two lines and leave the
-   controls beside it different heights. */
-.page-head .page-actions { position: relative; margin-left: auto; display: flex; gap: var(--space-4); flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+   controls beside it different heights. Its controls wrap rather than spill
+   past its start onto the title: a line one of them asks for (an ask's note)
+   takes a row of its own under them. */
+.page-head .page-actions { position: relative; margin-left: auto; display: flex; flex-wrap: wrap; gap: var(--space-4); flex: 0 1 auto; justify-content: flex-end; min-width: 0; }
 .page-head .page-actions > * { white-space: nowrap; }
 /* Ambient readings beside the greeting: no frame of their own, each panel a
    number worth reading at a distance and one quiet line under it. A panel
@@ -146,7 +151,6 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   border-radius: var(--radius);
 }
 .glance-panel-head:hover, .glance-panel[open] > .glance-panel-head { background: var(--bg-tint); }
-.glance-panel-head::-webkit-details-marker { display: none; }
 .glance-panel-head::marker { content: ""; }
 .glance-panel-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .glance-symbol { grid-row: 1 / span 3; align-self: center; color: var(--muted-2); }
@@ -168,7 +172,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   overflow-x: clip;
 }
 :is(.dot-list > li, .glance-caption > span, .project-meta > *) + *::before {
-  content: "·"; display: inline-block; inline-size: var(--dot-gap); margin-inline-start: calc(-1 * var(--dot-gap));
+  content: "·" / ""; display: inline-block; inline-size: var(--dot-gap); margin-inline-start: calc(-1 * var(--dot-gap));
   text-align: center; color: var(--muted-2); text-decoration: none;
 }
 .glance-alert { color: var(--attn); font-weight: 650; }
@@ -238,7 +242,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .page-nav-list a {
   display: inline-flex;
   align-items: center;
-  min-block-size: 32px;
+  min-block-size: var(--page-nav-link-size);
   padding-inline: var(--space-5);
   border-radius: 999px;
   color: var(--muted);
@@ -255,6 +259,8 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   background: var(--accent-tint);
   color: var(--accent);
 }
+/* One row of links, padded and ruled: the inset a part below it sits under. */
+:root:has(.page-nav) { --page-nav-height: calc(var(--page-nav-link-size) + 2 * var(--space-4) + 1px); }
 .page-section { scroll-margin-block-start: var(--page-nav-height); }
 /* Most heads wrap their controls in .page-actions; list pages hang a single
    control straight off the head. Both should sit at the far edge, otherwise
@@ -366,7 +372,6 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   list-style: none;
   white-space: nowrap;
 }
-.user-menu > summary::-webkit-details-marker { display: none; }
 /* Each fills the control's one line exactly, so the line after it starts
    below the control's edge and is not shown. */
 .user-menu > summary > * { flex: none; height: calc(var(--control-size) - 2px); }

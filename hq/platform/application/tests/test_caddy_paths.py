@@ -147,8 +147,7 @@ class RequestedHostRouteTests(TestCase):
 
     def rules(self):
         with projection_scope():
-            found = findings(principal=cli_principal())
-        return found
+            return findings(principal=cli_principal())
 
     def test_the_path_ends_at_the_proxy_and_resolves_nothing(self):
         self.routes(PLACEHOLDER, to_requested_host=True)

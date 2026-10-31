@@ -1,13 +1,10 @@
 """How to connect each provider, derived from what HQ already declares.
 
 A connection is a 1Password item the controller is given (docs/Secrets.md,
-"Connections"). Everything a person needs to make one is declared somewhere
-already: what to create at the provider (its ``ConnectionKind``), the
-permissions its readings need (``observer_permissions``), the fields its
-credential arrives in (its ``ConnectionShape``) and a script that mints it
-where one exists (``MINTERS``). This puts them together, once, for the
-Connections page and the reference doc both, so neither can say something the
-code does not.
+"Connections"). What to create at the provider (``ConnectionKind``), the
+permissions its readings need (``observer_permissions``), its credential's
+fields (``ConnectionShape``) and its minting script (``MINTERS``) meet once here,
+for the Connections page and the reference doc: neither says what the code does not.
 """
 
 from dataclasses import dataclass

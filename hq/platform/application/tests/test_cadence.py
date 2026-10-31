@@ -458,11 +458,17 @@ class ControllerStandingTests(TestCase):
 
         self.assertTrue(cadence.controller_standing(later).silent)
 
-    def test_the_arrival_is_noted_on_the_first_call_every_applying_run_makes(self):
+    def test_the_arrival_is_noted_on_the_claim_every_applying_run_makes(self):
+        """An idle pass claims too, so a healthy controller with nothing to do
+        arrives. A glance pass runs when someone asks for one, and counted, it
+        would hide a controller that had stopped."""
+
         from hq.domains.control_plane.tests import bridge_client
 
         bridge_client.call("glance-plan", controller_id="test")
+        self.assertFalse(cadence.controller_standing().known)
 
+        self.assertIsNone(bridge_client.call("claim", controller_id="test")["operation"])
         self.assertTrue(cadence.controller_standing().known)
 
     def test_a_marker_that_cannot_be_written_does_not_fail_the_controller(self):
@@ -547,6 +553,31 @@ class ControllerTimerTests(SimpleTestCase):
         self.assertEqual(declared["OnUnitInactiveSec"], f"{int(cadence.CONTROLLER_FLOOR.total_seconds() // 60)}min")
         self.assertGreater(cadence.CONTROLLER_SILENT_AFTER, cadence.CONTROLLER_FLOOR)
 
+    def test_each_doorbell_is_the_one_its_path_unit_waits_on(self):
+        """HQ is told only where the controller's doorbell is, and rings the
+        glance's beside it: each must be the file its unit on the host watches."""
+
+        units = Path(settings.BASE_DIR) / "deploy/systemd"
+
+        def watched(unit: str, key: str) -> Path:
+            (value,) = (
+                line.removeprefix(f"{key}=")
+                for line in (units / unit).read_text().splitlines()
+                if line.startswith(f"{key}=")
+            )
+            return Path(value)
+
+        controller = watched("severino-hq-controller.path", "PathChanged")
+        for ring, unit, key in (
+            (cadence.ring_doorbell, "severino-hq-controller.path", "PathChanged"),
+            (cadence.ring_glance_doorbell, "severino-hq-glance.path", "PathExists"),
+        ):
+            with self.subTest(unit=unit), tempfile.TemporaryDirectory() as directory:
+                with override_settings(SEVERINO_CONTROLLER_DOORBELL=str(Path(directory) / controller.name)):
+                    self.assertTrue(ring())
+                (rung,) = Path(directory).iterdir()
+                self.assertEqual(controller.with_name(rung.name), watched(unit, key))
+
 
 class DefaultCadenceTests(TestCase):
     """With the shipped cadence settings: a quarter hour of use, a marker rewritten once a minute."""
@@ -630,6 +661,37 @@ class AskedReadCarryTests(TestCase):
         self.assertEqual(verdict["carry"], ["up"])
         self.assertEqual(verdict["only_kinds"], [])
         self.assertNotIn("adguard.rewrite", verdict["reason"])
+
+    def test_a_connection_somebody_asked_for_is_probed_rather_than_carried(self):
+        ReadRequest.objects.create(connection_ref="down", requested_at=timezone.now())
+        swept(age_seconds=60, kind="adguard.rewrite", tried_seconds=120)
+
+        self.assertEqual(sweep_due("here")["carry"], ["up"])
+
+    def test_a_connection_asked_for_is_probed_on_the_sweeps_own_clock_too(self):
+        ReadRequest.objects.create(connection_ref="up", requested_at=timezone.now())
+        swept(age_seconds=7200, kind="adguard.rewrite")
+
+        self.assertEqual(sweep_due("here")["carry"], [])
+
+    def test_an_ask_for_everything_reads_every_kind(self):
+        ReadRequest.objects.create(requested_at=timezone.now())
+        swept(age_seconds=60, kind="adguard.rewrite", tried_seconds=120)
+
+        verdict = sweep_due("here")
+
+        self.assertTrue(verdict["due"])
+        self.assertEqual(verdict["only_kinds"], [])
+        self.assertIn("every connection", verdict["reason"])
+
+    def test_an_ask_without_a_controller_carries_nothing(self):
+        swept(age_seconds=60, kind="adguard.rewrite", tried_seconds=120)
+
+        verdict = sweep_due()
+
+        self.assertTrue(verdict["due"])
+        self.assertEqual(verdict["carry"], [])
+        self.assertEqual(verdict["only_kinds"], ["adguard.rewrite"])
 
 
 class AnsweredReadTests(TestCase):

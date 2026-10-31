@@ -128,12 +128,8 @@ class ServiceFacet:
         """``(kind, label)`` for each provider that could supply this facet.
 
         Read from the registry rather than listed here, so the offer to add one
-        covers every registered provider. Only kinds that can be seeded from a
-        hostname.
-
-        A certificate is offered too, only for a facet nothing supplies, so a
-        name already covered is never invited to grow one of its own. Each
-        offer carries the provider's label, never its identifier.
+        covers every registered provider that can be seeded from a hostname.
+        Each offer carries the provider's label, never its identifier.
         """
 
         public_first = self._in_public_zone()

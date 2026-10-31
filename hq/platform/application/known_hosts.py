@@ -1,27 +1,18 @@
 """Who actually runs a hostname, when the name itself says so.
 
-Hostnames carry their operator in the domain they sit under:
-``mx01.mail.icloud.com`` is iCloud, ``site.pages.dev`` is Cloudflare Pages,
-``node.example.ts.net`` is Tailscale. Reading that off the name turns a
-row of DNS trivia into the answer somebody was actually after: who has the
-mailbox, who serves the site.
-
-Derived, not configured. Nothing here is a per-domain setting; it is a small
-table of operators recognizable by the domain they publish under, and anything
-unrecognized falls back to the registrable domain, which is already the useful
-answer. The Email card and the Origin card both read it, because "who runs
-this" is one question asked in two places.
-
-Kept deliberately short. A directory of every hosting provider on the internet
-would be a maintenance burden with no owner; this is the handful that appear in
-one operator's own records, and being wrong here shows a slightly plainer label
-on one card rather than breaking anything.
+A hostname carries its operator in the domain it sits under
+(``mx01.mail.icloud.com`` is iCloud, ``site.pages.dev`` is Cloudflare Pages),
+which turns a row of DNS trivia into who has the mailbox or serves the site.
+The Email and Origin cards both ask it. Derived, never configured: a name no
+operator matches is named by its registrable domain.
 """
 
 from hq.domains.control_plane.names import in_zone, normalized_hostname
 
 # Suffix -> what a person calls it. Longest match wins, so a more specific
-# suffix can name a service running under a broader one.
+# suffix can name a service running under a broader one. Only the handful in
+# one operator's own records: a directory of every host would have no owner,
+# and a miss costs a plainer label on one card, never a break.
 OPERATORS: tuple[tuple[str, str], ...] = (
     ("icloud.com", "iCloud"),
     ("icloudmailadmin.com", "iCloud"),

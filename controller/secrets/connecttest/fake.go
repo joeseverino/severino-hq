@@ -3,12 +3,12 @@
 package connecttest
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -75,7 +75,7 @@ type State struct {
 	SyncStatus string
 }
 
-// An Interceptor, when it returns true, has answered the request itself.
+// An Interceptor that returns true has answered the request itself.
 type Interceptor func(w http.ResponseWriter, r *http.Request) bool
 
 // Fake is the server.
@@ -191,7 +191,7 @@ func (i Item) Full() connectapi.FullItem {
 func write(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(value)
+	_ = json.NewEncoder(w).Encode(value)
 }
 
 func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
@@ -235,7 +235,7 @@ func (s *State) answer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	items := append([]Item{}, s.Items...)
-	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
+	slices.SortFunc(items, func(a, b Item) int { return cmp.Compare(a.ID, b.ID) })
 	switch path := r.URL.Path; {
 	case path == "/v1/vaults":
 		write(w, http.StatusOK, append([]map[string]any{s.vault()}, s.ExtraVaults...))

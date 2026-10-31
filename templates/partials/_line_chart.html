@@ -7,7 +7,7 @@ Line chart: a measure over time, on an axis fitted to the measure.
 quantities that add up; this is for anything that varies around a level, where
 a zero-based axis would draw every reading as the same height.
 {% endcomment %}
-<figure class="chart-card card">
+{% card element="figure" css="chart-card" %}
   <figcaption>
     <h2>{{ chart.title|breakable }}</h2>
     <p>{{ chart.description|breakable }}</p>
@@ -63,4 +63,4 @@ a zero-based axis would draw every reading as the same height.
       {% endtable_region %}
     </details>
   {% endif %}
-</figure>
+{% endcard %}

@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="Build the production image as CI builds it; nothing when IMAGE hands one over"
+#MISE env={SEVERINO_HEAVY_BOUND="30m"}
 #MISE hide=true
 #MISE depends=["image:docker"]
 #MISE skip_if='test -n "${IMAGE:-}"'
@@ -9,6 +10,8 @@
 # IMAGE names the image under test; the pipeline passes the one it built.
 # IMAGE_BUILD_CACHE carries the pipeline's layer cache flags; a checkout has none.
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 
 # shellcheck source=tools/lib/source-url.sh
 . ./tools/lib/source-url.sh

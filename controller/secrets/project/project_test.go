@@ -175,7 +175,7 @@ func TestAnOptionalFieldRendersWhenPresentAndIsNotFatalWhenAbsent(t *testing.T) 
 // Only an explicit yes lets HQ change things through a connection.
 func TestManagesIsAnExplicitDeclaration(t *testing.T) {
 	for value, want := range map[string]bool{"": false, "false": false, "0": false, "read": false, "no": false,
-		"TRUE": true, "yes": true, "1": true, " true ": true} {
+		"TRUE": true, "yes": true, "1": true, " true ": true} { //nolint:gocritic // the padded key is the case that the value is trimmed
 		values := rendered(t, input(t, apiToken(1, "example", "EXAMPLE", f("manages", value))))
 		if _, manages := values["EXAMPLE_MANAGES"]; manages != want {
 			t.Errorf("manages=%q rendered %v", value, manages)
@@ -191,11 +191,11 @@ func TestManagesIsAnExplicitDeclaration(t *testing.T) {
 func TestATransportIsForSSHUnlessItSaysOtherwise(t *testing.T) {
 	key := connecttest.Ed25519Key(t)
 	keyItem := connecttest.KeyItem(id(2), "Edge deploy key", key.PKCS8, key.Public)
-	values := rendered(t, input(t, sshConnection(1, "edge", "EDGE", "Edge deploy key"), keyItem))
+	values := rendered(t, input(t, sshConnection("edge"), keyItem))
 	if values["EDGE_PROVIDER"] != "ssh" {
 		t.Fatalf("a transport that names no provider is for %q", values["EDGE_PROVIDER"])
 	}
-	values = rendered(t, input(t, sshConnection(1, "edge", "EDGE", "Edge deploy key", f("provider", "example")), keyItem))
+	values = rendered(t, input(t, sshConnection("edge", f("provider", "example")), keyItem))
 	if values["EDGE_PROVIDER"] != "example" {
 		t.Fatalf("a transport that names its provider is for %q", values["EDGE_PROVIDER"])
 	}
@@ -204,12 +204,12 @@ func TestATransportIsForSSHUnlessItSaysOtherwise(t *testing.T) {
 func TestAConstantIsRenderedFromTheProjection(t *testing.T) {
 	key := connecttest.RSAKey(t)
 	keyItem := connecttest.KeyItem(id(2), "Example app key", key.PKCS8, key.Public)
-	values := rendered(t, input(t, signingConnection(1, "example", "Example app key"), keyItem))
+	values := rendered(t, input(t, signingConnection("example", "Example app key"), keyItem))
 	if values["EXAMPLE_PROVIDER"] != "github_app" {
 		t.Fatal("the constant was not rendered")
 	}
 	// The item cannot say otherwise: the shape fixes its provider.
-	values = rendered(t, input(t, signingConnection(1, "example", "Example app key", f("provider", "other")), keyItem))
+	values = rendered(t, input(t, signingConnection("example", "Example app key", f("provider", "other")), keyItem))
 	if values["EXAMPLE_PROVIDER"] != "github_app" {
 		t.Fatal("an item overrode the provider its shape fixes")
 	}
@@ -527,11 +527,11 @@ func TestApplicationEnvironment(t *testing.T) {
 	}
 }
 
-func sshConnection(n int, ref, prefix, identity string, extra ...field) item {
-	return item{ID: id(n), Fields: append([]field{
-		f("connection_ref", ref), f("projection", "ssh_transport"), f("env_prefix", prefix),
+func sshConnection(ref string, extra ...field) item {
+	return item{ID: id(1), Fields: append([]field{
+		f("connection_ref", ref), f("projection", "ssh_transport"), f("env_prefix", "EDGE"),
 		f("host", "edge.example.com"), f("port", "2222"), f("user", "deploy"),
-		f("host_key", hostKey), f("identity", identity),
+		f("host_key", hostKey), f("identity", "Edge deploy key"),
 	}, extra...)}
 }
 
@@ -554,7 +554,7 @@ func TestSSHIdentitiesRenderWithPinnedHosts(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			key := connecttest.Ed25519Key(t)
-			out, err := Project(input(t, sshConnection(1, "edge", "EDGE", "Edge deploy key"),
+			out, err := Project(input(t, sshConnection("edge"),
 				connecttest.KeyItem(id(2), "Edge deploy key", private(key), key.Public+" a comment")))
 			if err != nil {
 				t.Fatal(err)
@@ -580,7 +580,7 @@ func TestSSHIdentitiesRenderWithPinnedHosts(t *testing.T) {
 			}
 			// A second render of the same key is the same identity, though its
 			// bytes differ; another key is not.
-			again, err := Project(input(t, sshConnection(1, "edge", "EDGE", "Edge deploy key"),
+			again, err := Project(input(t, sshConnection("edge"),
 				connecttest.KeyItem(id(2), "Edge deploy key", private(key), key.Public)))
 			if err != nil {
 				t.Fatal(err)
@@ -607,7 +607,7 @@ func TestKnownHostsAreWrittenAsSSHLooksThemUp(t *testing.T) {
 		"02222": "[edge.example.com]:2222 " + hostKey + "\n",
 		"65535": "[edge.example.com]:65535 " + hostKey + "\n",
 	} {
-		connection := sshConnection(1, "edge", "EDGE", "Edge deploy key")
+		connection := sshConnection("edge")
 		connection.Fields[4].Value = &port
 		out, err := Project(input(t, connection, connecttest.KeyItem(id(2), "Edge deploy key", key.PKCS8, key.Public)))
 		if err != nil {
@@ -632,7 +632,7 @@ func TestIdentityRefusals(t *testing.T) {
 	key, other := connecttest.Ed25519Key(t), connecttest.Ed25519Key(t)
 	keyItem := connecttest.KeyItem(id(2), "Edge deploy key", key.PKCS8, key.Public)
 	with := func(change func(*item)) Input {
-		connection := sshConnection(1, "edge", "EDGE", "Edge deploy key")
+		connection := sshConnection("edge")
 		change(&connection)
 		return input(t, connection, keyItem)
 	}
@@ -650,21 +650,21 @@ func TestIdentityRefusals(t *testing.T) {
 		in   Input
 		want string
 	}{
-		{"halves differ", input(t, sshConnection(1, "edge", "EDGE", "Edge deploy key"),
+		{"halves differ", input(t, sshConnection("edge"),
 			connecttest.KeyItem(id(2), "Edge deploy key", key.PKCS8, other.Public)), "do not match"},
 		{"identity is a reference", with(set("identity", "op://Elsewhere/key")), "unresolved reference"},
 		{"identity is an op: name", with(set("identity", "op:Elsewhere")), "names an invalid identity item"},
 		{"identity holds a slash", with(set("identity", "a/b")), "names an invalid identity item"},
 		{"identity item absent", with(set("identity", "No such key")), "the vault holds 0 of"},
-		{"identity item ambiguous", input(t, sshConnection(1, "edge", "EDGE", "Edge deploy key"), keyItem,
+		{"identity item ambiguous", input(t, sshConnection("edge"), keyItem,
 			connecttest.KeyItem(id(3), "Edge deploy key", other.PKCS8, other.Public)), "the vault holds 2 of"},
-		{"private key unreadable", input(t, sshConnection(1, "edge", "EDGE", "Edge deploy key"),
+		{"private key unreadable", input(t, sshConnection("edge"),
 			connecttest.KeyItem(id(2), "Edge deploy key", "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n", key.Public)), "cannot be read"},
-		{"public key unreadable", input(t, sshConnection(1, "edge", "EDGE", "Edge deploy key"),
+		{"public key unreadable", input(t, sshConnection("edge"),
 			connecttest.KeyItem(id(2), "Edge deploy key", key.PKCS8, "ssh-ed25519 not-base64")), "cannot be read"},
-		{"no private key field", input(t, sshConnection(1, "edge", "EDGE", "Edge deploy key"),
+		{"no private key field", input(t, sshConnection("edge"),
 			item{ID: id(2), Title: "Edge deploy key", Fields: []field{f("public key", key.Public)}}), "no single private key"},
-		{"two private key fields", input(t, sshConnection(1, "edge", "EDGE", "Edge deploy key"),
+		{"two private key fields", input(t, sshConnection("edge"),
 			item{ID: id(2), Title: "Edge deploy key", Fields: []field{
 				f("private key", key.PKCS8), f("private key", other.PKCS8), f("public key", key.Public)}}), "no single private key"},
 		{"tab in host", with(set("host", "edge.example.com\tinjected")), "control character in HOST"},
@@ -681,9 +681,9 @@ func TestIdentityRefusals(t *testing.T) {
 		{"rsa host key", with(set("host_key", "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQC7")), "must pin an ssh-ed25519 host key"},
 		{"malformed host key", with(set("host_key", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIexample")), "must pin an ssh-ed25519 host key"},
 		{"host key with options", with(set("host_key", `command="x" `+hostKey)), "must pin an ssh-ed25519 host key"},
-		{"ref named known_hosts", input(t, sshConnection(1, "known_hosts", "EDGE", "Edge deploy key"), keyItem), "collide"},
-		{"ref ending .pub", input(t, sshConnection(1, "edge.pub", "EDGE", "Edge deploy key"), keyItem), "collide"},
-		{"ref ending .key", input(t, sshConnection(1, "edge.key", "EDGE", "Edge deploy key"), keyItem), "collide"},
+		{"ref named known_hosts", input(t, sshConnection("known_hosts"), keyItem), "collide"},
+		{"ref ending .pub", input(t, sshConnection("edge.pub"), keyItem), "collide"},
+		{"ref ending .key", input(t, sshConnection("edge.key"), keyItem), "collide"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -695,8 +695,8 @@ func TestIdentityRefusals(t *testing.T) {
 	}
 }
 
-func signingConnection(n int, ref, key string, extra ...field) item {
-	return item{ID: id(n), Fields: append([]field{
+func signingConnection(ref, key string, extra ...field) item {
+	return item{ID: id(1), Fields: append([]field{
 		f("connection_ref", ref), f("projection", "github_app"), f("env_prefix", "GITHUB"),
 		f("app_id", "12345"), f("signing_key", key),
 	}, extra...)}
@@ -704,7 +704,7 @@ func signingConnection(n int, ref, key string, extra ...field) item {
 
 func TestASigningKeyRendersAsPKCS8BesideTheIdentities(t *testing.T) {
 	key := connecttest.RSAKey(t)
-	out, err := Project(input(t, signingConnection(1, "github", "Example app key"),
+	out, err := Project(input(t, signingConnection("github", "Example app key"),
 		connecttest.KeyItem(id(2), "Example app key", key.PKCS8, key.Public)))
 	if err != nil {
 		t.Fatal(err)
@@ -725,7 +725,7 @@ func TestASigningKeyRendersAsPKCS8BesideTheIdentities(t *testing.T) {
 		t.Fatal("public half")
 	}
 	// Deterministic: an unchanged signing key is byte-identical on every render.
-	again, _ := Project(input(t, signingConnection(1, "github", "Example app key"),
+	again, _ := Project(input(t, signingConnection("github", "Example app key"),
 		connecttest.KeyItem(id(2), "Example app key", key.OpenSSH, key.Public)))
 	if sha256.Sum256(files(t, again)["github.key"].Data) != sha256.Sum256(found["github.key"].Data) {
 		t.Fatal("the same signing key rendered differently")
@@ -735,14 +735,14 @@ func TestASigningKeyRendersAsPKCS8BesideTheIdentities(t *testing.T) {
 func TestSigningKeyRefusals(t *testing.T) {
 	key, other := connecttest.RSAKey(t), connecttest.Ed25519Key(t)
 	keyItem := connecttest.KeyItem(id(2), "Example app key", key.PKCS8, key.Public)
-	refused(t, input(t, signingConnection(1, "github", "Example app key"),
+	refused(t, input(t, signingConnection("github", "Example app key"),
 		connecttest.KeyItem(id(2), "Example app key", key.PKCS8, other.Public)), "do not match")
-	refused(t, input(t, signingConnection(1, "github", "op://Elsewhere/key"), keyItem), "unresolved reference")
-	refused(t, input(t, signingConnection(1, "github", "op:Elsewhere"), keyItem), "names an invalid signing key item")
-	refused(t, input(t, signingConnection(1, "github", "a/b"), keyItem), "names an invalid signing key item")
-	refused(t, input(t, signingConnection(1, "github.key", "Example app key"), keyItem), "invalid name")
-	refused(t, input(t, signingConnection(1, "known_hosts", "Example app key"), keyItem), "invalid name")
-	refused(t, input(t, signingConnection(1, "github", "No such key"), keyItem), "the vault holds 0 of")
+	refused(t, input(t, signingConnection("github", "op://Elsewhere/key"), keyItem), "unresolved reference")
+	refused(t, input(t, signingConnection("github", "op:Elsewhere"), keyItem), "names an invalid signing key item")
+	refused(t, input(t, signingConnection("github", "a/b"), keyItem), "names an invalid signing key item")
+	refused(t, input(t, signingConnection("github.key", "Example app key"), keyItem), "invalid name")
+	refused(t, input(t, signingConnection("known_hosts", "Example app key"), keyItem), "invalid name")
+	refused(t, input(t, signingConnection("github", "No such key"), keyItem), "the vault holds 0 of")
 }
 
 func TestRegistryRefusals(t *testing.T) {

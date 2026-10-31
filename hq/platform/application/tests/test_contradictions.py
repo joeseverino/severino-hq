@@ -89,6 +89,28 @@ class ContradictionTests(TestCase):
         self.assertEqual([remedy.target for remedy in finding.remedies], ["example-db-rewrite"])
         self.assertIn("?target=example-db-rewrite", finding.remedies[0].url)
 
+    def test_disagreeing_answers_offer_to_change_each_record_hq_declares(self):
+        db_record = record("db.example.com", "A", "198.51.100.20", proxied=False)
+        store("cloudflare.dns_record", record("shop.example.com", "A", "198.51.100.20"), db_record)
+        rewrite = {"domain": "db.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"}
+        store(
+            "adguard.rewrite",
+            {"domain": "app.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
+            rewrite,
+        )
+        ManagedResource.objects.create(key="example-db-rewrite", kind="adguard.rewrite", spec=rewrite)
+        ManagedResource.objects.create(key="example-db-record", kind="cloudflare.dns_record", spec=db_record)
+
+        (finding,) = raised("split-horizon-disagrees")
+
+        self.assertEqual(
+            {(remedy.target, remedy.intent) for remedy in finding.remedies},
+            {
+                ("example-db-rewrite", "Change the internal record"),
+                ("example-db-record", "Change the public record"),
+            },
+        )
+
     def test_a_proxy_that_carries_both_answers_to_one_machine_agrees(self):
         store(
             "cloudflare.dns_record",

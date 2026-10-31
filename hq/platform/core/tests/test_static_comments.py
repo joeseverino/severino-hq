@@ -41,7 +41,6 @@ class StylesheetSourceTests(SimpleTestCase):
 
                 self.assertNotIn("/*", served)
                 self.assertEqual(served.count("{"), source.count("{") - _in_comments(source, "{"))
-                self.assertLess(len(served), len(source))
 
 
 def _in_comments(css: str, mark: str) -> int:

@@ -50,9 +50,20 @@ cannot do four things HQ relies on, and each is handled here, never in HQ:
   a page of a list, a Map node's details) are answered by HQ's server. The
   build saves each one a page links, each choice a filter offers (a checkbox,
   a select's options), the first six pages of a list, each address a script
-  reads, and a search for each word of the pages' names, under `__q/` and
-  `__fragments__/`; `demo-theme.js` opens the saved copy before the page
-  paints. Sorts are not saved. On a page whose query has no copy, `demo.js`
+  reads, and a search for each word of the pages' names and each word the
+  command center's box suggests, under `__q/` and `__fragments__/`, and
+  once more each address with a query those copies and the command
+  center's answers link (the months either side of today, a command a
+  search found), each page they link being crawled too (`_COPY_DEPTH`);
+  `demo-theme.js` opens the saved copy before the page paints. Further
+  out, a day says only the days around today are saved. The command
+  center asks for the same searches as it is typed into. A word with no
+  saved search is answered as the nearest saved word, or, with none near, as
+  HQ answers a word nothing matches, about the word typed. Sorts are not
+  saved. A list's filter sends the order the list is drawn in with it, which
+  the build records for each list, so a filter keyed with that order opens
+  the same copy. A search within a list is not saved either: typing in it
+  says so and reloads nothing. On a page whose query has no copy, `demo.js`
   says which kind it was ("Sorting isn't saved in the demo"). Each page
   carries the policy HQ sends for its own route, so the API reference loads.
 - **Forms** have nowhere to post. Dismissals are kept in the browser's
@@ -85,6 +96,13 @@ so Scalar does not offer GitHub Pages as one.
 - Every address a page links or a script reads is a file in the demo.
 - Next and Prev under a list, filtered or not, open a saved copy, up to the
   sixth page.
+- Every address with a query a page links opens a saved copy, and so does
+  each one those copies and the command center's answers link.
+- A row's Refresh and the dashboard's say the demo can't read it again,
+  never that the request failed or that something was saved.
+- A filter ticked in a list's toolbar opens its saved copy, ticked, and
+  typing in the list's own search says the demo can't, leaving the page and
+  what was typed in place.
 - Every page that draws a class or script hook no earlier page drew (so
   each template is loaded at least once), and the main pages, load in WebKit
   with no console error and nothing from another site. On the main pages
@@ -113,6 +131,10 @@ so Scalar does not offer GitHub Pages as one.
   800 window and a 402px phone. Each thing to try in it is a page of the
   demo and each other link a file in this repository or its author, and it
   says the day the pages were saved, as HQ writes a day.
+- The command center opens from About this demo and from ⌘K with what it
+  offers, finds something as each word its box suggests is typed, and
+  answers a word the demo has no search for about that word, in the palette
+  and on the search page.
 - `404.html` is HQ's not-found page, and the API document names a server.
 
 HQ's own suite holds the other side: a running HQ with demo data on draws

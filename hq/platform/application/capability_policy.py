@@ -1,17 +1,14 @@
 """Whether a credential's call runs, waits for approval, or is refused.
 
-The identity provider's grant is checked first and can only be narrowed. Then
-the default, the surface rule and the agent rule: an explicit rule beats the
-default, and between explicit rules the stricter wins. Operators are never
-subject to policy.
-
-For an agent, anything destructive waits for a person by default: a caller that
-may have read untrusted text is the one whose deletes most deserve a second
-look. An operator lifts it for one agent, or a whole surface, with an explicit
-Allow.
+How the identity provider's grant, the default and the rules combine is
+docs/Security.md#what-hq-enforces. For an agent, anything destructive (a
+deletion, a stop) waits for a person by default: a caller that may have read
+untrusted text is the one whose deletes and stops most deserve a second look.
+Operators are never subject to policy.
 """
 
 from dataclasses import dataclass
+from typing import Annotated, Any
 
 from django.db import transaction
 from django.db.models import Q
@@ -26,12 +23,20 @@ from .approvals import (
     AGENT_SURFACES,
     DESTRUCTIVE_EFFECT,
     READ_EFFECT,
-    deletes,
     held_by_default,
+    is_destructive,
     may_be_held_by_default,
 )
+from .command_fields import Describe
 from .labels import effect_label
-from .security import AuthorizationError, Principal, is_interactive, mcp_principal
+from .security import (
+    AuthorizationError,
+    Principal,
+    could_hold,
+    is_interactive,
+    mcp_principal,
+    person,
+)
 lazy from . import capabilities
 lazy from .entity_links import kind_label
 lazy from .integrations import integration_graph
@@ -68,7 +73,7 @@ def decide(spec, principal: Principal, command, target) -> Decision:
         return Decision(Rule.ALLOW, "operator", default)
     if principal.interface not in SURFACES:
         return Decision(default, "default", default)
-    if deletes(spec, command):
+    if is_destructive(spec, command):
         default = Rule.APPROVE
 
     rules = dict(
@@ -121,6 +126,8 @@ def set_rule(
         raise ValueError(f"{scope!r} is not a policy scope.")
     if rule is not None and rule not in Rule.values:
         raise ValueError(f"{rule!r} is not a rule.")
+    if not agents_may_hold(spec):
+        raise ValueError(f"Only a person in the browser can {spec.title.lower()}, so no agent has a rule for it.")
     if rule == Rule.APPROVE and spec.effect == READ_EFFECT:
         raise ValueError(f"{spec.title} only reads. It can be allowed or blocked, not held for approval.")
     if scope == Scope.AGENT and rule is not None:
@@ -153,7 +160,7 @@ def set_rule(
         record_event(
             action=AuditLog.Action.SETTINGS_CHANGED,
             type_label=AUDIT_LABEL,
-            message=f"{subject} · {spec.name}: {_name(before)} → {_name(rule)}",
+            message=f"{subject} · {spec.name}: from {_name(before)} to {_name(rule)}",
             metadata={
                 "scope": scope,
                 "subject": subject,
@@ -165,6 +172,12 @@ def set_rule(
             required=True,
         )
     return True
+
+
+def agents_may_hold(spec) -> bool:
+    """Whether a token on some agent surface could ever be granted ``spec``."""
+
+    return any(could_hold(surface, spec.required_capabilities) for surface in SURFACES)
 
 
 def _held_by_grant(spec, granted) -> bool:
@@ -204,6 +217,18 @@ def _parse_field(name: str) -> tuple[str, str, str] | None:
     if len(parts) != 4 or parts[0] != "rule":
         return None
     return parts[1], parts[2], parts[3]
+
+
+def submitted_rules(post) -> list[dict[str, str]]:
+    """The policy form's cells as ``SET_POLICY``'s ``rules``: every field the form names, by what it names."""
+
+    found = []
+    for name, value in post.items():
+        parsed = _parse_field(name)
+        if parsed is not None:
+            scope, subject, capability = parsed
+            found.append({"scope": scope, "subject": subject, "capability": capability, "rule": value})
+    return found
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,13 +289,13 @@ def split_by_default(groups: tuple[Group, ...]) -> tuple[tuple[Group, ...], tupl
     differs from the default, then with only the rest. A group with no row on
     a side is left out of it, and every row is on exactly one side."""
 
-    def kept(changed: bool) -> tuple[Group, ...]:
+    def kept(*, changed: bool) -> tuple[Group, ...]:
         rows = (
             Group(group.label, tuple(row for row in group.rows if bool(row.overrides) is changed)) for group in groups
         )
         return tuple(group for group in rows if group.rows)
 
-    return kept(True), kept(False)
+    return kept(changed=True), kept(changed=False)
 
 
 def columns() -> tuple[Column, ...]:
@@ -300,7 +325,7 @@ def matrix() -> tuple[tuple[Column, ...], tuple[Group, ...]]:
     current = rules()
     grouped: dict[str, list] = {}
     for spec in capabilities.capability_registry().values():
-        if spec.effect in EFFECTS:
+        if spec.effect in EFFECTS and agents_may_hold(spec):
             grouped.setdefault(_subject_label(_subject(spec)), []).append(spec)
     groups = []
     for label in sorted(grouped):
@@ -337,8 +362,8 @@ def _subject_label(subject: str) -> str:
 
 
 def _default_label(spec) -> str:
-    """What happens with no rule set: a deletion always asks, and a change to
-    a type that needs approval asks for that type."""
+    """What happens with no rule set: a destructive call always asks, and a
+    change to a type that needs approval asks for that type."""
 
     if spec.effect == DESTRUCTIVE_EFFECT:
         return RULE_LABELS[Rule.APPROVE]
@@ -375,27 +400,48 @@ def _cell(spec, column: Column, current, grants, ceiling) -> PolicyCell:
     )
 
 
-def apply_changes(submitted, *, principal: Principal, user) -> tuple[int, list[str]]:
-    """Apply the cells that differ from what holds. Returns (changed, problems)."""
+SET_POLICY = "agents.policy.set"
 
+
+@dataclass(frozen=True, slots=True)
+class RuleCell:
+    """One cell of the policy: the rule for one capability, on one surface or agent; empty for the default."""
+
+    scope: str
+    subject: str
+    capability: str
+    rule: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class PolicyCommand:
+    """The cells a person submitted; those already as they hold change nothing."""
+
+    rules: Annotated[tuple[RuleCell, ...], Describe("The policy cells to set, each one rule.")]
+
+
+def apply_changes(command: PolicyCommand, *, principal: Principal) -> dict[str, Any]:
+    """Apply the cells that differ from what holds, each on its own.
+
+    ``changed`` counts what moved; ``problems`` says why each refused cell was
+    left as it was, so one refusal does not undo the rest.
+    """
+
+    user = person(principal)
     registry = capabilities.capability_registry()
     current = rules()
     changed, problems = 0, []
-    for name, value in submitted.items():
-        parsed = _parse_field(name)
-        if parsed is None:
-            continue
-        scope, subject, capability = parsed
-        spec = registry.get(capability)
+    for cell in command.rules:
+        spec = registry.get(cell.capability)
         if spec is None:
-            problems.append(f"{capability} is no longer something HQ can do.")
+            problems.append(f"{cell.capability} is no longer something HQ can do.")
             continue
-        wanted = value or None
-        if current.get((scope, subject, capability)) == wanted:
+        wanted = cell.rule or None
+        if current.get((cell.scope, cell.subject, cell.capability)) == wanted:
             continue
         try:
-            if set_rule(scope=scope, subject=subject, spec=spec, rule=wanted, principal=principal, user=user):
+            if set_rule(scope=cell.scope, subject=cell.subject, spec=spec, rule=wanted, principal=principal, user=user):
                 changed += 1
         except ValueError as exc:
             problems.append(str(exc))
-    return changed, problems
+    return {"ok": True, "changed": changed, "problems": problems}

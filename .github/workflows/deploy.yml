@@ -48,7 +48,7 @@ jobs:
       image: ${{ steps.find.outputs.image }}
       deployment: ${{ steps.record.outputs.deployment }}
     steps:
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -77,6 +77,9 @@ jobs:
           echo "deploying ${tag%:*}@$digest, composed from ${commit:0:12}"
       # HQ's app, asked for deployments only and for this repository only, so
       # the job's own token stays read-only and the write lives one step.
+      # zizmor warns that the file holds an anchor, and still audits the step
+      # in each job that uses it, reporting every finding at this line, so the
+      # anchor costs no audit.
       - &deployments-token
         name: Mint a token that can only write deployments
         id: deployments

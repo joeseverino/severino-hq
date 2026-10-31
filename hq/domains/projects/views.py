@@ -17,7 +17,7 @@ lazy from django.utils import timezone
 
 from hq.domains.projects.github import github_repository
 from hq.platform.application import related
-from hq.platform.application.action_links import READ_NOW_CAPABILITY, capability_action_link, command_url
+from hq.platform.application.action_links import capability_action_link, command_url
 from hq.platform.application.capabilities import capability_registry, capability_words, execute_capability
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import web_url
@@ -29,7 +29,7 @@ from hq.platform.application.projects import (
     projects_by_repository,
     repository_key,
 )
-from hq.platform.application.security import AuthorizationError, web_principal
+from hq.platform.application.security import web_principal
 from hq.platform.application.services import service_url_for
 from hq.platform.application.tables import (
     TableColumn,
@@ -52,7 +52,7 @@ lazy from hq.platform.application.connection_setup import docs_url
 lazy from hq.platform.application.dependency_updates import KIND as RUN_KIND, RUN_NOW, asked_at, last_run
 lazy from hq.platform.application.github_estate import repositories, repository_for
 lazy from hq.platform.application.github_posture import STANDARD, posture_of, postures
-lazy from hq.platform.application.github_profile import KIND, profile, request_read, standing
+lazy from hq.platform.application.github_profile import KIND, READ_NOW, profile, standing
 lazy from hq.platform.application.linked_accounts import GITHUB, linked_login
 lazy from hq.platform.application.outbound_work import ask
 lazy from hq.platform.application.page_reads import Remedy
@@ -276,7 +276,7 @@ class ProjectDetailView(PageMixin, DetailView):
             run_now = run_now_ask(project, web_principal(self.request.user), self.run_asked)
             actions += [run_now] if run_now is not None else []
         actions += [
-            PageAction("Edit", reverse("projects:edit", args=[project.slug])),
+            PageAction(capability_words("project.update"), reverse("projects:edit", args=[project.slug])),
             PageAction("Delete", reverse("projects:delete", args=[project.slug]), danger=True),
         ]
         return tuple(actions)
@@ -326,7 +326,7 @@ class WatchingView(PageMixin, TemplateView):
         found = standing()
         return [
             Ask(
-                capability_words(READ_NOW_CAPABILITY),
+                capability_words(READ_NOW),
                 reverse("watching_refresh"),
                 standing=found,
                 status_url=_profile_status(found.since),
@@ -380,16 +380,18 @@ class WatchingRefreshView(View):
         back = reverse("watching")
         if not login:
             return answer(request, Standing(FAILED, "Your sign-in names no GitHub account."), fallback=back)
-        try:
-            asked = request_read(login, principal=web_principal(request.user))
-        except AuthorizationError:
-            return answer(request, Standing(FAILED, "You may not read from GitHub."), fallback=back)
+        result = execute_capability(READ_NOW, {"login": login}, principal=web_principal(request.user))
+        if not result["ok"]:
+            refused = result["error"]
+            reason = "You may not read from GitHub." if refused["code"] == "forbidden" else refused["message"]
+            return answer(request, Standing(FAILED, reason), fallback=back)
+        asked = moment(result["asked_at"])
         return answer(
             request,
             read_standing((KIND,), asked),
             fallback=back,
             status_url=_profile_status(asked),
-            message=capability_registry()[READ_NOW_CAPABILITY].requested(f"@{login}"),
+            message=capability_registry()[READ_NOW].requested(f"@{login}"),
         )
 
 

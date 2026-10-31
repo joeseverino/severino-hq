@@ -1,0 +1,108 @@
+# The strings of a Python module that can reach a page, for Plain. Comments
+# and docstrings may keep HQ's own vocabulary; HQ's rules read the raw file.
+#
+# A string is shown when it holds words for a person: not a docstring or a
+# bytes literal, not lower-case identifier text (a route, a path, a class
+# list), not a file name or a type written as a string, and not an argument of
+# a call whose words go to a log or to whoever is writing the code (a shared
+# value's description is the controller contract's, read by its author).
+# Tree-sitter has no "not inside", so a string counts by its parent: every
+# parent but a bare expression (a docstring) and a call's arguments, which
+# count only when the call is not one of those.
+#
+# One scope only: Vale joins captures on consecutive lines at one column into
+# one, under the first one's scope.
+engine: tree-sitter
+scopes:
+  # A string a parent shows.
+  - name: shown
+    expr: |
+      ([(assignment [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (augmented_assignment [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (return_statement [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (list [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (tuple [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (set [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (pair [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (conditional_expression [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (binary_operator [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (boolean_operator [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (comparison_operator [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (subscript [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (attribute [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (default_parameter [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (typed_default_parameter [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (lambda [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (expression_list [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (list_splat [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (assert_statement [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (interpolation [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (for_in_clause [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (yield [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (await [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (not_operator [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])
+        (slice [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])]
+       (#not-match? @_s "^[rR]?[bB]")
+       (#match? @prose "(?s)\\S.* .*\\S")
+       (#not-match? @prose "^\\s*[a-z0-9_.:/#?&=%\\- ]*\\s*$")
+       (#not-match? @prose "\\.(html|py|js|css)\\s*$")
+       (#not-match? @prose "^\\s*[A-Z]\\w*( \\| [A-Za-z]\\w*)+\\s*$"))
+
+  # A piece of a string written in pieces: the pieces are one string, so a piece
+  # is never identifier text on its own.
+  - name: shown
+    expr: |
+      ([(assignment [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (augmented_assignment [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (return_statement [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (list [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (tuple [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (set [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (pair [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (conditional_expression [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (binary_operator [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (boolean_operator [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (comparison_operator [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (subscript [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (attribute [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (default_parameter [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (typed_default_parameter [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (lambda [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (expression_list [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (list_splat [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (assert_statement [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (interpolation [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (for_in_clause [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (yield [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (await [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (not_operator [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])
+        (slice [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])]
+       (#not-match? @_s "^[rR]?[bB]")
+       (#match? @prose "(?s)\\S.* .*\\S")
+       (#not-match? @prose "\\.(html|py|js|css)\\s*$"))
+
+  # A call's argument.
+  - name: shown
+    expr: |
+      ((call
+         function: [(identifier) @_f (attribute attribute: (identifier) @_f)]
+         arguments: (argument_list [[(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)] (keyword_argument value: [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])]))
+       (#not-match? @_f "^(debug|info|warning|error|exception|critical|log|getLogger|ImproperlyConfigured|RuntimeError|TypeError|AssertionError|NotImplementedError|KeyError|LookupError|compile|CheckMessage|Error|Warning|add_argument|CommandError|SuspiciousOperation|Http404|SharedValue)$")
+
+       (#not-match? @_s "^[rR]?[bB]")
+       (#match? @prose "(?s)\\S.* .*\\S")
+       (#not-match? @prose "^\\s*[a-z0-9_.:/#?&=%\\- ]*\\s*$")
+       (#not-match? @prose "\\.(html|py|js|css)\\s*$")
+       (#not-match? @prose "^\\s*[A-Z]\\w*( \\| [A-Za-z]\\w*)+\\s*$"))
+
+  # A call's argument written in pieces.
+  - name: shown
+    expr: |
+      ((call
+         function: [(identifier) @_f (attribute attribute: (identifier) @_f)]
+         arguments: (argument_list [[(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))] (keyword_argument value: [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])]))
+       (#not-match? @_f "^(debug|info|warning|error|exception|critical|log|getLogger|ImproperlyConfigured|RuntimeError|TypeError|AssertionError|NotImplementedError|KeyError|LookupError|compile|CheckMessage|Error|Warning|add_argument|CommandError|SuspiciousOperation|Http404|SharedValue)$")
+
+       (#not-match? @_s "^[rR]?[bB]")
+       (#match? @prose "(?s)\\S.* .*\\S")
+       (#not-match? @prose "\\.(html|py|js|css)\\s*$"))

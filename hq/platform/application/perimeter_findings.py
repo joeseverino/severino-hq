@@ -5,37 +5,28 @@ from .finding_model import (
     Finding,
     FindingEstate,
     FindingRule,
+    Said,
     cannot_run_commands,
-    fact_values,
+    connections_carrying,
+    per_connection,
 )
+from .topology_model import TopologyNode
 from .ui import ended
 
 
 def _reached_but_unmeasured(estate: FindingEstate) -> tuple[Finding, ...]:
     """A name a connection reports reaching that nothing is measuring.
 
-    A claim neither half of HQ can make alone. Infrastructure knows a
-    connection reaches this name; analytics knows what every name it watches
-    served. Put beside each other they answer which of the things HQ reaches
-    nobody is watching.
-
-    ``None`` and zero are the whole rule. A measured site with no visitors is a
-    fact about the site; an unmeasured one is a fact about HQ, and only the
-    second is a gap someone can close.
-
-    Restricted to observed targets on purpose. A declaration is a statement of
-    intent and may name something not serving anything yet, but a target is a
-    name a live connection said it *reaches*, so it is answering, and nothing
-    is counting.
-
-    Gated on a measured sibling, the same way a skipped record is judged against
-    the sweep that confirmed its siblings. Most things HQ reaches are containers
-    and proxy entries that will never carry a web beacon, and saying so about
-    each would bury the queue in claims nobody can act on. But a connection with
-    four measured names and a fifth without one is a gap someone can close, and
-    that is the only shape this fires on.
+    Infrastructure knows a connection reaches the name and analytics knows what
+    each name it watches served; only the two together find the gap. An
+    unmeasured site is a fact about HQ, where a measured one with no visitors is
+    a fact about the site.
     """
 
+    # Only observed targets (a live connection said it reaches them, so they
+    # answer), and only beside a measured sibling: most of what HQ reaches never
+    # carries a web beacon, but four measured names and a fifth without one is a
+    # gap someone can close.
     measured_peers: dict[str, bool] = {}
     reached_by: dict[str, str] = {}
     for edge in estate.topology.edges:
@@ -83,42 +74,24 @@ def _perimeter_open(estate: FindingEstate) -> tuple[Finding, ...]:
     prediction that it might be.
     """
 
-    found: list[Finding] = []
-    for node in estate.nodes():
-        if node.kind != "connection":
-            continue
-        ports = fact_values(node, "answers-publicly")
-        if not ports:
-            continue
-        found.append(
-            Finding(
-                rule="perimeter-open",
-                subject=node.id,
-                title=(
-                    f"{node.label} is open to the internet on "
-                    f"{'port' if len(ports) == 1 else 'ports'} {', '.join(ports)}"
-                ),
-                severity="serious",
-                explanation=(
-                    "A test from outside your network got an answer on "
-                    f"{'this port' if len(ports) == 1 else 'these ports'}."
-                ),
-                evidence=tuple(("Open port", port) for port in ports),
-            )
-        )
-    return tuple(sorted(found, key=lambda finding: finding.title))
+    return per_connection(
+        estate, "answers-publicly", rule="perimeter-open", severity="serious", shown_as="Open port", says=_open_ports
+    )
+
+
+def _open_ports(node: TopologyNode, ports: tuple[str, ...]) -> Said:
+    one = len(ports) == 1
+    return {
+        "title": f"{node.label} is open to the internet on {'port' if one else 'ports'} {', '.join(ports)}",
+        "explanation": f"A test from outside your network got an answer on {'this port' if one else 'these ports'}.",
+    }
 
 
 def _perimeter_unchecked(estate: FindingEstate) -> tuple[Finding, ...]:
     """A perimeter reading that tried nothing, which proves nothing either way."""
 
     found: list[Finding] = []
-    for node in estate.nodes():
-        if node.kind != "connection":
-            continue
-        reasons = fact_values(node, "perimeter-unchecked")
-        if not reasons:
-            continue
+    for node, reasons in connections_carrying(estate, "perimeter-unchecked"):
         found.append(
             Finding(
                 rule="perimeter-unchecked",
@@ -154,15 +127,7 @@ def _firewall_stopped(estate: FindingEstate) -> tuple[Finding, ...]:
     """
 
     found: list[Finding] = []
-    for node in estate.nodes():
-        if node.kind != "connection":
-            continue
-        state = next(
-            (value for key, value in node.facts if key == "firewall-unit" and value),
-            "",
-        )
-        if not state:
-            continue
+    for node, (state, *_) in connections_carrying(estate, "firewall-unit"):
         found.append(
             Finding(
                 rule="firewall-stopped",

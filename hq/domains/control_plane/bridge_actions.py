@@ -14,7 +14,7 @@ from typing import Any
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.analytics import analytics_plan, record_analytics
 from hq.platform.application.cadence import note_controller, sweep_due
-from hq.platform.application.certificates import CertificateError, material_for
+from hq.platform.application.certificates import material_for
 from hq.platform.application.controller import (
     ControllerReport,
     claim_next_operation,
@@ -26,12 +26,16 @@ from hq.platform.application.controller import (
 from hq.platform.application.glance import dashboard_refresh_plan, record_dashboard_observations
 from hq.platform.application.infrastructure import controller_contract
 from hq.platform.application.inventory import record_connections, record_step_failures
+from hq.platform.application.record_errors import CertificateError
 from hq.platform.application.scheduled_work import run as run_scheduled
-from hq.platform.application.security import cli_principal
+from hq.platform.application.security import internal_principal
 from hq.platform.application.sweep import record_sweep
 
 Parameters = Mapping[str, Any]
 Run = Callable[[Parameters, Any], Any]
+
+# Who a controller's report is recorded under, in the audit trail.
+CONTROLLER = "controller"
 
 
 def _capabilities(parameters: Parameters) -> tuple[tuple[str, str], ...]:
@@ -42,7 +46,12 @@ def _capabilities(parameters: Parameters) -> tuple[tuple[str, str], ...]:
 
 
 def _claim(parameters: Parameters, payload: Any) -> Any:
+    # Every applying pass claims, an idle one included, before any work that
+    # could end it early, and neither a preflight nor a glance pass does: so
+    # this is the controller arriving. A glance pass runs when a person asks,
+    # and counted, it would hide a controller that had stopped.
     del payload
+    note_controller()
     return claim_next_operation(
         parameters["controller-id"],
         lease_seconds=parameters["lease-seconds"],
@@ -76,10 +85,11 @@ def _material(parameters: Parameters, payload: Any) -> Any:
 
 
 def _recorded(record: Callable[..., Any]) -> Run:
-    """A controller's report, recorded against it as the local operator."""
+    """A controller's report, recorded by HQ itself: the bridge has already
+    admitted the controller, and nobody is acting on its behalf."""
 
     def run(parameters: Parameters, payload: Any) -> Any:
-        return record(payload, principal=cli_principal(), controller_id=parameters["controller-id"])
+        return record(payload, principal=internal_principal(CONTROLLER), controller_id=parameters["controller-id"])
 
     return run
 
@@ -95,11 +105,7 @@ def _sweep_due(parameters: Parameters, payload: Any) -> Any:
 
 
 def _glance_plan(parameters: Parameters, payload: Any) -> Any:
-    # The first call of every applying run, before any work that could end it
-    # early, and one a preflight never makes: so this is the controller
-    # arriving, noted before anything it does can go wrong.
     del payload
-    note_controller()
     return dashboard_refresh_plan(parameters["controller-id"])
 
 

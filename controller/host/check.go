@@ -1,14 +1,12 @@
 package host
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -69,7 +67,6 @@ func (c *Checker) skip(format string, args ...any) {
 
 // Check runs every check and returns the exit it adds up to.
 func (c *Checker) Check(ctx context.Context) int {
-	c.runner(ctx)
 	c.verified(ctx)
 	c.egress(ctx)
 	c.rootsAlone(hostRelative)
@@ -89,103 +86,19 @@ func (c *Checker) output(ctx context.Context, name string, args ...string) (stri
 	return strings.TrimSpace(string(out)), err
 }
 
-var unrestricted = regexp.MustCompile(`(?m)(^|[\s:])ALL\s*$`)
-
 // hostRelative is HostProgram's path in the tree.
 var hostRelative = strings.TrimPrefix(HostProgram, Lib+"/")
 
-// runner: the runner deploys through one sudo rule, and may do nothing
-// broader.
-func (c *Checker) runner(ctx context.Context) {
-	listed, _ := c.output(ctx, "systemctl", "list-units", "--all", "--plain", "--no-legend", "actions.runner.*.service")
-	var units []string
-	for line := range strings.SplitSeq(listed, "\n") {
-		if fields := strings.Fields(line); len(fields) > 0 {
-			units = append(units, fields[0])
-		}
-	}
-	if len(units) != 1 {
-		c.bad("expected one Actions runner unit, found: %s", cmp.Or(strings.Join(units, " "), "none"))
-		return
-	}
-	user, _ := c.output(ctx, "systemctl", "show", "-p", "User", "--value", units[0])
-	if user == "" || user == "root" {
-		c.bad("the Actions runner runs as '%s'; it must run as the deploy account", cmp.Or(user, "root"))
-		return
-	}
-	rules, err := c.output(ctx, "sudo", "-n", "-l", "-U", user)
-	deploy := filepath.Join(c.Lib, hostRelative) + " deploy *"
-	switch {
-	case err != nil:
-		c.bad("could not list %s's sudo rules", user)
-	case unrestricted.MatchString(rules):
-		c.bad("%s may run any command through sudo", user)
-	case regexp.MustCompile(`(?m)NOPASSWD:(.*,)?\s*` + regexp.QuoteMeta(deploy) + `\s*(,|$)`).MatchString(rules):
-		c.ok("%s may run %s through sudo", user, deploy)
-	default:
-		c.bad("%s has no NOPASSWD sudo rule for %s", user, deploy)
-	}
-	if err == nil {
-		c.onlyRendered(user, rules)
-	}
-}
-
-// onlyRendered: every command sudo lists for the runner is one HQ renders a
-// rule for. sudo-rs resolves the aliases, groups and includes, and names no
-// rule's source, so a failure says how to find it.
-func (c *Checker) onlyRendered(user, rules string) {
-	program := filepath.Join(c.Lib, hostRelative)
-	rendered := []string{program + " deploy *", program + " upgrade *"}
-	commands, found := listedCommands(rules)
-	if !found {
-		c.unknown("sudo's listing of %s's rules has no list of commands", user)
-		return
-	}
-	extra := false
-	for _, command := range commands {
-		if !slices.Contains(rendered, command) {
-			c.bad("%s may run %s through sudo, which HQ does not render; 'sudo grep -rn %s /etc/sudoers /etc/sudoers.d' there finds the rule", user, command, user)
-			extra = true
-		}
-	}
-	if !extra {
-		c.ok("%s may run nothing through sudo that HQ does not render", user)
-	}
-}
-
-var sudoTags = regexp.MustCompile(`^(?:[A-Z_]+:\s*|[A-Z_]+=\S+\s+)*`)
-
-// listedCommands are the commands `sudo -l -U` lists, each with its spacing
-// collapsed: an entry is `(runas) TAGS: command, command`, aliases expanded.
-func listedCommands(rules string) (commands []string, found bool) {
-	_, entries, found := strings.Cut(rules, "may run the following commands")
-	if !found {
-		return nil, false
-	}
-	_, entries, _ = strings.Cut(entries, "\n")
-	for line := range strings.SplitSeq(entries, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "(") {
-			_, line, _ = strings.Cut(line, ")")
-		}
-		for command := range strings.SplitSeq(line, ", ") {
-			if command = strings.Join(strings.Fields(sudoTags.ReplaceAllString(strings.TrimSpace(command), "")), " "); command != "" {
-				commands = append(commands, command)
-			}
-		}
-	}
-	return commands, true
-}
-
-// verified: the host is the release it runs, the tree, the units and nothing
-// else. hq-host verify runs as root. Where sudo asks for a password, the
+// verified: the host is the release it runs, the tree, the units, the
+// runner's sudo rules and nothing else. hq-host verify runs as root, the one
+// account that can read every sudo rule. Where sudo asks for a password, the
 // evidence is the drift unit's last run, which systemd reports to anyone,
 // provided it started after this release was installed: every deploy
 // rewrites the tree's .source, and verify compares the two.
 func (c *Checker) verified(ctx context.Context) {
 	out, err := c.Command(ctx, "sudo", "-n", filepath.Join(c.Lib, "deploy", "bin", "hq-host"), "verify").CombinedOutput()
 	if err == nil {
-		c.ok("the host is the release it runs")
+		c.ok("the host is the release it runs, the runner's sudo rules with it")
 		return
 	}
 	drifted := false
@@ -205,7 +118,7 @@ func (c *Checker) verified(ctx context.Context) {
 	}
 	switch c.lastVerify(ctx, installed.ModTime().Unix()) {
 	case "success":
-		c.ok("the host is the release it runs (%s, since this release was installed)", DriftUnit)
+		c.ok("the host is the release it runs, the runner's sudo rules with it (%s, since this release was installed)", DriftUnit)
 	case "failure":
 		c.bad("%s failed since this release was installed; 'journalctl -u %s' there says why", DriftUnit, DriftUnit)
 	default:

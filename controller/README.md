@@ -48,10 +48,15 @@ record of every reading a controller takes, from the model HQ validates it
 with; the readers still build their own record structs.
 
 From the repository root, `mise run lint:controller` runs
-`controller/scripts/check.sh` (format, generated types, vendor slices, vet) and
+`controller/scripts/check.sh` (format, generated types, vendor slices,
+golangci-lint with the linters `.golangci.yml` names) and
 `mise run test:controller` the race tests, `go test -race ./...` here.
+A rule over the controller's own tests that no linter reads is a test in
+`testrules/`, which parses the module's test files and runs with the rest.
 Generated contracts and vendor slices must regenerate without a diff. The full
-repository gate is `mise run check`.
+repository gate is `mise run check`. `mise run audit:go` counts golangci-lint's
+findings per linter without failing, for the linters given or the configured
+set.
 
 ```mermaid
 flowchart LR

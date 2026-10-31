@@ -199,8 +199,8 @@ func TestNoConnectionTypeHoldsSettingsByName(t *testing.T) {
 		case reflect.Pointer, reflect.Slice:
 			walk(kind.Elem(), path)
 		case reflect.Struct:
-			for index := range kind.NumField() {
-				walk(kind.Field(index).Type, path+"."+kind.Field(index).Name)
+			for field := range kind.Fields() {
+				walk(field.Type, path+"."+field.Name)
 			}
 		}
 	}
@@ -261,8 +261,8 @@ func TestAConnectionNeverPrintsItsSettings(t *testing.T) {
 		var logged bytes.Buffer
 		slog.New(slog.NewJSONHandler(&logged, nil)).Info("example", slog.Any("connection", connection), slog.Any("pointer", &connection))
 		for _, printed := range []string{
-			fmt.Sprint(connection), fmt.Sprintf("%v", connection), fmt.Sprintf("%+v", connection), fmt.Sprintf("%#v", connection),
-			fmt.Sprintf("%s", connection), fmt.Sprintf("%+v", &connection), fmt.Sprintf("%+v", document), fmt.Sprintf("%#v", document.Connections),
+			connection.String(), connection.String(), fmt.Sprintf("%+v", connection), fmt.Sprintf("%#v", connection),
+			connection.String(), fmt.Sprintf("%+v", &connection), fmt.Sprintf("%+v", document), fmt.Sprintf("%#v", document.Connections),
 			fmt.Errorf("refused: %v", connection).Error(), logged.String(),
 		} {
 			if strings.Contains(printed, secret) {

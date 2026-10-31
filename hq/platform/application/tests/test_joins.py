@@ -22,6 +22,7 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, disti
 from ..facts import Subject, readings
 from ..inventory import inventory_state
 from ..inventory_testing import store
+from ..plugin_testing import offering
 from ..projection import projection_scope
 from ..relationships import relationships_for
 from ..security import Capability, Principal, cli_principal
@@ -48,7 +49,7 @@ def refused_registration(reason, refusal=""):
     )
 
 
-def proxied(name, record_type, content, zone="example.com", on=True):
+def proxied(name, record_type, content, zone="example.com", *, on=True):
     """A swept Cloudflare record, proxied unless ``on`` is false."""
 
     return {"zone": zone, "name": name, "record_type": record_type, "content": content, "proxied": on, "ttl": 1}
@@ -492,7 +493,7 @@ class TopologyEstateTests(TestCase):
         self.finance = ConnectionSpecFixture.spec()
 
     def project(self):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(self.finance,)):
+        with offering(self.finance, alone=True):
             topology = derive_topology(principal=READ)
         return (
             {node.id: node for node in topology.nodes},
@@ -550,7 +551,7 @@ class TopologyEstateTests(TestCase):
     def test_the_page_draws_estate_lanes(self):
         user = get_user_model().objects.create_user("operator", password="x" * 20)
         self.client.force_login(user)
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(self.finance,)):
+        with offering(self.finance, alone=True):
             response = self.client.get(reverse("control_plane:topology"), {"all": 1})
 
         kinds = [group["kind"] for group in response.context["topology_groups"]]

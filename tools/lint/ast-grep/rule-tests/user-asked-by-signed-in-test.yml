@@ -1,0 +1,12 @@
+id: user-asked-by-signed-in
+valid:
+  - 'request_identity.signed_in(request)'
+  - 'getattr(request, "session", None)'
+  - 'request.user'
+  - 'getattr(request, "username", None)'
+invalid:
+  - 'getattr(request, "user", None)'
+  - 'getattr(request, ''user'', None)'
+  - 'getattr(request, "user")'
+  - 'hasattr(request, "user")'
+  - 'hasattr(self.request, "user")'

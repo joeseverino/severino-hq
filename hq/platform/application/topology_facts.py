@@ -77,25 +77,38 @@ def _tailnet_facts() -> tuple[tuple[str, str], ...]:
     against it.
     """
 
+    addresses, routes = _tailnet_reach()
+    if not addresses:
+        return ()
+    return (
+        *(("tailnet-dns-off-tailnet", address) for address in _resolvers_off(addresses)),
+        *(("tailnet-address", address) for address in sorted(addresses) if parse_ip(address) is not None),
+        *(("tailnet-route", route) for route in sorted(routes)),
+    )
+
+
+def _tailnet_reach() -> tuple[set[str], set[str]]:
+    """Every device's addresses, and the subnet routes approved for them, exit routes excluded."""
+
     addresses: set[str] = set()
     routes: set[str] = set()
     for snapshot in _inventory_of(TAILNET_KIND):
         for record in snapshot.records:
             addresses.update(str(item) for item in record.get("addresses") or ())
             routes.update(str(route) for route in record.get("enabled_routes") or () if str(route) not in EXIT_ROUTES)
-    if not addresses:
-        return ()
-    entries: list[tuple[str, str]] = []
-    for snapshot in _inventory_of("tailscale.dns"):
-        for record in snapshot.records:
-            entries.extend(
-                ("tailnet-dns-off-tailnet", str(address))
-                for address in record.get("nameservers") or ()
-                if parse_ip(str(address)) is not None and str(address) not in addresses
-            )
-    entries.extend(("tailnet-address", address) for address in sorted(addresses) if parse_ip(address) is not None)
-    entries.extend(("tailnet-route", route) for route in sorted(routes))
-    return tuple(entries)
+    return addresses, routes
+
+
+def _resolvers_off(addresses: set[str]) -> list[str]:
+    """The global resolvers the tailnet's DNS reading names that are no device's address."""
+
+    return [
+        str(address)
+        for snapshot in _inventory_of("tailscale.dns")
+        for record in snapshot.records
+        for address in record.get("nameservers") or ()
+        if parse_ip(str(address)) is not None and str(address) not in addresses
+    ]
 
 
 def _policy_verdicts(
@@ -104,12 +117,10 @@ def _policy_verdicts(
 ) -> dict[str, tuple[tuple[str, str], ...]]:
     """Add, for each unreachable address, whether the tailnet is what refused.
 
-    Three answers are possible and only one of them is this fact. A policy that
-    admits the path leaves nothing here: the consumer is down, or the service
-    is not listening, and saying "the tailnet allows this" would be noise. A
-    tailnet HQ has not swept leaves nothing either: not knowing is not the same
-    as knowing it is shut, and a rule that confused them would send an operator
-    to change an access policy that was never the problem.
+    Only a known refusal is this fact. A path the policy admits says nothing
+    (the consumer is down or not listening), and neither does a tailnet HQ has
+    not swept, which would send an operator to change a policy that was never
+    the problem.
     """
 
     known = tailnet.devices()
@@ -154,24 +165,10 @@ def add_observed_facts(
     # status this function was handed.
     blocked: list[tuple[str, dict[str, str]]] = []
     for resource in resources:
-        unreachable = (resource.status or {}).get("unreachable_consumers") or []
-        if not isinstance(unreachable, list):
-            continue
-        entries = tuple(
-            (
-                "unreachable",
-                str(item.get("domain") or item.get("consumer") or "").strip(),
-            )
-            for item in unreachable
-            if isinstance(item, dict) and str(item.get("domain") or item.get("consumer") or "").strip()
-        )
+        entries, endpoints = unreachable_consumers(resource)
         if entries:
             found[f"resource:{resource.key}"] = entries
-            blocked.extend(
-                (f"resource:{resource.key}", item)
-                for item in unreachable
-                if isinstance(item, dict) and str(item.get("endpoint", "")).strip()
-            )
+            blocked.extend((f"resource:{resource.key}", item) for item in endpoints)
 
     # Why it could not be reached, where the tailnet policy is the answer.
     #
@@ -187,9 +184,7 @@ def add_observed_facts(
     # near then: the deploy, recreate or edit that likely did it. Paid for only
     # when something has drifted.
     for resource in resources:
-        drift = _drift_facts(resource)
-        if drift:
-            found[f"resource:{resource.key}"] = found.get(f"resource:{resource.key}", ()) + drift
+        _add_to(found, resource, _drift_facts(resource))
 
     # Nothing further when the estate holds no zone, the way `_measure` pays
     # nothing when nothing is named like a host. This runs inside the shared
@@ -200,21 +195,48 @@ def add_observed_facts(
         return found
 
     for resource in zones:
-        name = normalized_hostname(resource.spec.get("zone"))
-        registration: dict[str, Any] = {}
-        for _snapshot, record in inventory_about(ZONE_KIND, Subject.of(hostnames=(name,))):
-            registration = dict(record.get("registration") or {})
-        if not registration or registration.get("unread"):
-            continue
-        # Added to, never over: the unreachable consumers above are kept.
-        found[f"resource:{resource.key}"] = (
-            *found.get(f"resource:{resource.key}", ()),
-            ("domain", name),
-            ("expires_at", str(registration.get("expires_at", ""))),
-            ("auto_renew", "yes" if registration.get("auto_renew") else "no"),
-            ("registrar", str(registration.get("registrar", ""))),
-        )
+        _add_to(found, resource, _registration_facts(resource))
     return found
+
+
+def unreachable_consumers(resource) -> tuple[tuple[tuple[str, str], ...], tuple[dict[str, str], ...]]:
+    """The consumers a sweep could not reach, as ``unreachable`` facts, and
+    those of them that name the endpoint it tried."""
+
+    unreachable = (resource.status or {}).get("unreachable_consumers") or []
+    if not isinstance(unreachable, list):
+        return (), ()
+    consumers = [item for item in unreachable if isinstance(item, dict)]
+    entries = tuple(
+        ("unreachable", name)
+        for name in (str(item.get("domain") or item.get("consumer") or "").strip() for item in consumers)
+        if name
+    )
+    return entries, tuple(item for item in consumers if str(item.get("endpoint", "")).strip())
+
+
+def _registration_facts(zone) -> tuple[tuple[str, str], ...]:
+    """A zone's registration as the zone sweep last read it, or nothing when it was not read."""
+
+    name = normalized_hostname(zone.spec.get("zone"))
+    registration: dict[str, Any] = {}
+    for _snapshot, record in inventory_about(ZONE_KIND, Subject.of(hostnames=(name,))):
+        registration = dict(record.get("registration") or {})
+    if not registration or registration.get("unread"):
+        return ()
+    return (
+        ("domain", name),
+        ("expires_at", str(registration.get("expires_at", ""))),
+        ("auto_renew", "yes" if registration.get("auto_renew") else "no"),
+        ("registrar", str(registration.get("registrar", ""))),
+    )
+
+
+def _add_to(found: dict[str, tuple[tuple[str, str], ...]], resource, entries: tuple[tuple[str, str], ...]) -> None:
+    """Add ``entries`` to a resource's facts, never over what it already holds."""
+
+    if entries:
+        found[f"resource:{resource.key}"] = (*found.get(f"resource:{resource.key}", ()), *entries)
 
 
 def _drift_facts(resource) -> tuple[tuple[str, str], ...]:

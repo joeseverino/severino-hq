@@ -1,17 +1,9 @@
 """What HQ can reach, and what each of those things can act on.
 
-A connection is a credential, and HQ holds none. It holds the *report* of one:
-the controller renders the vault into its own environment, asks each endpoint
-whether it still answers and what it can see, and sends that back. So this
-module reads a cache and never a secret, and the page it feeds is a view of the
-vault that cannot drift from it: there is no second list to keep in step.
-
-The point of ``reaches`` is that it is the only place some facts exist at all.
-Nothing in HQ can know which machines a Portainer holds or which zones a token
-may edit; the credential that would have to carry out the work is the only thing
-that can say. Every menu asking "which machine" or "which domain" is derived
-from it, which is what makes adding a VPS a matter of registering it with
-Portainer rather than of editing anything here.
+HQ holds no credential, only each connection's report: the controller renders
+the vault into its own environment and reports whether each endpoint answers
+and what it sees. So this module reads a cache, never a secret, and the page is
+a view of the vault with no second list to drift from it.
 """
 
 from dataclasses import dataclass
@@ -57,6 +49,10 @@ class ConnectionReading:
     controller_id: str
     provider: str
     endpoint: str
+    # What the credential says it can act on: the only source of which machines
+    # a Portainer holds or which zones a token may edit. Every "which machine"
+    # or "which domain" menu derives from it, so adding a VPS is registering it
+    # with Portainer, never an edit here.
     reaches: tuple[str, ...]
     reachable: bool
     probed: bool
@@ -98,17 +94,12 @@ class ConnectionReading:
 
 
 def _machines_reached(row, known, located) -> tuple[tuple[str, str], ...]:
-    """The machines one connection opens, named wherever HQ honestly can.
+    """The machines one connection opens, each linked to its page.
 
-    Three ways a credential names a machine, tried in order of how directly it
-    says so: the machines it reports reaching, its own name when that turns out
-    to be a machine, and last the address it points at.
-
-    The address matters because a credential that opens a shell on a known
-    machine should link to that machine's page, not print a bare address.
-
-    Silence when none of the three lands, which leaves the endpoint column
-    saying exactly what HQ knows.
+    Tried in order of how directly the credential says so: the machines it
+    reports reaching, its own name when that is a machine, and last the address
+    it points at. None when nothing lands, so the endpoint column says only
+    what HQ knows.
     """
 
     by_url = {known[name.lower()].url: name for name in row.reaches if name.lower() in known}
@@ -186,6 +177,21 @@ def machines_once() -> tuple:
     return read_once("machines.catalog", machines.machine_catalog)
 
 
+def machines_by_name(catalog: tuple[machines.Machine, ...]) -> dict[str, machines.Machine]:
+    """Every name the board has for a machine, lowercased: its own and the
+    ones it folded in, so a credential named after an alias still links to
+    the machine."""
+
+    known = {item.name.lower(): item for item in catalog}
+    # A kept name is never displaced by somebody else's alias: the board chose
+    # the kept name deliberately, and an alias that happens to collide with one
+    # would otherwise send that machine's row to a different page.
+    for item in catalog:
+        for alias in item.aliases:
+            known.setdefault(alias.lower(), item)
+    return known
+
+
 def connection_rows() -> tuple:
     """Every reported connection row, read once per projection and shared."""
 
@@ -196,15 +202,7 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
     """Every connection every controller last reported, and what ties to it."""
 
     catalog = machines_once()
-    # Every name the board has for a machine, its own and the ones it folded
-    # in, so a credential named after an alias still links to the machine.
-    known = {item.name.lower(): item for item in catalog}
-    # A kept name is never displaced by somebody else's alias: the board chose
-    # the kept name deliberately, and an alias that happens to collide with one
-    # would otherwise send that machine's row to a different page.
-    for item in catalog:
-        for alias in item.aliases:
-            known.setdefault(alias.lower(), item)
+    known = machines_by_name(catalog)
     # And by address, through the same resolver every other surface uses, so a
     # credential pointing at a machine HQ knows names it rather than printing a
     # bare endpoint. The catalog's own addresses are the evidence: a machine

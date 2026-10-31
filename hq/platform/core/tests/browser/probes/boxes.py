@@ -1,6 +1,6 @@
-"""Probes of boxes: what escapes the page, frames, overlaps, bands, forms and targets."""
+"""Probes of boxes: what escapes the page, frames, overlaps, targets, the map and the chrome's insets."""
 
-from hq.platform.core.tests.browser.probes.describe import DESCRIBE
+from hq.platform.core.tests.browser.probes.describe import DESCRIBE, PAINTED_PART
 
 ESCAPES = (
     "() => {"
@@ -26,35 +26,6 @@ ESCAPES = (
 }"""
 )
 
-NESTED_FRAMES = (
-    "([exemptSelector, withinSelector]) => {"
-    + DESCRIBE
-    + r"""
-  // One frame per thing. A box that draws its own border inside a box that
-  // draws one is two borders, two paddings and often two shadows around the
-  // same content; the design has one surface per thing and dividers inside it.
-  // Controls, chips, the steps of a path and menus are frames by design.
-  const framed = (el) => {
-    const style = getComputedStyle(el);
-    const sides = ['Top', 'Right', 'Bottom', 'Left'].filter((side) =>
-      parseFloat(style[`border${side}Width`]) > 0 && style[`border${side}Style`] !== 'none'
-      && !/rgba\(0, 0, 0, 0\)|transparent/.test(style[`border${side}Color`]));
-    const r = box(el);
-    return sides.length >= 3 && r.width > 60 && r.height > 30;
-  };
-  const exempt = (el) => ['TABLE', 'TD', 'TH', 'TR', 'INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'SUMMARY', 'CODE', 'PRE', 'IMG'].includes(el.tagName)
-    || el.matches(exemptSelector)
-    || el.closest(withinSelector);
-  const found = [];
-  for (const el of document.querySelectorAll('main *')) {
-    if (exempt(el) || !el.checkVisibility() || !framed(el)) continue;
-    for (let up = el.parentElement; up && up.tagName !== 'MAIN'; up = up.parentElement) {
-      if (!exempt(up) && framed(up)) { found.push(`${describe(el)} framed inside ${describe(up)}`); break; }
-    }
-  }
-  return found;
-}"""
-)
 
 SIDEWAYS = (
     "(allowed) => {"
@@ -234,86 +205,6 @@ SMALL_TARGETS = (
 }"""
 )
 
-# A grid whose items stretch ends each row together, and so does one the
-# stylesheet pairs, whatever its own alignment says.
-PAIRS = (
-    "(paired) => {"
-    + DESCRIBE
-    + """
-  const found = [];
-  for (const grid of document.querySelectorAll('main *')) {
-    const style = getComputedStyle(grid);
-    if (!['grid', 'inline-grid'].includes(style.display)) continue;
-    if (!grid.matches(paired) && !['normal', 'stretch'].includes(style.alignItems)) continue;
-    const rows = new Map();
-    for (const [item, own, r] of inFlow(grid)) {
-      if (!['auto', 'normal', 'stretch'].includes(own.alignSelf)) continue;
-      if (own.gridRowEnd !== 'auto' || own.height !== 'auto' && own.height !== `${r.height}px`) continue;
-      const key = Math.round(r.top);
-      rows.set(key, [...(rows.get(key) || []), [item, r]]);
-    }
-    for (const row of rows.values()) {
-      const bottoms = row.map(([, r]) => Math.round(r.bottom));
-      if (Math.max(...bottoms) - Math.min(...bottoms) > 1) {
-        found.push(`${describe(grid)}: ${row.map(([item]) => describe(item)).join(' / ')} end at ${bottoms}`);
-      }
-    }
-  }
-  return found;
-}"""
-)
-
-# An identifier is placed where the box it is an item of aligns its items: a
-# grid's justify-items, a column flexbox's align-items across, a row
-# flexbox's align-items down. Its own stretched box is the room it is
-# aligned in, measured by stretching it for the moment of the reading.
-OVERRULED_ALIGNMENT = (
-    "(chip) => {"
-    + DESCRIBE
-    + r"""
-  const found = [];
-  const ends = new Set(['end', 'flex-end', 'self-end']);
-  const edgeOf = (said, axis, rtl) => {
-    const value = said.split(' ').filter((word) => !['safe', 'unsafe', 'legacy'].includes(word)).join(' ');
-    if (value === 'center') return 'center';
-    if (axis === 'y') return ends.has(value) ? 'far' : null;
-    if (value === 'right' || (ends.has(value) && !rtl)) return 'far';
-    if (value === 'left' || (ends.has(value) && rtl)) return 'near';
-    return null;
-  };
-  const itemOf = (el) => {
-    let up = el.parentElement;
-    while (up && getComputedStyle(up).display === 'contents') up = up.parentElement;
-    return up;
-  };
-  const span = (r, axis) => (axis === 'x' ? [r.left, r.right] : [r.top, r.bottom]);
-  for (const el of document.querySelectorAll('main ' + chip)) {
-    if (!el.checkVisibility() || ['absolute', 'fixed'].includes(getComputedStyle(el).position)) continue;
-    const box = itemOf(el);
-    const style = box && getComputedStyle(box);
-    if (!style) continue;
-    const grid = /grid$/.test(style.display);
-    const column = /flex$/.test(style.display) && style.flexDirection.startsWith('column');
-    if (!grid && !/flex$/.test(style.display)) continue;
-    const axis = grid || column ? 'x' : 'y';
-    const said = grid ? style.justifyItems : style.alignItems;
-    const edge = edgeOf(said, axis, style.direction === 'rtl');
-    if (!edge) continue;
-    const held = el.getAttribute('style');
-    const r = el.getBoundingClientRect();
-    el.style.setProperty(grid ? 'justify-self' : 'align-self', 'stretch', 'important');
-    el.style.setProperty(axis === 'x' ? 'inline-size' : 'block-size', 'auto', 'important');
-    const room = el.getBoundingClientRect();
-    if (held === null) el.removeAttribute('style'); else el.setAttribute('style', held);
-    const [lo, hi] = span(r, axis), [from, to] = span(room, axis);
-    const off = {center: (lo + hi - from - to) / 2, far: hi - to, near: lo - from}[edge];
-    if (Math.abs(off) > 1) {
-      found.push(`${describe(el)} sits ${off.toFixed(1)}px off where ${describe(box)} aligns its items (${said})`);
-    }
-  }
-  return found;
-}"""
-)
 
 OVERLAPS = (
     "() => {"
@@ -339,27 +230,76 @@ OVERLAPS = (
 }"""
 )
 
-# A route's mark (a hop's icon, a check's tick) holds its glyph in its middle.
-# A glyph keeps the line height of the row around it unless its mark sets its
-# own, and a line taller than the mark pushes the glyph off its center.
-OFF_CENTER_MARKS = (
-    "(mark) => {"
+
+# A box in a row of boxes (a figure's tile, a card in a grid) keeps what it
+# holds to itself: something it holds that is drawn past its edge, onto a box
+# beside it, covers that box's words. OVERLAPS compares the boxes; this
+# compares what each holds with the boxes beside it. Something placed out of
+# flow (a tip, a hit area, a menu) is drawn over the page by design, and what
+# a box clips is not drawn at all.
+INTO_A_NEIGHBOR = (
+    "() => {"
     + DESCRIBE
+    + PAINTED_PART
     + """
   const found = [];
-  const range = document.createRange();
-  for (const el of document.querySelectorAll('main ' + mark)) {
-    if (!el.checkVisibility() || !el.textContent.trim() && !el.firstElementChild) continue;
-    range.selectNodeContents(el);
-    const glyph = range.getBoundingClientRect();
-    const at = box(el);
-    const dy = glyph.top + glyph.height / 2 - (at.top + at.height / 2);
-    const dx = glyph.left + glyph.width / 2 - (at.left + at.width / 2);
-    if (Math.abs(dy) > 1 || Math.abs(dx) > 1) found.push(`${describe(el)}: glyph ${dx.toFixed(1)}, ${dy.toFixed(1)} off its center`);
+  const placed = (el, item) => {
+    for (let up = el; up && up !== item; up = up.parentElement) {
+      if (['absolute', 'fixed'].includes(getComputedStyle(up).position)) return true;
+    }
+    return false;
+  };
+  for (const parent of document.querySelectorAll('main *')) {
+    if (!/grid|flex/.test(getComputedStyle(parent).display)) continue;
+    const items = inFlow(parent).filter(([, style]) => style.position !== 'sticky');
+    if (items.length < 2) continue;
+    for (const [item, , held] of items) {
+      for (const el of item.querySelectorAll('*')) {
+        const r = box(el);
+        if (r.width < 2 || r.height < 2) continue;
+        if (r.left >= held.left - 1 && r.right <= held.right + 1 && r.top >= held.top - 1 && r.bottom <= held.bottom + 1) continue;
+        if (placed(el, item)) continue;
+        const drawn = painted(el, r);
+        if (!drawn) continue;
+        for (const [other, , beside] of items) {
+          if (other === item) continue;
+          const x = Math.min(drawn.right, beside.right) - Math.max(drawn.left, beside.left);
+          const y = Math.min(drawn.bottom, beside.bottom) - Math.max(drawn.top, beside.top);
+          if (x > 1 && y > 1) found.push(`${describe(el)} in ${describe(item)} is drawn over ${describe(other)} by ${Math.round(x)}x${Math.round(y)}px`);
+        }
+      }
+    }
   }
   return [...new Set(found)];
 }"""
 )
+
+
+# A note the page says beside something (a live region: an ask's answer, the
+# readings a page asked for, a job's note) stands in the page's flow, so it
+# covers nothing and its line is held: placed out of flow, by itself or a box
+# around it, it is drawn over the page. What a reader opened (a menu, a
+# dialog) is drawn over the page by design, and so is its note; one hidden
+# for sight (`visually-hidden`) has no box to cover anything with.
+NOTES_OUT_OF_FLOW = (
+    "([notes, floating]) => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  for (const note of document.querySelectorAll(notes)) {
+    const r = box(note);
+    if (r.width < 2 || r.height < 2 || !note.checkVisibility()) continue;
+    for (let up = note; up && up !== document.body && !up.matches(floating); up = up.parentElement) {
+      const {position} = getComputedStyle(up);
+      if (position !== 'absolute' && position !== 'fixed') continue;
+      found.push(`${describe(note)} is drawn over the page (${describe(up)} is ${position})`);
+      break;
+    }
+  }
+  return found;
+}"""
+)
+
 
 # A table's frame spans the box it sits in, as its heading does: a frame cut to
 # its columns leaves the heading's count and the page's edge beyond its end.
@@ -380,211 +320,6 @@ NARROW_FRAMES = (
 }"""
 )
 
-# A band cell with no padding: its content touches the hairlines around it.
-# The frame rule zeroes the inset of anything nested in a surface, and a band
-# is one, so a component placed in a band loses its padding without a trace.
-# A frame across most of the page whose content fills less than half of it (a
-# short table stretched wide, a one-line card): the content should set the width.
-EMPTY_FRAMES = (
-    "([selector, content]) => {"
-    + DESCRIBE
-    + """
-  const page = document.querySelector('main').clientWidth;
-  const found = [];
-  const range = document.createRange();
-  for (const frame of document.querySelectorAll('main :is(' + selector + ')')) {
-    const r = frame.getBoundingClientRect();
-    if (r.width < page * 0.8 || r.height < 40 || !frame.checkVisibility()) continue;
-    let right = r.left;
-    const walker = document.createTreeWalker(frame, NodeFilter.SHOW_TEXT);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      if (!node.textContent.trim() || !node.parentElement.checkVisibility()) continue;
-      range.selectNodeContents(node);
-      for (const line of range.getClientRects()) right = Math.max(right, line.right);
-    }
-    for (const el of frame.querySelectorAll(content)) {
-      const box = el.getBoundingClientRect();
-      if (box.width) right = Math.max(right, box.right);
-    }
-    const used = (right - r.left) / r.width;
-    if (used < 0.5) found.push(`${describe(frame)} fills ${Math.round(used * 100)}% of its width`);
-  }
-  return found;
-}"""
-)
-
-# A filled box whose text or buttons touch its edge. The frame rule strips a
-# nested surface's border and padding together; one that keeps its own fill is
-# still a tile, and without padding its content sits on the fill's edge.
-UNPADDED_TILES = (
-    "([exempt, control, detached, disclosure]) => {"
-    + DESCRIBE
-    + """
-  // What a disclosure holds is laid out only when it is open.
-  for (const details of document.querySelectorAll(disclosure)) details.open = true;
-  const fill = (el) => {
-    const c = getComputedStyle(el).backgroundColor;
-    return c === 'transparent' || /rgba\\(.*, 0\\)$/.test(c) ? '' : c;
-  };
-  const behind = (el) => {
-    for (let at = el.parentElement; at; at = at.parentElement) {
-      const c = fill(at);
-      if (c) return c;
-    }
-    return '';
-  };
-  const found = [];
-  for (const el of document.querySelectorAll('main *')) {
-    if (el.closest(exempt) || !el.checkVisibility()) continue;
-    const own = fill(el);
-    if (!own || own === behind(el)) continue;
-    const r = el.getBoundingClientRect();
-    if (r.width < 120 || r.height < 48) continue;
-    const style = getComputedStyle(el);
-    if (parseFloat(style.paddingLeft) >= 4 && parseFloat(style.paddingBottom) >= 4) continue;
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-    const range = document.createRange();
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const holder = node.parentElement.getBoundingClientRect();
-      if (!node.textContent.trim() || !node.parentElement.checkVisibility() || holder.width <= 1) continue;
-      const within = node.parentElement;
-      if (within.closest(detached)) continue;
-      if (within.closest(exempt) && !within.closest(control)) continue;
-      // A control that draws no box (a bare glyph, its touch target hung
-      // into the padding) is measured by what it draws.
-      const pressed = node.parentElement.closest(control);
-      const drawn = pressed && (fill(pressed) || parseFloat(getComputedStyle(pressed).borderBottomWidth) > 0);
-      const box = drawn ? pressed : node;
-      let at;
-      if (box === node) { range.selectNodeContents(node); at = range.getBoundingClientRect(); }
-      else at = box.getBoundingClientRect();
-      if (at.width && (at.left - r.left < 4 || r.bottom - at.bottom < 4)) {
-        found.push(`${describe(el)}: ${node.textContent.trim().slice(0, 40)}`);
-        break;
-      }
-    }
-  }
-  return [...new Set(found)];
-}"""
-)
-
-# A band of up to six cells lays out as whole even rows: every row it wraps
-# to holds as many cells as the first (Design.md, "One band"). A band of more
-# lays out in even columns: every row but its last holds as many cells as the
-# first, and every cell is as wide as the others.
-UNEVEN_BANDS = (
-    "([band, aside]) => {"
-    + DESCRIBE
-    + """
-  const found = [];
-  for (const el of document.querySelectorAll('main ' + band)) {
-    if (!el.checkVisibility()) continue;
-    const cells = [...el.children].filter((cell) => !cell.matches(aside) && cell.checkVisibility());
-    if (cells.length < 2) continue;
-    const rows = new Map();
-    for (const cell of cells) {
-      const top = Math.round(box(cell).top);
-      rows.set(top, (rows.get(top) || 0) + 1);
-    }
-    const counts = [...rows.values()];
-    const full = cells.length > 6 ? counts.slice(0, -1) : counts;
-    const widths = cells.map((cell) => box(cell).width);
-    const uneven = new Set(full).size > 1 || (cells.length > 6 && Math.max(...widths) - Math.min(...widths) > 1);
-    if (uneven) found.push(`${describe(el)}: ${counts.join(' + ')}, cells ${Math.round(Math.min(...widths))}..${Math.round(Math.max(...widths))}px`);
-  }
-  return found;
-}"""
-)
-
-# A form is two columns or one: each row of its fields holds one or two and
-# runs from its first edge to its last, so no field has a hole beside it.
-HOLED_FORMS = (
-    "([form, field]) => {"
-    + DESCRIBE
-    + """
-  const found = [];
-  for (const el of document.querySelectorAll('main ' + form)) {
-    if (!el.checkVisibility()) continue;
-    const style = getComputedStyle(el);
-    const frame = box(el);
-    const left = frame.left + parseFloat(style.paddingLeft) + parseFloat(style.borderLeftWidth);
-    const right = frame.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth);
-    const rows = new Map();
-    for (const [item, , r] of inFlow(el)) {
-      const top = Math.round(r.top);
-      rows.set(top, [...(rows.get(top) || []), [item, r]]);
-    }
-    for (const row of rows.values()) {
-      const fields = row.filter(([item]) => item.matches(field)).length;
-      if (!fields) continue;
-      const names = row.map(([item]) => describe(item)).join(' / ');
-      if (fields > 2) found.push(`${describe(el)}: ${fields} fields in one row (${names})`);
-      const before = Math.min(...row.map(([, r]) => r.left)) - left;
-      const after = right - Math.max(...row.map(([, r]) => r.right));
-      if (before > 1 || after > 1) found.push(`${describe(el)}: ${names} leave ${Math.round(before)}px before and ${Math.round(after)}px after`);
-    }
-  }
-  return found;
-}"""
-)
-
-# A figure reads with its label: a value under the label it answers, never
-# left at the foot of a box grown to its neighbor's height. The budget is a
-# wrapped label's second line and the row's gap.
-FIGURE_UNDER_LABEL = r"""([figure, label_, value_]) => {
-  const found = [];
-  for (const kpi of document.querySelectorAll('main ' + figure)) {
-    const label = kpi.querySelector(':scope > ' + label_), value = kpi.querySelector(':scope ' + value_);
-    if (!label || !value || !kpi.checkVisibility()) continue;
-    // The words, not their boxes: a grid stretches a box to its track.
-    const words = (el) => { const range = document.createRange(); range.selectNodeContents(el); return range.getBoundingClientRect(); };
-    const gap = words(value).top - words(label).bottom;
-    if (gap > 32) found.push(`"${label.textContent.trim()}": its value stands ${Math.round(gap)}px under its label`);
-  }
-  return found;
-}"""
-
-# A value sits beside its label wherever the box holding both has room for
-# each on one line, and goes under it only where it does not. Measured on the
-# words' first lines, since a grid stretches a box to its track; the room the
-# two take is a copy of their box holding only them, laid out on one line
-# beside it, so whatever the box puts between them counts: a column gap, a
-# margin, the space between two inline boxes.
-UNDER_ITS_LABEL = r"""(labeled) => {
-  const found = [];
-  const firstLine = (el) => {
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    return [...range.getClientRects()].find((rect) => rect.width) || null;
-  };
-  const together = (box, first, second) => {
-    const copy = box.cloneNode(false);
-    for (let node = first; node; node = node.nextSibling) {
-      copy.append(node.cloneNode(true));
-      if (node === second) break;
-    }
-    copy.style.cssText = 'position: absolute; visibility: hidden; inline-size: max-content; max-inline-size: none; padding-inline: 0; border-inline-width: 0';
-    box.after(copy);
-    const width = copy.getBoundingClientRect().width;
-    copy.remove();
-    return width;
-  };
-  for (const second of document.querySelectorAll('main :is(' + labeled + ')')) {
-    const first = second.previousElementSibling;
-    if (!first.checkVisibility() || !second.checkVisibility()) continue;
-    const a = firstLine(first), b = firstLine(second);
-    if (!a || !b) continue;
-    const level = Math.abs(a.top - b.top) < Math.min(a.height, b.height);
-    if (level && (b.left >= a.right - 1 || b.right <= a.left + 1)) continue;
-    const box = second.parentElement, style = getComputedStyle(box);
-    const room = box.clientWidth - parseFloat(style.paddingInlineStart) - parseFloat(style.paddingInlineEnd);
-    const needed = together(box, first, second);
-    if (needed > room) continue;
-    const words = (el) => el.textContent.trim().replace(/\s+/g, ' ').slice(0, 40);
-    found.push(`"${words(first)}": "${words(second)}" goes under it with ${Math.round(room)}px for the ${Math.round(needed)}px both take`);
-  }
-  return found;
-}"""
 
 # The map scrolls with the page, and draws no lane with nothing in it.
 MAP = """([map, lane, node]) => {
@@ -597,3 +332,65 @@ MAP = """([map, lane, node]) => {
       .map((el) => el.textContent.trim().slice(0, 30)),
   };
 }"""
+
+# The insets a sticky part sits under are the stylesheet's, never measured by a
+# script, so each must be as tall as the chrome it stands for: the header, and
+# a page's section nav where there is one.
+CHROME_INSETS = """() => {
+  const inset = (value) => {
+    const probe = document.createElement('div');
+    probe.style.cssText = `position: absolute; visibility: hidden; block-size: ${value}`;
+    document.body.append(probe);
+    const size = probe.getBoundingClientRect().height;
+    probe.remove();
+    return size;
+  };
+  const found = [];
+  for (const [selector, token] of [['.site-header', '--site-header-height'], ['.page-nav', '--page-nav-height']]) {
+    const drawn = document.querySelector(selector)?.getBoundingClientRect().height || 0;
+    const said = inset(`var(${token})`);
+    if (Math.abs(drawn - said) > 0.5) found.push(`${token} is ${said}px, ${selector} is ${drawn}px`);
+  }
+  return found;
+}"""
+
+
+# A page's head (`partials/_page_head.html`): at most two controls beside the
+# title, on one line with the menu, and every control offered once, beside the
+# title or in the menu. A menu entry is read by its style rather than its
+# visibility, since a closed menu shows none of them.
+HEAD_CONTROLS = (
+    "([actionsSelector, menuSelector, panelSelector, askSelector]) => {"
+    + DESCRIBE
+    + r"""
+  const said = (el) => ((el.matches(askSelector) && el.querySelector('button')) || el).textContent.trim();
+  const shown = (el) => getComputedStyle(el).display !== 'none';
+  // A box drawn as its children alone (an ask) is seen when one of them is.
+  const seen = (el) => el.checkVisibility() || (getComputedStyle(el).display === 'contents' && [...el.children].some(seen));
+  const found = [];
+  for (const actions of document.querySelectorAll(actionsSelector)) {
+    if (!actions.checkVisibility()) continue;
+    const name = describe(actions);
+    const menu = actions.querySelector(`:scope > ${menuSelector}`);
+    const beside = [...actions.children].filter((el) => el !== menu && seen(el));
+    const listed = menu ? [...menu.querySelectorAll(`${panelSelector} > *`)].filter(shown) : [];
+    if (beside.length > 2) found.push(`${name} draws ${beside.length} controls beside the title`);
+    if (menu && menu.checkVisibility() !== listed.length > 0) found.push(`${name} draws a menu that holds ${listed.length} controls`);
+    const besideWords = beside.map(said);
+    const listedWords = listed.map(said);
+    for (const words of listedWords.filter((words) => besideWords.includes(words))) {
+      found.push(`${name} offers "${words}" beside the title and in its menu`);
+    }
+    const entries = menu ? [...menu.querySelectorAll(`${panelSelector} > *`)] : [];
+    const offered = new Set([...actions.children].filter((el) => el !== menu).concat(entries).map(said));
+    for (const words of offered) {
+      if (!besideWords.includes(words) && !listedWords.includes(words)) found.push(`${name} hides "${words}" with no way to it`);
+    }
+    // An ask's control is its button: what it says takes the line under the row.
+    const drawn = (el) => (el.matches(askSelector) ? [el.querySelector('button')] : [...el.children].filter(seen));
+    const row = [...beside, ...(menu && menu.checkVisibility() ? [menu] : [])].flatMap((el) => [...el.getClientRects(), ...(el.getClientRects().length ? [] : drawn(el).map((child) => child.getBoundingClientRect()))]);
+    if (row.some((r) => r.top >= row[0].bottom || r.bottom <= row[0].top)) found.push(`${name} wraps its controls onto two lines`);
+  }
+  return found;
+}"""
+)

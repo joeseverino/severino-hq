@@ -18,10 +18,12 @@ from hq.platform.application.capabilities import (
     capability_registry,
     execute_capability,
 )
-from hq.platform.application.command_forms import command_form_class
+from hq.platform.application.command_forms import command_form_class, own_fields
 from hq.platform.application.command_targets import (
     capability_target_initial,
     capability_target_options,
+    record_options,
+    starting_page,
     with_requested_target,
 )
 from hq.platform.application.contracts import route_url
@@ -31,7 +33,7 @@ from hq.platform.application.idempotency import (
     request_fingerprint,
     validate_key,
 )
-from hq.platform.application.integration_specs import capability_schema
+from hq.platform.application.integration_specs import ON_ITS_PAGE, capability_schema
 from hq.platform.application.integrations import integration_graph
 from hq.platform.application.pages import page_context
 from hq.platform.application.payload_words import value_words
@@ -60,14 +62,11 @@ def _cell(value) -> str:
 def _result_projection(payload: dict) -> tuple[tuple[tuple[str, str], ...], dict | None]:
     """The facts a result states, and the one list it carries, if any.
 
-    A result is a machine contract; a person reads it as facts. Most results are a handful of scalar facts and at most
-    one list of flat records (resolver answers, matched rows) so those become
-    a definition list and a table, and the JSON stays behind a disclosure for
-    whoever is checking HQ against another tool.
-
-    Generic on purpose. A handler describes its result by what it returns, not
-    through presentation metadata, so nothing here knows what a key means. A
-    shape these rules do not fit falls back to the JSON alone.
+    A result is a machine contract that a person reads as facts: its scalars
+    become a definition list and its one list of flat records a table, the JSON
+    kept behind a disclosure. A handler describes a result only by what it
+    returns, so nothing here knows what a key means, and a shape that does not
+    fit shows the JSON alone.
     """
 
     facts = tuple(
@@ -75,22 +74,32 @@ def _result_projection(payload: dict) -> tuple[tuple[tuple[str, str], ...], dict
         for key, value in payload.items()
         if key != "ok" and isinstance(value, _SCALAR)
     )
-    for key, value in payload.items():
-        if not isinstance(value, list) or not value:
-            continue
-        flat = all(
+    listed = next(((key, value) for key, value in payload.items() if _is_flat_records(value)), None)
+    return facts, _result_table(*listed) if listed else None
+
+
+def _is_flat_records(value: object) -> bool:
+    """Whether a value is a list of records, each a non-empty mapping of scalars."""
+
+    return (
+        isinstance(value, list)
+        and bool(value)
+        and all(
             isinstance(item, dict) and item and all(isinstance(field, _SCALAR) for field in item.values())
             for item in value
         )
-        if not flat:
-            continue
-        columns = tuple(dict.fromkeys(column for item in value for column in item))
-        return facts, {
-            "label": key.replace("_", " "),
-            "columns": tuple(column.replace("_", " ") for column in columns),
-            "rows": tuple(tuple(_cell(item.get(column)) for column in columns) for item in value),
-        }
-    return facts, None
+    )
+
+
+def _result_table(key: str, records: list[dict]) -> dict:
+    """A list of records as a table: a column for every field any record has."""
+
+    columns = tuple(dict.fromkeys(column for item in records for column in item))
+    return {
+        "label": key.replace("_", " "),
+        "columns": tuple(column.replace("_", " ") for column in columns),
+        "rows": tuple(tuple(_cell(item.get(column)) for column in columns) for item in records),
+    }
 
 
 def _new_key() -> str:
@@ -145,7 +154,11 @@ class CommandView(View):
                 request.GET.get("target") or request.POST.get("__target", ""),
                 principal=self.principal,
             )
-        self.form_class = command_form_class(self.spec, target_options=self.target_options)
+        self.form_class = command_form_class(
+            self.spec,
+            target_options=self.target_options,
+            record_choices=record_options(capability_schema(self.spec), principal=self.principal),
+        )
         return super().dispatch(request, name, *args, **kwargs)
 
     def _result(self):
@@ -183,9 +196,57 @@ class CommandView(View):
             "resource_url": resource_url,
             "resource_label": resource.label if resource else "",
             "hydrates_target": bool(self.spec.target_initial_fields),
-            # Only a command that writes a record's fields can blank them; one
-            # that takes just a target and a reason has no record to replace.
-            "writes_record": bool(set(schema.get("properties", {})) - {"idempotency_key", "reason"}),
+            "switch": self._switch(form),
+            # A command that needs what one page hands it says to start there.
+            "starting_page": starting_page(self.spec),
+            "starts_on_its_page": self.spec.reached_from == ON_ITS_PAGE,
+            "saves_blanks": self._saves_blanks(schema),
+        }
+
+    def _saves_blanks(self, schema: dict) -> bool:
+        """Whether a field left blank here overwrites what the record holds.
+
+        A command on a record that may be sent without one of its fields
+        receives that field's default, and no handler can tell it from one
+        the caller chose, so it is saved. A form that opens holding the
+        record's values, or a command whose every field is asked for, blanks
+        nothing.
+        """
+
+        if not self.spec.target_kind or self.spec.target_initial_fields:
+            return False
+        return bool(own_fields(schema) - set(schema.get("required", ())))
+
+    def _switch(self, form):
+        """A command that sets one thing to yes or no, as its two buttons.
+
+        On a page opened for one record whose value the form holds, or for a
+        command that declares its ``state``, it says that value and offers
+        only the button that changes it.
+        """
+
+        field = form.switch
+        if not field:
+            return None
+        # Present where a chosen record was read into the form, else read
+        # from the command's own declaration of where it stands.
+        held = form.initial.get(field)
+        if held is None and self.spec.state is not None:
+            if not self.spec.target_kind:
+                held = self.spec.state()
+            elif target := form["__target"].value():
+                held = self.spec.state(str(target))
+        state = None if held is None else bool(held)
+        choices = tuple(
+            ("true" if value else "false", self.spec.words(variant))
+            for variant, value in (("on", True), ("off", False))
+            if state is not value
+        )
+        return {
+            "field": field,
+            "label": self.spec.title,
+            "state": "" if state is None else ("On" if state else "Off"),
+            "choices": choices,
         }
 
     def _chosen_target(self, form):
@@ -209,7 +270,7 @@ class CommandView(View):
             "change_url": command_url(self.spec.name),
         }
 
-    def get(self, request, name: str):
+    def get(self, request, name: str):  # noqa: ARG002 - Django passes the URL's name; dispatch read it into spec
         initial = {"__execution_key": _new_key(), "next": safe_next(request)}
         target = request.GET.get("target", "") if self.spec.target_kind else ""
         known_targets = {option.value for option in self.target_options or ()}
@@ -223,8 +284,17 @@ class CommandView(View):
         context["unoffered_target"] = target if target and "__target" not in initial else ""
         return TemplateResponse(request, self.template_name, context)
 
-    def post(self, request, name: str):
-        form = self.form_class(request.POST)
+    def _held(self, target: str) -> dict:
+        """What the record a form edits holds, so a posted value its source no
+        longer lists is still the one it keeps (``CapabilityCommandForm._hold``)."""
+
+        known = {option.value for option in self.target_options or ()}
+        if not target or (self.target_options is not None and target not in known):
+            return {}
+        return capability_target_initial(self.spec, target, principal=self.principal)
+
+    def post(self, request, name: str):  # noqa: ARG002 - Django passes the URL's name; dispatch read it into spec
+        form = self.form_class(request.POST, initial=self._held(request.POST.get("__target", "")))
         if not form.is_valid():
             return TemplateResponse(request, self.template_name, self._context(form), status=400)
 

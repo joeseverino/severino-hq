@@ -1,13 +1,10 @@
 """The open problems about one thing, for that thing's own page.
 
-Every item of the queue says what it is about: its subject, a link to that
-thing's page. So the problems about a machine, a service, a record, a domain
-or a connection are the queue's items whose subject is that page, and a page
-shows them as the same cards the queue does. Nothing is detected here.
-
-Only the host's own sections are read. Their queue is a derived fact of the
-estate, answered from one stored value until the estate changes; an
-extension's items are composed on every request and are about its own records.
+Every queue item names its subject, a link to that thing's page, so the problems
+about a machine, service, record, domain or connection are the queue's items
+whose subject is that page, as the queue's own cards; nothing is detected here.
+Only the host's sections are read: their queue is stored until the estate
+changes, while an extension's is composed per request about its own records.
 """
 
 from collections.abc import Iterable, Mapping
@@ -25,7 +22,7 @@ lazy from .projection import projection_scope
 def _host_entries() -> tuple[dict[str, Any], ...]:
     """The host's own queue, from the one derivation that composes it."""
 
-    return domains._host_attention()
+    return domains.host_attention()
 
 
 @derivation("attention.by_subject", reads=QUEUE_READS, vary=estate_variant)
@@ -81,7 +78,7 @@ def problems_by_part(parts: Mapping[str, About]) -> tuple[tuple[str, dict[str, A
         item = queue_item(entry["source_id"], entry["source"], entry["item"])
         if item["notice"]:
             continue
-        page, key, link = (item["subject"] or {}).get("url"), getattr(entry["item"], "key", ""), str(item["url"] or "")
+        page, key, link = (item["subject"] or {}).get("url"), entry["item"].key, str(item["url"] or "")
         for name, pages, keys, roots in tests:
             if page in pages or key in keys or any(link == root or link.startswith(f"{root}/") for root in roots):
                 found.append((name, item))

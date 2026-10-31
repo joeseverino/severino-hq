@@ -1,13 +1,10 @@
 """When each open item of the queue was first seen.
 
 An item is derived from what holds now, so on its own it never says since
-when. The moment is recorded where the estate is written: a report from the
-controller is followed, at most every ``LOOK_EVERY``, by one look at what is
-open (``note_open``). A page only reads what a look recorded.
-
-A date is recorded only when it is known. An item open at the first look ever
-began at a time nobody recorded, and so did one that appears after a gap with
-no look: both are kept with no date, and a card then says none.
+when. A controller report is followed, at most every ``LOOK_EVERY``, by one
+look at what is open (``note_open``), and a page only reads what a look
+recorded. An item open at the first look ever, or appearing after a gap with
+no look, began at a time nobody recorded, so it keeps no date.
 """
 
 from collections.abc import Callable, Iterable
@@ -34,7 +31,7 @@ KNOWN_WITHIN = timedelta(hours=1)
 def about(item: Any) -> str:
     """What an item is about, for as long as it is the same matter."""
 
-    return str(getattr(item, "key", "") or f"{item.eyebrow}:{item.title}")
+    return item.key or f"{item.eyebrow}:{item.title}"
 
 
 def recorded() -> dict[str, datetime]:

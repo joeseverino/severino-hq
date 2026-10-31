@@ -19,6 +19,32 @@ def _nice_ceiling(value: float) -> float:
     return step * magnitude
 
 
+def fitted_range(values: list[float], minimum: float | None, maximum: float | None) -> tuple[float, float]:
+    """The low and high a line chart's axis runs between, fitted to its readings.
+
+    A bound the caller gives is kept; one derived from the readings is padded
+    so no point sits on the plot's edge.
+    """
+    low = minimum if minimum is not None else min(values)
+    high = maximum if maximum is not None else max(values)
+    if high == low:
+        # A flat series still has to be drawn somewhere other than on the axis
+        # itself. Half a unit either side keeps the line in the middle of the
+        # plot and keeps the ticks distinct.
+        return low - 0.5, high + 0.5
+    padding = (high - low) * 0.08
+    padded_low, padded_high = low - padding, high + padding
+    # Do not invent axis below a floor the measure cannot cross. Walking
+    # asymmetry is a percentage of steps and cannot be negative; padding it
+    # to -0.3 draws a region no reading could ever occupy and makes the
+    # data look like it is hovering above some boundary that means nothing.
+    if low >= 0 > padded_low:
+        padded_low = 0.0
+    if high <= 100 < padded_high and low >= 0:
+        padded_high = 100.0
+    return padded_low, padded_high
+
+
 def _format_tooltip_value(value: float) -> str:
     """The exact reading, not the axis abbreviation.
 
@@ -63,12 +89,9 @@ def _table_heading(label: str, unit: str) -> str:
 def _format_fitted_value(value: float, span: float) -> str:
     """An axis label with enough precision for the range it sits in.
 
-    The bar chart's formatter drops decimals above ten, which is right for an
-    axis that starts at zero: its ticks are always far apart. A fitted axis is
-    not: a pace chart running from 10.6 to 11.8 min/mi has three ticks that all
-    round to "11", and an axis reading 11, 11, 12 looks broken and says nothing.
-
-    Precision therefore comes from the span rather than the magnitude.
+    Precision comes from the span rather than the magnitude: a fitted axis
+    running from 10.6 to 11.8 min/mi under the bar chart's formatter, which
+    drops decimals above ten, would read 11, 11, 12 and say nothing.
     """
     if span >= 10 or not span:
         return _format_chart_value(value)

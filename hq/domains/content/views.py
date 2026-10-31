@@ -14,6 +14,7 @@ from django.views.generic import (
 
 from hq.platform.application import related
 from hq.platform.application.analytics import CONTENT_TRAFFIC_DAYS, attach_traffic, item_traffic
+from hq.platform.application.capabilities import capability_words
 from hq.platform.application.content import published_on
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.pages import PageAction, PageMixin
@@ -27,16 +28,9 @@ from .models import PAGE_TYPES, WRITEUP_TYPES, ContentItem
 class _ContentSectionView(PageMixin, TableListMixin, ListView):
     """One half of the registry, as a table.
 
-    The registry is cut once, in ``content.models``, and both sections read the
-    cut from there. A section states which half it is and its heading; every
-    other part of the table contract: search scope, sorts, toggles, paging,
-    is shared, so the two cannot drift into behaving differently.
-
-    The type filter offers only the types its own half can contain. Offering all
-    nine would let an operator select a type this section is defined to exclude
-    and get an empty table back, which reads as "nothing published" rather than
-    as "wrong section". A section whose items are all one type shows neither the
-    Type column nor its filter.
+    The registry is cut once, in ``content.models``. A section states which half
+    it is and its heading; every other part of the table contract (search scope,
+    sorts, toggles, paging) is shared, so the two cannot drift apart.
     """
 
     model = ContentItem
@@ -103,6 +97,10 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
 
     @override
     def get_table_filters(self):
+        # Only the types this half holds: one it is defined to exclude would
+        # give back an empty table, which reads as "nothing published" rather
+        # than as "wrong section". A section all of one type shows neither the
+        # Type column nor its filter.
         if len(self.types_held) < 2:
             return self.table_filters
         return (
@@ -158,13 +156,9 @@ class PageListView(_ContentSectionView):
 class ContentListView(_ContentSectionView):
     """Both halves at once. Reachable, but not in the nav.
 
-    The nav offers the two sections, because those are the two jobs. This is
-    where a question that spans them lands: the draft queue and the needs-docs
-    queue both count across the whole registry, and pointing either at one
-    section would make the number and the page it opens disagree.
-
-    It is also where a content type that is neither (a video, say) stays
-    visible while there is no section that claims it.
+    The draft and needs-docs queues count across the whole registry, so they
+    open here, where the number and the page agree; and a type no section
+    claims (a video, say) stays visible here.
     """
 
     content_types = frozenset(ContentItem.Type)
@@ -236,7 +230,7 @@ class ContentDetailView(PageMixin, DetailView):
         if item.published_url:
             actions.append(PageAction("Open live page", item.published_url))
         actions += [
-            PageAction("Edit", reverse("content:edit", args=[item.slug])),
+            PageAction(capability_words("content.update"), reverse("content:edit", args=[item.slug])),
             PageAction("Delete", reverse("content:delete", args=[item.slug]), danger=True),
         ]
         return tuple(actions)
@@ -253,7 +247,7 @@ class ContentCreateView(ContentPage, RecordFormMixin, CreateView):
     template_name = "content/content_form.html"
 
     @cached_property
-    def content_type(self) -> str:
+    def chosen_type(self) -> str:
         """The type the list this form was opened from holds, when it named one."""
 
         asked = self.request.GET.get("content_type", "")
@@ -262,18 +256,18 @@ class ContentCreateView(ContentPage, RecordFormMixin, CreateView):
     @override
     def get_initial(self):
         initial = super().get_initial()
-        if self.content_type:
-            initial["content_type"] = self.content_type
+        if self.chosen_type:
+            initial["content_type"] = self.chosen_type
         return initial
 
     @override
     def get_page_title(self):
-        return f"New {noun_of(self.content_type)}" if self.content_type else "New writeup or page"
+        return f"New {noun_of(self.chosen_type)}" if self.chosen_type else "New writeup or page"
 
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["noun"] = noun_of(self.content_type) if self.content_type else "writeup or page"
+        context["noun"] = noun_of(self.chosen_type) if self.chosen_type else "writeup or page"
         return context
 
 

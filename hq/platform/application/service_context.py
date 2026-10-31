@@ -1,28 +1,16 @@
 """Everything else HQ holds about a service, gathered by the name it is.
 
-HQ is two halves. One is densely related: a project links to its content, its
-assets, its expenses and its documents, each of those back again. The other is
-infrastructure, where a connection relates to nothing, an inventory relates to
-nothing, and a declaration relates only to its own operations. No key joins the
-halves, so without this a page about a running service can say what reconciled
-it and nothing about what it *is*.
-
-The join is the name. A project publishes at a hostname, a document names the
-system it describes, an audit entry names the resource it changed. None of that needs a foreign key: every side already carries
-the thing that identifies the other, and storing the tie again would make two
-answers where there is one.
-
-So a section is a function from a service to rows, and the registry below is the
-list of them. Adding what HQ knows next (workflow runs, deployments, an
-uptime history) is one function and one entry, and the page renders it without
-learning anything.
+No key joins HQ's densely related records (projects, content, assets,
+documents) to its infrastructure, so without this a page about a running
+service says what reconciled it and nothing about what it *is*. The join is the
+name a project publishes at, a document describes, an audit entry changed:
+every side already carries it, and storing the tie again would make two answers.
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any
 from urllib.parse import urlparse
-lazy from types import SimpleNamespace
 
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.routes import reverse
@@ -43,6 +31,7 @@ lazy from .infrastructure import RESOURCE_TONES
 lazy from .npm_sections import access
 lazy from .pages import PageBadge
 lazy from .path_dependencies import consequence_of
+lazy from .path_model import Route
 lazy from .paths import hq_path
 
 
@@ -101,18 +90,22 @@ class ServiceSection:
         # A column no row has anything in is a heading over nothing. Dropped
         # here, so no section has to check its own; an unknown value (the dash placeholder) is
         # something to say and keeps its column.
-        if self.records:
-            keep = tuple(
-                index
-                for index in range(len(self.columns))
-                if any(
-                    index < len(row) and (row[index].text.strip() or row[index].url or row[index].link)
-                    for row in self.records
-                )
-            )
-            if len(keep) < len(self.columns):
-                object.__setattr__(self, "columns", tuple(self.columns[i] for i in keep))
-                object.__setattr__(self, "records", tuple(tuple(row[i] for i in keep) for row in self.records))
+        keep = filled_columns(len(self.columns), self.records)
+        if self.records and len(keep) < len(self.columns):
+            object.__setattr__(self, "columns", tuple(self.columns[i] for i in keep))
+            object.__setattr__(self, "records", tuple(tuple(row[i] for i in keep) for row in self.records))
+
+
+def filled_columns(width: int, records: tuple[tuple[Cell, ...], ...]) -> tuple[int, ...]:
+    """The positions of the columns at least one row says something in."""
+
+    return tuple(index for index in range(width) if any(index < len(row) and _says(row[index]) for row in records))
+
+
+def _says(cell: Cell) -> bool:
+    """Whether a cell shows anything: text, a link, or an entity."""
+
+    return bool(cell.text.strip() or cell.url or cell.link)
 
 
 def sections_for(service) -> tuple[ServiceSection, ...]:
@@ -134,7 +127,7 @@ def _repository_label(url: str) -> str:
     return path or url
 
 
-def _activity(service, project) -> ServiceSection | None:
+def _activity(service, _project) -> ServiceSection | None:
     """What has recently happened to the things behind this name.
 
     Audit entries name the object they changed, and the objects behind a service
@@ -143,10 +136,16 @@ def _activity(service, project) -> ServiceSection | None:
     "what changed".
     """
 
-    keys = [claim.resource_key for claim in service.claims]
+    return recent_changes([claim.resource_key for claim in service.claims], what="Resource", limit=6)
+
+
+def recent_changes(keys: list[str], *, what: str, limit: int) -> ServiceSection | None:
+    """The latest audit entries on the records ``keys`` name, as a section; None
+    when there are none. The machine page asks the same of its declarations."""
+
     if not keys:
         return None
-    events = AuditLog.objects.filter(object_id__in=keys).order_by("-created_at")[:6]
+    events = AuditLog.objects.filter(object_id__in=keys).order_by("-created_at")[:limit]
     records = tuple(
         (
             Cell(
@@ -163,7 +162,7 @@ def _activity(service, project) -> ServiceSection | None:
     return ServiceSection(
         id="activity",
         label="Recent changes",
-        columns=("Resource", "Change", "When"),
+        columns=(what, "Change", "When"),
         records=records,
     )
 
@@ -171,22 +170,20 @@ def _activity(service, project) -> ServiceSection | None:
 def _traffic(service) -> SummaryItem | None:
     """What this host actually served, for the hosts something measures.
 
-    The join is the name, like every other fact here: analytics stores a
-    reading against a hostname and a service *is* a hostname. A service nothing
-    measures has no traffic fact at all: "0 pageviews" would read as a dead
-    site rather than an unmeasured one, which are opposite conclusions.
-
-    Sampling is carried rather than hidden: a figure extrapolated from one
-    beacon in ten is the best number available and still not a count.
+    Joined by the hostname analytics stores a reading against. A service
+    nothing measures has no traffic fact at all: "0 pageviews" would read as a
+    dead site rather than an unmeasured one, which are opposite conclusions.
     """
 
-    hostname = getattr(service, "hostname", "") or ""
+    hostname = service.hostname
     if not hostname:
         return None
     measured = traffic_for_hosts({hostname}, days=HOST_TRAFFIC_DAYS).get(normalized_hostname(hostname))
     if not measured:
         return None
     interval = measured.get("sample_interval") or 1
+    # Carried rather than hidden: a figure extrapolated from one beacon in ten
+    # is the best number available and still not a count.
     basis = "counted" if interval <= 1 else f"sampled 1 in {interval}"
     return SummaryItem(
         f"Traffic · {HOST_TRAFFIC_DAYS} days",
@@ -232,7 +229,7 @@ def service_summary(service) -> tuple[SummaryItem, ...]:
             ),
             # Where it runs only when there is no path to show it: the path
             # names the machine and the container hop by hop.
-            None if service.path.routes else replace(_where(service, service.path), icon="server"),
+            None if service.path.routes else replace(_where(service.path), icon="server"),
             # Only when it says something: "declared" is true of nearly every
             # name on the board, and first on the page it tells nobody anything.
             SummaryItem("What it is", what, icon="layers") if what else None,
@@ -271,7 +268,7 @@ def _what(service) -> str:
     return ""
 
 
-def _where(service, path) -> SummaryItem:
+def _where(path) -> SummaryItem:
     """Where a request for the name ends: another name, a reading, a machine, or unknown."""
 
     end = path.ends_at
@@ -398,10 +395,18 @@ class PartRow:
 
     @property
     def health(self) -> tuple[str, str] | None:
+        """``(label, pill class)``; read from an out-of-date reading, what it
+        was when last read, in no tone of its own."""
+
+        found: tuple[str, str] | None
         if self.claim is not None:
             tone = RESOURCE_TONES.get(self.claim.health["state"], "neutral")
-            return (self.claim.health["label"], _PILL_TONES[tone])
-        return self.observed_health
+            found = (self.claim.health["label"], _PILL_TONES[tone])
+        else:
+            found = self.observed_health
+        if found is not None and self.read_from is not None and self.read_from.stale:
+            return (f"{found[0]} when last read", _PILL_TONES["neutral"])
+        return found
 
 
 # A tone as the pill that draws it, so a declared part and a read one that
@@ -419,34 +424,35 @@ def part_rows(service, route) -> tuple[PartRow, ...]:
     consequence, then the declarations no hop reached."""
 
     claims = {claim.url: claim for claim in service.claims}
-    used: set[str] = set()
-    rows = []
-    for index, hop in enumerate(route.hops):
-        claim = claims.get(hop.link.url) if hop.link and hop.link.url else None
-        certificate = hop.certificate
-        certificate_claim = claims.get(certificate.link.url) if certificate is not None and certificate.link else None
-        used.update(item.url for item in (claim, certificate_claim) if item is not None)
-        neighbors = {
-            _shown(item)
-            for item in (
-                route.hops[index - 1] if index else None,
-                route.hops[index + 1] if index + 1 < len(route.hops) else None,
-            )
-            if item is not None
-        }
-        rows.append(
-            PartRow(
-                hop=hop,
-                claim=claim,
-                consequence=consequence_of(hop),
-                certificate_claim=certificate_claim,
-                observed_health=None if claim is not None else _observed_health(route.hops, index),
-                read_from=hop.source or _read_from(route.hops, index),
-                detail="" if hop.detail in neighbors else hop.detail,
-            )
-        )
+    # Indexed in the whole walk, whose neighbors say what a row leaves out.
+    shown = {id(hop) for hop in route.step_hops}
+    rows = [_part_row(route.hops, index, claims) for index, hop in enumerate(route.hops) if id(hop) in shown]
+    used = {item.url for row in rows for item in (row.claim, row.certificate_claim) if item is not None}
     rows.extend(PartRow(claim=claim) for url, claim in claims.items() if url not in used)
     return tuple(rows)
+
+
+def _part_row(hops, index: int, claims: dict[str, Any]) -> PartRow:
+    """The row of ``hops[index]``, joined to the declarations in ``claims``."""
+
+    hop = hops[index]
+    claim = claims.get(hop.link.url) if hop.link and hop.link.url else None
+    certificate = hop.certificate
+    certificate_claim = claims.get(certificate.link.url) if certificate is not None and certificate.link else None
+    neighbors = {
+        _shown(item)
+        for item in (hops[index - 1] if index else None, hops[index + 1] if index + 1 < len(hops) else None)
+        if item is not None
+    }
+    return PartRow(
+        hop=hop,
+        claim=claim,
+        consequence=consequence_of(hop),
+        certificate_claim=certificate_claim,
+        observed_health=None if claim is not None else _observed_health(hops, index),
+        read_from=hop.source or _read_from(hops, index),
+        detail="" if hop.detail in neighbors else hop.detail,
+    )
 
 
 def _shown(hop) -> str:
@@ -463,43 +469,74 @@ def _read_from(hops, index: int):
 
     step = hops[index].step
     if step == "network":
-        after = next((item for item in hops[index + 1 :] if item.step == "machine"), None)
+        after = _next_step(hops, index, "machine")
         return after.source if after is not None else None
     if step == "upstream":
-        before = next((item for item in reversed(hops[:index]) if item.step == "ingress"), None)
+        before = _previous_step(hops, index, "ingress")
         return before.source if before is not None else None
     return None
+
+
+def _next_step(hops, index: int, step: str):
+    """The first hop after ``index`` at ``step``, or None."""
+
+    return next((item for item in hops[index + 1 :] if item.step == step), None)
+
+
+def _previous_step(hops, index: int, step: str):
+    """The last hop before ``index`` at ``step``, or None."""
+
+    return next((item for item in reversed(hops[:index]) if item.step == step), None)
 
 
 def _observed_health(hops, index: int) -> tuple[str, str] | None:
     """A hop's health from the reading that covers it, when no declaration does."""
 
-    hop = hops[index]
-    if hop.step == "machine":
-        found = machines.machine(hop.name)
-        return (found.state[0].capitalize(), f"pill-{found.state[1]}") if found else None
-    if hop.step == "network":
-        # The link to the machine the address belongs to: the next machine hop.
-        after = next((item for item in hops[index + 1 :] if item.step == "machine"), None)
-        found = machines.machine(after.name) if after else None
-        if found is not None and found.presence is not None:
-            return ("Connected", "pill-reachable") if found.presence.online else ("Disconnected", "pill-unreachable")
+    reader = _HEALTH_READERS.get(hops[index].step)
+    return reader(hops, index) if reader is not None else None
+
+
+def _machine_health(hops, index: int) -> tuple[str, str] | None:
+    """A machine's own state pill."""
+
+    found = machines.machine(hops[index].name)
+    return (found.state[0].capitalize(), f"pill-{found.state[1]}") if found else None
+
+
+def _link_health(hops, index: int) -> tuple[str, str] | None:
+    """A network hop's link, read from the tailnet presence of the machine the
+    address belongs to: the next machine hop."""
+
+    after = _next_step(hops, index, "machine")
+    found = machines.machine(after.name) if after else None
+    if found is None or found.presence is None:
         return None
-    if hop.step in ("upstream", "container"):
-        # What answers a forward is the container behind it.
-        container = (
-            hop
-            if hop.step == "container"
-            else next((item for item in hops[index + 1 :] if item.step == "container"), None)
-        )
-        on = next((item for item in reversed(hops[:index]) if item.step == "machine"), None)
-        found = machines.machine(on.name) if on else None
-        running = next(
-            (item for item in (found.containers if found else ()) if container and item.name == container.name), None
-        )
-        if running is not None:
-            return (running.state.capitalize(), "pill-reachable" if running.healthy else "pill-unreachable")
-    return None
+    return ("Connected", "pill-reachable") if found.presence.online else ("Disconnected", "pill-unreachable")
+
+
+def _container_health(hops, index: int) -> tuple[str, str] | None:
+    """A container's state, or for a forward the state of the container behind
+    it, as the machine before it last saw it running."""
+
+    hop = hops[index]
+    container = hop if hop.step == "container" else _next_step(hops, index, "container")
+    on = _previous_step(hops, index, "machine")
+    found = machines.machine(on.name) if on else None
+    if container is None or found is None:
+        return None
+    running = next((item for item in found.containers if item.name == container.name), None)
+    if running is None:
+        return None
+    return (running.state.capitalize(), "pill-reachable" if running.healthy else "pill-unreachable")
+
+
+# The step each reading covers, and how its health is read.
+_HEALTH_READERS: dict[str, Callable[[Any, int], tuple[str, str] | None]] = {
+    "machine": _machine_health,
+    "network": _link_health,
+    "upstream": _container_health,
+    "container": _container_health,
+}
 
 
 def routes_for(service, request) -> tuple:
@@ -521,8 +558,10 @@ def routes_for(service, request) -> tuple:
     return (walked.primary, *routes[1:])
 
 
-# The list of sections, stated once. A section that has nothing to say returns
-# nothing and does not appear, so the page grows a band only when HQ has one.
+# The list of sections, stated once, each a function from a service to rows:
+# what HQ knows next is one function and one entry, and the page renders it
+# without learning anything. A section that has nothing to say returns nothing
+# and does not appear, so the page grows a band only when HQ has one.
 def _access(service, project) -> ServiceSection | None:
     return access(service, project)
 
@@ -542,7 +581,7 @@ def page_parts(service: Any, request: Any) -> dict[str, Any]:
     routes = routes_for(service, request)
     found: dict[str, Any] = {"routes": routes, "route_parts": [(route, part_rows(service, route)) for route in routes]}
     if not routes:
-        found["declared_parts"] = part_rows(service, SimpleNamespace(hops=()))
+        found["declared_parts"] = part_rows(service, Route("", ()))
     return found
 
 

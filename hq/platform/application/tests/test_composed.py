@@ -1,7 +1,7 @@
 """Every installed extension's part of a shared page is derived once per change."""
 
+from dataclasses import replace
 from datetime import date
-from unittest import mock
 
 from django.test import TestCase
 
@@ -17,12 +17,12 @@ from hq.platform.application.domains import (
 )
 from hq.platform.application.plugin_testing import (
     ComposedPluginTestCase,
+    installed,
     providers_derived_again,
     sibling,
 )
 from hq.platform.application.plugins import (
     DERIVED_PROVIDERS,
-    PluginIntegration,
     installed_integrations,
     installed_plugins,
     plugin_attention_items,
@@ -60,34 +60,20 @@ def _sources():
 OVERVIEW = DomainOverview("Current state.", "/alpha/", (Kpi("Open", 3),))
 
 
+def _with_calendar(manifest, contribution):
+    """The kit's sibling declares no calendar; this one does."""
+
+    return manifest, replace(contribution, calendars=_sources)
+
+
 class ComposedTests(ComposedPluginTestCase, TestCase):
     """An extension is installed beside whatever this suite already loads."""
 
-    siblings = (sibling(cards=CARDS, attention=(ITEM,), overview=OVERVIEW),)
+    siblings = (_with_calendar(*sibling(cards=CARDS, attention=(ITEM,), overview=OVERVIEW)),)
 
     def setUp(self):
         super().setUp()
         self.enterContext(frozen())
-        ((manifest, contribution),) = self.siblings
-        # The kit's sibling declares no calendar; this one does.
-        with_calendar = PluginIntegration(
-            dashboard=contribution.dashboard,
-            attention=contribution.attention,
-            overview=contribution.overview,
-            calendars=_sources,
-        )
-        self._contributions = {manifest.id: with_calendar}
-        original = __import__("hq.platform.application.plugins", fromlist=["_import"])._import
-
-        def _import(spec: str):
-            module, _, attribute = spec.partition(":")
-            if module in self._contributions and attribute == "integration":
-                return lambda: self._contributions[module]
-            return original(spec)
-
-        patcher = mock.patch("hq.platform.application.plugins._import", side_effect=_import)
-        patcher.start()
-        self.addCleanup(patcher.stop)
 
     def _compose(self):
         with projection_scope():
@@ -148,10 +134,10 @@ class ComposedTests(ComposedPluginTestCase, TestCase):
         self.assertTrue(all(domain.origin != "host" or domain.id not in named for domain in all_domains()))
 
     def test_the_kit_names_a_provider_whose_answer_cannot_be_kept(self):
-        manifest = self.siblings[0][0]
-        self._contributions[manifest.id] = PluginIntegration(attention=lambda: (lambda: None,))
+        manifest, contribution = sibling(identifier="example.unkept", name="Unkept")
+        unkept = replace(contribution, attention=lambda: (lambda: None,))
 
-        with self.assertLogs("severino.derivations", level="ERROR"):
+        with installed((manifest, unkept)), self.assertLogs("severino.derivations", level="ERROR"):
             found = providers_derived_again(manifest.id)
 
         self.assertEqual(found, ["attention: derived again, its answer was not kept"])

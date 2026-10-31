@@ -32,16 +32,16 @@ def rewrite(key: str = "app-dns", **fields) -> ManagedResource:
 class RecordNameTests(TestCase):
     def test_a_record_is_named_by_what_it_stands_for(self):
         for kind, spec, name in (
-            ("adguard.rewrite", {"domain": "app.example.com", "answer": "192.0.2.10"}, "app.example.com → 192.0.2.10"),
+            ("adguard.rewrite", {"domain": "app.example.com", "answer": "192.0.2.10"}, "app.example.com at 192.0.2.10"),
             (
                 "npm.proxy_host",
                 {"domain_names": ["app.example.com"], "forward_host": "127.0.0.1", "forward_port": 8000},
-                "app.example.com → 127.0.0.1:8000",
+                "app.example.com at 127.0.0.1:8000",
             ),
             (
                 "cloudflare.dns_record",
                 {"zone": "example.com", "name": "www.example.com", "record_type": "A", "content": "203.0.113.10"},
-                "www.example.com → 203.0.113.10",
+                "www.example.com at 203.0.113.10",
             ),
             (
                 "cloudflare.dns_record",
@@ -68,7 +68,7 @@ class RecordNameTests(TestCase):
             with self.assertNumQueries(0):
                 again = entity_link("resource", "app-dns")
 
-        self.assertEqual(first.label, "app.example.com → 192.0.2.10")
+        self.assertEqual(first.label, "app.example.com at 192.0.2.10")
         self.assertEqual((first.identity, first.title), ("app-dns", "app-dns"))
         self.assertEqual(first.url, reverse("control_plane:detail", args=["app-dns"]))
         self.assertEqual(again, first)
@@ -86,7 +86,7 @@ class RecordPageTests(TestCase):
     def test_the_page_is_titled_by_the_name_and_says_each_setting_once(self):
         response = self.client.get(reverse("control_plane:detail", args=["app-dns"]))
 
-        self.assertTrue(texts(response, "title")[0].startswith("app.example.com → 192.0.2.10"))
+        self.assertTrue(texts(response, "title")[0].startswith("app.example.com at 192.0.2.10"))
         # Its two settings are its name and its readout, so nothing is left to repeat.
         self.assertNotContains(response, "Other settings")
         self.assertTrue(select(response, "data-record-status", "working"))
@@ -99,7 +99,7 @@ class RecordPageTests(TestCase):
         row = next(outer for outer in reversed(name.ancestors) if outer.tag == "tr")
         cells = [element for element in page if any(outer is row for outer in element.ancestors)]
 
-        self.assertEqual(name.words, "app.example.com → 192.0.2.10")
+        self.assertEqual(name.words, "app.example.com at 192.0.2.10")
         self.assertEqual(len([cell for cell in cells if "pill" in cell.classes]), 1)
         self.assertIn("Working", row.words)
 

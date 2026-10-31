@@ -44,6 +44,7 @@ const hqFetch = async (input, options = {}) => {
   const { renewSession = true, ...rest } = options;
   const headers = new Headers(rest.headers);
   headers.set("X-Requested-With", "XMLHttpRequest");
+  // eslint-disable-next-line no-restricted-properties -- HQ's one request, which every enhanced request crosses
   const response = await window.fetch(input, { ...rest, headers });
   const refreshUrl =
     response.status === 403 ? response.headers.get("refresh_url") : "";
@@ -76,6 +77,7 @@ const hqEvery = (() => {
       if (!task.running && pace(task)) soonest = Math.min(soonest, task.last + pace(task));
     });
     if (soonest < Infinity) {
+      // eslint-disable-next-line no-restricted-properties -- the one timer every task that asks again shares
       timer = window.setTimeout(turn, Math.max(0, soonest - Date.now()));
     }
   };
@@ -140,6 +142,7 @@ const hqFragment = (() => {
   const parse = (() => {
     let policy = { createHTML: (html) => html };
     try {
+      // eslint-disable-next-line no-restricted-properties -- the one policy the content policy names
       policy = window.trustedTypes.createPolicy("hq-fragment", {
         createHTML: (html) => html,
       });
@@ -149,6 +152,7 @@ const hqFragment = (() => {
       // pass-through is what the sink refuses.
     }
     return (html) =>
+      // eslint-disable-next-line no-restricted-properties -- the one sink, fed a same-origin response HQ rendered
       new DOMParser().parseFromString(policy.createHTML(html), "text/html");
   })();
 

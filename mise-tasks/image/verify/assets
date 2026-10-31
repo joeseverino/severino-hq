@@ -1,8 +1,11 @@
 #!/bin/sh
 #MISE description="It carries its collected assets, their brotli and gzip copies and their manifest, readable by the account that serves them"
+#MISE env={SEVERINO_HEAVY_BOUND="30m"}
 #MISE hide=true
 #MISE depends=["image:build"]
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 
 # As the image's own user, so "readable" means readable by the server.
 docker run --rm --entrypoint sh "${IMAGE:-severino-hq:ci-local}" -c '

@@ -14,7 +14,7 @@ entry needs interpreting rather than just identifying.
         {% if row.detail %}<span class="muted">{{ row.detail|breakable }}</span>{% endif %}
         {% if row.badge %}<span class="pill pill-{{ row.status|default:'neutral' }}">{{ row.badge|breakable }}</span>{% endif %}
       </span>
-      {% if row.meta or row.at %}<span class="row-meta">{% if row.meta %}{{ row.meta|breakable }}{% endif %}{% if row.meta and row.at %} · {% endif %}{% if row.at %}{{ row.at|when:"day" }}{% endif %}</span>{% endif %}
+      {% if row.meta or row.at %}<span class="row-meta">{% if row.meta %}{{ row.meta|breakable }}{% endif %}{% if row.meta and row.at %}{% dot %}{% endif %}{% if row.at %}{{ row.at|when:"day" }}{% endif %}</span>{% endif %}
     </li>
   {% empty %}
     <li class="row-empty"><span class="muted">{{ empty|default:"Nothing here yet."|breakable }}</span></li>

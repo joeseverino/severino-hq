@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/joeseverino/severino-hq/controller/host"
 )
 
 type bridgeCall struct {
@@ -23,6 +24,8 @@ type fakeBridge struct {
 	Responses map[string]any
 	Fail      map[string]error
 	Pending   []Pending
+	// Plans answer glance-plan in turn, then Responses does.
+	Plans []GlancePlan
 }
 
 func (b *fakeBridge) call(action string, payload, into any) error {
@@ -34,6 +37,10 @@ func (b *fakeBridge) call(action string, payload, into any) error {
 	if action == "claim" && len(b.Pending) > 0 {
 		result = b.Pending[0]
 		b.Pending = b.Pending[1:]
+	}
+	if action == "glance-plan" && len(b.Plans) > 0 {
+		result = b.Plans[0]
+		b.Plans = b.Plans[1:]
 	}
 	if result == nil && action == "sweep-due" {
 		result = SweepVerdict{OK: true, Due: true, Carry: []string{}, Forced: []ForcedRead{}, OnlyKinds: []ResourceKind{}, Reason: "Nothing has been swept yet."}
@@ -51,23 +58,28 @@ func (b *fakeBridge) call(action string, payload, into any) error {
 	return json.Unmarshal(data, into)
 }
 func (b *fakeBridge) Peek(context.Context, []string) (pending Pending, err error) {
-	return pending, b.call("peek", nil, &pending)
+	err = b.call("peek", nil, &pending)
+	return pending, err
 }
 func (b *fakeBridge) Claim(context.Context, string, []string) (pending Pending, err error) {
-	return pending, b.call("claim", nil, &pending)
+	err = b.call("claim", nil, &pending)
+	return pending, err
 }
 func (b *fakeBridge) Material(context.Context, string) (material Material, err error) {
-	return material, b.call("material", nil, &material)
+	err = b.call("material", nil, &material)
+	return material, err
 }
 func (b *fakeBridge) Report(_ context.Context, _, _ string, report ControllerReport) error {
 	return b.call("report", report, nil)
 }
 func (b *fakeBridge) Schedule(context.Context, string) error { return b.call("schedule", nil, nil) }
 func (b *fakeBridge) SweepDue(context.Context, string) (verdict SweepVerdict, err error) {
-	return verdict, b.call("sweep-due", nil, &verdict)
+	err = b.call("sweep-due", nil, &verdict)
+	return verdict, err
 }
 func (b *fakeBridge) GlancePlan(context.Context, string) (plan GlancePlan, err error) {
-	return plan, b.call("glance-plan", nil, &plan)
+	err = b.call("glance-plan", nil, &plan)
+	return plan, err
 }
 func (b *fakeBridge) Glance(_ context.Context, _ string, observations GlanceObservations) error {
 	return b.call("glance", observations, nil)
@@ -79,7 +91,8 @@ func (b *fakeBridge) Inventory(_ context.Context, _ string, inventory Inventory)
 	return b.call("inventory", inventory, nil)
 }
 func (b *fakeBridge) AnalyticsPlan(_ context.Context, sites []AnalyticsSiteIdentity) (plan AnalyticsPlan, err error) {
-	return plan, b.call("analytics-plan", sites, &plan)
+	err = b.call("analytics-plan", sites, &plan)
+	return plan, err
 }
 func (b *fakeBridge) Analytics(_ context.Context, _ string, readings AnalyticsReadings) error {
 	return b.call("analytics", readings, nil)
@@ -145,19 +158,18 @@ func (p *fakeProviders) BeginSnapshot() func() {
 	return func() { p.SnapshotOpen = false }
 }
 
-func newWorker() (*Worker, *fakeBridge, *fakeProviders, *bytes.Buffer) {
+func newWorker() (*Worker, *fakeBridge, *fakeProviders) {
 	b := &fakeBridge{Responses: map[string]any{}, Fail: map[string]error{}}
 	p := &fakeProviders{}
-	out := &bytes.Buffer{}
-	w := &Worker{ID: "example-controller", Bridge: b, Providers: p, Output: out, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
-	return w, b, p, out
+	w := &Worker{ID: "example-controller", Bridge: b, Providers: p, Output: io.Discard, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	return w, b, p
 }
 func pending(id string) Pending {
 	return Pending{Operation: &Operation{ID: id, Action: "reconcile"}, Resource: Resource{Key: "example", Kind: "example.kind", Generation: 7, Spec: Object{}}}
 }
 
 func TestPlanDoesNotClaimReportScheduleOrLoadMaterial(t *testing.T) {
-	w, b, p, _ := newWorker()
+	w, b, p := newWorker()
 	b.Responses["peek"] = pending("operation")
 	p.Material = true
 	code, err := w.Run(t.Context(), false)
@@ -168,8 +180,111 @@ func TestPlanDoesNotClaimReportScheduleOrLoadMaterial(t *testing.T) {
 		t.Fatalf("actions %v apply %v", b.actions(), p.Apply)
 	}
 }
+
+// observing reads two panels for any plan.
+type observing struct{ *fakeProviders }
+
+func (observing) Glance(context.Context, GlancePlan) (GlanceObservations, error) {
+	return GlanceObservations{{"panel_id": "infrastructure"}, {"panel_id": "weather"}}, nil
+}
+
+// Every observation is returned with the as_of of the plan it answers, which
+// is how HQ tells a request the reading began after from one made during it.
+func TestGlanceObservationsCarryTheirPlansMoment(t *testing.T) {
+	w, b, p := newWorker()
+	w.Providers = observing{p}
+	asOf := "2026-01-02T03:04:05.000006+00:00"
+	b.Responses["glance-plan"] = GlancePlan{OK: true, Panels: []GlancePanelID{GlancePanelIDInfrastructure, GlancePanelIDWeather}, AsOf: asOf}
+	w.Glance(t.Context())
+	var reported GlanceObservations
+	for _, c := range b.Calls {
+		if c.Action == "glance" {
+			reported = c.Payload.(GlanceObservations)
+		}
+	}
+	if len(reported) != 2 {
+		t.Fatalf("reported %v", reported)
+	}
+	for _, observation := range reported {
+		if observation["as_of"] != asOf {
+			t.Errorf("%v", observation)
+		}
+	}
+}
+
+// A glance pass reads again while HQ still waits on a panel, which after a
+// reported reading is a request made during it, and stops when it waits on
+// none.
+func TestAGlancePassReadsAgainForARequestMadeWhileItRead(t *testing.T) {
+	w, b, p := newWorker()
+	w.Providers = observing{p}
+	panels := []GlancePanelID{GlancePanelIDInfrastructure}
+	b.Plans = []GlancePlan{{Panels: panels, AsOf: "2026-01-02T03:04:05+00:00"}, {Panels: panels, AsOf: "2026-01-02T03:04:09+00:00"}}
+	b.Responses["glance-plan"] = GlancePlan{Panels: []GlancePanelID{}}
+
+	code, err := w.Glances(t.Context())
+
+	want := []string{"glance-plan", "glance", "glance-plan", "glance", "glance-plan"}
+	if code != 0 || err != nil || !reflect.DeepEqual(b.actions(), want) {
+		t.Fatalf("%d %v %v", code, err, b.actions())
+	}
+}
+
+// Asked without end, a glance pass still ends, and it never claims, sweeps
+// or reports steps: those are the controller pass's.
+func TestAGlancePassIsBoundedAndDoesNothingElse(t *testing.T) {
+	w, b, p := newWorker()
+	w.Providers = observing{p}
+	b.Responses["glance-plan"] = GlancePlan{Panels: []GlancePanelID{GlancePanelIDWeather}, AsOf: "2026-01-02T03:04:05+00:00"}
+
+	code, err := w.Glances(t.Context())
+
+	if code != 0 || err != nil {
+		t.Fatalf("%d %v", code, err)
+	}
+	for _, action := range b.actions() {
+		if action != "glance-plan" && action != "glance" {
+			t.Errorf("a glance pass asked HQ for %s", action)
+		}
+	}
+	if len(b.actions()) != 2*GlanceLimit {
+		t.Errorf("read %v, want %d readings", b.actions(), GlanceLimit)
+	}
+}
+
+// A report HQ refused is not read again at once: the refusal would repeat.
+func TestAGlancePassStopsWhenHQRefusesItsReport(t *testing.T) {
+	w, b, p := newWorker()
+	w.Providers = observing{p}
+	b.Responses["glance-plan"] = GlancePlan{Panels: []GlancePanelID{GlancePanelIDWeather}, AsOf: "2026-01-02T03:04:05+00:00"}
+	b.Fail["glance"] = errors.New("no refresh is pending for weather")
+
+	code, err := w.Glances(t.Context())
+
+	if code != 0 || err != nil || !reflect.DeepEqual(b.actions(), []string{"glance-plan", "glance"}) {
+		t.Fatalf("%d %v %v", code, err, b.actions())
+	}
+}
+
+// Root gives a glance pass the Portainer connections by the name this
+// registry gives the provider.
+func TestTheGlanceIsGivenPortainerByItsDeclaredName(t *testing.T) {
+	if host.PortainerProvider != string(ConnectionProviderPortainer) {
+		t.Errorf("root gives a glance %q connections; Portainer's are %q", host.PortainerProvider, ConnectionProviderPortainer)
+	}
+}
+
+func TestAGlancePassWithoutAPlanFails(t *testing.T) {
+	w, b, _ := newWorker()
+	b.Fail["glance-plan"] = errors.New("HQ is not serving the bridge")
+
+	if code, err := w.Glances(t.Context()); code != 1 || err == nil {
+		t.Fatalf("%d %v", code, err)
+	}
+}
+
 func TestIdleApplyOrder(t *testing.T) {
-	w, b, p, _ := newWorker()
+	w, b, p := newWorker()
 	code, err := w.Run(t.Context(), true)
 	want := []string{"glance-plan", "claim", "sweep-due", "connections", "inventory", "analytics", "schedule", "claim", "steps"}
 	if code != 0 || err != nil || !reflect.DeepEqual(b.actions(), want) {
@@ -180,7 +295,7 @@ func TestIdleApplyOrder(t *testing.T) {
 	}
 }
 func TestTargetedSweepDoesNotReadAnalytics(t *testing.T) {
-	w, b, p, _ := newWorker()
+	w, b, p := newWorker()
 	b.Responses["sweep-due"] = Object{"due": true, "carry": []string{"example-ssh"}, "only_kinds": []string{"example.kind"}}
 	_, err := w.Run(t.Context(), true)
 	if err != nil || p.AnalyticsCalls != 0 || !reflect.DeepEqual(p.Only, []ResourceKind{"example.kind"}) || !reflect.DeepEqual(p.Carried, []string{"example-ssh"}) {
@@ -188,7 +303,7 @@ func TestTargetedSweepDoesNotReadAnalytics(t *testing.T) {
 	}
 }
 func TestProviderFailureReportsGenerationAndStillSweeps(t *testing.T) {
-	w, b, p, _ := newWorker()
+	w, b, p := newWorker()
 	b.Pending = []Pending{pending("first"), pending("second")}
 	p.ExecErr = &ProviderError{Message: "Provider refused.", Status: Object{"partial": true}}
 	code, err := w.Run(t.Context(), true)
@@ -211,7 +326,7 @@ func TestProviderFailureReportsGenerationAndStillSweeps(t *testing.T) {
 // A provider failure wrapped with context is still a refused operation, and
 // its report says the whole chain.
 func TestWrappedProviderFailureIsReportedWithItsContext(t *testing.T) {
-	w, b, p, _ := newWorker()
+	w, b, p := newWorker()
 	b.Pending = []Pending{pending("first")}
 	p.ExecErr = fmt.Errorf("reconcile rewrite: %w", &ProviderError{Message: "provider answered 403", Failure: FailureClassPermission})
 	if code, err := w.Run(t.Context(), true); err != nil || code != 1 {
@@ -227,7 +342,7 @@ func TestWrappedProviderFailureIsReportedWithItsContext(t *testing.T) {
 	}
 }
 func TestFailedReportDoesNotPreventSweepOrBecomeSuccess(t *testing.T) {
-	w, b, _, _ := newWorker()
+	w, b, _ := newWorker()
 	b.Pending = []Pending{pending("first")}
 	want := errors.New("report unavailable")
 	b.Fail["report"] = want
@@ -240,7 +355,7 @@ func TestFailedReportDoesNotPreventSweepOrBecomeSuccess(t *testing.T) {
 	}
 }
 func TestQueueIsBoundedBeforeAndAfterSweep(t *testing.T) {
-	w, b, p, _ := newWorker()
+	w, b, p := newWorker()
 	for range 15 {
 		b.Pending = append(b.Pending, pending("operation"))
 	}
@@ -264,7 +379,7 @@ func TestNetworkFailureIsRetriedAndOnlyPartialOutageForgiven(t *testing.T) {
 		{"credential", [][]ConnectionRecord{{refused, good}}, 1, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			w, _, p, _ := newWorker()
+			w, _, p := newWorker()
 			if tc.name == "recovered" {
 				tc.rounds[1] = []ConnectionRecord{{ConnectionRef: "a", OK: true, Probed: true}}
 			}
@@ -277,7 +392,7 @@ func TestNetworkFailureIsRetriedAndOnlyPartialOutageForgiven(t *testing.T) {
 	}
 }
 func TestAnalyticsPlanContainsNoProviderAccountIdentity(t *testing.T) {
-	w, b, p, _ := newWorker()
+	w, b, p := newWorker()
 	p.Sites = []AnalyticsSiteIdentity{{ConnectionRef: "example", SiteTag: "site"}}
 	_, err := w.Run(t.Context(), true)
 	if err != nil {

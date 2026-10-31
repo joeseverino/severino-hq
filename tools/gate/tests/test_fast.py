@@ -13,10 +13,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.test import tag
+from django.test.runner import DiscoverRunner
+from django.test.utils import iter_test_cases
 
 from hq.config.sandbox import PREFIX, sweep_abandoned
+from hq.platform.application.tests.tree import tagged
 from hq.platform.core.test_runner import excluded_tags
-from hq.platform.core.tests.task import Usage
+from hq.platform.core.tests.task import RefError, Usage
 from tests.mise_tasks import mise_tasks
 from tools.gate import fast as fast_gate, verdict as gate_verdict
 from tools.gate.tests.base import UNITTEST, GateTestCase
@@ -39,14 +42,33 @@ class FastGateMappingTests(GateTestCase):
         self.assertEqual(fast_gate.module_name(Path("a/b/c.py")), "a.b.c")
 
     def test_a_relative_import_reaches_its_sibling(self):
-        modules = {fast_gate.module_name(p) for p in self.files}
-        reached = fast_gate.imports(Path("hq/platform/application/tests/test_domains.py"), modules)
-        self.assertIn("hq.platform.application.domains", reached)
+        importers = fast_gate.importers(self.files)
+        self.assertIn("hq.platform.application.tests.test_domains", importers["hq.platform.application.domains"])
 
     def test_a_declarations_string_reference_is_not_an_import(self):
-        modules = {fast_gate.module_name(p) for p in self.files}
-        reached = fast_gate.imports(Path("hq/platform/application/domains.py"), modules)
-        self.assertNotIn("hq.domains.expenses.urls", reached)
+        importers = fast_gate.importers(self.files)
+        self.assertNotIn("hq.platform.application.domains", importers["hq.domains.expenses.urls"])
+
+    def test_a_lazy_import_and_a_tests_mock_target_are_imports_and_reach_the_package(self):
+        modules = {
+            "example/__init__.py": "",
+            "example/models.py": "class Thing: ...\n",
+            "example/urls.py": "patterns = []\n",
+            "example/lazy.py": "lazy from example.models import Thing\n",
+            "example/declares.py": 'URLCONF = "example.urls.patterns"\n',
+            "example/tests/__init__.py": "",
+            "example/tests/test_mock.py": '@patch("example.urls.patterns")\ndef test(): ...\n',
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for path, text in modules.items():
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                (root / path).write_text(text)
+            with patch.object(fast_gate, "ROOT", root):
+                importers = fast_gate.importers([Path(path) for path in modules])
+        self.assertEqual(importers["example.models"], {"example.lazy"})
+        self.assertEqual(importers["example.urls"], {"example.tests.test_mock"})
+        self.assertLessEqual({"example.lazy", "example.tests.test_mock"}, importers["example"])
 
     def test_an_app_change_selects_the_tests_that_use_the_app(self):
         labels = self.labels("hq/domains/expenses/views.py")
@@ -101,6 +123,14 @@ class FastGateMappingTests(GateTestCase):
                 self.assertIn("hq.platform.core.tests.test_browser_gate_tasks", self.labels(changed))
         self.assertNotIn("hq.platform.core.tests.test_browser_gate_tasks", self.labels("docs/Development.md"))
 
+    def test_a_change_to_a_file_a_task_runs_selects_the_tests_that_read_the_tasks(self):
+        """GateReferenceTests reads the scripts and modules a task's run names, by no import of them."""
+        reader = "hq.platform.application.tests.test_pipeline"
+        for changed in ("tools/dev/dev.sh", "tools/gate/fast.py", "tools/structural/bar.py"):
+            with self.subTest(changed=changed):
+                self.assertIn(reader, self.labels(changed))
+        self.assertNotIn(reader, self.labels("tools/gate/turn.py"))
+
     def test_a_test_change_selects_that_test_and_the_architecture_tests(self):
         labels = self.labels("hq/platform/core/tests/test_security.py")
         self.assertIn("hq.platform.core.tests.test_security", labels)
@@ -109,6 +139,11 @@ class FastGateMappingTests(GateTestCase):
     def test_a_template_belongs_to_its_app(self):
         _, touched = fast_gate.affected(["templates/expenses/list.html"], [], self.files)
         self.assertEqual(touched, {"expenses"})
+
+    def test_a_deleted_module_selects_what_imported_it(self):
+        reached, touched = fast_gate.affected([], ["hq/domains/projects/models.py"], self.files)
+        self.assertEqual(touched, {"projects"})
+        self.assertIn("hq.domains.reports.exports", reached)
 
     def test_apps_are_derived_from_the_tree(self):
         self.assertLessEqual({"expenses", "core", "projects"}, set(fast_gate.django_apps().values()))
@@ -130,9 +165,11 @@ class FastGateTaskSelectionTests(GateTestCase):
         self.assertLessEqual(set(fast_gate.TASKS), set(tasks))
         self.assertLessEqual({name for name in tasks if name.startswith("drift:")}, set(fast_gate.TASKS))
 
-    def test_a_docs_change_runs_only_the_gate_that_derives_it(self):
-        self.assertEqual(fast_gate.selected_tasks(["docs/Example.md"]), ())
-        self.assertEqual(fast_gate.selected_tasks(["docs/Connections.md"]), ("lint:drift-connections-reference",))
+    def test_a_docs_change_runs_only_the_prose_gate_and_the_gate_that_derives_it(self):
+        self.assertEqual(fast_gate.selected_tasks(["docs/Example.md"]), ("lint:prose",))
+        self.assertEqual(
+            fast_gate.selected_tasks(["docs/Connections.md"]), ("lint:prose", "lint:drift-connections-reference")
+        )
 
     def test_a_python_change_runs_the_python_gates_and_not_the_stylesheet_ones(self):
         selected = fast_gate.selected_tasks(["hq/domains/docs_index/importer.py"])
@@ -162,19 +199,26 @@ class FastGateTreeTests(GateTestCase):
             with self.subTest(path=path):
                 self.assertFalse(fast_gate.reaches_tree([path]))
 
-    def test_the_tree_tests_run_once_in_a_pass_that_finds_them(self):
-        (selected, selected_cmd), (walk, walk_cmd) = fast_gate.test_commands(["hq.a.tests.test_b"], "2", tree=True)
-        self.assertEqual((selected, walk), ("tests", "tree tests"))
-        self.assertIn("--exclude-tag tree", " ".join(selected_cmd))
-        self.assertIn("--tag tree", " ".join(walk_cmd))
+    @tag("tree")
+    def test_a_module_change_adds_every_tree_test_to_the_one_run(self):
+        tree = tagged(ROOT, "tree")
+        self.assertIn("hq.platform.application.tests.test_tree_tag.TreeTagTests", tree)
+        labels = fast_gate.with_tree(["hq.a.tests.test_b"], ["hq/domains/example/models.py"])
+        self.assertEqual(labels, ["hq.a.tests.test_b", *tree])
+        self.assertEqual(fast_gate.with_tree(["hq.a.tests.test_b"], ["docs/Example.md"]), ["hq.a.tests.test_b"])
+        command = fast_gate.test_command(labels, "2")
+        self.assertEqual(command[-len(labels) :], labels)
+        self.assertNotIn("--tag", command)
+        self.assertNotIn("--exclude-tag", command)
         # A labeled run keeps the source tests a bare whole-suite run leaves out.
-        labels = walk_cmd[walk_cmd.index("tree") + 1 :]
-        self.assertEqual(excluded_tags(labels, {"tree"}, set()), set())
+        self.assertEqual(excluded_tags(labels, set(), set()), set())
 
-    def test_without_a_module_change_the_selected_tests_run_whole(self):
-        ((label, cmd),) = fast_gate.test_commands(["hq.a.tests.test_b"], "2", tree=False)
-        self.assertEqual(label, "tests")
-        self.assertNotIn("tree", cmd)
+    def test_a_test_both_selected_and_tagged_tree_runs_once(self):
+        module = "tools.gate.tests.test_turn"
+        once = DiscoverRunner(verbosity=0).build_suite([module])
+        twice = DiscoverRunner(verbosity=0).build_suite([module, *(test.id() for test in iter_test_cases(once))])
+        self.assertGreater(once.countTestCases(), 1)
+        self.assertEqual(twice.countTestCases(), once.countTestCases())
 
     def test_fast_installs_the_lint_tools_its_gates_and_tests_run(self):
         self.assertIn("setup:lint-tools", mise_tasks()["fast"]["depends"])
@@ -187,7 +231,7 @@ class FastGateBaseTests(GateTestCase):
     def resolve(self, base):
         def git(*args):
             if args[-1] not in self.REFS:
-                raise subprocess.CalledProcessError(128, args)
+                raise RefError(f"no ref {args[-1]}")
             return [self.REFS[args[-1]]]
 
         with patch.object(fast_gate, "git", git):
@@ -211,7 +255,7 @@ class FastGateBaseTests(GateTestCase):
         self.assertEqual(self.resolve(None), "aaa")
 
 
-@tag("source", "tree")
+@tag("source")
 class FastGateNestedLayoutTests(GateTestCase):
     def test_app_config_label_can_differ_from_source_directory(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -227,6 +271,29 @@ class FastGateNestedLayoutTests(GateTestCase):
             self.assertEqual(fast_gate.owner("hq/domains/example/views.py", apps), "stable_label")
             self.assertEqual(fast_gate.owner("templates/stable_label/list.html", apps), "stable_label")
             self.assertEqual(fast_gate.owner("static/stable_label/site.css", apps), "stable_label")
+
+    def test_an_app_is_each_class_naming_one_in_an_apps_module_under_hq(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            modules = {
+                "hq/domains/example/apps.py": (
+                    "import os\n"
+                    "class Helper:\n    verbose = 3\n"
+                    'class ExampleConfig:\n    default_auto_field = os.sep\n    name = "hq.domains.example"\n'
+                    'class OtherConfig:\n    name, label = "hq.domains.other", "ignored"\n'
+                ),
+                "tools/example/apps.py": 'class ToolConfig:\n    name = "tools.example"\n',
+            }
+            for path, text in modules.items():
+                (root / path).parent.mkdir(parents=True)
+                (root / path).write_text(text)
+            with (
+                patch.object(fast_gate, "ROOT", root),
+                patch.object(fast_gate, "python_files", return_value=[Path(path) for path in modules]),
+            ):
+                apps = fast_gate.django_apps()
+            # Without a label of its own, an app is labeled by its name's last part.
+            self.assertEqual(apps, {"hq/domains/example": "example"})
 
     def test_moved_untracked_sources_are_included_and_deleted_sources_ignored(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -378,7 +445,7 @@ class GateVerdictTests(GateTestCase):
         )  # fmt: skip
         self.assertEqual(result.returncode, 1)
         self.assertIn("[check] Python one", result.stdout.splitlines())
-        self.assertTrue(result.stdout.splitlines()[-1].endswith(": Python two"), result.stdout)
+        self.assertIn(": Python two; rerun: ", result.stdout.splitlines()[-1])
         kept = Path(gate_verdict.VERDICTS, "check.txt").read_text()
         self.assertIn("Python one", kept[kept.index("Slowest first:") :])
 
@@ -406,6 +473,73 @@ class GateVerdictTests(GateTestCase):
                 code = fast_gate.main(Usage({}))
             self.assertEqual(code, 0 if expected == "passed in" else 1)
             self.assertIn(expected, out.getvalue().splitlines()[-1])
+
+
+@tag("source", "tree")
+class FastGateTurnTests(GateTestCase):
+    """fast holds the machine's heavy turn for its test run alone, so a worktree's quick gates never queue."""
+
+    def test_only_the_test_run_waits_for_the_heavy_turn(self):
+        commands: dict[str, list[str]] = {}
+
+        def step(label: str, cmd: list[str]) -> gate_verdict.Step:
+            commands[label] = cmd
+            return gate_verdict.Step(label)
+
+        with (
+            patch.object(fast_gate, "merge_base", return_value="0" * 40),
+            patch.object(fast_gate, "changed_files", return_value=(["hq/example.py"], [])),
+            patch.object(fast_gate, "selected_tasks", return_value=("lint:ruff",)),
+            patch.object(fast_gate, "step", side_effect=step),
+            patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            fast_gate.main(Usage({}))
+
+        heavy = str(ROOT / "tools" / "lib" / "heavy.sh")
+        self.assertEqual(commands.pop("tests")[:2], [heavy, sys.executable])
+        self.assertTrue(commands)
+        for label, cmd in commands.items():
+            with self.subTest(step=label):
+                self.assertNotIn(heavy, cmd)
+        self.assertFalse((mise_tasks()["fast"]["shell"] or "").startswith("tools/lib/heavy.sh"))
+
+
+@tag("source", "tree")
+class FastGateExtensionSuiteTests(GateTestCase):
+    """A shared UI change runs the extensions' suites with a set named, and says it skipped them without one."""
+
+    def run_fast(self, plugins: str | None) -> tuple[list[str], str]:
+        labels: list[str] = []
+
+        def step(label: str, cmd: list[str]) -> gate_verdict.Step:
+            labels.append(label)
+            return gate_verdict.Step(label)
+
+        environ = {key: value for key, value in os.environ.items() if key != "HQ_LOCAL_PLUGINS"}
+        if plugins:
+            environ["HQ_LOCAL_PLUGINS"] = plugins
+        with (
+            patch.dict(os.environ, environ, clear=True),
+            patch.object(fast_gate, "merge_base", return_value="0" * 40),
+            patch.object(fast_gate, "changed_files", return_value=(["templates/example.html"], [])),
+            patch.object(fast_gate, "selected_tasks", return_value=()),
+            patch.object(fast_gate, "step", side_effect=step),
+            patch("sys.stdout", new_callable=io.StringIO) as out,
+        ):
+            fast_gate.main(Usage({}))
+        return labels, out.getvalue()
+
+    def test_a_named_set_runs_the_extension_suites(self):
+        labels, out = self.run_fast("example_plugin.plugin:ExamplePlugin")
+        self.assertTrue(any("extension suites" in label for label in labels))
+        self.assertNotIn("skipped", out)
+
+    def test_without_a_set_the_skip_is_said_with_the_command_that_names_one(self):
+        labels, out = self.run_fast(None)
+        self.assertFalse(any("extension suites" in label for label in labels))
+        said = [line for line in out.splitlines() if "skipped" in line]
+        self.assertEqual(len(said), 1)
+        self.assertIn("mise run setup:extensions", said[0])
 
 
 WRITE = """

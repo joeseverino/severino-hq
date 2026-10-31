@@ -6,12 +6,14 @@ from enum import StrEnum
 
 from django.conf import settings
 from django.utils.http import url_has_allowed_host_and_scheme
+lazy from django.contrib.auth import get_user_model
 lazy from django.contrib.auth.base_user import AbstractBaseUser
 lazy from django.contrib.auth.models import AnonymousUser
 lazy from django.http import HttpRequest
 
 lazy from .domains import host_records
 lazy from .plugins import plugin_capabilities
+lazy from .record_errors import RecordNotFound
 
 
 class Capability(StrEnum):
@@ -39,6 +41,22 @@ class Capability(StrEnum):
     DELETE_CALENDAR = "delete_calendar"
     MANAGE_INFRASTRUCTURE = "manage_infrastructure"
     REQUEST_CERTIFICATE_RENEWAL = "request_certificate_renewal"
+    # Hands HQ a private key. Held only at the operator's own interfaces
+    # (``HELD_ONLY_AT``), so no token carries one in, whatever its grant says.
+    UPLOAD_CERTIFICATE = "upload_certificate"
+    # Hands HQ a receipt's file. Held at the operator's own interfaces as a
+    # certificate is: a file arrives through a person, never a token.
+    UPLOAD_RECEIPT = "upload_receipt"
+    # A person's own decisions and settings, held only in the browser
+    # (``HELD_ONLY_AT``): no credential approves what a credential asked for,
+    # pauses or grants agents, or arranges somebody's pages.
+    DECIDE_APPROVALS = "decide_approvals"
+    GOVERN_AGENTS = "govern_agents"
+    SET_PREFERENCES = "set_preferences"
+    # A person's own pins and set-aside action items. Held only by the person
+    # (``HELD_ONLY_AT``): a token is nobody's, so it has no favorites to keep.
+    PIN_FAVORITES = "pin_favorites"
+    SET_ASIDE_ACTION_ITEMS = "set_aside_action_items"
 
 
 # The interfaces where a request is a person, established as one and present at
@@ -51,6 +69,24 @@ class Capability(StrEnum):
 # other order fails open: a new adapter would inherit a person's standing by
 # not having been thought about.
 INTERACTIVE_INTERFACES = frozenset({"web"})
+
+
+# Operators: a person signed in to the web, or at the host's own shell.
+OPERATOR_INTERFACES = frozenset({"web", "cli"})
+
+# Capabilities held only at these interfaces, whatever a grant or a ceiling
+# says. A token that names one is refused it in ``Principal.require``, the
+# first thing the capability runner asks, so nothing it sends is held for
+# approval, stored or logged.
+HELD_ONLY_AT: dict[str, frozenset[str]] = {
+    Capability.UPLOAD_CERTIFICATE: OPERATOR_INTERFACES,
+    Capability.UPLOAD_RECEIPT: OPERATOR_INTERFACES,
+    Capability.DECIDE_APPROVALS: INTERACTIVE_INTERFACES,
+    Capability.GOVERN_AGENTS: INTERACTIVE_INTERFACES,
+    Capability.SET_PREFERENCES: INTERACTIVE_INTERFACES,
+    Capability.PIN_FAVORITES: INTERACTIVE_INTERFACES,
+    Capability.SET_ASIDE_ACTION_ITEMS: INTERACTIVE_INTERFACES,
+}
 
 
 def is_interactive(principal: Principal) -> bool:
@@ -87,8 +123,9 @@ def host_capabilities() -> frozenset[Capability | str]:
     return frozenset(Capability) | record_permissions("write") | record_permissions("delete")
 
 
-# For callers constructing explicit principals. Runtime operator principals
-# derive the same set, plus plugin grants, when they are built.
+# The host's grants alone, for callers constructing explicit principals that
+# exercise host behavior. A principal meant to hold every grant, extensions'
+# included, takes ``operator_capabilities()``.
 OPERATOR_CAPABILITIES = host_capabilities()
 
 
@@ -130,6 +167,24 @@ class Principal:
         available = {item.value if isinstance(item, Capability) else item for item in self.capabilities}
         if name not in available:
             raise AuthorizationError(f"{self.interface} principal {self.actor!r} lacks {name!r}.")
+        if not could_hold(self.interface, (name,)):
+            where = " or ".join(sorted(HELD_ONLY_AT[name]))
+            raise AuthorizationError(f"{name!r} is held only through {where}, never by a {self.interface} principal.")
+
+
+def could_hold(interface: str, capabilities: Iterable[Capability | str]) -> bool:
+    """Whether a principal on ``interface`` could ever hold every one of ``capabilities``.
+
+    The one reading of ``HELD_ONLY_AT``: a refusal at run time, a catalog that
+    lists only what its asker could run, and the agent policy page that offers
+    a rule only where an agent could use it all ask it.
+    """
+
+    for capability in capabilities:
+        interfaces = HELD_ONLY_AT.get(capability)
+        if interfaces is not None and interface not in interfaces:
+            return False
+    return True
 
 
 def require_all(principal: Principal, capabilities: Iterable[Capability | str]) -> None:
@@ -142,24 +197,50 @@ def require_all(principal: Principal, capabilities: Iterable[Capability | str]) 
         principal.require(capability)
 
 
-def _operator_capabilities() -> frozenset[Capability | str]:
+def operator_capabilities() -> frozenset[Capability | str]:
+    """Everything an operator holds: the host's grants and every installed extension's.
+
+    The most any principal is granted, since an extension's MCP grants are a
+    subset of its operator's (``plugins._validate_capabilities``).
+    """
+
     return host_capabilities() | plugin_capabilities("operator")
 
 
 def web_principal(user: AbstractBaseUser | AnonymousUser) -> Principal:
-    if not getattr(user, "is_authenticated", False):
+    if not user.is_authenticated:
         raise AuthorizationError("An authenticated web operator is required.")
-    return Principal(user.get_username(), "web", _operator_capabilities())
+    return Principal(user.get_username(), "web", operator_capabilities())
+
+
+def person_of(principal: Principal) -> AbstractBaseUser | None:
+    """The signed-in person an interactive principal stands for; None for a credential."""
+
+    if not is_interactive(principal):
+        return None
+    users = get_user_model()
+    return users._default_manager.filter(**{users.USERNAME_FIELD: principal.actor}).first()
+
+
+def person(principal: Principal) -> AbstractBaseUser:
+    """The signed-in person a principal is, for a use case that keeps something of theirs."""
+
+    if not is_interactive(principal):
+        raise AuthorizationError(f"A {principal.interface} principal is nobody's, so it keeps nothing of a person's.")
+    found = person_of(principal)
+    if found is None:
+        raise RecordNotFound("That person was not found.")
+    return found
 
 
 def internal_principal(purpose: str) -> Principal:
     """HQ reading its own records, never on a caller's behalf."""
 
-    return Principal(purpose, "internal", _operator_capabilities())
+    return Principal(purpose, "internal", operator_capabilities())
 
 
 def cli_principal() -> Principal:
-    return Principal("local-operator", "cli", _operator_capabilities())
+    return Principal("local-operator", "cli", operator_capabilities())
 
 
 def mcp_principal() -> Principal:
@@ -215,17 +296,10 @@ def mcp_principal() -> Principal:
 def safe_next(request: HttpRequest, *, fallback: str = "", scope: str = "") -> str:
     """A caller-supplied destination, but only if it points back at us.
 
-    Shared rather than repeated: the same "go back where I came from" appears
-    on forms, on toggles and on anything else that returns somewhere, and each
-    one written separately is one more chance to redirect wherever a query
-    string says. Checked in one place, every caller gets the check: adapters
-    and plugins alike, which is why it sits beside the principals rather than
-    in whichever app happened to need it first.
-
-    ``scope`` narrows the destination to a path prefix, for callers that return
-    somewhere within one section rather than anywhere on the host. ``fallback``
-    is what an absent or rejected destination becomes, so a caller can redirect
-    on the result unconditionally instead of re-deciding what "nowhere" means.
+    The one check every "go back where I came from" passes, adapters and
+    plugins alike, so none redirects wherever a query string says. ``scope``
+    narrows it to a path prefix; ``fallback`` is what an absent or rejected
+    destination becomes, so a caller redirects on the result unconditionally.
     """
 
     candidate = (request.POST.get("next", "") if request.method == "POST" else "") or request.GET.get("next", "")

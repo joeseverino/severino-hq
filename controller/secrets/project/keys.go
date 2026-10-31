@@ -6,7 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -19,10 +19,10 @@ import (
 // KnownHosts is the name of the pinned host keys beside the identities.
 const KnownHosts = "known_hosts"
 
-// As the controller holds them before either reaches ssh's command line.
+// As the controller holds a connection's host and user when it reads them.
 var sshHost = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.:-]*$`)
 var sshUser = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]{0,31}$`)
-var digits = regexp.MustCompile(`^[0-9]+$`)
+var digits = regexp.MustCompile(`^\d+$`)
 
 // keyField is an SSH Key item's private or public half, by the field's stable
 // id or its label, as `op read op://vault/item/private key` resolved it.
@@ -140,8 +140,8 @@ func keys(input Input, document connections.Document) ([]File, int, int, error) 
 			}
 			files[ref] = File{Name: ref, Data: pem.EncodeToMemory(block), Mode: 0o400, Same: sameIdentity(public)}
 			files[ref+".pub"] = File{Name: ref + ".pub", Data: ssh.MarshalAuthorizedKey(public), Mode: 0o444}
-			// As ssh looks a host up: by bare name on port 22, bracketed with
-			// the port otherwise, and by the number the controller dials.
+			// As the controller's known_hosts lookup names a host: bare on port
+			// 22, bracketed with the port otherwise, and by the number it dials.
 			known := transport.Host
 			if port != 22 {
 				known = "[" + known + "]:" + strconv.Itoa(port)
@@ -178,7 +178,7 @@ func keys(input Input, document connections.Document) ([]File, int, int, error) 
 	for name := range files {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	sorted := make([]File, 0, len(names))
 	for _, name := range names {
 		sorted = append(sorted, files[name])

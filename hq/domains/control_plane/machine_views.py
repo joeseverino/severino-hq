@@ -14,7 +14,7 @@ from hq.platform.application.hq_self import LABEL as HQ_LABEL
 from hq.platform.application.machine_context import header_addresses, machine_links, sections_for as machine_sections
 from hq.platform.application.machines import declaration_seed, machine
 from hq.platform.application.pages import PageAction, PageDialog, PageMixin
-from hq.platform.application.resource_capabilities import REMOVAL_CAPABILITY, resource_capabilities
+from hq.platform.application.resource_capabilities import UPDATE_CAPABILITY, resource_capabilities
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
 from hq.platform.application.tailnet_context import tailnet_context
@@ -120,7 +120,7 @@ class TailnetView(PageMixin, TemplateView):
             *(
                 (
                     PageAction(
-                        "Edit policy",
+                        capability_words(UPDATE_CAPABILITY),
                         reverse("control_plane:edit", args=[policy_declaration]),
                     ),
                 )
@@ -175,11 +175,14 @@ class MachineDetailView(PageMixin, TemplateView):
             # The machine's declaration is edited from its own page.
             key = self.found.declaration
             actions = [
-                PageAction("Edit machine", reverse("control_plane:edit", args=[key])),
-                PageAction(
-                    capability_words(REMOVAL_CAPABILITY), reverse("control_plane:remove", args=[key]), danger=True
-                ),
+                PageAction(capability_words(UPDATE_CAPABILITY), reverse("control_plane:edit", args=[key])),
             ]
+            resource = ManagedResource.objects.filter(key=key).first()
+            capabilities = resource_capabilities(resource) if resource is not None else None
+            if capabilities is not None and capabilities.removal != "unavailable":
+                actions.append(
+                    PageAction(capabilities.removal_words, reverse("control_plane:remove", args=[key]), danger=True)
+                )
         else:
             # Seeded with what HQ knows, and back here after saving. A machine the
             # tailnet device declaration already names gets its details added; one

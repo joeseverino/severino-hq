@@ -7,11 +7,17 @@ machine page and search all read ``roles_of``.
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from hq.domains.control_plane.observations.tailscale import EXIT_ROUTES
 
 from .locate import host_of
 lazy from .tailnet import policy
+
+# Named for annotations alone: a class's annotations can be read as it is made
+# (a dataclass's are), which would load a lazy import at once.
+if TYPE_CHECKING:
+    from .machines import Machine
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,11 +32,11 @@ class MachineRole:
     id: str
     label: str
     detail: str
-    applies: Callable[[object, RoleContext], bool]
+    applies: Callable[[Machine, RoleContext], bool]
 
 
-def _exit_node(machine, context: RoleContext) -> bool:
-    presence = getattr(machine, "presence", None)
+def _exit_node(machine: Machine, _context: RoleContext) -> bool:
+    presence = machine.presence
     if presence is None:
         return False
     # Offered and approved: the machine advertises both default routes and the
@@ -39,8 +45,8 @@ def _exit_node(machine, context: RoleContext) -> bool:
     return routed or (presence.offers_exit_node and presence.exit_node_approved)
 
 
-def _tailnet_dns(machine, context: RoleContext) -> bool:
-    addresses = {host_of(address) for address in getattr(machine, "addresses", ())}
+def _tailnet_dns(machine: Machine, context: RoleContext) -> bool:
+    addresses = {host_of(address) for address in machine.addresses}
     return bool(addresses & context.nameservers)
 
 
@@ -68,5 +74,5 @@ def role_context() -> RoleContext:
     )
 
 
-def roles_of(machine, context: RoleContext) -> tuple[MachineRole, ...]:
+def roles_of(machine: Machine, context: RoleContext) -> tuple[MachineRole, ...]:
     return tuple(role for role in ROLES if role.applies(machine, context))

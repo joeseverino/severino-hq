@@ -2,24 +2,21 @@
 tag, so it reads the same everywhere and a change to it is made once."""
 
 import re
-from pathlib import Path
 
 from django import forms
-from django.conf import settings
 from django.template import Context, Template, TemplateSyntaxError
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
 from .markup import elements, select, texts, with_class
-
-TEMPLATES = Path(settings.BASE_DIR) / "templates"
+from .source import template_files
 
 
 def _templates():
     """Each template's name and source, the one walk every guard here reads."""
 
-    for path in sorted(TEMPLATES.rglob("*.html")):
-        yield path.relative_to(TEMPLATES).as_posix(), path.read_text(encoding="utf-8")
+    for name, path in template_files():
+        yield name, path.read_text(encoding="utf-8")
 
 
 def _written_by_hand(pattern: str, partial: str) -> list[str]:
@@ -142,6 +139,66 @@ class BandFactTests(SimpleTestCase):
         self.assertEqual(elements(html, "b"), [])
 
 
+class CardTests(SimpleTestCase):
+    PARTIAL = "partials/_card.html"
+
+    def test_a_card_frames_what_it_holds_under_its_heading(self):
+        html = _render(
+            '{% card css="example-card" heading="example-heading" %}'
+            '{% section_head id="example-heading" %}Hosts{% endsection_head %}<p>{{ n }} up</p>{% endcard %}',
+            n=3,
+        )
+
+        (card,) = with_class(html, "card")
+        (line,) = elements(html, "p")
+        self.assertEqual(card.tag, "section")
+        self.assertEqual(card.classes, {"card", "example-card"})
+        self.assertEqual(card.attrs["aria-labelledby"], "example-heading")
+        self.assertIn(card, line.ancestors)
+        self.assertEqual(line.words, "3 up")
+
+    def test_a_card_is_the_element_it_is_asked_to_be(self):
+        html = _render('{% card element="details" %}<summary>More</summary>{% endcard %}')
+
+        (card,) = with_class(html, "card")
+        self.assertEqual(card.tag, "details")
+
+    def test_a_card_is_never_an_inline_or_unknown_element(self):
+        for element in ("span", "p", "script", ""):
+            with self.subTest(element=element), self.assertRaises(TemplateSyntaxError):
+                _render("{% card element=element %}A{% endcard %}", element=element)
+
+    def test_a_data_option_is_its_attribute_bare_when_true_and_absent_when_empty(self):
+        html = _render(
+            "{% card data_fragment=True data_state=state data_paused=paused data_ask_status=url %}A{% endcard %}",
+            state="pending",
+            paused=False,
+            url="",
+        )
+
+        (card,) = with_class(html, "card")
+        self.assertIn("data-fragment", card.attrs)
+        self.assertEqual(card.attrs["data-state"], "pending")
+        self.assertNotIn("data-paused", card.attrs)
+        self.assertNotIn("data-ask-status", card.attrs)
+
+    def test_what_a_page_gives_it_is_escaped(self):
+        html = _render("{% card data_state=state label=state %}{{ state }}{% endcard %}", state='"><b>x</b>')
+
+        (card,) = with_class(html, "card")
+        self.assertEqual(elements(html, "b"), [])
+        self.assertEqual(card.attrs["data-state"], '"><b>x</b>')
+
+    def test_an_option_it_does_not_take_is_refused(self):
+        for source in (
+            '{% card class="x" %}A{% endcard %}',
+            '{% card "x" %}A{% endcard %}',
+            '{% card aria_hidden="true" %}A{% endcard %}',
+        ):
+            with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):
+                Template(source)
+
+
 class OutsideLinkTests(SimpleTestCase):
     PARTIAL = "partials/_outside_link.html"
 
@@ -209,6 +266,10 @@ class SharedMarkupTemplateTests(SimpleTestCase):
     def test_only_the_tag_draws_a_section_head(self):
         found = _written_by_hand(r'class="section-head[" ]', SectionHeadTests.PARTIAL)
         self.assertEqual(found, [], "write {% section_head %} instead")
+
+    def test_only_the_tag_draws_a_card(self):
+        found = _written_by_hand(r'\bclass="(?:[^"]*[\s}])?card[\s"{]', CardTests.PARTIAL)
+        self.assertEqual(found, [], "write {% card %} instead")
 
     def test_only_the_tag_draws_a_band_fact(self):
         found = _written_by_hand(r'class="band-fact[" {]', BandFactTests.PARTIAL)

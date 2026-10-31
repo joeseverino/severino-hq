@@ -1,19 +1,10 @@
 """What an extension's templates may use from the host, recorded in contract.json.
 
-A host template is an interface as much as an ``hq_sdk`` export is: a child
-template overriding a block the frame no longer defines renders nothing and
-raises nothing, and a partial that stops reading a parameter ignores it the
-same way. So which pieces are public is declared here, and what each one is
-(the blocks a frame offers and what they are given, the parameters a partial
-reads, the arguments a tag or filter takes, whether a class is still styled
-and a hook still read) is derived from the host itself when ``manage.py
-sdk_contract`` writes the record. ``hq_sdk.validation`` holds an extension's
-templates to that record, and docs/Plugins.md's shared UI contract is written
-from it.
-
-A parameter is required when the partial reads it without first asking whether
-it is there (``{% if why %}``, ``|default``); an include must pass every
-required one by name rather than leave it to whatever the page has in scope.
+A host template is an interface as much as an export is: an override of a block
+the frame no longer defines, or a parameter a partial stopped reading, renders
+and raises nothing. So the public pieces are declared here, what each one is is
+derived from the host by ``manage.py sdk_contract``, and ``hq_sdk.validation``
+holds an extension's templates to the record.
 """
 
 import re
@@ -31,6 +22,7 @@ lazy from django.template.loader_tags import BlockNode, ExtendsNode, IncludeNode
 lazy from django.template.smartif import TokenBase
 
 lazy from hq.platform.core.stylesheets import stylesheet
+lazy from hq.platform.core.templatetags.value_tags import Takes
 
 lazy from .contract import _parameters
 
@@ -62,7 +54,7 @@ PARTIALS: dict[str, str] = {
     "partials/_chart_tabs.html": "Up to four charts of one thing in the space of one.",
     "partials/_dropzone.html": "A file field that also accepts a drop.",
     "partials/_empty_state.html": "The one empty state: what is missing, then what would fill it.",
-    "partials/_form_field.html": "Label, control, help text and validation errors for one form field.",
+    "partials/_form_errors.html": "What was wrong with a submitted form as a whole, above its fields.",
     "partials/_insight_grid.html": "Readings that need interpreting, each with its next step.",
     "partials/_job_progress.html": "A running job and what it is doing.",
     "partials/_kpi_grid.html": "Responsive linked or static figures.",
@@ -76,14 +68,21 @@ PARTIALS: dict[str, str] = {
 # The host's own tags and filters an extension may use. Django's are public
 # too; they are recorded from Django itself.
 TAGS = (
+    "arrow",
+    "card",
+    "dot",
     "empty_value",
     "entity",
+    "outside_link",
     "post_button",
     "reference",
     "referenced_by",
+    "row_group",
     "row_toggle",
+    "section_head",
     "table_heading",
     "table_region",
+    "words",
 )
 FILTERS = (
     "ago",
@@ -92,6 +91,7 @@ FILTERS = (
     "day",
     "money",
     "or_empty",
+    "outside",
     "readout",
     "sortable",
     "span",
@@ -100,7 +100,7 @@ FILTERS = (
 )
 
 # Django's own libraries an extension may ``{% load %}`` beside its own.
-LIBRARIES = ("humanize", "static")
+LIBRARIES = ("static",)
 
 # Classes an extension may write. Layout, tokens and states belong to the host;
 # a class missing here is the host's to add, never the extension's to invent.
@@ -109,7 +109,6 @@ CLASSES = (
     "allocation",
     "allocation-legend",
     "btn",
-    "card",
     "card-columns",
     "cell-data",
     "chart-axis",
@@ -120,6 +119,7 @@ CLASSES = (
     "compact-table",
     "count",
     "danger",
+    "danger-link",
     "data-table",
     "date-col",
     "domain-charts",
@@ -139,6 +139,7 @@ CLASSES = (
     "form-actions",
     "ghost",
     "help",
+    "icon-link",
     "inline",
     "key-col",
     "kv",
@@ -186,7 +187,6 @@ CLASSES = (
     "row-more",
     "save-bar",
     "section-foot",
-    "section-head",
     "section-period",
     "split",
     "stacked",
@@ -323,7 +323,7 @@ class _Reads:
                 self.found[read] = self.found.get(read, False) or read not in guards
 
     def _generic(self, node: Any, bound: set[str], guards: frozenset[str]) -> None:
-        children = set(getattr(node, "child_nodelists", ()))
+        children = set(node.child_nodelists)
         for attribute, value in vars(node).items():
             if attribute in children or isinstance(value, NodeList):
                 continue
@@ -363,6 +363,9 @@ def _partials(engine: Any) -> dict[str, Any]:
     partials = {}
     for name, about in PARTIALS.items():
         found = _reads(engine, name).found
+        # Required is read without first asking whether it is there ({% if why %},
+        # |default), so an include passes it by name rather than leave it to
+        # whatever the page has in scope.
         partials[name] = {
             "about": about,
             "required": sorted(read for read, required in found.items() if required),
@@ -392,6 +395,26 @@ def _tag_parameters(compile_function: Any) -> list[str]:
     return parameters[1:] if parameters[:1] == ["content"] else parameters
 
 
+def _tag_parts(compile_function: Any) -> list[str]:
+    """The markers a block tag's later parts open with (``{% aside %}``), which
+    a page writes only inside that tag. The first part follows the opening tag."""
+
+    target = getattr(compile_function, "__wrapped__", None)
+    return list(target.parts[1:]) if isinstance(target, Takes) else []
+
+
+def _class_options(parameters: list[str]) -> list[str]:
+    """The options that hand the tag class names (``css``, ``note_css``), held
+    to the public classes as a ``class`` attribute is."""
+
+    return [name.rstrip("=") for name in parameters if re.fullmatch(r"(\w+_)?css=?", name)]
+
+
+def _tag(compile_function: Any) -> dict[str, Any]:
+    parameters = _tag_parameters(compile_function)
+    return {"parameters": parameters, "parts": _tag_parts(compile_function), "classes": _class_options(parameters)}
+
+
 def _libraries(engine: Any) -> tuple[dict[str, Any], dict[str, Any]]:
     tags: dict[str, Any] = {}
     filters: dict[str, Any] = {}
@@ -407,7 +430,7 @@ def _host_tags(engine: Any) -> tuple[dict[str, Any], dict[str, Any]]:
     if missing:
         raise ValueError(f"Public tags or filters the host no longer has: {', '.join(missing)}.")
     return (
-        {name: {"parameters": _tag_parameters(tags[name])} for name in TAGS},
+        {name: _tag(tags[name]) for name in TAGS},
         {name: {"argument": _filter_argument(filters[name])} for name in FILTERS},
     )
 

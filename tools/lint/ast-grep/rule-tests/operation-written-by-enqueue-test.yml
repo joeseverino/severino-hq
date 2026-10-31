@@ -1,0 +1,10 @@
+id: operation-written-by-enqueue
+valid:
+  - 'OperationRequest.objects.filter(state="queued")'
+  - 'resource_operations.enqueue(resource, "restart")'
+  - 'OperationRequest.objects.bulk_create(rows)'
+  - 'Other.objects.create()'
+invalid:
+  - 'OperationRequest.objects.create(key="k")'
+  - 'OperationRequest.objects.get_or_create(key="k")'
+  - 'OperationRequest.objects.update_or_create(key="k", defaults={})'

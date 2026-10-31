@@ -3,41 +3,25 @@
 from typing import get_origin
 
 from django.contrib import messages
-from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
-from hq.platform.application.adoption import (
-    AdoptCommand,
-    AdoptServiceCommand,
-    adopt,
-    adopt_service,
-)
+from hq.platform.application.adoption import ADOPT, ADOPT_SERVICE
 from hq.platform.application.asks import APPLIES_SHORTLY
-from hq.platform.application.certificates import (
-    CertificateError,
-    UploadCertificateCommand,
-    store_certificate,
-)
+from hq.platform.application.capabilities import execute_capability
+from hq.platform.application.certificates import UPLOAD
 from hq.platform.application.entity_links import kind_label
-from hq.platform.application.glance import dashboard_machine_selected, select_dashboard_machine
-from hq.platform.application.infrastructure import (
-    ManagedResourceCommand,
-    PolicyError,
-    resolved_spec,
-    save_managed_resource,
-    suggest_key,
-)
+from hq.platform.application.glance import DASHBOARD_MACHINE, dashboard_machine_selected
+from hq.platform.application.infrastructure import resolved_spec, suggest_key
 from hq.platform.application.naming import name_context
 from hq.platform.application.pages import page_context
-from hq.platform.application.plugins import _import
+from hq.platform.application.plugins import import_reference
 from hq.platform.application.provider_forms import (
     CertificateUploadForm,
     ResourceIdentityForm,
     spec_form_class,
 )
-from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.ui import ended
@@ -53,10 +37,9 @@ from .providers import PROVIDERS, controller_action_policy, describe_providers, 
 class ResourceFormView(View):
     """Declare or amend one resource, on a form its provider generates.
 
-    The write goes through ``save_managed_resource`` (the same use case the
-    API and the MCP call) so the capability check, the spec validation, the
-    generation bump and the audit record are the ones that already existed. This
-    view supplies a form and a redirect and decides nothing else.
+    The write is the ``infrastructure.resource.create`` or ``.update``
+    capability the API and the MCP run, so its authority, validation and audit
+    are theirs. This view supplies a form and a redirect and decides nothing else.
     """
 
     template_name = "control_plane/resource_form.html"
@@ -151,7 +134,9 @@ class ResourceFormView(View):
             kind,
             lock_identity=bool(resource),
             context=_form_context(request, resource),
-        )(request.POST, initial=resource.spec if resource else None)
+            # The same starting point the page was drawn from, so a value it
+            # showed as held is one the form accepts back unchanged.
+        )(request.POST, initial=_initial_spec(request, kind, resource))
         material_class = _material_form(kind) if not resource else None
         material = material_class(request.POST) if material_class else None
         if (identity is None or identity.is_valid()) and spec.is_valid() and (material is None or material.is_valid()):
@@ -179,37 +164,39 @@ class ResourceFormView(View):
     def _declare(self, request, kind, resource, identity, spec, material):
         """Declare it, then act on the answer: a redirect, or None to re-render."""
 
-        try:
-            result = save_managed_resource(
-                ManagedResourceCommand(
-                    # The identifier is never asked for again once a
-                    # resource exists, so an edit keeps the one it has.
-                    key=resource.key if resource else _derived_key(kind, spec.spec),
-                    kind=kind,
-                    spec=spec.spec,
-                    # A thing being created is a thing you want applied.
-                    enabled=identity.cleaned_data["enabled"] if identity else True,
-                ),
-                principal=web_principal(request.user),
-                current_key=resource.key if resource else None,
-            )
-        except (PolicyError, DjangoValidationError) as exc:
-            spec.add_error(None, _readable_error(exc))
+        principal = web_principal(request.user)
+        result = execute_capability(
+            "infrastructure.resource.update" if resource else "infrastructure.resource.create",
+            {
+                # The identifier is never asked for again once a resource
+                # exists, so an edit keeps the one it has.
+                "key": resource.key if resource else _derived_key(kind, spec.spec),
+                "kind": kind,
+                "spec": spec.spec,
+                # A thing being created is a thing you want applied.
+                "enabled": identity.cleaned_data["enabled"] if identity else True,
+            },
+            principal=principal,
+            target=resource.key if resource else None,
+        )
+        if not result["ok"]:
+            spec.add_error(None, result["error"]["message"])
             return None
         saved = result["resource"]["key"]
         if resource and kind == MACHINE_KIND:
-            select_dashboard_machine(
-                saved,
-                selected="show_on_dashboard" in request.POST,
-                principal=web_principal(request.user),
+            shown = execute_capability(
+                DASHBOARD_MACHINE, {"selected": "show_on_dashboard" in request.POST}, principal=principal, target=saved
             )
+            if not shown["ok"]:
+                messages.error(request, shown["error"]["message"])
         if material is not None:
-            try:
-                _store_material(kind, saved, material.cleaned_data, request)
-            except (CertificateError, secrets.SecretsUnavailable) as exc:
+            stored = execute_capability(
+                PROVIDERS[kind].material_capability, dict(material.cleaned_data), principal=principal, target=saved
+            )
+            if not stored["ok"]:
                 # The declaration exists and the material does not, so
                 # say which half landed rather than reporting success.
-                messages.error(request, str(exc))
+                messages.error(request, stored["error"]["message"])
                 return redirect("control_plane:upload_certificate", key=saved)
         messages.success(
             request,
@@ -250,20 +237,11 @@ def _apply_note(kind: str) -> str:
 def _form_facts(resource, form) -> tuple[tuple[str, str, str], ...]:
     """What this resource is that the form below does not already ask.
 
-    The panel exists for the fields a form cannot show: a certificate's edit
-    page asks which target it installs on and says nothing about the names it
-    covers or what is actually served with it, which is the whole of what a
-    person comes to check.
-
-    A machine's form already holds every field, so repeating them here would
-    say each one twice. Matched by label against the form's own fields, a row
-    survives only when nothing below is asking about it.
-
-    The identifier leads, and is the reason this is not empty for a machine.
-
-    Added here rather than in the readout, which every list and detail surface
-    shares: they identify the resource in their own way already, and a row
-    repeating it on each of them is the same fact three times.
+    A certificate's edit page asks which target it installs on, not the names it
+    covers or what is served with it, which is what a person comes to check. A row
+    stays only when no form field has its label, and the identifier leads, which
+    is why a machine's panel is not empty. Here rather than in the readout, which
+    every list and detail surface shares and already identifies the resource by.
     """
 
     asked = {str(field.label).strip().casefold() for field in form}
@@ -293,14 +271,10 @@ def _after_save(request, kind: str, resource, saved: str) -> str:
 def _return_to(request) -> str:
     """The page that sent the operator here, if it said so and is ours.
 
-    A form is reached from wherever the thing being edited appears (a
-    service, a domain, a list), and returning to the resource instead puts the
-    operator somewhere they have not been, several clicks from the page they
-    are working on. The origin is carried explicitly rather than guessed from
-    Referer, which is absent, stale or forged often enough not to navigate by.
-
-    Checked before use: an unvalidated redirect target taken from a query
-    string is an open redirect regardless of how friendly the link looked.
+    A form is reached from wherever the thing appears (a service, a domain, a
+    list), so the origin is carried explicitly rather than read from Referer, which
+    is absent, stale or forged too often to navigate by, and checked, since an
+    unvalidated redirect target from a query string is an open redirect.
     """
 
     return safe_next(request)
@@ -342,8 +316,6 @@ def _derived_spec(resource) -> dict:
         resolved = resolved_spec(resource)
     except Exception:  # noqa: BLE001 - a form must render without the topology
         return {}
-    if not isinstance(resolved, dict):
-        return {}
     fields = PROVIDERS[resource.kind].spec_type.model_fields
     return {name: value for name, value in resolved.items() if name in fields and value not in (None, "", [], ())}
 
@@ -351,12 +323,10 @@ def _derived_spec(resource) -> dict:
 def _initial_spec(request, kind: str, resource) -> dict | None:
     """What the form says before anybody types in it.
 
-    Editing starts from the declaration. Creating starts from wherever the
-    operator came from, and that context arrives as query parameters naming spec
-    fields: a service page knows the hostname, a zone page knows the domain.
-    Filtered against the model's own fields, so the URL cannot introduce a value
-    the spec has no place for, and a provider joins this flow by having the
-    field rather than by this view being taught about it.
+    Editing starts from the declaration; creating, from query parameters the page
+    the operator came from names spec fields with (a service page knows the
+    hostname). Only the model's own fields are taken, so the URL cannot add a value
+    the spec has no place for, and a provider joins this flow by having the field.
     """
 
     if resource:
@@ -407,11 +377,7 @@ def _form_context(request, resource) -> NameContext:
 
 def _material_form(kind: str):
     reference = PROVIDERS[kind].material_form
-    return _import(reference) if reference else None
-
-
-def _store_material(kind: str, key: str, cleaned: dict, request) -> None:
-    _import(PROVIDERS[kind].material_handler)(key, cleaned, principal=web_principal(request.user))
+    return import_reference(reference) if reference else None
 
 
 def _derived_key(kind: str, spec: dict) -> str:
@@ -424,18 +390,6 @@ def _derived_key(kind: str, spec: dict) -> str:
     return suggest_key(kind, spec)
 
 
-def _readable_error(exc) -> str:
-    """What to show an operator when a use case refuses.
-
-    Django collects several messages on one ValidationError, and str() of that
-    renders the list with its brackets and quotes intact. Shared with the domain
-    views, so one refusal reads the same on every page.
-    """
-
-    messages_found = getattr(exc, "messages", None)
-    return " ".join(messages_found) if messages_found else str(exc)
-
-
 class AdoptView(View):
     """Bring something the provider already holds under HQ's management.
 
@@ -446,13 +400,9 @@ class AdoptView(View):
     """
 
     def post(self, request, hostname):
-        try:
-            result = adopt_service(
-                AdoptServiceCommand(hostname=hostname),
-                principal=web_principal(request.user),
-            )
-        except (RecordNotFound, PolicyError, DjangoValidationError) as exc:
-            messages.error(request, _readable_error(exc))
+        result = execute_capability(ADOPT_SERVICE, {"hostname": hostname}, principal=web_principal(request.user))
+        if not result["ok"]:
+            messages.error(request, result["error"]["message"])
             return redirect("control_plane:services")
         adopted = ", ".join(result["adopted"])
         messages.success(
@@ -493,17 +443,11 @@ class CertificateUploadView(View):
         resource = get_object_or_404(ManagedResource, key=key)
         form = CertificateUploadForm(request.POST)
         if form.is_valid():
-            try:
-                stored = store_certificate(
-                    UploadCertificateCommand(
-                        key=resource.key,
-                        fullchain=form.cleaned_data["fullchain"],
-                        private_key=form.cleaned_data["private_key"],
-                    ),
-                    principal=web_principal(request.user),
-                )
-            except (CertificateError, secrets.SecretsUnavailable, PolicyError) as exc:
-                form.add_error(None, str(exc))
+            stored = execute_capability(
+                UPLOAD, dict(form.cleaned_data), principal=web_principal(request.user), target=resource.key
+            )
+            if not stored["ok"]:
+                form.add_error(None, stored["error"]["message"])
             else:
                 messages.success(
                     request,
@@ -526,23 +470,15 @@ class CertificateUploadView(View):
 class AdoptRecordView(View):
     """Take on one record a sweep found, identified by what makes it that record.
 
-    Separate from adopting a service because a service is a hostname and some
-    records have none: a container answers wherever its ports are pointed, so
-    there is no name to route by and no group of records to take on together.
-
-    The spec is read back out of the sweep rather than posted, the same as every
-    other adoption: the declaration starts equal to the world, so the first
-    reconciliation after it changes nothing.
+    Separate from adopting a service, which is a hostname, because some records
+    have none: a container answers wherever its ports are pointed. The spec is read
+    back out of the sweep, not posted, so the first reconciliation changes nothing.
     """
 
     def post(self, request, kind, token):
-        try:
-            result = adopt(
-                AdoptCommand(kind=kind, token=token),
-                principal=web_principal(request.user),
-            )
-        except (RecordNotFound, PolicyError, ValueError) as exc:
-            messages.error(request, str(exc))
+        result = execute_capability(ADOPT, {"kind": kind, "token": token}, principal=web_principal(request.user))
+        if not result["ok"]:
+            messages.error(request, result["error"]["message"])
         else:
             messages.success(
                 request,

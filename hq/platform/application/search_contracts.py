@@ -13,14 +13,12 @@ def search_lines(value: Any) -> Iterator[str]:
 
     A body is read by the index and by a person: the snippet under a result
     is cut straight out of it. ``str()`` on a ``JSONField`` serves neither: it
-    renders Python (``{'key_expiry_disabled': False}``), and the punctuation
-    carrying the meaning is the punctuation the tokenizer discards, so the key
-    and its value would be indexed as unrelated words.
-
-    Keys stay verbatim; FTS5 already splits ``key_expiry_disabled`` on the
-    underscores. Whitespace inside a value is collapsed, so a field holding a
-    policy document does not spend the snippet window on escaped newlines.
+    renders Python, and the punctuation carrying the meaning is what the
+    tokenizer discards, so a key and its value would index as unrelated words.
     """
+
+    # Keys stay verbatim; FTS5 already splits ``key_expiry_disabled`` on the
+    # underscores.
 
     if isinstance(value, dict):
         for key, item in value.items():
@@ -37,6 +35,8 @@ def search_lines(value: Any) -> Iterator[str]:
     elif value is None:
         return
     else:
+        # Collapsed, so a field holding a policy document does not spend the
+        # snippet window on escaped newlines.
         text = " ".join(str(value).split())
         if text:
             yield text
@@ -58,6 +58,8 @@ class SearchDefinition:
     def object_id(self, instance: Model) -> str:
         return str(getattr(instance, self.identifier_field))
 
+    # The names are a plugin's declaration, never checked against its model,
+    # and the default timestamp names a field a model may not have.
     def body(self, instance: Model) -> str:
         return "\n".join(line for field in self.fields for line in search_lines(getattr(instance, field, None)))
 
@@ -78,4 +80,5 @@ class SearchDefinition:
         return " ".join(str(getattr(instance, self.snippet_field, "") or "").split())
 
     def url(self, instance: Model) -> str:
+        # Django leaves get_absolute_url for a model to define or not.
         return instance.get_absolute_url() if hasattr(instance, "get_absolute_url") else ""

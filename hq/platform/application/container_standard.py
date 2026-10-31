@@ -1,12 +1,7 @@
 """The standard a running container is held to: how much of its machine it can reach.
 
 Read from Docker's inspect of each container (``portainer.runtime``), never
-from inside it; what the image itself is held to is
-``application.supply_chain``. Serious is reach over the machine
-(privilege, the Docker socket, the host's process namespace, confinement turned
-off, a writable system path); the rest is hardening that limits what a
-compromised container could do, or what an upgrade could be verified by.
-
+from inside it; what the image itself is held to is ``application.supply_chain``.
 Nothing here is a verdict on intent: a socket proxy exists to hold the Docker
 socket, and the page says so as plainly as for anything else.
 """
@@ -81,7 +76,7 @@ def _no_socket(binds) -> bool:
     return not any(mount.get("source") in DOCKER_SOCKETS for mount in binds)
 
 
-def writable_system_binds(binds, docker_held: bool = False) -> tuple[Mapping[str, Any], ...]:
+def writable_system_binds(binds, *, docker_held: bool = False) -> tuple[Mapping[str, Any], ...]:
     """The bind mounts that let it write a system path."""
 
     return tuple(
@@ -108,13 +103,11 @@ def _system_path_kept(container: Any) -> bool | None:
     if mounts is None:
         return None
     binds = [mount for mount in mounts if mount.get("type") == "bind"]
-    return not writable_system_binds(binds, holds_socket(container))
+    return not writable_system_binds(binds, docker_held=holds_socket(container))
 
 
 def _confined(runtime: Mapping[str, Any]) -> bool:
-    return not any(
-        option.endswith("=unconfined") or option.endswith(":unconfined") for option in runtime.get("security_opt") or ()
-    )
+    return not any(option.endswith(("=unconfined", ":unconfined")) for option in runtime.get("security_opt") or ())
 
 
 def _no_powerful_capability(runtime: Mapping[str, Any]) -> bool:
@@ -135,6 +128,9 @@ def _bound_to_an_address(runtime: Mapping[str, Any]) -> bool:
     return not any(binding.get("host_ip", "") in _ANY_ADDRESS for binding in runtime.get("port_bindings") or ())
 
 
+# A serious check is reach over the machine; the rest is hardening that limits
+# what a compromised container could do, or what an upgrade could be verified
+# by.
 STANDARD: tuple[Check, ...] = (
     Check(
         "not-privileged",

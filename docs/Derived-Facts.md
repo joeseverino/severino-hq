@@ -198,7 +198,7 @@ launcher asks `systemctl show` for a fixed list of properties
 controller keeps exactly those properties and refuses a value that is not a
 unit name, a systemd state word, a number or an instant. `HostUnitRecord` in
 the bridge contract is emitted from the model of that name
-(`observations/host.py`): it holds no command line, environment or path, and a
+(`hq/domains/control_plane/observations/host.py`): it holds no command line, environment or path, and a
 unit that is not installed is a record saying so. Each record carries when it
 was read, and a unit's state is judged as of then.
 
@@ -637,8 +637,9 @@ workflow uses, which HQ does not read, so the item says to check those first. A
 repository whose workflows were not read gets the reason instead.
 
 Watching shows the signed-in person's GitHub profile and the repositories they
-star: the controller's `github.profile` reading, from GitHub's public API
-without a credential. Whose profile is the login their sign-in claims
+star: the controller's `github.profile` reading, from GitHub's public API,
+under a GitHub App token that reads one covered repository's metadata where an
+app is connected, for its allowance, and anonymously where none is. Whose profile is the login their sign-in claims
 (`hq.platform.application.linked_accounts`), never one typed into HQ;
 `hq.platform.application.github_profile.plan` hands the controller those
 accounts and says when the reading is due. Refresh asks for a read now; no

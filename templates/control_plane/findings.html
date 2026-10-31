@@ -21,9 +21,9 @@ first screen on chips before the first finding.
 
 {% comment %}The queue's own table, so a problem reads the same wherever it is drawn.{% endcomment %}
 {% if finding_entries %}
-<section class="card">
+{% card %}
 {% include "partials/_work_queue.html" with items=finding_entries grouped=True only %}
-</section>
+{% endcard %}
 {% elif finding_coverage and not finding_coverage.read_at %}
 {% url 'control_plane:controller' as controller_url %}
 {% include "partials/_empty_state.html" with message="Nothing read yet." action_url=controller_url action_label="Start the controller" %}

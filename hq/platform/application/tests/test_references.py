@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from hq.domains.assets.models import Asset
 from hq.domains.calendars.models import Entry
-from hq.domains.control_plane.models import ProviderConnection
+from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
@@ -282,6 +282,12 @@ class GuardedKindTests(TestCase):
         self.assertEqual(offered[1], ("Projects", [("example.account:an-account", "An Example Account")]))
         self.assertEqual(withheld, [("", "Nothing")])
 
+    def test_a_row_naming_what_the_reader_may_not_see_is_reported_only_to_who_may(self):
+        an_expense(paid_from="example.account:gone", paid_from_name="A closed account")
+
+        self.assertEqual(references.dangling(Expense, principal=self.stranger), ())
+        self.assertEqual(len(references.dangling(Expense, principal=self.reader)), 1)
+
     def test_a_role_takes_no_other_kind(self):
         self.assertTrue(self.field.accepts("example.account"))
         self.assertFalse(self.field.accepts("machine"))
@@ -370,6 +376,63 @@ class PickerTests(TestCase):
             "machine:lab-9",
             [option.attrs["value"] for option in elements(response, "option") if "selected" in option.attrs],
         )
+
+
+class ChoicesTests(TestCase):
+    """What a picker offers, read from the estate and the records, without a page."""
+
+    def setUp(self):
+        self.principal = internal_principal("test")
+        self.field = Asset._meta.get_field("infrastructure")
+
+    def offered(self, held=("", "")):
+        return dict(references.choices(self.field, principal=self.principal, held=held)[1:])
+
+    def test_each_kind_is_a_group_in_name_order_whatever_the_case(self):
+        ProviderConnection.objects.create(
+            connection_ref="a-portainer",
+            controller_id="a-controller",
+            provider="portainer",
+            endpoint="https://portainer.example.com",
+            reaches=["lab-2", "Lab-1", "lab-3"],
+            reachable=True,
+            probed=True,
+            observed_at=timezone.now(),
+        )
+
+        machines = self.offered()["Machines"]
+
+        names = [name for _value, name in machines]
+        self.assertEqual(names, sorted(names, key=str.casefold))
+        self.assertEqual(len(names), 3)
+
+    def test_a_certificate_is_offered_under_its_own_kind(self):
+        ManagedResource.objects.create(
+            key="a-certificate",
+            kind="tls.certificate",
+            spec={"certificate_name": "example", "domains": ["example.com"], "install_on": ["a-target"]},
+        )
+
+        offered = self.offered()
+
+        (group,) = offered
+        self.assertEqual(group.casefold(), "tls certificates")
+        self.assertEqual([value for value, _name in offered[group]], ["tls.certificate:a-certificate"])
+
+    def test_a_kind_with_nothing_in_it_is_no_group(self):
+        self.assertEqual(self.offered(), {})
+
+    def test_a_held_reference_still_offered_is_not_said_to_be_gone(self):
+        a_machine()
+
+        offered = self.offered(held=("machine:lab-1", "lab-1"))
+
+        self.assertNotIn("No longer in HQ", offered)
+
+    def test_a_gone_reference_with_no_name_kept_is_shown_as_itself(self):
+        offered = self.offered(held=("machine:lab-9", ""))
+
+        self.assertEqual(offered["No longer in HQ"], [("machine:lab-9", "machine:lab-9")])
 
 
 class ReferencedByTests(TestCase):
@@ -461,6 +524,18 @@ class DanglingTests(TestCase):
         self.assertEqual(item.title, "A server links to lab-9, which HQ does not have")
         self.assertEqual(item.url, asset.get_absolute_url())
         self.assertEqual(item.key, f"reference:assets.asset:{asset.pk}:infrastructure")
+
+    def test_text_that_is_no_reference_is_reported_by_what_it_holds(self):
+        Asset.objects.create(item_name="A server", slug="a-server", infrastructure="the old rack")
+
+        item = one(references.dangling(Asset))
+
+        self.assertEqual(item.title, "A server links to the old rack, which HQ does not have")
+
+    def test_models_without_a_reference_have_nothing_to_report(self):
+        Project.objects.create(name="An Example Project", slug="an-example")
+
+        self.assertEqual(references.dangling(Project), ())
 
     def test_a_reference_that_names_something_is_not_reported(self):
         a_machine()

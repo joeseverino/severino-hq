@@ -17,7 +17,6 @@ lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
 lazy from hq.platform.application.scheduled_work import job_names
 
 from .models import Job
-from .runner import reap
 
 FAILED_FIRST = "failed"
 ENDED_BADLY = (Job.State.FAILED, Job.State.LOST)
@@ -73,10 +72,9 @@ class JobListView(PageMixin, TableListMixin, ListView):
         """
 
         latest: dict[str, tuple[object, str, str]] = {}
-        for kind, pk, state, label in Job.objects.order_by("kind", "-created_at").values_list(
-            "kind", "pk", "state", "label"
-        ):
-            latest.setdefault(kind, (pk, state, self.names.get(kind) or label or kind))
+        runs = Job.objects.order_by("kind", "-created_at").only("kind", "state", "label", "created_at", "heartbeat_at")
+        for job in runs:
+            latest.setdefault(job.kind, (job.pk, job.seen_state, self.names.get(job.kind) or job.label or job.kind))
         return latest
 
     @property
@@ -104,10 +102,6 @@ class JobListView(PageMixin, TableListMixin, ListView):
 
     @override
     def get_queryset(self):
-        # Anything that died is settled before the list is drawn, so the page
-        # never shows a job as running when its process is gone. Off a page
-        # view rather than a schedule, deliberately.
-        reap()
         rows = self.apply_table_query(super().get_queryset().select_related("requested_by"))
         failed = [pk for pk, _label in self.failed_last]
         if failed and self.request.GET.get("sort", FAILED_FIRST) == FAILED_FIRST:
@@ -140,10 +134,6 @@ class JobStatusView(DetailView):
     @override
     def render_to_response(self, context, **response_kwargs):
         job = self.object
-        if job.is_stale:
-            reap(job.kind)
-            job.refresh_from_db()
-
         # The shape every ask's status answers in, with the job's own result.
         return JsonResponse({**job_standing(job).as_json(), "result": job.result})
 

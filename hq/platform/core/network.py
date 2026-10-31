@@ -1,39 +1,13 @@
 """Where a request came from, and whether that place may reach HQ at all.
 
-HQ holds provider credentials, a controller that can change public DNS, and an
-audit trail of everything the business does. It is meant to be reachable from a
-private network and a VPN, never from the internet.
-
-Whether that is *true* of any given deployment is a property of its DNS, its
-firewall and its router: none of which this application can see. A new proxy
-host, a forwarded port, or a container published to the wrong interface would
-each change the answer silently, and HQ would never notice it had begun
-answering strangers. So the application states the rule itself rather than
-inheriting it: requests are served for private ranges, the VPN's range, and the
-loopback address the container healthcheck probes, and refused, before
-authentication runs, for anywhere else.
-
-The hard part is not the rule. It is knowing who is asking.
-
-Behind a reverse proxy every request arrives from the proxy, whose address is
-private and therefore always passes. A check written against `REMOTE_ADDR`
-alone would be decorative: it would approve the proxy, every time, no matter
-who was on the other side of it. The real client is in `X-Forwarded-For`,
-which any client can also simply send, so believing it unconditionally is worse
-than not checking at all, because it lets an attacker choose the address HQ
-judges them by.
-
-Both failures come from one question: which hops in that header did
-infrastructure write, and which did a stranger? Only the peer that actually
-connected is known to be truthful. So the chain is walked from the right
-(from the hop the trusted proxy observed) discarding proxies HQ has been told
-about, and stopping at the first address it has not. That address is the
-closest thing to the caller that HQ can prove, and anything further left is
-attacker-controlled text.
+HQ is meant to be reachable from a private network and a VPN, never from the
+internet, and whether a deployment is so lives in its DNS, firewall and router,
+which the application cannot see. So it states the rule itself: private ranges,
+the VPN's and the healthcheck's loopback are served, and anywhere else refused.
 """
 
 from functools import cache
-from ipaddress import ip_address, ip_network
+from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
 
 from django.conf import settings
 from django.http import HttpResponseForbidden
@@ -56,11 +30,9 @@ def _networks(cidrs: tuple[str, ...]) -> tuple:
 def split_host_port(value: str) -> tuple[str, str]:
     """An endpoint as its address and its port, either of which may be empty.
 
-    Proxies and daemons write ports (`10.0.0.4:53812`) and brackets
-    (`[::1]:8000`) into the values HQ reads back, and every reader of those
-    values needs the same two rules applied the same way. Held here because
-    getting it slightly different somewhere else is how a hop stops matching a
-    trusted proxy while still looking correct.
+    Every reader of a value a proxy or daemon wrote (`10.0.0.4:53812`,
+    `[::1]:8000`) splits it here: a split slightly different elsewhere is how a
+    hop stops matching a trusted proxy while still looking correct.
     """
 
     candidate = str(value or "").strip()
@@ -125,7 +97,7 @@ def parse_ip(value: str):
 
 
 def _within(value, cidrs: tuple[str, ...]) -> bool:
-    address = parse_ip(value) if not hasattr(value, "version") else value
+    address = value if isinstance(value, IPv4Address | IPv6Address) else parse_ip(value)
     if address is None:
         return False
     return any(address in network for network in _networks(tuple(cidrs)))
@@ -138,9 +110,10 @@ def is_trusted_proxy(value) -> bool:
 def client_ip(request) -> str:
     """The closest address to the caller that HQ can actually vouch for.
 
-    Returns the peer address unless that peer is a proxy HQ has been told to
-    believe, in which case the forwarded chain is walked from the right for the
-    first hop that is not itself a known proxy.
+    Behind a proxy every request comes from the proxy's private address, and
+    X-Forwarded-For is text any client can send, so the chain is walked from the
+    right, past the proxies HQ was told to believe, to the first hop that is not
+    one: the closest hop infrastructure wrote. Further left is the caller's text.
     """
 
     peer = str(request.META.get("REMOTE_ADDR", "") or "").strip()
@@ -165,12 +138,9 @@ def is_trusted_client(request) -> bool:
 class TrustedNetworkASGI:
     """The same rule, for what is mounted beside Django rather than inside it.
 
-    Static assets are served by Starlette, above the Django stack, so the
-    middleware below never sees them: a request refused everywhere else still
-    collected the stylesheet. Nothing secret is in there, but a boundary with a
-    documented exception is one people reason about incorrectly later, and the
-    fix is a wrapper rather than a second copy of the rule: the predicate is
-    shared, so the two can never drift into disagreeing about who is trusted.
+    Starlette serves static assets above the Django stack, where the middleware
+    never sees them, so a boundary has no exception to reason about; the
+    predicate is shared, so the two cannot disagree about who is trusted.
     """
 
     def __init__(self, app):
@@ -208,13 +178,9 @@ class _FakeScopeRequest:
 class TrustedNetworkMiddleware:
     """Refuse anything arriving from outside the LAN, the tailnet or loopback.
 
-    First in the chain, and deliberately so. This runs before sessions, before
-    authentication and before any view: an address that may not talk to HQ
-    should not be able to reach the login form, spend a database query, or
-    appear in the audit log as an attempt at anything.
-
-    A refusal says only that the address was refused. Naming the ranges that
-    would have been accepted would hand a scanner the map.
+    First in the chain, so an address that may not talk to HQ reaches no login
+    form, spends no query and leaves no audit row. A refusal names no range it
+    would have accepted, which would hand a scanner the map.
     """
 
     def __init__(self, get_response):

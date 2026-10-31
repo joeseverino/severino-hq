@@ -7,6 +7,7 @@ package connections
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	jsonv2 "encoding/json/v2"
 	"errors"
@@ -16,7 +17,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"syscall"
 )
@@ -227,7 +228,7 @@ func (d Document) Encode() ([]byte, error) {
 		return nil, err
 	}
 	sorted := Document{SchemaVersion: d.SchemaVersion, Connections: append([]Connection{}, d.Connections...)}
-	sort.Slice(sorted.Connections, func(i, j int) bool { return sorted.Connections[i].Ref < sorted.Connections[j].Ref })
+	slices.SortFunc(sorted.Connections, func(a, b Connection) int { return cmp.Compare(a.Ref, b.Ref) })
 	var out bytes.Buffer
 	encoder := json.NewEncoder(&out)
 	encoder.SetEscapeHTML(false)
@@ -272,7 +273,7 @@ func (c Connection) String() string {
 
 // Format writes String for every verb: %+v and %#v would otherwise print the
 // settings.
-func (c Connection) Format(state fmt.State, _ rune) { io.WriteString(state, c.String()) }
+func (c Connection) Format(state fmt.State, _ rune) { _, _ = io.WriteString(state, c.String()) }
 
 // LogValue is what a structured log records of a connection.
 func (c Connection) LogValue() slog.Value {

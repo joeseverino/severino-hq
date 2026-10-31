@@ -1,6 +1,7 @@
 {% comment %}
 The short queue on the dashboard: each card is its title, one line of what it
-means, its age, its buttons and the way to dismiss it. Its title opens the page
+means (all of it where its buttons decide it, `whole`), its age, its buttons
+and the way to dismiss it. Its title opens the page
 that shows the rest (`page`), steps included.
 {% endcomment %}
 <ul class="attention-list attention-glance">
@@ -17,7 +18,7 @@ that shows the rest (`page`), steps included.
           </span>
           {% endif %}
         </div>
-        {% if item.detail %}<p class="attention-detail">{{ item.detail|breakable }}</p>{% endif %}
+        {% if item.detail %}<p class="attention-detail"{% if item.whole %} data-whole{% endif %}>{{ item.detail|breakable }}</p>{% endif %}
       </div>
       <div class="attention-end">
         {% remedies item.actions as shown %}{% if shown %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=shown only %}</div>{% endif %}

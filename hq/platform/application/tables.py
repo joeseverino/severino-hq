@@ -122,13 +122,13 @@ class TableColumn:
     Declared once on the view. The list page draws the header from these, and
     when a view declares no ``table_sorts`` the sort menu comes from them too,
     so a column cannot sort one way in its header and another in the menu.
-
-    A column of words names its two orders itself ("Status A–Z", "Status
-    Z–A"). A date or a number says its own: "Oldest purchase", "Highest cost".
     """
 
     label: str
     sort: str = ""
+    # Left blank, a column of words names its two orders itself ("Status A–Z",
+    # "Status Z–A"). A date or a number says its own: "Oldest purchase",
+    # "Highest cost".
     ascending_label: str = ""
     descending_label: str = ""
     # Classes for the heading. ``key-col`` keeps the column at every width;
@@ -204,6 +204,10 @@ class TableListMixin:
     table_empty_why = ""
     # False where the lead action is a view of this same list, not a way to fill it.
     table_empty_remedy = True
+    # The ListView this mixes into supplies these.
+    model: type[Model] | None
+    object_list: Any
+    _resolved_table_filters: tuple[TableFilter, ...] | None = None
 
     def get_table_empty(self) -> str:
         return self.table_empty
@@ -218,7 +222,7 @@ class TableListMixin:
         return self.table_filters
 
     def resolved_table_filters(self) -> tuple[TableFilter, ...]:
-        if not hasattr(self, "_resolved_table_filters"):
+        if self._resolved_table_filters is None:
             self._resolved_table_filters = tuple(self.get_table_filters())
         return self._resolved_table_filters
 
@@ -323,7 +327,7 @@ class TableListMixin:
                 else self.request.GET.get("sort", self.table_default_sort)
             ),
             "toggles": toggles,
-            "columns": ranked(typed(self.table_columns, getattr(self, "model", None))),
+            "columns": ranked(typed(self.table_columns, self.model)),
             "room": self.table_room,
             "selectable": self.table_selectable,
             "active_count": active_count,
@@ -361,5 +365,5 @@ class TableListMixin:
         context["table"] = self.table_context()
         # `object_list` is the filtered, ordered queryset before the paginator
         # slices it, which is exactly the set a total should describe.
-        context["table_totals"] = self.table_totals_for(getattr(self, "object_list", None))
+        context["table_totals"] = self.table_totals_for(self.object_list)
         return context

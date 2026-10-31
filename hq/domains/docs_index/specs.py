@@ -1,10 +1,17 @@
 """The documentation resource, declared on its domain in application/domains.py."""
 
+from hq.platform.application import documentation
 from hq.platform.application.integration_specs import ResourceSpec
+from hq.platform.application.resources import BoundedQuery
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
 
 from .models import DocumentationRecord
+
+
+class DocumentationQuery(BoundedQuery):
+    status: str | None = None
+    query: str | None = None
 
 
 def resources() -> tuple[ResourceSpec, ...]:
@@ -14,6 +21,8 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Docs",
             "Sensitivity-aware documentation pointers indexed by HQ.",
             Capability.READ,
+            documentation.list_documentation,
+            DocumentationQuery,
             search=SearchDefinition(
                 "documentation",
                 DocumentationRecord,

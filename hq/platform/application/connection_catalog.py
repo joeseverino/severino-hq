@@ -4,7 +4,7 @@ Each connection grouped by family, what it may do and why, and the evidence
 behind each ability. The API serializes the same view.
 """
 
-from dataclasses import asdict, dataclass, replace
+from dataclasses import KW_ONLY, asdict, dataclass, replace
 from datetime import datetime, timedelta
 
 from django.core.exceptions import ImproperlyConfigured
@@ -24,7 +24,6 @@ from .action_links import (
 from .connection_contracts import (
     CREDENTIAL_MODELS,
     ConnectionAbility,
-    ConnectionFact,
     ConnectionInstance,
     ConnectionLink,
     ConnectionSpec,
@@ -103,28 +102,29 @@ QUIET_AUTHORITY = frozenset({"whole_account"})
 def grant_evidence(ability: ConnectionAbility, instance: ConnectionInstance) -> tuple[str, tuple[str, ...]]:
     """What proves this connection may perform this ability, and what is absent.
 
-    Two declarations meet here: the ability's grant model, which says what proof
-    it needs, and the instance's credential model, which says what kind of
-    credential was observed. A rejected credential proves nothing for anything.
-    A keyless ability or credential has nothing to prove. A whole-account
-    credential satisfies any ability and is worth naming as such, because it is
-    the opposite of least privilege. Only a scoped requirement is checked scope
-    by scope, and only when the provider reported grants. Anything left is a
-    requirement nobody declared: said as "unverified" when the provider could
-    have been asked, and "undeclared" when nothing is known either way.
+    The ability's grant model (what proof it needs) meets the instance's
+    credential model (what kind of credential was observed).
     """
 
+    # A rejected credential proves nothing for anything.
     if instance.credential_model == "rejected":
         return "revoked", ()
+    # A keyless ability or credential has nothing to prove.
     if ability.grant == "none" or instance.credential_model == "none":
         return "not_applicable", ()
+    # A whole-account credential satisfies any ability, and is named as such
+    # because it is the opposite of least privilege.
     if ability.grant == "coarse" or instance.credential_model == "coarse":
         return "coarse", ()
+    # Only a scoped requirement is checked scope by scope, and only when the
+    # provider reported grants.
     if ability.required_scopes:
         if not instance.scopes_known:
             return "unknown", ()
         missing = tuple(scope for scope in ability.required_scopes if scope not in instance.granted_scopes)
         return ("missing", missing) if missing else ("verified", ())
+    # What is left is a requirement nobody declared: unverified when the
+    # provider could have been asked, undeclared when nothing is known.
     if instance.credential_model == "scoped":
         return "unverified", ()
     return "undeclared", ()
@@ -191,6 +191,7 @@ def _observed_lifecycle(
 @dataclass(frozen=True, slots=True)
 class ConnectionAbilityState:
     ability: ConnectionAbility
+    _: KW_ONLY
     available: bool | None
     missing_scopes: tuple[str, ...] = ()
     action: ActionLink | None = None
@@ -310,52 +311,65 @@ class ConnectionView:
 
 
 def _validate_instance(spec: ConnectionSpec, instance: ConnectionInstance) -> ConnectionInstance:
+    """``instance`` as its provider emitted it, once every part a page shows holds."""
+
     if not isinstance(instance, ConnectionInstance):
         raise ImproperlyConfigured(f"Connection {spec.name!r} emitted a non-ConnectionInstance.")
     if not instance.id.strip() or not instance.label.strip() or not instance.kind.strip():
         raise ImproperlyConfigured(f"Connection {spec.name!r} emitted an incomplete instance.")
+    _check_reading(instance)
+    _check_grants(instance)
+    _check_relations(spec, instance)
+    return instance
+
+
+def _check_reading(instance: ConnectionInstance) -> None:
+    """The status a connection was read in, where it was read and by whom."""
+
     if instance.status not in {"good", "attention", "serious", "neutral"}:
         raise ImproperlyConfigured(f"Connection {instance.id!r} has invalid status {instance.status!r}.")
     if not instance.status_label.strip():
         raise ImproperlyConfigured(f"Connection {instance.id!r} has no status label.")
-    if instance.observed_at is not None and not isinstance(instance.observed_at, datetime):
-        raise ImproperlyConfigured(f"Connection {instance.id!r} has an invalid observation time.")
     if instance.endpoint and endpoint_has_private_parts(instance.endpoint):
         raise ImproperlyConfigured(f"Connection {instance.id!r} endpoint contains private URL parts.")
-    if not isinstance(instance.controller_id, str) or (
-        instance.controller_id and instance.controller_id != instance.controller_id.strip()
-    ):
+    if instance.controller_id != instance.controller_id.strip():
         raise ImproperlyConfigured(f"Connection {instance.id!r} has an invalid controller id.")
-    if len(instance.granted_scopes) != len(set(instance.granted_scopes)) or any(
-        not SCOPE_NAME.fullmatch(scope) for scope in instance.granted_scopes
-    ):
+
+
+def _check_grants(instance: ConnectionInstance) -> None:
+    """The credential a connection holds and the scopes it reports granted."""
+
+    scopes = instance.granted_scopes
+    if len(scopes) != len(set(scopes)) or any(not SCOPE_NAME.fullmatch(scope) for scope in scopes):
         raise ImproperlyConfigured(f"Connection {instance.id!r} has invalid granted scopes.")
     if instance.credential_model not in ("", *CREDENTIAL_MODELS):
         raise ImproperlyConfigured(
             f"Connection {instance.id!r} has invalid credential model {instance.credential_model!r}."
         )
-    if instance.credential_model == "none" and (instance.granted_scopes or instance.scopes_known):
+    if instance.credential_model == "none" and (scopes or instance.scopes_known):
         raise ImproperlyConfigured(f"Connection {instance.id!r} is keyless but reports grants.")
-    known = {ability.name for ability in spec.abilities}
-    unknown = sorted(set(instance.ability_names) - known)
+
+
+def _check_relations(spec: ConnectionSpec, instance: ConnectionInstance) -> None:
+    """What a connection names: its family's abilities, its links and its facts."""
+
+    unknown = sorted(set(instance.ability_names) - {ability.name for ability in spec.abilities})
     if unknown:
         raise ImproperlyConfigured(f"Connection {instance.id!r} references unknown abilities: {', '.join(unknown)}.")
-    for collection in (instance.targets, instance.dependencies):
-        if any(
-            not isinstance(link, ConnectionLink)
-            or not link.label.strip()
-            or (link.url and not safe_connection_url(link.url))
-            or not isinstance(link.resource_key, str)
-            or (link.resource_key and link.resource_key != link.resource_key.strip())
-            for link in collection
-        ):
-            raise ImproperlyConfigured(f"Connection {instance.id!r} has an invalid relationship.")
-    if any(
-        not isinstance(fact, ConnectionFact) or not fact.label.strip() or not fact.value.strip()
-        for fact in instance.facts
-    ):
+    if not all(_sound_link(link) for link in (*instance.targets, *instance.dependencies)):
+        raise ImproperlyConfigured(f"Connection {instance.id!r} has an invalid relationship.")
+    if any(not fact.label.strip() or not fact.value.strip() for fact in instance.facts):
         raise ImproperlyConfigured(f"Connection {instance.id!r} has an invalid fact.")
-    return instance
+
+
+def _sound_link(link: ConnectionLink) -> bool:
+    """Whether a link has a label, a safe address if any, and an exact resource key."""
+
+    if not link.label.strip():
+        return False
+    if link.url and not safe_connection_url(link.url):
+        return False
+    return link.resource_key == link.resource_key.strip()
 
 
 def connection_total() -> int:
@@ -414,14 +428,16 @@ def _ability_state(
     available = None if evidence == "unknown" else evidence not in ("missing", "revoked")
     return ConnectionAbilityState(
         ability,
-        available,
-        missing,
+        available=available,
+        missing_scopes=missing,
         # Named for the command it opens, not for the ability that led here.
         # Several abilities are commonly performed by one command, and a button
         # labeled with the ability lands on a page that says something else.
         # A command about one record is about this connection.
-        capability_action_link(ability.capability, principal=principal, subject=instance.id) if available else None,
-        evidence,
+        action=capability_action_link(ability.capability, principal=principal, subject=instance.id)
+        if available
+        else None,
+        evidence=evidence,
     )
 
 

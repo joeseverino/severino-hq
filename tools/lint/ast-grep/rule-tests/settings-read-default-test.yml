@@ -1,0 +1,10 @@
+id: settings-read-default
+valid:
+  - 'settings.DEBUG'
+  - 'getattr(settings, name)'
+  - 'getattr(config, "DEBUG", False)'
+invalid:
+  - 'getattr(settings, "DEBUG", False)'
+  - 'getattr(settings, ''X'', 1)'
+  - 'getattr(settings, name, None)'
+  - 'getattr(settings, f"HQ_{name}", "")'

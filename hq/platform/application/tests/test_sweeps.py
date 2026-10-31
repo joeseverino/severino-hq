@@ -2,7 +2,6 @@
 
 import tempfile
 from pathlib import Path
-from unittest import mock
 
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -14,6 +13,16 @@ from hq.platform.application.derivations import counting, derive_ahead
 from hq.platform.application.projection import projection_scope
 from hq.platform.core import ahead
 from hq.platform.core.bench import seed, unchanged_sweep
+
+
+def markers(directory: Path):
+    """The marker files HQ and its controller touch, kept in ``directory``."""
+
+    return override_settings(
+        SEVERINO_ACTIVITY_MARKER=str(directory / "hq-activity"),
+        SEVERINO_CONTROLLER_HEARTBEAT=str(directory / "controller-heartbeat"),
+        SEVERINO_CONTROLLER_DOORBELL=str(directory / "controller-doorbell"),
+    )
 
 
 class SweepTests(TestCase):
@@ -30,7 +39,7 @@ class SweepTests(TestCase):
         cls.seeded = seed(0.05)
         # The first sweep of a seeded estate adopts what it finds; every one
         # after it changes nothing but when it was read.
-        with mock.patch("hq.platform.application.cadence._touch"):
+        with tempfile.TemporaryDirectory() as kept, markers(Path(kept)):
             unchanged_sweep()
 
     def setUp(self):
@@ -40,12 +49,9 @@ class SweepTests(TestCase):
         # A marker of its own, fresh: whether HQ is in use is part of what an
         # estate answer is keyed on, and asked ahead it is always in use. Left
         # to whatever an earlier test wrote, a request here would ask as idle.
-        marker = Path(self.enterContext(tempfile.TemporaryDirectory())) / "hq-activity"
-        marker.touch()
-        self.enterContext(override_settings(SEVERINO_ACTIVITY_MARKER=str(marker)))
-        patch = mock.patch("hq.platform.application.cadence._touch")
-        patch.start()
-        self.addCleanup(patch.stop)
+        kept = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        (kept / "hq-activity").touch()
+        self.enterContext(markers(kept))
 
     def _load(self) -> None:
         for name in self.PAGES:

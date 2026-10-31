@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/runtime"
@@ -20,7 +22,7 @@ func TestEnvironmentGlanceMeasuresRunningContainers(t *testing.T) {
 	_, server := newPortainerAPI(t, map[string]string{
 		"/api/endpoints":                      oneLocalEndpoint,
 		docker + "/info":                      `{"NCPU":4,"MemTotal":8589934592}`,
-		docker + "/system/df":                 `{"LayersSize":1073741824,"Volumes":[{"UsageData":{"Size":1073741824}},{"UsageData":{"Size":-1}},{}],"BuildCache":[{"Size":1073741824}]}`,
+		docker + glanceDiskUsage:              `{"LayersSize":1073741824,"Volumes":[{"UsageData":{"Size":1073741824}},{"UsageData":{"Size":-1}},{}],"BuildCache":[{"Size":1073741824}]}`,
 		docker + "/containers/json?all=false": `[{"Id":"a"},{"Id":"b"}]`,
 		docker + "/containers/a/stats?stream=false&one-shot=true": `{"memory_stats":{"usage":1073741824,"stats":{"inactive_file":536870912}},
 			"cpu_stats":{"cpu_usage":{"total_usage":300},"system_cpu_usage":1000,"online_cpus":4},
@@ -30,7 +32,7 @@ func TestEnvironmentGlanceMeasuresRunningContainers(t *testing.T) {
 			"precpu_stats":{"cpu_usage":{"total_usage":50},"system_cpu_usage":0}}`,
 	})
 	r := portainerRegistry(t, server.URL, runtime.Environment{})
-	machines, err := r.portainerGlance(t.Context())
+	machines, err := r.portainerGlance(t.Context(), map[string]bool{"hq-node": true})
 	if err != nil || len(machines) != 1 {
 		t.Fatalf("%+v %v", machines, err)
 	}
@@ -109,7 +111,7 @@ func hostGlanceRegistry(t *testing.T, stdout string) *Registry {
 	env := runtime.Environment{SSHDir: t.TempDir()}
 	held := supplied(sshConnection("srv", connections.SSHTransport{Host: "192.0.2.5", User: "hq", Port: "22", HostKey: "ssh-ed25519 AAAA"}))
 	r := New(env, held, &fakeHTTP{})
-	r.Commands = &Commands{Env: env, Supplied: held, Exec: func(context.Context, []string, []byte, []string) ([]byte, []byte, int, error) {
+	r.Commands = &Commands{Env: env, Supplied: held, Remote: func(context.Context, string, string, []byte) ([]byte, []byte, int, error) {
 		return []byte(stdout), nil, 0, nil
 	}}
 	return r
@@ -201,6 +203,153 @@ func (k keyed) Request(ctx context.Context, address, method string, headers map[
 	return k.Transport.Request(ctx, address, method, with, payload)
 }
 
+// glanceSite is a fake Portainer API with a local environment of three running
+// containers and an agent environment, and a fake weather service, behind one
+// test server; edge-vps is also reachable over SSH.
+func glanceSite(t *testing.T) (*Registry, runtime.GlancePlan) {
+	t.Helper()
+	docker := "/api/endpoints/1/docker"
+	stats := `{"memory_stats":{"usage":1048576},"cpu_stats":{"cpu_usage":{"total_usage":200},"system_cpu_usage":1000,"online_cpus":2},"precpu_stats":{"cpu_usage":{"total_usage":100},"system_cpu_usage":500}}`
+	api, server := newPortainerAPI(t, map[string]string{
+		"/api/endpoints": `[{"Id":1,"Name":"local","URL":"unix:///var/run/docker.sock","Type":1,"Status":1},
+			{"Id":2,"Name":"edge-vps","URL":"tcp://192.0.2.20:9001","Type":2,"Status":1}]`,
+		docker + "/info":                                          `{"NCPU":2,"MemTotal":4294967296}`,
+		docker + glanceDiskUsage:                                  `{"LayersSize":1073741824,"Volumes":[],"BuildCache":[]}`,
+		docker + "/containers/json?all=false":                     `[{"Id":"a"},{"Id":"b"},{"Id":"c"}]`,
+		docker + "/containers/a/stats?stream=false&one-shot=true": stats,
+		docker + "/containers/b/stats?stream=false&one-shot=true": stats,
+		docker + "/containers/c/stats?stream=false&one-shot=true": stats,
+		"/points/40.0000,-75.0000":                                `{"properties":{"forecastHourly":"SERVER/hourly","relativeLocation":{"properties":{"city":"Example","state":"PA"}}}}`,
+		"/hourly":                                                 `{"properties":{"periods":[{"startTime":"2026-07-01T13:00:00-04:00","temperature":70,"shortForecast":"Sunny"}]}}`,
+		"/alerts/active?point=40.0000,-75.0000":                   `{"features":[]}`,
+	})
+	api.routes["/points/40.0000,-75.0000"] = strings.Replace(api.routes["/points/40.0000,-75.0000"], "SERVER", server.URL, 1)
+	env := runtime.Environment{ID: "hq-node", SSHDir: t.TempDir()}
+	held := supplied(apiTokenConnection(runtime.ConnectionProviderPortainer, "portainer-example", server.URL, "synthetic"),
+		sshConnection("edge", connections.SSHTransport{Host: "192.0.2.20", User: "hq", Port: "22", HostKey: "ssh-ed25519 AAAA"}))
+	r := New(env, held, keyed{mustClient(t)})
+	r.Resolve = func(string) (string, error) { return "192.0.2.100", nil }
+	r.Commands = &Commands{Env: env, Supplied: held, Remote: func(context.Context, string, string, []byte) ([]byte, []byte, int, error) {
+		return []byte(`{"cpu_percent":5,"cores":2,"load_1m":0.1,"memory_used":1,"memory_total":2,"storage_used":1,"storage_total":2}`), nil, 0, nil
+	}}
+	plan := runtime.GlancePlan{
+		Panels: []runtime.GlancePanelID{runtime.GlancePanelIDInfrastructure, runtime.GlancePanelIDWeather},
+		Targets: runtime.GlancePlanTargets{
+			Infrastructure: []runtime.GlanceMachineTarget{{Key: "edge-vps", Connections: []string{"edge"}}, {Key: "hq-node"}},
+			Weather:        runtime.GlanceWeatherTarget{Point: "40,-75", Endpoint: server.URL},
+		},
+	}
+	return r, plan
+}
+
+// glanceMachines is each machine's summary in the infrastructure panel.
+func glanceMachines(t *testing.T, observations runtime.GlanceObservations) map[string]string {
+	t.Helper()
+	for _, observation := range observations {
+		if observation["panel_id"] != string(runtime.GlancePanelIDInfrastructure) {
+			continue
+		}
+		summaries := map[string]string{}
+		for _, machine := range observation["machines"].([]any) {
+			fields := machine.(map[string]any)
+			summaries[fields["key"].(string)] = fields["summary"].(string)
+		}
+		return summaries
+	}
+	t.Fatal("no infrastructure panel")
+	return nil
+}
+
+// A machine read over SSH is not read through Portainer as well: the glance
+// reads only the environments that are machines it has no other way to read.
+// The test server refuses a GET it has no route for, and edge-vps's
+// environment has none.
+func TestGlanceReadsOnlyTheEnvironmentsItNeeds(t *testing.T) {
+	r, plan := glanceSite(t)
+	observations, err := r.Glance(t.Context(), plan)
+	if err != nil || len(observations) != 2 {
+		t.Fatalf("%v %v", observations, err)
+	}
+	got := glanceMachines(t, observations)
+	want := map[string]string{"edge-vps": "Host load 0.10", "hq-node": "2 cores · 4.0 GB memory"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// meeting holds every call it gates until all of them are in flight together.
+type meeting struct {
+	mu      sync.Mutex
+	want    int
+	arrived int
+	all     chan struct{}
+}
+
+func (m *meeting) wait(ctx context.Context) error {
+	m.mu.Lock()
+	m.arrived++
+	if m.arrived == m.want {
+		close(m.all)
+	}
+	m.mu.Unlock()
+	select {
+	case <-m.all:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+type gated struct {
+	Transport
+	meeting *meeting
+	gate    func(address string) bool
+}
+
+func (g gated) Request(ctx context.Context, address, method string, headers map[string]string, payload any) (json.RawMessage, error) {
+	if g.gate(address) {
+		if err := g.meeting.wait(ctx); err != nil {
+			return nil, err
+		}
+	}
+	return g.Transport.Request(ctx, address, method, headers, payload)
+}
+
+// The glance reads its panels, its machines and a machine's containers at
+// once: the three container samples, the SSH reading and the weather point
+// are held until all five are in flight, which reads one at a time never are.
+func TestGlanceReadsAtOnce(t *testing.T) {
+	r, plan := glanceSite(t)
+	m := &meeting{want: 5, all: make(chan struct{})}
+	r.HTTP = gated{Transport: r.HTTP, meeting: m, gate: func(address string) bool {
+		return strings.Contains(address, "/stats?") || strings.Contains(address, "/points/")
+	}}
+	reading := r.Commands.Remote
+	r.Commands.Remote = func(ctx context.Context, ref, operation string, input []byte) ([]byte, []byte, int, error) {
+		if err := m.wait(ctx); err != nil {
+			return nil, nil, 0, err
+		}
+		return reading(ctx, ref, operation, input)
+	}
+	// Reads one at a time would wait for the meeting for good; the deadline
+	// turns that into failed panels.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	observations, err := r.Glance(ctx, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, observation := range observations {
+		if observation["refresh_failed"] != nil {
+			t.Fatalf("weather was not read with the rest: %v", observation)
+		}
+	}
+	got := glanceMachines(t, observations)
+	if got["hq-node"] != "2 cores · 4.0 GB memory" || got["edge-vps"] != "Host load 0.10" {
+		t.Fatalf("machines were not read with the rest: %v", got)
+	}
+}
+
 func TestHostFirewallReadingIsTyped(t *testing.T) {
 	cases := []struct {
 		name, body, err string
@@ -249,7 +398,7 @@ func TestHostPerimeterChecksPublishedPortsAndSSH(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			r := New(env, held, &fakeHTTP{})
-			r.Commands = &Commands{Env: env, Supplied: held, Exec: func(context.Context, []string, []byte, []string) ([]byte, []byte, int, error) {
+			r.Commands = &Commands{Env: env, Supplied: held, Remote: func(context.Context, string, string, []byte) ([]byte, []byte, int, error) {
 				return []byte(c.stdout), nil, 0, nil
 			}}
 			r.PublishedContainers = func(context.Context) ([]PublishedContainer, error) {

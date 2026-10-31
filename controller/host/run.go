@@ -85,7 +85,7 @@ func (r *WebRunner) supervise(ctx context.Context, exited <-chan error) error {
 		case <-ctx.Done():
 			_ = r.Notify("STOPPING=1")
 			_ = r.Docker(context.WithoutCancel(ctx), "stop", "--time", StopSeconds, Container).Run()
-			<-exited
+			<-exited //nolint:errcheck // stopped on purpose, so how it exited says nothing
 			return nil
 		case <-ticker.C:
 			if ready {
@@ -102,7 +102,7 @@ func (r *WebRunner) supervise(ctx context.Context, exited <-chan error) error {
 				// Past its start period and failing: the start fails now,
 				// so a deploy of an image that cannot serve rolls back.
 				_ = r.Docker(context.WithoutCancel(ctx), "stop", "--time", StopSeconds, Container).Run()
-				<-exited
+				<-exited //nolint:errcheck // stopped on purpose, so how it exited says nothing
 				return errors.New("HQ did not become healthy")
 			}
 		}
@@ -131,7 +131,7 @@ func (r *WebRunner) awaitRendered(ctx context.Context) error {
 			r.Log.Info("Waiting for the application environment.", slog.String("event", "host.web.awaiting"), slog.String("reason", err.Error()))
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("%w: %v", ErrNotRendered, err)
+			return fmt.Errorf("%w: %w", ErrNotRendered, err)
 		}
 		select {
 		case <-ctx.Done():

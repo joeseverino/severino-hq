@@ -1,28 +1,16 @@
 """Everything else HQ holds about a machine, gathered by what it already knows.
 
-The machine page is where the estate is most densely related and said least
-about it. A machine answers on a handful of names, and behind each name sits a
-DNS record, a proxy host, a certificate and something running: four
-declarations HQ already resolves, per name, for the service page.
-
-So the machine page asks the service catalog what supplies each name, and the
-answer cannot disagree with the service page because it *is* the service page's
-answer.
-
-A section is a function from a machine to rows, and the registry below is the
-list of them. A page that hand-wires each band can only grow when someone edits
-it; a page that reads a registry grows when HQ learns something.
-
-The section and cell primitives are shared with the service page rather than
-copied, so a band gained on one renders identically on the other.
+The machine page is where the estate is most densely related. Behind each name
+a machine answers on sit a DNS record, a proxy host, a certificate and something
+running, which HQ already resolves for the service page; this asks the service
+catalog for them, so the two cannot disagree, and draws them with the service
+page's sections and cells, so a band renders identically on both.
 """
 
 from collections.abc import Callable
 from dataclasses import replace
 
 from hq.domains.control_plane.names import normalized_hostname
-from hq.platform.application.routes import reverse
-from hq.platform.core.models import AuditLog
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.models import ManagedResource
 lazy from hq.domains.control_plane.providers import service_facets
@@ -30,14 +18,14 @@ lazy from hq.domains.control_plane.providers import service_facets
 from . import docker_sections
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import entity_link, kind_label
-from .moments import ago
 from .projection import projection_scope
-from .service_context import Cell, ServiceSection
+from .service_context import Cell, ServiceSection, recent_changes
 from .ui import MISSING
 lazy from . import connections, services
 lazy from .cadence import connection_providers
 lazy from .hq_self import hq_service
 lazy from .locate import host_of
+lazy from .machines import Machine
 lazy from .own_addresses import tailnet_sightings
 lazy from .policy_links import PolicyNames
 lazy from .public_registry import public_endpoints
@@ -61,23 +49,19 @@ def sections_for(machine) -> tuple[ServiceSection, ...]:
 def _identity(machine) -> ServiceSection | None:
     """The declarations that constitute this machine, and what each is filed as.
 
-    One machine is declared more than once (as a machine, and again as the
-    device the tailnet knows) and a key is unique across every kind, so the
-    second declaration is filed under a suffixed key. The estate then contains
-    ``x`` and ``x-2`` describing one thing, which reads as two machines to
-    anyone who meets the second one first.
-
-    The machine carries both keys, so HQ knows they are the same. This says
-    so, because a name that looks like a duplicate is worth one row to explain
-    and expensive to rediscover.
+    A machine declared twice (as a machine, and as the device the tailnet
+    knows) files the second under a suffixed key, since keys are unique across
+    kinds, so ``x`` and ``x-2`` read as two machines to anyone who meets the
+    second first. A name that looks like a duplicate is worth one row to
+    explain and expensive to rediscover.
     """
 
     keys = list(
         dict.fromkeys(
             key
             for key in (
-                getattr(machine, "declaration", ""),
-                getattr(machine, "route_approval_key", ""),
+                machine.declaration,
+                machine.route_approval_key,
             )
             if key
         )
@@ -115,22 +99,14 @@ _SUPPLIED_BY = {"runtime": "Container", "dns": "DNS record", "proxy": "Proxy", "
 def _names(machine) -> ServiceSection | None:
     """Every name this machine answers on, and what supplies each one.
 
-    The band the machine page exists for. A machine is only interesting through
-    its names, and each name is supplied by a short, fixed set of things: what
-    runs it, what resolves it, what fronts it, what secures it. HQ already
-    decides all four, per name, for the service page; this reads that decision
-    rather than making a second one.
-
-    Traffic rides along because it answers the question the facets raise. Four
-    green cells beside a name nobody visits is a different situation from four
-    green cells beside the name carrying the site, and only the machine page
-    holds enough names at once for the comparison to mean anything.
-
-    A blank cell is "nothing supplies this", which is not the same as unhealthy
-    and not the same as unmeasured. Each is said in its own words.
+    The band the machine page exists for: what runs, resolves, fronts and
+    secures each name, read from the service page's decision rather than made a
+    second time. Traffic rides along because four green cells beside a name
+    nobody visits differ from four beside the name carrying the site, and only
+    this page holds enough names at once for the comparison to mean anything.
     """
 
-    hostnames = tuple(getattr(machine, "hostnames", ()) or ())
+    hostnames = machine.hostnames
     if not hostnames:
         return None
 
@@ -140,12 +116,15 @@ def _names(machine) -> ServiceSection | None:
     measured = traffic_for_hosts(set(hostnames), days=HOST_TRAFFIC_DAYS)
     facets = service_facets()
 
+    # A blank cell is "nothing supplies this", which is neither unhealthy nor
+    # unmeasured; each is said in its own words.
     def supplied(service, facet_id: str) -> Cell:
         facet = next((f for f in service.facets if f.id == facet_id), None) if service else None
         claim = next(iter(facet.claims), None) if facet and facet.present else None
         if claim is None:
             return Cell(MISSING, muted=True)
-        return Cell.of(claim.link)
+        # The row is already the name, so the cell says where it leads.
+        return Cell.of(claim.within_service)
 
     def traffic(hostname: str) -> Cell:
         reading = measured.get(normalized_hostname(hostname))
@@ -197,29 +176,7 @@ def _activity(machine) -> ServiceSection | None:
     "what changed".
     """
 
-    keys = [str(key) for key in (getattr(machine, "resources", ()) or ())]
-    if not keys:
-        return None
-    events = AuditLog.objects.filter(object_id__in=keys).order_by("-created_at")[:8]
-    records = tuple(
-        (
-            Cell(
-                event.object_repr or event.object_id,
-                reverse("core:audit_detail", kwargs={"pk": event.pk}),
-            ),
-            Cell(event.get_action_display()),
-            Cell(ago(event.created_at), muted=True),
-        )
-        for event in events
-    )
-    if not records:
-        return None
-    return ServiceSection(
-        id="activity",
-        label="Recent changes",
-        columns=("What", "Change", "When"),
-        records=records,
-    )
+    return recent_changes(list(machine.resources), what="What", limit=8)
 
 
 def serves_links(machine, relationships) -> tuple:
@@ -229,7 +186,7 @@ def serves_links(machine, relationships) -> tuple:
 
     group = relationships.group(RELATIONS["runs_on"].inverse)
     serves = [item.entity for item in (group.items if group else ())]
-    if getattr(machine, "runs_hq", False):
+    if machine.runs_hq:
         own = hq_service(catalog=connections.machines_once())
         if own is not None:
             first = entity_link("service", own.hostname)
@@ -237,7 +194,7 @@ def serves_links(machine, relationships) -> tuple:
     return tuple(dict.fromkeys(serves))
 
 
-def machine_links(machine, relationships) -> dict[str, object]:
+def machine_links(machine: Machine, relationships) -> dict[str, object]:
     """Every entity the machine page names outside its sections, as links.
 
     What it is reached through, what it serves, what else is declared on it,
@@ -245,14 +202,14 @@ def machine_links(machine, relationships) -> dict[str, object]:
     names an address; it links to the machine answering there.
     """
 
-    presence = getattr(machine, "presence", None)
+    presence = machine.presence
     serves = serves_links(machine, relationships)
     links: dict[str, object] = {
         "reached_links": tuple(
             (_reached_through(machine, ref), ref in machine.unanswered) for ref in machine.reached_by
         ),
         "serves_links": serves,
-        "serves_count": len(serves) + len(getattr(machine, "roles", ()) or ()),
+        "serves_count": len(serves) + len(machine.roles),
         "declaration_links": tuple(entity_link("resource", key) for key in machine.other_declarations),
         "labeled_addresses": (),
         "tailscale_version": "",
@@ -278,7 +235,7 @@ def machine_links(machine, relationships) -> dict[str, object]:
     return links
 
 
-def _reached_through(machine, ref: str):
+def _reached_through(machine: Machine, ref: str):
     """A connection that reaches the machine, as its page names it.
 
     A connection named for the machine it reaches would read, on that
@@ -286,7 +243,7 @@ def _reached_through(machine, ref: str):
     kind instead ("SSH"), its own name kept for hover.
     """
 
-    own = {str(name).lower() for name in (machine.name, *(getattr(machine, "aliases", ()) or ()))}
+    own = {str(name).lower() for name in (machine.name, *machine.aliases)}
     providers = connection_providers(ref) if ref.lower() in own else ()
     if not providers:
         return entity_link("connection", ref)
@@ -306,8 +263,8 @@ def labeled_addresses(machine) -> tuple[tuple[str, str], ...]:
     machine's own names say nothing about where it is.
     """
 
-    own = {str(name).lower() for name in (getattr(machine, "name", ""), *(getattr(machine, "aliases", ()) or ()))}
-    hosts = dict.fromkeys(host_of(address) for address in getattr(machine, "addresses", ()) or ())
+    own = {name.lower() for name in (machine.name, *machine.aliases)}
+    hosts = dict.fromkeys(host_of(address) for address in machine.addresses)
     return tuple(
         (_label(host), host) for host in hosts if host and host.lower() not in own and network_of(host) != "loopback"
     )
@@ -323,14 +280,14 @@ def _label(host: str) -> str:
     return f"{_NETWORKS[network]} IPv6" if ":" in host else _NETWORKS[network]
 
 
-def header_addresses(machine) -> tuple[tuple[str, str, str], ...]:
+def header_addresses(machine: Machine) -> tuple[tuple[str, str, str], ...]:
     """``(label, address, holder)`` for the addresses a person uses to reach it.
 
     Tailnet, then LAN, then public: each only when it is the device's own
     (``application.own_addresses``).
     """
 
-    presence = getattr(machine, "presence", None)
+    presence = machine.presence
     if presence is None:
         return ()
     seen = tailnet_sightings()
@@ -342,8 +299,9 @@ def header_addresses(machine) -> tuple[tuple[str, str, str], ...]:
     )
 
 
-# The list of sections, stated once. A section with nothing to say returns
-# nothing and does not appear, so the page grows a band only when HQ has one.
+# The list of sections, stated once: each is a function from a machine to rows,
+# so the page grows when HQ learns something rather than when someone edits it.
+# A section with nothing to say returns nothing and does not appear.
 SECTIONS: tuple[Callable[[object], ServiceSection | None], ...] = (
     _identity,
     _names,

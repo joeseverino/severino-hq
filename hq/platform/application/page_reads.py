@@ -1,11 +1,10 @@
 """What a page is made of, and what would fill it while it is empty.
 
-A view names the things its page shows (``page_reads``) by the names they are
-declared under: a resource kind, a reading, or a connection provider for data
-that is neither. Which connection reads each is in that thing's own
-declaration, so an empty page's remedy ("Connect Portainer") and the order the
-Connections page offers services in both follow from those names alone, and
-neither is written per page.
+A view names the things its page shows (``page_reads``) by their declared
+names: a resource kind, a reading, or a connection provider for data that is
+neither. Each one's declaration says which connection reads it, so an empty
+page's remedy ("Connect Portainer") and the Connections page's order follow
+from those names alone, and neither is written per page.
 """
 
 from collections.abc import Iterable

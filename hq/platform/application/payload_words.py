@@ -57,18 +57,30 @@ def value_words(value: Any, schema: Mapping[str, Any] | None = None) -> str:
     if isinstance(value, bool):
         return "yes" if value else "no"
     if isinstance(value, Mapping):
-        if len(value) <= SAID_WHOLE and all(_scalar(child) for child in value.values()):
-            return ", ".join(
-                f"{lower_first(field_label(str(key)))} {value_words(child) or 'empty'}" for key, child in value.items()
-            )
-        return counted(len(value), "field")
+        return _record_words(value)
     if isinstance(value, (list, tuple, set, frozenset)):
-        items = list(value)
-        if all(_scalar(item) for item in items):
-            return ", ".join(value_words(item) for item in items)
-        noun = lower_first(_items_title(schema))
-        return counted(len(items), noun if noun and " " not in noun else "entry")
+        return _list_words(list(value), schema)
     return _plain_words(value)
+
+
+def _record_words(record: Mapping[Any, Any]) -> str:
+    """A small record of plain facts said whole, any other counted by its fields."""
+
+    if len(record) > SAID_WHOLE or not all(_scalar(child) for child in record.values()):
+        return counted(len(record), "field")
+    return ", ".join(
+        f"{lower_first(field_label(str(key)))} {value_words(child) or 'empty'}" for key, child in record.items()
+    )
+
+
+def _list_words(items: list[Any], schema: Mapping[str, Any] | None) -> str:
+    """A list of plain values said as those values, any other counted by what
+    its schema calls one item, when that is a single word."""
+
+    if all(_scalar(item) for item in items):
+        return ", ".join(value_words(item) for item in items)
+    noun = lower_first(_items_title(schema))
+    return counted(len(items), noun if noun and " " not in noun else "entry")
 
 
 def _plain_words(value: Any) -> str:

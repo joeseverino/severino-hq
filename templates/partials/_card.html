@@ -1,0 +1,9 @@
+{% comment %}
+A card, the frame a page's content is grouped in, drawn by {% card %}:
+{% card css="example" heading="example-heading" %}{% section_head id="example-heading" %}Hosts{% endsection_head %}...{% endcard %}.
+A section by default; element= says when it is an article, figure, details
+or div. heading names its heading's id, label says what it holds when it has
+none, busy says its content is still coming, and each data_* option is a
+data- attribute (True draws it bare). The tags are built by value_tags._card.
+{% endcomment %}
+{{ opening|safe }}{{ content|safe }}{{ closing|safe }}

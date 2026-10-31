@@ -1,20 +1,10 @@
 """The request path to a hostname, hop by hop, from what the connections read.
 
-``path_to(hostname)`` walks what a request for the name meets: the DNS answer
-(a public record, proxied or not, or an internal rewrite), the ingress (the
-provider edge, a proxy host, a Caddy route, a Pages project, a tunnel), then the
-machine and container behind it. One route per DNS answer that names the host.
-
-Each hop names the reading or swept record it came from and the connection
-that read it. A hop HQ cannot see is stated with its reason ("not read:
-<kind>, because <reason>"), never guessed. Which kinds answer which hop is read
-from the registries: DNS and ingress providers declare their facet and origin,
-readings their facet, ``redirects_to`` and ``upstream``. A kind nothing reads
-falls back to its declarations, marked as declared.
-
-``hq_path`` is HQ's own path: its hostname's path, ending at HQ where it says
-it is served (``served_at``/``served_port``), or the machine alone where no
-name leads to it.
+``path_to(hostname)`` walks a request for the name from each DNS answer through
+the ingress to the machine and container behind it; ``hq_path`` is HQ's own,
+ending at HQ where it says it is served (``served_at``/``served_port``), or at
+the machine alone where no name leads to it. How each hop is found, and stated
+when HQ cannot see it: docs/Derived-Facts.md#request-paths.
 """
 
 from collections.abc import Iterable, Mapping
@@ -379,7 +369,7 @@ def _refused_gap(kinds: tuple[str, ...], name: str) -> str:
     return _reading_gap(read, name) if read else ""
 
 
-def _redirect_kinds(at_ingress: bool = False) -> tuple[str, ...]:
+def _redirect_kinds(*, at_ingress: bool = False) -> tuple[str, ...]:
     """Redirect readings answered at the edge, or at a machine's ingress."""
 
     return _reading_kinds(lambda spec: spec.redirects and (spec.facet == "proxy") == at_ingress)
@@ -420,7 +410,7 @@ def _certificate_of(role: str, found: tuple[Joined, ...]) -> Certificate:
 def _redirect(name: str, *, at_ingress: bool = False) -> list[Hop]:
     """A redirect answering for the name: at the edge, or at the machine's ingress."""
 
-    for joined in _about(name, kinds=_redirect_kinds(at_ingress)):
+    for joined in _about(name, kinds=_redirect_kinds(at_ingress=at_ingress)):
         target = joined.spec.redirects_to(joined.record)
         if target:
             return [
@@ -523,9 +513,9 @@ def _from_answer(name: str, answer: str, *, fronted: bool, depth: int, edge: str
     host = host_of(answer)
     network = network_of(host)
     if not network:
-        return _alias(name, host, fronted=fronted, depth=depth)
+        return _alias(name, host, depth=depth)
     if is_documentation(host):
-        return [_placeholder(name, host, fronted, edge)]
+        return [_placeholder(name, host, fronted=fronted, edge=edge)]
     hops = [Hop("network", NETWORK_LABELS.get(network, network), "", detail=host)]
     machine = _machine(host)
     if machine is None:
@@ -543,7 +533,7 @@ def _from_answer(name: str, answer: str, *, fronted: bool, depth: int, edge: str
     return hops
 
 
-def _placeholder(name: str, host: str, fronted: bool, edge: str = "") -> Hop:
+def _placeholder(name: str, host: str, *, fronted: bool, edge: str = "") -> Hop:
     if fronted:
         gap = _reading_gap(_redirect_kinds(), name)
         # Named for who answers, since that is what "runs on" asks: the edge
@@ -558,7 +548,7 @@ def _placeholder(name: str, host: str, fronted: bool, edge: str = "") -> Hop:
     return Hop("origin", "Parked", host, detail="A documentation address. Nothing answers there.")
 
 
-def _alias(name: str, target: str, *, fronted: bool, depth: int) -> list[Hop]:
+def _alias(name: str, target: str, *, depth: int) -> list[Hop]:
     """A record answering with another name: that name's path, or who runs it."""
 
     target = normalized_hostname(target)

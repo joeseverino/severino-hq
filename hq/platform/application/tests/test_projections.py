@@ -1,4 +1,5 @@
 import json
+import math
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -23,6 +24,7 @@ from ..resource_context import get_managed_resource
 from ..resource_operations import operation_summary
 from ..ui import (
     MISSING,
+    PLOT_HEIGHT,
     PLOT_LEFT,
     PLOT_WIDTH,
     ActivityCalendar,
@@ -126,6 +128,24 @@ class UiProjectionTests(TestCase):
                 (ChartSeries("Run", (30.0, 45.0), 1),),
                 unit="minutes",
             )
+
+    def test_stacked_chart_rejects_a_slot_outside_the_palette(self):
+        with self.assertRaises(ValueError):
+            stacked_bar_chart("Training", "", ("Aug 3",), (ChartSeries("Run", (30.0,), 6),), unit="minutes")
+
+    def test_stacked_chart_rejects_values_that_cannot_stack(self):
+        for value in (-1.0, math.inf, math.nan):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                stacked_bar_chart("Training", "", ("Aug 3",), (ChartSeries("Run", (value,), 1),), unit="minutes")
+
+    def test_a_stacked_chart_of_zeros_is_empty_and_draws_flat_bars(self):
+        chart = stacked_bar_chart("Training", "", ("Aug 3", "Aug 10"), (ChartSeries("Run", (0.0, 0.0), 1),), unit="m")
+        self.assertTrue(chart.empty)
+        self.assertEqual({bar.height for bar in chart.bars}, {0.0})
+
+    def test_a_known_maximum_fixes_the_axis_top(self):
+        chart = stacked_bar_chart("Share", "", ("Aug 3",), (ChartSeries("Done", (40.0,), 1),), unit="%", maximum=100.0)
+        self.assertAlmostEqual(chart.bars[0].height, PLOT_HEIGHT * 0.4)
 
 
 class LineChartTests(TestCase):
@@ -316,6 +336,21 @@ class LineChartTests(TestCase):
                 unit="bpm",
             )
 
+    def test_two_series_sharing_a_color_are_refused(self):
+        points = ((date(2026, 1, 1), 1.0), (date(2026, 1, 2), 2.0))
+        with self.assertRaises(ValueError):
+            line_chart("Resting", "", (("One", points, 2), ("Two", points, 2)), unit="bpm")
+
+    def test_a_percentage_is_not_padded_past_its_whole(self):
+        chart = line_chart(
+            "Adherence",
+            "",
+            (("Adherence", ((date(2026, 1, 1), 40.0), (date(2026, 1, 2), 100.0)), 1),),
+            unit="%",
+        )
+        self.assertEqual(float(chart.ticks[-1].label), 100.0)
+        self.assertAlmostEqual(min(point.y for point in chart.series[0].points), chart.plot_top)
+
     def test_the_plot_rectangle_is_shared_with_the_bar_chart(self):
         line = line_chart("Resting", "", self.SERIES, unit="bpm")
         bars = stacked_bar_chart("Training", "", ("a", "b"), (ChartSeries("Run", (1.0, 2.0), 1),), unit="m")
@@ -413,11 +448,11 @@ class CadenceTests(TestCase):
     """A period with no data is drawn as that and is in no total."""
 
     WEEKS = (
-        CadenceWeek("Sep 1", True, 2, "2 sessions"),
-        CadenceWeek("Sep 8", False, detail="None"),
-        CadenceWeek("Sep 15", True, 1, "1 session"),
-        CadenceWeek("Sep 22", False, no_data=True),
-        CadenceWeek("Sep 29", False, no_data=True),
+        CadenceWeek("Sep 1", hit=True, count=2, detail="2 sessions"),
+        CadenceWeek("Sep 8", hit=False, detail="None"),
+        CadenceWeek("Sep 15", hit=True, count=1, detail="1 session"),
+        CadenceWeek("Sep 22", hit=False, no_data=True),
+        CadenceWeek("Sep 29", hit=False, no_data=True),
     )
 
     def test_totals_count_only_periods_with_data(self):
@@ -429,13 +464,13 @@ class CadenceTests(TestCase):
         self.assertEqual(cadence.streak, 1)
 
     def test_a_row_with_no_data_at_all_has_no_total(self):
-        row = CadenceRow("Legs", tuple(CadenceWeek(str(n), False, no_data=True) for n in range(3)))
+        row = CadenceRow("Legs", tuple(CadenceWeek(str(n), hit=False, no_data=True) for n in range(3)))
 
         self.assertEqual(row.tally, MISSING)
 
     def test_a_period_cannot_have_no_data_and_a_hit(self):
         with self.assertRaises(ValueError):
-            CadenceWeek("Sep 1", True, no_data=True)
+            CadenceWeek("Sep 1", hit=True, no_data=True)
 
     def test_the_strip_draws_no_data_apart_from_a_miss(self):
         rendered = render_to_string("partials/_cadence.html", {"cadence": Cadence("", "", self.WEEKS)})
@@ -455,7 +490,7 @@ class CadenceTests(TestCase):
         self.assertIn("2/3", [cell.words for cell in elements(rendered, "td")])
 
     def test_the_owners_own_words_for_a_period_are_kept(self):
-        week = CadenceWeek("Sep 22", False, detail="No data for the week of Sep 22", no_data=True)
+        week = CadenceWeek("Sep 22", hit=False, detail="No data for the week of Sep 22", no_data=True)
 
         self.assertEqual(week.said, "No data for the week of Sep 22")
 

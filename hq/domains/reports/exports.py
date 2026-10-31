@@ -55,8 +55,12 @@ def _csv_cell(value) -> str:
 Column = str | tuple[str, Callable[[Any], Any]]
 
 
+def _readers(columns: tuple[Column, ...]) -> list[tuple[str, Callable[[Any], Any]]]:
+    return [(column, attrgetter(column)) if isinstance(column, str) else column for column in columns]
+
+
 def _csv_of(records: Iterable[Any], columns: tuple[Column, ...]) -> str:
-    readers = [(column, attrgetter(column)) if isinstance(column, str) else column for column in columns]
+    readers = _readers(columns)
     return _csv_response(
         [header for header, _ in readers],
         ([read(record) for _, read in readers] for record in records),
@@ -182,135 +186,154 @@ def _money(value) -> str:
     return f"{(value or Decimal('0.00')):.2f}"
 
 
+def _read(name: str, attribute: str, shape: Callable[[Any], Any] = lambda value: value) -> Column:
+    """A field read from another attribute, shaped for the summary."""
+
+    return name, lambda record: shape(getattr(record, attribute))
+
+
+def _iso(name: str) -> Column:
+    """A date, or None when it is not yet set."""
+
+    return _read(name, name, lambda value: value.isoformat() if value else None)
+
+
+def _amount(name: str) -> Column:
+    return _read(name, name, _money)
+
+
+def _handles(relation: str, field: str = "slug") -> Column:
+    """Each related record's handle, read from the prefetch: a ``values_list``
+    on the relation asks the database again for every row."""
+
+    return _read(relation, relation, lambda related: [getattr(item, field) for item in related.all()])
+
+
+PROJECT_FIELDS: tuple[Column, ...] = (
+    "slug",
+    "name",
+    "category",
+    "status",
+    _read("technologies", "tech_list"),
+    "repository_url",
+    "public_url",
+)
+CONTENT_FIELDS: tuple[Column, ...] = (
+    "slug",
+    "title",
+    _read("type", "content_type"),
+    "status",
+    "topic",
+    _read("tags", "tag_list"),
+    "published_url",
+    _iso("published_at"),
+    _handles("related_projects"),
+    _handles("related_assets"),
+    _handles("related_documentation", "doc_id"),
+)
+DOCUMENTATION_FIELDS: tuple[Column, ...] = (
+    "doc_id",
+    "title",
+    _read("type", "doc_type"),
+    "system_service",
+    "environment",
+    "status",
+    "sensitivity",
+    "obsidian_path",
+    "github_path",
+    "external_url",
+    _iso("last_reviewed"),
+    _read("safe_for_ai_export", "is_safe_for_ai_export"),
+    _handles("related_projects"),
+    _handles("related_assets"),
+)
+ASSET_FIELDS: tuple[Column, ...] = (
+    "slug",
+    "item_name",
+    "vendor",
+    "category",
+    _iso("purchase_date"),
+    _amount("total_cost"),
+    "business_use_percentage",
+    _amount("estimated_deductible_amount"),
+    "status",
+    _handles("related_projects"),
+)
+
+
+def _records(records: Iterable[Any], fields: tuple[Column, ...]) -> list[dict[str, Any]]:
+    readers = _readers(fields)
+    return [{name: read(record) for name, read in readers} for record in records]
+
+
 def year_summary(year: int) -> dict:
-    # Related records are read from the prefetch (``.all()``): a ``values_list``
-    # on the relation asks the database again for every row.
     expenses = Expense.objects.filter(date__year=year)
     assets = Asset.objects.filter(purchase_date__year=year)
-
-    by_category = list(
-        expenses.values("category")
-        .annotate(total=Sum("total_cost"), deductible=Sum("estimated_deductible_amount"))
-        .order_by("-total")
-    )
-
-    largest = list(
-        expenses.order_by("-total_cost").values(
-            "id",
-            "date",
-            "vendor",
-            "item",
-            "category",
-            "total_cost",
-        )[:10]
-    )
-
-    projects = [
-        {
-            "slug": p.slug,
-            "name": p.name,
-            "category": p.category,
-            "status": p.status,
-            "technologies": p.tech_list,
-            "repository_url": p.repository_url,
-            "public_url": p.public_url,
-        }
-        for p in Project.objects.all().order_by("name")
-    ]
-
-    content = [
-        {
-            "slug": c.slug,
-            "title": c.title,
-            "type": c.content_type,
-            "status": c.status,
-            "topic": c.topic,
-            "tags": c.tag_list,
-            "published_url": c.published_url,
-            "published_at": c.published_at.isoformat() if c.published_at else None,
-            "related_projects": [related.slug for related in c.related_projects.all()],
-            "related_assets": [related.slug for related in c.related_assets.all()],
-            "related_documentation": [related.doc_id for related in c.related_documentation.all()],
-        }
-        for c in ContentItem.objects.all()
-        .prefetch_related("related_projects", "related_assets", "related_documentation")
-        .order_by("-updated_at")
-    ]
-
-    docs = [
-        {
-            "doc_id": d.doc_id,
-            "title": d.title,
-            "type": d.doc_type,
-            "system_service": d.system_service,
-            "environment": d.environment,
-            "status": d.status,
-            "sensitivity": d.sensitivity,
-            "obsidian_path": d.obsidian_path,
-            "github_path": d.github_path,
-            "external_url": d.external_url,
-            "last_reviewed": d.last_reviewed.isoformat() if d.last_reviewed else None,
-            "safe_for_ai_export": d.is_safe_for_ai_export,
-            "related_projects": [related.slug for related in d.related_projects.all()],
-            "related_assets": [related.slug for related in d.related_assets.all()],
-        }
-        for d in DocumentationRecord.objects.all()
-        .prefetch_related("related_projects", "related_assets")
-        .order_by("doc_id")
-    ]
-
-    asset_records = [
-        {
-            "slug": a.slug,
-            "item_name": a.item_name,
-            "vendor": a.vendor,
-            "category": a.category,
-            "purchase_date": a.purchase_date.isoformat() if a.purchase_date else None,
-            "total_cost": _money(a.total_cost),
-            "business_use_percentage": a.business_use_percentage,
-            "estimated_deductible_amount": _money(a.estimated_deductible_amount),
-            "status": a.status,
-            "related_projects": [related.slug for related in a.related_projects.all()],
-        }
-        for a in assets.prefetch_related("related_projects")
-    ]
-
     return {
         "generated_at": timezone.now().isoformat(),
         "year": year,
         "disclaimer": ("Estimated deductible = cost × business-use %. Estimate, not tax advice."),
-        "totals": {
-            "expenses_count": expenses.count(),
-            "expenses_total": _money(expenses.aggregate(s=Sum("total_cost"))["s"]),
-            "expenses_deductible_total": _money(expenses.aggregate(s=Sum("estimated_deductible_amount"))["s"]),
-            "assets_count": assets.count(),
-            "assets_total": _money(assets.aggregate(s=Sum("total_cost"))["s"]),
-            "assets_deductible_total": _money(assets.aggregate(s=Sum("estimated_deductible_amount"))["s"]),
-        },
-        "expenses_by_category": [
-            {
-                "category": row["category"],
-                "total": _money(row["total"]),
-                "deductible": _money(row["deductible"]),
-            }
-            for row in by_category
-        ],
-        "largest_expenses": [
-            {
-                "id": row["id"],
-                "date": row["date"].isoformat() if row["date"] else None,
-                "vendor": row["vendor"],
-                "item": row["item"],
-                "category": row["category"],
-                "total_cost": _money(row["total_cost"]),
-            }
-            for row in largest
-        ],
-        "projects": projects,
-        "content": content,
-        "documentation": docs,
-        "assets": asset_records,
+        "totals": _year_totals(expenses, assets),
+        "expenses_by_category": _expenses_by_category(expenses),
+        "largest_expenses": _largest_expenses(expenses),
+        "projects": _records(Project.objects.all().order_by("name"), PROJECT_FIELDS),
+        "content": _records(
+            ContentItem.objects.all()
+            .prefetch_related("related_projects", "related_assets", "related_documentation")
+            .order_by("-updated_at"),
+            CONTENT_FIELDS,
+        ),
+        "documentation": _records(
+            DocumentationRecord.objects.all().prefetch_related("related_projects", "related_assets").order_by("doc_id"),
+            DOCUMENTATION_FIELDS,
+        ),
+        "assets": _records(assets.prefetch_related("related_projects"), ASSET_FIELDS),
     }
+
+
+def _year_totals(expenses, assets) -> dict[str, Any]:
+    """How many expenses and assets the year holds, what they cost and what
+    of that is estimated deductible."""
+
+    return {
+        "expenses_count": expenses.count(),
+        "expenses_total": _money(expenses.aggregate(s=Sum("total_cost"))["s"]),
+        "expenses_deductible_total": _money(expenses.aggregate(s=Sum("estimated_deductible_amount"))["s"]),
+        "assets_count": assets.count(),
+        "assets_total": _money(assets.aggregate(s=Sum("total_cost"))["s"]),
+        "assets_deductible_total": _money(assets.aggregate(s=Sum("estimated_deductible_amount"))["s"]),
+    }
+
+
+def _expenses_by_category(expenses) -> list[dict[str, Any]]:
+    """Each category's cost and deductible part, the costliest first."""
+
+    rows = (
+        expenses.values("category")
+        .annotate(total=Sum("total_cost"), deductible=Sum("estimated_deductible_amount"))
+        .order_by("-total")
+    )
+    return [
+        {"category": row["category"], "total": _money(row["total"]), "deductible": _money(row["deductible"])}
+        for row in rows
+    ]
+
+
+def _largest_expenses(expenses) -> list[dict[str, Any]]:
+    """The year's ten costliest expenses."""
+
+    rows = expenses.order_by("-total_cost").values("id", "date", "vendor", "item", "category", "total_cost")[:10]
+    return [
+        {
+            "id": row["id"],
+            "date": row["date"].isoformat(),
+            "vendor": row["vendor"],
+            "item": row["item"],
+            "category": row["category"],
+            "total_cost": _money(row["total_cost"]),
+        }
+        for row in rows
+    ]
 
 
 def year_summary_json(year: int) -> str:
@@ -397,10 +420,10 @@ def _asset_line(a) -> str:
 RECORD_HOMES = [
     "## Where records live",
     "",
-    "- Public website pages/writeups → ContentItem.published_url + related documentation",
-    "- Runbooks & infra detail → DocumentationRecord.obsidian_path (Obsidian vault)",
-    "- Source repos → Project.repository_url / DocumentationRecord.github_path",
-    "- Receipts → Severino HQ only (sign-in required, never exported)",
+    "- Public website pages/writeups: ContentItem.published_url + related documentation",
+    "- Runbooks & infra detail: DocumentationRecord.obsidian_path (Obsidian vault)",
+    "- Source repos: Project.repository_url / DocumentationRecord.github_path",
+    "- Receipts: Severino HQ only (sign-in required, never exported)",
     "",
 ]
 

@@ -1307,13 +1307,18 @@
           },
           "targets": {
             "$ref": "#/components/schemas/GlancePlanTargets"
+          },
+          "as_of": {
+            "type": "string",
+            "description": "When HQ made the plan. The controller returns it on each observation unchanged, and the observation answers only the requests made by then."
           }
         },
         "additionalProperties": false,
         "required": [
           "ok",
           "panels",
-          "targets"
+          "targets",
+          "as_of"
         ]
       },
       "GlanceObservations": {
@@ -1321,7 +1326,7 @@
         "items": {
           "type": "object",
           "additionalProperties": true,
-          "description": "One dashboard panel observation (record_dashboard_observations). Not yet produced by the Go controller."
+          "description": "One dashboard panel observation (record_dashboard_observations), carrying the as_of of the plan it answers."
         }
       },
       "ForcedRead": {

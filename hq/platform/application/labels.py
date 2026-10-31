@@ -74,7 +74,7 @@ EFFECT_LABELS = {
     "read": "Reads only",
     "remote_write": "Changes HQ",
     "infrastructure_change": "Changes a live system",
-    "destructive": "Deletes",
+    "destructive": "Stops or deletes",
 }
 
 

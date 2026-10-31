@@ -10,9 +10,10 @@ from hq.platform.application.tests.markup import text
 from hq.platform.core.models import AgentIdentity, AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
-from ..approvals import DELETING_FLAGS, approve
+from ..approvals import APPROVE, DELETING_FLAGS, ApproveCommand, approve
 from ..capabilities import capability_registry, execute_capability, validate_command
 from ..capability_policy import RULE_LABELS, Rule, Scope, decide, field_name, matrix, set_rule
+from ..certificates import UPLOAD
 from ..integration_specs import capability_schema
 from ..labels import human_label
 from ..security import AuthorizationError, Capability, Principal, cli_principal, web_principal
@@ -111,23 +112,23 @@ class DestructiveDefaultTests(PolicyTestCase):
 
         self.assertEqual(held["status"], "awaiting_approval")
         self.assertTrue(Project.objects.filter(pk=project.pk).exists())
-        approve(held["approval"]["id"], principal=self.operator)
+        approve(ApproveCommand(held["approval"]["id"]), principal=self.operator)
         self.assertFalse(Project.objects.filter(pk=project.pk).exists())
 
     def test_pausing_agents_also_stops_what_one_is_waiting_on(self):
-        from ..agent_access import set_agents_paused
+        from ..agent_access import AgentAccessCommand, set_agents_paused
         from ..approvals import ApprovalError
 
         project = Project.objects.create(name="Kept")
         held = self.delete(agent(capabilities=DELETES), project.slug)
 
-        set_agents_paused(True, principal=self.operator, user=self.user)
+        set_agents_paused(AgentAccessCommand(paused=True), principal=self.operator)
         with self.assertRaisesMessage(ApprovalError, "Agents are paused"):
-            approve(held["approval"]["id"], principal=self.operator)
+            approve(ApproveCommand(held["approval"]["id"]), principal=self.operator)
         self.assertTrue(Project.objects.filter(pk=project.pk).exists())
 
-        set_agents_paused(False, principal=self.operator, user=self.user)
-        approve(held["approval"]["id"], principal=self.operator)
+        set_agents_paused(AgentAccessCommand(paused=False), principal=self.operator)
+        approve(ApproveCommand(held["approval"]["id"]), principal=self.operator)
         self.assertFalse(Project.objects.filter(pk=project.pk).exists())
 
     def test_a_held_call_whose_subject_cannot_be_read_is_refused_not_run(self):
@@ -142,6 +143,8 @@ class DestructiveDefaultTests(PolicyTestCase):
             result = self.delete(agent(capabilities=DELETES), project.slug)
 
         self.assertEqual(result["error"]["code"], "approval_subject_unreadable")
+        self.assertIn("HQ could not read what it would change", result["error"]["message"])
+        self.assertNotIn("project.delete", result["error"]["message"])
         self.assertTrue(Project.objects.filter(pk=project.pk).exists())
         self.assertFalse(ApprovalRequest.objects.exists())
 
@@ -189,7 +192,7 @@ class SurfaceRuleTests(PolicyTestCase):
 
         self.assertEqual(held["status"], "awaiting_approval")
         self.assertFalse(Project.objects.filter(name="Held").exists())
-        approve(held["approval"]["id"], principal=self.operator)
+        approve(ApproveCommand(held["approval"]["id"]), principal=self.operator)
         self.assertTrue(Project.objects.filter(name="Held").exists())
 
     def test_a_held_change_to_a_record_goes_stale_if_the_record_moves(self):
@@ -199,7 +202,7 @@ class SurfaceRuleTests(PolicyTestCase):
         Project.objects.filter(pk=project.pk).update(description="changed underneath")
 
         with self.assertRaisesMessage(Exception, "This changed after the agent asked"):
-            approve(held["approval"]["id"], principal=self.operator)
+            approve(ApproveCommand(held["approval"]["id"]), principal=self.operator)
         self.assertEqual(
             ApprovalRequest.objects.get(pk=held["approval"]["id"]).state,
             ApprovalRequest.State.STALE,
@@ -352,6 +355,24 @@ class PageTests(PolicyTestCase):
         self.assertContains(page, "Pocket ID does not allow this")
         self.assertNotContains(page, f'name="{field_name(Scope.AGENT, "example-agent", "project.delete")}"')
 
+    def test_what_only_a_person_can_do_has_no_rule_for_agents(self):
+        _columns, groups = matrix()
+        shown = {row.name for group in groups for row in group.rows}
+
+        self.assertNotIn(APPROVE, shown)
+        self.assertNotIn(UPLOAD, shown)
+        self.assertIn("infrastructure.reconcile", shown)
+        with self.assertRaises(ValueError):
+            set_rule(
+                scope=Scope.SURFACE,
+                subject="mcp",
+                spec=spec(APPROVE),
+                rule=Rule.ALLOW,
+                principal=self.operator,
+                user=self.user,
+            )
+        self.assertFalse(CapabilityRule.objects.exists())
+
     def test_a_read_offers_no_approval(self):
         _columns, groups = matrix()
         read = next(row for group in groups for row in group.rows if row.effect == "read")
@@ -483,6 +504,23 @@ class CommandTitleTests(TestCase):
 
         with self.assertRaises(ImproperlyConfigured):
             validate_capability_spec(replace(spec("project.create"), label=" Create project"))
+
+    def test_a_command_type_without_a_schema_does_not_compose(self):
+        from dataclasses import dataclass, replace
+
+        from django.core.exceptions import ImproperlyConfigured
+
+        from ..integration_validation import validate_capability_spec
+
+        class Opaque:
+            pass
+
+        @dataclass(frozen=True)
+        class Unschemable:
+            held: Opaque
+
+        with self.assertRaisesMessage(ImproperlyConfigured, "cannot emit JSON Schema"):
+            validate_capability_spec(replace(spec("project.create"), command_type=Unschemable))
 
     def test_a_connection_offers_the_command_by_its_title_and_marks_destruction(self):
         from ..connection_catalog import _ability_state

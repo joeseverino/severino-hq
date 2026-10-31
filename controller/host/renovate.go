@@ -177,7 +177,7 @@ func (r *Renovator) runOwner(ctx context.Context, work, envName, image string, l
 		// Killing the client leaves its container running: remove it, and
 		// the tool trees with it.
 		stop, done := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
-		r.Command(stop, "docker", "rm", "--force", "--volumes", name).Run()
+		_ = r.Command(stop, "docker", "rm", "--force", "--volumes", name).Run()
 		done()
 		if !errors.Is(runCtx.Err(), context.DeadlineExceeded) {
 			result.Outcome = "failed"
@@ -245,7 +245,8 @@ func (r *Renovator) openLog() (*os.File, error) {
 	}
 	path := filepath.Join(r.LogDir, "renovate.log")
 	if info, err := os.Lstat(path); err == nil && info.Size() > renovateLogLimit {
-		os.Rename(path, path+".1")
+		// A log that cannot rotate keeps growing; the run still logs.
+		_ = os.Rename(path, path+".1")
 	}
 	return os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
 }

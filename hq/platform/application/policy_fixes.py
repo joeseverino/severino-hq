@@ -12,12 +12,14 @@ from typing import Any
 
 lazy from hq.domains.control_plane.models import ManagedResource
 
-from .record_errors import RecordNotFound
-from .security import Capability, Principal
+from .record_errors import PolicyError, RecordNotFound
+from .security import Principal
 from .ui import counted
-lazy from .infrastructure import ManagedResourceCommand, PolicyError, save_managed_resource
+lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .resource_operations import refuse_while_drifted
 lazy from .tailnet import POLICY_KIND
+
+UNREADABLE = "HQ cannot read the policy as a JSON object, so it cannot edit it. Edit the policy by hand."
 
 # Where a rule names who it admits and what it admits to.
 _RULE_SIDES = ("src", "dst")
@@ -77,19 +79,26 @@ def _without(rules: list[dict[str, Any]], groups: set[str]) -> tuple[list[dict[s
 def policy_without_empty_groups(document: str) -> tuple[str, str]:
     """The policy with every empty granted group removed, and what moved.
 
-    ``("", "")`` when there is none. Raises ``ValueError`` when a group is also
-    named somewhere this does not edit (a tag owner, an auto-approver, a
-    test), because removing it there changes what the policy means.
+    ``("", "")`` when there is none. Refuses a document that is not a JSON
+    object, and a group also named somewhere this does not edit (a tag owner,
+    an auto-approver, a test), because removing it there changes what the
+    policy means.
     """
 
-    parsed = json.loads(document)
+    try:
+        parsed = json.loads(document)
+    except ValueError as exc:
+        raise PolicyError(UNREADABLE) from exc
+    if not isinstance(parsed, dict):
+        raise PolicyError(UNREADABLE)
     empty = set(empty_granted_groups(parsed))
     if not empty:
         return "", ""
-    for group in sorted(empty):
-        elsewhere = _referenced_outside_rules(parsed, group)
-        if elsewhere:
-            raise ValueError(f"{group} is also named in {', '.join(elsewhere)}. Edit the policy by hand.")
+    if any(_referenced_outside_rules(parsed, group) for group in empty):
+        raise PolicyError(
+            "A group the policy grants is also named outside its rules, such as by a tag owner, "
+            "an auto-approver or a test. Edit the policy by hand."
+        )
     parsed["groups"] = {name: members for name, members in (parsed.get("groups") or {}).items() if name not in empty}
     dropped = 0
     for section in ("grants", "ssh"):
@@ -112,16 +121,12 @@ def request_empty_groups_removal(
     """Remove the empty groups the policy still grants, as a proposed policy change."""
 
     del command
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
     policy = ManagedResource.objects.filter(key=current_key, kind=POLICY_KIND).first()
     if policy is None:
         raise RecordNotFound("HQ has no tailnet policy by that name.")
 
     refuse_while_drifted(policy)
-    try:
-        document, summary = policy_without_empty_groups(str(policy.spec.get("document", "")))
-    except ValueError as exc:
-        raise PolicyError(str(exc)) from exc
+    document, summary = policy_without_empty_groups(str(policy.spec.get("document", "")))
     if not document:
         raise PolicyError("The policy grants no empty group.")
     result = save_managed_resource(

@@ -72,7 +72,7 @@ def state_on_controller(
         found = tuple(row.fact for row in rows(snapshot))
         if not found:
             continue
-        controller = str(getattr(snapshot, "controller_id", "") or "")
+        controller = snapshot.controller_id
         node_id = derived_id("controller", controller)
         if node_id not in nodes:
             node_id = machine(controller) or node_id

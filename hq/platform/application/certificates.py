@@ -1,17 +1,14 @@
 """Taking a certificate an operator generated elsewhere, and holding it safely.
 
-`cert-gen <service>.home.arpa` runs on the Mac against an air-gapped CA and prompts
-for a passphrase, so HQ cannot issue an internally signed certificate and should
-not pretend to. What it can do is everything after that: install the result
-wherever it belongs, keep it so installing it somewhere else later is a click,
-and say when it is about to stop working.
-
-Only the leaf certificate and its key move: the same pair that would otherwise
-be pasted into a provider's web form by hand. The root CA key stays where it is.
+`cert-gen <service>.home.arpa` signs on the Mac against an air-gapped CA behind
+a passphrase, so HQ cannot issue an internal certificate and does not pretend
+to. It does what comes after: installs it where it belongs, keeps it for the
+next install, and says when it is about to stop working. Only the leaf and its
+key move, the pair otherwise pasted into a provider's form by hand.
 """
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
 
 from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm
@@ -21,23 +18,23 @@ from django.utils import timezone
 
 from hq.domains.control_plane.desired_state import desired_fingerprint
 from hq.domains.control_plane.models import CertificateMaterial, ManagedResource
+from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.core import secrets
+from hq.platform.core.secrets import NO_STORE_KEY
 
+from .command_fields import Describe
 from .infrastructure import delivery_targets
 from .moments import when_day
-from .security import Capability, Principal
+from .record_errors import CertificateError, PolicyError, RecordNotFound
+from .security import Principal
 
-
-class CertificateError(ValueError):
-    """The uploaded material is not a usable certificate and key pair."""
+UPLOAD = "certificate.upload"
 
 
 @dataclass(frozen=True, slots=True)
 class UploadCertificateCommand:
-    key: str
-    fullchain: str
-    private_key: str
-    install_on: tuple[str, ...] = ()
+    fullchain: Annotated[str, Describe("The certificate and its chain, PEM-encoded.")]
+    private_key: Annotated[str, Describe("The certificate's private key, PEM-encoded.")]
 
 
 def inspect(fullchain: str, private_key: str) -> dict[str, Any]:
@@ -86,28 +83,35 @@ def store_certificate(
     command: UploadCertificateCommand,
     *,
     principal: Principal,
+    current_key: str,
 ) -> dict[str, Any]:
-    """Seal an uploaded pair against an existing declaration.
+    """Seal an uploaded pair against an existing certificate declaration.
 
-    Refuses before touching anything if there is nowhere safe to put it: a
-    secret store that quietly degrades to plaintext is worse than none, because
-    the operator would believe otherwise.
+    The ``certificate.upload`` capability, which authorizes it. Refuses before
+    touching anything if there is nowhere safe to put it: a secret store that
+    quietly degrades to plaintext is worse than none, because the operator
+    would believe otherwise.
     """
 
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
-    if not secrets.available():
-        raise secrets.SecretsUnavailable("No secret store key is configured. Nothing was stored.")
+    del principal
     details = inspect(command.fullchain, command.private_key)
     try:
-        resource = ManagedResource.objects.get(key=command.key)
+        resource = ManagedResource.objects.select_for_update().get(key=current_key)
     except ManagedResource.DoesNotExist as exc:
-        raise CertificateError(f"No record named {command.key!r}.") from exc
+        raise RecordNotFound("That record was not found.") from exc
+    if PROVIDERS[resource.kind].material_capability != UPLOAD:
+        raise PolicyError("Only an uploaded certificate record holds a certificate and key.")
+    try:
+        sealed = (secrets.seal(command.fullchain), secrets.seal(command.private_key))
+    except secrets.SecretsUnavailable as exc:
+        # Sealing fails only for want of a key, which names the setting to fix.
+        raise PolicyError(NO_STORE_KEY) from exc
 
     CertificateMaterial.objects.update_or_create(
         resource=resource,
         defaults={
-            "sealed_fullchain": secrets.seal(command.fullchain),
-            "sealed_private_key": secrets.seal(command.private_key),
+            "sealed_fullchain": sealed[0],
+            "sealed_private_key": sealed[1],
             "fingerprint_sha256": details["fingerprint_sha256"],
             "not_after": details["not_after"],
             "subject": details["subject"],
@@ -125,7 +129,7 @@ def store_certificate(
     resource.desired_fingerprint = desired_fingerprint(
         resource.kind,
         resource.spec,
-        resource.enabled,
+        enabled=resource.enabled,
         targets=delivery_targets(),
         resource_key=resource.key,
     )
@@ -148,22 +152,9 @@ def material_for(key: str) -> dict[str, str]:
     try:
         material = CertificateMaterial.objects.get(resource__key=key)
     except CertificateMaterial.DoesNotExist as exc:
-        raise CertificateError(f"No stored certificate for {key!r}.") from exc
+        raise CertificateError("No certificate is stored for that record.") from exc
     return {
         "fullchain": secrets.unseal(material.sealed_fullchain),
         "private_key": secrets.unseal(material.sealed_private_key),
         "domains": list(material.domains or ()),
     }
-
-
-def store_uploaded_material(key: str, cleaned: dict[str, Any], *, principal: Principal) -> dict[str, Any]:
-    """Adapter for the create page, which collects the material with the rest."""
-
-    return store_certificate(
-        UploadCertificateCommand(
-            key=key,
-            fullchain=cleaned["fullchain"],
-            private_key=cleaned["private_key"],
-        ),
-        principal=principal,
-    )

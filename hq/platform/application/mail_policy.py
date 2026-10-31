@@ -1,19 +1,10 @@
 """What a domain says about its own mail, as something other than a string.
 
-SPF and DMARC are policies published as TXT records, and a TXT record is where
-they stop being readable. `v=DMARC1; p=reject; sp=reject; rua=mailto:...` is a
-decision about what happens to forged mail, written in a notation that hides
-which decision was made, so it gets copied from a blog post once and never
-looked at again.
-
-The grammar is declared here, once, and everything else derives from it: the
-controls a form renders, the sentence a card reads out, the value written back
-to DNS, and what each choice actually does. Adding a tag is an entry in a
-tuple, not an edit to a parser, a form and a template that must agree.
-
-Nothing here talks to DNS. A policy is parsed from a record's value and composed
-back into one; publishing it is the DNS record's own use case, which already
-knows how to reconcile a change and say what it will cost.
+SPF and DMARC are decisions about forged mail published as TXT records, in a
+notation that hides which decision was made. The grammar is declared here once,
+and a form's controls, a card's sentence, the value written back and what each
+choice does all derive from it. Nothing here talks to DNS: publishing a policy
+is the DNS record's own use case, which knows how to reconcile a change.
 """
 
 from dataclasses import dataclass, field
@@ -93,6 +84,8 @@ def _percent_sentence(value: str) -> str:
     return f"The policy is applied to {value}% of failing mail; the rest is only reported."
 
 
+# Adding a tag is an entry here, not an edit to a parser, a form and a template
+# that must agree.
 DMARC_TAGS: tuple[PolicyTag, ...] = (
     PolicyTag(
         id="p",

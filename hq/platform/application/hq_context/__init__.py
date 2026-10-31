@@ -2,11 +2,8 @@
 what is wrong with it.
 
 The page about HQ and the ``hq`` resource are this one projection. Nothing in
-it is configured: the release is the build's own revision and the readings of
-its image and repository, the machine and container are the ones
-``hq_self`` derives, the work is the ``host.unit`` and ``host.render_status``
-readings of the machine HQ's controller runs on, and what it sees is every
-registered reading. A reading that could not be taken is said, never filled in.
+it is configured: ``release``, ``hq_self``, ``work`` and ``sight`` derive each
+part, and a reading that could not be taken is said, never filled in.
 """
 
 from collections.abc import Iterable, Mapping

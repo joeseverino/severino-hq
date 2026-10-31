@@ -7,7 +7,7 @@ next pass. Where it does not, the anonymous public read is the fallback.
 """
 
 import tempfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from django.contrib.auth import get_user_model
@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
-from hq.domains.jobs.models import Job
+from hq.domains.jobs.models import HEARTBEAT_GRACE, Job
 from hq.domains.jobs.testing import held_jobs
 from hq.domains.projects.models import Project
 from hq.platform.core.models import AuditLog
@@ -203,6 +203,24 @@ class RefreshButtonTests(TestCase):
         self.assertEqual((again.status_code, again.json()["state"]), (200, "failed"))
         self.assertEqual(again.json()["note"], ANOTHER_RUNNING)
         self.assertEqual(Job.objects.count(), 1)
+
+    def test_a_refresh_whose_process_stopped_shows_failed_and_the_page_writes_nothing(self):
+        stale = timezone.now() - HEARTBEAT_GRACE - timedelta(minutes=1)
+        job = Job.objects.create(
+            kind=REFRESH,
+            label="Refresh",
+            state=Job.State.RUNNING,
+            request={"subject": "alpha"},
+            started_at=stale,
+            heartbeat_at=stale,
+        )
+        before = AuditLog.objects.count()
+
+        page = self.page()
+
+        self.assertTrue(select(page, "data-ask-state", "failed"))
+        job.refresh_from_db()
+        self.assertEqual((job.state, AuditLog.objects.count()), (Job.State.RUNNING, before))
 
     def test_pressing_again_while_its_own_refresh_runs_follows_that_one(self):
         with held_jobs():

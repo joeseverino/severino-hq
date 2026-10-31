@@ -11,6 +11,7 @@ run = 'uv run python -m tools.pipeline.ci_timings "${usage_run}"'
 ["ci:caches"]
 description = "Fill the caches CI's jobs restore: every Python group, the Go controller's builds, the npm tools"
 hide = true
+extends = "heavy"
 depends = ["setup:lint-tools"]
 run = [
   "uv sync --all-groups",
@@ -41,6 +42,22 @@ run = [
   "uv run python manage.py connections_reference",
   "uv run python -m tools.fonts.subset",
 ]
+
+# The API's examples are responses its tests really received, so they are
+# recorded by a serial run of the tests that call the API through a
+# ContractClient (test_api_openapi_command.py holds the labels to every one),
+# under a clock that stands still and with fixed ids (hq/platform/api/testing.py),
+# so a recording reads the same every run. It is not a step of fix, being a
+# serial run of the suite; lint:drift-api-examples and lint:drift-api-document
+# name this task.
+["fix:api-examples"]
+description = "When the API's recorded examples no longer match its document: record them again from the tests that call it, then rewrite the document"
+hide = true
+extends = "django-heavy"
+# One step, so the run and the rewrite share one heavy turn. A recording
+# written elsewhere (HQ_API_RECORD_EXAMPLES_TO, lint:drift-api-examples's)
+# leaves the document as it is.
+run = 'HQ_API_RECORD_EXAMPLES=1 uv run python manage.py test hq.platform.api hq.domains.contacts --parallel 1 && { [ -n "${HQ_API_RECORD_EXAMPLES_TO:-}" ] || uv run python manage.py api_openapi; }'
 
 ["plugin:check"]
 description = "One extension package's contract check against this host, as its CI runs it"

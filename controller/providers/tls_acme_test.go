@@ -374,7 +374,11 @@ func TestIssuanceRefusesUnwritableACMEState(t *testing.T) {
 	}
 	f := newIssuance(t)
 	_ = os.Chmod(f.acmeDir, 0o500)
-	defer os.Chmod(f.acmeDir, 0o700)
+	t.Cleanup(func() {
+		if err := os.Chmod(f.acmeDir, 0o700); err != nil {
+			t.Error(err)
+		}
+	})
 	if _, _, err := f.r.issueCertificate(t.Context(), issuanceSpec); err == nil || err.Error() != "ACME state directory is not writable" {
 		t.Fatalf("%v", err)
 	}

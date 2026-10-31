@@ -1,20 +1,23 @@
 """Derived answers asked again as their inputs change, ahead of the next request."""
 
+import tempfile
 import threading
 import time
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import override
 from unittest import mock
 
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection, transaction
-from django.test import SimpleTestCase, TestCase, TransactionTestCase
+from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from hq.domains.expenses.models import Expense
 from hq.platform.application import derivations
 from hq.platform.application.cadence import recently_used
 from hq.platform.application.demo import demo_scope, showing_demo
+from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.derivations import counting, derive_ahead
 from hq.platform.application.projection import projection_scope, read_once, seeded
 from hq.platform.core import ahead
@@ -88,13 +91,13 @@ class AskedAgainTests(Remembering):
             _calls,
         ):
             read = register(reading)
-            with demo_scope(True), projection_scope({"example.seed": "seeded"}):
+            with demo_scope(showing=True), projection_scope({"example.seed": "seeded"}):
                 self.assertEqual(seeded(), {"example.seed": "seeded"})
                 read("x")
             _write()
 
             derive_ahead()
-            with demo_scope(True), projection_scope(), counting() as (ran, _served):
+            with demo_scope(showing=True), projection_scope(), counting() as (ran, _served):
                 found = read("x")
 
         self.assertEqual(found, (True, "seeded", "x", 1))
@@ -211,7 +214,7 @@ class AskedAgainTests(Remembering):
         soon, later = MOMENT + timedelta(minutes=5), MOMENT + timedelta(hours=2)
 
         with (
-            mock.patch.object(derivations, "_clock", return_value=MOMENT),
+            frozen(MOMENT),
             declared("test.ahead.soon", reads=(READING,)) as (register_soon, _),
             declared("test.ahead.later", reads=(READING,)) as (register_later, _calls),
         ):
@@ -231,11 +234,12 @@ class AskedAgainTests(Remembering):
             seen.append((derivations.asked_ahead(), recently_used()))
             return _readings()
 
+        # Nobody has used HQ: its activity marker was never written.
+        unused = Path(self.enterContext(tempfile.TemporaryDirectory())) / "hq-activity"
         with (
-            mock.patch("hq.platform.application.cadence._path") as path,
+            override_settings(SEVERINO_ACTIVITY_MARKER=str(unused)),
             declared("test.ahead.use", reads=(READING,)) as (register, _calls),
         ):
-            path.return_value.stat.side_effect = OSError
             read = register(use)
             with projection_scope():
                 read()
@@ -250,7 +254,7 @@ class UnseenTests(Remembering):
 
     def _until(self, now: datetime, **options):
         with (
-            mock.patch.object(derivations, "_clock", return_value=now),
+            frozen(now),
             declared("test.unseen", reads=(READING,), **options) as (register, _calls),
         ):
             read = register(_readings)
@@ -273,7 +277,7 @@ class UnseenTests(Remembering):
 
     def test_what_asks_it_stands_no_longer_than_it_does(self):
         with (
-            mock.patch.object(derivations, "_clock", return_value=MOMENT),
+            frozen(MOMENT),
             declared("test.unseen.part", reads=(READING,), unseen=True) as (register_part, _),
             declared("test.unseen.whole", reads=(READING,)) as (register, _calls),
         ):
@@ -292,7 +296,7 @@ class AskedTwiceTests(Remembering):
 
     def test_an_answer_already_given_still_bounds_the_one_that_asks_next(self):
         with (
-            mock.patch.object(derivations, "_clock", return_value=MOMENT),
+            frozen(MOMENT),
             declared("test.twice.part", reads=(READING,), unseen=True) as (register_part, _),
             declared("test.twice.whole", reads=(READING,)) as (register, _calls),
         ):
@@ -344,7 +348,7 @@ class AskedTwiceTests(Remembering):
             declared("test.twice.undeclared", reads=()) as (register, _calls),
         ):
             part = register_part(_readings)
-            whole = register(lambda: part())
+            whole = register(lambda: part())  # noqa: PLW0108 - a function of its own, so it registers apart from the one it calls
             with projection_scope():
                 part()
                 with self.assertRaises(ImproperlyConfigured):
@@ -356,7 +360,7 @@ class AskedTwiceTests(Remembering):
             declared("test.twice.learns", reads=(), unseen=True) as (register, _calls),
         ):
             part = register_part(_readings)
-            whole = register(lambda: part())
+            whole = register(lambda: part())  # noqa: PLW0108 - a function of its own, so it registers apart from the one it calls
             with projection_scope():
                 self.assertEqual(whole(), 0)
 
@@ -415,13 +419,13 @@ class KeptCurrentTests(Remembering):
         with declared("test.kept.rolled", reads=(READING,)) as (register, calls), ahead.keeping(inline=True):
             self._asked(register)
 
-            with self.captureOnCommitCallbacks(execute=True):
-                try:
-                    with transaction.atomic():
-                        _write()
-                        raise RuntimeError("undone")
-                except RuntimeError:
-                    pass
+            def write_then_fail():
+                with transaction.atomic():
+                    _write()
+                    raise RuntimeError("undone")
+
+            with self.captureOnCommitCallbacks(execute=True), self.assertRaises(RuntimeError):
+                write_then_fail()
 
         self.assertEqual(len(calls), 1)
 
@@ -453,15 +457,21 @@ class KeeperThreadTests(TransactionTestCase):
         self.addCleanup(derivations.forget)
 
     def test_a_commit_wakes_the_thread_and_the_answer_is_stored_off_the_request(self):
+        recomputed = threading.Event()
         with declared("test.keeper.thread", reads=(READING,)) as (register, calls):
-            read = register(_readings)
+
+            def readings() -> int:
+                # The keeper's pass is the second call, after the request's.
+                if len(calls) == 2:
+                    recomputed.set()
+                return _readings()
+
+            read = register(readings)
             with projection_scope():
                 read()
             with ahead.keeping():
                 _write()
-                deadline = time.monotonic() + 10
-                while len(calls) < 2 and time.monotonic() < deadline:
-                    time.sleep(0.02)
+                self.assertTrue(recomputed.wait(10))
                 thread = ahead.KEEPER._thread
 
             self.assertEqual(len(calls), 2)
@@ -499,9 +509,9 @@ class KeeperThreadTests(TransactionTestCase):
 
         windows = []
         for _ in range(6):
-            keeper.interrupted(True)
+            keeper.interrupted(written=True)
             windows.append(keeper.within)
-        keeper.interrupted(False)
+        keeper.interrupted(written=False)
 
         self.assertEqual(windows, [1.0, 2.0, 4.0, ahead.SETTLES_LONGEST, ahead.SETTLES_LONGEST, ahead.SETTLES_LONGEST])
         self.assertEqual(keeper.within, ahead.SETTLES_WITHIN)

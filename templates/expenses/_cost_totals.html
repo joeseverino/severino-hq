@@ -4,5 +4,5 @@ is application.expenses.CostTotals; a list with nothing to add up says nothing.
 `by_category` are the figures each category adds up to, each a link to the
 list narrowed to it.
 {% endcomment %}
-{% if totals %}<p class="muted">{% if totals.narrowed %}Matching: {% else %}Total {% endif %}<strong>{{ totals.total|money }}</strong>{% if totals.narrowed %} total{% endif %} · deductible (est.) <strong>{{ totals.deductible|money }}</strong></p>{% endif %}
+{% if totals %}<p class="muted">{% if totals.narrowed %}Matching: {% else %}Total {% endif %}<strong>{{ totals.total|money }}</strong>{% if totals.narrowed %} total{% endif %}{% dot %}deductible (est.) <strong>{{ totals.deductible|money }}</strong></p>{% endif %}
 {% if by_category %}{% include "partials/_kpi_grid.html" with items=by_category label="Totals by category" only %}{% endif %}

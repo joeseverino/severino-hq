@@ -16,7 +16,7 @@ would be a page about anybody.
     {% if profile.avatar %}<img class="gh-avatar" src="{{ profile.avatar }}" alt="" width="64" height="64">{% endif %}
     <div class="gh-identity">
       <p class="gh-name">{{ profile.name|default:profile.login|breakable }}<span class="gh-verified" tabindex="0" data-tip="This is your GitHub account, according to your sign-in.{% if app_repositories %}&#10;HQ's GitHub App is installed on it.{% endif %}">{% include "partials/_icon.html" with name="check-circle" %}<span class="visually-hidden">This is your GitHub account, according to your sign-in.</span></span></p>
-      <p>{% entity profile.url|outside label="@"|add:profile.login %}{% if profile.bio %} · {{ profile.bio|breakable }}{% endif %}</p>
+      <p>{% entity profile.url|outside label="@"|add:profile.login %}{% if profile.bio %}{% dot %}{{ profile.bio|breakable }}{% endif %}</p>
     </div>
     <dl class="gh-stats">
       <div><dt>Followers</dt><dd>{% entity profile.url|add:"?tab=followers"|outside label=profile.followers %}</dd></div>
@@ -26,7 +26,7 @@ would be a page about anybody.
     </dl>
   </section>
 
-  <h2>Starred <span class="heading-aside">newest first · {% include "partials/_reading_age.html" with at=profile.observed_at only %}</span></h2>
+  <h2>Starred <span class="heading-aside">newest first{% dot %}{% include "partials/_reading_age.html" with at=profile.observed_at only %}</span></h2>
   {% table_region "Starred" %}
     <table class="data-table">
       <thead><tr>{% table_heading "Repository" local_sort=profile.watched|sortable gutter=True %}{% table_heading "Latest release" "identifier" local_sort=profile.watched|sortable drop=2 %}{% table_heading "Advisories" local_sort=profile.watched|sortable drop=1 %}{% table_heading "Starred" "status" local_sort=profile.watched|sortable %}</tr></thead>
@@ -64,8 +64,7 @@ would be a page about anybody.
     <div><dt>HQ's GitHub App</dt><dd>
       {% if app_repositories %}
         Installed, reading {{ app_repositories|length }} of your repositories:
-        {% for item in app_repositories %}{% if item.project %}<a href="{{ item.project.get_absolute_url }}">{{ item.repo.short|breakable }}</a>{% else %}{% entity item.repo.url|outside label=item.repo.short %}{% endif %}{% if item.repo.private %} <span class="muted">(private)</span>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
-        · {% entity "https://github.com/settings/installations"|outside label="Manage on GitHub" %}
+        {% for item in app_repositories %}{% if item.project %}<a href="{{ item.project.get_absolute_url }}">{{ item.repo.short|breakable }}</a>{% else %}{% entity item.repo.url|outside label=item.repo.short %}{% endif %}{% if item.repo.private %} <span class="muted">(private)</span>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}{% dot %}{% entity "https://github.com/settings/installations"|outside label="Manage on GitHub" %}
       {% else %}
         <span class="muted">Not reading any repository this account owns.</span>
       {% endif %}

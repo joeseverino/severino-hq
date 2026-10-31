@@ -1,22 +1,20 @@
 package runtime
 
 import (
-	"net"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 )
 
-// peerUID is the uid of the process at the other end, as the kernel recorded
-// it when the connection was made (SO_PEERCRED).
-func peerUID(conn net.Conn) (int, error) {
-	raw, err := rawConn(conn)
-	if err != nil {
-		return 0, err
-	}
+// PeerUIDOf is the uid of the process at the other end of a Unix socket, as
+// the kernel recorded it when the connection was made (SO_PEERCRED).
+func PeerUIDOf(raw syscall.RawConn) (int, error) {
 	var credentials *unix.Ucred
 	var failure error
 	if err := raw.Control(func(fd uintptr) {
-		credentials, failure = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
+		if failure = unixSocket(int(fd)); failure == nil {
+			credentials, failure = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
+		}
 	}); err != nil {
 		return 0, err
 	}

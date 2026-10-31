@@ -61,21 +61,19 @@ def execute_once(
 
     ``scope`` separates keys that arrive by different routes: a key in a
     command's payload and the same text in a transport's header are two keys.
-
-    ``keep`` says whether a response is the outcome of the call. One that is
+    ``keep`` says whether a response is the outcome of the call; one that is
     not (a refusal, a call held for a person) frees its key while what the
     operation wrote commits, so the same key runs once the cause has gone.
-
-    The reservation and domain operation share a transaction. A crashed
-    process therefore leaves neither a partial domain write nor a poisoned
-    pending key. Concurrent retries converge on one committed record on both
-    SQLite and PostgreSQL.
     """
 
     owner = f"{scope}\x1f{actor}" if scope else actor
     actor_sha256 = hashlib.sha256(owner.encode("utf-8")).hexdigest()
     now = timezone.now()
     ttl = timedelta(seconds=settings.SEVERINO_API_IDEMPOTENCY_TTL_SECONDS)
+    # The reservation and the operation share a transaction, so a crashed
+    # process leaves neither a partial domain write nor a poisoned pending key,
+    # and concurrent retries converge on one committed record on both SQLite
+    # and PostgreSQL.
     with transaction.atomic():
         IdempotencyRecord.objects.filter(expires_at__lte=now).delete()
         record, created = IdempotencyRecord.objects.get_or_create(

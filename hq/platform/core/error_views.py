@@ -16,7 +16,7 @@ def server_error(request):
     return HttpResponseServerError(loader.get_template("500.html").render(context))
 
 
-def csrf_failure(request, reason=""):
+def csrf_failure(request, reason=""):  # noqa: ARG001 - Django's CSRF_FAILURE_VIEW is passed the reason by name
     """A form posted without a valid token: almost always a page left open
     past its session. The same page as any other refusal, saying so; the
     reason Django gives is for the log and is not shown."""

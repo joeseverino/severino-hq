@@ -1,0 +1,10 @@
+# How HQ is configured, which a page never asks its owner to type: a
+# setting's name, or the value to put in a credential's field. Read in code
+# too, where an identifier is otherwise allowed.
+extends: existence
+message: "'%s' asks the owner to configure HQ by hand; say what it lets HQ do, and where the connection's guide says how"
+level: error
+nonword: true
+scope: [shown, ~comment]
+tokens:
+  - '(?<![\w-])(?:SEVERINO_[A-Z0-9_]+|manages to 1)(?![\w-])'

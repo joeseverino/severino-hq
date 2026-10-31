@@ -1,25 +1,18 @@
 """Expense commands shared by web, MCP, and CLI."""
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Annotated, Any
 
-from django.db import transaction
 from django.db.models import Sum
 
-from hq.domains.assets.models import Asset
-from hq.domains.content.models import ContentItem
-from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import DEFAULT_CATEGORY, Expense
-from hq.domains.projects.models import Project
-from hq.platform.core.audit import operation_context
 
-from .domains import records_of
+from .command_fields import Describe, Names, Refers
 from .money import money
 from .projection import iso
-from .record_errors import RecordConflict, RecordNotFound
-from .security import Principal
+from .record_saves import Held, Link, linked_saver
 from .sensitivity import SAFE_SENSITIVITIES
 from .ui import Kpi
 
@@ -87,22 +80,25 @@ def costs_by_category(rows, *, query, choices, narrowed: bool) -> tuple[CostTota
 
 @dataclass(frozen=True, slots=True)
 class ExpenseCommand:
-    date: date
-    vendor: str
-    item: str
-    category: str = DEFAULT_CATEGORY
-    total_cost: Decimal = Decimal("0.00")
-    business_use_percentage: int = 100
-    payment_method: str = ""
-    business_purpose: str = ""
-    notes: str = ""
-    related_project: str | None = None
-    related_asset: str | None = None
-    related_content: str | None = None
-    related_documentation: str | None = None
-    # ``kind:identity`` of the account that paid, and of what it was for.
-    paid_from: str = ""
-    about: str = ""
+    date: Annotated[date, Describe("When it was spent.")]
+    vendor: Annotated[str, Describe("Who was paid.")]
+    item: Annotated[str, Describe("What was bought.")]
+    category: Annotated[str, Describe("What type of expense it is.")] = DEFAULT_CATEGORY
+    total_cost: Annotated[Decimal, Describe("What it cost in all.")] = Decimal("0.00")
+    business_use_percentage: Annotated[int, Describe("How much of it is for the business, as a percentage.")] = 100
+    payment_method: Annotated[str, Describe("How it was paid.")] = ""
+    business_purpose: Annotated[str, Describe("Why the business needed it.")] = ""
+    notes: Annotated[str, Describe("Anything else worth keeping.")] = ""
+    related_project: Annotated[str | None, Names("projects"), Describe("The project this was spent on.")] = None
+    related_asset: Annotated[str | None, Names("assets"), Describe("The asset this bought or kept running.")] = None
+    related_content: Annotated[
+        str | None, Names("content", key="slug"), Describe("The writeup or page this paid for.")
+    ] = None
+    related_documentation: Annotated[
+        str | None, Names("documentation", key="doc_id"), Describe("The doc that records this expense.")
+    ] = None
+    paid_from: Annotated[str, Refers(Expense, "paid_from"), Describe("The account that paid, as type:identity.")] = ""
+    about: Annotated[str, Refers(Expense, "about"), Describe("What it was for, as type:identity.")] = ""
 
 
 def serialize_expense(expense: Expense) -> dict[str, Any]:
@@ -129,46 +125,14 @@ def serialize_expense(expense: Expense) -> dict[str, Any]:
     }
 
 
-def _one(model, field: str, value):
-    if value in (None, ""):
-        return None
-    try:
-        return model.objects.get(**{field: value})
-    except model.DoesNotExist as exc:
-        raise RecordNotFound("A related record was not found.") from exc
-
-
-@transaction.atomic
-def save_expense(
-    command: ExpenseCommand,
-    *,
-    principal: Principal,
-    current_id: int | None = None,
-    expected_updated_at: str | None = None,
-) -> dict[str, Any]:
-    principal.require(records_of("expenses").write)
-    operation = "expense.create" if current_id is None else "expense.update"
-    with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
-        if current_id is None:
-            expense, created = Expense(), True
-        else:
-            try:
-                expense = Expense.objects.select_for_update().get(pk=current_id)
-            except Expense.DoesNotExist as exc:
-                raise RecordNotFound("That expense was not found.") from exc
-            created = False
-            if expected_updated_at and expense.updated_at.isoformat() != expected_updated_at:
-                raise RecordConflict("That expense changed after it was read.")
-
-        values = asdict(command)
-        relations = {
-            "related_project": _one(Project, "slug", values.pop("related_project")),
-            "related_asset": _one(Asset, "slug", values.pop("related_asset")),
-            "related_content": _one(ContentItem, "slug", values.pop("related_content")),
-            "related_documentation": _one(DocumentationRecord, "doc_id", values.pop("related_documentation")),
-        }
-        for field, value in {**values, **relations}.items():
-            setattr(expense, field, value)
-        expense.full_clean()
-        expense.save()
-    return {"ok": True, "created": created, "expense": serialize_expense(expense)}
+save_expense = linked_saver(
+    "expenses",
+    serialize_expense,
+    refusals=Held("That expense was not found.", "That expense changed after it was read."),
+    links={
+        "related_project": Link("slug", "A related project was not found."),
+        "related_asset": Link("slug", "A related asset was not found."),
+        "related_content": Link("slug", "A related writeup or page was not found."),
+        "related_documentation": Link("doc_id", "A related documentation record was not found."),
+    },
+)

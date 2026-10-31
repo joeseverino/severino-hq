@@ -284,6 +284,11 @@ class FieldMaskTests(TestCase):
         )
 
 
+def _no_rows():
+    # A function and not the builtin dict: registration reads the handler's signature.
+    return {}
+
+
 class ResourceRegistrationTests(SimpleTestCase):
     def test_plugin_resource_names_cannot_shadow_core(self):
         duplicate = ResourceSpec(
@@ -291,7 +296,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             "Duplicate",
             "Must fail before an adapter silently wins by ordering.",
             Capability.READ,
-            list_handler=lambda: {},
+            list_handler=_no_rows,
             list_query_type=EmptyQuery,
         )
         with (
@@ -309,7 +314,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             "Records",
             "A deliberately incomplete plugin contract.",
             "example.read",
-            list_handler=lambda: {},
+            list_handler=_no_rows,
         )
         with (
             mock.patch("hq.platform.application.plugins.plugin_resource_specs", return_value=(invalid,)),

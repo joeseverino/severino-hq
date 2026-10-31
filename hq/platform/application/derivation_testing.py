@@ -19,9 +19,9 @@ def frozen(moment: datetime | None = None) -> Iterator[datetime]:
     """
 
     at = moment or timezone.now()
-    held = derivations._clock
-    derivations._clock = lambda: at
+    held = derivations.clock
+    derivations.clock = lambda: at
     try:
         yield at
     finally:
-        derivations._clock = held
+        derivations.clock = held

@@ -41,6 +41,10 @@ REFUSED = [
     (REFERENCE, ".a { font-family: serif; }", "property-disallowed-list"),
     (REFERENCE, ".a { font-size: 1.1em; }", "declaration-property-value-disallowed-list"),
     (REFERENCE, ".a { color: var(--no-such-token); }", "no-unknown-custom-properties"),
+    (APP, '.a::before { content: "\\203A"; }', "declaration-property-value-disallowed-list"),
+    (APP, ".a::after { content: ' / '; }", "declaration-property-value-disallowed-list"),
+    (TOKENS, '.a::after { content: "Dismissed: "; }', "declaration-property-value-disallowed-list"),
+    (REFERENCE, '.a::after { content: "\\2197"; }', "declaration-property-value-disallowed-list"),
 ]
 
 PASSED = [
@@ -50,6 +54,12 @@ PASSED = [
     (APP, ".pill-green { color: var(--ok); }"),
     (APP, ".eyebrow { text-transform: uppercase; }"),
     (TOKENS, ":root { --x: #fff; --y: rgb(0 0 0); --z: canvas; --w: tomato; }"),
+    (APP, '.a::before { content: "\\203A" / ""; } .b::after { content: "/" / ""; }'),
+    (APP, '.a::before { content: "Dismissed: " / "Dismissed: "; } .b::before { content: ""; }'),
+    (
+        APP,
+        '.a::before { content: none; } .b::before { content: counter(step) ". "; } .c::before { content: attr(data-x); }',
+    ),
 ]
 
 

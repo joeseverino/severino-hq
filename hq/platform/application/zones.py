@@ -1,33 +1,16 @@
 """A domain: one zone, and every record published in it.
 
-The services view answers "does this name work". This answers a different
-question that the same declarations already contain: "what does this domain
-actually say". They are not the same question, and neither is a substitute for
-the other: a DMARC policy, a CAA restriction and an MX record are not services
-and never appear there, yet getting them wrong is how mail stops arriving and
-how anyone in the world becomes able to obtain a certificate for the domain.
-
-Nothing here is stored. A zone is derived from three things that already exist:
-the domains an operator declared, the records declared inside them, and the last
-controller sweep of what the provider actually holds. There is deliberately no
-Zone model: a stored copy could disagree with the declarations, and being the
-thing that cannot disagree is the entire value.
-
-What the page says *about* a zone is contributed rather than listed here: see
-``ZONE_INSIGHTS`` and ``zone_insights``. Those observations stay descriptions
-rather than drift, because HQ holds a credential that can read and write DNS
-records and nothing else. It cannot change a zone's TLS posture, so it does not
-get to have an opinion about it: stating "DMARC is monitoring only" is true and
-useful, and flagging it as drift would invent a policy the operator never
-declared and that nothing here could enforce. The exceptions are the two things that are wrong by their own
-definition: a challenge record that outlived its issuance, and a CAA record that
-forbids the authority HQ renews with.
+Where the services view answers "does this name work", this answers "what does
+this domain say": a DMARC policy, CAA restriction or MX record is no service,
+yet one wrong stops mail or lets anyone obtain a certificate. A zone is derived
+from the declared domains and records and the last sweep, with no Zone model,
+since a stored copy could disagree with the declarations.
 """
 
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from functools import cached_property
-from typing import Any
+from typing import Annotated, Any
 
 from django.db import transaction
 lazy from django.core.exceptions import ValidationError
@@ -43,9 +26,11 @@ from hq.platform.application.routes import reverse
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .adoption import AdoptCommand, unmanaged
+from .command_fields import Describe
 from .entity_links import entity_link
-from .infrastructure import PolicyError, enabled_resources, resource_health
-from .record_errors import RecordNotFound
+from .infrastructure import enabled_resources, resource_health
+from .record_errors import PolicyError, RecordNotFound
+from .security import Principal
 from .ui import ListRow
 lazy from . import adoption, plugins
 lazy from .facts import snapshots_of
@@ -131,12 +116,10 @@ class ZoneRecord:
     def manageable(self) -> bool:
         """Whether HQ's model can express this record at all.
 
-        Cloudflare serves types HQ deliberately does not model: SRV, NS, PTR,
-        SVCB and more. They are real records in the zone and are listed as such,
-        but HQ cannot declare one, so it must never try: adoption runs inside
-        the controller sweep, and a spec the model rejects would take the whole
-        transaction down with it, losing every provider's inventory over one
-        delegated subdomain.
+        Cloudflare serves types HQ deliberately does not model (SRV, NS, PTR,
+        SVCB): listed, never adopted, since adoption runs inside the controller
+        sweep and a spec the model rejects would take every provider's
+        inventory down with it.
         """
 
         return self.record_type in DNS_RECORD_TYPES_BY_ID
@@ -188,19 +171,16 @@ def told_apart(records: Iterable[ZoneRecord]) -> tuple[ZoneRecord, ...]:
 class ZoneInsight:
     """One thing worth knowing about a domain, and where to go about it.
 
-    ``value`` is the answer and stays short enough to read at a glance, because
-    it is set in the card's headline type. Anything needing a sentence goes in
-    ``detail``, the caption: an explanation in the headline slot renders as a
-    paragraph of bold text and drowns the cards beside it.
-
-    ``url`` is what makes these worth more than the provider's own dashboard. A
-    card that restates a DNS record is Cloudflare with different fonts; one that
-    says which HQ certificate covers this domain, and links to it, answers a
-    question no single provider can.
+    A card that restates a DNS record is Cloudflare with different fonts; one
+    that says which HQ certificate covers this domain, and links to it, answers
+    a question no single provider can.
     """
 
     label: str
+    # The answer, set in the card's headline type, so short enough to read at a
+    # glance: an explanation there renders as a paragraph of bold text.
     value: str
+    # The caption, for anything needing a sentence.
     detail: str = ""
     url: str = ""
     # The full list behind a summarized value, shown in a dialog. A domain with
@@ -243,6 +223,12 @@ class ZoneInsight:
 # Late-bound as strings so this module keeps deriving and the contributors can
 # each import whatever they need (certificates, services) without this file
 # depending on all of it.
+#
+# What they say stays description rather than drift: HQ's credential can change
+# DNS records and nothing else, so it has no opinion on a zone's TLS posture.
+# "DMARC is monitoring only" is true and useful; flagging it would invent a
+# policy nobody declared and nothing here could enforce. The exceptions are
+# what is wrong by its own definition (``ZoneInsight.concern``).
 # Four cards, each answering one question: what runs here, how it is secured,
 # its mail, and whether it is still owned. A notice (left-over challenges)
 # renders above the records instead of as a card.
@@ -342,7 +328,7 @@ class Zone:
         found = []
         for reference in ZONE_INSIGHTS:
             try:
-                insight = plugins._import(reference)(self)
+                insight = plugins.import_reference(reference)(self)
             except Exception:  # noqa: BLE001 - one card must not lose the page
                 continue
             if isinstance(insight, tuple):
@@ -389,76 +375,76 @@ def zone_catalog(pinned: frozenset[str] = frozenset()) -> tuple[Zone, ...]:
 def _zone_catalog(pinned: frozenset[str]) -> tuple[Zone, ...]:
 
     declared: dict[str, ManagedResource] = {
-        normalized_hostname(str(resource.spec.get("zone", ""))): resource
+        _zone_of(resource.spec): resource
         for resource in ManagedResource.objects.filter(kind=ZONE_KIND, enabled=True)
         if resource.spec.get("zone")
     }
-
     snapshots = {
         snapshot.kind: snapshot for snapshot in ProviderInventory.objects.filter(kind__in=(ZONE_KIND, RECORD_KIND))
     }
-    zone_snapshot = snapshots.get(ZONE_KIND)
-    seen: dict[str, dict[str, Any]] = {}
-    if zone_snapshot:
-        for entry in zone_snapshot.records:
-            name = normalized_hostname(str(entry.get("zone", "")))
-            if name:
-                seen[name] = entry
-
+    seen = _sweep_entries(snapshots.get(ZONE_KIND))
     # One pass over the unmanaged set, shared by the zones and their records.
     # Called twice it would run the whole inventory diff twice for one page.
     pending = list(unmanaged())
-    zone_items = {
-        normalized_hostname(str(item.spec.get("zone", ""))): item
-        for item in pending
-        if item.kind == ZONE_KIND and item.spec.get("zone")
-    }
-
-    by_zone: dict[str, list[ZoneRecord]] = {}
-    for resource in ManagedResource.objects.filter(kind=RECORD_KIND, enabled=True):
-        zone = normalized_hostname(str(resource.spec.get("zone", "")))
-        if not zone:
-            continue
-        by_zone.setdefault(zone, []).append(
-            _record_of(
-                resource.spec,
-                resource_key=resource.key,
-                health=resource_health(resource),
-            )
-        )
-    for item in pending:
-        if item.kind != RECORD_KIND:
-            continue
-        zone = normalized_hostname(str(item.spec.get("zone", "")))
-        if not zone:
-            continue
-        by_zone.setdefault(zone, []).append(_record_of(item.spec, token=item.token, observed_only=item.observed_only))
-
+    zone_items = {_zone_of(item.spec): item for item in pending if item.kind == ZONE_KIND and item.spec.get("zone")}
+    by_zone = _records_by_zone(pending)
     record_snapshot = snapshots.get(RECORD_KIND)
     zones = []
     for name in zone_names():
-        resource = declared.get(name)
-        item = None if resource else zone_items.get(name)
+        owner = declared.get(name)
+        adoptable = None if owner else zone_items.get(name)
         zones.append(
             Zone(
                 zone=name,
-                resource_key=resource.key if resource else "",
+                resource_key=owner.key if owner else "",
                 connection_ref=(
-                    str((resource.spec if resource else {}).get("connection_ref", ""))
+                    str((owner.spec if owner else {}).get("connection_ref", ""))
                     or str(seen.get(name, {}).get("connection_ref", ""))
                 ),
                 records=tuple(sorted(by_zone.get(name, []), key=_sort_key)),
                 observed_at=record_snapshot.observed_at if record_snapshot else None,
                 reachable=record_snapshot.reachable if record_snapshot else True,
-                adopt_token=item.token if item and not item.observed_only else "",
+                adopt_token=adoptable.token if adoptable and not adoptable.observed_only else "",
                 pinned=name in pinned,
-                observed_only=bool(item and item.observed_only),
+                observed_only=bool(adoptable and adoptable.observed_only),
             )
         )
     # Pinned first, then alphabetical within each half. Sorted here rather than
     # in the view so every surface that lists domains agrees on the order
     # without restating the rule.
     return tuple(sorted(zones, key=lambda zone: (not zone.pinned, zone.zone)))
+
+
+def _zone_of(spec: dict[str, Any]) -> str:
+    """The domain a zone or record names, as HQ compares hostnames."""
+
+    return normalized_hostname(str(spec.get("zone", "")))
+
+
+def _sweep_entries(zone_snapshot: ProviderInventory | None) -> dict[str, dict[str, Any]]:
+    """Each zone the last sweep read, by its name."""
+
+    if not zone_snapshot:
+        return {}
+    return {name: entry for entry in zone_snapshot.records if (name := _zone_of(entry))}
+
+
+def _records_by_zone(pending: list[Any]) -> dict[str, list[ZoneRecord]]:
+    """Every record of a domain, declared or waiting to be adopted, by its
+    domain: the declared ones first."""
+
+    by_zone: dict[str, list[ZoneRecord]] = {}
+    for resource in ManagedResource.objects.filter(kind=RECORD_KIND, enabled=True):
+        if zone := _zone_of(resource.spec):
+            by_zone.setdefault(zone, []).append(
+                _record_of(resource.spec, resource_key=resource.key, health=resource_health(resource))
+            )
+    for item in pending:
+        if item.kind == RECORD_KIND and (zone := _zone_of(item.spec)):
+            by_zone.setdefault(zone, []).append(
+                _record_of(item.spec, token=item.token, observed_only=item.observed_only)
+            )
+    return by_zone
 
 
 def zone_reads(resources=None) -> tuple[tuple[str, ...], dict[str, list[Any]]]:
@@ -542,21 +528,11 @@ def find_zone(zone: str) -> Zone | None:
 def adopt_discovered_records(*, principal) -> dict[str, Any]:
     """Take on every record found in a domain HQ has been made responsible for.
 
-    Run on each controller sweep, so "a record HQ has not adopted yet" is a
-    state that closes itself within a minute rather than a chore on a screen.
-
-    There is no decision in it. Declaring a domain is the decision, and it is
-    made once; asking again per record presents a question whose answer is
-    always yes, and leaves a page reporting outstanding work that nobody
-    intends to do.
-
-    Safe for the reason every adoption is safe: the spec is read back out of
-    the live record, so each declaration starts equal to the world and the
-    first reconciliation changes nothing. What this cannot do is decide that a
-    record should not exist. Removing one stays deliberate and manual.
-
-    Working material is skipped (``EPHEMERAL_PREFIXES``), and so are records
-    read through a connection that only observes: see ``application.adoption``.
+    Run on each controller sweep, so an unadopted record closes itself within a
+    minute: declaring the domain was the decision, and asking per record asks a
+    question whose answer is always yes. It never removes a record; that stays
+    deliberate and manual. Working material (``EPHEMERAL_PREFIXES``) and records
+    an observing connection read are skipped (docs/Derived-Facts.md#adoption).
     """
 
     adopted: list[str] = []
@@ -584,15 +560,10 @@ def adopt_discovered_records(*, principal) -> dict[str, Any]:
 def adopt_zone_records(zone: str, *, principal) -> dict[str, Any]:
     """Bring every unmanaged record in one domain under management, or none.
 
-    Offered because the alternative is real: a working zone has dozens of
-    records and adopting them one at a time is dozens of round trips to say the
-    same thing. Atomic for the same reason ``adopt_service`` is: a half
-    adopted zone is harder to reason about than an unadopted one, because the
-    gap looks like a missing record rather than an unfinished action.
-
-    Safe for the same reason every adoption is safe: each spec is read back out
-    of the live record, so the declarations start equal to the world and the
-    first reconciliation changes nothing.
+    A working zone has dozens of records, and adopting them one at a time is
+    dozens of round trips to say the same thing. Atomic, as ``adopt_service``
+    is: a half-adopted zone's gap looks like a missing record rather than an
+    unfinished action.
     """
 
     found = find_zone(zone)
@@ -608,17 +579,38 @@ def adopt_zone_records(zone: str, *, principal) -> dict[str, Any]:
     return {"ok": True, "zone": found.zone, "adopted": adopted}
 
 
+ADOPT_ZONE = "infrastructure.zone.adopt"
+
+
+@dataclass(frozen=True, slots=True)
+class AdoptZoneCommand:
+    zone: Annotated[str, Describe("The domain to take on.")]
+    # The token HQ gave the live domain when it read it, which says which is meant.
+    token: Annotated[str, Describe("The token HQ gave the live domain when it read it.")]
+
+
+def adopt_zone(command: AdoptZoneCommand, *, principal: Principal) -> dict[str, Any]:
+    """Take on a domain, then every record in it HQ can, exactly as they are.
+
+    Declaring the domain is the decision, so it stands whatever happens to its
+    records: a domain with nothing left to take on is the ordinary case.
+    """
+
+    declared = adoption.adopt(AdoptCommand(kind=ZONE_KIND, token=command.token), principal=principal)
+    try:
+        records = adopt_zone_records(command.zone, principal=principal)["adopted"]
+    except RecordNotFound, PolicyError, ValidationError:
+        records = []
+    return {"ok": True, "resource": declared["resource"], "adopted": records}
+
+
 def public_answers_for(hostname: str) -> tuple[str, ...]:
     """What the public internet is told when it asks for this name.
 
-    Read from the zones HQ actually manages rather than by resolving the name.
-    A resolver on the same machine as HQ is inside every boundary this is meant
-    to describe: it would follow the internal rewrite and report that a
-    private name resolves, which is the opposite of the question being asked.
-
-    An empty answer means no zone HQ manages publishes this name. That is not
-    the same as proving the name is unresolvable everywhere, and nothing built
-    on this should say that it is.
+    Read from the zones HQ manages, never by resolving: a resolver beside HQ
+    would follow the internal rewrite and report a private name as resolving.
+    Empty means no zone HQ manages publishes the name, never that it is
+    unresolvable everywhere, and nothing built on this should say so.
     """
 
     wanted = normalized_hostname(hostname)

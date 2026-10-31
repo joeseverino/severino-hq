@@ -17,7 +17,7 @@ from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
 from hq_sdk import validation
 from hq_sdk.validation import _cell_markup_pins
 
-from .source import parsed, source_files
+from .source import parsed, source_files, template_files
 
 
 def view_modules(root: Path) -> list[Path]:
@@ -37,23 +37,7 @@ def _is_address(text: str, found: re.Match[str]) -> bool:
 
 
 class DeliveryAdapterArchitectureTests(SimpleTestCase):
-    @tag("source")
-    def test_workflow_models_remain_a_dependency_leaf(self):
-        root = Path(__file__).parent.resolve().parent
-        contracts = parsed(root / "workflow_contracts.py")
-        relative_imports = [
-            node.module for node in ast.walk(contracts) if isinstance(node, ast.ImportFrom) and node.level
-        ]
-        self.assertEqual(relative_imports, [])
-
-        boundaries = {
-            "ui.py": "workflows",
-            "workflows.py": "action_links",
-        }
-        for filename, forbidden in boundaries.items():
-            tree = parsed(root / filename)
-            imported = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.level}
-            self.assertNotIn(forbidden, imported)
+    """Which module may import which is pyproject.toml's import contracts, held by lint:imports."""
 
     def test_asgi_routes_static_assets_before_django(self):
         from django.conf import settings
@@ -109,56 +93,6 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
             "public, max-age=31536000, immutable",
         )
 
-    @tag("source")
-    def test_mcp_services_do_not_access_django_models(self):
-        """Keep MCP as an adapter over application-owned behavior and projections."""
-        source_path = Path(__file__).resolve().parents[4] / "hq/platform/mcp" / "services.py"
-        tree = parsed(source_path)
-
-        model_imports = [
-            node.module
-            for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom)
-            and node.module
-            and (node.module == "models" or node.module.endswith(".models"))
-        ]
-        manager_access = [
-            node.lineno for node in ast.walk(tree) if isinstance(node, ast.Attribute) and node.attr == "objects"
-        ]
-
-        self.assertEqual(model_imports, [])
-        self.assertEqual(manager_access, [])
-
-    @tag("source", "tree")
-    def test_web_views_do_not_mutate_models_directly(self):
-        """Web adapters may query for rendering, but writes belong to use cases."""
-        root = Path(__file__).resolve().parents[4]
-        violations = []
-        instance_mutations = {"save", "delete"}
-        manager_mutations = {
-            "create",
-            "get_or_create",
-            "update_or_create",
-            "bulk_create",
-            "bulk_update",
-        }
-
-        for source_path in view_modules(root):
-            tree = parsed(source_path)
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
-                    continue
-                is_instance_mutation = node.func.attr in instance_mutations
-                is_manager_mutation = (
-                    node.func.attr in manager_mutations
-                    and isinstance(node.func.value, ast.Attribute)
-                    and node.func.value.attr == "objects"
-                )
-                if is_instance_mutation or is_manager_mutation:
-                    violations.append(f"{source_path.relative_to(root)}:{node.lineno}")
-
-        self.assertEqual(violations, [])
-
     @tag("source", "tree")
     def test_paginated_list_views_use_the_shared_table_engine(self):
         root = Path(__file__).resolve().parents[4]
@@ -183,9 +117,10 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
     def test_every_module_defining_a_view_is_one_these_checks_read(self):
         """A view split into its own module must not step outside the checks.
 
-        The two checks above read a fixed set of files. Any module under a
-        Django app that subclasses a ``...View`` is a view module, and it is
-        held to the same rules only if it is in that set.
+        The check above and lint:ast-grep's views-write-no-model read the
+        files ``view_modules`` names. Any module under a Django app that
+        subclasses a ``...View`` is a view module, and it is held to the same
+        rules only if it is in that set.
         """
 
         root = Path(__file__).resolve().parents[4]
@@ -221,10 +156,10 @@ class StyleContractTests(SimpleTestCase):
     def _stylesheet() -> str:
         return stylesheet()
 
-    def test_a_face_never_swaps_in_after_text_is_drawn(self):
-        """A face that arrives late and is swapped in moves every line it sets.
-        Each @font-face is shown only if ready for the first paint (optional),
-        and its file is preloaded beside the stylesheet so it usually is."""
+    def test_every_face_is_preloaded_beside_the_stylesheet(self):
+        """A face is shown only if it is ready for the first paint (lint:css
+        holds each @font-face to `font-display: optional`), so its file is
+        preloaded beside the stylesheet, where it usually is ready."""
 
         root = Path(__file__).resolve().parents[4]
         head = (root / "templates" / "base.html").read_text(encoding="utf-8")
@@ -239,7 +174,6 @@ class StyleContractTests(SimpleTestCase):
             # The face's address as `{% static %}` names it: relative to the sheet that asks for it.
             asset = (sheet.parent / source.group(1)).resolve().relative_to(STATIC).as_posix() if source else ""
             with self.subTest(face=asset or face[:60]):
-                self.assertIn("font-display: optional", face)
                 self.assertIsNotNone(source)
                 self.assertIn(f'{{% static \'{asset}\' %}}" as="font"', head)
 
@@ -254,31 +188,6 @@ class StyleContractTests(SimpleTestCase):
                 self.assertIsNotNone(background)
                 self.assertRegex(background.group(1), r"transparent|/\s*[.\d]+\)|rgba|hsla")
 
-    def test_a_long_word_breaks_rather_than_widening_the_page(self):
-
-        body = re.search(r"@layer base \{.*?\nbody \{([^}]*)\}", self._stylesheet(), re.DOTALL)
-        self.assertIsNotNone(body)
-        self.assertIn("overflow-wrap: break-word", body.group(1))
-
-    @staticmethod
-    def _script() -> str:
-        root = Path(__file__).resolve().parents[4]
-        return (root / "static" / "js" / "app.js").read_text(encoding="utf-8")
-
-    def test_mobile_section_disclosures_keep_their_parent_drawer_open(self):
-        """Opening a category must not dismiss the drawer containing it."""
-
-        script = self._script()
-        self.assertIn(
-            'if (!menu.closest(".primary-nav")) setSectionMenu(false);',
-            script,
-        )
-        css = self._stylesheet()
-        self.assertIn(
-            ".nav-is-open .primary-nav .nav-group > summary",
-            css,
-        )
-
     def test_a_table_part_is_never_given_a_block_flex_or_grid_display(self):
         """`display: flex` or `block` on a table part drops it out of table layout.
 
@@ -290,10 +199,9 @@ class StyleContractTests(SimpleTestCase):
         `.table-scroll`; it does not stack into cards.
         """
 
-        root = Path(__file__).resolve().parents[4]
         parts = {"table", "thead", "tbody", "tfoot", "tr", "td", "th"}
         cell_classes: set[str] = set()
-        for template in (root / "templates").rglob("*.html"):
+        for _name, template in template_files():
             for attrs in re.findall(
                 r"<(?:table|thead|tbody|tfoot|tr|td|th)\b([^>]*)>",
                 template.read_text(encoding="utf-8"),
@@ -345,10 +253,9 @@ class StyleContractTests(SimpleTestCase):
         shown there stacks the whole detail into one column beside empty ones,
         so it is `row-below`, the line beneath the row at the table's width."""
 
-        root = Path(__file__).resolve().parents[4]
         offences = [
-            f"{template.relative_to(root)}: <{tag}>"
-            for template in (root / "templates").rglob("*.html")
+            f"{name}: <{tag}>"
+            for name, template in template_files()
             for tag in re.findall(
                 r'<(div|ul|ol|p|section|form|table|dl)\b[^>]*class="[^"]*\brow-more\b',
                 template.read_text(encoding="utf-8"),
@@ -805,14 +712,13 @@ class PageTitleTests(SimpleTestCase):
 
     def title_blocks(self):
 
-        root = Path(__file__).resolve().parents[4] / "templates"
         pattern = re.compile(r"\{%\s*block title\s*%\}(.*?)\{%\s*endblock", re.DOTALL)
-        for template in sorted(root.rglob("*.html")):
-            if template.name == "base.html":
+        for name, template in template_files():
+            if name == "base.html":
                 continue
             match = pattern.search(template.read_text(encoding="utf-8"))
             if match:
-                yield template.relative_to(root), match.group(1).strip()
+                yield name, match.group(1).strip()
 
     def test_no_page_appends_the_site_name_itself(self):
         offenders = [
@@ -838,52 +744,6 @@ class PageTitleTests(SimpleTestCase):
             "{% block title %}{% endblock %} · {{ SITE_NAME }}",
             base.read_text(encoding="utf-8"),
         )
-
-
-@tag("source", "tree")
-class AssertionPrecisionTests(SimpleTestCase):
-    """A comparison belongs in the assertion, not inside a boolean.
-
-    ``assertTrue(a > b)`` fails with "False is not true", which says nothing
-    about a or b. ``assertGreater(a, b)`` prints both. CodeQL flags this; the
-    check here finds it before a push does.
-    """
-
-    SPECIFIC = {
-        "Eq": "assertEqual",
-        "NotEq": "assertNotEqual",
-        "Lt": "assertLess",
-        "LtE": "assertLessEqual",
-        "Gt": "assertGreater",
-        "GtE": "assertGreaterEqual",
-        "Is": "assertIs",
-        "IsNot": "assertIsNot",
-        "In": "assertIn",
-        "NotIn": "assertNotIn",
-    }
-
-    def test_no_assertion_hides_a_comparison_inside_a_boolean(self):
-        root = Path(__file__).resolve().parents[4]
-        offenders = []
-        for path in source_files(root, "test*.py"):
-            tree = parsed(path)
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Call) or not node.args:
-                    continue
-                name = getattr(node.func, "attr", "")
-                if name not in ("assertTrue", "assertFalse"):
-                    continue
-                # `any(x > y for …)` is a Call, not a Compare, and is fine:
-                # the comparison is part of the predicate being asserted.
-                if not isinstance(node.args[0], ast.Compare):
-                    continue
-                operator = type(node.args[0].ops[0]).__name__
-                better = self.SPECIFIC.get(operator, "a specific assertion")
-                if name == "assertFalse":
-                    better = "the negated form of " + better
-                offenders.append(f"{path.relative_to(root)}:{node.lineno}: use {better}")
-
-        self.assertEqual(offenders, [])
 
 
 @tag("source", "tree")
@@ -937,70 +797,6 @@ class CellMarkupTests(SimpleTestCase):
         self.assertIn("read the cell's text", said)
 
 
-@tag("source", "tree")
-class CommentHistoryTests(SimpleTestCase):
-    """A comment says what the code does and why, in the present tense.
-
-    How the code came to be belongs in the commit message. Narration in a
-    comment is read as a description of the code by everyone who opens the
-    file, long after it stopped being true. The phrases below cannot describe
-    present behavior, so any of them in a comment is history.
-    """
-
-    NARRATION = re.compile(
-        r"\b(used to be|the first version|the old version|reached production"
-        r"|turned out|until now|until recently|this regression|the bug (?:that|was)"
-        r"|shipped (?:once|unstyled|for a while)|we (?:had|used|found|added|removed|changed|tried)"
-        r"|now also|evaluated on)\b",
-        re.IGNORECASE,
-    )
-
-    def _comments(self, path: Path, text: str):
-        if path.suffix == ".md":
-            # Prose outside fenced code, which keeps its offsets so a hit names its line.
-            masked = re.sub(r"```.*?```", lambda m: re.sub(r"[^\n]", " ", m.group()), text, flags=re.DOTALL)
-            return re.finditer(r"(?:[^\n]+\n?)+", masked)
-        if path.suffix in (".css", ".js", ".go"):
-            return re.finditer(r"/\*.*?\*/|//[^\n]*", text, re.DOTALL)
-        if path.suffix in (".py", ".sh"):
-            return re.finditer(r"#[^\n]*|\"\"\".*?\"\"\"", text, re.DOTALL)
-        return re.finditer(r"\{% comment %\}.*?\{% endcomment %\}|\{#.*?#\}", text, re.DOTALL)
-
-    SUFFIXES = {".py", ".js", ".css", ".html", ".sh", ".go", ".md"}
-
-    @staticmethod
-    def _in_scope(relative: Path) -> bool:
-        """Go and Markdown are read where HQ's own prose lives, not in vendored or generated trees."""
-
-        if relative.suffix == ".go":
-            return (
-                relative.parts[0] == "controller"
-                and "vendor" not in relative.parts
-                and not relative.name.endswith(".gen.go")
-            )
-        if relative.suffix == ".md":
-            return relative.parts[0] == "docs" or relative.parts in (("AGENTS.md",), ("README.md",))
-        return True
-
-    def _sources(self, root: Path):
-        for path in source_files(root, "*"):
-            if path.suffix in self.SUFFIXES and path.is_file() and self._in_scope(path.relative_to(root)):
-                yield path
-
-    def test_no_comment_narrates_history(self):
-        root = Path(__file__).resolve().parents[4]
-        sources = list(self._sources(root))
-        self.assertGreater(len(sources), 100)
-        found = []
-        for path in sources:
-            text = path.read_text(encoding="utf-8", errors="ignore")
-            for match in self._comments(path, text):
-                if phrase := self.NARRATION.search(match.group()):
-                    line = text.count("\n", 0, match.start()) + 1
-                    found.append(f"{path.relative_to(root)}:{line}: {phrase.group()}")
-        self.assertEqual(found, [])
-
-
 class CountedTests(SimpleTestCase):
     """One way to say how many, so a noun and its verb agree."""
 
@@ -1045,10 +841,6 @@ class InterfaceTextTests(SimpleTestCase):
     def test_the_pass_read_the_source(self):
         self.assertGreater(self.reading.files, 300, "The interface text pass read almost nothing")
 
-    def test_no_em_dash_in_interface_text(self):
-        """Rewrite the sentence. For a missing value use `or_empty` or MISSING."""
-        self.assertEqual(self._places(self.reading.em_dashes), [])
-
     def test_no_plural_built_by_hand(self):
         """Use counted(n, one, many) or {{ n|counted:"one,many" }}."""
         self.assertEqual(self._places(self.reading.hand_plurals), [])
@@ -1080,195 +872,6 @@ class InterfaceTextTests(SimpleTestCase):
             with self.subTest(check=f"{module.__name__}.{check.__name__}"):
                 self.assertIsNone(reads_source.search(inspect.getsource(module)))
         self.assertGreater(checked, 0, "No HQ system check was examined")
-
-
-# What the plain-words rule reads, relative to the checkout: every template
-# and every module, each read whole.
-PLAIN_WORDS_PATHS = ("templates", "hq")
-# Text under these is written for a program or the person writing one, in
-# HQ's own vocabulary, and is never a sentence on a page: as (prefix, why).
-PLAIN_WORDS_NOT_FOR_THE_OWNER = (
-    ("hq/platform/api/", "The machine API: its errors and descriptions are read by a client's author."),
-    ("hq/platform/mcp/", "Tool descriptions and errors an agent reads."),
-    ("hq/domains/control_plane/bridge_", "The controller bridge: refusals the controller logs."),
-    ("hq/domains/control_plane/provider_adapters/__init__.py", "Admission errors raised while HQ starts."),
-    ("hq/domains/control_plane/provider_spec.py", "Declaration errors raised while HQ starts."),
-    ("hq/domains/control_plane/providers.py", "Declaration errors raised while HQ starts."),
-    ("hq/domains/control_plane/observations/contract.py", "Declaration errors raised while HQ starts."),
-    ("hq/domains/control_plane/models.py", "Model validation messages no page shows."),
-    ("hq/platform/application/integrations.py", "Errors an extension's author reads when it loads."),
-    ("hq/platform/application/plugin_admission.py", "Admission errors raised while HQ starts."),
-    ("hq/platform/core/outbound.py", "Why a request may wait on the outside, read by whoever adds one."),
-    ("hq/platform/application/controller.py", "Refusals answered to the controller over the bridge."),
-    ("hq/config/", "Settings and start-up errors."),
-)
-
-
-def _for_the_owner(path: str) -> bool:
-    name = path.rsplit("/", 1)[-1]
-    return not (
-        "/tests/" in path
-        or "/management/commands/" in path
-        or name.startswith("test")
-        or name in {"testing.py", "bench.py"}
-        or name.endswith("_testing.py")
-        or any(path.startswith(prefix) for prefix, _why in PLAIN_WORDS_NOT_FOR_THE_OWNER)
-    )
-
-
-# A place the rule lets a word stand, as (path, word, why). Each is a string
-# that is kept as data or read by a client's author, never a sentence the
-# owner is told. One that no longer matches fails the test.
-PLAIN_WORDS_EXEMPT = (
-    (
-        "hq/platform/application/capability_policy.py",
-        "Capability",
-        "The type name stored on every past audit row for an agent rule; a new name would split that history in two.",
-    ),
-    *(
-        (path, word, "Linux's own word for a privilege a container can be given, as Docker's cap_add spells it.")
-        for path, word in (
-            ("hq/platform/application/container_hardening.py", "capability"),
-            ("hq/platform/application/container_standard.py", "capability"),
-            ("hq/platform/application/container_standard.py", "capabilities"),
-        )
-    ),
-    (
-        "hq/platform/application/dns_findings.py",
-        "provider",
-        "'Your internet provider' is the everyday name for the company that sells the connection.",
-    ),
-    (
-        "hq/platform/application/render_status_findings.py",
-        "render",
-        "Part of a literal log token the owner is told to search the journal for.",
-    ),
-    (
-        "templates/control_plane/zone_detail.html",
-        "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS",
-        "The domain page's notice, owned by the pass reworking that page; it goes with the rewording there.",
-    ),
-    (
-        "hq/domains/control_plane/apps.py",
-        "Managed resource",
-        "The type name stored on every past audit row for a record; a new name would split that history.",
-    ),
-    (
-        "hq/platform/application/capabilities.py",
-        "capability",
-        "An error for a command name that does not exist, read by whoever wrote the caller.",
-    ),
-    (
-        "hq/platform/application/cadence.py",
-        "kind",
-        "A validation message that lists the request's own field names for whoever wrote the caller.",
-    ),
-    (
-        "hq/platform/application/infrastructure.py",
-        "kind",
-        "A validation message that lists the request's own field names for whoever wrote the caller.",
-    ),
-    (
-        "hq/platform/application/resources.py",
-        "resource",
-        "An API error for a list name that does not exist, read by whoever wrote the client, in the API's own vocabulary.",
-    ),
-)
-
-
-class PlainWordsTests(SimpleTestCase):
-    """HQ's names for its own parts stay out of what its owner reads.
-
-    ``hq.platform.core.plain_words`` holds the words and what to say instead.
-    """
-
-    @classmethod
-    def setUpClass(cls):
-        from pathlib import Path
-
-        from django.conf import settings
-
-        from hq.platform.core import plain_words
-
-        super().setUpClass()
-        cls.words = plain_words
-        root = Path(settings.BASE_DIR).resolve()
-        found, cls.files = plain_words.read((root / path for path in PLAIN_WORDS_PATHS), root=root)
-        cls.found = [item for item in found if _for_the_owner(str(item.path))]
-
-    def test_the_rule_read_the_pages(self):
-        self.assertGreater(self.files, 100, "The plain-words rule read almost nothing")
-
-    def test_no_page_shows_a_word_hq_keeps_to_itself(self):
-        """Say what plain_words.NEVER_SHOWN gives for it, or reword the sentence."""
-
-        exempt = {(path, word) for path, word, _why in PLAIN_WORDS_EXEMPT}
-        shown = [str(found) for found in self.found if (str(found.path), found.word) not in exempt]
-
-        self.assertEqual(shown, [])
-
-    def test_every_exemption_still_exempts_something_and_says_why(self):
-        found = {(str(item.path), item.word) for item in self.found}
-        for path, word, why in PLAIN_WORDS_EXEMPT:
-            with self.subTest(path=path, word=word):
-                self.assertIn((path, word), found, "Nothing here needs this exemption any more.")
-                self.assertGreater(len(why.split()), 6, "Say why the word stands here.")
-
-    def test_it_reads_what_a_person_sees_and_nothing_else(self):
-        template = (
-            "{% comment %}The sweep reconciles a kind.{% endcomment %}\n"
-            '<a class="sweep-link" href="{% url \'control_plane:reconcile\' %}" title="Reconcile it">Open</a>\n'
-            '{% include "partials/_sweep_freshness.html" with message="No resources yet." %}\n'
-            "<code>adguard.rewrite</code><p>Findings</p><p>Read 3 records.</p>"
-        )
-        shown = [text for _line, text in self.words.template_text(template)]
-
-        self.assertEqual(shown, ["Open", "Reconcile it", "No resources yet.", "Findings", "Read 3 records."])
-        self.assertEqual(
-            [word for text in shown for word, _instead in self.words.words_in(text)],
-            ["Reconcile", "resources"],
-        )
-
-    def test_python_is_read_for_sentences_and_not_for_names(self):
-        source = (
-            '"""A sweep of every kind."""\n'
-            'KIND = "adguard.rewrite"\n'
-            'route = "control_plane:reconcile"\n'
-            'logger.info("The sweep reached every provider.")\n'
-            'title = "Was not in the last sweep"\n'
-        )
-
-        self.assertEqual([text for _line, text in self.words.python_text(source)], ["Was not in the last sweep"])
-
-    def test_a_retired_name_is_found_as_written(self):
-        self.assertEqual(
-            [word for word, _instead in self.words.words_in("Open Action items from the Command Center")],
-            ["Action items", "Command Center"],
-        )
-        self.assertEqual(list(self.words.words_in("3 things need you. Refresh all.")), [])
-
-    def test_a_setting_name_or_a_field_value_is_found_even_in_code(self):
-        template = (
-            "<p>Set <code>SEVERINO_EXAMPLE_SWITCH</code> to allow it.</p>"
-            "<p>Set manages to 1 on its item.</p><code>example.rewrite</code>"
-        )
-        found = [
-            word
-            for _line, text in (*self.words.template_text(template), *self.words.template_identifiers(template))
-            for word, _instead in self.words.asked_in(text)
-        ]
-
-        self.assertEqual(sorted(found), ["SEVERINO_EXAMPLE_SWITCH", "manages to 1"])
-        self.assertEqual(
-            [word for word, _instead in self.words.words_in("Public DNS changes are off. Set SEVERINO_EXAMPLE_DNS.")],
-            ["SEVERINO_EXAMPLE_DNS"],
-        )
-
-    def test_a_path_that_is_gone_fails_rather_than_passing(self):
-        from pathlib import Path
-
-        with self.assertRaises(FileNotFoundError):
-            self.words.read([Path("templates/no-such-page.html")], root=Path())
 
 
 class PostButtonTests(SimpleTestCase):
@@ -1346,8 +949,8 @@ class OnePrimitiveTests(SimpleTestCase):
         self.assertIn("hq/platform/application/action_links.py", {relative for relative, _ in scanned})
         self.assertEqual(found, [])
         templates = [
-            path.relative_to(self.ROOT).as_posix()
-            for path in sorted((self.ROOT / "templates").rglob("*.html"))
+            name
+            for name, path in template_files()
             if re.search(r"""\{%\s*url\s+["']command["']""", path.read_text(encoding="utf-8"))
         ]
         self.assertEqual(templates, [])
@@ -1363,8 +966,8 @@ class OnePrimitiveTests(SimpleTestCase):
         # A code block keeps its own lines, so code inside <pre> is not a token.
         bare = re.compile(r"(<pre[^>]*>\s*)?(<code[^>]*>\{\{(?:(?!\}\}).)*\}\})")
         found = [
-            f"{path.relative_to(self.ROOT).as_posix()}: {code}"
-            for path in sorted((self.ROOT / "templates").rglob("*.html"))
+            f"{name}: {code}"
+            for name, path in template_files()
             for block, code in bare.findall(path.read_text(encoding="utf-8"))
             if not block and "|breakable" not in code
         ]
@@ -1382,45 +985,8 @@ class OnePrimitiveTests(SimpleTestCase):
         ]
         self.assertEqual(found, [])
 
-    def test_templates_say_ages_through_the_ago_filter(self):
-        found = [
-            path.relative_to(self.ROOT).as_posix()
-            for path in sorted((self.ROOT / "templates").rglob("*.html"))
-            if "|timesince }} ago" in path.read_text(encoding="utf-8")
-            or "|timesince %}" in path.read_text(encoding="utf-8")
-        ]
-        self.assertEqual(found, [])
-
-    def test_templates_write_dates_through_the_when_filter(self):
-        """A day and its month are written by ``when`` ("Oct 3", "Oct 3, 2025"),
-        never by a format of a template's own. A month or a weekday alone (a
-        calendar's heading, its column labels) is not a date, and digits only
-        (``Y-m-d`` in an address or a ``datetime``) are for a machine to read."""
-
-        formatted = re.compile(r"""\{%\s*now\s+(["'])(.*?)\1|\|date(?::(["'])(.*?)\3|(?![:\w]))""")
-        day, month = set("djS"), set("mnMFNbE")
-
-        def a_whole_date(layout: str) -> bool:
-            letters = set(re.sub(r"\\.", "", layout)) - set(" ,.-:/")
-            if letters <= set("YmdHis"):
-                return False
-            return bool(letters & day and letters & month)
-
-        found = [
-            f"{path.relative_to(self.ROOT).as_posix()}:{number}: {match.group(0)}"
-            for path in sorted((self.ROOT / "templates").rglob("*.html"))
-            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1)
-            for match in formatted.finditer(line)
-            if a_whole_date(match.group(2) or match.group(4) or "N j, Y")
-        ]
-        self.assertEqual(found, [])
-
     def test_templates_say_byte_counts_through_the_bytes_filter(self):
-        found = [
-            path.relative_to(self.ROOT).as_posix()
-            for path in sorted((self.ROOT / "templates").rglob("*.html"))
-            if "filesizeformat" in path.read_text(encoding="utf-8")
-        ]
+        found = [name for name, path in template_files() if "filesizeformat" in path.read_text(encoding="utf-8")]
         self.assertEqual(found, [])
 
     def test_templates_write_amounts_through_the_money_filter(self):
@@ -1428,11 +994,7 @@ class OnePrimitiveTests(SimpleTestCase):
         which writes a negative amount as "$-5.00"."""
 
         built = re.compile(r"\$\{\{")
-        found = [
-            path.relative_to(self.ROOT).as_posix()
-            for path in sorted((self.ROOT / "templates").rglob("*.html"))
-            if built.search(path.read_text(encoding="utf-8"))
-        ]
+        found = [name for name, path in template_files() if built.search(path.read_text(encoding="utf-8"))]
         self.assertEqual(found, [])
 
     def test_a_related_list_is_drawn_by_its_partial(self):
@@ -1441,8 +1003,8 @@ class OnePrimitiveTests(SimpleTestCase):
         under a "Related" heading over a list of its own shape."""
 
         found = [
-            path.relative_to(self.ROOT).as_posix()
-            for path in sorted((self.ROOT / "templates").rglob("*.html"))
+            name
+            for name, path in template_files()
             if re.search(r"<h[1-6][^>]*>\s*Related\b", path.read_text(encoding="utf-8"))
         ]
         self.assertEqual(found, [])
@@ -1501,11 +1063,7 @@ class OnePrimitiveTests(SimpleTestCase):
             r'<a href="\{% url \'(control_plane:(detail|machine|service)|zones:detail|'
             r"projects:detail)\'"
         )
-        found = [
-            path.relative_to(self.ROOT).as_posix()
-            for path in sorted((self.ROOT / "templates").rglob("*.html"))
-            if mention.search(path.read_text(encoding="utf-8"))
-        ]
+        found = [name for name, path in template_files() if mention.search(path.read_text(encoding="utf-8"))]
         self.assertEqual(found, [])
 
     def test_entity_pages_are_addressed_by_entity_link(self):
@@ -1522,96 +1080,6 @@ class OnePrimitiveTests(SimpleTestCase):
             and page.search(text)
         ]
         self.assertEqual(found, [])
-
-
-@tag("source", "tree")
-class CognitiveComplexityTests(SimpleTestCase):
-    """No function asks a reader to hold more than twenty units of nesting.
-
-    The score is the codebase-memory graph's ``cognitive`` property: +1 plus the
-    nesting depth for each if, elif, loop, with, try, except and match. An elif
-    or else body sits one level deeper than its if. Boolean operators,
-    ternaries, comprehensions and nested functions add nothing.
-    """
-
-    LIMIT = 20
-    ROOT = Path(__file__).resolve().parents[4]
-    NESTING = (
-        ast.For,
-        ast.AsyncFor,
-        ast.While,
-        ast.With,
-        ast.AsyncWith,
-        ast.Try,
-        ast.TryStar,
-        ast.ExceptHandler,
-        ast.Match,
-    )
-
-    @classmethod
-    def score(cls, function) -> int:
-        def block(nodes, nesting):
-            return sum(walk(node, nesting) for node in nodes)
-
-        def walk(node, nesting):
-            if isinstance(node, ast.If):
-                total = 1 + nesting + walk(node.test, nesting)
-                total += block(node.body, nesting + 1)
-                rest = node.orelse
-                # An elif shares its if's column; an if inside an else does not.
-                while len(rest) == 1 and isinstance(rest[0], ast.If) and rest[0].col_offset == node.col_offset:
-                    branch = rest[0]
-                    total += 2 + nesting + walk(branch.test, nesting + 1)
-                    total += block(branch.body, nesting + 2)
-                    rest = branch.orelse
-                return total + block(rest, nesting + 1)
-            children = ast.iter_child_nodes(node)
-            if isinstance(node, cls.NESTING):
-                return 1 + nesting + block(children, nesting + 1)
-            return block(children, nesting)
-
-        return block(function.body, 0)
-
-    def functions(self, tree, prefix):
-        for node in ast.iter_child_nodes(tree):
-            name = f"{prefix}.{getattr(node, 'name', '')}"
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                yield name, self.score(node)
-            elif isinstance(node, ast.ClassDef):
-                yield from self.functions(node, name)
-
-    def scores(self) -> dict[str, int]:
-        found = {}
-        for package in sorted(self.ROOT.glob("*/__init__.py")):
-            for path in sorted(package.parent.rglob("*.py")):
-                relative = path.relative_to(self.ROOT)
-                if path.name.startswith("test") or {"tests", "migrations"} & set(relative.parts):
-                    continue
-                tree = parsed(path)
-                module = ".".join(relative.with_suffix("").parts)
-                found.update(self.functions(tree, module))
-        return found
-
-    def test_the_score_weighs_nesting(self):
-        source = (
-            "def f(a):\n"
-            "    for x in a:\n"  # +1
-            "        if x and a:\n"  # +2
-            "            pass\n"
-            "        elif x:\n"  # +3
-            "            pass\n"
-            "        else:\n"
-            "            with x:\n"  # +3
-            "                pass\n"
-            "    return [y for y in a if y] or None\n"
-        )
-        function = ast.parse(source).body[0]
-        self.assertEqual(self.score(function), 9)
-
-    def test_no_function_exceeds_the_limit(self):
-        # No allowance list: a function over the limit is split, never excused.
-        over = {name: score for name, score in self.scores().items() if score > self.LIMIT}
-        self.assertEqual(over, {}, "split these into named steps")
 
 
 @tag("source", "tree")
@@ -1677,7 +1145,10 @@ class FileSizeTests(SimpleTestCase):
             elif sizes[path] <= self.LIMIT:
                 problems.append(f"{path}: {sizes[path]} lines, under {self.LIMIT}; remove its line")
             elif sizes[path] > listed:
-                problems.append(f"{path}: {sizes[path]} lines, listed at {listed}; a listed file does not grow")
+                problems.append(
+                    f"{path}: {sizes[path]} lines, listed at {listed}; a listed file does not grow,"
+                    " so a new test goes in a sibling module beside it"
+                )
         for path, lines in sorted(sizes.items()):
             if lines > self.LIMIT and path not in baseline:
                 problems.append(f"{path}: {lines} lines, over {self.LIMIT} and not listed; split it by behavior")
@@ -1711,118 +1182,6 @@ class OneDefinitionTests(SimpleTestCase):
                         counts[target.id] = counts.get(target.id, 0) + 1
             twice |= {f"{path.relative_to(root)}: {name}": n for name, n in counts.items() if n > 1}
         self.assertEqual(twice, {}, "give each its own name")
-
-
-def _defaulted_settings_reads(tree: ast.AST) -> list[int]:
-    """Lines of ``getattr(settings, NAME, default)``, a read that survives a misspelled NAME."""
-
-    return [
-        node.lineno
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "getattr"
-        and len(node.args) == 3
-        and isinstance(node.args[0], ast.Name)
-        and node.args[0].id == "settings"
-    ]
-
-
-@tag("source", "tree")
-class SettingsReadTests(SimpleTestCase):
-    """A setting is declared once, in ``hq/config/settings.py``, and read as ``settings.NAME``.
-
-    ``getattr(settings, "NAME", default)`` turns a misspelled name into a
-    feature quietly switched off, and writes the default a second time.
-    """
-
-    def test_no_source_reads_a_setting_with_a_default(self):
-        root = Path(__file__).resolve().parents[4]
-        self.assertEqual(_defaulted_settings_reads(ast.parse('getattr(settings, "X", 1)')), [1])
-        reads = {
-            f"{path.relative_to(root)}:{line}"
-            for package in ("hq", "hq_sdk", "tools")
-            for path in source_files(root / package, "*.py")
-            if "tests" not in path.parts and not path.name.startswith("test")
-            for line in _defaulted_settings_reads(parsed(path))
-        }
-        self.assertEqual(reads, set(), "declare the setting in hq/config/settings.py and read settings.NAME")
-
-
-def _operation_writes(tree: ast.AST) -> list[int]:
-    """Lines that write an ``OperationRequest`` row one at a time."""
-
-    return [
-        node.lineno
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr in {"create", "get_or_create", "update_or_create"}
-        and isinstance(node.func.value, ast.Attribute)
-        and node.func.value.attr == "objects"
-        and isinstance(node.func.value.value, ast.Name)
-        and node.func.value.value.id == "OperationRequest"
-    ]
-
-
-@tag("source", "tree")
-class OperationQueueTests(SimpleTestCase):
-    """An operation enters the queue through ``resource_operations.enqueue``.
-
-    Its key column is unique, and ``enqueue`` lets that column settle two
-    writers on one key. A caller that checks for the key and then creates the
-    row has a race of its own between the two.
-    """
-
-    def test_only_enqueue_writes_an_operation(self):
-        root = Path(__file__).resolve().parents[4]
-        home = root / "hq/platform/application/resource_operations.py"
-        self.assertTrue(_operation_writes(parsed(home)), "enqueue no longer writes the row this test looks for")
-        writes = {
-            f"{path.relative_to(root)}:{line}"
-            for path in source_files(root / "hq", "*.py")
-            if path != home and "tests" not in path.parts
-            for line in _operation_writes(parsed(path))
-        }
-        self.assertEqual(writes, set(), "queue it with resource_operations.enqueue")
-
-
-def _user_reads(tree: ast.AST) -> list[int]:
-    """Lines of ``getattr(x, "user", ...)`` or ``hasattr(x, "user")``."""
-
-    return [
-        node.lineno
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id in {"getattr", "hasattr"}
-        and len(node.args) >= 2
-        and isinstance(node.args[1], ast.Constant)
-        and node.args[1].value == "user"
-    ]
-
-
-@tag("source", "tree")
-class SignedInTests(SimpleTestCase):
-    """Who a request's session signed in is ``request_identity.signed_in``.
-
-    Every request Django serves has a ``user``; only one the MCP boundary
-    admitted has none. That case is answered once, so no reader decides on its
-    own whether a missing or anonymous user counts as signed in.
-    """
-
-    def test_only_signed_in_asks_whether_a_request_has_a_user(self):
-        root = Path(__file__).resolve().parents[4]
-        home = root / "hq/platform/application/request_identity.py"
-        self.assertTrue(_user_reads(parsed(home)), "signed_in no longer reads the attribute this test looks for")
-        reads = {
-            f"{path.relative_to(root)}:{line}"
-            for package in ("hq", "hq_sdk")
-            for path in source_files(root / package, "*.py")
-            if path != home and "tests" not in path.parts
-            for line in _user_reads(parsed(path))
-        }
-        self.assertEqual(reads, set(), "ask request_identity.signed_in(request)")
 
 
 class RouteOwnerTests(SimpleTestCase):
@@ -1943,9 +1302,7 @@ class RequestNeverWaitsTests(SimpleTestCase):
     @tag("source", "tree")
     def test_asked_for_work_is_followed_by_one_script_behavior(self):
         script = (self.ROOT / "static" / "js" / "ask.js").read_text(encoding="utf-8")
-        templates = "\n".join(
-            path.read_text(encoding="utf-8") for path in sorted((self.ROOT / "templates").rglob("*.html"))
-        )
+        templates = "\n".join(path.read_text(encoding="utf-8") for _name, path in template_files())
 
         # The controls that ask for work outside the request are all an ask.
         for partial in ("_ask.html", "_job_progress.html", "_visit_refresh.html"):
@@ -1959,63 +1316,12 @@ class RequestNeverWaitsTests(SimpleTestCase):
 class FragmentPrimitiveTests(SimpleTestCase):
     """Reads are one component: `static/js/fragment.js` and the part it asks for.
 
-    A script that parses a response itself, or keeps its own timer to ask
-    again, is a second fetch-and-swap with its own focus, session and failure
-    behavior. Both are refused here, so the next read is an attribute on an
-    element rather than a function in a page's script.
+    `lint:js` holds the scripts to it; this holds the templates that load
+    and name its parts.
     """
 
     ROOT = Path(__file__).resolve().parents[4]
     PRIMITIVE = "fragment.js"
-    # What only the primitive does: turn a response into markup, and ask again
-    # on a timer.
-    REFUSED = {
-        "reads a response body as text": r"\.text\(\)",
-        "reads a response body as data": r"\.json\(\)",
-        "parses markup": r"DOMParser|parseFromString|insertAdjacentHTML|\.innerHTML\b|\.outerHTML\s*=",
-        "keeps its own interval": r"\bsetInterval\(",
-        "sleeps in a loop": r"setTimeout\(\s*resolve\b",
-        "opens its own stream": r"\bEventSource\b|\bXMLHttpRequest\(",
-        "fetches outside the session boundary": r"(?<![\w.])fetch\(|window\.fetch\(",
-    }
-    # How many times a script may still do what is refused, and why. Asked-for
-    # work answers with how it stands (state, note, seconds, status address),
-    # which every copy of its control on the page draws in place; that answer
-    # is data no one region is drawn from: the ask's post and its status poll.
-    ALLOWED = {("ask.js", "reads a response body as data"): 2}
-
-    def scripts(self) -> dict[str, str]:
-        found = {
-            path.name: path.read_text(encoding="utf-8") for path in sorted((self.ROOT / "static" / "js").glob("*.js"))
-        }
-        self.assertIn(self.PRIMITIVE, found)
-        self.assertGreater(len(found), 1)
-        return found
-
-    def test_only_the_primitive_parses_a_response_or_asks_again_on_a_timer(self):
-        for name, source in self.scripts().items():
-            if name == self.PRIMITIVE:
-                continue
-            for what, pattern in self.REFUSED.items():
-                with self.subTest(script=name, rule=what):
-                    self.assertEqual(
-                        len(re.findall(pattern, source)),
-                        self.ALLOWED.get((name, what), 0),
-                        f"{name} {what}; a read is a `data-fragment` region or "
-                        "`hqFragment.swap`, and a poll is `hqEvery`",
-                    )
-
-    def test_the_primitive_is_one_fetch_one_parser_and_one_timer(self):
-        source = self.scripts()[self.PRIMITIVE]
-
-        self.assertEqual(source.count("window.fetch("), 1)
-        self.assertEqual(source.count("parseFromString("), 1)
-        self.assertEqual(source.count("window.setTimeout("), 1)
-        # The parser is not handed out: nothing outside the closure can reach it.
-        exported = re.search(r"return \{([^}]*)\};\s*\}\)\(\);\s*window\.hqFragment = hqFragment;", source)
-        self.assertIsNotNone(exported, "hqFragment's closure no longer ends in the object it hands out")
-        self.assertNotIn("parse", re.findall(r"\w+", exported.group(1)))
-        self.assertFalse(re.search(r"window\.\w+\s*=\s*parse\b", source), "the parser left the closure")
 
     def test_the_primitive_loads_before_the_scripts_that_use_it(self):
         base = (self.ROOT / "templates" / "base.html").read_text(encoding="utf-8")
@@ -2025,7 +1331,7 @@ class FragmentPrimitiveTests(SimpleTestCase):
         self.assertEqual(deferred[0], self.PRIMITIVE)
 
     def test_every_part_a_template_names_is_one_a_template_defines(self):
-        sources = [path.read_text(encoding="utf-8") for path in sorted((self.ROOT / "templates").rglob("*.html"))]
+        sources = [path.read_text(encoding="utf-8") for _name, path in template_files()]
         named = {name for text in sources for name in re.findall(r'data-fragment-name="(\w+)"', text)}
         defined = {name for text in sources for name in re.findall(r"{% partialdef (\w+)", text)}
 

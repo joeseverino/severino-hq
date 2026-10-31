@@ -20,6 +20,15 @@ ROOT = Path(settings.BASE_DIR)
 PROBLEM = contract()["components"]["schemas"]["Problem"]
 
 
+def recording(ran: list[str]):
+    """The bridge application with each action replaced by a note that it ran."""
+
+    def noted(name: str):
+        return lambda parameters, payload: ran.append(name)
+
+    return bridge_application.bridge(tuple(Action(action.name, noted(action.name)) for action in ACTIONS))
+
+
 class RefusalTests(TestCase):
     """A call the contract does not describe is refused as a problem, and runs nothing."""
 
@@ -85,10 +94,8 @@ class RefusalTests(TestCase):
 
     def test_a_payload_over_the_limit_is_refused_before_it_is_read_or_run(self):
         ran = []
-        with (
-            patch.object(bridge_application, "max_body_bytes", return_value=8),
-            patch.object(bridge_application, "_run", side_effect=lambda *args: ran.append(args)),
-        ):
+        app = recording(ran)
+        with patch.object(bridge_application, "max_body_bytes", return_value=8):
             # Declared too large, and too large without declaring it.
             self.refused(
                 413,
@@ -97,6 +104,7 @@ class RefusalTests(TestCase):
                 query={"controller-id": "x"},
                 body=b"[]",
                 headers=((b"content-length", b"9"),),
+                app=app,
             )
             self.refused(
                 413,
@@ -104,6 +112,7 @@ class RefusalTests(TestCase):
                 "/steps",
                 query={"controller-id": "x"},
                 body=b"[" + b" " * 8 + b"]",
+                app=app,
             )
         self.assertEqual(ran, [])
 
@@ -208,21 +217,22 @@ class PayloadContractTests(TestCase):
 
     def test_each_departure_is_refused_with_its_path_and_runs_nothing(self):
         ran = []
-        with patch.object(bridge_application, "_run", side_effect=lambda *args: ran.append(args)):
-            for action, payload, pointer, reason in self.DEPARTURES:
-                with self.subTest(action=action, pointer=pointer):
-                    query = {"controller-id": "x", "operation": "1"} if action == "report" else {"controller-id": "x"}
-                    answer = bridge_client.request(
-                        f"/{action}",
-                        query={} if action == "analytics-plan" else query,
-                        body=json.dumps(payload).encode(),
-                    )
-                    self.assertEqual(answer.status, 422, answer.body)
-                    self.assertEqual(answer.media_type, "application/problem+json")
-                    problem = answer.json()
-                    Draft202012Validator(PROBLEM).validate(problem)
-                    self.assertIn(f"The {action} payload at {pointer} ", problem["detail"])
-                    self.assertIn(reason, problem["detail"])
+        app = recording(ran)
+        for action, payload, pointer, reason in self.DEPARTURES:
+            with self.subTest(action=action, pointer=pointer):
+                query = {"controller-id": "x", "operation": "1"} if action == "report" else {"controller-id": "x"}
+                answer = bridge_client.request(
+                    f"/{action}",
+                    query={} if action == "analytics-plan" else query,
+                    body=json.dumps(payload).encode(),
+                    app=app,
+                )
+                self.assertEqual(answer.status, 422, answer.body)
+                self.assertEqual(answer.media_type, "application/problem+json")
+                problem = answer.json()
+                Draft202012Validator(PROBLEM).validate(problem)
+                self.assertIn(f"The {action} payload at {pointer} ", problem["detail"])
+                self.assertIn(reason, problem["detail"])
         self.assertEqual(ran, [])
 
     def test_a_refusal_never_repeats_the_value_it_refused(self):
@@ -295,10 +305,9 @@ class ContractBindingTests(SimpleTestCase):
         for actions in (extra, ACTIONS[1:], (*ACTIONS, ACTIONS[0])):
             with (
                 self.subTest(count=len(actions)),
-                patch.object(bridge_application, "ACTIONS", actions),
                 self.assertRaisesMessage(RuntimeError, "differ"),
             ):
-                bridge_application._routes()
+                bridge_application.bridge(actions)
 
     def test_every_parameter_is_a_kind_the_application_parses(self):
         for operation in operations().values():
@@ -314,27 +323,26 @@ class ReachabilityTests(TestCase):
     """The bridge answers on its Unix socket and nowhere else; the web answers no bridge action."""
 
     def test_a_request_from_a_network_listener_is_refused_before_any_action(self):
-        with patch.object(bridge_application, "_run") as run:
-            for server in (("127.0.0.1", 8000), ("0.0.0.0", 8000), ("::1", 8000), None):
-                for action in operations():
-                    with self.subTest(server=server, action=action):
-                        answer = bridge_client.request(f"/{action}", query={"controller-id": "x"}, server=server)
-                        self.assertEqual(answer.status, 403)
-                        self.assertIn("Unix socket only", answer.json()["detail"])
-        run.assert_not_called()
+        ran = []
+        app = recording(ran)
+        for server in (("127.0.0.1", 8000), ("0.0.0.0", 8000), ("::1", 8000), None):
+            for action in operations():
+                with self.subTest(server=server, action=action):
+                    answer = bridge_client.request(f"/{action}", query={"controller-id": "x"}, server=server, app=app)
+                    self.assertEqual(answer.status, 403)
+                    self.assertIn("Unix socket only", answer.json()["detail"])
+        self.assertEqual(ran, [])
 
     def test_the_web_application_serves_no_bridge_action(self):
-        with patch.object(bridge_application, "_run") as run:
-            for action, operation in operations().items():
-                with self.subTest(action=action):
-                    response = self.client.post(
-                        f"/{action}?controller-id=x&resource=x&operation=1",
-                        data=b"[]" if operation.takes_body else b"",
-                        content_type="application/json",
-                    )
-                    self.assertNotEqual(response.status_code, 200)
-                    self.assertNotEqual(response.headers.get("Content-Type"), "application/problem+json")
-        run.assert_not_called()
+        for action, operation in operations().items():
+            with self.subTest(action=action):
+                response = self.client.post(
+                    f"/{action}?controller-id=x&resource=x&operation=1",
+                    data=b"[]" if operation.takes_body else b"",
+                    content_type="application/json",
+                )
+                self.assertNotEqual(response.status_code, 200)
+                self.assertNotEqual(response.headers.get("Content-Type"), "application/problem+json")
 
     def test_no_web_route_is_a_bridge_action(self):
         from hq.config.asgi import application as web
@@ -399,3 +407,31 @@ class ListenerSourceTests(SimpleTestCase):
                 "async with unix_server.serving(bridge_application, settings.SEVERINO_BRIDGE_SOCKET):",
             ],
         )
+
+
+class ReportAttributionTests(TestCase):
+    def test_a_sweep_is_stored_and_adopted_by_hq_itself_for_the_controller(self):
+        from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.models import AuditLog
+
+        managing_everything()
+        bridge_client.call(
+            "inventory",
+            {
+                "adguard.rewrite": {
+                    "ok": True,
+                    "records": [{"domain": "app.example.com", "answer": "192.0.2.10", "enabled": True}],
+                }
+            },
+            controller_id="example-controller",
+        )
+
+        self.assertEqual(len(ProviderInventory.objects.get(kind="adguard.rewrite").records), 1)
+        adopted = ManagedResource.objects.get(kind="adguard.rewrite")
+        attributed = {
+            (metadata["interface"], metadata["actor"])
+            for metadata in AuditLog.objects.filter(object_id=str(adopted.pk)).values_list("metadata", flat=True)
+            if "actor" in metadata
+        }
+        self.assertEqual(attributed, {("internal", "controller")})

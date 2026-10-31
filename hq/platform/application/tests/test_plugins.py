@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from ..domains import domain_navigation
 from ..pages import page_context
+from ..plugin_testing import importable
 from ..plugins import (
     PLUGIN_API_VERSION,
     NavigationItem,
@@ -108,10 +109,7 @@ class PluginContractTests(TestCase):
             },
             clear=False,
         )
-        importer = mock.patch(
-            "hq.platform.application.plugins._import",
-            side_effect=lambda reference: PluginIntegration if reference == manifest.integration_provider else manifest,
-        )
+        importer = importable({"example.plugin": {"manifest": manifest, "integration": PluginIntegration}})
         return env, importer
 
     def test_empty_allowlist_is_the_secure_default(self):
@@ -242,9 +240,9 @@ class PluginContractTests(TestCase):
         with (
             mock.patch.dict(
                 os.environ,
-                {"SEVERINO_HQ_PLUGINS": "one:plugin,two:plugin"},
+                {"SEVERINO_HQ_PLUGINS": "example.one:plugin,example.two:plugin"},
             ),
-            mock.patch("hq.platform.application.plugins._import", return_value=VALID),
+            importable({"example.one": {"plugin": VALID}, "example.two": {"plugin": VALID}}),
             self.assertRaises(ImproperlyConfigured),
         ):
             installed_plugins()
@@ -268,12 +266,9 @@ class PluginContractTests(TestCase):
         with (
             mock.patch.dict(
                 os.environ,
-                {"SEVERINO_HQ_PLUGINS": "first:plugin,second:plugin"},
+                {"SEVERINO_HQ_PLUGINS": "example.first:plugin,example.second:plugin"},
             ),
-            mock.patch(
-                "hq.platform.application.plugins._import",
-                side_effect=(first, second),
-            ),
+            importable({"example.first": {"plugin": first}, "example.second": {"plugin": second}}),
             self.assertRaisesRegex(ImproperlyConfigured, "Duplicate plugin URL prefix"),
         ):
             installed_plugins()
@@ -297,12 +292,9 @@ class PluginContractTests(TestCase):
         with (
             mock.patch.dict(
                 os.environ,
-                {"SEVERINO_HQ_PLUGINS": "first:plugin,second:plugin"},
+                {"SEVERINO_HQ_PLUGINS": "example.first:plugin,example.second:plugin"},
             ),
-            mock.patch(
-                "hq.platform.application.plugins._import",
-                side_effect=(first, second),
-            ),
+            importable({"example.first": {"plugin": first}, "example.second": {"plugin": second}}),
             self.assertRaisesRegex(ImproperlyConfigured, "prefixes overlap"),
         ):
             installed_plugins()
@@ -346,10 +338,7 @@ class PluginContractTests(TestCase):
 
         with (
             env,
-            mock.patch(
-                "hq.platform.application.plugins._import",
-                side_effect=lambda reference: factory if reference == VALID.integration_provider else VALID,
-            ),
+            importable({"example.plugin": {"manifest": VALID, "integration": factory}}),
         ):
             ((manifest, composed),) = installed_integrations()
             self.assertEqual(manifest, VALID)
@@ -375,12 +364,7 @@ class PluginContractTests(TestCase):
         )
         with (
             env,
-            mock.patch(
-                "hq.platform.application.plugins._import",
-                side_effect=lambda reference: (
-                    (lambda: contribution) if reference == VALID.integration_provider else VALID
-                ),
-            ),
+            importable({"example.plugin": {"manifest": VALID, "integration": lambda: contribution}}),
             self.assertRaisesRegex(ImproperlyConfigured, "must be callable: health"),
         ):
             installed_integrations()
@@ -462,7 +446,7 @@ class PluginContractTests(TestCase):
                 },
                 clear=True,
             ),
-            mock.patch("hq.platform.application.plugins._import", return_value=VALID),
+            importable({"example.plugin": {"manifest": VALID}}),
             self.assertRaisesRegex(ImproperlyConfigured, "PLUGIN_LOCK is required"),
         ):
             installed_plugins()
@@ -508,7 +492,7 @@ class PluginContractTests(TestCase):
                     },
                     clear=True,
                 ),
-                mock.patch("hq.platform.application.plugins._import", return_value=VALID),
+                importable({"example.plugin": {"manifest": VALID}}),
                 mock.patch(
                     "hq.platform.application.plugin_admission.package_version",
                     return_value=VALID.version,
@@ -556,7 +540,7 @@ class PluginContractTests(TestCase):
                     },
                     clear=True,
                 ),
-                mock.patch("hq.platform.application.plugins._import", return_value=VALID),
+                importable({"example.plugin": {"manifest": VALID}}),
                 self.assertRaisesRegex(ImproperlyConfigured, "version does not match"),
             ):
                 installed_plugins()

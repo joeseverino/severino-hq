@@ -33,8 +33,8 @@ page it falls back to. Nothing here knows which one it is in.
     <div class="conn-link conn-link-{{ connection.path }}">
       <p class="conn-headline"><span class="conn-dot" aria-hidden="true"></span>{{ connection.channel.label|breakable }}</p>
       <span class="conn-link-line" aria-hidden="true"></span>
-      <p class="conn-sub">This request: {{ connection.tally|lower|breakable }} · {{ connection.path_label|breakable }} · {{ connection.transport|breakable }}</p>
-      {% if posture %}<p class="conn-sub"><a href="{% url 'control_plane:connections' %}#posture-heading">{% if posture.advanced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture enabled{% else %}HQ's standard{% endif %}</a> · {{ posture.count_line|breakable }}</p>{% endif %}
+      <p class="conn-sub">This request: {{ connection.tally|lower|breakable }}{% dot %}{{ connection.path_label|breakable }}{% dot %}{{ connection.transport|breakable }}</p>
+      {% if posture %}<p class="conn-sub"><a href="{% url 'control_plane:connections' %}#posture-heading">{% if posture.advanced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture enabled{% else %}HQ's standard{% endif %}</a>{% dot %}{{ posture.count_line|breakable }}</p>{% endif %}
     </div>
     <div class="conn-peer">
       <span class="conn-peer-role">HQ</span>
@@ -48,7 +48,7 @@ page it falls back to. Nothing here knows which one it is in.
     </div>
   </section>
 
-  <section class="card">
+  {% card %}
     <h3>You</h3>
     <dl class="kv">
       <dt>Signed in</dt>
@@ -115,9 +115,9 @@ page it falls back to. Nothing here knows which one it is in.
         Only your sign-in says who you are. No tailnet account is known for this request.
       </p>
     {% endif %}
-  </section>
+  {% endcard %}
 
-  <section class="card">
+  {% card %}
     <h3>The link</h3>
     <dl class="kv">
       <dt>Path</dt>
@@ -200,9 +200,9 @@ page it falls back to. Nothing here knows which one it is in.
         </dd>
       {% endif %}
     </dl>
-  </section>
+  {% endcard %}
 
-  <section class="card conn-path" aria-label="Path to HQ" data-connection-layers>
+  {% card css="conn-path" label="Path to HQ" data_connection_layers=True %}
     <div class="conn-path-head">
       <h3>Path to HQ</h3>
       <span>{{ request_path.proof|breakable }}</span>
@@ -261,7 +261,7 @@ page it falls back to. Nothing here knows which one it is in.
         </li>
       {% endfor %}
     </ol>
-  </section>
+  {% endcard %}
 
   <div class="conn-aside">
   <details class="conn-protocol conn-addresses" open>
@@ -270,7 +270,7 @@ page it falls back to. Nothing here knows which one it is in.
         <strong>Addresses</strong>
         <small>Yours and HQ's</small>
       </span>
-      <span class="count">Yours {{ request_path.addresses|length }}{% if request_path.hq_addresses %} · HQ {{ request_path.hq_addresses|length }}{% endif %}</span>
+      <span class="count">Yours {{ request_path.addresses|length }}{% if request_path.hq_addresses %}{% dot %}HQ {{ request_path.hq_addresses|length }}{% endif %}</span>
     </summary>
     <div class="conn-protocol-body">
       <section>

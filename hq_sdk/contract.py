@@ -1,23 +1,9 @@
-"""The shape of everything ``hq_sdk`` exports, stated once and committed.
+"""The shape of everything ``hq_sdk`` exports, committed as ``contract.json``.
 
-Every module here re-exports host objects by name, so a test that the names
-resolve proves nothing about what an extension binds to: a dataclass field
-renamed, a parameter added without a default, a method that went away. Each of
-those is a fleet-wide change, and this repository's suite and code graph both
-report it as safe, because every caller lives in another repository.
-
-``describe()`` walks each export and records its shape (the parameters a
-callable takes, the fields a dataclass or model carries, the members of an
-enum, the public methods and attributes a class defines) and deliberately not annotations or
-docstrings, so the record is identical across the interpreter matrix and moves
-only when the contract does. ``contract.json`` beside this module is the shape
-extensions were built against. A test fails when the two differ, the diff is
-the review, and whether ``PLUGIN_API_VERSION`` must move is the question that
-review answers. Its ``templates`` section is the same record for the host's
-templates (``template_contract``).
-
-    python manage.py sdk_contract          # rewrite contract.json
-    python manage.py sdk_contract --check  # exit 1 on drift
+Every caller of an export lives in another repository, so this repository's
+suite and code graph read a renamed field or a new required parameter as safe.
+The record makes that drift fail a test here, and its diff is the review that
+decides whether ``PLUGIN_API_VERSION`` moves (docs/Plugins.md).
 """
 
 import dataclasses
@@ -152,6 +138,8 @@ def _class(cls: type) -> dict[str, Any]:
     return shape
 
 
+# Shape only, never annotations or docstrings, so the record is the same on every
+# interpreter of the matrix and moves only when the contract does.
 def _shape(value: object) -> dict[str, Any]:
     if inspect.isclass(value):
         return _class(value)
@@ -161,7 +149,11 @@ def _shape(value: object) -> dict[str, Any]:
 
 
 def describe() -> dict[str, Any]:
-    """The current contract, as plain JSON data."""
+    """The current contract, as plain JSON data.
+
+    ``python manage.py sdk_contract`` writes it to contract.json, and with
+    ``--check`` exits 1 when the two differ.
+    """
 
     modules = {}
     for name in module_names():
@@ -189,28 +181,32 @@ def load_committed() -> dict[str, Any]:
 
 
 def _summary(before: dict[str, Any], after: dict[str, Any]) -> str:
-    parts = []
-    for key in sorted(set(before) | set(after)):
-        old, new = before.get(key), after.get(key)
-        if old == new:
-            continue
-        if isinstance(old, dict) and isinstance(new, dict):
-            added = sorted(set(new) - set(old))
-            removed = sorted(set(old) - set(new))
-            changed = sorted(name for name in set(old) & set(new) if old[name] != new[name])
-            detail = ", ".join(
-                item
-                for item in (
-                    f"+{','.join(added)}" if added else "",
-                    f"-{','.join(removed)}" if removed else "",
-                    f"~{','.join(changed)}" if changed else "",
-                )
-                if item
-            )
-            parts.append(f"{key}: {detail}")
-        else:
-            parts.append(f"{key}: {json.dumps(old)} -> {json.dumps(new)}")
-    return "; ".join(parts)
+    """Each field that differs between two shapes of one export."""
+
+    return "; ".join(
+        _field_change(key, before.get(key), after.get(key))
+        for key in sorted(set(before) | set(after))
+        if before.get(key) != after.get(key)
+    )
+
+
+def _field_change(key: str, old: Any, new: Any) -> str:
+    """A field's members gained, lost and changed, or else its value before and after."""
+
+    if isinstance(old, dict) and isinstance(new, dict):
+        return f"{key}: {_member_changes(old, new)}"
+    return f"{key}: {json.dumps(old)} -> {json.dumps(new)}"
+
+
+def _member_changes(old: dict[str, Any], new: dict[str, Any]) -> str:
+    """The members added, removed and changed between two mappings, each set after its sign."""
+
+    marked = (
+        ("+", set(new) - set(old)),
+        ("-", set(old) - set(new)),
+        ("~", {name for name in set(old) & set(new) if old[name] != new[name]}),
+    )
+    return ", ".join(f"{sign}{','.join(sorted(names))}" for sign, names in marked if names)
 
 
 def _module_drift(module: str, before: dict[str, Any], after: dict[str, Any]) -> list[str]:

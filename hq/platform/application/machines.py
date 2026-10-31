@@ -1,15 +1,10 @@
 """The machines HQ knows about, and everything that ties to one.
 
-A machine is named in a container's record, in a proxy's forwarding address, in
-what a Portainer reports it reaches and in a certificate's install list. This is
-where those meet, so "what is on this machine" is one page rather than four read
-in sequence.
-
-A machine exists because something reported it (a credential that reaches it,
-a container running on it, a service served from it) or because HQ was told
-about one directly. Observation first: registering a VPS somewhere is what puts
-it here, and a declaration is for the printer and the offline CA, which nothing
-will ever sweep and which are still part of the place.
+A machine is named in a container's record, a proxy's forwarding address, what
+a Portainer reaches and a certificate's install list; this is where those meet,
+so "what is on this machine" is one page rather than four. Observation first: a
+machine exists because something reported it, and a declaration is for the
+printer and the offline CA, which nothing will ever sweep.
 """
 
 from dataclasses import dataclass, field, replace
@@ -435,13 +430,12 @@ def _reaches_machines(provider: str) -> bool:
     ``reaches`` is deliberately polymorphic (a Portainer reports the machines
     it holds and a DNS token reports the zones it may edit) and read the same
     way, a zone would appear on this page as though it were a server.
-
-    Told apart by what the providers behind each connection actually declare: a
-    provider that has a ``host`` field is one whose things live on machines.
     """
 
     if not provider:
         return False
+    # Told apart by what the providers behind the connection declare: one with
+    # a ``host`` field is one whose things live on machines.
     return any(provider in spec.connection_providers and declares_host(kind) for kind, spec in PROVIDERS.items())
 
 
@@ -492,13 +486,9 @@ def _declarations() -> dict[str, Declared]:
 def _services_by_host(index: Machines) -> dict[str, set[str]]:
     """Which names are served from which machine.
 
-    Read straight off the declarations that answer "and then what serves it".
-    A board of machines needs one field from each service, and assembling every
+    Read straight off the declarations that answer "and then what serves it": a
+    board of machines needs one field from each service, and assembling every
     service in full to get it is a query per row and then some.
-
-    The origin is resolved through the same index every other surface uses, so
-    the machine this board files a name under and the machine that name's own
-    page says it is served from cannot disagree.
     """
 
     # Ranked exactly as the service catalog ranks them, through the one rule
@@ -524,6 +514,8 @@ def _services_by_host(index: Machines) -> dict[str, set[str]]:
             if hostname:
                 rank.setdefault(hostname, origin)
 
+    # Resolved through the index every other surface uses, so the machine this
+    # board files a name under and the one its own page names cannot disagree.
     found: dict[str, set[str]] = {}
     for hostname, origin in {**resolved, **routed}.items():
         host = index.resolve(origin)
@@ -544,14 +536,12 @@ def declares_host(kind: str) -> bool:
 
 
 def _resources_by_host() -> tuple[dict[str, set[str]], dict[str, str]]:
-    """Declarations that name a machine, and the tailnet device keys, in one pass.
+    """Declarations that name a machine (:func:`declares_host`), and the
+    tailnet device keys, in one pass.
 
-    Which declarations name a machine is :func:`declares_host`.
-
-    The device keys ride along because the loop already reads every enabled
-    resource, and a verb offered on a machine page needs the key of the
-    declaration it acts on, which is not the tailnet's name for the device
-    and must not be guessed from it.
+    A verb offered on a machine page needs the key of the declaration it acts
+    on, which is not the tailnet's name for the device and must not be guessed
+    from it; the keys ride along because this loop already reads every resource.
     """
 
     found: dict[str, set[str]] = {}

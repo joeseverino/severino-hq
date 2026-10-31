@@ -25,7 +25,7 @@ Release is a list of facts, so it takes the width and its facts flow into
 columns. Where HQ runs and how it was reached are about the same height, so
 they share a row; either alone takes it.
 {% endcomment %}
-<section class="card" aria-labelledby="hq-release-heading">
+{% card heading="hq-release-heading" %}
   <h2 id="hq-release-heading">Release</h2>
   {% include "partials/_problems.html" with problems=hq.problems_in.release|not_urgent only %}
   <dl class="kv">
@@ -38,7 +38,7 @@ they share a row; either alone takes it.
             {% elif release.behind is False %}Production runs its head, <code>{{ release.head|slice:":7"|breakable }}</code>
             {% else %}<span class="muted">Its head or its production deploy has not been read.</span>{% endif %}
             {% if release.runs_deployed is False %}<br><strong>This process is not the commit production last deployed.</strong>{% endif %}
-            <br>{% entity repository.url|outside label=repository.name %} <span class="muted">· {% include "partials/_reading_age.html" with reading=repository.reading only %}</span>
+            <br>{% entity repository.url|outside label=repository.name %}<span class="muted">{% dot %}{% include "partials/_reading_age.html" with reading=repository.reading only %}</span>
           </dd>
         {% endwith %}{% endif %}
         {% if release.image %}
@@ -50,15 +50,15 @@ they share a row; either alone takes it.
         <dt>Signature</dt>
           <dd>{% if release.signed %}Signed{% elif release.signed is False %}<strong>Not signed</strong>{% else %}<span class="muted">Not read</span>{% endif %}</dd>
         <dt>Vulnerabilities</dt>
-          <dd>{{ release.vulnerabilities|capfirst|breakable }}{% if release.vulnerabilities_note %} <span class="muted">{{ release.vulnerabilities_note|breakable }}</span>{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %} · {% if repository.open_alerts %}{% entity repository.alerts_url|outside label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|outside label="no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</dd>
+          <dd>{{ release.vulnerabilities|capfirst|breakable }}{% if release.vulnerabilities_note %} <span class="muted">{{ release.vulnerabilities_note|breakable }}</span>{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %}{% dot %}{% if repository.open_alerts %}{% entity repository.alerts_url|outside label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|outside label="no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</dd>
         {% endif %}
         <dt>Extensions</dt>
-          <dd>{% for name, version in release.extensions %}{{ name|breakable }} <span class="muted">{{ version|breakable }}</span>{% if not forloop.last %} · {% endif %}{% empty %}<span class="muted">None composed into this build</span>{% endfor %}</dd>
+          <dd>{% for name, version in release.extensions %}{{ name|breakable }} <span class="muted">{{ version|breakable }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% empty %}<span class="muted">None composed into this build</span>{% endfor %}</dd>
       </dl>
-</section>
+{% endcard %}
 <div class="{% if machine and hq.request_path %}two-col{% else %}stack{% endif %}">
 {% if machine %}
-<section class="card" aria-labelledby="hq-where-heading">
+{% card heading="hq-where-heading" %}
   <h2 id="hq-where-heading">Runs on</h2>
   {% include "partials/_problems.html" with problems=hq.problems_in.where|not_urgent only %}
   <dl class="kv">
@@ -68,7 +68,7 @@ they share a row; either alone takes it.
         <dt>Container</dt>
           <dd><a href="{{ container.url }}">{{ container.running.name|breakable }}</a> <span class="muted">{{ container.uptime|breakable }}</span></dd>
         <dt>Health</dt>
-          <dd>{{ runtime.health|default:container.running.check|default:container.running.status|capfirst|breakable }}{% if runtime %} · {{ runtime.restart_count|default:0|counted:"restart" }}{% endif %}</dd>
+          <dd>{{ runtime.health|default:container.running.check|default:container.running.status|capfirst|breakable }}{% if runtime %}{% dot %}{{ runtime.restart_count|default:0|counted:"restart" }}{% endif %}</dd>
         {% with posture=container.posture %}
         <dt>How it is run</dt>
           <dd>{{ posture.met|breakable }} of {{ posture.measured|breakable }} checks met{% for result in posture.unmet %}<br><span class="muted">{{ result.check.unmet|breakable }}</span>{% endfor %}</dd>
@@ -82,17 +82,17 @@ they share a row; either alone takes it.
           <dd>{% for job in work.services %}<code>{{ job.unit|breakable }}</code>{% if job.last_run %} <span class="muted">since {{ job.last_run|when:"ago" }}</span>{% endif %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</dd>
         {% endif %}
       </dl>
-</section>
+{% endcard %}
 {% endif %}
 {% if hq.request_path %}{% with found=hq.request_path %}
-<section class="card" aria-labelledby="hq-reach-heading">
+{% card heading="hq-reach-heading" %}
   <h2 id="hq-reach-heading">Reached through</h2>
   {% include "partials/_example_connection.html" with notice=True %}
   {% include "partials/_problems.html" with problems=hq.problems_in.reach|not_urgent only %}
-  <p class="muted">{{ found.connection.channel.label|breakable }} · {{ found.proof|breakable }}</p>
+  <p class="muted">{{ found.connection.channel.label|breakable }}{% dot %}{{ found.proof|breakable }}</p>
   {% include "control_plane/_path_hops.html" with route=found.route label="How this page reached you" %}
   {% for hop in found.findings %}<p class="notice notice-attention"><strong>{{ hop.label|breakable }}</strong> {{ hop.check.detail|breakable }} {{ hop.check.step|breakable }}</p>{% endfor %}
-</section>
+{% endcard %}
 {% endwith %}{% endif %}
 </div>
 
@@ -163,7 +163,7 @@ they share a row; either alone takes it.
   {% include "partials/_problems.html" with problems=hq.problems_in.sight|not_urgent only %}
   {% comment %}A table where every row says "Never read" says one thing; it is said once.{% endcomment %}
   {% if sight.never == sight.rows|length %}
-  <p class="card">None read yet. Once the controller runs, HQ reads {% for row in sight.rows %}{{ row.label|breakable }}{% if forloop.revcounter == 2 %} and {% elif not forloop.last %}, {% endif %}{% endfor %}.</p>
+  {% card element="div" %}<p>None read yet. Once the controller runs, HQ reads {% for row in sight.rows %}{{ row.label|breakable }}{% if forloop.revcounter == 2 %} and {% elif not forloop.last %}, {% endif %}{% endfor %}.</p>{% endcard %}
   {% else %}
   {% table_region "Readings" %}
     <table class="data-table">

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -51,7 +52,7 @@ func (s *stubBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(answer)
+	_ = json.NewEncoder(w).Encode(answer)
 }
 
 func (s *stubBridge) Calls() []call {
@@ -113,7 +114,7 @@ var built = sync.OnceValues(func() (string, error) {
 	}
 	binary := filepath.Join(dir, "hq-controller")
 	if out, err := exec.Command("go", "build", "-o", binary, ".").CombinedOutput(); err != nil {
-		return "", fmt.Errorf("build: %v\n%s", err, out)
+		return "", fmt.Errorf("build: %w\n%s", err, out)
 	}
 	return binary, nil
 })
@@ -162,7 +163,7 @@ func setUp(t *testing.T) (binary string, bridge *stubBridge) {
 		t.Fatal(err)
 	}
 	server := &http.Server{Handler: bridge}
-	go server.Serve(listener)
+	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() { server.Close() })
 	return binary, bridge
 }
@@ -175,7 +176,7 @@ func runBinary(t *testing.T, binary string, bridge *stubBridge, args ...string) 
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
 	code := 0
-	if exited, ok := err.(*exec.ExitError); ok {
+	if exited, ok := errors.AsType[*exec.ExitError](err); ok {
 		code = exited.ExitCode()
 	} else if err != nil {
 		t.Fatal(err)
@@ -250,6 +251,22 @@ func TestPlanMode(t *testing.T) {
 	}
 }
 
+// TestGlanceMode is the glance pass: it asks only for the glance plan, so it
+// claims nothing, sweeps nothing and never counts as the controller arriving.
+func TestGlanceMode(t *testing.T) {
+	binary, bridge := setUp(t)
+	code, calls, lines := runBinary(t, binary, bridge, "--glance")
+	if code != 0 {
+		t.Fatalf("exit %d, output %v", code, lines)
+	}
+	if got := actions(calls); !slices.Equal(got, []string{"registry", "glance-plan"}) {
+		t.Fatalf("calls %v", got)
+	}
+	if code, _, _ := runBinary(t, binary, bridge, "--glance", "--apply"); code != 2 {
+		t.Fatalf("--glance with --apply exit %d, want 2", code)
+	}
+}
+
 // TestBridgeFailure reports a bridge that is not there as one JSON line and
 // exit 1, saying which rule failed: there is no other way to reach HQ to fall
 // back to.
@@ -258,15 +275,19 @@ func TestBridgeFailure(t *testing.T) {
 	// In this order: each case leaves the path as the next one finds it.
 	for _, tc := range []struct {
 		name    string
-		arrange func()
+		arrange func(*testing.T)
 		want    string
 	}{
-		{"HQ is not serving", func() { os.Remove(bridge.Socket) }, "no socket at its path"},
-		{"something else is here", func() { os.WriteFile(bridge.Socket, nil, 0o600) }, "not a socket"},
-		{"no socket is named", func() { bridge.Socket = "" }, "SEVERINO_BRIDGE_SOCKET"},
+		{"HQ is not serving", func(*testing.T) { os.Remove(bridge.Socket) }, "no socket at its path"},
+		{"something else is here", func(t *testing.T) {
+			if err := os.WriteFile(bridge.Socket, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}, "not a socket"},
+		{"no socket is named", func(*testing.T) { bridge.Socket = "" }, "SEVERINO_BRIDGE_SOCKET"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			tc.arrange()
+			tc.arrange(t)
 			code, _, lines := runBinary(t, binary, bridge, "--apply")
 			last := lines[len(lines)-1]
 			if code != 1 || !strings.Contains(last, `"ok":false`) || !strings.Contains(last, tc.want) {
@@ -281,7 +302,7 @@ func TestBridgeFailure(t *testing.T) {
 func TestReady(t *testing.T) {
 	binary, bridge := setUp(t)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health/ready/", func(w http.ResponseWriter, _ *http.Request) {})
+	mux.HandleFunc("/health/ready/", func(http.ResponseWriter, *http.Request) {})
 	mux.HandleFunc("/starting/", func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "starting", http.StatusServiceUnavailable)
 	})

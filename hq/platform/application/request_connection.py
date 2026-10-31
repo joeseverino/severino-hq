@@ -1,20 +1,10 @@
 """How this request reached HQ, and what had to be true for it to arrive.
 
-Every other page here describes the estate. This one describes the reader: the
-address they came from, the device that address belongs to, the person the
-session says they are, and the sequence of independent things that each had to
-hold before any of it got this far.
-
-It is assembled rather than asserted. A page claiming "your connection is
-secure" is decoration: it says the same words when the gate is switched off,
-when the policy has been loosened, and when the request arrived from a coffee
-shop. So every line below is read from something that would change if the fact
-changed: the settings the middleware actually enforces, the backends actually
-installed, the tailnet's own account of who this device is and how its traffic
-is being carried, and the access policy as Tailscale evaluated it.
-
-Which means a layer can report that it does *not* hold, and say so plainly.
-That is the property that makes the rest worth reading.
+It describes the reader: their address, device and person, and each layer that
+had to hold for the request to get this far. Every line is read from something
+that would change if the fact changed (the settings the middleware enforces,
+the installed backends, the tailnet, the policy as Tailscale evaluated it), so
+a layer can say it does not hold, where "secure" would stay with the gate off.
 """
 
 from dataclasses import dataclass
@@ -43,21 +33,11 @@ lazy from .tailnet_presence import tailnet_presence
 class Peering:
     """Which network the tailnet link itself is running over.
 
-    Being on the tailnet says the traffic is encrypted and the peer is
-    enrolled. It says nothing about where the packets went, and the two are
-    routinely confused: a laptop in the same room and a laptop in an airport
-    lounge produce an identical page everywhere else in HQ, because both are
-    "on the tailnet over WireGuard".
-
-    Tailscale already knows the difference and HQ already stores the answer,
-    the endpoint the two nodes negotiated. A private address means they found
-    each other on the same network and nothing crossed the internet; a public
-    one means this session is riding over it from that address; a relayed path
-    means they could not reach each other at all and the traffic is going
-    through a machine neither end owns.
-
-    Derived here rather than resolved: no lookup, no egress, and nothing that
-    could put DNS in the path of rendering this page.
+    Being on the tailnet says the traffic is encrypted and the peer enrolled,
+    not where the packets went: a laptop in the same room and one in an airport
+    lounge look the same everywhere else in HQ. Derived from the endpoint the
+    two nodes negotiated, which HQ already stores, so no lookup or DNS stands
+    in the path of rendering the page (``_peering``).
     """
 
     id: str
@@ -466,19 +446,17 @@ def _serving_device_resolution(
     """The tailnet node HQ is actually running on.
 
     The device the sweep marked ``self`` is the controller's host, which is HQ's
-    host only when the two share a machine. So the node is found by address
-    through ``hq_self``: a device holding one of HQ's own addresses, else the
-    device holding an address of the machine ``hq_machine`` places HQ on.
-
-    ``machine`` is the machine catalog's answer for HQ, the one every page
-    shows; a device holding one of its addresses is the next placement. Falls
-    back to the observer flag when nothing resolves.
+    host only when the two share a machine, so the node is found by address and
+    that flag is only the last resort. ``machine`` is the machine catalog's
+    answer for HQ, the one every page shows.
     """
 
+    # A device holding one of HQ's own addresses, else one holding an address
+    # of the machine ``hq_machine`` places HQ on, else of ``machine``.
     for address in own_addresses(served):
         device = tailnet.device_at(address, known)
         if device is not None:
-            return ServingDeviceResolution(device, True, "found by an address on this machine")
+            return ServingDeviceResolution(device, verified=True, basis="found by an address on this machine")
     index = index_of(declared=declared)
     for placed, basis in (
         (hq_machine(index, (), {}, served_at=served, devices=known.values()), "found by the machine HQ is recorded on"),
@@ -486,12 +464,12 @@ def _serving_device_resolution(
     ):
         device = _device_on(placed, index, known)
         if device is not None:
-            return ServingDeviceResolution(device, True, basis)
+            return ServingDeviceResolution(device, verified=True, basis=basis)
     observer = tailnet.observer(known)
     return ServingDeviceResolution(
         observer,
-        False,
-        "assumed from the machine that read the tailnet" if observer else "not found",
+        verified=False,
+        basis="assumed from the machine that read the tailnet" if observer else "not found",
     )
 
 
@@ -512,12 +490,11 @@ def _machine_name(addresses, declared) -> str:
     By address, because the tailnet's name for a machine is rarely the one HQ
     uses (a laptop is whatever its owner typed into it years ago) and the
     address is the one thing every source of a machine agrees on.
-
-    Resolved through the shared index, over the declarations this page has
-    already read, so it costs no query, and an address recorded with a port
-    matches the same address recorded without one.
     """
 
+    # The shared index over the declarations this page has already read costs
+    # no query, and matches an address recorded with a port to the same one
+    # recorded without.
     index = index_of(declared=declared)
     for address in addresses or ():
         name = index.at(address)

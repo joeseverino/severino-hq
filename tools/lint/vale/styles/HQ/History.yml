@@ -1,0 +1,23 @@
+# A comment says what the code does and why, in the present tense. How the
+# code came to be belongs in the commit message: narration is read as a
+# description of the code long after it stopped being true, and none of these
+# phrases can describe present behavior.
+extends: existence
+message: "'%s' narrates history; say what the code does now"
+level: error
+ignorecase: true
+scope: raw
+tokens:
+  - used to be
+  - the first version
+  - the old version
+  - reached production
+  - turned out
+  - until now
+  - until recently
+  - this regression
+  - the bug (?:that|was)
+  - shipped (?:once|unstyled|for a while)
+  - we (?:had|used|found|added|removed|changed|tried)
+  - now also
+  - evaluated on

@@ -24,15 +24,13 @@ no grid, and the page around it has already said which provider it is about.
 `count` replaces the sweep's total when the page shows part of it: one domain's
 records. Each state is worded by `credential_sight.standing`: refused, unreadable,
 or out of date.
-{% endcomment %}
-{% if inventory %}
-  {% if only_kind and inline %}{% for snapshot in inventory %}{% if snapshot.kind == only_kind %} · {% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|lower|breakable }}</span>{% endif %}{% endif %}{% endfor %}
+{% endcomment %}{% if inventory %}{% if only_kind and inline %}{% for snapshot in inventory %}{% if snapshot.kind == only_kind %}{% dot %}{% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|lower|breakable }}</span>{% endif %}{% endif %}{% endfor %}
   {% elif only_kind %}
     <p class="muted">
       {% for snapshot in inventory %}
         {% if snapshot.kind == only_kind %}
           {% if snapshot.reachable %}
-            {% if count or count == 0 %}{{ count|counted:"record" }}{% else %}{{ snapshot.count|counted:"record" }}{% endif %} ·
+            {% if count or count == 0 %}{{ count|counted:"record" }}{% else %}{{ snapshot.count|counted:"record" }}{% endif %}{% dot %}
             {% include "partials/_reading_age.html" with at=snapshot.observed_at only %}
           {% else %}
             {{ snapshot.state_label|lower|breakable }}{% if snapshot.error %} ({{ snapshot.error|breakable:")" }}{% endif %}
@@ -55,7 +53,7 @@ or out of date.
             {% if snapshot.reachable %}
               <span class="sweep-count">{{ snapshot.count|breakable }}</span>
               <span class="sweep-age"{% if snapshot.refused_parts %} title="{{ snapshot.refused_parts|join:'; ' }}"{% endif %}>
-                {% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% if snapshot.state == "stale" or snapshot.state == "partial" %} · {{ snapshot.state_label|lower|breakable }}{% endif %}
+                {% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% if snapshot.state == "stale" or snapshot.state == "partial" %}{% dot %}{{ snapshot.state_label|lower|breakable }}{% endif %}
               </span>
             {% else %}
               <span class="sweep-count">{% empty_value %}</span>

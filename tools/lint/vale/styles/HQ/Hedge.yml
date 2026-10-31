@@ -1,0 +1,9 @@
+# "account(s)" agrees with neither count. "http(s)" names two schemes, not a
+# plural.
+extends: existence
+message: "'%s' hedges a plural; use counted(n, one, many) or {{ n|counted:\"one,many\" }}"
+level: error
+nonword: true
+scope: raw
+tokens:
+  - '(?:^|[a-z]|\}\})(?<!http)\((?:s|es|ies)\)'

@@ -1,11 +1,9 @@
 """How old a reading may be before it is out of date, per kind.
 
-One answer for every surface. A reading is taken on a cadence its kind
-declares: a controller sweep, a daily public registry lookup, a dashboard
-refresh on view, an hourly SSH probe. It is *due* once one cadence has passed,
-so a surface may ask for it again, and *stale* once the tolerance has passed
-with no newer reading, so a surface says it is out of date. Nothing else
-decides either.
+One answer for every surface, and nothing else decides it. A reading is *due*
+once one cadence of its kind has passed, so a surface may ask for it again,
+and *stale* once the tolerance has passed with no newer reading, so a surface
+says it is out of date.
 """
 
 from dataclasses import dataclass

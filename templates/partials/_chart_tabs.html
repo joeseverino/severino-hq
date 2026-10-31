@@ -16,7 +16,7 @@ because the selector that shows a panel is a sibling combinator and cannot
 climb back out of a wrapper. The labels sit in the strip and point at them by
 id, which is what keeps the visual grouping without nesting the controls.
 {% endcomment %}
-<div class="chart-tabs card">
+{% card element="div" css="chart-tabs" %}
   {% for chart in charts %}
     <input type="radio" name="tabs-{{ group }}" id="tab-{{ group }}-{{ forloop.counter }}" class="chart-tab-input"{% if forloop.first %} checked{% endif %}>
   {% endfor %}
@@ -34,4 +34,4 @@ id, which is what keeps the visual grouping without nesting the controls.
       {% endif %}
     </div>
   {% endfor %}
-</div>
+{% endcard %}

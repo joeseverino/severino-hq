@@ -8,8 +8,7 @@ hq/platform/application/tests/test_findings.py 1742
 hq/platform/application/tests/test_inventory.py 1242
 hq/platform/application/tests/test_request_connection.py 1326
 hq/platform/application/tests/test_services.py 1213
-hq/platform/application/tests/test_topology.py 1153
+hq/platform/application/tests/test_topology.py 1084
 hq/platform/application/tests/test_zones.py 2049
 hq/platform/core/tests/test_security.py 1178
 hq/platform/core/tests/test_web.py 1659
-hq/platform/mcp/tests/test_mcp.py 1023

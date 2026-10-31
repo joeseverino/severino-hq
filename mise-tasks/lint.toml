@@ -8,11 +8,27 @@ hide = true
 run = ["uv run ruff check .", "uv run ruff format --check ."]
 
 ["lint:mypy"]
-description = "mypy type-checks the seams pyproject.toml names, and the browser test package's calls"
+description = "mypy type-checks the seams pyproject.toml names and the browser test package's calls, then every source module for code its types rule out"
 hide = true
 # django-stubs loads the host's settings.
 extends = "django"
-run = "uv run python -m mypy"
+run = [
+  "uv run python -m mypy",
+  "uv run python -m mypy --config-file tools/lint/mypy-reach.toml",
+]
+
+["lint:ast-grep"]
+description = "ast-grep holds the source of hq, hq_sdk and tools to the structural rules in tools/lint/ast-grep/rules, every test and test-support module (test*.py, *_testing.py) to those in tools/lint/ast-grep/test-code/rules, and each rule to its own cases"
+hide = true
+# Two projects, since the source rules exclude the tests the test-code rules
+# read. A rule's cases (rule-tests/) prove it refuses what it is for before
+# its scan is trusted to find nothing.
+run = [
+  "ast-grep test -c tools/lint/ast-grep/sgconfig.yml --skip-snapshot-tests",
+  "ast-grep test -c tools/lint/ast-grep/test-code/sgconfig.yml --skip-snapshot-tests",
+  "ast-grep scan -c tools/lint/ast-grep/sgconfig.yml --globs '!**/tests/**' --globs '!**/test_*.py' --globs '!**/migrations/**' hq hq_sdk tools",
+  "ast-grep scan -c tools/lint/ast-grep/test-code/sgconfig.yml --globs 'test*.py' --globs '*_testing.py' .",
+]
 
 ["lint:openapi"]
 description = "Both OpenAPI descriptions pass specification lint"
@@ -20,7 +36,10 @@ hide = true
 depends = ["setup:lint-tools"]
 # Specification rules cover wire contracts. HTTP style recommendations do not
 # apply to Django's canonical trailing slashes or the stdin/stdout bridge.
-run = "redocly lint --extends=spec --format=summary hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json"
+# Stylish names each problem's file, line and column. HQ writes all three
+# documents, so a problem is fixed in what declares them, never ignored.
+env = { REDOCLY_SUPPRESS_UPDATE_NOTICE = "true" }
+run = "redocly lint --extends=spec --format=stylish hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json || { echo 'lint:openapi: each problem is at the file:line:column above. HQ writes these documents: fix the Python that declares the shape, then mise run fix.' >&2; exit 1; }"
 
 ["lint:deptry"]
 description = "Host code imports only declared runtime dependencies and imports every one, or pyproject.toml says why not"
@@ -28,10 +47,16 @@ hide = true
 # Host code is these two packages less their tests/ ([tool.deptry]).
 run = "uv run deptry hq hq_sdk"
 
+["lint:imports"]
+description = "Each module imports only what pyproject.toml's import contracts allow it"
+hide = true
+run = "uv run lint-imports --no-cache"
+
 ["lint:lockfile"]
 description = "uv.lock matches pyproject.toml"
 hide = true
-run = "uv lock --check"
+# uv's own hint, a plain uv lock, is refused under mise.toml's UV_LOCKED.
+run = "uv lock --check || { echo 'lint:lockfile: write the lock with UV_LOCKED=0 uv lock, then commit uv.lock (docs/Development.md).' >&2; exit 1; }"
 
 ["lint:toolchain"]
 description = "mise.lock checksums every pinned tool for each gate platform, mise renders Go from go.mod's toolchain line, no image borrows a build tool"
@@ -48,7 +73,12 @@ description = "The workflows are valid, run: blocks included, and pass zizmor's 
 hide = true
 # zizmor runs offline, with no token, at its default persona; a deliberate
 # finding is suppressed in .github/zizmor.yml with its reason.
-run = ["actionlint -color", "zizmor --offline --strict-collection .github"]
+# Named rather than found: found, jactionlint reads every action.yml under the
+# checkout, the agents' worktrees in .claude/worktrees included.
+run = [
+  "jactionlint .github/workflows/*.yml .github/actions/*/action.yml",
+  "zizmor --offline --strict-collection .github",
+]
 
 ["lint:deploycheck"]
 description = "Production settings raise no security warning"
@@ -66,16 +96,29 @@ hide = true
 usage = 'flag "--record" help="Rewrite the baseline from this tree instead of checking it"'
 run = "uv run python -m tools.structural.bar"
 
+["lint:complexity"]
+description = "complexipy holds every function outside tests to cognitive complexity 20"
+hide = true
+# The bound and the tree are complexipy.toml's, which reads and writes no
+# snapshot: every function over the bound fails.
+run = "uv run complexipy"
+
 ["lint:css"]
 description = "Stylelint holds the stylesheets to their contract: color and sizes from tokens, every custom property defined"
 hide = true
 depends = ["setup:lint-tools"]
 run = "stylelint --config tools/lint/stylelint.config.mjs 'static/css/**/*.css'"
 
+["lint:js"]
+description = "ESLint holds the browser scripts to its recommended rules and the modern forms (const and let, strict equality), every name they use defined, no unsanitized markup sink, fetching, parsing and polling to fragment.js, and tables.js's layout reads to the places that say why"
+hide = true
+depends = ["setup:lint-tools"]
+run = "eslint --config tools/lint/eslint.config.mjs --max-warnings 0 'static/js/**/*.js'"
+
 # The Go controller's static half: format, generated types, the vendor slicer,
-# vet and the advisory guard. Its race tests are test:controller.
+# golangci-lint and the advisory guard. Its race tests are test:controller.
 ["lint:controller"]
-description = "The Go controller is formatted and vetted, its generated types current"
+description = "The Go controller is formatted and linted, its generated types current"
 hide = true
 run = "controller/scripts/check.sh"
 
@@ -93,6 +136,14 @@ hide = true
 extends = "django"
 run = "uv run python manage.py api_openapi --check"
 
+# A recording the examples file must equal, written beside the gate's database
+# rather than over the file.
+["lint:drift-api-examples"]
+description = "The machine API's recorded examples are what its tests receive"
+hide = true
+extends = "django"
+run = 'recorded="$SEVERINO_DATABASE_PATH.examples.json"; HQ_API_RECORD_EXAMPLES_TO="$recorded" mise run fix:api-examples && diff -u hq/platform/api/openapi-examples.json "$recorded" || { echo "lint:drift-api-examples: the recording differs from hq/platform/api/openapi-examples.json, or did not finish; mise run fix:api-examples records it again" >&2; exit 1; }'
+
 ["lint:drift-bridge-contract"]
 description = "The controller's contracts are the ones the registry derives"
 hide = true
@@ -109,3 +160,13 @@ run = "uv run python manage.py connections_reference --check"
 description = "The served font is its source cut to the characters HQ prints and the features its stylesheets use"
 hide = true
 run = "uv run python -m tools.fonts.subset --check"
+
+["lint:shell:suite"]
+description = "One shell suite under the shell named, or as its first line says for -: a run lint:shell makes of every suite"
+quiet = true
+hide = true
+usage = '''
+arg "<shell>" help="The shell to run the suite under, which the suite finds in SHELL_UNDER_TEST; - runs it as its first line says"
+arg "<suite>" help="The suite, tests/shell/test-*.sh"
+'''
+run = 'if [ "$usage_shell" = - ]; then exec "$usage_suite"; fi; SHELL_UNDER_TEST="$usage_shell" exec "$usage_shell" "$usage_suite"'

@@ -68,7 +68,7 @@ part, so only a panel that changed is replaced and an open one stays open.
             </ol>
           {% endif %}
           <footer class="glance-expanded-foot">
-            {% if panel.link %}<a href="{{ panel.link.url }}">{{ panel.link.label|breakable }} →</a>{% endif %}
+            {% if panel.link %}<a href="{{ panel.link.url }}">{{ panel.link.label|breakable }}{% arrow %}</a>{% endif %}
             <span>
               {% if dashboard_can_refresh %}<button class="glance-refresh" type="submit" form="glance-refresh">Refresh</button>{% endif %}
               <a href="{% url 'dashboard_glance_settings' %}">Settings</a>

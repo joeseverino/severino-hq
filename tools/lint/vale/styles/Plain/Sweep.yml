@@ -1,0 +1,8 @@
+extends: existence
+message: "'%s' is HQ's own word; say 'read'"
+level: error
+ignorecase: true
+nonword: true
+scope: [shown, ~comment & ~code]
+tokens:
+  - '(?<![\w-])(?:sweeps?|swept|sweeping)(?![\w-])'

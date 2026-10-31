@@ -46,7 +46,7 @@ def _plugin_state(item: Mapping[str, Any]) -> str:
     return " ".join(ended(said) for said in (f"Runs {running}, latest approved is {approved}", stage) if said)
 
 
-def _readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
+def _readout(_spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     rows = [("Goal", GOAL, "")]
     rows.extend(
         (str(item.get("plugin", "")), "", _plugin_state(item))
@@ -91,14 +91,14 @@ DEFINITION = ProviderSpec(
     actions={"reconcile": applies(automatic=True)},
     label="HQ deploys",
     label_plural="HQ deploys",
-    name=lambda spec: "HQ deploys",
+    name=lambda _spec: "HQ deploys",
     reported_fields=("production",),
     console=_console,
     console_label="Open deploy on GitHub",
     connection_providers=(PROVIDER,),
     from_record=_from_record,
     identity=lambda spec: (spec["repository"],),
-    key_hint=lambda record: "delivery",
+    key_hint=lambda _record: "delivery",
     adopts=lambda record: record.get("production") == CURRENT,
     sample_record={
         "repository": "example/host",

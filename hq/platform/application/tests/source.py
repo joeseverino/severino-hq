@@ -1,4 +1,5 @@
-"""This checkout's source files, and their parsed form cached per test process.
+"""This checkout's source files, the templates Django loads, and their parsed
+form cached per test process.
 
 Keyed on modification time, so a file edited mid-run is parsed again.
 """
@@ -6,6 +7,8 @@ Keyed on modification time, so a file edited mid-run is parsed again.
 import ast
 from functools import cache
 from pathlib import Path
+
+from django.template.autoreload import get_template_directories
 
 
 def parsed(path: Path) -> ast.Module:
@@ -47,3 +50,19 @@ def source_files(root: Path, pattern: str) -> list[Path]:
         for path in root.rglob(pattern)
         if not any(part.startswith(".") or part in NOT_SOURCE for part in path.relative_to(root).parts[:-1])
     )
+
+
+def template_files() -> list[tuple[str, Path]]:
+    """Every template Django loads, the host's and each installed extension's,
+    by the name Django loads it by, so a template check holds an extension's
+    templates as it holds the host's."""
+
+    found = sorted(
+        (path.relative_to(directory).as_posix(), path)
+        for directory in get_template_directories()
+        for path in directory.rglob("*.html")
+    )
+    if not found:
+        # A template check that reads nothing passes.
+        raise AssertionError("No template directory Django names holds a template.")
+    return found

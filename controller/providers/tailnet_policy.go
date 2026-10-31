@@ -80,11 +80,7 @@ type tailnetPolicySSH struct {
 
 // view reads the parts HQ looks at; a part of the wrong shape is an error.
 func (d tailnetPolicyDocument) view() (tailnetPolicyView, error) {
-	var view tailnetPolicyView
-	if err := json.Unmarshal(d, &view); err != nil {
-		return view, &ProviderError{Message: "the policy does not have the shape HQ reads", Err: err}
-	}
-	return view, nil
+	return decodeAs[tailnetPolicyView](d, "the policy does not have the shape HQ reads")
 }
 
 // tests is the document's tests verbatim, or [] when it has none.

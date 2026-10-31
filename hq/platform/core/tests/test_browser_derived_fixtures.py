@@ -256,7 +256,7 @@ class _Fill:
                 self._relate(child)
                 self.waiting.append((child, above | {relation.related_model}))
 
-    def _row(self, model, given=None, sparse=False):
+    def _row(self, model, given=None, *, sparse=False):
         """A row of ``model`` holding ``given``, each required relation pointed
         at a row of its own; a sparse one leaves every field that may be empty."""
 

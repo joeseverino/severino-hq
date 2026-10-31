@@ -22,7 +22,7 @@ status=0
 docker run --rm --entrypoint python \
   --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
   --env DJANGO_ALLOWED_HOSTS=localhost \
-  --env SEVERINO_LOG_LEVEL=WARNING \
+  --env SEVERINO_LOG_LEVEL=CRITICAL \
   "$image" manage.py test --verbosity 1 --parallel auto >"$output" 2>&1 || status=$?
 
 grep -E '^(Ran [0-9]+ tests? in|OK|FAILED)' "$output" | sed 's/^/composed suite: /' || true

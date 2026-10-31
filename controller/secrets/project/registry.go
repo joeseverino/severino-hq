@@ -8,7 +8,7 @@ import (
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
 )
@@ -204,6 +204,6 @@ func variables(projection map[string]Entry) []string {
 	for name := range projection {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }

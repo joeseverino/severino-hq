@@ -9,10 +9,12 @@ from django.test import TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.core.models import ActionItemRead
+from hq.platform.core.models import ActionItemRead, AuditLog
 
 from ..action_items import (
     FORGET_AFTER,
+    RESTORE,
+    SET_ASIDE,
     by_source,
     item_key,
     item_revision,
@@ -22,7 +24,8 @@ from ..action_items import (
     waiting_count,
     with_aside_state,
 )
-from ..security import cli_principal
+from ..capabilities import execute_capability
+from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, internal_principal
 from ..ui import Insight
 from .markup import select
 
@@ -242,7 +245,10 @@ class PageTests(TestCase):
             {**ITEM, "key": f"example:advisory:{n}", "label": f"Image {n} has advisories", "family": "Image advisories"}
             for n in range(3)
         ]
-        with mock.patch("hq.platform.core.action_item_views.work_queue", return_value=[*family, OTHER]):
+        with (
+            mock.patch("hq.platform.core.action_item_views.work_queue", return_value=[*family, OTHER]),
+            mock.patch("hq.platform.application.dashboard.work_queue", return_value=[*family, OTHER]),
+        ):
             page = self.client.get(reverse("action_items"))
             (group,) = page.context["action_groups"]
             self.assertEqual(
@@ -280,7 +286,10 @@ class PageTests(TestCase):
 
     def test_a_notice_is_kept_apart_from_what_needs_doing_and_out_of_that_count(self):
         told = {**ITEM, "key": "example:run", "label": "A run drifted", "notice": True}
-        with mock.patch("hq.platform.core.action_item_views.work_queue", return_value=[ITEM, told]):
+        with (
+            mock.patch("hq.platform.core.action_item_views.work_queue", return_value=[ITEM, told]),
+            mock.patch("hq.platform.application.dashboard.work_queue", return_value=[ITEM, told]),
+        ):
             page = self.client.get(reverse("action_items"))
             self.assertEqual(self.shown(page), [ITEM["label"]])
             self.assertEqual(self.shown(page, "notice_groups"), [told["label"]])
@@ -365,3 +374,67 @@ class ReadableValueTests(TestCase):
         self.assertIn("Sep\xa020", readable("2026-09-20T22:08:26.284763+00:00"))
         self.assertEqual(readable("2d"), "2d")
         self.assertEqual(readable("Tailnet"), "Tailnet")
+
+
+class AsideCapabilityTests(TestCase):
+    """Setting aside is the person's own: through the chokepoint, audited, and refused to any token."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user("op", password="x" * 20)
+        self.client.force_login(self.user)
+        for name in ("hq.platform.core.action_item_views", "hq.platform.application.dashboard"):
+            patcher = mock.patch(f"{name}.work_queue", return_value=[ITEM, OTHER])
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_setting_aside_and_bringing_back_are_audited_as_the_person(self):
+        self.client.post(reverse("action_items_set_aside"), {"key": row_value(ITEM)})
+        self.client.post(reverse("action_items_bring_back"), {"key": row_value(ITEM)})
+
+        for operation in (SET_ASIDE, RESTORE):
+            with self.subTest(operation=operation):
+                self.assertTrue(
+                    AuditLog.objects.filter(
+                        user=self.user, metadata__operation=operation, metadata__interface="web", metadata__actor="op"
+                    ).exists()
+                )
+
+    def test_a_token_is_refused_whatever_it_was_granted(self):
+        granted = frozenset({Capability.SET_ASIDE_ACTION_ITEMS})
+        rows = {ITEM["key"]: ITEM["revision"]}
+        for principal in (
+            Principal("op", "api", granted, granted=granted),
+            Principal("op", "mcp", granted, granted=granted),
+            cli_principal(),
+            internal_principal("example-purpose"),
+        ):
+            with self.subTest(interface=principal.interface):
+                result = execute_capability(SET_ASIDE, {"rows": rows}, principal=principal)
+
+                self.assertEqual(result["error"]["code"], "forbidden")
+        self.assertFalse(ActionItemRead.objects.exists())
+        self.assertEqual(
+            AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=SET_ASIDE).count(), 4
+        )
+
+    def test_the_page_says_when_it_is_refused_and_keeps_nothing(self):
+        lacking = Principal("op", "web", frozenset({Capability.READ}))
+        with mock.patch("hq.platform.core.action_item_views.web_principal", return_value=lacking):
+            response = self.client.post(reverse("action_items_set_aside"), {"key": row_value(ITEM)}, follow=True)
+
+        self.assertContains(response, Capability.SET_ASIDE_ACTION_ITEMS.value)
+        self.assertFalse(ActionItemRead.objects.exists())
+        self.assertTrue(AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=SET_ASIDE).exists())
+
+    def test_a_malformed_request_is_invalid_input(self):
+        operator = Principal("op", "web", OPERATOR_CAPABILITIES)
+        for name, payload in (
+            (SET_ASIDE, {"rows": {ITEM["key"]: "bad!rev"}}),
+            (SET_ASIDE, {"keys": ITEM["key"]}),
+            (RESTORE, {}),
+        ):
+            with self.subTest(payload=payload):
+                result = execute_capability(name, payload, principal=operator)
+
+                self.assertEqual(result["error"]["code"], "invalid_input")
+        self.assertFalse(ActionItemRead.objects.exists())

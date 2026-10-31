@@ -9,7 +9,7 @@ from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timedelta
 from itertools import count
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from django.db import transaction
 from django.db.models import Q
@@ -21,13 +21,17 @@ from hq.platform.application.routes import reverse
 from hq.platform.core.audit import operation_context
 
 from .calendar import CalendarEvent, CalendarSource, gather
+from .command_fields import Describe, Refers
 from .derivations import derivation
 from .moments import when_day
-from .record_errors import RecordConflict, RecordNotFound
-from .security import Capability, Principal
+from .record_errors import RecordNotFound
+from .record_saves import Held, held
+from .security import Capability, Principal, person
 from .ui import counted
 lazy from . import calendar
 lazy from .references import dangling
+
+_ENTRY = Held("That calendar event was not found.", "This event changed after it was read.")
 
 OWN_SOURCE = "calendar.mine"
 # Occurrences a repeating entry may yield into one window, so a daily entry
@@ -185,20 +189,20 @@ def repeat_label(entry: Entry) -> str:
 class EntryCommand:
     """One entry, as every surface states it."""
 
-    title: str
-    starts_on: date
-    ends_on: date | None = None
-    starts_at: time | None = None
-    ends_at: time | None = None
-    location: str = ""
-    notes: str = ""
-    repeat: Literal["", "daily", "weekly", "monthly", "yearly"] = ""
-    interval: int = 1
-    # Monday is 0.
-    weekdays: tuple[int, ...] = ()
-    repeat_until: date | None = None
-    # ``kind:identity`` of what the event is about.
-    about: str = ""
+    title: Annotated[str, Describe("What the entry is.")]
+    starts_on: Annotated[date, Describe("The day it starts.")]
+    ends_on: Annotated[date | None, Describe("The day it ends, for one that spans days.")] = None
+    starts_at: Annotated[time | None, Describe("The time it starts; blank for all day.")] = None
+    ends_at: Annotated[time | None, Describe("The time it ends.")] = None
+    location: Annotated[str, Describe("Where it happens.")] = ""
+    notes: Annotated[str, Describe("Anything else worth keeping.")] = ""
+    repeat: Annotated[
+        Literal["", "daily", "weekly", "monthly", "yearly"], Describe("How often it repeats; blank for once.")
+    ] = ""
+    interval: Annotated[int, Describe("Every how many days, weeks, months or years it repeats.")] = 1
+    weekdays: Annotated[tuple[int, ...], Describe("The days of the week a weekly entry falls on, Monday as 0.")] = ()
+    repeat_until: Annotated[date | None, Describe("The last day it repeats.")] = None
+    about: Annotated[str, Refers(Entry, "about"), Describe("What the entry is about, as type:identity.")] = ""
 
 
 def serialize_entry(entry: Entry) -> dict[str, Any]:
@@ -222,10 +226,9 @@ def serialize_entry(entry: Entry) -> dict[str, Any]:
     }
 
 
-def _entry(uid: str, *, lock: bool = False) -> Entry:
-    query = Entry.objects.select_for_update() if lock else Entry.objects
+def _entry(uid: str) -> Entry:
     try:
-        return query.get(uid=uid)
+        return Entry.objects.get(uid=uid)
     except (Entry.DoesNotExist, ValueError) as exc:
         raise RecordNotFound("That calendar event was not found.") from exc
 
@@ -244,9 +247,7 @@ def save_entry(
         if current_key is None:
             entry, created = Entry(), True
         else:
-            entry, created = _entry(current_key, lock=True), False
-            if expected_updated_at and entry.updated_at.isoformat() != expected_updated_at:
-                raise RecordConflict("This event changed after it was read.")
+            entry, created = held(Entry, _ENTRY, {"uid": current_key}, expected_updated_at), False
         values = asdict(command)
         values["title"] = values["title"].strip()
         values["weekdays"] = ",".join(str(day) for day in sorted(set(values["weekdays"])))
@@ -262,20 +263,33 @@ def calendar_choices(user: Any) -> dict[str, bool]:
     return {str(key): bool(value) for key, value in (found or {}).items()}
 
 
-@transaction.atomic
-def choose_source(user: Any, source_id: str, shown: bool) -> dict[str, bool]:
-    """Check or uncheck one source for one operator.
+CHOOSE_SOURCE = "calendar.source.choose"
 
-    Not audited: a view preference is the operator arranging their own page,
+
+@dataclass(frozen=True, slots=True)
+class SourceChoiceCommand:
+    """One calendar source, and whether the month shows it."""
+
+    source: Annotated[str, Describe("The calendar source.")]
+    shown: Annotated[bool, Describe("Whether the month shows it.")]
+
+
+@transaction.atomic
+def choose_source(command: SourceChoiceCommand, *, principal: Principal) -> dict[str, Any]:
+    """Check or uncheck one source for the signed-in person.
+
+    Not audited: a view preference is the person arranging their own page,
     not a change to anything HQ holds.
     """
 
-    if source_id not in {source.id for _group, source in calendar.calendar_sources()}:
+    principal.require(Capability.SET_PREFERENCES)
+    user = person(principal)
+    if command.source not in {source.id for _group, source in calendar.calendar_sources()}:
         raise RecordNotFound("No calendar source has that name.")
     preference, _ = Preference.objects.select_for_update().get_or_create(user=user)
-    preference.choices = {**preference.choices, source_id: bool(shown)}
+    preference.choices = {**preference.choices, command.source: bool(command.shown)}
     preference.save(update_fields=("choices", "updated_at"))
-    return calendar_choices(user)
+    return {"ok": True, "choices": calendar_choices(user)}
 
 
 def attention() -> tuple[Any, ...]:

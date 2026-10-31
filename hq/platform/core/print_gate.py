@@ -1,18 +1,10 @@
 """Every value a template of HQ or one of its extensions prints is held to
 ``application.printable``.
 
-Django prints a ``{{ value }}``, ``{% cycle %}``, ``{% firstof %}`` and the
-translation tags through ``render_value_in_context``, which each module looks
-up in its own globals, and an escaped ``simple_tag``'s result through
-``conditional_escape`` in ``template.library``. ``install`` gates those names.
-A value printed is one type check; only a refused one looks up the stack for
-the node printing it, which carries the template and line that printed.
-
-A template is held when its origin lies in a template directory of HQ or of an
-installed extension app. Every other template is a third party's: Django's
-widgets print a date input's value as a stamp, the debug toolbar prints raw
-settings, and a template built from a string (Django's own error pages) has no
-directory at all.
+``install`` gates the names Django prints through. A template outside the
+template directories of HQ and its installed extensions is a third party's
+(Django's widgets, the debug toolbar, an error page built from a string) and
+prints as it always has (docs/Plugins.md, What a template prints).
 """
 
 import functools
@@ -73,6 +65,7 @@ def _printing() -> base.Node | None:
 def _gated(write):
     """``write``, refusing what the node printing now may not print."""
 
+    # A value printed is one type check; only a refused one looks up the stack.
     @functools.wraps(write)
     def gated(value, *args):
         reason = refusal(value)
@@ -89,7 +82,11 @@ def _gated(write):
 
 
 def install() -> None:
-    """Gate every place Django prints a value; a second call changes nothing."""
+    """Gate every place Django prints a value; a second call changes nothing.
+
+    Each module looks ``render_value_in_context`` up in its own globals, and an
+    escaped ``simple_tag``'s result goes through ``conditional_escape``.
+    """
 
     if getattr(base.render_value_in_context, "hq_print_gate", False):
         return

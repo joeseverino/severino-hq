@@ -35,9 +35,11 @@ from .input_errors import pydantic_refusal
 from .integration_specs import ResourceSpec
 from .integration_validation import required_capability_names
 from .integrations import integration_graph
+from .projection import MAX_PAGE_SIZE, page_size
 from .record_errors import RecordNotFound
 from .search_contracts import SearchDefinition, search_lines
 from .security import Capability, Principal, require_all
+from .ui import ended
 
 
 class ResourceSearchDefinition(SearchDefinition):
@@ -51,10 +53,10 @@ class ResourceSearchDefinition(SearchDefinition):
     def body(self, instance: Model) -> str:
         """The indexed text; a withheld kind's spec is left out (``ProviderSpec.withheld``)."""
 
-        fields = tuple(
-            field for field in self.fields if field != "spec" or not spec_withheld(str(getattr(instance, "kind", "")))
-        )
-        return "\n".join(line for field in fields for line in search_lines(getattr(instance, field, None)))
+        # Each name is a field the definition declares on its model.
+        withheld = spec_withheld(str(instance.serializable_value("kind")))
+        fields = tuple(field for field in self.fields if field != "spec" or not withheld)
+        return "\n".join(line for field in fields for line in search_lines(instance.serializable_value(field)))
 
 
 class ResourceQuery(BaseModel):
@@ -542,7 +544,7 @@ def _selected(name: str, records: list[Any], fields: Fields) -> list[dict[str, A
     """Each record cut to the field mask ``fields`` names, in its own order."""
 
     if any(not isinstance(record, dict) for record in records):
-        raise RuntimeError(f"Resource {name!r} returned a record that is not an object.")
+        raise TypeError(f"Resource {name!r} returned a record that is not an object.")
     selection = _selection(name, fields)
     return _cut(selection, records, selection.mask, ())
 
@@ -571,11 +573,44 @@ def list_resource(
         or not isinstance(result.get("items"), list)
         or not isinstance(result.get("count"), int)
         or result["count"] != len(result["items"])
+        or not isinstance(result.get("total", 0), int | None)
+        or not isinstance(result.get("truncated", False), bool)
     ):
         raise RuntimeError(f"Resource {name!r} list handler returned an invalid collection.")
+    result = {**result, **_page(spec, parsed, result)}
     if fields is None:
         return result
     return {**result, "items": _selected(name, result["items"], fields)}
+
+
+def _page(spec: ResourceSpec, parsed: BaseModel, result: dict[str, Any]) -> dict[str, Any]:
+    """Whether this page holds every match, and how to ask for the rest when it does not.
+
+    ``total`` is what the handler counted, or None where counting is not cheap.
+    A handler that does not say is read as cut off when its page is full, so a
+    full page is never mistaken for the whole list.
+    """
+
+    count, total = result["count"], result.get("total")
+    # A list's query model is its declarer's, plugin or host, and need not page.
+    limit = getattr(parsed, "limit", None)
+    full = isinstance(limit, int) and count >= page_size(limit)
+    truncated = result.get("truncated", total > count if isinstance(total, int) else full)
+    return {"total": total, "truncated": truncated, "next": _next(spec, limit) if truncated else ""}
+
+
+def _next(spec: ResourceSpec, limit: int | None) -> str:
+    """How a caller reaches what a cut-off page left out, in this resource's own query fields."""
+
+    narrowing = sorted(field for field in (spec.list_query_type or EmptyQuery).model_fields if field != "limit")
+    steps = []
+    if isinstance(limit, int) and limit < MAX_PAGE_SIZE:
+        steps.append(f"ask again with limit up to {MAX_PAGE_SIZE}")
+    if narrowing:
+        steps.append(f"narrow by {', '.join(narrowing)}")
+    if not steps:
+        return f"{spec.name} returns at most {MAX_PAGE_SIZE} items."
+    return ended(f"More match than this page holds: {' or '.join(steps)}")
 
 
 def get_resource(
@@ -607,7 +642,7 @@ def get_resource(
         # extension, not for a caller, so answer with this module's own.
         raise RecordNotFound("No record matches the requested identifier.") from exc
     if not isinstance(result, dict):
-        raise RuntimeError(f"Resource {name!r} detail handler returned a non-object.")
+        raise TypeError(f"Resource {name!r} detail handler returned a non-object.")
     if fields is None:
         return result
     return _selected(name, [result], fields)[0]

@@ -1,11 +1,7 @@
-"""
-Documentation Index.
+"""Documentation Index: the vault docs' metadata and relationships.
 
-Severino HQ does NOT store full runbook bodies. The Obsidian vault remains the
-source of truth. This model stores metadata and relationships only, so the
-future severino-knowledge-router MCP can point an assistant at the right place.
-
-No secrets should be stored here.
+The Obsidian vault remains the source of truth, so HQ stores no runbook bodies
+and no secrets, only enough to point an assistant at the right place.
 """
 
 from datetime import timedelta
@@ -28,14 +24,6 @@ class DocumentationQuerySet(models.QuerySet):
 
         The one shared definition used by the dashboard, the docs list filter,
         and the reports page.
-
-        Three doc types are excluded because they are not documentation about a
-        system and so have no review cycle to fall behind. A public article
-        draft belongs to the Content pipeline. A report is a frozen record, so
-        reviewing it has nothing to clear. A queue note is generated from its
-        items, so it is current whenever the tool writes it and reviewing it
-        clears nothing. Each would put an item in the queue that reviewing
-        cannot clear, which is the one thing a queue must never contain.
         """
         review_days = settings.SEVERINO_DOC_REVIEW_INTERVAL_DAYS
 
@@ -44,6 +32,11 @@ class DocumentationQuerySet(models.QuerySet):
             Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=cutoff),
             status=self.model.Status.ACTIVE,
         ).exclude(
+            # Not documentation about a system, so reviewing clears nothing, and a
+            # queue must never hold an item reviewing cannot clear: a public
+            # article draft belongs to the Content pipeline, a report is a frozen
+            # record, and a queue note is generated from its items, so it is
+            # current whenever the tool writes it.
             doc_type__in=(
                 self.model.DocType.PUBLIC_ARTICLE_DRAFT,
                 self.model.DocType.REPORT,

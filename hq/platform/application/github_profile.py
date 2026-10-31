@@ -1,35 +1,40 @@
 """Your GitHub profile, and what you watch there, as the controller last read it.
 
-Whose profile is the signed-in person's: the login their sign-in claims
-(``application.linked_accounts``), never one typed into HQ.
-
-HQ reads nothing here. The controller reads GitHub's public API
-(``controller/providers/github_profile.go``), under the connected GitHub App's
-allowance where there is one and anonymously where there is not, and reports
-the ``github.profile`` reading, which is what a page shows. GitHub rations
-calls by the hour, so the reading keeps a clock of its own
-(``observations.github.PROFILE_EVERY``): ``plan`` tells the controller whose
-profile to read and whether it is due, and ``request_read`` asks for one now.
-``observations.github.WATCHED_KEPT`` states what a read costs.
+Whose profile is the login the signed-in person's sign-in claims, never one
+typed into HQ. HQ reads nothing here: the controller reads GitHub's public API
+(``controller/providers/github_profile.go``), under the GitHub App's allowance
+where there is one and anonymously where not, on a clock of its own since
+GitHub rations calls by the hour (``observations.github.PROFILE_EVERY``).
 """
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Annotated, Any
 
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations.github import PROFILE_EVERY, PROFILE_KIND as KIND
-from hq.platform.core.models import LinkedAccount
+from hq.platform.core.audit import record_event
+from hq.platform.core.models import AuditLog, LinkedAccount
 
 from .asks import Standing, read_standing
+from .command_fields import Describe
 from .linked_accounts import GITHUB
-from .security import Capability, Principal
+from .record_errors import RecordNotFound
+from .security import Principal
 lazy from .cadence import forced_reads, request_reads
 lazy from .timestamps import moment
 
 # GitHub's allowance is by the hour, so a read that failed is tried again after one.
 RETRY_AFTER = timedelta(hours=1)
+
+READ_NOW = "github.profile.read"
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileReadCommand:
+    login: Annotated[str, Describe("The GitHub login whose profile to read.")]
 
 
 def _snapshot() -> ProviderInventory | None:
@@ -127,16 +132,24 @@ def standing() -> Standing:
     return read_standing((KIND,), asked) if asked is not None else Standing()
 
 
-def request_read(login: str, *, principal: Principal) -> datetime:
-    """Ask the controller to read ``login``'s profile now: when it was asked.
+def request_read(command: ProfileReadCommand, *, principal: Principal) -> dict[str, Any]:
+    """Ask the controller to read a profile now: the ``github.profile.read``
+    capability, answering when it was asked.
 
     A read spends GitHub's hourly allowance and says what HQ is asking about,
     so asking for one is gated like every other public lookup, and waking the
     controller is gated as Refresh is.
     """
 
-    principal.require(Capability.LOOK_UP_PUBLIC_RECORDS)
-    if login not in accounts():
-        raise ValueError("No sign-in names that GitHub account.")
-    request_reads((KIND,), principal=principal)
-    return asked_at() or timezone.now()
+    del principal
+    if command.login not in accounts():
+        raise RecordNotFound("No sign-in names that GitHub account.")
+    request_reads((KIND,))
+    record_event(
+        action=AuditLog.Action.UPDATED,
+        type_label="GitHub profile",
+        message=f"Asked for @{command.login}'s GitHub profile to be read now.",
+        metadata={"login": command.login},
+        required=True,
+    )
+    return {"ok": True, "login": command.login, "asked_at": (asked_at() or timezone.now()).isoformat()}

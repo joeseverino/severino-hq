@@ -4,10 +4,12 @@ import re
 from pathlib import Path
 
 from django.template import Context, RequestContext, Template, TemplateSyntaxError
+from django.template.autoreload import get_template_directories
 from django.test import RequestFactory, SimpleTestCase, tag
 from django.urls import reverse
 
-from hq.platform.application import plugins
+from hq.platform.application import asks
+from hq.platform.application.asks import Ask, Standing
 from hq.platform.application.plugin_testing import hand_drawn_tables, table_problems
 from hq.platform.application.routes import routed
 from hq.platform.application.tables import TableColumn, TableListMixin, ranked, typed
@@ -26,13 +28,7 @@ def _template_roots() -> list[Path]:
     """The host's templates and each installed extension's, so the composed
     suite reads the extensions as well."""
 
-    from django.apps import apps
-
-    installed = set(plugins.installed_plugin_apps())
-    return [
-        TEMPLATES,
-        *(Path(config.path) / "templates" for config in apps.get_app_configs() if config.name in installed),
-    ]
+    return sorted(get_template_directories())
 
 
 # What tables.js marks as it fits a table to its region, before the frame
@@ -106,7 +102,10 @@ def _render(source: str, context: dict | None = None, request=None) -> str:
 
 class TableTagTests(SimpleTestCase):
     def test_a_region_is_labeled_and_only_one_that_scrolls_takes_focus(self):
-        html = _render('{% table_region "Machines" %}<table class="data-table"></table>{% endtable_region %}')
+        html = _render(
+            '{% table_region "Machines" %}<table class="data-table"><tbody><tr><td>a</td></tr></tbody></table>'
+            "{% endtable_region %}"
+        )
         (region,) = select(html, "role", "region")
         self.assertEqual(region.attrs["aria-label"], "Machines")
         self.assertNotIn("tabindex", region.attrs)
@@ -118,6 +117,27 @@ class TableTagTests(SimpleTestCase):
                 self.assertEqual(scrolls.attrs["tabindex"], "0")
         (pane,) = select(_render('{% table_region "Links" pane=True %}{% endtable_region %}'), "role", "region")
         self.assertIn("is-pane", pane.classes)
+
+    def test_a_table_with_no_rows_is_drawn_as_the_empty_state(self):
+        """Whatever left the rows out (a loop over nothing, a branch not
+        taken), the region draws its empty state instead of headings over
+        nothing; a row in the body, or a region holding no table, is drawn."""
+
+        head = '<thead><tr>{% table_heading "Name" "identifier" %}</tr></thead>'
+        body = "<tbody>{% for row in rows %}<tr><td>{{ row }}</td></tr>{% endfor %}</tbody>"
+        source = (
+            '{% table_region "Latest runs" %}<table class="data-table">' + head + body + "</table>{% endtable_region %}"
+        )
+        for rows in ([], None):
+            with self.subTest(rows=rows):
+                html = _render(source, {"rows": rows})
+                self.assertEqual(elements(html, "table"), [])
+                self.assertEqual(select(html, "role", "region"), [])
+                (empty,) = select(html, "data-empty-state")
+                self.assertIn("Latest runs", empty.words)
+        html = _render(source, {"rows": ["a"]})
+        self.assertEqual(len(elements(html, "table")), 1)
+        self.assertEqual(select(html, "data-empty-state"), [])
 
     def test_a_region_names_the_room_its_identifiers_get_and_still_does_not_scroll(self):
         for room in ("shared", "snug"):
@@ -206,8 +226,8 @@ class TableTagTests(SimpleTestCase):
             '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Pick" select_all=True %}'
             '{% table_heading "Name" %}{% table_heading "Empty" %}{% table_heading "Some" %}</tr></thead><tbody>'
             '<tr class="row-group"><th colspan="4">Group</th></tr>'
-            '<tr><td data-col="pick"></td><td data-col="name">—</td><td data-col="empty">—</td><td data-col="some">Said</td></tr>'
-            '<tr><td data-col="pick"></td><td data-col="name">—</td><td data-col="empty"> </td><td data-col="some">–</td></tr>'
+            '<tr><td data-col="pick"></td><td data-col="name">\u2014</td><td data-col="empty">\u2014</td><td data-col="some">Said</td></tr>'
+            '<tr><td data-col="pick"></td><td data-col="name">\u2014</td><td data-col="empty"> </td><td data-col="some">–</td></tr>'
             "</tbody></table>{% endtable_region %}"
         )
         marked = [each for each in all_elements(_render(source)) if "data-blank-column" in each.attrs]
@@ -221,7 +241,7 @@ class TableTagTests(SimpleTestCase):
             '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
             '{% table_heading "State" "status" %}{% table_heading "Note" %}</tr></thead><tbody>'
             '<tr><td>a</td><td data-col="said">Ask me first <span class="muted">for\nthis</span></td><td>b</td></tr>'
-            '<tr><td>c</td><td data-col="blank">—</td><td>d</td></tr>'
+            '<tr><td>c</td><td data-col="blank">\u2014</td><td>d</td></tr>'
             '<tr><td colspan="3">Nothing else</td></tr>'
             "</tbody></table>{% endtable_region %}"
         )
@@ -237,7 +257,7 @@ class TableTagTests(SimpleTestCase):
             '{% table_heading "State" "status" %}{% table_heading "Note" %}</tr></thead><tbody>'
             f'<tr><td>{long}</td><td data-col="status">{long}</td><td data-col="long">{long}</td></tr>'
             f'<tr><td>b</td><td>Up</td><td data-col="lines">{lines}</td></tr>'
-            '<tr><td>c</td><td>Up</td><td data-col="blank"><span class="empty-value">——————————————————</span></td></tr>'
+            f'<tr><td>c</td><td>Up</td><td data-col="blank"><span class="empty-value">{"\u2014" * 18}</span></td></tr>'
             "</tbody></table>{% endtable_region %}"
         )
         marked = [each.attrs.get("data-col") for each in elements(_render(source), "td") if "data-long" in each.attrs]
@@ -295,6 +315,38 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual([each.words for each in values], ["from here", "Said", "since", "Go", "x"])
         self.assertIn("cell-data", values[1].classes)
 
+    def test_a_rows_ask_says_its_word_and_sentence_on_the_line_beneath(self):
+        """An ask in a row shows its state's word alone there, so the line the
+        row opens to says the word and the sentence under the button's label;
+        an ask that has said nothing adds nothing to it."""
+
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
+            '{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
+            '<tr><td class="row-gutter">A{% row_toggle %}</td><td>{% include "partials/_ask.html" with ask=ask %}</td>'
+            "</tr></tbody></table>{% endtable_region %}"
+        )
+        failed = Ask(
+            "Refresh",
+            "/example/ask/",
+            Standing(asks.FAILED, "The example could not be read."),
+            title="Read the example again.",
+        )
+        found = all_elements(_render(source, {"ask": failed}))
+        # The title holds the failure; what the button is for stays apart, for
+        # ask.js to say again once the work has nothing to say.
+        (button,) = [each for each in found if "data-ask-button" in each.attrs]
+        self.assertEqual(button.attrs["data-ask-reason"], "Read the example again.")
+        (detail,) = [each for each in found if "row-detail" in each.classes]
+        beneath = [each for each in found if detail in each.ancestors]
+        self.assertEqual([each.words for each in beneath if each.tag == "dt"], ["Refresh"])
+        (said,) = [each for each in beneath if "data-ask-why" in each.attrs]
+        self.assertIn("Failed", said.words)
+        self.assertIn("could not be read", said.words)
+        self.assertEqual(said.attrs["data-ask-why"], "/example/ask/")
+        idle = Ask("Refresh", "/example/ask/")
+        self.assertEqual(with_class(_render(source, {"ask": idle}), "row-detail"), [])
+
     def test_a_control_under_no_heading_is_named_for_a_screen_reader_alone(self):
         source = (
             '{% table_region "Queue" %}<table class="data-table"><tbody>'
@@ -312,6 +364,18 @@ class TableTagTests(SimpleTestCase):
             '<tr><td colspan="2">Nothing else</td></tr></tbody></table>{% endtable_region %}'
         )
         self.assertEqual(with_class(_render(source), "row-detail"), [])
+
+    def test_a_cell_left_without_its_end_tag_holds_nothing_back(self):
+        """Its content has no end to copy up to, so the open line shows only
+        what the row's closed cells hold."""
+
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "Note" drop=1 %}{% table_heading "When" drop=2 %}</tr></thead><tbody>'
+            "<tr><td>a</td><td>Open<td>Shut</td></tr></tbody></table>{% endtable_region %}"
+        )
+        values = [each.words for each in all_elements(_render(source)) if each.tag == "dd"]
+        self.assertEqual(values, ["Shut"])
 
     def test_a_rank_on_the_column_that_names_the_row_is_refused(self):
         source = (
@@ -485,7 +549,7 @@ class TableColumnTests(SimpleTestCase):
         self.assertEqual(self._ranks(*keyed), {"Name": 0, "State": 0, "Cost": 1})
 
     def test_a_list_ranks_its_columns(self):
-        view = type("Listed", (TableListMixin,), {"table_columns": _LIST_COLUMNS})()
+        view = type("Listed", (TableListMixin,), {"table_columns": _LIST_COLUMNS, "model": None})()
         view.request = RequestFactory().get("/")
         ranks = {column.label: column.drop for column in view.table_context()["columns"]}
         self.assertEqual(ranks, {"Name": 0, "Note": 0, "When": 1})
@@ -502,8 +566,9 @@ class ListTableTests(_AuthedTestCase):
     def setUpTestData(cls):
         super().setUpTestData()
         from hq.platform.core import example_estate
+        from hq.platform.core.example_estate.testing import throwaway_media
 
-        with example_estate.throwaway_media():
+        with throwaway_media():
             example_estate.seed()
 
     def test_a_list_sits_in_its_region_with_declared_headings(self):

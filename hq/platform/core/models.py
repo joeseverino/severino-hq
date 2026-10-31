@@ -224,15 +224,10 @@ class AuditLog(models.Model):
 class Pin(models.Model):
     """Something an operator wants to see first.
 
-    Deliberately not a field on the thing pinned. A domain's declaration is
-    what HQ asks the controller to make true, and an operator's preference
-    about ordering is not part of that: stored there it would bump the
-    generation, queue a reconcile, and make "I look at this one most" into a
-    change to the world.
-
-    Generic on purpose: a pin is a (kind, key) pair, so services, records and
-    anything else that later wants the same affordance uses this table rather
-    than growing a second one shaped identically.
+    Not a field on the thing pinned: a declaration is what HQ asks the
+    controller to make true, and stored there a preference about ordering would
+    bump the generation and queue a reconcile. A pin is a generic (kind, key)
+    pair, so anything that wants the same affordance uses this table.
     """
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="pins")

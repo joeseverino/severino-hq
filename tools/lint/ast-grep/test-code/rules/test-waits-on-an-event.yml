@@ -1,0 +1,30 @@
+# A test that sleeps to let something happen passes or fails by how loaded the
+# machine is, and costs its sleep on every run. A test waits on the thing
+# itself: an Event the work sets, a join, a Condition.
+#
+# A sleep of zero waits for nothing: it is the call the outbound rule audits,
+# and stays. The exceptions are the sleeps that are the scenario rather than a
+# wait for it, each with the reason.
+id: test-waits-on-an-event
+language: python
+severity: error
+message: A test sleeps, so it passes by timing and spends the sleep on every run.
+note: >-
+  Wait on what the sleep was waiting for: a threading.Event the work sets
+  (event.wait(timeout) fails the test if it never comes), a thread's join, or
+  a fake clock where the code reads the time.
+rule:
+  any:
+    - all:
+        - pattern: $MODULE.sleep($DELAY)
+        - not: { pattern: $MODULE.sleep(0) }
+    - pattern: from time import $$$NAMES
+      has: { kind: dotted_name, regex: ^sleep$ }
+  not:
+    any:
+      # The importer's transaction holds the write lock this long on purpose:
+      # the test measures how soon a waiting writer gets in against it.
+      - pattern: time.sleep(held)
+constraints:
+  MODULE:
+    regex: ^(time|asyncio)$

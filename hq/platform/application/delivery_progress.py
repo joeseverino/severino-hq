@@ -1,15 +1,10 @@
 """Whether a delivery that is behind production is still on its way there.
 
-The controller reports a delivery as having a problem from the moment a newer
-commit is approved until production runs it. Most of that time nothing is
-wrong: the deploy has not started yet, or it is running. That is a notice. It
-is a problem once a run has failed or ended without deploying, or once the
-delivery has been behind for longer than ``STALLED_AFTER``. A run waiting for
+The controller reports a delivery as a problem from the moment a newer commit
+is approved until production runs it, while for most of that time the deploy
+has only not started or is running: a notice. It is a problem once a run has
+failed or ended without deploying, or past ``STALLED_AFTER``; a run waiting for
 approval waits on the owner, which is neither.
-
-Each plugin's stage is read from ``stage_state`` where the reading carries it.
-A reading without it carries only the controller's sentence, whose closing
-words are fixed (controller/providers/github_delivery.go).
 """
 
 from collections.abc import Mapping
@@ -31,7 +26,8 @@ RUNNING = "running"
 WAITING = "waiting"
 ENDED = "ended"
 _ON_ITS_WAY = (STARTING, RUNNING)
-# The controller's closing words for each stage that is not an end.
+# The controller's closing words for each stage that is not an end, fixed in
+# controller/providers/github_delivery.go.
 _SENTENCES = (
     ("No deploy has started", STARTING),
     ("is running", RUNNING),
@@ -53,6 +49,7 @@ class DeliveryProgress:
 
 
 def _stage(item: Mapping[str, Any]) -> str:
+    # A reading without ``stage_state`` carries only the controller's sentence.
     stated = str(item.get("stage_state", "") or "")
     if stated:
         return stated if stated in (STARTING, RUNNING, WAITING) else ENDED

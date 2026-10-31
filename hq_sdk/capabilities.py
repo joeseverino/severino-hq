@@ -8,6 +8,8 @@ from hq.platform.application.capabilities import (
     describe_capabilities,
     execute_capability,
 )
+from hq.platform.application.command_fields import Choices, Describe, Names, Refers
+from hq.platform.application.integration_specs import ON_ITS_PAGE
 from hq.platform.application.security import (
     AuthorizationError,
     Capability,
@@ -25,10 +27,15 @@ class StrictCommand(BaseModel):
 
 
 __all__ = [
+    "ON_ITS_PAGE",
     "AuthorizationError",
     "Capability",
     "CapabilitySpec",
+    "Choices",
+    "Describe",
+    "Names",
     "Principal",
+    "Refers",
     "StrictCommand",
     "capability_registry",
     "cli_principal",

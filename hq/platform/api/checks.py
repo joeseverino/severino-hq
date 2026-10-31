@@ -5,7 +5,7 @@ from django.apps import AppConfig
 from django.core.checks import CheckMessage, Error, Tags, register
 from django.urls import NoReverseMatch, reverse
 
-from hq.platform.application.integrations import IntegrationGraphError, integration_graph
+lazy from hq.platform.application.integrations import IntegrationGraphError, integration_graph
 
 
 def _route_error(owner: str, name: str, route: str, error_id: str) -> Error | None:

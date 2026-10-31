@@ -9,7 +9,6 @@ what follows takes a fact away and asserts the page notices.
 from datetime import UTC, datetime
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -27,6 +26,7 @@ from ..request_path import address_chain
 from ..ui import MISSING
 from .host_only import host_only
 from .markup import select, texts, within
+from .people import someone
 
 A_TAILNET_ADDRESS = "100.64.0.5"
 A_LAN_ADDRESS = "10.0.0.50"
@@ -72,7 +72,7 @@ def a_device(name, address, *, user="", tags=(), observer=False, reach=(), **ext
 
 def a_request(address=A_TAILNET_ADDRESS, *, host="hq.example.test", secure=True):
     request = RequestFactory().get("/connection/", secure=secure, HTTP_HOST=host, REMOTE_ADDR=address)
-    request.user = get_user_model()(username="someone", email="someone@example.test")
+    request.user = someone()
     return request
 
 
@@ -527,9 +527,7 @@ class LinkTests(TestCase):
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
 class ConnectionPageTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="someone", email="someone@example.test", password="not-used-here"
-        )
+        self.user = someone()
         a_tailnet(a_device("hq-host", "100.64.0.9", observer=True))
 
     def test_the_page_needs_a_session(self):
@@ -798,9 +796,7 @@ class CostTests(TestCase):
     def setUp(self):
         # Counts what the host draws; an installed extension adds its own reads.
         self.enterContext(host_only())
-        self.user = get_user_model().objects.create_user(
-            username="someone", email="someone@example.test", password="not-used-here"
-        )
+        self.user = someone()
         a_tailnet(
             a_device("a-laptop", A_TAILNET_ADDRESS, user="someone@example.test"),
             a_device("hq-host", "100.64.0.9", observer=True),
@@ -857,7 +853,7 @@ class ProxyThatDropsTheCallerTests(TestCase):
             REMOTE_ADDR="10.0.0.9",
             HTTP_X_FORWARDED_FOR="172.18.0.1",
         )
-        request.user = get_user_model()(username="someone")
+        request.user = someone()
         return connection(request)
 
     def test_it_says_the_address_never_arrived(self):
@@ -1171,7 +1167,7 @@ class LocalProxyPolicyTests(TestCase):
             REMOTE_ADDR="127.0.0.1",
             HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS,
         )
-        request.user = get_user_model()(username="someone", email="someone@example.test")
+        request.user = someone()
         return connection(request)
 
     def policy_layers(self):

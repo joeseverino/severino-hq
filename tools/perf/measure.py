@@ -1,12 +1,9 @@
 """What one signed-in server costs per page: on the server, and in a browser.
 
-The server's time is what it says it spent, the `app` metric of the
-Server-Timing header every response carries (hq/platform/core/middleware.py),
-so the client's own overhead is not in it. The browser's numbers are the
-platform's own: Resource Timing for bytes and requests, PerformanceObserver
-for first and largest contentful paint, layout shift and long tasks, and Chromium's Performance.getMetrics for the
-main thread's script time, the one figure with no web API. That is why the
-browser is Chromium: WebKit reports neither layout shifts nor long tasks.
+The server's time is the `app` metric of its Server-Timing header, so the
+client's own overhead is not in it. The browser's numbers are the platform's
+own (Resource Timing, ``OBSERVE``), taken in Chromium since WebKit reports
+neither layout shifts nor long tasks.
 """
 
 import http.client
@@ -20,6 +17,10 @@ from tools.perf import parse
 
 # Asked of each page before its timed requests, so a first request's caching is not its cost.
 WARM = 2
+# A page that sends a reader on, such as a list that opens its one record, is measured where it
+# lands, within a few hops of the same server.
+REDIRECTS = frozenset({301, 302, 303, 307, 308})
+HOPS = 5
 # Installed before any of a page's own script, in every document a visit
 # loads: first contentful paint, the largest contentful paint so far (the
 # latest candidate the browser reported), layout shift as Core Web Vitals
@@ -86,12 +87,21 @@ class Server:
         self.cookie = "=".join(cookie)
 
     def get(self, page: str) -> Answer:
-        """The status, the time the server says it spent, and what it sent."""
+        """The status, the time the server says it spent, and what it sent, for the page a reader
+        lands on: a redirect within the server is followed, as a link to it is, and its time counted."""
 
-        self.connection.request("GET", page, headers={"Cookie": self.cookie})
-        response = self.connection.getresponse()
-        body = response.read()
-        return Answer(response.status, parse.server_time(response.getheader("Server-Timing", "")), body)
+        spent: list[float] = []
+        for _ in range(HOPS):
+            self.connection.request("GET", page, headers={"Cookie": self.cookie})
+            response = self.connection.getresponse()
+            body = response.read()
+            took = parse.server_time(response.getheader("Server-Timing", ""))
+            spent += [] if took is None else [took]
+            location = urlsplit(response.getheader("Location", ""))
+            if response.status not in REDIRECTS or location.netloc or not location.path.startswith("/"):
+                break
+            page = location._replace(scheme="", netloc="").geturl()
+        return Answer(response.status, sum(spent) if spent else None, body)
 
     def close(self) -> None:
         self.connection.close()
@@ -116,19 +126,30 @@ def server_times(
 
     with ExitStack() as stack:
         opened = {name: stack.enter_context(closing(Server(url, cookie))) for name, (url, cookie) in servers.items()}
-        for page in pages:
-            for _ in range(WARM):
-                for server in opened.values():
-                    server.get(page)
+        _warm(opened, pages)
         times: dict[str, dict[str, list[float | None]]] = {name: {page: [] for page in pages} for name in opened}
         last: dict[tuple[str, str], Answer] = {}
-        order = list(opened)
         for turn in range(rounds):
             for page in pages:
-                for name in order if turn % 2 == 0 else order[::-1]:
+                for name in _asking_order(list(opened), turn):
                     last[name, page] = answer = opened[name].get(page)
                     times[name][page].append(answer.took_ms)
     return {name: {page: _numbers(times[name][page], last[name, page]) for page in pages} for name in opened}
+
+
+def _warm(opened: dict[str, Server], pages: list[str]) -> None:
+    """Asks each server for each page ``WARM`` times, untimed, so no timed round pays a first visit."""
+
+    for page in pages:
+        for _ in range(WARM):
+            for server in opened.values():
+                server.get(page)
+
+
+def _asking_order(names: list[str], turn: int) -> list[str]:
+    """The servers in the order a round asks them: as given on an even round, reversed on an odd one."""
+
+    return names if turn % 2 == 0 else names[::-1]
 
 
 def _numbers(times: list[float | None], last: Answer) -> dict[str, Any]:
@@ -163,6 +184,8 @@ def past_spread(server: dict[str, Any]) -> bool:
     return server.get("moved_ms") is not None and abs(server["moved_ms"]) > server["spread_ms"]
 
 
+# The main thread's script time, the one figure with no web API, so it is
+# Chromium's own Performance.getMetrics.
 def _script_seconds(session: Any) -> float:
     metrics = session.send("Performance.getMetrics")["metrics"]
     return next((metric["value"] for metric in metrics if metric["name"] == "ScriptDuration"), 0.0)

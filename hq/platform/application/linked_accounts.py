@@ -41,7 +41,7 @@ def claimed_github_login(payload: Mapping[str, Any]) -> str:
 def record_claimed_accounts(user, payload: Mapping[str, Any]) -> None:
     """Keep what this sign-in claims, and forget what it no longer does."""
 
-    if getattr(user, "pk", None) is None:
+    if user.pk is None:
         return
     _record(user, GITHUB, claimed_github_login(payload))
 
@@ -92,5 +92,5 @@ def sign_in_subject(issuer: str, subject: str) -> str:
 def bind_sign_in(user, key: str) -> None:
     """Hold ``user`` to the subject that signed in as them, from now on."""
 
-    if getattr(user, "pk", None) is not None and key:
+    if user.pk is not None and key:
         _record(user, SIGN_IN, key)

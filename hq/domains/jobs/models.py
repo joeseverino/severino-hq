@@ -1,17 +1,10 @@
 """Work too slow for a request, and honest about where it has got to.
 
-Reading a multi-gigabyte archive takes minutes and cannot be uploaded, so the
-page that starts it has to return before the work finishes. The alternative is
-a request that hangs until the proxy gives up, leaving no way to tell whether
-the work finished or died.
-
-So a job is a row: created before the work starts, updated while it runs, and
-outliving it either way. That buys three things: a page that can ask "and
-now?" cheaply, evidence when a process is killed mid-run, and a lock that
-stops the same job starting twice.
-
-`kind` is a string the caller chooses and this app never interprets, so an
-extension owns the work while the host owns the running of it.
+A job is a row: created before the work starts, updated while it runs, and
+outliving it either way, so a page can ask "and now?" cheaply, a process killed
+mid-run leaves evidence, and a lock stops the same job starting twice. `kind`
+is a string the caller chooses and this app never interprets, so an extension
+owns the work while the host owns the running of it.
 """
 
 import uuid
@@ -28,6 +21,9 @@ from hq.platform.core.rules import Rule, one_of
 # dead. Generous: a slow step that reports nothing for two minutes is working,
 # and declaring it dead is worse than waiting.
 HEARTBEAT_GRACE = timedelta(minutes=5)
+
+# What a job whose process stopped says went wrong.
+LOST_ERROR = "HQ stopped before it finished."
 
 
 class JobState(models.TextChoices):
@@ -114,6 +110,20 @@ class Job(models.Model):
         if self.state == self.State.QUEUED:
             return timezone.now() - self.created_at > HEARTBEAT_GRACE
         return False
+
+    @property
+    def seen_state(self) -> str:
+        """The state a page shows: a live job nothing has heard from for too
+        long has stopped early, whether or not the sweep has marked it yet."""
+        return self.State.LOST if self.is_stale else self.state
+
+    @property
+    def seen_state_display(self) -> str:
+        return self.State(self.seen_state).label
+
+    @property
+    def seen_error(self) -> str:
+        return LOST_ERROR if self.is_stale else self.error
 
     @property
     def duration_seconds(self) -> float | None:

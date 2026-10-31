@@ -2,7 +2,6 @@ package providers
 
 import (
 	"encoding/json"
-	"fmt"
 )
 
 // Wire types for the Portainer and Docker Engine answers HQ reads. Portainer's
@@ -214,12 +213,9 @@ type dockerCPUStats struct {
 // decodeAnswer decodes one provider answer into its wire type. An empty or null
 // answer is the zero value; one of the wrong shape is an error naming what was read.
 func decodeAnswer[T any](raw json.RawMessage, what string) (T, error) {
-	var out T
 	if len(raw) == 0 || string(raw) == "null" {
-		return out, nil
+		var empty T
+		return empty, nil
 	}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return out, &ProviderError{Message: fmt.Sprintf("decode %s", what), Err: err}
-	}
-	return out, nil
+	return decodeAs[T](raw, "decode "+what)
 }

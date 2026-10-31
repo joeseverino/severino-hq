@@ -12,7 +12,7 @@ list, with what it says and where it is set up, so everything not yet
 connected is in one place.
 {% endcomment %}
 {% load value_tags %}
-<section class="card connection-setup" aria-labelledby="connection-setup-heading">
+{% card css="connection-setup" heading="connection-setup-heading" %}
   {% section_head id="connection-setup-heading" %}{% if again %}Connect another account{% else %}Connect a service{% endif %}{% aside %}<span class="count">{% if again %}{{ setups|length|counted:"service" }} connected{% else %}{{ count|breakable }} not connected yet{% endif %}</span>{% endsection_head %}
   <p class="muted">Each connection is a 1Password item the controller is given. Open one to see what to make.{% if guide %} {% entity guide|outside label="How connections work" %}{% endif %}</p>
   <ul class="setup-list">
@@ -73,4 +73,4 @@ connected is in one place.
       </li>
     {% endfor %}
   </ul>
-</section>
+{% endcard %}

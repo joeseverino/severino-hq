@@ -176,10 +176,10 @@ func TestFetchPictureKeepsOnlyASmallImageFromTheAddressAsked(t *testing.T) {
 		case "/picture":
 			// What the response calls itself is not what is believed.
 			w.Header().Set("Content-Type", "text/plain")
-			io.WriteString(w, png)
+			_, _ = io.WriteString(w, png)
 		case "/page":
 			w.Header().Set("Content-Type", "image/png")
-			io.WriteString(w, "<html><body>not a picture</body></html>")
+			_, _ = io.WriteString(w, "<html><body>not a picture</body></html>")
 		case "/elsewhere":
 			http.Redirect(w, req, "/picture", http.StatusFound)
 		}

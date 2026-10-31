@@ -19,7 +19,7 @@ from .entity_links import EntityLink
 from .finding_model import Finding
 from .findings import estate_findings, serialize_finding
 from .policy_links import PolicyName, PolicyNames, tagged
-from .projection import projection_scope
+from .projection import complete, projection_scope
 from .routes import reverse
 from .security import Capability, Principal
 from .tailnet import (
@@ -265,4 +265,4 @@ def get_tailnet(*, principal: Principal) -> dict[str, Any]:
     """The tailnet as one item, for the registered read."""
 
     found = tailnet_context(principal=principal).as_dict()
-    return {"items": [found], "count": 1}
+    return complete([found])

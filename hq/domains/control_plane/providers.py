@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
+from hq.platform.application.record_errors import Sentence
 from hq.platform.application.routes import reverse
 
 from .attribution import unattributed_kinds
@@ -103,15 +104,10 @@ OBSERVATION_KINDS = frozenset(OBSERVATIONS)
 class ObserverAbility:
     """What a connection is carried for when it reconciles nothing.
 
-    Every other ability is derived from a resource kind: a credential exists to
-    make some declaration true, so the kind is the record of why it is held.
-    A connection that only ever reads has no kind to derive from, and left at
-    that it appears on the connections page holding no authority at all, which
-    reads as a credential nobody can account for rather than as a reader.
-
-    So a reader declares its ability here, against the resource it answers for.
-    The effect is always a read: if something wants to change state it needs a
-    kind, and a kind is what the reconcile machinery keys on.
+    Every other ability derives from a resource kind, the record of why a
+    credential is held. A connection that only reads has none, and without this
+    shows on the connections page as a credential nobody can account for. The
+    effect is always a read: changing state needs a kind, which reconcile keys on.
     """
 
     provider: str
@@ -182,14 +178,11 @@ def controller_capability_registry() -> ControllerCapabilityRegistry:
 def controller_id() -> str:
     """Which controller this deployment runs.
 
-    An identity, not a policy: it names one installation, so it arrives from the
-    environment rather than from the committed contract beside it.
-
-    Falling back to the machine's own name rather than to a word. This is what
-    a sweep files its findings under, so a placeholder would put every container
-    on a host called "controller", and both processes that ask run on the host
-    network, so both get the same answer without anything being passed between
-    them.
+    An identity of one installation, so it arrives from the environment rather than
+    the committed contract. A sweep files its findings under it, so it falls back
+    to the machine's own name, which both processes that ask share on the host
+    network, where a placeholder would put every container on a host called
+    "controller".
     """
 
     return os.environ.get("HQ_CONTROLLER_ID", "").strip() or os.uname().nodename
@@ -215,13 +208,15 @@ def enabled_controller_actions(*, automatic_only: bool = False) -> tuple[tuple[s
     )
 
 
-def controller_action_policy(kind: str, action: str) -> tuple[bool, str]:
+def controller_action_policy(kind: str, action: str) -> tuple[bool, Sentence]:
+    """Whether the controller may run ``action`` on a ``kind``, and why, as a refusal may say it."""
+
     capability = controller_capability_registry().capabilities.get(kind)
     policy = capability.actions.get(action) if capability else None
     if not policy:
-        return False, f"The controller does not implement {action!r} for {kind!r}."
+        return False, "The controller does not do that to this kind of record."
     if policy.mode != "apply":
-        return False, policy.reason or "The controller cannot run this action."
+        return False, policy.why_locked()
     return True, "The controller can run this action."
 
 

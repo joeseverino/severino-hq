@@ -1,17 +1,9 @@
-"""HQ's stylesheet: the sheets every page links, in cascade order.
+"""HQ's stylesheet: the sheets every page links, in cascade order (docs/Design.md).
 
-The sheets share the cascade layers the first one declares (`tokens.css`).
-Inside a layer a later rule wins a tie of specificity, and a rule in a later
-sheet is a later rule, so this order is part of the cascade: a sheet moves
-only when its rules may come later than the ones they used to follow. Each
-sheet is one responsibility, held under the source-file ceiling
-(`FileSizeTests`).
-
-Several links rather than one sheet that imports the rest: every link is
-render-blocking, so the first paint still waits for the whole stylesheet and
-nothing is drawn unstyled, and the browser's preload scanner finds every link
-in the head at once, where an `@import` is found only once its parent has
-arrived. Anything that reads the stylesheet reads it through here.
+Several links rather than one sheet importing the rest: each is render-blocking,
+so nothing is drawn unstyled, and the preload scanner finds every link in the
+head at once, where an `@import` is found only once its parent arrives.
+Anything that reads the stylesheet reads it through here.
 """
 
 from pathlib import Path

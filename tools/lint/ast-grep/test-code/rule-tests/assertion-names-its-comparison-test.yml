@@ -1,0 +1,20 @@
+id: assertion-names-its-comparison
+valid:
+  - self.assertGreater(a, b)
+  - self.assertTrue(any(x > y for x in xs))
+  - self.assertTrue(ready)
+  - self.assertTrue(not ready)
+  - self.assertFalse(a and b)
+  - self.assertEqual(a > b, True)
+  - assertTrue(a > b)
+invalid:
+  - self.assertTrue(a > b)
+  - self.assertTrue(a == b, "message")
+  - self.assertFalse(a != b)
+  - self.assertTrue(a is None)
+  - self.assertFalse(a is not None)
+  - self.assertTrue(key in found)
+  - self.assertFalse(key not in found)
+  - self.assertTrue(0 < count <= limit)
+  - self.assertTrue((a <= b))
+  - case.assertFalse(a >= b, msg="why")

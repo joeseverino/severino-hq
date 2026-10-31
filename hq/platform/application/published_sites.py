@@ -57,44 +57,57 @@ def _load_projects_by_hostname() -> dict[str, Project]:
 def public_sites() -> tuple[tuple[str, str, str], ...]:
     """Names HQ publishes to the internet, as (label, sub, url).
 
-    A dashboard link to a site is the site HQ already declares a public record
-    for, so the list is whatever HQ is currently publishing rather than what it
-    was publishing when somebody last edited a template.
-
-    Read through the providers that say their effect is public, and through
-    their own ``hostnames`` hook, which returns nothing for the record types
-    that carry policy, so a DMARC entry never arrives here looking like a site.
+    A dashboard link to a site is a site HQ declares a public record for, so
+    the list follows what HQ publishes now rather than a template's last edit.
+    A name pointed at another one published here is left out (``_aliases``).
     """
 
     projects = published_projects()
     found: dict[str, str] = {}
     targets: dict[str, str] = {}
     for resource in ManagedResource.objects.filter(enabled=True):
-        provider = PROVIDERS.get(resource.kind)
-        if provider is None or not provider.public_effect:
-            continue
-        if provider.hostnames is None:
-            continue
-        try:
-            names = tuple(provider.hostnames(resource.spec))
-            origin = provider.origin(resource.spec) if provider.origin else ""
-        except KeyError, TypeError, ValueError:
-            continue
-        for name in names:
-            hostname = normalized_hostname(name)
-            # A wildcard is a rule about names, not a name anything answers at.
-            if hostname and names_a_host(hostname) and "*" not in hostname:
-                found.setdefault(hostname, projects.get(hostname, {}).get("name", ""))
-                targets.setdefault(hostname, normalized_hostname(origin))
-    # A name whose target is another name here is the same site reached a
-    # second way. The board folds those in, and a list that unfolds them shows
-    # one site twice. An address with a port is where a name is served, not
-    # another name for it.
-    aliases = {
+        for hostname, origin in _published_names(resource):
+            found.setdefault(hostname, projects.get(hostname, {}).get("name", ""))
+            targets.setdefault(hostname, origin)
+    aliases = _aliases(found, targets)
+    return tuple(
+        (hostname, sub, f"https://{hostname}") for hostname, sub in sorted(found.items()) if hostname not in aliases
+    )
+
+
+def _published_names(resource: ManagedResource) -> list[tuple[str, str]]:
+    """Each host name a resource publishes, with the name it points at.
+
+    Only a provider whose effect is public and that names hosts publishes, and
+    its ``hostnames`` hook names none for a record that carries policy, so a
+    DMARC entry never reads as a site. A spec its provider cannot read
+    publishes nothing.
+    """
+
+    provider = PROVIDERS.get(resource.kind)
+    if provider is None or not provider.public_effect or provider.hostnames is None:
+        return []
+    try:
+        names = tuple(provider.hostnames(resource.spec))
+        origin = provider.origin(resource.spec) if provider.origin else ""
+    except KeyError, TypeError, ValueError:
+        return []
+    target = normalized_hostname(origin)
+    hostnames = (normalized_hostname(name) for name in names)
+    # A wildcard is a rule about names, not a name anything answers at.
+    return [(hostname, target) for hostname in hostnames if hostname and names_a_host(hostname) and "*" not in hostname]
+
+
+def _aliases(found: dict[str, str], targets: dict[str, str]) -> set[str]:
+    """The names whose target is another name published here.
+
+    The board folds those in, and a list that unfolds them shows one site
+    twice. An address with a port is where a name is served, not another name
+    for it.
+    """
+
+    return {
         hostname
         for hostname, target in targets.items()
         if target and ":" not in target and target != hostname and target in found
     }
-    return tuple(
-        (hostname, sub, f"https://{hostname}") for hostname, sub in sorted(found.items()) if hostname not in aliases
-    )

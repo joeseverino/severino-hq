@@ -1,14 +1,9 @@
 """Machines, services and domains as nodes of their own, and the readings between them.
 
-The estate is the hub of the topology. A controller or a reached target that
-names a machine, a service or a domain folds into that node. Every stored
-reading joined to an estate node through ``application.facts`` becomes an edge
-from the connection that read it, labeled with the reading's relation phrase,
-and exists only while the reading does.
-
-Resolution is the machine catalog's own index, the service catalog and the
-zone inventory: never a match on labels alone. What an extension reaches that
-is none of these stays a target.
+The estate is the hub of the topology; how nodes fold and readings become edges
+is docs/Derived-Facts.md#topology. Resolution is the machine catalog's own
+index, the service catalog and the zone inventory, never a match on labels
+alone, so what an extension reaches that is none of these stays a target.
 """
 
 from dataclasses import dataclass, field, replace
@@ -89,14 +84,14 @@ def add_estate(
     Returns each estate node's join keys, by node id.
     """
 
-    estate = _machines(nodes, edges, resources)
+    estate = _machines(nodes, edges)
     zones = _zones(nodes, edges, resources, estate)
     _services(nodes, edges, estate, zones)
     _fold(nodes, edges, estate)
     _hosted(nodes, edges, resources, estate)
     _reading_edges(nodes, edges, estate)
     _connects_edges(nodes, edges, estate)
-    _derived_from_readings(nodes, edges, resources, estate)
+    _derived_from_readings(nodes, resources, estate)
     _observed(nodes, edges, estate)
     return dict(estate.subjects)
 
@@ -126,7 +121,7 @@ def _declared_by(edges, node_id: str, resource_id: str, nodes) -> None:
         edges[relation.id] = relation
 
 
-def _machines(nodes, edges, resources) -> _Estate:
+def _machines(nodes, edges) -> _Estate:
     catalog = machines_once()
     connections: dict[str, list[str]] = {}
     for node in nodes.values():
@@ -164,7 +159,7 @@ def _machines(nodes, edges, resources) -> _Estate:
     for machine in catalog:
         estate.saw(
             f"machine:{machine.name}",
-            getattr(machine.presence, "observed_at", None),
+            machine.presence.observed_at if machine.presence is not None else None,
             machine.telemetry_observed_at,
             *(item.observed_at for item in machine.containers),
         )
@@ -462,11 +457,11 @@ def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
     return by_ref, by_provider
 
 
-def _derived_from_readings(nodes, edges, resources, estate: _Estate) -> None:
+def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
     """What provider-specific joins add: container edges, and image, render status, unit and certificate facts."""
 
     if estate.machine_ids:
-        docker_estate.add(nodes, edges, resources, estate.machine)
+        docker_estate.add(nodes, estate.machine)
     render_status_findings.add(nodes, estate.machine)
     unit_findings.add(nodes, estate.machine)
     reference_findings.add(nodes, resources)

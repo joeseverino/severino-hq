@@ -1,0 +1,79 @@
+# getattr with a literal name and a default reads an attribute as if it might
+# be missing, which hides a typo and a wrong type from the reader and from
+# mypy alike. Where the type declares the attribute, it is read as one; where
+# it may be absent (None, or one of two shapes), the code says which.
+#
+# The exceptions are the reads whose attribute is genuinely absent on some of
+# the values that reach them, each with the reason.
+id: getattr-literal-default
+language: python
+severity: error
+message: getattr names a literal attribute and a default; read it as an attribute where the type declares it.
+note: Where the value can be None, test for None; where it is one of two types, test the type.
+rule:
+  pattern: getattr($OBJ, $NAME, $DEFAULT)
+  not:
+    any:
+      # Set only on some callables: a class view's view_class, a decorator's
+      # marker, a derivation's declaration, a wrapped tag's original.
+      - pattern: getattr($O, "view_class", $D)
+      - pattern: getattr($O, "login_required", $D)
+      - pattern: getattr($O, "page_reads", $D)
+      - pattern: getattr($O, "derivation", $D)
+      - pattern: getattr($O, "__hq_query_fields__", $D)
+      - pattern: getattr($O, "hq_print_gate", $D)
+      - pattern: getattr($O, "__wrapped__", $D)
+      # Read off whatever value or module is walked: a module defines its
+      # exports and declarations or not, and a filter need not be a function.
+      - pattern: getattr($O, "__all__", $D)
+      - pattern: getattr($O, "__module__", $D)
+      - pattern: getattr($O, "__name__", $D)
+      - pattern: getattr(module, "SHARED", $D)
+      - pattern: getattr(module, "CONNECTIONS", $D)
+      # A capability's command is any capability's: only some carry these.
+      - pattern: getattr(command, $N, $D)
+      # A request differs by transport: the MCP boundary admits one with no
+      # user or session, a WSGI one has no ASGI scope, and one that failed
+      # before the request middleware carries no id. A log record carries a
+      # request only when its caller passed one.
+      - pattern: getattr(request, "user", $D)
+      - pattern: getattr(request, "session", $D)
+      - pattern: getattr(request, "scope", $D)
+      - pattern: getattr(request, "request_id", $D)
+      - pattern: getattr(record, "request", $D)
+      # signed_in() is None for a request nobody signed in on.
+      - pattern: getattr(request_identity.signed_in(request), "last_login", $D)
+      # A template node has an origin only when its template was loaded.
+      - pattern: getattr(node, "origin", $D)
+      # A reverse one-to-one that is missing raises AttributeError.
+      - pattern: getattr($O, "material", $D)
+      # A list view has no object; a model defines get_absolute_url or not.
+      - pattern: getattr(self, "object", $D)
+      - pattern: getattr(self.object, "get_absolute_url", $D)
+      # Only date fields carry auto_now.
+      - pattern: getattr(field, "auto_now", $D)
+      # A plugin hands whatever principal it holds, or none.
+      - pattern: getattr(principal, "interface", $D)
+      - pattern: getattr(principal, "actor", $D)
+      # A read before the model was registered left no capture; the one
+      # removing a record says what going away meant, or not.
+      - pattern: getattr(instance, "_audit_snapshot", $D)
+      - pattern: getattr(instance, "audit_gone", $D)
+      # Only the hashed storage keeps a manifest.
+      - pattern: getattr(staticfiles_storage, "hashed_files", $D)
+      # A plugin's own objects, checked here before anything trusts them.
+      - pattern: getattr(source, "events", $D)
+      - pattern: getattr(item, "status", $D)
+      # A container or its upgrade plan, which holds its container.
+      - pattern: getattr(each, "container", $D)
+      # A card link is a dict or an object.
+      - pattern: getattr(link, "name", $D)
+      # A list's query model is its declarer's, plugin or host, and need not page.
+      - pattern: getattr(parsed, "limit", $D)
+constraints:
+  # A literal: an f-string builds its name, so it reads what the data names.
+  NAME:
+    kind: string
+    not:
+      has:
+        kind: interpolation

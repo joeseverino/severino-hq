@@ -14,6 +14,7 @@ from .ui import counted, ended
 lazy from . import connections
 lazy from .findings import estate_findings
 lazy from .hq_self import hq_service
+lazy from .moments import ago
 lazy from .security import Capability, Principal
 lazy from .whereabouts import reads_containers_on
 
@@ -44,7 +45,7 @@ def service_health(service: Any, *, own_findings: bool = True) -> Health:
     """
 
     if service.declared_claims:
-        found = _declared(service)
+        found = _as_last_read(_declared(service), service)
     elif service.is_hq:
         found = Health(GOOD, "Up", "Answering this request.")
     else:
@@ -125,6 +126,22 @@ def _running(running: Any, detail: str) -> Health:
     if running is not None and running.healthy:
         return Health(GOOD, "Running", detail)
     return Health(UNKNOWN, "In place", detail)
+
+
+def _as_last_read(found: Health, service: Any) -> Health:
+    """A health whose route was read from an out-of-date reading
+    (``freshness``) is what it was when last read, never a live state."""
+
+    route = service.path.primary
+    stale = route.stale_reading if route is not None else None
+    if stale is None or found.state == UNKNOWN:
+        return found
+    said = f"{found.label} when last read, {ago(stale.observed_at)}."
+    return Health(
+        SERIOUS if found.state == SERIOUS else ATTENTION,
+        "Out of date",
+        " ".join(part for part in (said, found.detail) if part),
+    )
 
 
 def _and(names: list[str]) -> str:

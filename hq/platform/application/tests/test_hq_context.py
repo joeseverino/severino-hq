@@ -18,7 +18,6 @@ from ..container_words import UP_TO_DATE, UPDATE_AVAILABLE
 from ..drawings import Dot, Dots
 from ..hq_context import hq_context
 from ..inventory_testing import store
-from ..ui import Insight
 from .markup import all_elements, links, select, text, with_class
 
 # The package exports a function named work, so the module is named by its path.
@@ -86,6 +85,21 @@ def units(count: int = 1) -> list[dict]:
     return found
 
 
+def repository(name: str = "example/hq", **fields) -> dict:
+    """A repository as GitHub's reading reports it: by default the one HQ is built from."""
+
+    return {
+        "connection_ref": "github", "repository": name, "url": f"https://github.com/{name}",
+        "default_branch": "main", "head": {"sha": HEAD}, **fields,
+    }  # fmt: skip
+
+
+def tailnet(**fields) -> None:
+    """``example-box``, where HQ runs, as the tailnet reports it."""
+
+    store("tailscale.device", {"name": "example-box", "online": True, **fields})
+
+
 def estate(*, containers: int = 0, timers: int = 1, deployed: str = HEAD) -> None:
     ManagedResource.objects.create(
         key="example-box", kind="machine", spec={"name": "example-box", "addresses": ["192.0.2.44"]}
@@ -112,14 +126,7 @@ def estate(*, containers: int = 0, timers: int = 1, deployed: str = HEAD) -> Non
             "tags": ["example/old:1"], "created_at": stamp(timedelta(days=9)), "size": 10, "containers": [],
         },
     )  # fmt: skip
-    store(
-        "github.repository",
-        {
-            "connection_ref": "github", "repository": "example/hq", "url": "https://github.com/example/hq",
-            "default_branch": "main", "head": {"sha": HEAD},
-            "deployments": [{"environment": "production", "sha": deployed}],
-        },
-    )  # fmt: skip
+    store("github.repository", repository(deployments=[{"environment": "production", "sha": deployed}]))
     store(UNIT_KIND, *units(timers))
     store(
         RENDER_STATUS_KIND,
@@ -232,16 +239,12 @@ class ProjectionTests(TestCase):
         self.assertIsNone(found.container)
 
 
-def entry(item: Insight) -> dict:
-    return {"source_id": "hq.example", "source": "Example", "item": item}
-
-
 @SITE
 class ProblemTests(TestCase):
     def test_no_problems_is_running(self):
         estate()
         first, second = own("192.0.2.44")
-        with first, second, mock.patch("hq.platform.application.problems._host_entries", return_value=()):
+        with first, second:
             found = hq_context()
 
         self.assertEqual((found.problems, found.status), ((), ("good", "Running")))
@@ -263,36 +266,21 @@ class ProblemTests(TestCase):
         self.assertEqual({tile.label: tile.tone for tile in found.tiles}["Sees"], "serious")
 
     def test_only_problems_about_hq_are_its_own(self):
-        from ..ui import ActionLink
-
         estate()
-        machine = reverse("control_plane:machine", args=["example-box"])
-        entries = (
-            entry(
-                Insight(
-                    status="serious", eyebrow="Finding", title="A job failed on example-box", value="", body="",
-                    key="about-machine",
-                    subject=ActionLink("subject", "example-box", "read", machine),
-                )
-            ),
-            entry(
-                Insight(
-                    status="attention", eyebrow="GitHub", title="Alerts", value="", body="", key="about-repo",
-                    url="https://github.com/example/hq/security",
-                )
-            ),
-            entry(
-                Insight(
-                    status="serious", eyebrow="GitHub", title="Elsewhere", value="", body="", key="about-other",
-                    url="https://github.com/example/other",
-                )
-            ),
-        )  # fmt: skip
+        tailnet(authorized=False)
+        store(
+            "github.repository",
+            repository(deployments=[{"environment": "production", "sha": HEAD}], alerts={"code_scanning": {"high": 1}}),
+            repository("example/other", alerts={"code_scanning": {"critical": 1}}),
+        )
         first, second = own("192.0.2.44")
-        with first, second, mock.patch("hq.platform.application.problems._host_entries", return_value=entries):
+        with first, second:
             found = hq_context()
 
-        self.assertEqual([item["label"] for item in found.problems], ["A job failed on example-box", "Alerts"])
+        self.assertEqual(
+            [item["label"] for item in found.problems],
+            ["example-box is waiting for tailnet approval", "1 serious alert in hq"],
+        )
         self.assertEqual(found.status, ("serious", "1 urgent · 1 needs attention"))
         # Each beside the fact it explains: the machine where HQ runs, the repository its release.
         self.assertEqual(found.parts, ("where", "release"))
@@ -321,16 +309,10 @@ class PageTests(TestCase):
         self.assertContains(response, "Delete old routine log entries")
 
     def test_a_problem_is_drawn_under_the_part_it_is_about_and_the_status_leads_to_it(self):
-        from ..ui import ActionLink
-
         estate()
-        machine = reverse("control_plane:machine", args=["example-box"])
-        problem = Insight(
-            status="attention", eyebrow="Finding", title="A job failed on example-box", value="", body="",
-            key="about-machine", subject=ActionLink("subject", "example-box", "read", machine),
-        )  # fmt: skip
-        with mock.patch("hq.platform.application.problems._host_entries", return_value=(entry(problem),)):
-            response = self.client.get(reverse("hq_self"))
+        tailnet(update_available=True)
+
+        response = self.client.get(reverse("hq_self"))
 
         self.assertIn(("1 needs attention", "#hq-where-heading"), links(response))
         # Not urgent, so a line under its part and nothing framed above the page.
@@ -343,16 +325,10 @@ class PageTests(TestCase):
         self.assertLess(line, work)
 
     def test_an_urgent_problem_is_framed_above_the_page(self):
-        from ..ui import ActionLink
-
         estate()
-        machine = reverse("control_plane:machine", args=["example-box"])
-        problem = Insight(
-            status="serious", eyebrow="Finding", title="A job failed on example-box", value="", body="",
-            key="about-machine", subject=ActionLink("subject", "example-box", "read", machine),
-        )  # fmt: skip
-        with mock.patch("hq.platform.application.problems._host_entries", return_value=(entry(problem),)):
-            response = self.client.get(reverse("hq_self"))
+        tailnet(authorized=False)
+
+        response = self.client.get(reverse("hq_self"))
 
         self.assertIn(("1 urgent", "#problems-here"), links(response))
         self.assertIn("1 urgent problem", text(response))

@@ -1,13 +1,9 @@
 """The page frame, for extension views.
 
 A page declares its head (PageMixin, or page_context for a function view) and
-extends ``page.html``. A head action that opens a dialog declares it
-(``PageAction(modal=PageDialog(...))``) and ``page.html`` draws it. A list
-also uses hq_sdk.tables and extends ``list_page.html``, writing only the cells
-of one row. See application.pages.
-
-``built_from`` answers an extension's id with a link to the project it is
-built from, for its overview to show.
+extends ``page.html``, which draws its actions and their dialogs; a list extends
+``list_page.html`` and writes only one row's cells (docs/Plugins.md, Shared UI
+contract). ``built_from`` links an extension's overview to its project.
 """
 
 from hq.platform.application.pages import Page, PageAction, PageDialog, PageMixin, page_context

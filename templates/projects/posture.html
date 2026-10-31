@@ -39,9 +39,7 @@ A check met everywhere is a word in one closing line.
           {% for result in posture.results %}{% ifchanged result.check.scope %}{% if not forloop.first %}<span class="posture-meter-break" aria-hidden="true"></span>{% endif %}{% endifchanged %}<span class="is-{{ result.state }}" aria-hidden="true"></span>{% endfor %}
         </span>
         {% with access=posture.subject.access %}
-          <span class="posture-access">{% if access %}{% with others=access.collaborators|length|add:-1 %}{% if others > 0 %}<span class="is-unmet">{{ others|counted:"other person has,other people have" }} access</span>{% else %}Only you{% endif %}{% endwith %}
-            · {% for key in access.deploy_keys %}{% include "partials/_icon.html" with name="lock" %} {{ key.title|breakable:"," }}{% if not key.read_only %} <span class="is-unmet">can write</span>,{% endif %} {% if key.last_used %}used {{ key.last_used|ago_short }}{% else %}never used{% endif %}{% if not forloop.last %} · {% endif %}{% empty %}no deploy keys{% endfor %}
-            {% if posture.subject.variables %} · {{ posture.subject.variables|length|counted:"Actions variable,Actions variables" }}: {{ posture.subject.variables|join:", "|breakable }}{% endif %}
+          <span class="posture-access">{% if access %}{% with others=access.collaborators|length|add:-1 %}{% if others > 0 %}<span class="is-unmet">{{ others|counted:"other person has,other people have" }} access</span>{% else %}Only you{% endif %}{% endwith %}{% dot %}{% for key in access.deploy_keys %}{% include "partials/_icon.html" with name="lock" %} {{ key.title|breakable:"," }}{% if not key.read_only %} <span class="is-unmet">can write</span>,{% endif %} {% if key.last_used %}used {{ key.last_used|ago_short }}{% else %}never used{% endif %}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}no deploy keys{% endfor %}{% if posture.subject.variables %}{% dot %}{{ posture.subject.variables|length|counted:"Actions variable,Actions variables" }}: {{ posture.subject.variables|join:", "|breakable }}{% endif %}
           {% else %}Access not read{% endif %}</span>
         {% endwith %}
       </li>

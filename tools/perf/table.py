@@ -1,14 +1,9 @@
 """One report, or one beside its base, as the table `perf` prints, and its summary.
 
-A row is a page at one width: the server's numbers on its first width's row,
-the browser's on each. A total row sums each column over every page, so a
-change's whole effect reads as one number per column. With a base, each number
-is followed by how far it moved from the base's, and the server's time by the
-median of its round-by-round difference from the base's and that difference's
-spread: a page whose difference stands past its spread is marked moved.
-The summary is the totals, memory, cold start and the pages whose server time
-moved, which is what a reader of the session log needs; the table it
-summarizes is kept beside it.
+A row is a page at one width, the server's numbers on its first width's row, and
+a total row sums each column over every page, so a change's whole effect reads
+as one number per column. The summary is what a reader of the session log needs,
+and the table it summarizes is kept beside it.
 """
 
 from collections.abc import Callable
@@ -57,12 +52,12 @@ SUMMARY: tuple[tuple[str, Read, int, str], ...] = (
 SLOWEST = 3
 
 
-def server_headers(compared: bool) -> list[str]:
+def server_headers(*, compared: bool) -> list[str]:
     return [name for name, _, _ in (*SERVER, *(PAIRED if compared else ()))] + ([PAST] if compared else [])
 
 
-def headers(compared: bool) -> list[str]:
-    return ["page", "width", *server_headers(compared), *(name for name, _, _ in BROWSER)]
+def headers(*, compared: bool) -> list[str]:
+    return ["page", "width", *server_headers(compared=compared), *(name for name, _, _ in BROWSER)]
 
 
 def _kilobytes(size: float) -> float:
@@ -82,7 +77,7 @@ def _moved(value: float | None, base: float | None, places: int) -> str:
     return f"{moved:+.{places}f}" if moved else "0"
 
 
-def cell(value: float | None, base: float | None, places: int, compared: bool) -> str:
+def cell(value: float | None, base: float | None, places: int, *, compared: bool) -> str:
     said = _number(value, places)
     return f"{said} {_moved(value, base, places)}".rstrip() if compared else said
 
@@ -104,22 +99,25 @@ def _read(read: Read, source: dict[str, Any] | None) -> float | None:
         return None
 
 
-def _server(entry: dict[str, Any], base: dict[str, Any] | None, compared: bool) -> list[str]:
+def _server(entry: dict[str, Any], base: dict[str, Any] | None, *, compared: bool) -> list[str]:
     """A page's server numbers, each beside how far it moved from ``base``'s when ``compared``."""
 
     server, before = entry.get("server"), (base or {}).get("server")
-    cells = [cell(_read(read, server), _read(read, before), places, compared) for _, read, places in SERVER]
+    cells = [cell(_read(read, server), _read(read, before), places, compared=compared) for _, read, places in SERVER]
     if compared:
         cells += [_number(_read(read, server), places) for _, read, places in PAIRED]
         cells.append(PAST if past_spread(server or {}) else "")
     return cells
 
 
-def _row(entry: dict[str, Any], base: dict[str, Any] | None, width: str, first: bool, compared: bool) -> list[str]:
-    server = _server(entry, base, compared) if first else [""] * len(server_headers(compared))
+# The server's numbers on a page's first width only: they do not vary by width.
+def _row(entry: dict[str, Any], base: dict[str, Any] | None, width: str, *, first: bool, compared: bool) -> list[str]:
+    server = _server(entry, base, compared=compared) if first else [""] * len(server_headers(compared=compared))
     base = base or {}
     seen, seen_before = entry.get("browser", {}).get(width), base.get("browser", {}).get(width)
-    browser = [cell(_read(read, seen), _read(read, seen_before), places, compared) for _, read, places in BROWSER]
+    browser = [
+        cell(_read(read, seen), _read(read, seen_before), places, compared=compared) for _, read, places in BROWSER
+    ]
     return [_page(entry) if first else "", width, *server, *browser]
 
 
@@ -136,18 +134,18 @@ def _total(entries: list[dict[str, Any]], read: Read, key: str, width: str | Non
     return sum(present) if present else None
 
 
-def _totals(report: Report, base: Report | None, width: str, first: bool) -> list[str]:
+def _totals(report: Report, base: Report | None, width: str, *, first: bool) -> list[str]:
     compared = base is not None
     mine, theirs = report["pages"], (base or {"pages": []})["pages"]
     server = [
-        cell(_total(mine, read, "server", None), _total(theirs, read, "server", None), places, compared)
+        cell(_total(mine, read, "server", None), _total(theirs, read, "server", None), places, compared=compared)
         if first
         else ""
         for _, read, places in SERVER
     ]
-    server += [""] * (len(server_headers(compared)) - len(SERVER))
+    server += [""] * (len(server_headers(compared=compared)) - len(SERVER))
     browser = [
-        cell(_total(mine, read, "browser", width), _total(theirs, read, "browser", width), places, compared)
+        cell(_total(mine, read, "browser", width), _total(theirs, read, "browser", width), places, compared=compared)
         for _, read, places in BROWSER
     ]
     return ["total" if first else "", width, *server, *browser]
@@ -170,7 +168,7 @@ def _summary(report: Report, base: Report | None) -> list[str]:
     compared = base is not None
     lines = []
     for label, read, places, unit in SUMMARY:
-        said = cell(_read(read, report), _read(read, base), places, compared)
+        said = cell(_read(read, report), _read(read, base), places, compared=compared)
         lines.append(f"{label}: {said} {unit}")
     return lines
 
@@ -184,15 +182,15 @@ def _title(report: Report, base: Report | None) -> str:
     return title
 
 
-def _table(report: Report, base: Report | None, every_page: bool) -> list[str]:
+def _table(report: Report, base: Report | None, *, every_page: bool) -> list[str]:
     compared = base is not None
     theirs = _pages(base) if base else {}
-    rows = [headers(compared)]
+    rows = [headers(compared=compared)]
     for entry in report["pages"] if every_page else []:
         for index, width in enumerate(_widths(report)):
-            rows.append(_row(entry, theirs.get(entry["page"]), width, index == 0, compared))
+            rows.append(_row(entry, theirs.get(entry["page"]), width, first=index == 0, compared=compared))
     for index, width in enumerate(_widths(report)):
-        rows.append(_totals(report, base, width, index == 0))
+        rows.append(_totals(report, base, width, first=index == 0))
     return aligned(rows)
 
 
@@ -217,15 +215,15 @@ def moved(report: Report, base: Report | None = None) -> list[str]:
     if not picked:
         return []
     theirs = _pages(base) if base else {}
-    rows = [["page", *server_headers(base is not None)]]
-    rows += [[_page(entry), *_server(entry, theirs.get(entry["page"]), base is not None)] for entry in picked]
+    rows = [["page", *server_headers(compared=base is not None)]]
+    rows += [[_page(entry), *_server(entry, theirs.get(entry["page"]), compared=base is not None)] for entry in picked]
     return [heading, *aligned(rows)]
 
 
 def render(report: Report, base: Report | None = None) -> str:
     """The table, then memory and cold start; with ``base``, each number beside how far it moved."""
 
-    return "\n".join([_title(report, base), *_table(report, base, True), "", *_summary(report, base)])
+    return "\n".join([_title(report, base), *_table(report, base, every_page=True), "", *_summary(report, base)])
 
 
 def summary(report: Report, base: Report | None, table: str) -> str:
@@ -234,7 +232,7 @@ def summary(report: Report, base: Report | None, table: str) -> str:
     return "\n".join(
         [
             _title(report, base),
-            *_table(report, base, False),
+            *_table(report, base, every_page=False),
             "",
             *_summary(report, base),
             "",

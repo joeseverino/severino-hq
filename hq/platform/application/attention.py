@@ -1,19 +1,10 @@
 """What each host section believes needs a decision now.
 
-One function per domain, each referenced by that domain's descriptor in
-``application.domains``. Nothing here knows the set of domains (the registry
-does) so a section is added or removed by editing its descriptor and its
-function, and no third place has to be kept in step.
-
-Every function returns ``Insight``: the same shape an extension emits, so the
-composed queue does not care who produced an entry. Two properties of that
-shape are doing real work:
-
-- ``url`` travels with the item: a domain knows which of its own filters
-  answers its own backlog.
-- ``value`` is the count. A domain with nothing outstanding returns ``()``
-  rather than a zero, so the queue contains only real work and its length is
-  the number of areas needing attention.
+One function per domain, referenced by its descriptor in ``application.domains``
+(nothing here knows the set). Each returns ``Insight``, the shape an extension
+emits, with the ``url`` of the domain's own filter for its backlog; one with
+nothing outstanding returns ``()`` rather than a zero, so the queue holds only
+real work and its length is the number of areas needing attention.
 """
 
 import re
@@ -48,8 +39,7 @@ from .services import service_catalog
 from .timestamps import moment
 from .ui import Insight, counted, ended
 from .workflow_contracts import ActionLink, WorkflowPlan
-lazy from .approvals import pending, preview
-lazy from .capabilities import capability_title
+lazy from .approvals import asked, pending, preview
 lazy from .tailnet import policy as tailnet_policy
 lazy from .tailnet_presence import tailnet_presence
 
@@ -289,22 +279,17 @@ def _update_body(presence, newest: str) -> str:
     current = _VERSION.match(presence.client_version)
     running = current.group() if current else presence.client_version
     if newest and _version(newest) > _version(running):
-        return ended(f"{running} → {newest}")
+        return ended(f"Runs {running}; {newest} is out")
     return ended(f"Runs {running}")
 
 
 def tailnet() -> tuple[Insight, ...]:
-    """Two tailnet facts with no symptom until somebody needs them.
+    """Tailnet facts with no symptom until somebody needs them.
 
-    A node key runs out on a date decided months earlier: the machine keeps
-    running, keeps serving, and simply stops being reachable. Devices with
-    expiry disabled are silent here, because for them there is no date.
-
-    And a route that was advertised but never approved. `--advertise-routes`
-    succeeds, the machine reports the route for as long as it runs, and the
-    coordination server hands it to nobody, so a subnet route or an exit node
-    can be configured, documented, believed, and dead, with every side of it
-    reporting success.
+    A node key runs out on a date decided months earlier, and the machine,
+    still running, stops being reachable. A route advertised but never approved
+    is reported by the machine for as long as it runs and handed to nobody, so
+    it can be configured, documented, believed and dead.
     """
 
     # The presence table, not the whole machine catalog. Everything shown
@@ -318,6 +303,7 @@ def tailnet() -> tuple[Insight, ...]:
     items = []
     for name, presence in presences:
         days = presence.key_expiry_days
+        # A device with key expiry disabled has no date, so it is silent here.
         if days is None or days > KEY_EXPIRY_ATTENTION_DAYS:
             continue
         expires = moment(presence.key_expires)
@@ -494,36 +480,55 @@ def infrastructure() -> tuple[Insight, ...]:
     """What infrastructure needs looking at: unsettled state, and deadlines.
 
     One entry per finding, and one per resource whose reconciled state is not
-    settled that no finding already speaks for.
-
-    Per resource rather than a single count: each one links to its own detail
-    page, and "three resources need attention" is not actionable without
-    knowing which. Severity distinguishes an outright failure from a state HQ
-    simply cannot vouch for yet.
+    settled that no finding already speaks for, so each links to its own page:
+    "three resources need attention" is not actionable without knowing which.
     """
 
-    principal = cli_principal()
     resources = enabled_resources()
     health_by_key = {resource.key: resource_health(resource) for resource in resources}
-    actionable_keys = {
-        resource.key for resource in resources if health_by_key[resource.key]["state"] not in {"pending", "declared"}
-    }
-    actionable_kinds = {resource.kind for resource in resources if resource.key in actionable_keys}
-    # A resource subject waits until HQ has confirmed it; any other subject (a
-    # connection, a domain, a machine) is a fact already observed.
-    findings = tuple(
-        finding
-        for finding in estate_findings(principal=principal)
-        if (
-            finding.subject.removeprefix("resource:") in actionable_keys
-            if finding.subject.startswith("resource:")
-            else bool(finding.subject) or not finding.scope or finding.scope in actionable_kinds
-        )
-    )
+    findings = _findings_to_raise(resources, health_by_key)
     # One item per finding, so each can be read, acted on and resolved on its
     # own. Folding them is the page's job; each says which family it is of.
     findings_url = reverse("control_plane:findings")
     items = [finding_insight(finding, findings_url) for finding in findings]
+    items.extend(_resource_insights(resources, health_by_key, findings))
+    return tuple(items) + tailnet()
+
+
+def _findings_to_raise(resources, health_by_key: dict[str, dict[str, str]]) -> tuple[Any, ...]:
+    """The estate's findings whose subject HQ can speak for now."""
+
+    actionable_keys = {
+        resource.key for resource in resources if health_by_key[resource.key]["state"] not in {"pending", "declared"}
+    }
+    actionable_kinds = {resource.kind for resource in resources if resource.key in actionable_keys}
+    return tuple(
+        finding
+        for finding in estate_findings(principal=cli_principal())
+        if _subject_confirmed(finding, actionable_keys, actionable_kinds)
+    )
+
+
+def _subject_confirmed(finding: Any, actionable_keys: set[str], actionable_kinds: set[str]) -> bool:
+    """Whether HQ has confirmed what a finding is about.
+
+    A resource subject waits until HQ has confirmed it; any other subject (a
+    connection, a domain, a machine) is a fact already observed. A finding
+    with no subject that names a kind waits until one of that kind is
+    confirmed.
+    """
+
+    if finding.subject.startswith("resource:"):
+        return finding.subject.removeprefix("resource:") in actionable_keys
+    return bool(finding.subject) or not finding.scope or finding.scope in actionable_kinds
+
+
+def _resource_insights(
+    resources, health_by_key: dict[str, dict[str, str]], findings: tuple[Any, ...]
+) -> Iterable[Insight]:
+    """A card for each resource being deployed, and for each unsettled one no
+    finding already speaks for, by its key or its kind."""
+
     covered_resources = {
         finding.subject.removeprefix("resource:") for finding in findings if finding.subject.startswith("resource:")
     }
@@ -532,13 +537,13 @@ def infrastructure() -> tuple[Insight, ...]:
         health = health_by_key[resource.key]
         if health["state"] == "deploying":
             # Told whatever else is open about it: no finding says this.
-            items.append(_deploying(resource, health))
-            continue
-        if resource.key in covered_resources or resource.kind in covered_kinds:
-            continue
-        if health["state"] in UNSETTLED_RESOURCE_STATES:
-            items.append(_unsettled(resource, health))
-    return tuple(items) + tailnet()
+            yield _deploying(resource, health)
+        elif (
+            resource.key not in covered_resources
+            and resource.kind not in covered_kinds
+            and health["state"] in UNSETTLED_RESOURCE_STATES
+        ):
+            yield _unsettled(resource, health)
 
 
 def finding_insight(finding: Any, findings_url: str) -> Insight:
@@ -549,7 +554,7 @@ def finding_insight(finding: Any, findings_url: str) -> Insight:
         status=_FINDING_STATUS.get(finding.severity, "attention"),
         eyebrow="Finding",
         # A rule's findings are one kind of matter, named as the rule names itself.
-        family=getattr(rule_for(finding.rule), "title", ""),
+        family=rule.title if (rule := rule_for(finding.rule)) is not None else "",
         key=finding_key(finding),
         title=finding.title,
         value="",
@@ -657,17 +662,15 @@ def waiting_for_approval() -> tuple[Insight, ...]:
     items = []
     for held in pending():
         shown = preview(held)
+        sentence = asked(held, shown)
         items.append(
             Insight(
                 status="serious",
                 eyebrow="Approval",
                 key=f"approval:{held.id}",
-                title=(
-                    f"{held.requested_actor} wants to run {capability_title(held.capability)}"
-                    + (f" on {held.target}" if held.target else "")
-                ),
+                title=str(sentence),
                 value="1",
-                body=_asked_change(shown),
+                body="" if sentence.whole else _asked_change(shown),
                 url=reverse("core:approval_entry", kwargs={"approval_id": held.id}),
                 since=held.created_at,
                 actions=tuple(
@@ -696,7 +699,7 @@ def _asked_change(shown) -> str:
         (
             f"{lower_first(row.label)} from {row.before} to {row.after or 'empty'}"
             if row.before
-            else f"{lower_first(row.label)} to {row.after or 'empty'}"
+            else f"{lower_first(row.label)} set to {row.after or 'empty'}"
         )
         for row in shown.rows[:3]
     ]
@@ -712,16 +715,11 @@ def _asked_change(shown) -> str:
 
 @dated
 def services() -> tuple[Insight, ...]:
-    """One entry per hostname whose wiring is incomplete.
-
-    Wiring only, and deliberately no overlap with ``infrastructure`` above.
-    Whether a declared resource reconciled is reported there, per resource;
-    saying it again here would put one problem in the queue twice under two
-    names and make the count of things needing attention wrong.
-
-    What is left is what no single resource can see: a name something answers
-    for with no certificate covering it, an ingress pointing at a host HQ does
-    not know, two declarations of the same kind contradicting each other.
+    """One entry per hostname whose wiring is incomplete: what no single resource
+    can see, such as a name answered with no certificate covering it, an
+    ingress pointing at a host HQ does not know, or two declarations of one
+    kind contradicting each other. Whether a resource reconciled is
+    ``infrastructure``'s, so one problem is never queued twice.
     """
 
     return tuple(

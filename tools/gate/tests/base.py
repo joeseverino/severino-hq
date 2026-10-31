@@ -4,8 +4,12 @@ A gate keeps its closing verdict in `var/gate/`, where a reader whose copy of
 the output was cut looks for it, so a test's fixture verdict there passes for
 a real one. Each class keeps its verdicts in a folder of its own, and fails
 when the real folder changed while it ran: a subprocess escapes the patch.
+A gate a test runs hands the tests it saw fail to the gate it runs under, so
+the class runs outside the gate that runs the suite, whose verdict would
+otherwise name a fixture's failures.
 """
 
+import os
 import tempfile
 from pathlib import Path
 from typing import override
@@ -49,6 +53,8 @@ class GateTestCase(SimpleTestCase):
         cls.verdicts_before = verdicts_kept()
         kept = cls.enterClassContext(tempfile.TemporaryDirectory())
         cls.enterClassContext(patch.object(gate_verdict, "VERDICTS", Path(kept)))
+        cls.enterClassContext(patch.dict(os.environ))
+        os.environ.pop(gate_verdict.REPORTS, None)
 
     @classmethod
     @override

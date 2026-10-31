@@ -1,0 +1,20 @@
+id: production-never-patches
+valid:
+  - import unittest
+  - 'class DemoSiteTests(unittest.TestCase): pass'
+  - from unittest import TestCase
+  - from example.mock import patch
+  - import mockito
+  - settings.mock = True
+invalid:
+  - from unittest import mock
+  - from unittest import mock as patching
+  - from unittest import TestCase, mock
+  - from unittest.mock import patch
+  - import unittest.mock
+  - import unittest.mock as m
+  - lazy from unittest import mock
+  - |
+    def held():
+        from unittest.mock import patch
+  - unittest.mock.patch("hq.platform.application.cadence.ring_doorbell")

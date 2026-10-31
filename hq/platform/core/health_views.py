@@ -14,7 +14,7 @@ from hq.platform.core.static import collected
 
 
 @login_not_required
-def health_live(request):
+def health_live(_request):
     """Minimal process liveness probe; never touches an external dependency."""
 
     return JsonResponse({"status": "ok"})
@@ -53,7 +53,7 @@ def health_ready(request):
     plugins = plugin_health()
     if plugins:
         checks["plugins"] = all(plugins.values())
-        if getattr(request.user, "is_authenticated", False):
+        if request.user.is_authenticated:
             checks.update({f"plugin:{key}": value for key, value in plugins.items()})
     ready = all(checks.values())
     return JsonResponse(

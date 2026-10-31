@@ -1,0 +1,8 @@
+extends: existence
+message: "'%s' is HQ's own word; say the thing's own name, or 'type'"
+level: error
+ignorecase: true
+nonword: true
+scope: [shown, ~comment & ~code]
+tokens:
+  - '(?<![\w-])(?:kinds?)(?![\w-])'

@@ -10,13 +10,14 @@ from annotationlib import Format
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, PydanticUndefinedAnnotation, PydanticUserError, ValidationError
 
 from .connection_contracts import GRANT_MODELS, ConnectionAbility, ConnectionSpec
 from .contracts import DJANGO_ROUTE, DOTTED_NAME, EFFECTS, SCOPE_NAME
 from .integration_specs import (
     RESERVED_QUERY_FIELD,
     STALE_WRITE_KEYWORD,
+    TARGET,
     TARGET_KINDS,
     CapabilitySpec,
     ResourceSpec,
@@ -65,20 +66,26 @@ def _validate_capability_identity(spec: CapabilitySpec) -> None:
 def _validate_capability_target(spec: CapabilitySpec) -> None:
     if spec.target_kind is not None and spec.target_kind not in TARGET_KINDS:
         raise ImproperlyConfigured(f"Capability {spec.name!r} has invalid target {spec.target_kind!r}.")
-    if not isinstance(spec.target_label, str) or not isinstance(spec.target_help, str):
-        raise ImproperlyConfigured(f"Capability {spec.name!r} has invalid target presentation metadata.")
     if spec.target_query and (not spec.target_kind or not spec.subject_resource):
         raise ImproperlyConfigured(f"Capability {spec.name!r} has a target query without a target resource.")
-    if any(not isinstance(item, tuple) or len(item) != 2 or not isinstance(item[0], str) for item in spec.target_query):
-        raise ImproperlyConfigured(f"Capability {spec.name!r} has an invalid target query.")
-    if any(not isinstance(note, str) or not note.strip() for note in spec.execution_notes):
+    if any(not note.strip() for note in spec.execution_notes):
         raise ImproperlyConfigured(f"Capability {spec.name!r} has an invalid execution note.")
+    if spec.wants and (
+        spec.wants != spec.wants.strip()
+        or len(spec.wants) > 80
+        or spec.wants.count(TARGET) != (1 if spec.target_kind else 0)
+        or "{" in spec.wants.replace(TARGET, "")
+    ):
+        raise ImproperlyConfigured(
+            f"Capability {spec.name!r} says what it wants in a short phrase, with {TARGET} where its target goes "
+            "exactly when it takes one."
+        )
 
 
 def _validate_capability_command(spec: CapabilitySpec) -> None:
     try:
         schema = command_schema(spec.command_type)
-    except Exception as exc:
+    except (PydanticUserError, PydanticUndefinedAnnotation) as exc:
         raise ImproperlyConfigured(f"Capability {spec.name!r} command type cannot emit JSON Schema.") from exc
     command_fields = set(schema.get("properties", {}))
     if (
@@ -93,7 +100,7 @@ def _validate_capability_requirements(spec: CapabilitySpec) -> None:
     if spec.subject_resource is not None and not DOTTED_NAME.fullmatch(spec.subject_resource):
         raise ImproperlyConfigured(f"Capability {spec.name!r} has invalid resource {spec.subject_resource!r}.")
     required = required_capability_names(spec)
-    if not required or any(not isinstance(item, str) or not DOTTED_NAME.fullmatch(item) for item in required):
+    if not required or any(not DOTTED_NAME.fullmatch(item) for item in required):
         raise ImproperlyConfigured(f"Capability {spec.name!r} must declare valid required capabilities.")
     if len(required) != len(set(required)):
         raise ImproperlyConfigured(f"Capability {spec.name!r} repeats a required capability.")
@@ -144,12 +151,6 @@ def _query_names(query_type: type[BaseModel]) -> set[str]:
 def _validate_list_contract(spec: ResourceSpec) -> None:
     if bool(spec.list_handler) != bool(spec.list_query_type):
         raise ImproperlyConfigured(f"Resource {spec.name!r} must declare its list handler and query together.")
-    if spec.list_query_type and not (
-        inspect.isclass(spec.list_query_type)
-        and issubclass(spec.list_query_type, BaseModel)
-        and callable(spec.list_handler)
-    ):
-        raise ImproperlyConfigured(f"Resource {spec.name!r} has an invalid list contract.")
     if spec.list_query_type and RESERVED_QUERY_FIELD in _query_names(spec.list_query_type):
         raise ImproperlyConfigured(
             f"Resource {spec.name!r} query may not declare {RESERVED_QUERY_FIELD!r}: it selects the keys returned."
@@ -175,10 +176,6 @@ def _validate_detail_contract(spec: ResourceSpec) -> None:
         inspect.signature(spec.detail_handler, annotation_format=Format.STRING).bind(None, **_principal_argument(spec))
     except TypeError as exc:
         raise ImproperlyConfigured(f"Resource {spec.name!r} detail handler does not accept one identifier.") from exc
-    if not isinstance(spec.identifier_type, type):
-        raise ImproperlyConfigured(f"Resource {spec.name!r} has an invalid identifier type.")
-    if any(not isinstance(error, type) or not issubclass(error, Exception) for error in spec.not_found_errors):
-        raise ImproperlyConfigured(f"Resource {spec.name!r} has invalid not-found errors.")
 
 
 def _validate_search_contract(spec: ResourceSpec) -> None:
@@ -247,11 +244,8 @@ def validate_connection_spec(spec: ConnectionSpec) -> None:
             raise ImproperlyConfigured(f"Connection {spec.name!r} has invalid route {route!r}.")
     if spec.documentation_url and not safe_connection_url(spec.documentation_url):
         raise ImproperlyConfigured(f"Connection {spec.name!r} has an invalid documentation URL.")
-    if (
-        isinstance(spec.stale_after_hours, bool)
-        or not isinstance(spec.stale_after_hours, int)
-        or spec.stale_after_hours <= 0
-    ):
+    # A bool is an int to the type checker, and no number of hours.
+    if isinstance(spec.stale_after_hours, bool) or spec.stale_after_hours <= 0:
         raise ImproperlyConfigured(f"Connection {spec.name!r} must declare a positive staleness window.")
     for ability in spec.abilities:
         _validate_ability(spec, ability)

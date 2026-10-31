@@ -1,46 +1,10 @@
 """Derived facts, computed once per change of what they read.
 
-A derivation is a function of three things: the rows of the tables it reads,
-its arguments, and the clock. It is declared once::
-
-    @derivation("services.catalog", reads=("control_plane.ManagedResource", ...))
-    def service_catalog(favorites=()): ...
-
-and from then on a call is answered in this order:
-
-1. from the projection in progress, so one request never derives twice;
-2. from the ``derived`` cache, under a key made of the derivation's name, its
-   arguments and the revision of every table it reads, behind the identity of
-   the code that stored it (``code_identity``, the cache's ``KEY_PREFIX``);
-3. by running the function, and storing what it returned under that key.
-
-The revisions are kept by the database on every write
-(``hq.platform.core.revisions``), in the writing transaction, so a key names
-exactly one state of the tables. The cache is a database table: a value stored
-inside a transaction commits or rolls back with the rows it was derived from.
-
-The clock is an input too. A derivation never reads it directly: it asks
-``reached``, ``passed``, ``since``, ``whole``, ``today`` or ``this_year`` here, and each answer also
-records the moment it stops being true. A stored value is good until the
-earliest such moment and is derived again after it, so a threshold is crossed
-on time and no age is served stale.
-
-A computation this module cannot follow to the clock is ``unseen``: an
-installed extension's provider, or a derivation an extension declares. Its
-answer stands until what it asked here, and in any case no longer than
-``UNSEEN``, nor past the next local midnight. Nothing HQ words is finer than a
-minute and a count of days turns at midnight, so such an answer is never a day
-late and never more than a minute behind the clock.
-
-An answer a request asked for is asked again as soon as it stops standing:
-when a table it reads is written, and when its moment comes. ``derive_ahead``
-does that, off any request, in the context the question was first asked in, so
-the next request finds its answer stored. The one that computes is the request
-that follows its own write.
-
-It fails toward deriving. If the revisions cannot be read, a table has lost its
-triggers, the cache cannot be read or a stored value does not load, the
-function runs and its answer is used.
+A derivation is a function of the rows of the tables it reads, its arguments
+and the clock, declared once with ``@derivation`` and answered from the
+projection in progress, then the ``derived`` cache, then by running it. Its
+keys, the revisions, the clock, ``unseen`` answers and asking ahead are
+docs/Architecture.md#derived-once-per-change.
 """
 
 import hashlib
@@ -62,7 +26,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 lazy from django.apps import apps
 lazy from django.core.cache import caches
-lazy from django.db import OperationalError, connection
+lazy from django.db import DatabaseError, OperationalError, connection
 
 lazy from hq.platform.core import revisions
 lazy from hq.platform.core.database import without_waiting
@@ -74,8 +38,9 @@ logger = logging.getLogger("severino.derivations")
 
 
 # The clock, as the module holds it. Derivations reach it only through the
-# functions below, which is what lets a test forbid every other way in.
-_clock = timezone.now
+# functions below, which is what lets a test forbid every other way in, and
+# ``derivation_testing.frozen`` hold it still.
+clock = timezone.now
 
 
 # The longest a stored value is kept, in seconds; its key outlives its use.
@@ -153,7 +118,7 @@ def holds_until(moment: datetime) -> None:
 def reached(moment: datetime, *, now: datetime | None = None) -> bool:
     """Whether ``moment`` has come. False now turns true at ``moment``."""
 
-    current = now or _clock()
+    current = now or clock()
     if current >= moment:
         return True
     holds_until(moment)
@@ -163,7 +128,7 @@ def reached(moment: datetime, *, now: datetime | None = None) -> bool:
 def passed(moment: datetime, *, now: datetime | None = None) -> bool:
     """Whether ``moment`` is behind us. False now turns true just after it."""
 
-    current = now or _clock()
+    current = now or clock()
     if current > moment:
         return True
     holds_until(moment)
@@ -179,7 +144,7 @@ def since(moment: datetime, *, now: datetime | None = None) -> timedelta:
     of ``reached`` or ``passed``, never of this.
     """
 
-    current = now or _clock()
+    current = now or clock()
     age = current - moment
     unit = timedelta(minutes=1) if abs(age) < timedelta(hours=1) else timedelta(hours=1)
     holds_until(moment + (math.floor(age / unit) + 1) * unit)
@@ -194,13 +159,13 @@ def present() -> datetime:
     ``since``, ``whole`` or ``expiry.days_until``.
     """
 
-    return _clock()
+    return clock()
 
 
 def whole(since: datetime, unit: timedelta, *, now: datetime | None = None) -> int:
     """Whole ``unit``s elapsed since ``since``; negative before it."""
 
-    current = now or _clock()
+    current = now or clock()
     count = math.floor((current - since) / unit)
     holds_until(since + (count + 1) * unit)
     return count
@@ -209,7 +174,7 @@ def whole(since: datetime, unit: timedelta, *, now: datetime | None = None) -> i
 def today() -> date:
     """The local day, which holds until the next local midnight."""
 
-    local = timezone.localtime(_clock())
+    local = timezone.localtime(clock())
     holds_until(_midnight_after(local))
     return local.date()
 
@@ -218,8 +183,8 @@ def this_year() -> int:
     """The local year, which holds until the next local New Year: an answer that
     only asks the year is not derived again every midnight."""
 
-    local = timezone.localtime(_clock())
-    holds_until(timezone.make_aware(datetime(local.year + 1, 1, 1), timezone.get_current_timezone()))
+    local = timezone.localtime(clock())
+    holds_until(datetime(local.year + 1, 1, 1, tzinfo=timezone.get_current_timezone()))
     return local.year
 
 
@@ -284,17 +249,11 @@ def derivation[**P, T](
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Declare a function as a derived fact of the tables in ``reads``.
 
-    ``reads`` names every model the function queries, directly or through
-    another derivation, as ``app_label.Model``. ``vary`` takes the call's
-    arguments and returns what of them the answer depends on, as something
-    with a stable ``repr``; left out, the arguments themselves are used, so
-    they must then be plain values.
-
-    ``unseen`` says the function may read the clock where this module cannot
-    see, and bounds how long its answer stands (``UNSEEN``). A question a
-    request asked is asked again when its answer stops standing; ``ahead`` is
-    how many ways of asking are kept current so, the most recently asked
-    first, and 0 keeps none.
+    ``reads`` names every model it queries, directly or through another
+    derivation, as ``app_label.Model``; ``vary`` maps the call's arguments to
+    what the answer depends on, with a stable ``repr`` (left out, they must be
+    plain values). ``unseen`` bounds its answer by ``UNSEEN``, as it may read the
+    clock out of sight; ``ahead`` is how many ways of asking are kept current.
     """
 
     def declare(function: Callable[P, T]) -> Callable[P, T]:
@@ -422,7 +381,8 @@ def _awaited(key: str | None) -> bool:
 # very answer it needs (``_awaited``).
 _NO_REQUEST = threading.Event()
 _NO_REQUEST.set()
-_REQUESTS = 0
+# The requests deriving for themselves, each by a token of its own, under _IN_FLIGHT_LOCK.
+_REQUESTS: set[object] = set()
 # The longest a pass waits between questions for requests to finish, in seconds.
 GIVES_WAY = 2.0
 
@@ -434,16 +394,16 @@ def _for_a_request() -> Iterator[None]:
     if _AHEAD.get():
         yield
         return
-    global _REQUESTS
+    request = object()
     with _IN_FLIGHT_LOCK:
-        _REQUESTS += 1
+        _REQUESTS.add(request)
         _NO_REQUEST.clear()
     try:
         yield
     finally:
         with _IN_FLIGHT_LOCK:
-            _REQUESTS -= 1
-            if _REQUESTS == 0:
+            _REQUESTS.discard(request)
+            if not _REQUESTS:
                 _NO_REQUEST.set()
 
 
@@ -484,7 +444,7 @@ def _stored(key: str | None) -> tuple[Any, datetime | None, bool]:
     if entry is None:
         return None, None, False
     value, until = entry
-    if until is not None and _clock() >= until:
+    if until is not None and clock() >= until:
         return None, None, False
     SERVED[key.partition(":")[0]] += 1
     return value, until, True
@@ -494,11 +454,9 @@ def _compute(declared: Derivation, args: tuple, kwargs: dict) -> tuple[Any, date
     """The value, how long it holds, and whether computing it showed a table
     its key did not yet move with.
 
-    A computation is a function of the tables it read. Whatever made it read
-    one more was itself a change to a table it had read, so the answer stored
-    before was sound, and from here its key moves with the new table too.
-    ``reads`` is the floor the host states; an installed extension's tables,
-    which the host cannot name, are learned the first time they are read.
+    A table read beyond ``reads``, the floor the host states, is learned (an
+    extension's, which the host cannot name): whatever made it read one more
+    was a change to a table it had read, so the stored answer was sound.
     """
 
     frame = _Frame(declared.tables, learns=declared.unseen)
@@ -514,7 +472,7 @@ def _compute(declared: Derivation, args: tuple, kwargs: dict) -> tuple[Any, date
         _FRAME.reset(token)
     COMPUTED[declared.name] += 1
     if declared.unseen:
-        local = timezone.localtime(_clock())
+        local = timezone.localtime(clock())
         frame.hold_until(min(local + UNSEEN, _midnight_after(local)))
     learned = declared.learn(frame.undeclared)
     if learned:
@@ -534,7 +492,7 @@ def _keep(key: str | None, value: Any, until: datetime | None) -> bool:
         return False
     lifetime: float = _LONGEST
     if until is not None:
-        lifetime = min((until - _clock()).total_seconds(), _LONGEST)
+        lifetime = min((until - clock()).total_seconds(), _LONGEST)
         if lifetime <= 0:
             return False
 
@@ -661,6 +619,7 @@ def _remember(
         # of its own, from the same seed.
         context.run(_FRAME.set, None)
         asks[variant] = _Ask(answer, args, kwargs, context, seeded(), now, until)
+        # The most recently asked are kept; ``ahead`` 0 keeps none.
         while len(asks) > declared.ahead:
             asks.pop(next(iter(asks)))
 
@@ -730,7 +689,7 @@ def _again(ask: _Ask) -> tuple[bool, str]:
                 # would store nothing a request could be answered from.
                 return False, ""
             if _standing_stored(key):
-                if ask.until is not None and ask.until <= _clock():
+                if ask.until is not None and ask.until <= clock():
                     # Derived since by a request: learn how long that stands.
                     ask.until = _stored(key)[1]
                 return False, key
@@ -748,7 +707,7 @@ def _again(ask: _Ask) -> tuple[bool, str]:
 def _standing_stored(key: str) -> bool:
     try:
         return bool(_store().has_key(key))
-    except Exception:  # noqa: BLE001 - an unreadable cache is a miss
+    except DatabaseError:  # an unreadable cache is a miss
         return False
 
 

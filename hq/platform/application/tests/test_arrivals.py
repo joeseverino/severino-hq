@@ -5,7 +5,7 @@ from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.db import connection
+from django.db import DatabaseError, connection
 from django.test import RequestFactory, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
@@ -55,6 +55,16 @@ def stored():
     return row.records if row is not None else []
 
 
+def writes(queries):
+    return [query for query in queries if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))]
+
+
+def refusing_writes(execute, sql, params, many, context):
+    if sql.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE")):
+        raise DatabaseError("database is locked")
+    return execute(sql, params, many, context)
+
+
 @override_settings(SEVERINO_REQUEST_PATH_SECONDS=300, SEVERINO_TRUSTED_PROXIES=["172.18.0.0/16"])
 class ArrivalTests(TestCase):
     def setUp(self):
@@ -95,11 +105,12 @@ class ArrivalTests(TestCase):
 
     def test_a_source_is_written_at_most_once_per_interval(self):
         arrivals.note(a_request())
-        with mock.patch("hq.platform.application.arrivals._write") as write:
+        with CaptureQueriesContext(connection) as queries:
             for _ in range(5):
                 self.clock += 10
                 arrivals.note(a_request())
-        write.assert_not_called()
+        self.assertEqual(writes(queries), [])
+        self.assertEqual(stored()[0]["count"], 1)
 
         self.clock += 300
         arrivals.note(a_request())
@@ -157,7 +168,10 @@ class ArrivalTests(TestCase):
         self.assertEqual(len(stored()), 2)
 
     def test_a_failed_write_never_fails_the_request(self):
-        with mock.patch("hq.platform.application.arrivals._write", side_effect=RuntimeError("boom")):
+        with (
+            connection.execute_wrapper(refusing_writes),
+            self.assertLogs("hq.platform.application.arrivals", "WARNING"),
+        ):
             arrivals.note(a_request())
 
         self.assertEqual(stored(), [])
@@ -174,13 +188,7 @@ class ArrivalTests(TestCase):
             arrivals.note(a_request(method="head"))
 
         self.assertEqual(stored(), [])
-        self.assertFalse(
-            [
-                q
-                for q in queries.captured_queries
-                if q["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
-            ]
-        )
+        self.assertEqual(writes(queries), [])
         arrivals.note(a_request())
         self.assertEqual(stored()[0]["count"], 3)
 

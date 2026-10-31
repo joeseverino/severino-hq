@@ -30,7 +30,7 @@ dismissed row is its title and the way back.
       {% endif %}{% endif %}
     </div>
     {% if not item.aside %}
-      {% if item.detail %}<p class="attention-detail">{{ item.detail|breakable }}</p>{% endif %}
+      {% if item.detail %}<p class="attention-detail"{% if item.whole %} data-whole{% endif %}>{{ item.detail|breakable }}</p>{% endif %}
       {% if item.detail or item.facts or item.advice or item.steps or item.reason or item.links %}
       <div class="row-below queue-more">
         {% if item.detail %}<p class="queue-meaning">{{ item.detail|breakable }}</p>{% endif %}

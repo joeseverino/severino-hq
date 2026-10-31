@@ -35,6 +35,7 @@ from hq.platform.application.ui import (
     TimelineItem,
     WeekPlan,
     counted,
+    ended,
     line_chart,
     stacked_bar_chart,
 )
@@ -67,6 +68,7 @@ __all__ = [
     "WeekPlan",
     "ago",
     "counted",
+    "ended",
     "line_chart",
     "span",
     "stacked_bar_chart",

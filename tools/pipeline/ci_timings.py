@@ -1,11 +1,6 @@
 """Where a CI run's time went: each job's and step's seconds, and the critical path.
 
-    mise run ci:timings <run>
-
-Read-only: one `gh run view <run> --json jobs`. The critical path is read off
-the clock, since the run's record carries no `needs`: from the job that
-finished last, back through the job that finished last before it started,
-which is the one it waited for.
+`mise run ci:timings <run>`, read-only: one `gh run view <run> --json jobs`.
 """
 
 from __future__ import annotations
@@ -35,7 +30,7 @@ class Job(Span):
 
 def when(text: str) -> datetime:
     """GitHub's one shape of instant; HQ's own parser is not importable here."""
-    return datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ")
+    return datetime.strptime(text, "%Y-%m-%dT%H:%M:%S%z")
 
 
 def ran(record: dict) -> bool:
@@ -62,6 +57,10 @@ def jobs(record: dict) -> list[Job]:
 
 
 def critical_path(found: list[Job]) -> list[Job]:
+    """Read off the clock, since the run's record carries no `needs`: from the job
+    that finished last, back through the job that finished last before it
+    started, which is the one it waited for."""
+
     if not found:
         return []
     path = [max(found, key=lambda job: job.end)]

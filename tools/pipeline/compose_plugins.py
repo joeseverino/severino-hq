@@ -1,24 +1,9 @@
 """Assemble the build context for an image carrying several admitted plugins.
 
-    python3 -m tools.pipeline.compose_plugins --policy-sha256 HEX \
-                                              --entry a.json --wheel a.whl \
-                                              --entry b.json --wheel b.whl \
-                                              --out build/composition
-    python3 -m tools.pipeline.compose_plugins --policy-sha256 HEX --out build/composition
-    python3 -m tools.pipeline.compose_plugins --candidate --wheel a.whl --wheel b.whl --out build/candidate
-
-Each plugin is verified and admitted independently, producing a canonical
-verified entry. Merging those entries into one lock is Cordon's job (its lock
-tool already takes repeated --entry, sorts by plugin id and rejects duplicates)
-so this shells out to it instead of reimplementing the lock format. A second
-implementation could disagree with the one the runtime validates against, which
-is the failure worth avoiding.
-
-What remains here is genuinely host-side: pair each wheel with its entry, check
-the bytes against the digest that entry admitted, and derive the enabled plugin
-list from the merged lock so the enabled and approved sets cannot drift apart.
-A composition of no extensions is the host alone: an empty lock, written here
-because there is nothing for Cordon to merge.
+Each wheel is paired with its admitted entry and checked against the digest that
+entry admitted, and the enabled plugin list is derived from the merged lock, so
+the enabled and approved sets cannot drift apart. ``--candidate`` stages
+unadmitted wheels for a verify-only image instead.
 """
 
 from __future__ import annotations
@@ -80,7 +65,8 @@ def emit(out: Path, references: str, digests: list[str], policy_sha256: str | No
 
 
 def compose_none(out: Path, policy_sha256: str) -> int:
-    """The host with no extensions: an empty lock the runtime accepts as one."""
+    """The host with no extensions: an empty lock the runtime accepts as one, written
+    here because there is nothing for Cordon to merge."""
     stage([], out)
     (out / "plugin-lock.json").write_text(json.dumps({"schema_version": 1, "host": HOST, "plugins": []}) + "\n")
     emit(out, "", [], policy_sha256)
@@ -94,10 +80,13 @@ def compose_admitted(entries: list[Path], wheels: list[Path], out: Path, policy_
             print("a composition of no extensions must state its policy", file=sys.stderr)
             return 1
         return compose_none(out, policy_sha256)
+    # Merging the entries into one lock is Cordon's (its lock tool sorts by plugin id
+    # and rejects duplicates): a second implementation of the lock format could
+    # disagree with the one the runtime validates against.
     command = [CORDON_LOCK, "--host", HOST]
     for entry in entries:
         command += ["--entry", str(entry)]
-    merged = subprocess.run(command, capture_output=True, text=True)
+    merged = subprocess.run(command, capture_output=True, text=True, check=False)
     if merged.returncode != 0:
         print(merged.stderr.strip() or "cordon refused the composition", file=sys.stderr)
         return 1

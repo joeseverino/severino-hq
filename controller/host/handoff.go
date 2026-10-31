@@ -232,7 +232,7 @@ func (c *Controller) takeHandoff(run string) {
 		return
 	}
 	defer out.Close()
-	defer out.RemoveAll(DependencyHandoff)
+	defer func() { _ = out.RemoveAll(DependencyHandoff) }()
 
 	data, err := readUntrusted(out, DependencyHandoff, handoffLimit)
 	if errors.Is(err, fs.ErrNotExist) {

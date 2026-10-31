@@ -1,0 +1,8 @@
+extends: existence
+message: "'%s' is HQ's own word; say 'settings'"
+level: error
+ignorecase: true
+nonword: true
+scope: [shown, ~comment & ~code]
+tokens:
+  - '(?<![\w-])(?:specs?)(?![\w-])'

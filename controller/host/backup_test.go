@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"context"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,16 +22,24 @@ func (f *fakeHost) volumes(t *testing.T) map[string]string {
 	t.Helper()
 	volume := func(name string) string { return filepath.Join(f.root, "volumes", "severino-hq_severino_"+name) }
 	for _, name := range []string{"data", "media/receipts", "exports"} {
-		os.MkdirAll(volume(name), 0o755)
+		if err := os.MkdirAll(volume(name), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	database := filepath.Join(volume("data"), Database)
 	sql := "CREATE TABLE proof (value TEXT NOT NULL); INSERT INTO proof VALUES ('restorable');"
 	if out, err := exec.Command("sqlite3", database, sql).CombinedOutput(); err != nil {
 		t.Fatalf("sqlite3 is needed for the backup drill: %v %s", err, out)
 	}
-	os.WriteFile(filepath.Join(volume("media"), "receipts", "receipt.txt"), []byte("receipt-proof\n"), 0o644)
-	os.Symlink("receipt.txt", filepath.Join(volume("media"), "receipts", "latest"))
-	os.WriteFile(filepath.Join(volume("exports"), "report.txt"), []byte("export-proof\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(volume("media"), "receipts", "receipt.txt"), []byte("receipt-proof\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("receipt.txt", filepath.Join(volume("media"), "receipts", "latest")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(volume("exports"), "report.txt"), []byte("export-proof\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	return map[string]string{"SEVERINO_BACKUP_DIR": filepath.Join(f.root, "backups")}
 }
 
@@ -88,7 +97,7 @@ func TestABackupRestoresIntoAFreshDatabase(t *testing.T) {
 			t.Errorf("%s restored as %q", path, body)
 		}
 	}
-	if link, _ := os.Readlink(filepath.Join(restored, "media/receipts/latest")); link != "receipt.txt" {
+	if link, _ := os.Readlink(filepath.Join(restored, "media", "receipts", "latest")); link != "receipt.txt" {
 		t.Errorf("a link was archived as %q, not as itself", link)
 	}
 }
@@ -127,9 +136,7 @@ func TestABackupThatCannotBeWhatTheUnitAsksWritesNothing(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := newFakeHost(t)
 			settings := f.volumes(t)
-			for key, value := range change {
-				settings[key] = value
-			}
+			maps.Copy(settings, change)
 
 			if err := f.backup(t, settings); err == nil {
 				t.Fatal("the backup ran")
@@ -178,8 +185,12 @@ func TestRetentionRemovesOldArchivesAndNothingElse(t *testing.T) {
 	}
 	for name, age := range ages {
 		path := filepath.Join(dir, name)
-		os.WriteFile(path, nil, 0o600)
-		os.Chtimes(path, now.Add(-age), now.Add(-age))
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, now.Add(-age), now.Add(-age)); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if err := prune(dir, 30*24*time.Hour, now); err != nil {
@@ -232,12 +243,20 @@ func archiveWhileWriting(t *testing.T, change func(path string)) (string, string
 	t.Helper()
 	tree := t.TempDir()
 	for _, dir := range []string{"media", "exports"} {
-		os.Mkdir(filepath.Join(tree, dir), 0o755)
+		if err := os.Mkdir(filepath.Join(tree, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
-	os.WriteFile(filepath.Join(tree, Database), []byte("database"), 0o644)
+	if err := os.WriteFile(filepath.Join(tree, Database), []byte("database"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	upload := filepath.Join(tree, "media", "upload.bin")
-	os.WriteFile(upload, []byte("0123456789"), 0o644)
-	os.WriteFile(filepath.Join(tree, "exports", "report.txt"), []byte("export-proof\n"), 0o644)
+	if err := os.WriteFile(upload, []byte("0123456789"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tree, "exports", "report.txt"), []byte("export-proof\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	var archive, warnings bytes.Buffer
 	building := &assembly{warn: &warnings, opened: func(path string) {
@@ -259,7 +278,7 @@ func archiveWhileWriting(t *testing.T, change func(path string)) (string, string
 func TestAFileThatGrowsDuringTheBackupIsArchivedAsItStoodAtOpen(t *testing.T) {
 	restored, warnings := archiveWhileWriting(t, func(path string) {
 		grown, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
-		grown.WriteString("appended")
+		_, _ = grown.WriteString("appended")
 		grown.Close()
 	})
 	if body, _ := os.ReadFile(filepath.Join(restored, "media", "upload.bin")); string(body) != "0123456789" {
@@ -271,7 +290,11 @@ func TestAFileThatGrowsDuringTheBackupIsArchivedAsItStoodAtOpen(t *testing.T) {
 }
 
 func TestAFileThatShrinksDuringTheBackupKeepsItsPlaceAndIsNamed(t *testing.T) {
-	restored, warnings := archiveWhileWriting(t, func(path string) { os.Truncate(path, 4) })
+	restored, warnings := archiveWhileWriting(t, func(path string) {
+		if err := os.Truncate(path, 4); err != nil {
+			t.Fatal(err)
+		}
+	})
 	body, _ := os.ReadFile(filepath.Join(restored, "media", "upload.bin"))
 	if len(body) != 10 || string(body[:4]) != "0123" {
 		t.Errorf("the shrunk file restored as %q", body)

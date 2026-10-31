@@ -60,8 +60,10 @@
     table.style.setProperty("--showing", Math.min(Math.max(sharing, 1), 16));
     gaveWay.set(table, steps);
   };
+  // eslint-disable-next-line no-restricted-syntax -- whether a table is wider than its region, the one question the fit asks
   const overflows = (table) => table.offsetWidth > table.parentElement.clientWidth;
   // A hidden region has none.
+  // eslint-disable-next-line no-restricted-syntax -- the width a region is fitted at, so a table is fitted again only when it changes
   const widthOf = (region) => region.clientWidth;
   // A table that overflows gives way until it fits. One that fits takes back
   // what left, the last first, while it still fits; a region that only
@@ -158,12 +160,14 @@
   // neither makes a row "say more".
   const unseen = (el) => el.closest(".visually-hidden, [aria-hidden=true]") !== null;
 
+  /* eslint-disable no-restricted-syntax -- a row whose value is cut short, which only a layout knows; markCut marks it and moves nothing */
   const isCut = (el) => {
     if (unseen(el)) return false;
     const style = getComputedStyle(el);
     if (style.overflowX === "visible" && style.overflowY === "visible") return false;
     return el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
   };
+  /* eslint-enable no-restricted-syntax */
 
   // A list whose server sorts it has links in its headings; any other table
   // whose rows are worth sorting has buttons that sort the rows on the page.
@@ -232,8 +236,10 @@
     if ("rowsHeld" in table.dataset) return;
     const headings = headingsOf(table);
     if (!headings.length) return;
+    /* eslint-disable no-restricted-syntax -- every column at the width the reader saw while a row is open */
     const widths = headings.map((heading) => heading.getBoundingClientRect().width);
     table.style.width = `${table.getBoundingClientRect().width}px`;
+    /* eslint-enable no-restricted-syntax */
     headings.forEach((heading, index) => {
       if (widths[index]) heading.style.width = `${widths[index]}px`;
     });
@@ -291,7 +297,8 @@
       row.toggleAttribute("data-open", opening);
     });
     refit(head.closest("table"));
-    markTablesSoon();
+    // Measured at once, so each row it shows offers its toggle as it appears.
+    markTables();
   };
   document.addEventListener("click", (event) => {
     const head = event.target.closest("tr[data-folds]");
@@ -316,8 +323,7 @@
     if (!(row instanceof HTMLTableRowElement) || !row.closest(".data-table")) return;
     const head = row.dataset.folded && document.getElementById(row.dataset.folded);
     if (head && !row.hasAttribute("data-open")) setFold(head, true);
-    // Measured now, since the row may only just have been shown.
-    markTables();
+    else markTables();
     const toggle = row.querySelector(".row-expand");
     if (toggle && toggle.getAttribute("aria-expanded") !== "true") toggle.click();
     row.scrollIntoView({ block: "start" });
@@ -481,6 +487,7 @@
       if (!currentHeads.length || currentHeads.length !== nextHeads.length) return;
       giveWay(nextTable, gaveWay.get(table) ?? 0);
       currentHeads.forEach((th, index) => {
+        // eslint-disable-next-line no-restricted-syntax -- the columns of a table a sort, search or page turn swaps in
         const width = th.getBoundingClientRect().width;
         if (width) nextHeads[index].style.width = `${width}px`;
       });

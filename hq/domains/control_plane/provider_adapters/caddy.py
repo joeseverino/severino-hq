@@ -160,7 +160,7 @@ DEFINITION = ProviderSpec(
         "upstream": str(record.get("upstream", "") or ""),
     },
     key_hint=lambda spec: f"{normalized_hostname(str(spec.get('domain', '') or ''))}-caddy",
-    readout=lambda spec, status: (
+    readout=lambda spec, _status: (
         (
             "Served by",
             "",

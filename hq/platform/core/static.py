@@ -66,6 +66,7 @@ class HashedStaticStorage(CompressedManifestStaticFilesStorage):
 def collected() -> bool:
     """Whether the assets this process serves were collected: the manifest names some."""
 
+    # Only the hashed storage keeps a manifest; the live one serves the tree as it is.
     return bool(getattr(staticfiles_storage, "hashed_files", None))
 
 
@@ -106,13 +107,8 @@ class CachedStaticFiles(StaticFiles):
     """Collected assets, as the bytes the image build left: compressed once, never per request.
 
     A request is answered with the compressed copy collectstatic wrote beside
-    the asset in the coding it prefers: ``.br`` for brotli, ``.gz`` for gzip.
-    Content-named assets are cached permanently and ordinary ones briefly.
-
-    Never while serving live (``STATIC_LIVE``): the source trees it reads
-    change under the same plain name and have no compressed copies. Production
-    serves the tree its image collected, where a hashed name only ever means
-    one set of bytes.
+    the asset in the coding it prefers. Content-named assets are cached
+    permanently and ordinary ones briefly.
     """
 
     @override
@@ -131,6 +127,9 @@ class CachedStaticFiles(StaticFiles):
         """The asset's compressed copy the request takes as its response, or None
         when there is none to send."""
 
+        # Never while serving live: the source trees change under the same
+        # plain name and have no compressed copies. Production serves the tree
+        # its image collected, where a hashed name only ever means one set of bytes.
         if settings.STATIC_LIVE:
             return None
         for coding in acceptable_codings(scope):
@@ -178,7 +177,7 @@ def root_icon(name: str):
     in, since a browser asks on the sign-in page too."""
 
     @login_not_required
-    def view(request):
+    def view(_request):
         return HttpResponsePermanentRedirect(static(name))
 
     return view

@@ -1,36 +1,14 @@
 """Claims about the estate, with the evidence behind them and what to run.
 
-A lens is a question an operator has to think to ask. A finding is the answer
-arriving without being asked, and that difference is the whole of this module.
-
-A resource can be wrong while every surface reads healthy: its declared and
-observed revisions match, so nothing queues a reconcile, and the only fact that
-moves is ``last_observed_at`` falling behind its siblings. The rules here are
-therefore not about certificates or proxies. They are about the shapes a
-silence can take: observed later than everything of its own
-kind, never observed at all, asked for but never confirmed, reconciled again
-and again against a world that keeps disagreeing. Each is derivable from the
-projection alone (kinds, edges, two revisions, an age, a reason) which is
-why an extension gets them without the host learning what it is.
-
-Three properties hold and are tested:
-
-Derivation is pure. Nothing here queries, and nothing here mutates. A finding
-is computed from a projection that was already derived and already authorized,
-so deriving one cannot widen what a principal can see, and rendering a page
-cannot change the estate.
-
-A remedy is a reference, never a route. It names a capability already in the
-registry and a target, and it copies that capability's effect and required
-permissions rather than restating them, so a capability that becomes
-destructive tomorrow is reported as destructive tomorrow. Executing one is a
-call to the capability the caller was always going to call.
-
-Absence of a remedy is a fact, not an omission. A principal who cannot run the
-capability sees the finding and the evidence and no remedy at all.
+A finding is an answer arriving without being asked. A resource can be wrong
+while every surface reads healthy, so the rules are about the shapes a silence
+can take, each derivable from the projection alone, which is why an extension
+gets them without the host learning what it is. Deriving is pure, and a remedy
+is a registered capability, absent for whoever cannot run it (``_resolved``).
 """
 
 import inspect
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from functools import cache
@@ -119,30 +97,34 @@ def _causal_edges(topology: Topology) -> dict[str, dict[str, set[str]]]:
 def _controllers_by_kind(topology: Topology, by_id: dict[str, TopologyNode]) -> dict[str, frozenset[str]]:
     """Controllers a kind can be attributed to without guessing."""
 
-    indexed = _causal_edges(topology)
     controllers_by_kind: dict[str, set[str]] = {}
-    for resource_id, connections in indexed["used_by"].items():
-        kind = getattr(by_id.get(resource_id), "kind_key", "")
-        controllers = {
-            controller for connection in connections for controller in indexed["carries"].get(connection, set())
-        }
-        if kind and controllers:
-            controllers_by_kind.setdefault(kind, set()).update(controllers)
+    for resource_id, controllers in _proven_controllers(_causal_edges(topology)):
+        node = by_id.get(resource_id)
+        if node is not None and node.kind_key and controllers:
+            controllers_by_kind.setdefault(node.kind_key, set()).update(controllers)
+    return {kind: frozenset(items) for kind, items in controllers_by_kind.items()}
 
+
+def _proven_controllers(indexed: dict[str, dict[str, set[str]]]) -> Iterator[tuple[str, set[str]]]:
+    """Each resource the edges reach, with the controllers proven to read it:
+    those carrying a connection it is used by, and the one enabling an ability
+    that governs it."""
+
+    for resource_id, connections in indexed["used_by"].items():
+        yield resource_id, _carrying(indexed, connections)
     # Ability nodes are shared by a connection family. They prove a cause only
     # when exactly one controller enables that ability; otherwise attributing
     # every governed resource to both would manufacture knowledge HQ lacks.
     for ability, connections in indexed["enables"].items():
-        controllers = {
-            controller for connection in connections for controller in indexed["carries"].get(connection, set())
-        }
-        if len(controllers) != 1:
-            continue
-        for resource_id in indexed["governs"].get(ability, set()):
-            kind = getattr(by_id.get(resource_id), "kind_key", "")
-            if kind:
-                controllers_by_kind.setdefault(kind, set()).update(controllers)
-    return {kind: frozenset(items) for kind, items in controllers_by_kind.items()}
+        controllers = _carrying(indexed, connections)
+        if len(controllers) == 1:
+            yield from ((resource_id, controllers) for resource_id in indexed["governs"].get(ability, set()))
+
+
+def _carrying(indexed: dict[str, dict[str, set[str]]], connections: set[str]) -> set[str]:
+    """The controllers that carry any of ``connections``."""
+
+    return {controller for connection in connections for controller in indexed["carries"].get(connection, set())}
 
 
 def _estate(topology: Topology) -> FindingEstate:

@@ -4,5 +4,5 @@ since when, and how old the reading is. A page never shows two statuses, so two
 can never disagree.
 {% endcomment %}
 <p class="page-title-meta" data-record-status="{{ status.state }}">
-  <strong class="control-{{ status.tone }}">{{ status.label|breakable }}</strong>{% if status.since %} since {{ status.since|when }}{% endif %}{% if status.read_at %} · {% include "partials/_reading_age.html" with at=status.read_at only %}{% endif %}
+  <strong class="control-{{ status.tone }}">{{ status.label|breakable }}</strong>{% if status.since %} since {{ status.since|when }}{% endif %}{% if status.read_at %}{% dot %}{% include "partials/_reading_age.html" with at=status.read_at only %}{% endif %}
 </p>

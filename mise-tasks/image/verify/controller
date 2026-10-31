@@ -1,11 +1,25 @@
 #!/bin/sh
-#MISE description="It carries the controller"
+#MISE description="It carries the controller, and no OpenSSH or Kerberos package, since the controller speaks SSH in process"
+#MISE env={SEVERINO_HEAVY_BOUND="30m"}
 #MISE hide=true
 #MISE depends=["image:build"]
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 
-usage="$(docker run --rm --entrypoint /usr/local/bin/hq-controller "${IMAGE:-severino-hq:ci-local}" -help 2>&1 || true)"
+image="${IMAGE:-severino-hq:ci-local}"
+usage="$(docker run --rm --entrypoint /usr/local/bin/hq-controller "$image" -help 2>&1 || true)"
 case "$usage" in
     *-apply*) ;;
     *) echo "$usage" >&2; exit 1 ;;
 esac
+
+# The controller speaks SSH through Go's x/crypto/ssh, so an OpenSSH client,
+# and the Kerberos libraries it brings, would be code nothing here runs.
+packages="$(docker run --rm --entrypoint dpkg-query "$image" -W -f '${Package}\n')"
+others="$(printf '%s\n' "$packages" | grep -E '^(openssh|ssh$|krb5|libkrb5|libk5crypto|libgssapi-krb5)' || true)"
+if [ -n "$others" ]; then
+    echo "OpenSSH or Kerberos packages the image ships and nothing in it runs:" >&2
+    printf '%s\n' "$others" >&2
+    exit 1
+fi

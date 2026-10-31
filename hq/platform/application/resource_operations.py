@@ -7,7 +7,7 @@ before the controller runs it.
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Annotated, Any
 
 from django.db import transaction
 
@@ -20,20 +20,22 @@ from hq.platform.core.audit import operation_context
 from .adoption import OBSERVES_ONLY, keep_out_declaration, observes_only
 from .approvals import AGENT_SURFACES, consent_gap
 from .asks import WAITING
-from .cadence import ring_doorbell
+from .cadence import request_reading, ring_doorbell, swept
+from .command_fields import Describe
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .infrastructure import (
     ManagedResourceCommand,
-    PolicyError,
     delivery_targets,
     is_drifted,
     save_managed_resource,
 )
-from .record_errors import RecordNotFound
-from .security import Capability, Principal
+from .record_errors import PolicyError, RecordNotFound, Sentence
+from .security import Principal
 from .ui import counted, ended
 lazy from . import tailnet
+lazy from .containers import Running
 lazy from .inventory import live_spec
+lazy from .machines import Machine, container_context
 lazy from .moments import when_day
 lazy from .resource_capabilities import public_dns_enabled
 lazy from .tailnet import POLICY_KIND, device_at, may_reach, observer, policy_allowing
@@ -42,7 +44,7 @@ lazy from .tailnet import POLICY_KIND, device_at, may_reach, observer, policy_al
 @dataclass(frozen=True, slots=True)
 class OperationCommand:
     idempotency_key: str
-    reason: str = ""
+    reason: Annotated[str, Describe("Why it is done, kept with the operation it queues.")] = ""
 
 
 def serialize_operation(operation: OperationRequest) -> dict[str, Any]:
@@ -155,16 +157,15 @@ def operation_summary(operation: OperationRequest) -> dict[str, Any]:
 
 
 def changes(operations: Any, limit: int) -> list[OperationRequest]:
-    """The operations worth a row of history, newest first.
+    """The operations worth a row of history, from ``operations`` newest first.
 
-    ``operations`` is newest first. An automatic run that ended exactly as the
-    run before it on the same record (same state, same sentence, same
-    conditions) repeats what is already listed, so it is left out: a check
-    that runs every minute is one row until its answer changes. Anything a
-    person or an agent asked for, anything unfinished and anything that failed
-    is always listed.
+    A check that runs every minute is one row until its answer changes.
     """
 
+    # An automatic run that ended exactly as the run before it on the same
+    # record (same state, same sentence, same conditions) repeats what is
+    # already listed, so it is left out. Anything a person or an agent asked
+    # for, anything unfinished and anything that failed is always listed.
     def signature(operation: OperationRequest) -> tuple[Any, ...]:
         result = operation.result or {}
         return (
@@ -206,7 +207,7 @@ def refuse_while_drifted(resource: ManagedResource) -> None:
     """
 
     if is_drifted(resource):
-        raise PolicyError(f"{resource.key} differs from what is live. Keep the live version or restore HQ's first.")
+        raise PolicyError("This record differs from what is live. Keep the live version or restore HQ's first.")
 
 
 def _resource_for_operation(key: str) -> ManagedResource:
@@ -247,7 +248,7 @@ def _queue_operation(
     require_enabled: bool = True,
 ) -> dict[str, Any]:
     if require_enabled and not resource.enabled:
-        raise PolicyError(f"{resource.key} is switched off in HQ.")
+        raise PolicyError("This record is switched off in HQ.")
     if observes_only(resource.kind, resource.spec):
         raise PolicyError(OBSERVES_ONLY)
     # Nothing enters the queue for a gated kind without a person behind it. The
@@ -310,7 +311,6 @@ def request_reconcile(
     principal: Principal,
     current_key: str,
 ) -> dict[str, Any]:
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
     resource = _resource_for_operation(current_key)
 
     if PROVIDERS[resource.kind].public_effect and not public_dns_enabled():
@@ -359,13 +359,6 @@ def _forget_declaration(
 
     For a declaration-only kind (a domain) and for anything whose connection
     only observes. Nothing is queued and nothing is deleted at the provider.
-
-    The declarations *inside* it go too. Left behind, HQ would keep reconciling
-    records in a domain it is no longer responsible for: still writing to a
-    zone the operator had just said was not its business, which is the one
-    outcome this has to avoid. They are forgotten rather than deleted: the
-    records stay exactly as they are at the provider, which is what stepping
-    back means.
     """
 
     with operation_context(
@@ -373,6 +366,10 @@ def _forget_declaration(
         actor=principal.actor,
         operation="infrastructure.resource.forget",
     ):
+        # The declarations inside it go too. Left behind, HQ would keep
+        # reconciling records in a domain it is no longer responsible for. They
+        # are forgotten rather than deleted: the records stay exactly as they
+        # are at the provider, which is what stepping back means.
         contained = _contained_keys(resource)
         ManagedResource.objects.filter(key__in=contained).delete()
         key = resource.key
@@ -396,7 +393,7 @@ def _forget_declaration(
 
 
 @transaction.atomic
-def request_lifecycle(
+def _request_lifecycle(
     command: OperationCommand,
     *,
     principal: Principal,
@@ -405,23 +402,96 @@ def request_lifecycle(
 ) -> dict[str, Any]:
     """Ask the controller to start, stop or restart what a declaration names.
 
-    Not reconciliation. Cycling a container does not move the world toward a
-    declaration (it is a thing asked for once, about something already exactly
-    as declared) so it neither bumps the generation nor waits on one.
-
-    Which verbs exist is the capability registry's to say, so a controller that
-    does not implement one refuses here rather than queueing work nothing will
-    claim.
+    Not reconciliation: cycling a container is asked for once, about something
+    already exactly as declared, so it neither bumps the generation nor waits
+    on one.
     """
 
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
     resource = _resource_for_operation(current_key)
+    gap = unit_gap(resource)
+    if gap:
+        raise PolicyError(gap)
     with operation_context(
         interface=principal.interface,
         actor=principal.actor,
         operation=f"infrastructure.{action}.request",
     ):
-        return _queue_operation(resource, command, principal=principal, action=action)
+        # Which verbs exist is the capability registry's to say, so a verb the
+        # controller does not implement is refused here rather than queued for
+        # work nothing will claim.
+        result = _queue_operation(resource, command, principal=principal, action=action)
+    # The page that asked shows the state the sweep last read, so the run that
+    # applies this reads the kind again after it, rather than leaving the old
+    # state up until the cadence comes round. Only a kind the sweep reads:
+    # nothing would answer a request for any other.
+    if result["queued"] and swept(resource.kind):
+        kind = resource.kind
+        transaction.on_commit(lambda: request_reading(kind))
+    return result
+
+
+# Why a container its unit runs is not stopped, started or restarted from HQ:
+# the controller asks a unit only through root's socket on its own machine.
+UNIT_OUT_OF_REACH: Sentence = "A systemd unit runs this container, and HQ asks a unit only on the machine HQ runs on."
+
+
+@dataclass(frozen=True, slots=True)
+class Supervision:
+    """The systemd unit that runs a container, as its label was last read."""
+
+    unit: str
+    # Whether HQ reaches the unit: only on the machine HQ runs on.
+    reachable: bool
+
+
+def supervision(resource: ManagedResource) -> Supervision | None:
+    """The unit that runs the container a declaration names, or None for a
+    container no unit runs (or one not read yet)."""
+
+    spec = resource.spec or {}
+    context = container_context(str(spec.get("host", "")), str(spec.get("name", "")))
+    running, machine = context.get("running"), context.get("machine")
+    if not isinstance(running, Running) or not running.unit:
+        return None
+    return Supervision(unit=running.unit, reachable=isinstance(machine, Machine) and machine.runs_hq)
+
+
+def unit_gap(resource: ManagedResource) -> Sentence:
+    """Why a lifecycle verb cannot be asked of this container, or ""."""
+
+    found = supervision(resource)
+    return UNIT_OUT_OF_REACH if found is not None and not found.reachable else ""
+
+
+def request_restart(command: OperationCommand, *, principal: Principal, current_key: str) -> dict[str, Any]:
+    return _request_lifecycle(
+        command, principal=principal, current_key=current_key, action=OperationRequest.Action.RESTART
+    )
+
+
+def request_start(command: OperationCommand, *, principal: Principal, current_key: str) -> dict[str, Any]:
+    return _request_lifecycle(
+        command, principal=principal, current_key=current_key, action=OperationRequest.Action.START
+    )
+
+
+def request_stop(command: OperationCommand, *, principal: Principal, current_key: str) -> dict[str, Any]:
+    return _request_lifecycle(
+        command, principal=principal, current_key=current_key, action=OperationRequest.Action.STOP
+    )
+
+
+# The capability that asks for each verb, so a page asks for one by its verb
+# and runs it through the capability runner like every other caller.
+ACTION_CAPABILITY = {
+    OperationRequest.Action.RECONCILE: "infrastructure.reconcile",
+    OperationRequest.Action.RENEW: "certificate.renew",
+    OperationRequest.Action.DELETE: "infrastructure.resource.remove",
+    OperationRequest.Action.RESTART: "infrastructure.restart",
+    OperationRequest.Action.START: "infrastructure.start",
+    OperationRequest.Action.STOP: "infrastructure.stop",
+    OperationRequest.Action.APPROVE_ROUTES: "tailnet.routes.approve",
+}
 
 
 @transaction.atomic
@@ -433,19 +503,18 @@ def accept_observed(
 ) -> dict[str, Any]:
     """Make the declaration say what the provider holds.
 
-    For a change made at the provider on purpose: a policy a connector edited,
-    a setting changed in its own console. Reconciling would undo it; this
-    keeps it, by copying the live record into the declaration, the same way
-    adopting does. Fields no sweep can observe (hidden, on demand) stay as
-    they were declared. Nothing is written to the provider, and the next sweep
-    finds the two agreeing.
+    For a change made at the provider on purpose (a policy a connector edited,
+    a setting changed in its own console), which reconciling would undo.
+    Nothing is written to the provider.
     """
 
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
     resource = _resource_for_operation(current_key)
+    # Copied from the live record, the same way adopting does, so the next
+    # sweep finds the two agreeing.
     found = live_spec(resource.kind, resource.spec)
     if found is None:
         raise RecordNotFound("No live record was last seen for this one, so there is nothing to accept.")
+    # A field no sweep can observe (hidden, on demand) stays as it was declared.
     kept = {
         field: resource.spec[field] for field in PROVIDERS[resource.kind].unobservable_fields if field in resource.spec
     }
@@ -473,17 +542,11 @@ def request_removal(
 ) -> dict[str, Any]:
     """Queue removal of the thing this declaration describes.
 
-    Deliberately not a plain row delete. The record lives at a provider, not in
-    HQ, so forgetting the declaration would abandon the rewrite or proxy host
-    rather than remove it, and nothing would be left pointing at the orphan.
-    HQ drops its own row only once a controller reports the provider is clear.
-
-    Removal is queued even for a disabled resource: disabling stops HQ
-    reconciling a declaration, which is exactly the state something is left in
-    just before an operator decides to be rid of it.
+    Not a plain row delete: the record lives at a provider, so forgetting the
+    declaration would orphan it there. HQ drops its own row only once a
+    controller reports the provider is clear.
     """
 
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
     resource = _resource_for_operation(current_key)
     # HQ deletes at the provider only through a connection that manages.
     if PROVIDERS[resource.kind].declaration_only or observes_only(resource.kind, resource.spec):
@@ -498,7 +561,8 @@ def request_removal(
     ):
         # Bypasses the enabled check in _queue_operation on purpose: that guard
         # exists to stop HQ converging a paused declaration, and removal is the
-        # opposite of converging it.
+        # opposite of converging it. A switched-off record is exactly what is
+        # left just before an operator decides to be rid of it.
         return _queue_operation(
             resource,
             command,
@@ -508,7 +572,7 @@ def request_removal(
         )
 
 
-def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, str]:
+def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, Sentence]:
     if resource.kind != CERTIFICATE_KIND:
         return False, "Only a certificate HQ issues can be renewed."
     if not resource.enabled:
@@ -557,7 +621,6 @@ def request_route_approval(
     to trust that machine with traffic for those addresses.
     """
 
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
     resource = _resource_for_operation(current_key)
     with operation_context(
         interface=principal.interface,
@@ -573,26 +636,22 @@ def request_route_approval(
 
 
 def request_reach_allow(
-    command: OperationCommand,
+    _command: OperationCommand,
     *,
     principal: Principal,
     current_key: str,
 ) -> dict[str, Any]:
     """Open the path a reading proved is shut, where the tailnet is what shut it.
 
-    Given a resource, never a policy. Which path to open is re-derived here
-    from what the controller observed (the address and port it could not
-    reach) so a caller cannot name one. The only change this can ever produce
-    is the one an observation already justified.
-
-    The amendment is written to the policy declaration through the ordinary
-    write, which is what puts it in front of a person: the tailnet policy is a
-    gated kind, so this proposes and somebody else consents.
+    Given a resource, never a policy, so the only change this can produce is
+    one an observation already justified; a person consents to it before it
+    reaches the tailnet.
     """
 
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
     resource = _resource_for_operation(current_key)
 
+    # Which path to open is re-derived from what the controller observed (the
+    # address and port it could not reach), so a caller cannot name one.
     known = tailnet.devices()
     watcher = observer(known)
     if watcher is None:
@@ -633,6 +692,8 @@ def request_reach_allow(
     if not moved:
         raise PolicyError("The tailnet policy already allows every needed path.")
 
+    # The ordinary write, which puts it in front of a person: the tailnet
+    # policy is a gated kind, so this proposes and somebody else consents.
     return save_managed_resource(
         ManagedResourceCommand(
             key=policy.key,
@@ -651,7 +712,6 @@ def request_certificate_renewal(
     principal: Principal,
     current_key: str,
 ) -> dict[str, Any]:
-    principal.require(Capability.REQUEST_CERTIFICATE_RENEWAL)
     resource = _resource_for_operation(current_key)
     allowed, explanation = certificate_renewal_allowed(resource)
     if not allowed:

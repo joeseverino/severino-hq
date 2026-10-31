@@ -32,7 +32,7 @@ is open.
 
 <section id="path" class="page-section" data-page-section>
 {% section_head %}Path{% if routes|length == 1 %} <span class="heading-aside">via {{ routes.0.via_phrase|breakable }}</span>{% endif %}{% aside %}{% if topology_url %}<a class="btn ghost compact" href="{{ topology_url }}">See on the map</a>{% endif %}{% endsection_head %}
-<p class="path-reach"><span class="exposure exposure-{{ exposure.level }}">{{ exposure.label|breakable }}</span>{% if exposure.worst.path_gates %} <span class="muted">· login only at {% for path in exposure.worst.path_gates %}<code>{{ path|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span>{% endif %}</p>
+<p class="path-reach"><span class="exposure exposure-{{ exposure.level }}">{{ exposure.label|breakable }}</span>{% if exposure.worst.path_gates %}<span class="muted">{% dot %}login only at {% for path in exposure.worst.path_gates %}<code>{{ path|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span>{% endif %}</p>
 {% if gate_fixes and not read_only %}
   <div class="notice notice-attention">
     <strong>Anyone on the internet can open this without signing in</strong>
@@ -46,9 +46,9 @@ is open.
   {% include "control_plane/_service_parts.html" %}
 {% empty %}
   {% if declared_parts %}{% with parts=declared_parts %}{% include "control_plane/_service_parts.html" %}{% endwith %}{% endif %}
-  <p class="muted">{% for gap in service.path.gaps %}{{ gap|capfirst|breakable }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+  <p class="muted">{% for gap in service.path.gaps %}{{ gap|capfirst|breakable }}{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</p>
   {% for hop in service.path.observed %}
-    <p>{{ hop.phrase|breakable:":" }} {% entity hop.link %}{% if hop.source %} <span class="muted">· {{ hop.source.phrase|breakable }}{% if hop.source.observed_at %} · {% include "partials/_reading_age.html" with at=hop.source.observed_at only %}{% endif %}</span>{% endif %}</p>
+    <p>{{ hop.phrase|breakable:":" }} {% entity hop.link %}{% if hop.source %}<span class="muted">{% dot %}{{ hop.source.phrase|breakable }}{% if hop.source.observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=hop.source.observed_at only %}{% endif %}</span>{% endif %}</p>
   {% endfor %}
 {% endfor %}
 </section>
@@ -87,7 +87,7 @@ is open.
               {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}<dt>Compose project</dt><dd><code>{{ facet.observed.stack|breakable }}</code></dd>{% endif %}
               <dt>Reading</dt><dd>{% include "partials/_reading_age.html" with at=facet.observed.observed_at only %}</dd>
             </dl>
-            <span class="readout"><a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">Change what HQ expects &rarr;</a></span>
+            <span class="readout"><a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">{% words "infrastructure.resource.update" %}{% arrow %}</a></span>
           </details>
         {% endwith %}
       {% elif facet.present %}
@@ -105,7 +105,7 @@ is open.
           <span class="readout">
             {% entity claim.within_service code=True %}
             <span class="pill control-{{ claim.health.state }}">{{ claim.health.label|breakable }}</span>
-            <a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">Edit</a>
+            <a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">{% words "infrastructure.resource.update" %}</a>
           </span>
         {% endfor %}
         {% comment %}
@@ -181,7 +181,7 @@ is open.
             <dd>
               {% if facet.observed.portainer_managed %}
                 Portainer.
-                {% for kind, label in facet.declarable %}<a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label|breakable }} &rarr;</a>{% endfor %}
+                {% for kind, label in facet.declarable %}<a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label|breakable }}{% arrow %}</a>{% endfor %}
               {% else %}
                 A compose file on {{ facet.observed.host|breakable:"." }} HQ cannot read it.
               {% endif %}
@@ -196,7 +196,7 @@ is open.
         <strong class="control-unknown">Not visible</strong>
         <span>{{ facet.not_visible|breakable }}</span>
         {% if not read_only %}{% for kind, label in facet.declarable %}
-          <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label|breakable }} &rarr;</a></span>
+          <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label|breakable }}{% arrow %}</a></span>
         {% endfor %}{% endif %}
       {% elif read_only %}
         <strong class="control-unknown">Not set up</strong>
@@ -210,7 +210,7 @@ is open.
         it is being asked about.
         {% endcomment %}
         {% for kind, label in facet.declarable %}
-          <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label|breakable }} &rarr;</a></span>
+          <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label|breakable }}{% arrow %}</a></span>
         {% endfor %}
         {% comment %}
         Named, not silently dropped. An option disappearing without explanation
@@ -223,7 +223,7 @@ is open.
       {% endif %}
       {% comment %}One line per reading kind. The kind is named unless the headline above already is it.{% endcomment %}
       {% for line in facet.reading_lines %}
-        <span class="readout">{% if facet.present or facet.observed or not forloop.first %}<span class="readout-label">{{ line.label|breakable }}</span> {% endif %}{% if line.issued %}{{ line.detail|breakable }}{% else %}{% for link in line.entities %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% if line.expiry %} · expires {{ line.expiry|breakable }}{% endif %}{% if line.stale %} <span class="pill pill-attention">Out of date</span>{% endif %}</span>
+        <span class="readout">{% if facet.present or facet.observed or not forloop.first %}<span class="readout-label">{{ line.label|breakable }}</span> {% endif %}{% if line.issued %}{{ line.detail|breakable }}{% else %}{% for link in line.entities %}{% entity link mark=forloop %}{% if not forloop.last %}{% endif %}{% endfor %}{% endif %}{% if line.expiry %}{% dot %}expires {{ line.expiry|breakable }}{% endif %}{% if line.stale %} <span class="pill pill-attention">Out of date</span>{% endif %}</span>
       {% endfor %}
     </div>
 

@@ -197,7 +197,7 @@ class RefError(Exception):
 
 
 def git(*args: str, root: Path = ROOT) -> list[str]:
-    done = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
+    done = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=False)
     if done.returncode:
         raise RefError(done.stderr.strip() or f"git {args[0]} exited {done.returncode}")
     return [line for line in done.stdout.splitlines() if line]
@@ -255,7 +255,9 @@ def worktree(commit: str, root: Path = ROOT) -> Iterator[Path]:
                 git("worktree", "add", "--detach", "--quiet", str(tree), commit, root=root)
                 yield tree
             finally:
-                subprocess.run(["git", "worktree", "remove", "--force", str(tree)], cwd=root, capture_output=True)
-                subprocess.run(["git", "worktree", "prune"], cwd=root, capture_output=True)
+                subprocess.run(
+                    ["git", "worktree", "remove", "--force", str(tree)], cwd=root, capture_output=True, check=False
+                )
+                subprocess.run(["git", "worktree", "prune"], cwd=root, capture_output=True, check=False)
     finally:
         signal.signal(signal.SIGTERM, previous)

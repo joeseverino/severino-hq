@@ -12,7 +12,7 @@ from hq.domains.control_plane.models import ProviderConnection
 from ..findings import findings
 from ..inventory_testing import store
 from ..security import Capability, Principal
-from ..tailnet import WELL_KNOWN_PORTS, grant_ports
+from ..tailnet import TAILNET_KIND, WELL_KNOWN_PORTS, grant_ports
 from .markup import texts
 
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
@@ -128,6 +128,44 @@ class EmptyGroupTests(TestCase):
 
         self.assertEqual(len(raised("empty-group-granted")), 1)
 
+    def test_several_empty_groups_are_counted_and_each_is_named_in_the_step(self):
+        policy(
+            groups=[{"name": "group:one", "members": []}, {"name": "group:two", "members": []}],
+            grants=[{"src": ["group:one", "group:two"], "dst": ["tag:server"], "ip": ["tcp:22"]}],
+        )
+
+        (finding,) = raised("empty-group-granted")
+
+        self.assertTrue(finding["title"].startswith("2 groups have"))
+        (step,) = finding["operator_steps"]
+        self.assertIn("group:one, group:two", step["label"])
+
+
+class TagGrantedToNobodyTests(TestCase):
+    def setUp(self):
+        tailnet_connection()
+        store(TAILNET_KIND, {"name": "example-box", "tags": ["tag:worn"]})
+
+    def _grant(self, *tags):
+        policy(grants=[{"src": ["autogroup:member"], "dst": [f"{tag}:443" for tag in tags], "ip": ["tcp:443"]}])
+        return raised("tag-granted-to-nobody")
+
+    def test_one_unworn_tag_is_named(self):
+        (finding,) = self._grant("tag:worn", "tag:unworn")
+
+        self.assertEqual(finding["severity"], "neutral")
+        self.assertTrue(finding["title"].startswith("tag:unworn "))
+        self.assertIn("tag:unworn", finding["explanation"])
+        self.assertEqual(finding["evidence"], [{"label": "Tag", "value": "tag:unworn"}])
+
+    def test_several_unworn_tags_are_counted_and_each_is_named_in_the_step(self):
+        (finding,) = self._grant("tag:one", "tag:two")
+
+        self.assertTrue(finding["title"].startswith("2 tags are"))
+        self.assertNotIn("tag:one", finding["explanation"])
+        (step,) = finding["operator_steps"]
+        self.assertIn("tag:one, tag:two", step["label"])
+
 
 class RefusedConnectionTests(TestCase):
     def test_a_credential_refusal_says_refused(self):
@@ -236,6 +274,7 @@ class PortNameTests(TestCase):
             opened_by=(),
             containers=(),
             runs_hq=runs_hq,
+            addresses=(),
         )
         with projection_scope(seed={"hq.served_port": port}):
             (grant,) = grant_ports(({"src": ["*"], "dst": ["tag:server"], "ip": [entry]},), machines=[machine])
@@ -260,7 +299,7 @@ class PortNameTests(TestCase):
 
         response = self.client.get(reverse("control_plane:tailnet"))
 
-        self.assertIn("tcp:7722 · SSH", texts(response, "code"))
+        self.assertIn("tcp:7722 SSH", texts(response, "code"))
 
 
 class TrustedNetworksWidthTests(TestCase):

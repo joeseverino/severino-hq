@@ -29,8 +29,8 @@ from .ui import MISSING, counted
 
 def _records(machine, kind: str) -> tuple[Mapping[str, Any], ...]:
     subject = Subject.of(
-        hostnames=(getattr(machine, "name", ""), *(getattr(machine, "aliases", ()) or ())),
-        addresses=getattr(machine, "addresses", ()) or (),
+        hostnames=(machine.name, *machine.aliases),
+        addresses=machine.addresses,
     )
     if not subject:
         return ()

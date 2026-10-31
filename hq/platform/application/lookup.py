@@ -1,14 +1,10 @@
 """What the public internet says about a name or an address.
 
-Two questions HQ cannot answer from the inside. A resolver on this network
-follows the internal rewrites, so it reports the opposite of what the world
-sees; ``application.zones.public_answers_for`` covers the names HQ publishes,
-this covers every other name. And who a public address belongs to, which only
-the registries know.
-
-Both gateways are injected defaults, so no test here opens a socket. The
-handlers are registered as ``read`` capabilities, so the browser form, the
-machine API, the CLI and MCP all reach this one implementation.
+Two questions HQ cannot answer from the inside: what the world resolves any
+name to, since a resolver here follows the internal rewrites
+(``application.zones.public_answers_for`` covers the names HQ publishes), and
+who a public address belongs to, which only the registries know. The handlers
+are ``read`` capabilities, so every interface reaches this one implementation.
 """
 
 import json
@@ -16,7 +12,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from ipaddress import ip_address
-from typing import Any
+from typing import Annotated, Any
 
 from django.utils.timezone import now
 
@@ -25,8 +21,10 @@ from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.core.outbound import allowed
 lazy from hq.domains.control_plane.models import AddressReading
 
+from .command_fields import Describe
 from .projection import iso
 from .reach import is_documentation, is_public, network_of
+from .record_errors import InputError
 from .security import Capability, Principal
 
 # A hostname, conservatively. The value becomes a query parameter on a URL the
@@ -44,12 +42,14 @@ HOSTNAME = re.compile(
 # with no records. Fixing the set here means that cannot happen.
 RECORD_TYPES = ("A", "AAAA", "CNAME", "MX", "TXT", "NS", "SOA", "CAA")
 
+LOOK_UP_ADDRESS = "lookup.address"
+
 
 @dataclass(frozen=True, slots=True)
 class NameCommand:
     """A name to ask a public resolver about."""
 
-    name: str
+    name: Annotated[str, Describe("The hostname to resolve.")]
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,8 +63,8 @@ class AddressCommand:
     discloses, every time, which addresses HQ is interested in.
     """
 
-    address: str
-    refresh: bool = False
+    address: Annotated[str, Describe("The IP address to look up.")]
+    refresh: Annotated[bool, Describe("Ask again rather than reading the stored answer.")] = False
 
 
 def _flatten(data: Any) -> str:
@@ -154,10 +154,11 @@ def look_up_name(
 ) -> dict[str, Any]:
     """What a resolver outside this network returns for a name."""
 
-    principal.require(Capability.LOOK_UP_PUBLIC_RECORDS)
+    del principal
     wanted = normalized_hostname(command.name or "")
     if not wanted or not HOSTNAME.match(wanted):
-        raise ValueError("That is not a hostname.")
+        raise InputError("That is not a hostname.")
+    # The gateways are injected defaults, so no test here opens a socket.
     # Resolve at execution time so scoped replacements also cover registry calls.
     resolver = resolver or resolve
     with allowed("lookup"):
@@ -211,7 +212,7 @@ def _address_answer(command: AddressCommand, *, principal: Principal) -> tuple[A
     try:
         parsed = ip_address(str(command.address or "").strip())
     except ValueError as exc:
-        raise ValueError("That is not an IP address.") from exc
+        raise InputError("That is not an IP address.") from exc
     if not is_public(str(parsed)):
         return parsed, {
             "ok": True,
@@ -236,22 +237,23 @@ def look_up_address(
     command: AddressCommand,
     *,
     principal: Principal,
-    resolver: Callable[..., dict] = resolve,
-    allocations: Callable[..., dict] = registry,
+    resolver: Callable[..., dict] | None = None,
+    allocations: Callable[..., dict] | None = None,
 ) -> dict[str, Any]:
     """What the public internet says about one address.
 
     Two registries, because they answer differently: reverse DNS is published
     by whoever holds the address, RDAP by the registry that allocated it. Both
     are reported rather than reconciled.
-
-    A non-routable address is answered locally rather than asked about. The
-    resolver would attempt it, find nothing, and return a body that looks like
-    an answer: having been told an address from inside the estate to get
-    there.
     """
 
+    # A non-routable address is answered locally rather than asked about: the
+    # resolver would find nothing and return a body that looks like an answer,
+    # having been told an address from inside the estate to get there.
     parsed, known = _address_answer(command, principal=principal)
+    # Resolved at execution time, as look_up_name's is.
+    resolver = resolver or resolve
+    allocations = allocations or registry
     if known is not None and (not command.refresh or not is_public(str(parsed))):
         return known
     reading: dict[str, Any] = {

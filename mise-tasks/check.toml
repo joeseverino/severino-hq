@@ -1,0 +1,7 @@
+# The steps of `mise run check`.
+
+# `mise run check --release` reaches the deploy host through this.
+["check:host"]
+description = "The deploy host, read-only, as check --release reads it: hq-host check built from HEAD and run there over SSH; exits 0 ready, 1 a fault, 3 unverified"
+hide = true
+run = "uv run python -m tools.gate.host"

@@ -7,7 +7,7 @@ from django.test import SimpleTestCase
 
 from ..labels import field_label
 from ..moments import when_day
-from ..payload_words import value_words
+from ..payload_words import SAID_WHOLE, value_words
 from ..printable import Unprintable
 
 
@@ -30,8 +30,17 @@ class ValueWordsTests(SimpleTestCase):
         with self.assertRaisesMessage(Unprintable, "value_words printed a builtins.object"):
             value_words(object())
 
+    def test_a_record_is_said_whole_only_while_it_is_small_and_plain(self):
+        self.assertEqual(value_words({"enabled": False, "note": None}), "enabled no, note empty")
+        large = {f"field_{index}": index for index in range(SAID_WHOLE + 1)}
+        self.assertEqual(value_words(large), f"{SAID_WHOLE + 1} fields")
+
     def test_a_list_is_counted_by_what_its_schema_calls_an_item(self):
         self.assertEqual(value_words([{}, {}], {"items": {"title": "Runbook"}}), "2 runbooks")
+        self.assertEqual(value_words(({},), {"anyOf": [{"type": "null"}, {"items": {"title": "Zone"}}]}), "1 zone")
+        # A title of several words names the list rather than one item of it.
+        self.assertEqual(value_words([{}, {}], {"items": {"title": "Runbook list"}}), "2 entries")
+        self.assertEqual(value_words(frozenset({"a.example"})), "a.example")
 
     def test_a_field_reads_by_its_title_or_its_name_as_a_sentence(self):
         self.assertEqual(field_label("confirm_prune", "Confirm Prune"), "Confirm prune")

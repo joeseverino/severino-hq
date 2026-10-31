@@ -1,0 +1,63 @@
+# golangci-lint for the controller (lint:controller; per-linter counts with
+# `mise run audit:go`). Generated files carry the standard "Code generated ...
+# DO NOT EDIT." line, which exclusions.generated leaves out.
+version: "2"
+
+linters:
+  # errcheck, govet, ineffassign, staticcheck and unused.
+  default: standard
+  # nilerr stays off: each place the controller returns nil beside an error is
+  # a read whose absence is the answer (a missing directory left out of a
+  # backup, an optional NPM list, an ACME account not yet made) or a stop on
+  # cancellation, and each says so where it does it.
+  enable:
+    - errorlint
+    - gocritic
+    - modernize
+    - perfsprint
+    - revive
+    - unparam
+    - usestdlibvars
+  settings:
+    errcheck:
+      exclude-functions:
+        # os.Root's twins of os.Remove and os.RemoveAll, which the preset below
+        # excludes for the same reason.
+        - (*os.Root).Remove
+        - (*os.Root).RemoveAll
+    govet:
+      settings:
+        # A subtest that stops its parent (t.Fatal, FailNow or Skip on the t
+        # outside its t.Run) fails the wrong test, and from a goroutine that
+        # is not its test's.
+        testinggoroutine:
+          subtest: true
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+      disabled-checks:
+        # Asks to name results that share a type, as in (string, string, error).
+        # The controller names a function's results in its doc comment, and
+        # named results invite the bare return.
+        - unnamedResult
+  exclusions:
+    generated: strict
+    warn-unused: true
+    presets:
+      # golangci-lint's own exclusion of errcheck on Close, Flush, os.Remove,
+      # os.RemoveAll and the print family: cleanup on a path already failing,
+      # and writes to a terminal or log, where no caller could act on the error.
+      - std-error-handling
+    rules:
+      # revive's exported rule asks every exported name for a doc comment. The
+      # controller's packages are its own, never imported elsewhere, and most
+      # of what they export is a record of a provider's reading whose comment
+      # would restate its name. The rest of the rule, a comment's form and a
+      # name that stutters, still holds.
+      - linters: [revive]
+        text: "exported (.+) should have comment( \\(or a comment on this block\\))? or be unexported"
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

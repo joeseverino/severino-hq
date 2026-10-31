@@ -1,11 +1,8 @@
 """The provider modules HQ admits, and every declaration they emit.
 
-Each module declares everything it brings: its kinds (``DEFINITIONS``) and the
-connection its credential arrives through (``CONNECTIONS``). The controller
-(controller/providers) reads and acts on them. Admission is this one closed
-tuple, owned by HQ, and its order is the registries' order: a module outside it
-contributes nothing, and adding a provider is writing its module and naming it
-here.
+Admission is this closed tuple, owned by HQ, and its order is the registries'
+order: a module outside it contributes nothing. What each module declares, and
+what admitting one takes, is docs/Architecture.md#providers.
 """
 
 from ..provider_spec import ConnectionKind

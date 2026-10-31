@@ -29,7 +29,7 @@
   Where they are read from, beside the heading, and what they leave behind
   under it. How they stand is the band at the top of the page.
   {% endcomment %}
-  <h2>Containers{% if docker %} <span class="heading-aside">{% if docker.version %}Docker {{ docker.version|breakable }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status|breakable }}{% endif %}{% if docker.connection %} · read through {% entity docker.connection %}{% endif %}</span>{% endif %}</h2>
+  <h2>Containers{% if docker %} <span class="heading-aside">{% if docker.version %}Docker {{ docker.version|breakable }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status|breakable }}{% endif %}{% if docker.connection %}{% dot %}read through {% entity docker.connection %}{% endif %}</span>{% endif %}</h2>
   {% if unused_images %}<ul class="dot-list section-facts"><li class="tone-attention">{{ unused_images|length|counted:"unused image,unused images" }}, {{ unused_size|breakable }} can be freed</li></ul>{% endif %}
   {% if unused_images %}{% include "partials/_command.html" with command="ssh "|add:machine.name|add:' "sudo docker image prune -a"' only %}{% endif %}
   {% if machine.containers %}{% include "control_plane/_container_rows.html" with containers=machine.on_show label="Containers" %}{% endif %}
@@ -47,7 +47,7 @@
 {% endif %}
 
 {% if machine.presence %}
-<section class="card">
+{% card %}
   {% section_head %}Tailnet{% aside %}
     {% comment %}
     The question sits beside the facts it is asked about rather than under a
@@ -63,10 +63,9 @@
         address, a tailnet address and a v6 address; which is the right one to
         point a record at depends on where the client is, so they belong
         together in one place rather than crowding the top of the page. One
-        per line, each beside its network, on a row of its own: a v6 address
-        is wider than a column of facts.
+        per line, each beside its network; a list, so on a row of its own.
         {% endcomment %}
-        <dt class="kv-whole">Addresses</dt>
+        <dt>Addresses</dt>
           <dd>{% if labeled_addresses %}<ul class="address-list">{% for label, address in labeled_addresses %}<li><span>{{ label|breakable }}</span> <code>{{ address|breakable }}</code></li>{% endfor %}</ul>{% else %}{% empty_value %}{% endif %}</dd>
         <dt>Device</dt>
           <dd>{% entity device_link %}</dd>
@@ -98,7 +97,7 @@
         <dt>Node key</dt>
           <dd>{% if machine.presence.key_expires %}Expires in {{ machine.presence.key_expiry_days|counted:"day" }}{% else %}Does not expire{% endif %}</dd>
         <dt>Runs</dt>
-          <dd>{{ machine.presence.os|or_empty }}{% if tailscale_version %} · <span title="{{ machine.presence.client_version }}">Tailscale {{ tailscale_version|breakable }}</span>{% if machine.presence.update_available %} <strong>(update available)</strong>{% endif %}{% endif %}</dd>
+          <dd>{{ machine.presence.os|or_empty }}{% if tailscale_version %}{% dot %}<span title="{{ machine.presence.client_version }}">Tailscale {{ tailscale_version|breakable }}</span>{% if machine.presence.update_available %} <strong>(update available)</strong>{% endif %}{% endif %}</dd>
         {% comment %}
         Each shown only when true. A device that runs no Tailscale SSH, accepts
         inbound connections and belongs to this tailnet is every device: three
@@ -168,7 +167,7 @@
           <dd>Open to {% include "control_plane/_policy_names.html" with names=who %}</dd>
         {% endfor %}
   </dl>
-</section>
+{% endcard %}
 
   {% if machine.presence.peered %}
     {% comment %}
@@ -185,8 +184,7 @@
     <dl class="kv">
           <dt>Handshake</dt>
           <dd>
-              Completed {{ machine.presence.handshake|breakable }}
-              {% if machine.presence.active %} · active{% endif %}
+              Completed {{ machine.presence.handshake|breakable }}{% if machine.presence.active %}{% dot %}active{% endif %}
             </dd>
           <dt>Path</dt>
           <dd>
@@ -199,7 +197,7 @@
               {% endif %}
             </dd>
           <dt>Traffic</dt>
-          <dd>{{ machine.presence.rx_bytes|bytes }} in · {{ machine.presence.tx_bytes|bytes }} out</dd>
+          <dd>{{ machine.presence.rx_bytes|bytes }} in{% dot %}{{ machine.presence.tx_bytes|bytes }} out</dd>
           <dt>Node key</dt>
           <dd><code class="node-key">{{ machine.presence.public_key|breakable }}</code></dd>
         </dl>

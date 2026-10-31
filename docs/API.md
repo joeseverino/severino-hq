@@ -26,7 +26,10 @@ other credential in the fleet, and HQ only checks them:
 | **Real scoping** | A credential can be granted `example.write` and nothing else. |
 
 A web operator holds every capability HQ has. A token's principal holds
-exactly the permissions the token was granted, never widened.
+exactly the permissions the token was granted, never widened. A capability
+held only by a person (an upload, an approval) is out of any token's reach
+whatever its grant, so neither the catalog nor the OpenAPI document lists it
+for one.
 
 ## Configuration
 
@@ -113,7 +116,7 @@ curl -s https://hq.example.com/api/v2/capabilities/example.import/ \
 |---|---|---|
 | `GET` | `/api/v2/` | Who you are and what you were granted |
 | `GET` | `/api/v2/openapi.json` | This API as an OpenAPI 3.2 document; also served to the signed-in operator's session, even with no API resource configured, and rendered for them at `/api/docs/` |
-| `GET` | `/api/v2/capabilities/` | Every capability, flagged `permitted` for this token |
+| `GET` | `/api/v2/capabilities/` | Every capability a token could hold, flagged `permitted` for this one |
 | `POST` | `/api/v2/capabilities/<name>/` | Run one |
 | `GET` | `/api/v2/resources/` | Every read resource, its operations and filter schema |
 | `GET` | `/api/v2/resources/<name>/` | List a resource using validated query parameters |
@@ -333,16 +336,16 @@ version replaces the old one rather than running beside it.
 Always `{"ok": false, "error": {"code", "message", "details"}}`. Branch on the
 status; the code says which cause. The OpenAPI document lists, on each
 capability's operation, every code a capability answers with each status,
-derived from the one map the view answers from (`CAPABILITY_STATUS` in
-`hq/platform/api/views.py`). The ones that need a word:
+derived from the one map every HTTP adapter answers from (`CAPABILITY_STATUS` in
+`hq/platform/application/refusal_status.py`). The ones that need a word:
 
 | Status | Means |
 |---|---|
-| `400` | `invalid_input`: the request did not match its schema. Fix the fields it names. Any code a capability answers with that is not in the map is a `400` too. |
+| `400` | `invalid_input`: the request did not match its schema. Fix the fields it names. `invalid_material`: an uploaded certificate or key cannot be used; the message says why. Any code a capability answers with that is not in the map is a `400` too. |
 | `401` | No token, or it failed verification. Mint a new one. |
 | `403` | `forbidden`: verified, but this client was not granted that capability; fix its scope. `denied_by_policy`: an operator's rule at `/agents/` refuses it. `agents_paused`: the operator has paused every agent; nothing runs until they resume. |
 | `404` | `unknown_capability`: no such capability on this deployment. `not_found`: the record the command names does not exist. `approval_subject_unreadable`: the call has to be held, and the record it names could not be read to show the person deciding. |
-| `409` | `conflict`: the record changed after it was read or clashes with another. `operation_failed`: the domain refused the command. `idempotency_conflict`: a retry key was reused with different input. `precondition`: the request is valid, but the record it acts on refuses it until something about it changes; the message says what. |
+| `409` | `conflict`: the record changed after it was read or clashes with another. `operation_failed`: the domain refused the command. `idempotency_conflict`: a retry key was reused with different input. `precondition`: the request is valid, but HQ's settings or the record it acts on refuse it until something changes; the message says what. |
 | `413` | The request exceeds the deployment's body-size safety limit. |
 | `415` | A capability request was not sent as `application/json`. |
 | `429` | `too_many_pending_approvals`: this client already has ten requests waiting for a person. Nothing more is held for it until those are answered. |
@@ -429,6 +432,21 @@ translation is applied. Resource filters emit individual query parameters;
 
 `mise run lint:openapi` installs the locked Redocly from `tools/lint` and
 validates every description against the specification.
+
+### The document
+
+`hq/platform/api/openapi.py` derives the document, so a capability, resource
+or domain added anywhere appears in it with no edit. Every path comes from the
+API's URLconf; every operation's methods, success type and error statuses
+from its view's `_endpoint` declaration, and its description from the first
+line of the view's docstring; every capability from the capability registry,
+its request body the JSON Schema the view already validates against
+(`request_schema`); every resource from the resource registry; and the tag
+tree from the domain registry, so the grouping is HQ's nav. Examples are
+responses the suite really received, recorded into `openapi-examples.json`
+and validated against the document on every run. `mise run fix:derived`
+rewrites the committed `hq-api.openapi.json`, and `mise run lint` names it
+when it is behind.
 
 `manage.py test tests.fuzz.api_properties` generates bounded requests through Django's
 real WSGI middleware using Schemathesis from the tools dependency set. Host cases

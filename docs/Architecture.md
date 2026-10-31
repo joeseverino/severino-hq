@@ -38,7 +38,12 @@ writes around the service.
 A browser submit, an API call, an MCP tool call and a CLI command follow the
 same lifecycle. The adapter parses and steps aside. The service validates,
 authorizes, opens the transaction, guards against stale state, writes, audits
-and returns one result; the adapter only chooses how it looks.
+and returns one result; the adapter only chooses how it looks. A view reaches
+a domain write only through `execute_capability`: `test_view_writes` follows
+every call each view module makes, and an audit row, a refusal or an agent's
+identity observation is not a domain write. A job whose process stopped and an
+approval nobody answered in time are computed by the read that shows them and
+marked by the hourly `due` work.
 
 Reads cross the same boundary. `hq.platform.application.resources.ResourceSpec`
 is the registry of readable domains; query projections live in their
@@ -84,7 +89,8 @@ the choice lives in `DashboardConfiguration`. Weather is the configured point's
 same address: the refresh button asks for every panel, and the dashboard, when
 it opens on a reading older than five minutes (`freshness.GLANCE_EVERY`), asks
 for the due panels only (`scope=stale`). Either way HQ records a
-credential-free `DashboardRefreshRequest` and rings the controller's doorbell;
+credential-free `DashboardRefreshRequest` and rings the glance doorbell, which
+starts a glance pass beside any controller pass ([Units](Deployment.md#units));
 the controller derives target and connection from the machine graph. The
 browser follows that one request for a bounded interval and keeps no
 page-lifetime polling loop. An SSH-capable connection yields whole-host
@@ -376,7 +382,7 @@ costs nobody:
   doorbell and answers; the reading arrives through the sweep's ingest. A
   reading whose provider rations calls keeps its own clock
   (`ObservationSpec.every`): HQ tells the controller when it is due.
-  `github.profile` is the example (`observations/github.py`); a reading's
+  `github.profile` is the example (`hq/domains/control_plane/observations/github.py`); a reading's
   procedure is in [Derived Facts](Derived-Facts.md#readings).
 - **Long local work is a job** (`hq/domains/jobs/`): its own thread, progress
   notes, a heartbeat, one live job per kind. A project's refresh is one.
@@ -624,6 +630,12 @@ break-glass recovery, not a second transport.
 1. Define the typed command and result in `hq/platform/application/`; a plain
    record domain declares `records` instead ([New Domain](New-Domain.md)).
 2. Implement validation, authorization, locking, persistence and audit there.
+   It refuses with a host refusal from `record_errors.py` (`not_found`,
+   `conflict`, `precondition`, `invalid_material`, `invalid_input`), whose
+   reason every adapter answers with as it stands: a literal, or a `Sentence`
+   carried from where HQ wrote it, never a request's or a dependency's text
+   (`RefusalTextTests` reads every one). Any other exception's text stays
+   inside HQ.
 3. Register it. The web form, API, MCP and CLI derive from the registry; add an
    adapter only where one needs translating.
 4. Prove identical result shapes with an adapter-parity test.
@@ -660,7 +672,9 @@ which facet of a service it supplies, how to read hostnames out of a resolved
 spec, how to describe itself in one line, and how to rebuild a spec from a
 record the provider holds. The service view, the generated create and edit
 forms and adoption are written once and name no provider, so a provider added
-to the registry appears on all of them.
+to the registry appears on all of them. A container a systemd unit runs is
+stopped, started and restarted through that unit
+([A container its unit runs](#a-container-its-unit-runs)).
 
 ![Provider registry: one declaration derives the schema, validation, controller contract, forms, service view, and adoption](diagrams/provider-registry.png)
 
@@ -911,3 +925,54 @@ the contacts capability reads them. The declaration is `withheld` too, because
 reviews carry the operator's notes. The records API, MCP, record pages,
 reports, search and the audit log show its status and never its contents, and
 the generic writer refuses it. DNS-01 uses its own least-privilege connection.
+
+### A container its unit runs
+
+A container a systemd unit keeps running would be started again by that unit
+after a stop asked of Docker, and a start asked of Docker would skip what the
+unit runs first. Such a container names its unit in the label
+`severino-hq.unit` (`unit.Label`, beside HQ's `severino-hq.run` and
+`severino-hq.role`), and its record carries the unit. Stop, Start and Restart
+on it go through the unit and never through Docker: `portainerCycler` hands
+them to `providers.UnitControl`, and where no unit control reaches the
+container's machine it refuses in a plan and a run alike. HQ shows the same:
+on the machine HQ runs on the verbs name the unit; elsewhere they are disabled
+with the reason, and a request is refused.
+
+The one unit control is root's `hq-host unit --serve` (`controller/host/unit`),
+behind `severino-hq-unit.socket` on the machine HQ runs on. Each connection
+starts one `severino-hq-unit@.service`, which reads one line, `VERB NAME`, and
+answers one line of JSON. The controller dials it at `SEVERINO_UNIT_SOCKET`. A
+machine reached over SSH would be a second carrier of the same line.
+
+What decides whether root acts is read from the machine, never from the
+request:
+
+- **A closed grammar.** The verb is stop, start or restart, the name a plain
+  `.service` unit: no template instance, path or option, at most 256 bytes.
+- **The directory is the boundary.** The socket sits in `/run/severino-hq-unit`,
+  which only the controller's account and root may enter, and only the
+  controller's container mounts it, never the web container's. The two share
+  an account, so the socket's peer check (root or that account, by
+  `SO_PEERCRED`) is defense in depth.
+- **The label is not trusted alone.** Portainer's credential can create a
+  container with any label, so at least one container on the machine, running
+  or stopped, must name the unit, and the unit's own `ExecStartPre` and
+  `ExecStart`, which are root's, must run docker on every container that names
+  it, read where docker reads a container's name: the container `docker
+  start`, `stop` or `restart` names, the `--name` of `docker run` or `create`,
+  or one `docker compose up`, `create`, `start` or `restart` brings up, named
+  as compose names it from the project's own files (`docker compose config`:
+  a service's `container_name`, or `project-service-N`). The container's
+  creator chooses its name and every other label, so an argument that only
+  spells the name, or a copied `com.docker.compose.project.working_dir`,
+  counts for nothing, and a command with an option the tables do not know
+  names no container.
+- **The unit is loaded under exactly that name**, so an alias cannot stand in
+  for another unit.
+
+An account that takes over the controller gains a stop, start or restart of
+units that already run a labeled container on that machine, which its
+Portainer token can already do to those containers through Docker. Planting a
+labeled container can only block a real unit from being acted on: a refusal,
+never an action.

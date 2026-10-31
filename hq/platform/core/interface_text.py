@@ -1,28 +1,9 @@
-"""What HQ and its extensions show people: their words and markup, read as source.
+"""What HQ and its extensions show people: their markup and counts, read as source.
 
-An em dash in interface text is the most recognizable mark of generated prose,
-and it spreads by copying. A value that is missing is shown with the
-`or_empty` filter or ``MISSING``, never a literal dash.
-
-Counts get the same treatment. A plural built by hand, Django's ``pluralize``
-or ``"s" if n != 1 else ""``, agrees the noun and forgets the verb ("1 need
-output"). ``counted`` takes the whole phrase for one and for many instead, and
-a literal phrase that cannot agree raises the moment a page renders it with
-data, so every ``|counted:"..."`` literal and every literal ``counted(...)``
-call is read here first.
-
-HTML has no nested forms: the parser drops the inner opening tag and takes the
-inner closing tag as the end of the outer form, so every control after it
-belongs to no form.
-
-Django's ``{# #}`` comment ends at the end of its line. One that runs onto a
-second line is not a comment: the page prints it. A note longer than a line is
-``{% comment %}``. ``open_comment_lines`` is the rule, read over every template
-of HQ and of every installed extension.
-
-These are properties of the source, so a gate reads them and a running HQ
-never does: ``read`` walks each tree once and parses each file once, and
-``InterfaceTextTests`` (the architecture tests) fails on anything it finds.
+Their wording is Vale's (``tools/lint/vale``, ``mise run lint:prose``). These
+are properties of the source, so a gate reads them and a running HQ never does:
+``read`` walks each tree once, and ``InterfaceTextTests`` (the architecture
+tests) fails on anything it finds.
 """
 
 import ast
@@ -40,14 +21,11 @@ lazy from hq.platform.application import plugins
 lazy from hq.platform.application.ui import counted_forms
 lazy from hq.platform.core.templatetags.value_tags import counted_phrases
 
-EM_DASH = chr(0x2014)  # built, so this file holds no literal one
 TEMPLATE_COMMENT = re.compile(r"\{#.*?#\}|\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}", re.DOTALL)
 _SKIPPED = frozenset({"tests", "migrations", "staticfiles", "node_modules", "var", "data", "docs", "deploy"})
+# A plural built by hand, Django's pluralize or "s" if n != 1 else "", agrees the
+# noun and forgets the verb ("1 need output"); counted takes the whole phrase.
 _PLURALIZE = re.compile(r"\|\s*pluralize\b")
-# "account(s)": a plural hedged in brackets. Only flagged where a value is
-# interpolated (an f-string, a template), since a plain string such as a CSV
-# column named "Duration(s)" is data, not a count.
-_BRACKETED = re.compile(r"(?:^|[a-z]|\}\})\((?:s|es|ies)\)")
 _SUFFIXES = frozenset({"s", "es"})
 _COUNTED_FILTER = re.compile(r"""\|\s*counted\s*:\s*(["'])(.*?)\1""")
 _FORM_TAG = re.compile(r"<(/?)form\b", re.IGNORECASE)
@@ -58,7 +36,6 @@ class TextFindings:
     """Every finding of one pass over the source, as ``(path, line[, why])``."""
 
     files: int = 0
-    em_dashes: list[tuple[Path, int]] = field(default_factory=list)
     hand_plurals: list[tuple[Path, int]] = field(default_factory=list)
     nested_forms: list[tuple[Path, int]] = field(default_factory=list)
     open_comments: list[tuple[Path, int]] = field(default_factory=list)
@@ -123,6 +100,7 @@ def _refusal(one: str, many: str | None) -> str | None:
 
 
 def _template_counts(path: Path, number: int, line: str, reading: TextFindings) -> None:
+    """Each ``|counted:"..."`` literal that cannot agree, which raises the moment a page renders it."""
     for match in _COUNTED_FILTER.finditer(line):
         reason = _refusal(*counted_phrases(match.group(2)))
         if reason:
@@ -130,7 +108,11 @@ def _template_counts(path: Path, number: int, line: str, reading: TextFindings) 
 
 
 def _template_forms(path: Path, number: int, line: str, depth: int, reading: TextFindings) -> int:
-    """The form depth after ``line``; a form opened inside an open one is found."""
+    """The form depth after ``line``; a form opened inside an open one is found.
+
+    HTML has no nested forms: the parser drops the inner opening tag and takes
+    the inner closing tag as the outer form's end, orphaning every control after.
+    """
     for match in _FORM_TAG.finditer(line):
         if match.group(1):
             depth = max(depth - 1, 0)
@@ -142,7 +124,11 @@ def _template_forms(path: Path, number: int, line: str, depth: int, reading: Tex
 
 
 def open_comment_lines(source: str) -> list[int]:
-    """Each line of a template that opens ``{#`` and does not close it there."""
+    """Each line of a template that opens ``{#`` and does not close it there.
+
+    Django's ``{# #}`` ends at the end of its line, so one that runs onto a second
+    line is printed on the page; a longer note is ``{% comment %}``.
+    """
     found = []
     for number, line in enumerate(source.splitlines(), 1):
         opened = line.rfind("{#")
@@ -154,12 +140,7 @@ def open_comment_lines(source: str) -> list[int]:
 def unclosed_template_comments(template_root: str | Path) -> list[str]:
     """Every comment left open under ``template_root``, as "page.html:line".
 
-    For an extension's own suite, which reads its own templates:
-
-        class TemplateCommentTests(SimpleTestCase):
-            def test_every_short_comment_closes_on_its_own_line(self):
-                root = Path(__file__).resolve().parents[1] / "templates"
-                self.assertEqual(unclosed_template_comments(root), [])
+    For an extension's own suite, which asserts it finds none in its templates.
     """
     root = Path(template_root)
     found = []
@@ -172,7 +153,7 @@ def unclosed_template_comments(template_root: str | Path) -> list[str]:
     return found
 
 
-def _read_template(path: Path, source: str, worded: bool, reading: TextFindings) -> None:
+def _read_template(path: Path, source: str, *, worded: bool, reading: TextFindings) -> None:
     reading.open_comments.extend((path, number) for number in open_comment_lines(source))
     text = TEMPLATE_COMMENT.sub(lambda match: "\n" * match.group().count("\n"), source)
     depth = 0
@@ -180,23 +161,9 @@ def _read_template(path: Path, source: str, worded: bool, reading: TextFindings)
         _template_counts(path, number, line, reading)
         if not worded:
             continue
-        if EM_DASH in line:
-            reading.em_dashes.append((path, number))
-        if _PLURALIZE.search(line) or _BRACKETED.search(line):
+        if _PLURALIZE.search(line):
             reading.hand_plurals.append((path, number))
         depth = _template_forms(path, number, line, depth, reading)
-
-
-def docstrings(tree: ast.AST) -> set[int]:
-    owners = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
-    return {
-        id(node.body[0].value)
-        for node in ast.walk(tree)
-        if isinstance(node, owners)
-        and node.body
-        and isinstance(node.body[0], ast.Expr)
-        and isinstance(node.body[0].value, ast.Constant)
-    }
 
 
 def _is_suffix_guess(node: ast.AST) -> bool:
@@ -206,12 +173,6 @@ def _is_suffix_guess(node: ast.AST) -> bool:
     branches = {node.body, node.orelse}
     values = {b.value for b in branches if isinstance(b, ast.Constant)}
     return len(values) == 2 and "" in values and bool(values & _SUFFIXES)
-
-
-def _is_bracketed_plural(node: ast.AST) -> bool:
-    return isinstance(node, ast.JoinedStr) and any(
-        isinstance(part, ast.Constant) and _BRACKETED.search(str(part.value)) for part in node.values
-    )
 
 
 def _literal(node: ast.AST | None) -> str | None:
@@ -224,7 +185,13 @@ def _counted_call_phrases(node: ast.AST) -> tuple[str, str | None] | None:
     """``(one, many)`` of a ``counted(n, "one"[, "many"])`` call with literal words."""
     if not isinstance(node, ast.Call):
         return None
-    name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+    name = (
+        node.func.id
+        if isinstance(node.func, ast.Name)
+        else node.func.attr
+        if isinstance(node.func, ast.Attribute)
+        else None
+    )
     if name != "counted" or len(node.args) < 2:
         return None
     one = _literal(node.args[1])
@@ -237,16 +204,11 @@ def _counted_call_phrases(node: ast.AST) -> tuple[str, str | None] | None:
     return one, _literal(many_node)
 
 
-def _has_em_dash(node: ast.AST) -> bool:
-    return isinstance(node, ast.Constant) and isinstance(node.value, str) and EM_DASH in node.value
-
-
-def _read_python(path: Path, source: str, worded: bool, reading: TextFindings) -> None:
+def _read_python(path: Path, source: str, *, worded: bool, reading: TextFindings) -> None:
     try:
         tree = ast.parse(source)
     except SyntaxError, ValueError:
         return
-    documented = docstrings(tree) if worded else set()
     for node in ast.walk(tree):
         phrases = _counted_call_phrases(node)
         reason = _refusal(*phrases) if phrases else None
@@ -254,21 +216,18 @@ def _read_python(path: Path, source: str, worded: bool, reading: TextFindings) -
             reading.unagreeable_counts.append((path, node.lineno, reason))
         if not worded:
             continue
-        if _has_em_dash(node) and id(node) not in documented:
-            reading.em_dashes.append((path, node.lineno))
-        if _is_suffix_guess(node) or _is_bracketed_plural(node):
+        if _is_suffix_guess(node):
             reading.hand_plurals.append((path, node.lineno))
 
 
-def read() -> TextFindings:
+def read(roots: list[Path] | None = None) -> TextFindings:
     """One pass over HQ and its extensions: each tree walked and each file parsed once.
 
-    Wording and markup are read in HQ and in each extension checked out beside
-    it. ``counted`` phrases and comments left open are read in those and in
-    every installed extension as well, because a phrase that cannot agree fails
-    a page, and an open comment is printed on one, wherever it lives.
+    Plurals and markup are read in HQ and the extensions checked out beside it,
+    or in ``roots`` when given; ``counted`` phrases and open comments in every
+    installed extension too, since either fails a page wherever it lives.
     """
-    worded_roots = _roots()
+    worded_roots = _roots() if roots is None else roots
     reading = TextFindings()
     for root in _outermost(worded_roots + _plugin_roots()):
         for path in _files(root):
@@ -278,7 +237,7 @@ def read() -> TextFindings:
             reading.files += 1
             worded = any(path.is_relative_to(worded) for worded in worded_roots)
             if path.suffix == ".html":
-                _read_template(path, source, worded, reading)
+                _read_template(path, source, worded=worded, reading=reading)
             else:
-                _read_python(path, source, worded, reading)
+                _read_python(path, source, worded=worded, reading=reading)
     return reading

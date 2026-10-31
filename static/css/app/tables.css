@@ -13,8 +13,8 @@
 /* A wrapped bar is whole rows: controls grow to fill their row, the first (search or the one choice) takes most of it, words never grow. */
 :where(.filter-bar, .table-filters) > :where(:not(.control-label, .filter-bar-summary)) { flex: 1 1 auto; }
 .filter-bar > :first-child:not(.control-label) { flex: 1000 1 240px; min-width: 0; }
-/* The search asks for its whole placeholder (`size`), so the filters beside it wrap before it is cut. */
-.table-toolbar > .table-search { flex: 1000 1 auto; min-width: 0; }
+/* The search asks for its whole placeholder, or what is typed in it (`field-sizing`), so the filters beside it wrap before it is cut. */
+.table-toolbar > .table-search { field-sizing: content; flex: 1000 1 auto; min-width: 0; }
 /* A select is as wide as its longest option unless told otherwise. */
 .filter-bar > select { max-width: 100%; min-width: 0; }
 .filter-bar > .btn, .table-filters > .btn { justify-content: center; }
@@ -27,7 +27,7 @@
 /* min-width: 0, or a grid or flex ancestor sizes to the table and the overflow escapes the card. */
 /* A region that scrolls scrolls sideways, never widening the page; `overflow-y` is stated or it computes to `auto`. */
 /* The region is the container columns are dropped against: a table beside a chart is as narrow as one on a phone. */
-.table-scroll { container: table-region / inline-size; overflow-x: auto; overflow-y: clip; -webkit-overflow-scrolling: touch; margin-bottom: var(--space-8); min-width: 0; max-width: 100%; }
+.table-scroll { container: table-region / inline-size; overflow-x: auto; overflow-y: clip; margin-bottom: var(--space-8); min-width: 0; max-width: 100%; }
 .table-scroll .data-table { margin-bottom: 0; }
 /* The scroll box clips what overflows it, the table's shadow included, so the box carries border, radius and shadow. */
 .table-scroll > .data-table { border: 0; border-radius: 0; box-shadow: none; }
@@ -190,7 +190,6 @@
   background-size: 5px 5px;
   background-repeat: no-repeat;
 }
-.table-filter-menu summary::-webkit-details-marker { display: none; }
 /* A panel that would run off the right of the screen hangs from the disclosure's right edge; app.js decides when it opens. */
 details > [data-edge="end"] { left: auto; right: 0; }
 .table-filter-options { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; min-width: min(220px, 100%); max-width: calc(100vw - 32px); max-height: 280px; overflow: auto; display: grid; gap: var(--space-1); padding: var(--space-4); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow); }
@@ -263,8 +262,10 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .data-table > tbody > tr.is-expanded > td .whole:not(td > strong:first-child *, td > a:first-child > strong *, .cell-data *) { display: inline-block; }
 /* A box that cut a value is as wide as its track, never its content, or a run with no seam would push past the column. */
 .data-table > tbody > tr.is-expanded > td :is(code:not(.cell-whole) > .token[data-sole], [data-entity] > :is(.token[data-sole], .cut)) { width: 100%; }
+/* The chip's baseline is its token's: the grid's first row, ahead of the
+   strut's rows, whose text has none of the chip's padding. */
 .data-table td code:not(.cell-whole) > .token[data-sole] {
-  display: block; justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  display: block; justify-self: start; order: -1; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
   padding: 1px calc(var(--space-2) + 1px) 1px var(--space-2); border-radius: 4px; background: var(--bg-tint);
 }
 /* An identifier the row is read by, among many columns, wraps at its seams with a chip on each line, so its column can give way without hiding any of it. */

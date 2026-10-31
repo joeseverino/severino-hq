@@ -1,20 +1,9 @@
 """Where two connections disagree about the same thing.
 
-Each connection reports alone: the DNS provider its records, the proxy its
-routes, Docker its containers, Access its applications. Each report can be
-healthy while together they describe something that cannot work: a public
-name answered by a machine that serves nothing for it, a route to a container
-that is not running, an Access application guarding a name nothing answers.
-These rules read what HQ already stores and walks (``application.paths``) and
-poll nothing of their own.
-
-Every finding names what each side says, so the fix is a choice between them,
-and offers the declaration HQ can change to make them agree.
-
-
-They are found while the topology is derived, which may read, and carried on
-a node as a ``contradiction`` fact; the rules only read those facts, because
-deriving findings costs no query.
+Each report can be healthy while together they describe something that cannot
+work; the rules are docs/Derived-Facts.md#contradictions. Every finding names
+what each side says, so the fix is a choice between them, and offers the
+declaration HQ can change to make them agree.
 """
 
 import json
@@ -45,10 +34,13 @@ lazy from . import exposure, zones
 lazy from .containers import containers
 lazy from .facts import inventory_records
 lazy from .infrastructure import enabled_resources
+lazy from .path_model import Route
 lazy from .paths import path_to, routed_names
 lazy from .services import find_service
 
 # The fact a contradiction travels on, from the topology to the rule reading it.
+# Contradictions are found while the topology is derived, which may read, so
+# the rules only read this fact and deriving findings costs no query.
 FACT = "contradiction"
 
 UPDATE_CAPABILITY = "infrastructure.resource.update"
@@ -242,46 +234,55 @@ def _split_horizon() -> tuple[Finding, ...]:
     found = []
     for name in routed_names():
         routes = path_to(name).routes
-        public = {route.machine for route in routes if public_name(route) and route.machine}
-        internal = {route.machine for route in routes if not public_name(route) and route.machine}
-        # Every machine a public request crosses: an edge that proxies on to
-        # the machine the internal record names is a front, and deliberate.
-        crossed = {hop.name for route in routes if public_name(route) for hop in route.hops if hop.step == "machine"}
-        if not public or not internal or public & internal or internal <= crossed:
-            continue
-        rewrites = _declared(
-            name,
-            (kind for kind, provider in PROVIDERS.items() if provider.facet == "dns" and not provider.public_effect),
-        )
-        records = _declared(
-            name, (kind for kind, provider in PROVIDERS.items() if provider.facet == "dns" and provider.public_effect)
-        )
-        found.append(
-            Finding(
-                rule="split-horizon-disagrees",
-                subject=_subject(name),
-                title=(
-                    f"{name} goes to {', '.join(sorted(public))} from the internet "
-                    f"and {', '.join(sorted(internal))} from home"
-                ),
-                severity="attention",
-                explanation=(
-                    "That is right only if you meant it. Otherwise the public record "
-                    "or the internal record is out of date."
-                ),
-                evidence=tuple(("Path", route.line) for route in routes),
-                remedies=(
-                    *(_update(key, "Change the internal record") for key in rewrites),
-                    *(_update(key, "Change the public record") for key in records),
-                ),
-                steps=(
-                    OperatorStep(
-                        label=f"Point the internal record for {name} at the machine the public one reaches, or the other way round."
-                    ),
-                ),
-            )
-        )
+        if apart := _machines_apart(routes):
+            found.append(_split_horizon_finding(name, routes, *apart))
     return tuple(found)
+
+
+def _machines_apart(routes: tuple[Route, ...]) -> tuple[set[str], set[str]] | None:
+    """The machines a name reaches from the internet and from home, when the
+    two answers disagree; None when either is missing or they agree."""
+
+    public = {route.machine for route in routes if public_name(route) and route.machine}
+    internal = {route.machine for route in routes if not public_name(route) and route.machine}
+    # Every machine a public request crosses: an edge that proxies on to
+    # the machine the internal record names is a front, and deliberate.
+    crossed = {hop.name for route in routes if public_name(route) for hop in route.hops if hop.step == "machine"}
+    if not public or not internal or public & internal or internal <= crossed:
+        return None
+    return public, internal
+
+
+def _dns_kinds(*, public: bool) -> tuple[str, ...]:
+    """The kinds of DNS record that answer the internet, or only home."""
+
+    return tuple(
+        kind for kind, provider in PROVIDERS.items() if provider.facet == "dns" and provider.public_effect is public
+    )
+
+
+def _split_horizon_finding(name: str, routes: tuple[Route, ...], public: set[str], internal: set[str]) -> Finding:
+    return Finding(
+        rule="split-horizon-disagrees",
+        subject=_subject(name),
+        title=(
+            f"{name} goes to {', '.join(sorted(public))} from the internet and {', '.join(sorted(internal))} from home"
+        ),
+        severity="attention",
+        explanation=(
+            "That is right only if you meant it. Otherwise the public record or the internal record is out of date."
+        ),
+        evidence=tuple(("Path", route.line) for route in routes),
+        remedies=(
+            *(_update(key, "Change the internal record") for key in _declared(name, _dns_kinds(public=False))),
+            *(_update(key, "Change the public record") for key in _declared(name, _dns_kinds(public=True))),
+        ),
+        steps=(
+            OperatorStep(
+                label=f"Point the internal record for {name} at the machine the public one reaches, or the other way round."
+            ),
+        ),
+    )
 
 
 # ----- A port published on a machine that no proxy fronts --------------------
@@ -298,7 +299,7 @@ def _unfronted_ports() -> tuple[Finding, ...]:
         if front_door_names(item):
             continue
         machine = item.machine
-        answering = publicly_answering((*getattr(machine, "addresses", ()), getattr(machine, "address", "")))
+        answering = publicly_answering((*machine.addresses, machine.address))
         open_ports = sorted(port for port in item.running.ports if port in answering)
         if not open_ports:
             continue

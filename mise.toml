@@ -29,11 +29,12 @@
 # command to; nothing here needs a virtualenv made by hand. uv itself is one of
 # the tools below.
 
-min_version = "2026.10.18"
+min_version = "2026.10.21"
 
 [settings]
-# The runners, which build the images, and the machines gates run on by hand.
-lockfile_platforms = ["linux-x64", "macos-arm64"]
+# The runners, which build the images, the machines gates run on by hand, and
+# the image an Apple-silicon machine builds for itself in `mise run build`.
+lockfile_platforms = ["linux-arm64", "linux-x64", "macos-arm64"]
 # Here, in CI and in the images, nothing installs that mise.lock does not record.
 locked = true
 
@@ -59,17 +60,26 @@ UV_LOCKED = "1"
 GOTOOLCHAIN = "local"
 
 [tools]
-node = "26.12.1"
+node = "26.13.0"
 # The controller's Go is the release go.mod's toolchain line names, its one
 # pin, which Renovate moves; the images install it and uv from mise.lock.
 go = '{{ read_file(path="controller/go.mod") | regex_replace(pattern="(?ms).*^toolchain go([0-9.]+)$.*", rep="$1") }}'
 shellcheck = "0.11.0"
-actionlint = "1.7.12"
+# The Go linter, its linters chosen in controller/.golangci.yml (lint:controller).
+"aqua:golangci/golangci-lint" = "2.15.0"
+jactionlint = { version = "2.4.0", workflow = "release.yaml" }
 # The workflows' security audit (lint:workflows), offline.
 zizmor = "1.31.1"
+# The prose linter: HQ's wording rules, in tools/lint/vale/.vale.ini (lint:prose).
+# 3.25 no longer masks a template's {% comment %} block, so lint:prose reads
+# comments as shown text; renovate.json skips 3.25.x.
+vale = "3.24.0"
+# Structural rules over the source, in tools/lint/ast-grep/ (lint:ast-grep), and the
+# counts Ruff has no rule for (audit:ast).
+ast-grep = "0.51.0"
 yq = "4.54.1"
 jq = "1.8.2"
-uv = "0.13.5"
+uv = "0.13.6"
 # The Scorecard the pinned ossf/scorecard-action builds against (its go.mod).
 # Lazy, as age is: only lint:scorecard runs it.
 scorecard = { version = "5.6.0", lazy = true }
@@ -77,7 +87,7 @@ scorecard = { version = "5.6.0", lazy = true }
 # `mise install` leaves it to its first use, held to mise.lock all the same.
 age = { version = "1.3.2", lazy = true }
 # The image scan, here (image:trivy) and in Compose. Lazy, as age is.
-trivy = { version = "0.76.0", lazy = true }
+trivy = { version = "0.76.1", lazy = true }
 # Tags a proven image on main: `crane tag` PUTs the manifest's own bytes, so
 # the tag names the signed digest. Lazy, as age is.
 crane = { version = "0.22.1", lazy = true }
@@ -98,7 +108,7 @@ linux-arm64 = { asset_pattern = "codebase-memory-mcp-linux-arm64-portable.tar.gz
 # src/defaults.json), so the local analysis runs the queries CI runs. Bump with
 # that action. Lazy, as age is: only scan:codeql runs it.
 [tools."github:github/codeql-action"]
-version = "2.27.2"
+version = "2.27.3"
 version_prefix = "codeql-bundle-v"
 bin_path = "codeql"
 lazy = true
@@ -127,36 +137,27 @@ linux-x64 = { asset_pattern = "codeql-bundle-linux64.tar.zst" }
 env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 
 # ------------------------------------------------------------------ heavy
-# A task that loads the machine (a suite, a browser, an aggregate of them) runs
-# under tools/lib/heavy.sh: its shell is mise's default behind the
-# wrapper. Heavy tasks take turns through one lock every checkout shares; one
-# started while another holds the turn names the holder and waits for it, up to
-# SEVERINO_HEAVY_WAIT seconds (two hours by default), then exits 75. A heavy
-# task inside a turn runs in it. CI takes no lock. The timeout stops a
-# hung holder: well above the slowest gate (the suite, a browser gate), and an
-# aggregate's above the gates it runs in turn. A file task sources
-# tools/lib/heavy-turn.sh and sets its timeout in its header. A template takes
-# the turn for every run; a task whose tests are given to it decides per run
-# through tools/gate/turn.py (`test` in tools/gate/at.py). mise's own
-# task.timeout setting would bound the whole run, development servers
-# included, so each heavy task carries its own.
+# A task that loads the machine runs under tools/lib/heavy.sh, which says how
+# the turn is taken: its shell is mise's default behind the wrapper. Its
+# SEVERINO_HEAVY_BOUND stops a hung holder once its turn has started: well
+# above the slowest gate (the suite, a browser gate), and an aggregate's above
+# the gates it runs in turn. It carries no mise timeout, whose clock would run
+# while the task waits for its turn.
 [task_templates.heavy]
+env = { SEVERINO_HEAVY_BOUND = "30m" }
 shell = "tools/lib/heavy.sh sh -o errexit -c"
-timeout = "30m"
 
 # A Django gate that loads the machine: django's env inside a heavy turn.
 [task_templates.django-heavy]
-env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
+env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false, SEVERINO_HEAVY_BOUND = "30m" }
 shell = "tools/lib/heavy.sh sh -o errexit -c"
-timeout = "30m"
 
 # A browser gate: django-heavy's env and turn, WebKit installed first, and the
 # test classes its task names in `vars.classes`, which mise renders from the
 # extending task's own vars.
 [task_templates.django-browser]
-env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
+env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false, SEVERINO_HEAVY_BOUND = "30m" }
 shell = "tools/lib/heavy.sh sh -o errexit -c"
-timeout = "30m"
 depends = [{ task = "setup:browser", args = ["webkit"] }]
 usage = 'flag "--fallback-face" help="Draw every page in the system face, as a reader sees it before Inter loads"'
 run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test {{ vars.classes }} --noinput --parallel auto"
@@ -238,6 +239,7 @@ flag "--seed <seed>" help="Fill it with a named data set (hq/platform/core/seeds
     choices "showcase" "standard" "empty" "scale"
 }
 flag "--port <port>" help="A fixed port instead of a free one"
+flag "--reload" negate="--no-reload" help="Restart on each change to Python or a template, as it does by default; --no-reload serves the code it started with, without the reloader's supervising process and its memory"
 flag "--plan" help="Print what it would run under and exit"
 '''
 run = "tools/dev/dev.sh"
@@ -267,7 +269,10 @@ run = "uv run python manage.py"
 
 [tasks.fast]
 description = "While editing: the tests the change reaches, and the quick gates that read the paths it touched"
-extends = "django-heavy"
+# Its test run alone takes the heavy turn (tools/gate/fast.py), so the quick
+# gates of one worktree never wait on another's suite; the bound is that run's.
+extends = "django"
+env = { SEVERINO_HEAVY_BOUND = "30m" }
 # The lint tools the quick gates and the stylesheet tests run.
 depends = ["setup:lint-tools"]
 usage = '''
@@ -281,7 +286,7 @@ run = "uv run python -m tools.gate.fast"
 description = "After editing, or when fast is not enough: CI's lint job, every lint:* gate: lint, types, structure, dependencies, security, derived files"
 # Run-form, so the gates and the installs they depend on run inside one turn.
 extends = "heavy"
-timeout = "2h"
+env = { SEVERINO_HEAVY_BOUND = "2h" }
 run = "uv run python -m tools.gate.verdict lint mise run -c 'lint:*'"
 
 [tasks.scan]
@@ -289,20 +294,18 @@ description = "To reproduce an alert CI's scan job raised: CodeQL's security-and
 depends = ["scan:*"]
 
 # Whether this checkout can compose its extensions: `mise doctor project` names
-# each gap with its fix. Without a set, `fast` skips the composed pass and says
-# nothing, and an agent's worktree has none until its mise.local.toml is copied
-# in. A check that needs the set depends on it, so without one it is reported
-# blocked and one missing file is reported once.
+# each gap with its fix. A check that needs the set depends on it, so without
+# one it is reported blocked and one missing file is reported once.
 [doctor.checks."local:extensions"]
 description = "mise.local.toml names an extension set, so the composed suite and dev servers load it"
 run = 'test -n "$HQ_LOCAL_PLUGINS"'
-hint = "cp tools/dev/mise.local.example.toml mise.local.toml and name your extension checkouts in it"
+hint = "mise run setup:extensions <checkout>... names the set from your extension checkouts"
 
 [doctor.checks."local:extension-sources"]
 description = "Every directory on HQ_LOCAL_PYTHONPATH exists"
 depends = "local:extensions"
 run = 'IFS=:; for d in $HQ_LOCAL_PYTHONPATH; do test -d "$d" || exit 1; done'
-hint = "Point HQ_LOCAL_PYTHONPATH in mise.local.toml at each extension checkout's src directory"
+hint = "mise run setup:extensions <checkout>... names each package's src directory again"
 
 [doctor.checks."local:extension-imports"]
 description = "Every module HQ_LOCAL_PLUGINS names imports with the host's libraries"

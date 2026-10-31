@@ -28,10 +28,13 @@ from .conditions import stamped
 from .infrastructure import controller_contract, resolved_spec, serialize_resource
 from .plugin_admission import admitted_sources
 from .resource_operations import enqueue, serialize_operation
+lazy from .cadence import request_reading, swept
 lazy from .dependency_updates import plan as dependency_updates
+lazy from .derivations import present
 lazy from .expiry import certificate_expiry, renewal_opens_at, renewal_window
 lazy from .findings import auto_remediable
 lazy from .github_profile import plan as github_profiles
+lazy from .resource_capabilities import LIFECYCLE_VERBS
 lazy from .security import cli_principal
 
 _FORBIDDEN_STATUS_KEYS = ("private", "secret", "token", "password", "credential")
@@ -49,18 +52,10 @@ class ControllerReport:
 def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any]) -> None:
     """Mark the places a certificate was just verified at as observed.
 
-    No sweep reports a delivery target (how a place takes a certificate is not
-    something any provider volunteers, which is why it has to be stated), so
-    ``confirm_observed`` skips it. Reconciling the certificate is what observes
-    it: it opens a connection to each target, asks what it is serving and
-    matches the fingerprint against what HQ issued, a stronger check than any
-    sweep performs. That answer arrives under the certificate's name, so it is
-    recorded against each target here.
-
-    Joined on the connection each consumer names rather than on the consumer
-    name itself. That name belongs to the certificate: a target holding a second
-    certificate is named after *that* certificate there, so matching by name
-    would confirm the wrong row or silently confirm nothing.
+    No sweep reports a delivery target, so ``confirm_observed`` skips it.
+    Reconciling the certificate observes it, matching each target's served
+    fingerprint against what HQ issued, a stronger check than any sweep; that
+    answer arrives under the certificate's name, so it is recorded here.
     """
 
     if resource.kind not in (CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND):
@@ -69,6 +64,10 @@ def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any])
     if not verified:
         return
 
+    # Joined on the connection each consumer names, never the consumer name,
+    # which belongs to the certificate: a target holding a second certificate
+    # is named after that one there, so matching by name would confirm the
+    # wrong row or nothing.
     reached = {
         consumer.get("connection_ref")
         for consumer in resolved_spec(resource).get("consumers", ())
@@ -152,10 +151,6 @@ def peek_next_operation(*, capabilities: tuple[tuple[str, str], ...] = ()) -> di
         # answer "it cannot build this one, because ..." rather than a traceback.
         result["unresolvable"] = str(exc)
     return result
-
-
-def _scheduler_now():
-    return timezone.now()
 
 
 def _certificate_expiry(resource: ManagedResource):
@@ -248,7 +243,7 @@ def _finding_repairs(controller_id: str, now) -> list[str]:
 def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
     """Queue work declared automatic by the validated controller contract."""
     scheduled: list[str] = []
-    now = _scheduler_now()
+    now = present()
     automatic = enabled_controller_actions(automatic_only=True)
     by_kind: dict[str, list[str]] = {}
     for kind, action in automatic:
@@ -373,6 +368,17 @@ def _next_resolvable(operations, now):
 
 
 @transaction.atomic
+def _read_back_lifecycle(operation: OperationRequest) -> None:
+    """Ask for a lifecycle operation's kind to be read once it is reported
+    done, whatever its outcome. The ask made when it was queued can be
+    answered by a sweep already running then, which read the state before
+    the operation acted."""
+
+    kind = operation.resource.kind
+    if operation.action in LIFECYCLE_VERBS and swept(kind):
+        transaction.on_commit(lambda: request_reading(kind))
+
+
 def report_operation(
     operation_id: str,
     report: ControllerReport,
@@ -432,6 +438,7 @@ def report_operation(
     resource.save(update_fields=resource_fields)
     if report.success:
         _confirm_delivery_targets(resource, report.status)
+    _read_back_lifecycle(operation)
 
     if report.success and operation.action == OperationRequest.Action.DELETE:
         # The declaration outlived the thing it described. Keeping it would put
@@ -481,7 +488,7 @@ def controller_registry() -> dict[str, Any]:
             for action, policy in sorted(capability.actions.items())
             if policy.mode == "locked"
         ],
-        "material_kinds": sorted(kind for kind, provider in PROVIDERS.items() if provider.material_handler),
+        "material_kinds": sorted(kind for kind, provider in PROVIDERS.items() if provider.material_capability),
         "connection_providers": {
             kind: list(provider.connection_providers) for kind, provider in sorted(PROVIDERS.items())
         },

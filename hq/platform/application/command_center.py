@@ -8,6 +8,7 @@ from hq.domains.control_plane.names import normalized_hostname
 
 from .action_links import command_url
 from .capabilities import CapabilitySpec
+from .command_targets import starting_page
 from .connection_catalog import connection_catalog
 from .connections import ConnectionAbility, ConnectionSpec
 from .contracts import route_url
@@ -92,11 +93,16 @@ def _match_score(item: DiscoveryItem, query: str) -> int:
     )
 
 
-def _matching(items: tuple[DiscoveryItem, ...], query: str) -> tuple[DiscoveryItem, ...]:
-    matched = tuple(item for item in items if _matches(item, query))
+def _ranked(items: tuple[DiscoveryItem, ...], query: str) -> tuple[DiscoveryItem, ...]:
+    """The items best match first, or as declared when nothing was asked."""
+
     if not query:
-        return matched
-    return tuple(sorted(matched, key=lambda item: _match_score(item, query), reverse=True))
+        return items
+    return tuple(sorted(items, key=lambda item: _match_score(item, query), reverse=True))
+
+
+def _matching(items: tuple[DiscoveryItem, ...], query: str) -> tuple[DiscoveryItem, ...]:
+    return _ranked(tuple(item for item in items if _matches(item, query)), query)
 
 
 def _ability_contains_any(ability: ConnectionAbility, query: str) -> bool:
@@ -150,15 +156,23 @@ def _command_matches_ability(command: CapabilitySpec, ability: ConnectionAbility
     return not constrained_kinds or bool(governed & constrained_kinds)
 
 
-def _command_item(spec: CapabilitySpec, relation: CommandRelation) -> DiscoveryItem:
-    url = command_url(spec.name, kinds=relation.kinds)
+def _command_item(spec: CapabilitySpec, relation: CommandRelation) -> DiscoveryItem | None:
+    """A command as search offers it: its form, or the page a person starts
+    it from (``reached_from``); ``None`` for one only its own page sends."""
+
+    url, destination = command_url(spec.name, kinds=relation.kinds), ""
+    if spec.reached_from:
+        start = starting_page(spec)
+        if start is None:
+            return None
+        destination, url = start
     return DiscoveryItem(
         kind="command",
         name=spec.name,
         label=spec.title,
         summary=spec.summary,
         url=url,
-        destination_label="",
+        destination_label=destination,
         badges=(
             effect_label(spec.effect),
             *(f"via {label}" for label in relation.labels),
@@ -392,31 +406,40 @@ def command_center(query: str, *, principal: Principal, include_live_connections
 def _command_center(query: str, *, principal: Principal, include_live_connections: bool) -> dict:
 
     graph = integration_graph()
-    registered_resources = tuple(graph.resources.values())
-    registered_commands = tuple(graph.capabilities.values())
-    registered_connections = tuple(graph.connections.values())
     permitted_connections = tuple(
-        spec for spec in registered_connections if principal.permits(*spec.required_capabilities)
+        spec for spec in graph.connections.values() if principal.permits(*spec.required_capabilities)
     )
     # Registry discovery is a zero-query application primitive used by CLI,
     # MCP and contract checks. The web palette explicitly opts into cached live
     # instances because operator-entered names and current reachability are the
-    # point of that surface; other adapters keep the cheap contract.
-    live_connections = (
-        tuple(
-            _live_connection_item(group, connection)
-            for group in connection_catalog(principal=principal)
-            for connection in group.connections
-        )
-        if include_live_connections
-        else ()
+    # point of that surface; other adapters keep the cheap contract. The estate
+    # is live state too: only the palette and the search page ask for it.
+    live_connections = _live_connection_items(principal) if include_live_connections else ()
+    estate = estate_search(query, principal=principal) if include_live_connections else ()
+    views, checks = _questions(principal)
+    return {
+        "estate": estate,
+        "resources": _matching(_resource_items(tuple(graph.resources.values()), principal), query),
+        "commands": _ranked(
+            _command_items(tuple(graph.capabilities.values()), permitted_connections, principal, query),
+            query,
+        ),
+        "connections": _matching((*live_connections, *_connection_items(permitted_connections, query)), query),
+        "views": _matching(views, query),
+        "checks": _matching(checks, query),
+    }
+
+
+def _live_connection_items(principal: Principal) -> tuple[DiscoveryItem, ...]:
+    return tuple(
+        _live_connection_item(group, connection)
+        for group in connection_catalog(principal=principal)
+        for connection in group.connections
     )
-    related_commands = _related_command_labels(
-        permitted_connections,
-        registered_commands,
-        query,
-    )
-    resources = tuple(
+
+
+def _resource_items(registered: tuple[ResourceSpec, ...], principal: Principal) -> tuple[DiscoveryItem, ...]:
+    return tuple(
         DiscoveryItem(
             kind="resource",
             name=spec.name,
@@ -426,12 +449,24 @@ def _command_center(query: str, *, principal: Principal, include_live_connection
             destination_label="",
             badges=(),
         )
-        for spec in registered_resources
+        for spec in registered
         if principal.permits(*spec.required_capabilities)
     )
-    commands = tuple(
+
+
+def _command_items(
+    registered: tuple[CapabilitySpec, ...],
+    permitted_connections: tuple[ConnectionSpec, ...],
+    principal: Principal,
+    query: str,
+) -> tuple[DiscoveryItem, ...]:
+    """The permitted commands the query matches, and those a matching
+    connection relates to, each carrying that relation unless it was named."""
+
+    related = _related_command_labels(permitted_connections, registered, query)
+    return tuple(
         item
-        for spec in registered_commands
+        for spec in registered
         if principal.permits(*spec.required_capabilities)
         for item in (
             _command_item(
@@ -439,13 +474,16 @@ def _command_center(query: str, *, principal: Principal, include_live_connection
                 (
                     CommandRelation()
                     if query.casefold() == spec.name.casefold()
-                    else related_commands.get(spec.name, CommandRelation())
+                    else related.get(spec.name, CommandRelation())
                 ),
             ),
         )
-        if _matches(item, query) or spec.name in related_commands
+        if item is not None and (_matches(item, query) or spec.name in related)
     )
-    connections = tuple(
+
+
+def _connection_items(permitted: tuple[ConnectionSpec, ...], query: str) -> tuple[DiscoveryItem, ...]:
+    return tuple(
         DiscoveryItem(
             kind="connection",
             name=spec.name,
@@ -458,63 +496,43 @@ def _command_center(query: str, *, principal: Principal, include_live_connection
                 term for ability in spec.abilities for term in (ability.name, ability.label, ability.summary)
             ),
         )
-        for spec in permitted_connections
+        for spec in permitted
     )
-    # A lens is a question about the graph rather than a thing in it, so it
-    # costs no query to offer: the declarations are static and the projection is
-    # derived only once the operator opens one.
-    views = (
-        tuple(
-            DiscoveryItem(
-                kind="view",
-                name=lens.name,
-                label=lens.label,
-                summary=lens.summary,
-                url=_lens_url(lens.name),
-                destination_label="",
-                badges=(),
-            )
-            for lens in topology_lenses()
+
+
+def _questions(principal: Principal) -> tuple[tuple[DiscoveryItem, ...], tuple[DiscoveryItem, ...]]:
+    """The topology lenses and the finding rules a reader may open.
+
+    Each is a question about the graph rather than a thing in it, so it costs
+    no query to offer: the declarations are static and the projection is
+    derived only once the operator opens one. A rule is offered, not the claims
+    it would make, which would derive the whole projection on every keystroke.
+    """
+
+    if not principal.permits(Capability.READ):
+        return (), ()
+    views = tuple(
+        DiscoveryItem(
+            kind="view",
+            name=lens.name,
+            label=lens.label,
+            summary=lens.summary,
+            url=_lens_url(lens.name),
+            destination_label="",
+            badges=(),
         )
-        if principal.permits(Capability.READ)
-        else ()
+        for lens in topology_lenses()
     )
-    # Rules, not the claims they would make. Live findings here would derive the
-    # whole projection on every keystroke.
-    checks = (
-        tuple(
-            DiscoveryItem(
-                kind="check",
-                name=rule.name,
-                label=rule.title,
-                summary="",
-                url=_finding_url(rule.name),
-                destination_label="",
-                badges=(urgency(rule.severity),),
-            )
-            for rule in finding_rules()
+    checks = tuple(
+        DiscoveryItem(
+            kind="check",
+            name=rule.name,
+            label=rule.title,
+            summary="",
+            url=_finding_url(rule.name),
+            destination_label="",
+            badges=(urgency(rule.severity),),
         )
-        if principal.permits(Capability.READ)
-        else ()
+        for rule in finding_rules()
     )
-    # The estate is live state, like the live connections: only the palette
-    # and the search page ask for it.
-    estate = estate_search(query, principal=principal) if include_live_connections else ()
-    return {
-        "estate": estate,
-        "resources": _matching(resources, query),
-        "commands": (
-            tuple(
-                sorted(
-                    commands,
-                    key=lambda item: _match_score(item, query),
-                    reverse=True,
-                )
-            )
-            if query
-            else commands
-        ),
-        "connections": _matching((*live_connections, *connections), query),
-        "views": _matching(views, query),
-        "checks": _matching(checks, query),
-    }
+    return views, checks

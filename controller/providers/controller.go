@@ -287,12 +287,9 @@ func (c *Controller) hasSource(kind string, connected map[runtime.ConnectionProv
 	for _, provider := range c.Declared.ConnectionCredentials {
 		credentials[provider] = true
 	}
-	for _, provider := range needs {
-		if credentials[provider] && connected[provider] {
-			return true
-		}
-	}
-	return local && held.has()
+	return slices.ContainsFunc(needs, func(provider runtime.ConnectionProvider) bool {
+		return credentials[provider] && connected[provider]
+	}) || local && held.has()
 }
 
 // readKind is one kind's report: its records and any parts refused while they

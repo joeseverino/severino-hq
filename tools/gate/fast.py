@@ -1,23 +1,15 @@
 """The inner-loop gate: only what the change can have broken.
 
-Changed files against the merge base are mapped to the test modules that reach
-them, by the import graph of the tree itself (nothing here lists an app), a
-changed task definition to the tests that read the tasks, and a changed file
-that is not Python to the tests that name its path. The
-architecture tests always run, and a change to a module under hq/ or hq_sdk/
-runs every test tagged tree, which finds its files by walking. Every other check is a mise task, run here by
-name, so each exists once, and only when the change touches a path it reads
-(TASKS). A change to what extensions render through
-(templates, static, hq_sdk, the shared page and table layer) also runs the
-extensions' own suites, composed, when HQ_LOCAL_PLUGINS names a set.
-```mise run check``` stays the gate before a push.
-
-Run as `mise run fast`; `mise run fast --help` says what it takes.
+What it selects from the changed files, and which quick gates it runs beside
+them: docs/Development.md, What `fast` runs. ``mise run check`` stays the gate
+before a push.
 """
 
 from __future__ import annotations
 
 import ast
+import functools
+import json
 import os
 import re
 import subprocess
@@ -26,11 +18,18 @@ import time
 from fnmatch import fnmatch
 from pathlib import Path
 
-from hq.platform.core.tests.task import Usage, usage
+from hq.platform.application.tests.tree import tagged
+from hq.platform.core.tests.task import RefError, Usage, git, usage
+from tests.mise_tasks import run_files
 from tools.gate.verdict import Step, close, run
 from tools.structural.classify import TEST
 
 ROOT = Path(__file__).resolve().parents[2]
+# Only the test run waits for the machine's heavy turn: its parallel workers
+# hold a suite's memory for most of fast's time, while each quick gate is one
+# short process, and the composed suites take the turn as their own task
+# decides.
+HEAVY = ROOT / "tools" / "lib" / "heavy.sh"
 # The quick gates, each with the paths a change must touch for it to run, as
 # fnmatch patterns, where `*` crosses directories. Those selected run side by
 # side; each Django gate opens a database of its own (the django task
@@ -39,12 +38,17 @@ PYTHON = ("*.py",)
 TASKS: dict[str, tuple[str, ...]] = {
     "lint:ruff": PYTHON,
     "lint:mypy": PYTHON,
+    "lint:ast-grep": (*PYTHON, "tools/lint/ast-grep/*"),
     # The graph fingerprints functions in every language it indexes.
     "lint:structural": (*PYTHON, "*.go", "*.js", "*.mjs", "*.sh", "mise-tasks/*", "tools/structural/*"),
-    "lint:css": ("static/css/*", "tools/lint/*"),
+    "lint:complexity": (*PYTHON, "complexipy.toml"),
+    "lint:controller": ("controller/*",),
+    "lint:css": ("static/css/*", "tools/lint/*.mjs", "tools/lint/package*.json"),
+    "lint:js": ("static/js/*", "tools/lint/*.mjs", "tools/lint/package*.json"),
     "lint:deptry": ("hq/*.py", "hq_sdk/*.py"),
+    "lint:imports": ("hq/*.py",),
+    "lint:prose": (*PYTHON, "*.html", "*.md", "*.js", "*.css", "*.go", "*.sh", "tools/lint/vale/*"),
     "lint:mise-tasks": ("mise-tasks/*",),
-    "test:django": PYTHON,
     "test:migrations": ("hq/*.py",),
     "lint:drift-sdk-contract": (*PYTHON, "hq_sdk/*", "docs/Plugins.md"),
     "lint:drift-api-document": (*PYTHON, "hq/platform/api/hq-api.openapi.json"),
@@ -53,8 +57,9 @@ TASKS: dict[str, tuple[str, ...]] = {
     "lint:drift-font": ("tools/fonts/*", "static/fonts/*", "static/css/*"),
 }
 # Paths a gate never reads, so a change to them alone leaves it out: the
-# structural bar drops test code before it pairs anything.
-UNREAD = {"lint:structural": TEST}
+# structural bar drops test code before it pairs anything, and complexipy.toml
+# leaves it out.
+UNREAD = {"lint:structural": TEST, "lint:complexity": TEST}
 # What every gate reads: the dependencies, the tool pins and the task
 # definitions. A change to one runs them all.
 EVERY_TASK = (
@@ -69,11 +74,11 @@ EVERY_TASK = (
 SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
 ALWAYS = ("architecture", "new_domain")
 # A test that walks a directory finds a module there through no import, so a
-# change to a module here runs every test tagged tree
-# (hq/platform/application/tests/test_tree_tag.py holds the tag to the walks).
+# change to a module here runs every test tagged tree, in the same run as the
+# rest (hq/platform/application/tests/test_tree_tag.py holds the tag to the walks).
 TREE = ("hq/*.py", "hq_sdk/*.py")
 # The module every test that reads the tasks goes through; a change to a task
-# definition reaches those tests as a change to it would.
+# definition, or to a file a task runs, reaches those tests as a change to it would.
 TASK_READER = "tests.mise_tasks"
 # How many importers away from a changed module a test is still selected: one
 # that imports it, or imports a module that does. Further out the walk reaches
@@ -93,12 +98,19 @@ SHARED_UI = (
     "hq/platform/application/ui.py",
     "hq/platform/application/moments.py",
 )
+# Said when such a change finds no extension set to run.
+SKIPPED = (
+    "shared UI changed, but mise.local.toml names no extension set, so the extensions' suites were skipped:"
+    " `mise run setup:extensions <checkout>...` names one"
+)
 
 
 def defines_tasks(path: str) -> bool:
-    """A file mise reads this checkout's tasks from: mise.toml, or one in mise-tasks/, mise's default task directory."""
+    """A file mise reads this checkout's tasks from (mise.toml, or one in
+    mise-tasks/, mise's default task directory), or one a task's run names,
+    which the tests that read the tasks read with it."""
 
-    return path == "mise.toml" or path.startswith("mise-tasks/")
+    return path == "mise.toml" or path.startswith("mise-tasks/") or path in run_files()
 
 
 def touches_shared_ui(paths: list[str]) -> bool:
@@ -134,11 +146,6 @@ def tasks_command(tasks: tuple[str, ...], parallel: str) -> list[str]:
     return ["mise", "run", "-c", *jobs, *separated]
 
 
-def git(*args: str) -> list[str]:
-    out = subprocess.run(["git", *args], cwd=ROOT, check=True, capture_output=True, text=True).stdout
-    return [line for line in out.splitlines() if line]
-
-
 def merge_base(base: str | None) -> str:
     """The merge base with the named base, or with the first default that exists.
 
@@ -149,7 +156,7 @@ def merge_base(base: str | None) -> str:
     for candidate in (base,) if base else ("origin/main", "main"):
         try:
             return git("merge-base", "HEAD", candidate)[0]
-        except subprocess.CalledProcessError, IndexError:
+        except RefError, IndexError:
             if base:
                 sys.exit(f"fast: {base} has no merge base with HEAD; pass a ref that exists")
     sys.exit("fast: no base found; pass one (mise run fast <ref>)")
@@ -190,81 +197,55 @@ def is_test(path: Path) -> bool:
     )
 
 
-def imports(path: Path, modules: set[str]) -> set[str]:
-    """Modules of this tree a file imports, or a test names in a string (mock targets).
+def packages(module: str, modules: set[str]) -> set[str]:
+    """The module and the package __init__ files above it, which importing it also runs."""
 
-    A string outside a test is a late-bound reference, such as a domain's
-    declaration naming its urlconf. Followed, the registry would reach every
-    app and every change would select the whole suite.
-    """
-
-    try:
-        tree = ast.parse((ROOT / path).read_text(encoding="utf-8"))
-    except SyntaxError:
-        return set()
-    reached = {module for name in named(tree, path) for module in reaches(name, modules)}
-    reached.discard(module_name(path))
-    return reached
-
-
-def named(tree: ast.Module, path: Path) -> set[str]:
-    """Every dotted name a file imports, and in a test every dotted string."""
-
-    package = module_name(path).split(".")
-    if path.name != "__init__.py":
-        package = package[:-1]
-    test = is_test(path)
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            names.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            head = imported_from(node, package)
-            names.add(head)
-            names.update(f"{head}.{alias.name}" for alias in node.names)
-        elif test and is_dotted_string(node):
-            names.add(node.value)
-    return names
-
-
-def imported_from(node: ast.ImportFrom, package: list[str]) -> str:
-    if not node.level:
-        return node.module or ""
-    base = package[: len(package) - node.level + 1]
-    return ".".join([*base, *([node.module] if node.module else [])])
-
-
-def is_dotted_string(node: ast.AST) -> bool:
-    return (
-        isinstance(node, ast.Constant)
-        and isinstance(node.value, str)
-        and "." in node.value
-        and " " not in node.value
-        and len(node.value) < 200
-    )
-
-
-def reaches(name: str, modules: set[str]) -> set[str]:
-    """The longest module a dotted name starts with, and the package __init__
-    files above it, which importing it also runs."""
-
-    pieces = name.split(".")
-    for end in range(len(pieces), 0, -1):
-        if ".".join(pieces[:end]) in modules:
-            return {".".join(pieces[:n]) for n in range(1, end + 1)} & modules
-    return set()
+    pieces = module.split(".")
+    return {".".join(pieces[:n]) for n in range(1, len(pieces) + 1)} & modules
 
 
 def importers(files: list[Path]) -> dict[str, set[str]]:
-    """module -> modules that import it."""
+    """module -> modules that import it, read once per tree and file list, so
+    the tests that map many changes read the tree once."""
+
+    return _importers(ROOT, tuple(files))
+
+
+@functools.cache
+def _importers(root: Path, files: tuple[Path, ...]) -> dict[str, set[str]]:  # noqa: ARG001 - root is a key of the cache
+    """Ruff's import graph, which reads a test's dotted strings (mock targets)
+    as imports too. A string outside a test is a late-bound reference, such
+    as a domain's declaration naming its urlconf: followed, the registry
+    would reach every app and every change would select the whole suite."""
 
     modules = {module_name(p) for p in files}
     reverse: dict[str, set[str]] = {m: set() for m in modules}
-    for path in files:
-        me = module_name(path)
-        for target in imports(path, modules):
-            reverse[target].add(me)
+    tests = [p for p in files if is_test(p)]
+    # Ruff shortens a string that names an attribute (a mock target) down to
+    # --min-dots dots, so at 1 `package.module.attribute` reaches its module.
+    strings = import_graph(tests, "--detect-string-imports", "--min-dots", "1")
+    for graph in (import_graph(list(files)), strings):
+        for source, targets in graph.items():
+            me = module_name(Path(source))
+            for target in targets:
+                for module in packages(module_name(Path(target)), modules) - {me}:
+                    reverse[module].add(me)
     return reverse
+
+
+def import_graph(files: list[Path], *flags: str) -> dict[str, list[str]]:
+    """Each file and the files of this tree it imports, as `ruff analyze graph` reads them."""
+
+    if not files:
+        return {}
+    found = subprocess.run(
+        [sys.executable, "-m", "ruff", "analyze", "graph", "--quiet", *flags, *map(str, files)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(found.stdout)
 
 
 def django_apps() -> dict[str, str]:
@@ -272,24 +253,37 @@ def django_apps() -> dict[str, str]:
 
     apps: dict[str, str] = {}
     for path in python_files():
-        if path.name != "apps.py" or path.parts[0] != "hq":
-            continue
-        tree = ast.parse((ROOT / path).read_text(encoding="utf-8"))
-        for node in tree.body:
-            if not isinstance(node, ast.ClassDef):
-                continue
-            values = {
-                target.id: assignment.value.value
-                for assignment in node.body
-                if isinstance(assignment, ast.Assign)
-                for target in assignment.targets
-                if isinstance(target, ast.Name)
-                if isinstance(assignment.value, ast.Constant) and isinstance(assignment.value.value, str)
-            }
-            name = values.get("name")
-            if name:
-                apps[name.replace(".", "/")] = values.get("label", name.rsplit(".", 1)[-1])
+        if path.name == "apps.py" and path.parts[0] == "hq":
+            apps.update(app_configs(ast.parse((ROOT / path).read_text(encoding="utf-8"))))
     return apps
+
+
+def app_configs(tree: ast.Module) -> dict[str, str]:
+    """Each class in a module that names an app: its name as a source prefix,
+    mapped to its label, or to its name's last part without one."""
+
+    found: dict[str, str] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        values = string_attributes(node)
+        if name := values.get("name"):
+            found[name.replace(".", "/")] = values.get("label", name.rsplit(".", 1)[-1])
+    return found
+
+
+def string_attributes(node: ast.ClassDef) -> dict[str, str]:
+    """The class's attributes assigned a string literal, by name."""
+
+    return {
+        target.id: assignment.value.value
+        for assignment in node.body
+        if isinstance(assignment, ast.Assign)
+        and isinstance(assignment.value, ast.Constant)
+        and isinstance(assignment.value.value, str)
+        for target in assignment.targets
+        if isinstance(target, ast.Name)
+    }
 
 
 def owner(path: str, apps: dict[str, str]) -> str | None:
@@ -313,30 +307,40 @@ def affected(changed: list[str], deleted: list[str], files: list[Path]) -> tuple
     """
 
     reverse = importers(files)
-    modules = set(reverse)
     apps = django_apps()
-    seen: set[str] = set()
-    seeds: set[str] = set()
-    touched: set[str] = set()
-    for path in [*changed, *deleted]:
-        if path.endswith(".py"):
-            seeds.add(module_name(Path(path)))
-        elif defines_tasks(path):
-            seeds.add(TASK_READER)
-        pkg = owner(path, apps)
-        if pkg:
-            touched.add(pkg)
-            # One hop only: a test that imports the app. Following importers
-            # further would reach every module through the shared layers.
-            prefixes = [prefix.replace("/", ".") for prefix, label in apps.items() if label == pkg]
-            members = {m for m in modules if any(m == prefix or m.startswith(prefix + ".") for prefix in prefixes)}
-            seen |= members
-            seen.update(i for m in members for i in reverse[m])
-    reached = frontier = seeds
+    paths = [*changed, *deleted]
+    touched = {label for path in paths if (label := owner(path, apps))}
+    return app_reach(touched, apps, reverse) | import_reach(seeds(paths), reverse), touched
+
+
+def seeds(paths: list[str]) -> set[str]:
+    """The modules a change starts from: each Python module it touched, and
+    the module that reads the tasks when it touched a task's definition."""
+
+    found = {module_name(Path(path)) for path in paths if path.endswith(".py")}
+    return (found | {TASK_READER}) if any(defines_tasks(path) for path in paths) else found
+
+
+def app_reach(touched: set[str], apps: dict[str, str], reverse: dict[str, set[str]]) -> set[str]:
+    """Every module of the touched apps, and each module that imports one.
+
+    One hop only: a test that imports the app. Following importers further
+    would reach every module through the shared layers.
+    """
+
+    prefixes = [prefix.replace("/", ".") for prefix, label in apps.items() if label in touched]
+    members = {m for m in reverse if any(m == prefix or m.startswith(prefix + ".") for prefix in prefixes)}
+    return members | {i for m in members for i in reverse[m]}
+
+
+def import_reach(start: set[str], reverse: dict[str, set[str]]) -> set[str]:
+    """``start`` and the modules that import it, ``REACH`` hops out."""
+
+    reached = frontier = set(start)
     for _ in range(REACH):
         frontier = {i for m in frontier for i in reverse.get(m, ())} - reached
         reached |= frontier
-    return seen | reached, touched
+    return reached
 
 
 def path_references(path: str) -> list[re.Pattern[str]]:
@@ -378,23 +382,34 @@ def test_labels(
     return sorted(chosen), len(tests)
 
 
-def test_commands(labels: list[str], parallel: str, *, tree: bool) -> list[tuple[str, list[str]]]:
-    """The test runs, each with its label: the selected modules, then with
-    `tree` every test tagged tree, once, in a pass of its own.
+def with_tree(labels: list[str], paths: list[str]) -> list[str]:
+    """The selected labels, and every test tagged tree when a module under hq/ or hq_sdk/ changed."""
 
-    The label "." is the whole tree; named, the runner keeps the source tests
-    a bare run leaves out.
-    """
+    return [*labels, *tagged(ROOT, "tree")] if reaches_tree(paths) else labels
 
-    test = [sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel]
-    if not tree:
-        return [("tests", [*test, *labels])]
-    return [("tests", [*test, "--exclude-tag", "tree", *labels]), ("tree tests", [*test, "--tag", "tree", "."])]
+
+def test_command(labels: list[str], parallel: str) -> list[str]:
+    """One run of the selected tests, in the machine's heavy turn: a test both
+    selected and tagged tree runs once, since Django's runner drops a
+    repeated test."""
+
+    return [str(HEAVY), sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel, *labels]
 
 
 def step(label: str, cmd: list[str]) -> Step:
     print(f"[fast] {label}", flush=True)
     return run(label, cmd)
+
+
+def extension_suites(parallel: str) -> list[Step]:
+    """The extensions' suites, composed, when the shared UI changed: run with a set named, else said skipped."""
+
+    if not os.environ.get("HQ_LOCAL_PLUGINS"):
+        print(f"[fast] {SKIPPED}", flush=True)
+        return []
+    # test:composed hands what follows to manage.py test.
+    command = ["mise", "run", "test:composed", "--", "--installed-plugins", "--parallel", parallel]
+    return [step("extension suites, composed (shared UI changed)", command)]
 
 
 def main(asked: Usage) -> int:
@@ -412,9 +427,9 @@ def main(asked: Usage) -> int:
     if total and len(labels) / total > WIDE:
         print("[fast] wide change: most of the suite is reached; `mise run check` is the honest gate")
 
-    tree = reaches_tree([*changed, *deleted])
-    if tree:
+    if reaches_tree([*changed, *deleted]):
         print("[fast] a module under hq/ or hq_sdk/ changed: every test tagged tree runs too")
+    labels = with_tree(labels, [*changed, *deleted])
     if list_only:
         print("\n".join(labels))
         return 0
@@ -425,15 +440,9 @@ def main(asked: Usage) -> int:
         steps.append(step("quick gates", tasks_command(tasks, parallel)))
     else:
         print("[fast] no quick gate reads what changed")
-    steps.extend(step(label, cmd) for label, cmd in test_commands(labels, parallel, tree=tree))
-    if os.environ.get("HQ_LOCAL_PLUGINS") and touches_shared_ui([*changed, *deleted]):
-        # test:composed hands what follows to manage.py test.
-        steps.append(
-            step(
-                "extension suites, composed (shared UI changed)",
-                ["mise", "run", "test:composed", "--", "--installed-plugins", "--parallel", parallel],
-            )
-        )
+    steps.append(step("tests", test_command(labels, parallel)))
+    if touches_shared_ui([*changed, *deleted]):
+        steps.extend(extension_suites(parallel))
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))
     close("fast", started, steps, " (full gate before push: `mise run check`)")
     return 0 if all(s.ok for s in steps) else 1

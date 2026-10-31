@@ -1,19 +1,10 @@
 """The join engine: what HQ knows about a subject, and where from.
 
-A subject is a set of hostnames, addresses and zones: a machine, a service name,
-a domain (every name under it). Readings join only through their spec's declared
-``hostnames`` and ``addresses``; resource inventories join through the
-provider's ``hostnames``, ``answers``, ``origin`` or a single-name ``identity``;
-tailnet devices and containers through their own readers. Nothing else parses a
-record to find a join key.
-
-``readings()`` indexes every stored reading record by its keys, once per
-projection; ``Readings.about(subject)`` returns the records joined to one
-subject. ``facts_about`` projects those and the inventories into facts.
-
-A kind stored as unreachable is one unreadable fact carrying its error and
-``requires``. A kind no connection could read (``connected`` false) yields
-nothing: it is not a failed read.
+A subject is a set of hostnames, addresses and zones (a machine, a service
+name, a domain). Readings join only through their spec's declared keys,
+inventories through their provider's, tailnet devices and containers through
+their own readers, so nothing else parses a record to find a join key. How a
+page uses it is docs/Derived-Facts.md#facts-about-a-subject.
 """
 
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -256,8 +247,16 @@ class Readings:
     ) -> tuple[Joined, ...]:
         """The records joined to ``subject``, in registry and record order."""
 
-        wanted_kinds = frozenset(kinds) if kinds is not None else None
-        wanted_facets = frozenset(facets) if facets is not None else None
+        wanted = _Wanted.of(kinds, facets)
+        entries = (self._entries[index] for index in sorted(self._indexes_about(subject)))
+        joined = (self._joined(entry, subject) for entry in entries if wanted.admits(entry.spec))
+        return tuple(item for item in joined if item is not None)
+
+    def _indexes_about(self, subject: Subject) -> set[int]:
+        """The entries any of ``subject``'s keys reach through the indexes: a
+        hostname or the wildcard over it, a name in one of its zones, an
+        address, a container."""
+
         found: set[int] = set()
         for hostname in subject.hostnames:
             found.update(self._by_name.get(hostname, ()))
@@ -272,35 +271,30 @@ class Readings:
             found.update(self._by_address.get(address, ()))
         for container in subject.containers:
             found.update(self._by_container.get(container, ()))
-        joined = []
-        for index in sorted(found):
-            entry = self._entries[index]
-            if wanted_kinds is not None and entry.spec.kind not in wanted_kinds:
-                continue
-            if wanted_facets is not None and entry.spec.facet not in wanted_facets:
-                continue
-            # Only the keys that name this subject: a resolver list names
-            # other machines too.
-            names = tuple(name for name in entry.hostnames if subject.matches(name))
-            if entry.spec.fronted_by and names:
-                names = self._fronted_names(entry, names, subject)
-            addresses = tuple(address for address in entry.addresses if address in subject.addresses)
-            containers = tuple(key for key in entry.containers if key in subject.containers)
-            if not (names or addresses or containers):
-                continue
-            joined.append(
-                Joined(
-                    spec=entry.spec,
-                    record=entry.record,
-                    connection_ref=entry.connection_ref,
-                    observed_at=record_read_at(entry.record) or entry.snapshot.observed_at,
-                    controller_id=str(getattr(entry.snapshot, "controller_id", "") or ""),
-                    hostnames=names,
-                    addresses=addresses,
-                    containers=containers,
-                )
-            )
-        return tuple(joined)
+        return found
+
+    def _joined(self, entry: _Entry, subject: Subject) -> Joined | None:
+        """``entry`` joined to ``subject`` by the keys that name it, or None when none does."""
+
+        # Only the keys that name this subject: a resolver list names
+        # other machines too.
+        names = tuple(name for name in entry.hostnames if subject.matches(name))
+        if entry.spec.fronted_by and names:
+            names = self._fronted_names(entry, names, subject)
+        addresses = tuple(address for address in entry.addresses if address in subject.addresses)
+        containers = tuple(key for key in entry.containers if key in subject.containers)
+        if not (names or addresses or containers):
+            return None
+        return Joined(
+            spec=entry.spec,
+            record=entry.record,
+            connection_ref=entry.connection_ref,
+            observed_at=record_read_at(entry.record) or entry.snapshot.observed_at,
+            controller_id=entry.snapshot.controller_id,
+            hostnames=names,
+            addresses=addresses,
+            containers=containers,
+        )
 
     def hostnames(self, *, names_services: bool = False) -> tuple[str, ...]:
         """Every hostname key the stored records hold; with ``names_services``,
@@ -339,14 +333,26 @@ class Readings:
     ) -> tuple[Unread, ...]:
         """Kinds whose last read was refused. Not connected kinds are not here."""
 
-        wanted_kinds = frozenset(kinds) if kinds is not None else None
-        wanted_facets = frozenset(facets) if facets is not None else None
-        return tuple(
-            item
-            for item in self._unread
-            if (wanted_kinds is None or item.spec.kind in wanted_kinds)
-            and (wanted_facets is None or item.spec.facet in wanted_facets)
+        wanted = _Wanted.of(kinds, facets)
+        return tuple(item for item in self._unread if wanted.admits(item.spec))
+
+
+@dataclass(frozen=True, slots=True)
+class _Wanted:
+    """The kinds and facets a caller narrowed a reading to; None admits every one."""
+
+    kinds: frozenset[str] | None
+    facets: frozenset[str] | None
+
+    @classmethod
+    def of(cls, kinds: Iterable[str] | None, facets: Iterable[str] | None) -> _Wanted:
+        return cls(
+            frozenset(kinds) if kinds is not None else None,
+            frozenset(facets) if facets is not None else None,
         )
+
+    def admits(self, spec: ObservationSpec) -> bool:
+        return (self.kinds is None or spec.kind in self.kinds) and (self.facets is None or spec.facet in self.facets)
 
 
 def record_read_at(record: Mapping[str, Any]) -> datetime | None:
@@ -545,20 +551,10 @@ def inventory_about(kind: str, subject: Subject) -> tuple[tuple[Any, Mapping[str
     found = []
     for snapshot, record in inventory_records(kind):
         try:
-            spec = provider.from_record(record)
-            names = tuple(provider.hostnames(spec)) if provider.hostnames else ()
-            if not names and provider.identity is not None:
-                identity = tuple(provider.identity(spec))
-                names = identity if len(identity) == 1 else ()
-            answers = tuple(provider.answers(spec)) if provider.answers else ()
-            origin = provider.origin(spec) if provider.origin else ""
+            keys = _record_keys(provider, record, by_identity=True)
         except KeyError, TypeError, ValueError:
             continue
-        if (
-            subject.names(names)
-            or subject.holds(answers)
-            or (origin and (subject.holds((origin,)) or subject.names((host_of(origin),))))
-        ):
+        if _keys_about(subject, *keys):
             found.append((snapshot, record))
     return tuple(found)
 
@@ -628,15 +624,22 @@ def connection_facts(connection_ref: str, provider: str) -> tuple[tuple[str, str
     for spec in OBSERVATIONS.values():
         if spec.provider != provider:
             continue
-        for snapshot in _inventory(spec.kind):
-            if not snapshot.reachable:
-                continue
-            for record in snapshot.records:
-                ref = str(record.get("connection_ref", "") or "")
-                if ref and ref != connection_ref:
-                    continue
-                found.extend(fact for fact in spec.facts(record) if fact not in found)
+        for record in _records_for_connection(spec.kind, connection_ref):
+            found.extend(fact for fact in spec.facts(record) if fact not in found)
     return tuple(found)
+
+
+def _records_for_connection(kind: str, connection_ref: str) -> Iterator[Mapping[str, Any]]:
+    """The records of one kind's readable snapshots that speak for ``connection_ref``:
+    its own, and those naming no connection."""
+
+    for snapshot in _inventory(kind):
+        if not snapshot.reachable:
+            continue
+        for record in snapshot.records:
+            ref = str(record.get("connection_ref", "") or "")
+            if not ref or ref == connection_ref:
+                yield record
 
 
 def snapshots_of(kind: str) -> tuple[Any, ...]:
@@ -841,12 +844,7 @@ def _record_facts(subject: Subject, provider, snapshot, label: str, record) -> I
             connection_ref=connection_ref,
         )
         return
-    about = (
-        subject.names(names)
-        or subject.holds(answers)
-        or (origin and (subject.holds((origin,)) or subject.names((host_of(origin),))))
-    )
-    if not about:
+    if not _keys_about(subject, names, answers, origin):
         return
     source = _source(snapshot, label, connection_ref)
     for name in names:
@@ -858,14 +856,32 @@ def _record_facts(subject: Subject, provider, snapshot, label: str, record) -> I
     yield from _partial(snapshot, label, _requires(provider), record, connection_ref)
 
 
-def _record_keys(provider, record) -> tuple[tuple[str, ...], tuple[str, ...], str]:
-    """The hostnames, answers and origin a provider reads out of one record."""
+def _record_keys(provider, record, *, by_identity: bool = False) -> tuple[tuple[str, ...], tuple[str, ...], str]:
+    """The hostnames, answers and origin a provider reads out of one record.
+
+    With ``by_identity``, a record naming no hostname is named by its identity
+    when that is one name.
+    """
 
     spec = provider.from_record(record)
     names = tuple(provider.hostnames(spec)) if provider.hostnames else ()
+    if by_identity and not names and provider.identity is not None:
+        identity = tuple(provider.identity(spec))
+        names = identity if len(identity) == 1 else ()
     answers = tuple(provider.answers(spec)) if provider.answers else ()
     origin = provider.origin(spec) if provider.origin else ""
     return names, answers, origin
+
+
+def _keys_about(subject: Subject, names: tuple[str, ...], answers: tuple[str, ...], origin: str) -> bool:
+    """Whether a record's keys reach ``subject``: a name it has, an address it
+    holds, or an origin at either."""
+
+    return bool(
+        subject.names(names)
+        or subject.holds(answers)
+        or (origin and (subject.holds((origin,)) or subject.names((host_of(origin),))))
+    )
 
 
 def _container_facts(subject: Subject) -> Iterator[Fact]:
@@ -898,16 +914,25 @@ def _tailnet_facts(subject: Subject) -> Iterator[Fact]:
             continue
         for record in snapshot.records:
             device = known.get(str(record.get("name", "")))
-            if device is None:
-                continue
-            if not (subject.names((device.name, device.label, device.dns_name)) or subject.holds(device.addresses)):
+            if device is None or not _device_about(device, subject):
                 continue
             connection_ref = str(record.get("connection_ref", "") or "")
-            source = _source(snapshot, label, connection_ref)
-            yield source("Tailnet name", device.label)
-            for address in device.addresses:
-                yield source("Address", address)
-            if device.os:
-                yield source("Operating system", device.os)
-            yield source("Online", "yes" if device.online else "no")
+            yield from _device_facts(device, _source(snapshot, label, connection_ref))
             yield from _partial(snapshot, label, _requires(provider), record, connection_ref)
+
+
+def _device_about(device: tailnet.Device, subject: Subject) -> bool:
+    """Whether a tailnet device is ``subject``, by any of its names or addresses."""
+
+    return subject.names((device.name, device.label, device.dns_name)) or subject.holds(device.addresses)
+
+
+def _device_facts(device: tailnet.Device, source: Callable[..., Fact]) -> Iterator[Fact]:
+    """What the tailnet says about one device: its name, addresses, system and presence."""
+
+    yield source("Tailnet name", device.label)
+    for address in device.addresses:
+        yield source("Address", address)
+    if device.os:
+        yield source("Operating system", device.os)
+    yield source("Online", "yes" if device.online else "no")

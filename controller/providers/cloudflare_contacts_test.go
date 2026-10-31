@@ -123,7 +123,7 @@ func TestContactInboxReconcileAppliesEachChange(t *testing.T) {
 	fake := &d1Fake{changes: 1}
 	r, _ := newCloudflare(t, contactRoutes(fake))
 
-	result, err := r.runAction(runtime.ResourceKindCloudflareContactInbox, "reconcile", t.Context(), inboxSpec(), nil, true)
+	result, err := r.runAction(t.Context(), runtime.ResourceKindCloudflareContactInbox, "reconcile", inboxSpec(), nil, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,12 +150,12 @@ func TestContactInboxReconcileIsIdempotentAndPlansWithoutWriting(t *testing.T) {
 	fake := &d1Fake{changes: 0}
 	r, _ := newCloudflare(t, contactRoutes(fake))
 
-	result, err := r.runAction(runtime.ResourceKindCloudflareContactInbox, "reconcile", t.Context(), inboxSpec(), nil, true)
+	result, err := r.runAction(t.Context(), runtime.ResourceKindCloudflareContactInbox, "reconcile", inboxSpec(), nil, true)
 	if err != nil || result.Changed {
 		t.Fatalf("a second apply changed something: %v %+v", err, result)
 	}
 	before := len(fake.statements)
-	plan, err := r.runAction(runtime.ResourceKindCloudflareContactInbox, "reconcile", t.Context(), inboxSpec(), nil, false)
+	plan, err := r.runAction(t.Context(), runtime.ResourceKindCloudflareContactInbox, "reconcile", inboxSpec(), nil, false)
 	if err != nil || !plan.Changed || len(fake.statements) != before {
 		t.Fatalf("a plan wrote: %v %+v %d", err, plan, len(fake.statements)-before)
 	}
@@ -170,10 +170,10 @@ func TestContactInboxReconcileRefusals(t *testing.T) {
 
 	spec := inboxSpec()
 	delete(spec, "database_id")
-	if _, err := r.runAction(runtime.ResourceKindCloudflareContactInbox, "reconcile", t.Context(), spec, nil, true); err == nil || len(fake.requests) != 0 {
+	if _, err := r.runAction(t.Context(), runtime.ResourceKindCloudflareContactInbox, "reconcile", spec, nil, true); err == nil || len(fake.requests) != 0 {
 		t.Fatalf("a declaration naming no database reached Cloudflare: %v", err)
 	}
-	if _, err := r.runAction(runtime.ResourceKindCloudflareContactInbox, "reconcile", t.Context(), inboxSpec(), nil, true); err == nil {
+	if _, err := r.runAction(t.Context(), runtime.ResourceKindCloudflareContactInbox, "reconcile", inboxSpec(), nil, true); err == nil {
 		t.Fatal("a refused write reported success")
 	}
 }

@@ -16,7 +16,7 @@ one situation it is ever seen in.
         <span class="control-label">{{ zone.zone|breakable }}</span>
         <strong>{{ zone.records|length|counted:"record" }}</strong>
         <span class="readout">
-          <a class="subtle-link" href="{{ zone.url }}">View records &rarr;</a>
+          <a class="subtle-link" href="{{ zone.url }}">View records{% arrow %}</a>
         </span>
         {% if zone.adopt_token %}
           {% url 'zones:adopt' zone.zone as adopt_url %}
@@ -31,5 +31,5 @@ one situation it is ever seen in.
   {% include "partials/_empty_state.html" with message="No domains yet." remedy=page.remedy %}
 {% endif %}
 
-{% include "partials/_sweep_freshness.html" with inventory=inventory only_kind="cloudflare.zone" %}
+{% include "partials/_sweep_freshness.html" with inventory=inventory only_kind="cloudflare.zone" inline=False %}
 {% endblock %}

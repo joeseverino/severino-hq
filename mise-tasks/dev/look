@@ -1,29 +1,30 @@
 #!/bin/sh
 #MISE description="To see what a page change looks like: screenshots as the browser gates draw them, judged by a rule if asked; --docs to redraw the docs' pictures"
 #MISE extends="django"
+#MISE env={SEVERINO_HEAVY_BOUND="30m"}
 #MISE depends=[{task="setup:browser", args=["{{usage.engine}}"]}]
-#MISE timeout="30m"
-#USAGE arg "[pages]" var=#true help="Pages, unless --docs: a gate page (connections, dense/services, derived/<app>/<list>), api/docs, estate/<path>, a path (/infrastructure/containers/), a route name (control_plane:containers), estate/all, or all"
+#USAGE long_about "A page at the phone, 820 and 1360:\n  mise run dev:look estate/infrastructure/containers\n\nThe same with every row a reader can open opened, and var/probe.js (a function, such as () => document.title) run on what the screenshot shows:\n  mise run dev:look --expand --eval var/probe.js estate/infrastructure/containers\n\nEvery page, judged by every check the browser gates hold:\n  mise run dev:look --rule survey all\n\nThe host's and the extensions' pages together, as mise.local.toml composes them:\n  mise run dev:look --composed estate/all"
+#USAGE arg "[pages]" var=#true help="Pages, unless --docs: a gate page (connections, dense/services, derived/<app>/<list>, the last filled with the longest values its model holds, as LongestValueLayoutTests fills it), api/docs, estate/<path>, a path (/infrastructure/containers/), a route name (control_plane:containers), estate/all, or all"
 #USAGE flag "--docs" help="Redraw every screenshot in the docs from the showcase demo instead, after a change to a page one shows"
 #USAGE flag "--widths <widths>" help="Comma-separated widths in CSS pixels; default the phone, 820 and 1360"
 #USAGE flag "--rule <rule>" help="What to judge on each page: survey (every check the browser gates hold), tables (print each table) or one layout check by name, such as a_table_fits_its_box_at_every_width. Findings go to var/gate/look.txt"
 #USAGE flag "--css <css>" help="Extra CSS after app.css, as text or a file: the defect a new rule must catch"
-#USAGE flag "--base <ref>" help="Also look at <ref> in a temporary worktree and report only findings and errors new or fixed here; implies --rule survey and --perf"
+#USAGE flag "--base <ref>" help="Also look at <ref> in a temporary worktree and report only findings and errors new or fixed here, its screenshots kept in var/look/base/ beside this checkout's in var/look/; implies --rule survey and --perf"
 #USAGE flag "--perf" negate="--no-perf" help="Then measure the estate pages asked with mise run perf, beside --base's; on by default with --base"
 #USAGE flag "--seed <name>" default="showcase" help="The data set the estate pages are drawn on, by its name in hq.platform.core.seeds"
 #USAGE flag "--columns" help="Also print each table's column widths as drawn, at min-content and at max-content"
-#USAGE flag "--eval <file>" help="Run the script in <file> on each page at each width before the screenshot and print what it returns"
+#USAGE flag "--eval <file>" help="Run the function in <file> on each page at each width and print what it returns: after --open and --expand have opened what they open and the page has drawn it, before the screenshot, so it reads what the screenshot shows and what it changes is shot"
 #USAGE flag "--dialog <ids>" help="Also shoot each page with these dialogs open, comma-separated ids or all; --rule runs again inside each"
-#USAGE flag "--slow <ms>" help="Draw as a loaded machine does, each animation frame <ms> late, to reproduce a timing flake"
 #USAGE flag "--engine <engine>" default="webkit" help="The browser engine to draw in, installed first" {
 #USAGE   choices "webkit" "chromium" "firefox"
 #USAGE }
 #USAGE flag "--dark" help="In the dark palette"
 #USAGE flag "--fallback-face" help="With Inter withheld, in the next face of the font stack"
 #USAGE flag "--open" help="With every disclosure open; --rule runs again with one popover of each kind shown, and shoots it"
-#USAGE flag "--expand" help="With every table row opened"
+#USAGE flag "--expand" help="With every table row a reader can open opened: a row offers its toggle only when a value in it is cut, so a row that shows whole stays closed"
 #USAGE flag "--no-script" help="As the server drew it, before any script runs"
 #USAGE flag "--deep" help="Also every page the estate pages link to: each record and the command forms it opens"
+#USAGE flag "--composed" help="With the extension set mise.local.toml names loaded, as mise run test --composed loads it, so estate/all and the route names reach the extensions' pages; its first line names the tree each is imported from, and HQ_LOCAL_PYTHONPATH on the command line composes an extension worktree instead. The extensions bring no data of their own: their pages draw empty beside the seed's estate"
 
 # The look is hq/platform/core/tests/look.py; `mise run perf` measures after
 # it, in the same heavy turn. The docs' pictures are demo/screenshot.py's, a
@@ -34,6 +35,18 @@ if [ "${usage_docs:-}" = true ]; then
     exec mise run dev:look:docs
 fi
 [ -n "${usage_pages:-}" ] || { echo "mise run dev:look: name the pages to look at, or --docs" >&2; exit 64; }
+# Composed, the extensions load as the composed suite loads them, which says
+# first where they are imported from.
+if [ "${usage_composed:-}" = true ]; then
+    [ -n "${HQ_LOCAL_PLUGINS:-}" ] || {
+        echo "mise run dev:look --composed: HQ_LOCAL_PLUGINS is unset; name the set with mise run setup:extensions <checkout>." >&2
+        exit 64
+    }
+    # shellcheck source=tools/lib/extension-set.sh
+    . ./tools/lib/extension-set.sh
+    compose_extensions
+    kept_set=/composed
+fi
 
 # A look at the pages it names holds a fraction of a suite's memory, so it
 # runs beside other heavy work, as `mise run test` runs light labels; every
@@ -52,10 +65,11 @@ done
 # migrates only what is new. A run that did not come back to say it ended may
 # have left its estate committed there, so the next one starts from a new
 # file. A look against a base keeps none: the run at the base inherits this
-# environment, and a database migrated here does not fit the code there.
+# environment, and a database migrated here does not fit the code there. A
+# composed look keeps its own, which holds the extensions' tables.
 keep=""
 if [ -z "${usage_base:-}" ]; then
-    kept="${MISE_CONFIG_ROOT}/var/dev-look"
+    kept="${MISE_CONFIG_ROOT}/var/dev-look${kept_set:-}"
     mkdir -p "${kept}"
     [ ! -e "${kept}/running" ] || rm -f "${kept}"/test.sqlite3*
     : >"${kept}/running"
@@ -66,7 +80,6 @@ fi
 
 looked=0
 HQ_BROWSER_ENGINE="${usage_engine:?}" HQ_BROWSER_FACE="${usage_fallback_face:+fallback}" \
-    HQ_BROWSER_SLOW="${usage_slow:-${HQ_BROWSER_SLOW:-}}" \
     uv run --group browser python manage.py test hq.platform.core.tests.look.Look.test_look --noinput --parallel 1 \
     ${keep} || looked=$?
 [ -z "${keep}" ] || rm -f "${kept}/running"

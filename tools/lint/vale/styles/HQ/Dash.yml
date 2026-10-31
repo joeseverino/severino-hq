@@ -1,0 +1,9 @@
+# The most recognizable mark of generated prose, and it spreads by copying. A
+# value that is missing is shown with the `or_empty` filter or MISSING.
+extends: existence
+message: "Rewrite the sentence without the em dash; for a missing value use or_empty or MISSING"
+level: error
+nonword: true
+scope: raw
+raw:
+  - '—'

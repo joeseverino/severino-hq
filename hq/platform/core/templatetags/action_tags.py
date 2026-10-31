@@ -103,26 +103,47 @@ def post_button(label, url, *, name="action", value="", css="btn", title="", dis
     )
 
 
+# How many controls a head draws beside its title; the rest wait in its menu.
+BESIDE_THE_TITLE = 2
+
+
+def _ranked(actions):
+    """The controls in the order a head reaches for them, by what each is for
+    rather than where it stands: never a destructive one while another is
+    offered, then one that can be pressed, then the page's primary, then the
+    page's own order. So a service's Restart leads and its Stop waits in the
+    menu."""
+
+    return [
+        action
+        for _at, action in sorted(
+            enumerate(actions),
+            key=lambda pair: (pair[1].danger, pair[1].disabled, not pair[1].primary, pair[0]),
+        )
+    ]
+
+
 @register.filter
 def lead_action(actions):
-    """The one control a narrow head keeps beside its title, chosen by what each
-    is for rather than where it stands: never a destructive one while another
-    is offered, then one that can be pressed, then the page's primary, then
-    the first. So a service's Restart leads and its Stop waits in the menu."""
+    """The control a head draws first beside its title."""
+
+    ranked = _ranked(tuple(actions or ()))
+    return ranked[0] if ranked else None
+
+
+@register.filter
+def head_actions(actions):
+    """``(beside, menu)``: the controls a head draws beside its title, the
+    first two it reaches for, and every one but the lead for its menu, the
+    second first. The stylesheet leaves out the menu's copy of a control drawn
+    beside the title, and folds the second in where the head is narrow."""
 
     actions = tuple(actions or ())
-    if not actions:
-        return None
-    ranked = sorted(
-        enumerate(actions),
-        key=lambda pair: (
-            bool(getattr(pair[1], "danger", False)),
-            bool(getattr(pair[1], "disabled", False)),
-            not getattr(pair[1], "primary", False),
-            pair[0],
-        ),
-    )
-    return ranked[0][1]
+    beside = tuple(_ranked(actions)[:BESIDE_THE_TITLE])
+    if not beside:
+        return (), ()
+    rest = tuple(action for action in actions if all(action is not shown for shown in beside))
+    return beside, (*beside[1:], *rest)
 
 
 @register.filter
@@ -172,7 +193,11 @@ def ask_button(ask, extra=""):
     attributes = {
         "name": ask.name,
         "value": ask.value,
-        "title": ask.title,
+        # What the work said, where a cell shows only its word (_ask.html).
+        "title": ask.standing.note if ask.standing.state != asks.IDLE and ask.standing.note else ask.title,
+        # What the button is for, which the title says again once the work
+        # has nothing to say (ask.js).
+        "data-ask-reason": ask.title,
         "aria-disabled": "true" if ask.standing.live else "",
     }
     return format_html(

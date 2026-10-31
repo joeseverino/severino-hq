@@ -1,14 +1,9 @@
 """`mise run perf <pages>... [--image] [--seed <name>] [--base <ref>]`: how light and fast HQ is.
 
-Measures the pages asked, named as dev:look names the example estate's
-(`hq.platform.core.tests.task.pages`), or all for every page its navigation lists, on this
-checkout's `dev:scratch`, or its built image, seeded with a named data set, so
-a change's cost is a number. With a base, both servers stay up and are asked
-for server time in turn, so a page's move is told from noise
-(`measure.server_times`). What it measures and its flags are in
-docs/Development.md. A report, never a gate: it exits 0 when every measurement
-finished, 1 when any failed or a page answered anything but 200, 2 for a ref
-that names no commit, or a page or set it cannot serve.
+Measures the pages asked on a server of this checkout, seeded with a named data
+set, so a change's cost is a number, and with a base tells a page's move from
+noise. What it measures and its flags: docs/Development.md. A report, never a
+gate.
 """
 
 import copy
@@ -25,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 lazy import django
+lazy from django.core.management import call_command
 lazy from django.test import override_settings
 lazy from playwright.sync_api import sync_playwright
 
@@ -34,7 +30,7 @@ from hq.platform.core.tests.task import ESTATE, PageRefused, RefError, estate_na
 from tools.perf import measure, parse, runs, table
 from tools.perf.targets import COLD_STARTS, Image, NotMeasured, Scratch, clean_env, run
 lazy from hq.platform.core import seeds
-lazy from hq.platform.core.tests.browser.estate import navigation
+lazy from hq.platform.core.tests.browser.estate import Redirected, ask_as_production, landing, navigation, owner_client
 lazy from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, viewport
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -104,6 +100,27 @@ def seed_of(asked: str) -> str:
     return asked
 
 
+def landed(seed: str, every: list[str], chosen: list[str]) -> tuple[list[str], list[str]]:
+    """``every`` and ``chosen`` as the pages they land on, asked of ``seed`` built in this
+    process's own throwaway database: a server measured answers each with the page, never a
+    redirect to it, so a page's numbers are that page's."""
+
+    call_command("migrate", verbosity=0, interactive=False)
+    with owner_client(seed) as client:
+
+        def ask(address: str) -> Any:
+            return ask_as_production(client, address)
+
+        try:
+            lands = {page: landing(ask, page) for page in dict.fromkeys([*every, *chosen])}
+        except Redirected as error:
+            raise Unservable(f"{error}, so perf has no page of HQ's to measure.") from None
+    for page in chosen:
+        if lands[page] != page:
+            print(f"{estate_name(page)} lands on {estate_name(lands[page])}, which is measured")
+    return [*dict.fromkeys(lands[page] for page in every)], [*dict.fromkeys(lands[page] for page in chosen)]
+
+
 def plan() -> Plan:
     """The pages asked, the phone's and the wide desktop's viewports, and the task's flags."""
 
@@ -122,6 +139,7 @@ def plan() -> Plan:
             chosen = task.pages(asked.repeated("pages"), every)
         except PageRefused as refused:
             raise Unservable(f"{refused} perf serves the {ESTATE}'s pages alone.") from None
+        every, chosen = landed(seed, every, chosen)
     return Plan(
         pages=chosen,
         walked=list(dict.fromkeys([*every, *chosen])),
@@ -165,7 +183,7 @@ def base_tree(commit: str) -> Iterator[Path]:
         yield tree
 
 
-def image_of(tree: Path, commit: str, here: bool) -> str:
+def image_of(tree: Path, commit: str, *, here: bool) -> str:
     """The image to run for ``tree``: the one IMAGE hands over here, else one image:build makes."""
 
     if here and os.environ.get("IMAGE"):
@@ -293,7 +311,9 @@ def measure_costs(server: Live, asked: Plan) -> None:
     recorder.attempt("queries", queries)
 
 
-def serve(tree: Path, commit: str, here: bool, asked: Plan, kept: runs.Run, side: str, stack: ExitStack) -> Live | None:
+def serve(
+    tree: Path, commit: str, *, here: bool, asked: Plan, kept: runs.Run, side: str, stack: ExitStack
+) -> Live | None:
     """One tree's server, started, signed in and walked once, its report under ``side``, and
     stopped when ``stack`` closes if not before. None where it would not start or sign in,
     recorded as a failure."""
@@ -307,7 +327,7 @@ def serve(tree: Path, commit: str, here: bool, asked: Plan, kept: runs.Run, side
     print(f"Starting {commit} ({asked.target}, {asked.seed}); its server's output is in {log}", flush=True)
     try:
         target = (
-            Image(image_of(tree, commit, here), log, asked.seed)
+            Image(image_of(tree, commit, here=here), log, asked.seed)
             if asked.image
             else Scratch(tree, log, asked.seed, trusted=not here, alone=bool(asked.alone))
         )
@@ -415,7 +435,7 @@ def kept_base(commit: str, asked: Plan, kept: runs.Run) -> bool:
     return True
 
 
-def measure_run(base_commit: str | None, here_commit: str, asked: Plan, kept: runs.Run, fresh: bool) -> None:
+def measure_run(base_commit: str | None, here_commit: str, asked: Plan, kept: runs.Run, *, fresh: bool) -> None:
     """Both servers started, their server time asked of both in turn, then each side's other
     numbers; every server stopped and the base's worktree gone however the block ends."""
 
@@ -426,8 +446,16 @@ def measure_run(base_commit: str | None, here_commit: str, asked: Plan, kept: ru
             short = base_commit[:12]
             if fresh or not kept_base(short, asked, kept):
                 measuring.add("base")
-            live["base"] = serve(stack.enter_context(base_tree(base_commit)), short, False, asked, kept, "base", stack)
-        live["here"] = serve(ROOT, here_commit, True, asked, kept, "here", stack)
+            live["base"] = serve(
+                stack.enter_context(base_tree(base_commit)),
+                short,
+                here=False,
+                asked=asked,
+                kept=kept,
+                side="base",
+                stack=stack,
+            )
+        live["here"] = serve(ROOT, here_commit, here=True, asked=asked, kept=kept, side="here", stack=stack)
         serving = {side: server for side, server in live.items() if server}
         # First, while every server is as its first boot and one pass left it, so neither has a
         # history the other lacks.
@@ -444,6 +472,9 @@ def measure_run(base_commit: str | None, here_commit: str, asked: Plan, kept: ru
 
 
 def main() -> int:
+    """0 when every measurement finished; 1 when one failed or a page answered
+    anything but 200; 2 for a ref that names no commit, or a page or set it cannot serve."""
+
     signal.signal(signal.SIGTERM, stop)
     ref = usage().text("base")
     try:
@@ -460,7 +491,7 @@ def main() -> int:
     stem = runs.name(here_commit, base_commit and base_commit[:12], asked.target, datetime.now(UTC))
     kept = runs.Run.start(OUT, stem, target=asked.target, plan=asked.key(), alone=asked.alone or None)
     try:
-        measure_run(base_commit, here_commit, asked, kept, usage().switch("fresh"))
+        measure_run(base_commit, here_commit, asked, kept, fresh=usage().switch("fresh"))
     except SetRefused as refused:
         kept.doc["refused"] = str(refused)
         kept.save()

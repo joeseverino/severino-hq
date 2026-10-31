@@ -1,14 +1,9 @@
 """Running a job off the request thread, and saying so while it happens.
 
 A thread rather than a queue: this host is one process against one SQLite
-file, so a broker would add another thing to deploy and to fail. What replaces
-its durability is the row: a job whose process vanished is `lost`, not
-silently absent.
-
-Two things a thread gets wrong are handled here rather than left to callers: a
-database connection per thread, closed at the end, and every exception
-recorded. An exception on a thread otherwise goes to stderr and the row sits
-at `running` forever.
+file, so a broker would add another thing to deploy and to fail
+(docs/Decisions.md). The row stands in for its durability: a job whose process
+vanished is `lost`, not silently absent.
 """
 
 import threading
@@ -28,7 +23,7 @@ from hq.platform.core.facets import Counts, Failure, Timing
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import OutboundInRequest, off_request, serving_request
 
-from .models import Job
+from .models import LOST_ERROR, Job
 
 # How often progress reaches the database, at most. Work may report per
 # record; at a few million records the reporting would cost more than the work.
@@ -91,6 +86,8 @@ def _record(kind, label, *, actor, requested_by, request) -> Job:
     # Recorded against a person only: nobody signed in is nobody, as an
     # audit event treats them.
     person = requested_by if requested_by is not None and requested_by.is_authenticated else None
+    # A job of this kind whose process stopped would hold the one live slot.
+    reap(kind)
     try:
         with transaction.atomic():
             return Job.objects.create(
@@ -138,7 +135,7 @@ def _launch(job: Job, work: Callable[[Progress], dict[str, Any]]) -> None:
     """Start the job's thread; a thread that cannot start ends the job failed."""
 
     try:
-        threading.Thread(target=_run, args=(job.pk, work), name=f"job:{job.kind}", daemon=True).start()
+        threading.Thread(target=run_job, args=(job.pk, work), name=f"job:{job.kind}", daemon=True).start()
     except RuntimeError as exc:
         ended = timezone.now()
         _audit(job, AuditLog.Action.FAILED, "could not start", {"error": str(exc)}, ended)
@@ -173,7 +170,7 @@ def run(
     return job
 
 
-def _run(job_id, work: Callable[[Progress], dict[str, Any]]) -> None:
+def run_job(job_id, work: Callable[[Progress], dict[str, Any]]) -> None:
     # A job is nobody's request: it may wait on whatever its work needs.
     with off_request():
         _work(job_id, work)
@@ -235,8 +232,10 @@ def _work(job_id, work: Callable[[Progress], dict[str, Any]], *, own_connection=
             # A stated outcome, not a fault: the sentence is the whole record.
             _fail(job, str(said) or "Failed.", Failure(message=str(said)[:400], kind="Failed"))
         except Exception:  # noqa: BLE001 - a failed job is recorded, never raised
-            # The whole traceback, not just the message: nobody can reproduce
-            # a background failure by running it again from a terminal.
+            # Recorded here, since an exception left on a thread goes to stderr
+            # and the row sits at `running` forever. The whole traceback, not
+            # just the message: nobody can reproduce a background failure by
+            # running it again from a terminal.
             detail = traceback.format_exc()
             last = detail.strip().splitlines()[-1]
             _fail(job, detail[-8000:], Failure(message=last[:400], kind=last.split(":")[0][:80]))
@@ -259,12 +258,9 @@ def _fail(job: Job, error: str, failure: Failure) -> None:
 def _counts(result: dict) -> list[Counts]:
     """The work's own numbers, where it reported any in the shared shape.
 
-    Read rather than required: work returns whatever it wants, and a job that
-    reports nothing countable is normal. What is not normal is inventing a
-    count that was never measured, so anything absent stays absent.
-
-    A list because the answer is none or one, and a tuple whose length carries
-    meaning is a record, which this is not.
+    Read rather than required: a job that reports nothing countable is normal,
+    and a count that was never measured is never invented, so anything absent
+    stays absent.
     """
     counts = Counts(
         seen=result.get("seen"),
@@ -272,16 +268,16 @@ def _counts(result: dict) -> list[Counts]:
         updated=result.get("updated"),
         skipped=result.get("skipped"),
     )
+    # A list because the answer is none or one, and a tuple whose length
+    # carries meaning is a record, which this is not.
     return [counts] if counts.as_metadata() else []
 
 
 def _audit(job: Job, action: str, outcome: str, detail: dict, ended, facets=()) -> None:
     """Record how the job ended, attributed to whoever asked for it.
 
-    The user is passed explicitly: `record_event` otherwise reads the current
-    request's user, and there is no request on a worker thread. Creation is
-    audited by the model signal; without this the log would show every job
-    starting and none ending.
+    Creation is audited by the model signal; without this the log would show
+    every job starting and none ending.
     """
     # Measured from the in-memory job's start: the row is not marked finished
     # until after this returns.
@@ -298,6 +294,8 @@ def _audit(job: Job, action: str, outcome: str, detail: dict, ended, facets=()) 
         # than a phrase that has to be read.
         facets=(Timing(duration_ms=round(seconds * 1000)), *facets),
         metadata={"kind": job.kind, "job": str(job.pk), **detail},
+        # Passed explicitly: `record_event` otherwise reads the current
+        # request's user, and there is no request on a worker thread.
         user=job.requested_by,
     )
 
@@ -325,9 +323,9 @@ def due(kind: str, every: timedelta, *, now: datetime, subject: str | None = Non
 def reap(kind: str | None = None) -> int:
     """Mark jobs whose process stopped without finishing.
 
-    Called from the pages that list jobs rather than from a scheduler: a stale
-    job only blocks the next job of its kind, so the moment somebody looks is
-    when the answer is needed.
+    Done before a job of the kind is recorded, which is when a stale one
+    blocks, and by the hourly ``due`` work for the rest; a page shows a stale
+    job as stopped early without writing it (``Job.seen_state``).
     """
     live = Job.objects.filter(state__in=(Job.State.QUEUED, Job.State.RUNNING)).select_related("requested_by")
     if kind:
@@ -348,6 +346,6 @@ def reap(kind: str | None = None) -> int:
         )
     return Job.objects.filter(pk__in=[job.pk for job in lost]).update(
         state=Job.State.LOST,
-        error="HQ stopped before it finished.",
+        error=LOST_ERROR,
         finished_at=ended,
     )

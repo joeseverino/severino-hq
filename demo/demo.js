@@ -44,12 +44,20 @@
   // itself (the connection panel's) gets the headers HQ sent when the demo was
   // built, since GitHub Pages can't send them.
   const plainFetch = window.fetch.bind(window);
+  const escapeHTML = (text) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   const once = (path) => { let kept; return () => (kept ??= plainFetch(path).then((r) => r.json())); };
   const answers = once("/__fragments__/index.json");
   const sent = once("/__fragments__/headers.json");
   const demo = window.hqDemo;
+  // What a control that asks for a reading again (ask.js: a row's Refresh, a
+  // page's readings as it opens) is answered with: how the work stands, idle,
+  // saying why.
+  const READ_AGAIN = "The demo can't read it again: this is as it was saved.";
+  const readsAgain = (url) => [...document.querySelectorAll("[data-ask-button], form[data-ask-auto]")]
+    .some((control) => (control.formAction || control.action) === url.href);
   window.fetch = async (input, init = {}) => {
-    const url = new URL(typeof input === "string" ? input : input.url, location.href);
+    // A request is asked by a string, a URL (the command center's) or a Request.
+    const url = new URL(input instanceof Request ? input.url : String(input), location.href);
     const method = (init.method || "GET").toUpperCase();
     const headers = new Headers(init.headers || {});
     const partial = headers.has("X-Fragment") || headers.get("X-Requested-With") === "XMLHttpRequest";
@@ -59,23 +67,29 @@
     if (method !== "GET" && !partial) return new Response("", { status: 200 });
     if (partial) {
       const name = headers.get("X-Fragment") || "";
-      const saved = await answers();
-      const found = saved[`${demo.key(url)}|${name}`];
-      if (found) return plainFetch(found);
-      const asked = url.pathname === "/search/" ? url.searchParams.get("q") : "";
-      if (asked && saved[`${demo.searchKey(asked, await demo.routes())}|${name}`]) {
-        return plainFetch(saved[`${demo.searchKey(asked, await demo.routes())}|${name}`]);
-      }
+      const [saved, found] = await Promise.all([answers(), demo.routes()]);
+      const answer = saved[`${demo.key(url, found)}|${name}`];
+      if (answer) return plainFetch(answer);
+      const asked = url.pathname === "/search/" ? url.searchParams.get("q")?.trim() : "";
+      const near = asked && saved[`${demo.searchKey(asked, found)}|${name}`];
+      if (near && demo.nearest(asked, found) !== found.nothing) return plainFetch(near);
+      // HQ's answer for a word nothing matches, about the word asked.
+      if (near) return new Response((await (await plainFetch(near)).text()).replaceAll(found.nothing, escapeHTML(asked)));
       // The page itself: the file it was served from, with the headers HQ sent.
-      if (demo.key(url) === demo.key(new URL(location.href))) {
+      if (demo.key(url, found) === demo.key(new URL(location.href), found)) {
         return new Response(await (await plainFetch(demo.served)).text(), { headers: await sent() });
       }
       // Another address with a query: its saved copy, a whole page the
       // region is found in; else nothing, and the link it enhanced is followed.
-      const copy = (await demo.routes()).variants[demo.key(url)];
+      const copy = found.variants[demo.key(url, found)];
       if (copy) return plainFetch(copy);
       // A post with no saved answer (a page asking for its readings as it
       // opens) is answered with nothing changed, as above.
+      if (method !== "GET" && readsAgain(url)) {
+        return new Response(JSON.stringify({ state: "idle", live: false, note: READ_AGAIN }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
       if (method !== "GET") return new Response("", { status: 200 });
       if (url.search) return new Response("", { status: 404 });
     }
@@ -99,23 +113,49 @@
     main.scrollIntoView({ block: "start" });
   };
 
+  // A list's own search asks HQ as each word is typed, and the demo has none
+  // of those saved: it says so as typing starts, rather than reloading the
+  // page under the reader's hands. Enter still asks, and is answered as any
+  // query with no saved copy.
+  const SEARCHING_A_LIST = "Searching within a list isn't saved in the demo. Find anything, at the top of the page, searches everything.";
+  window.addEventListener("input", (event) => {
+    if (!event.target.closest?.("[data-table-toolbar] input[type=search]")) return;
+    event.stopImmediatePropagation();
+    if (document.querySelector("#content > .messages")?.textContent !== SEARCHING_A_LIST) say(SEARCHING_A_LIST);
+  }, true);
+
   // A query the demo has no saved copy of: the page is shown without it, and
   // says what was left out. demo/build.py saves no sorts, the first pages of
-  // a list (_MOST_PAGES_OF_A_LIST) and every filter a page offers.
+  // a list (_MOST_PAGES_OF_A_LIST), every filter a page offers one at a
+  // time, what is linked up to two copies from a page (_COPY_DEPTH), so the
+  // days around today, and no search within a list.
   const unanswered = () => {
-    const asked = new URLSearchParams(location.search);
-    if (asked.has("sort")) say("Sorting isn't saved in the demo, so the list is shown in its usual order.");
-    else if (asked.has("page")) say("Only the first pages of a list are saved in the demo, so this shows the first.");
+    const kind = demo.unanswered;
+    if (kind === "sort") say("Sorting isn't saved in the demo, so the list is shown in its usual order.");
+    else if (kind === "page") say("Only the first pages of a list are saved in the demo, so this shows the first.");
+    else if (kind === "day") say("Only the days around today are saved in the demo, so this is shown without the one asked for.");
+    else if (kind === "search") say(SEARCHING_A_LIST);
     else say("This filter isn't in the demo, so the page is shown without it.");
   };
-  const answeredAs = () => say(`The demo has no saved search for that, so this shows results for “${demo.answeredAs}”.`);
+  // A search answered as the saved search that finds nothing keeps the
+  // word asked in its box.
+  const answeredAs = async () => {
+    const { nothing } = await demo.routes();
+    if (demo.answeredAs !== nothing) {
+      say(`The demo has no saved search for that, so this shows results for “${demo.answeredAs}”.`);
+      return;
+    }
+    const asked = new URLSearchParams(location.search).get("q") || "";
+    document.querySelectorAll('input[name="q"]').forEach((box) => { if (box.value === nothing) box.value = asked; });
+    say("The demo has no saved search for that.");
+  };
   document.addEventListener("hq-demo:unanswered", () => {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", unanswered);
     else unanswered();
   });
 
   document.addEventListener("DOMContentLoaded", () => {
-    if (!demo.answered) unanswered();
+    if (demo.unanswered) unanswered();
     if (demo.answeredAs) answeredAs();
     document.querySelectorAll("[data-fragment-poll]").forEach((region) => region.removeAttribute("data-fragment-poll"));
 
@@ -166,11 +206,18 @@
     write(state);
   }, true);
   // Every other form that posts shows the note instead. A filter or a search
-  // is a GET, answered from its saved copy like any address with a query.
-  document.addEventListener("submit", (event) => {
-    if (event.defaultPrevented) return;
+  // is a GET, answered from its saved copy like any address with a query. A
+  // post to an address the demo saved an answer from (a Refresh, a lookup)
+  // asks for a reading again, and says the demo can't; an ask's own control
+  // says so where it was pressed.
+  document.addEventListener("submit", async (event) => {
+    if (event.defaultPrevented || event.submitter?.matches("[data-ask-button]")) return;
     if ((event.target.getAttribute("method") || "get").toLowerCase() === "get") return;
     event.preventDefault();
-    say("Demo only: nothing was saved.");
+    // A button's formAction is the page's own address when it names none.
+    const button = event.submitter?.hasAttribute("formaction") ? event.submitter : null;
+    const action = new URL(button?.formAction || event.target.action, location.href).pathname;
+    const read = Object.keys(await answers()).some((saved) => saved.split(/[?|]/)[0] === action);
+    say(read ? READ_AGAIN : "Demo only: nothing was saved.");
   });
 })();

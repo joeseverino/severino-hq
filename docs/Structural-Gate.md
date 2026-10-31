@@ -17,6 +17,12 @@ fragment inside larger functions, and an idiom of a line or two (a lookup
 repeated across sites, a two-line override). Those are held by an
 architecture test that names the one place the rule lives.
 
+A flagged pair is resolved by moving the shape both repeat into one function
+they call. That shape is usually a constructor call with many keyword
+arguments (a model's `create`, a `through(...)` row, a log call), since it
+holds most of the trigrams; a helper that shares only the loop or the
+`try` around it leaves the pair near.
+
 * Generated Go: the parser finds a `// Code generated ... DO NOT EDIT.` comment
   before the package statement. The generated file, adjacent generation source,
   generator config and schema must be tracked. An adjacent `go:generate go tool
@@ -77,6 +83,12 @@ The inspector is `controller/cmd/structural-inspector`, held by the
 controller's gate like the rest of its module, its own tests among them. The
 adversarial tests of the pairs are `mise run lint:source tools.structural`,
 which builds it.
+
+The bar keeps the pairs it found under `var/structural`, keyed by a digest of
+what they depend on: the tree git would write from every file it sees, staged
+or not (the baseline aside), which files are tracked, and the graph and Go
+releases. A run on inputs already read answers from there and compares that
+answer with the baseline, so the verdict is the one a fresh graph gives.
 
 ## Asking the graph
 

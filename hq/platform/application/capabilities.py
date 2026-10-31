@@ -6,12 +6,15 @@ from dataclasses import replace
 from typing import Any, TypedDict
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
 from hq.platform.core.audit import audit_connection, operation_context
+lazy from hq.platform.core.doorbell import ask_soon
 
 from .approvals import RefusedHold, hold_for_approval
 from .capability_policy import Rule, decide
+from .contracts import DOTTED_NAME
 from .denials import record_denial
 from .idempotency import (
     IdempotencyConflict,
@@ -37,12 +40,14 @@ from .integration_specs import (
 )
 from .integrations import integration_graph
 from .labels import human_label
-from .record_errors import RecordConflict, RecordNotFound
+from .projection import QueryRefusal
+from .record_errors import HostRefusal
 from .security import (
     AuthorizationError,
     Capability,
     PolicyDenied,
     Principal,
+    could_hold,
     require_all,
 )
 
@@ -108,8 +113,39 @@ class CapabilityDescription(TypedDict):
     input_schema: dict[str, Any]
 
 
-def describe_capabilities() -> dict[str, Any]:
-    """Return stable JSON Schemas and operational effects for every capability."""
+class InvalidCapabilityQuery(QueryRefusal):
+    """A narrowing input the capability catalog cannot be read by; ``reason`` says which."""
+
+
+def _narrowed(name: str, resource: str) -> list[CapabilitySpec]:
+    """The capabilities under the dotted ``name`` and about ``resource``, refusing what names nothing.
+
+    ``name`` is a whole capability name or a prefix of whole segments
+    (``infrastructure`` holds ``infrastructure.reconcile``), so a filter never
+    matches half a word.
+    """
+
+    graph = integration_graph()
+    if name and not DOTTED_NAME.match(name):
+        raise InvalidCapabilityQuery("capabilities: name is a dotted capability name or a prefix of one.")
+    if resource and resource not in graph.resources:
+        raise InvalidCapabilityQuery("That list name matches nothing HQ serves; describe_resources names each one.")
+    return [
+        spec
+        for spec in graph.capabilities.values()
+        if (not name or spec.name == name or spec.name.startswith(f"{name}."))
+        and (not resource or spec.subject_resource == resource)
+    ]
+
+
+def describe_capabilities(*, principal: Principal, name: str = "", resource: str = "") -> dict[str, Any]:
+    """Return stable JSON Schemas and operational effects for every capability
+    ``principal``'s interface could ever hold, or those under a dotted ``name``
+    and about a ``resource``.
+
+    A capability its interface never holds is left out, whatever the grant: a
+    token is not shown a command only a person can run.
+    """
 
     described: list[CapabilityDescription] = [
         {
@@ -132,7 +168,8 @@ def describe_capabilities() -> dict[str, Any]:
             "resource": spec.subject_resource,
             "input_schema": capability_schema(spec),
         }
-        for spec in integration_graph().capabilities.values()
+        for spec in _narrowed(name.strip(), resource.strip())
+        if could_hold(principal.interface, spec.required_capabilities)
     ]
     return {"ok": True, "schema_version": 2, "capabilities": described}
 
@@ -199,7 +236,7 @@ def execute_capability(
             reason=exc.code,
         )
         return _error(exc.code, exc.reason)
-    except (DjangoValidationError, RecordNotFound, RecordConflict, TypeError, ValueError) as exc:
+    except (DjangoValidationError, HostRefusal, TypeError, ValueError) as exc:
         return _domain_refusal(name, exc)
 
 
@@ -210,12 +247,10 @@ def _domain_refusal(name: str, exc: Exception) -> dict[str, Any]:
         return _invalid(pydantic_refusal(name, exc.errors()))
     if isinstance(exc, DjangoValidationError):
         return _invalid(django_refusal(name, exc))
-    if isinstance(exc, RecordNotFound):
+    if isinstance(exc, HostRefusal):
         # Host-written text naming no request value (record_errors.py), and
-        # what tells a caller which record it has to fix.
-        return _error("not_found", exc.reason)
-    if isinstance(exc, RecordConflict):
-        return _error("conflict", exc.reason)
+        # what tells a caller what it has to change.
+        return _error(exc.code, exc.reason)
     # Neither handler nor dependency exception text crosses an adapter.
     # It can contain argument names, provider responses, paths, or values
     # from the request. The capability name is registry-owned and safe.
@@ -386,7 +421,16 @@ def _run(
         operation_context(interface=principal.interface, actor=principal.actor, operation=spec.name),
         audit_connection(getattr(command, "connection_ref", "") or ""),
     ):
-        return spec.handler(command, principal=principal, **arguments)
+        result = spec.handler(command, principal=principal, **arguments)
+    if spec.effect != "read":
+        # Every write a person or credential makes passes here, so this is the
+        # one place that starts the controller at once rather than at the next
+        # minute's ask; whether a pass is due is still `pass_due`'s alone, asked
+        # on the doorbell's thread so the request pays for none of it.
+        # Robust: a write that committed does not fail for a hint that could
+        # not be given.
+        transaction.on_commit(ask_soon, robust=True)
+    return result
 
 
 def execute_approved(
@@ -398,15 +442,10 @@ def execute_approved(
 ) -> dict[str, Any]:
     """Run a capability a person has just agreed to, held payload and all.
 
-    The gate is deliberately not consulted again. It has already been satisfied,
-    by the decision that called this, and asking it a second time would hold the
-    approval for an approval. Reachable only from that decision, which is why it
-    takes a spec rather than a name: nothing can route to it by sending a string.
-
-    Errors are raised rather than projected into an adapter's error shape. The
-    caller here is the page a person is standing on, and it reports what went
-    wrong on that page while leaving the request as it was, which is what the
-    surrounding transaction guarantees.
+    The approval gate is not consulted again: the decision that calls this
+    satisfied it. Takes a spec rather than a name, so nothing can route here by
+    sending a string, and raises rather than answering in an adapter's error
+    shape, so the person's page reports it and the transaction keeps the request.
     """
 
     return _run(spec, command, principal=principal, target=target, expected_updated_at=None)

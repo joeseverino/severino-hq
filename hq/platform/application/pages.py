@@ -1,13 +1,10 @@
 """The frame every page shares: its head, its actions, its section navigation.
 
 A view says what its page is (a title, a lede, the actions it offers) and
-``templates/page.html`` draws it, the same way on every page, host or
-extension. A page template fills only ``{% block page %}``. It never writes its
-own head, so no two heads can differ, and it never writes a form for one
-button: a post action is a ``post_button``.
-
-Class-based views mix in ``PageMixin``; function views pass ``page_context``
-to ``render``.
+``templates/page.html`` draws it the same way on every page, host or extension.
+A page template fills only ``{% block page %}``, so it never writes its own head
+or a form for one button (a ``post_button``). Class-based views mix in
+``PageMixin``; function views pass ``page_context`` to ``render``.
 """
 
 import re
@@ -137,7 +134,7 @@ class Page:
     def dialogs(self) -> tuple[PageDialog, ...]:
         """Every dialog the head's actions open, each drawn once."""
 
-        found = (getattr(action, "dialog", None) for action in self.actions)
+        found = (action.dialog for action in self.actions if isinstance(action, PageAction))
         return tuple(dict.fromkeys(dialog for dialog in found if dialog is not None))
 
 
@@ -199,7 +196,7 @@ class PageMixin(FragmentMixin):
     def get_page_navigation(self) -> PageNavigation | None:
         return None
 
-    def trail_label(self, record: Any) -> str | None:
+    def trail_label(self, record: Any) -> str | None:  # noqa: ARG002 - the default; an override is given the record
         """The record's crumb after the list's; None, the default, leaves it off.
 
         ``record`` is ``self.object``, the record as stored: an edit page's
@@ -211,6 +208,7 @@ class PageMixin(FragmentMixin):
     def get_page_trail(self) -> tuple[tuple[str, str], ...]:
         if self.page_trail is None:
             return ()
+        # A list page has no record of its own.
         record = getattr(self, "object", None)
         return record_trail(self.page_trail, record, self.trail_label)
 

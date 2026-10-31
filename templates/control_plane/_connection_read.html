@@ -4,19 +4,10 @@ same in the row and in the opened line beneath it. Opened, a state word stands
 beside it when it was not read cleanly, its record count when it was, and why
 it was not read. A grant note stands beside it only when it differs from its
 neighbors or cannot be used: the state column says it once for the connection.
+The item is one line with nothing between its parts but their own words:
+the row draws its separator after it (routes.css), and a space before that
+would let a line start with the dot.
 {% endcomment %}
 {% with sight=read.sight state=read.ability %}
-<li class="{% if sight %}connection-sight-{{ sight.state }}{% endif %}{% if state.available is False %} is-unavailable{% endif %}"{% if sight.observed_at %} title="{% if sight.state == "readable" or sight.state == "partial" %}Last read{% else %}Tried{% endif %} {{ sight.observed_at|ago }}"{% elif state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>
-  <span{% if read.whole %} class="cell-part"{% endif %}>{{ read.label|breakable }}</span>
-  {% if sight %}
-    {% if sight.state != "readable" %}<span class="connection-sight-state cell-part row-more">{{ sight.state_label|breakable }}</span>{% endif %}
-    {% if sight.state == "readable" or sight.state == "partial" %}<span class="muted row-more">{{ sight.records|breakable }}</span>{% endif %}
-    {% if sight.state != "readable" %}
-      {% if sight.part_reasons %}<span class="row-more">{% for reason in sight.part_reasons %}{% if forloop.last %}{{ reason|breakable }}{% else %}{{ reason|breakable:";" }} {% endif %}{% endfor %}</span>
-      {% elif sight.remedy %}<span class="row-more">{{ sight.remedy|breakable:"." }}{% if sight.error %} <span class="muted">{{ sight.error|breakable }}</span>{% endif %}</span>
-      {% elif sight.error %}<span class="muted row-more">{{ sight.error|breakable }}</span>{% endif %}
-    {% endif %}
-  {% endif %}
-  {% if state and not state.proven and connection.mixed_evidence or state.available is False %}<small class="connection-evidence connection-evidence-{{ state.evidence }}" title="{{ state.evidence_detail }}">{{ state.evidence_label|breakable }}</small>{% endif %}
-</li>
+<li class="{% if sight %}connection-sight-{{ sight.state }}{% endif %}{% if state.available is False %} is-unavailable{% endif %}"{% if sight.observed_at %} title="{% if sight.state == "readable" or sight.state == "partial" %}Last read{% else %}Tried{% endif %} {{ sight.observed_at|ago }}"{% elif state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}><span{% if read.whole %} class="cell-part"{% endif %}>{{ read.label|breakable }}</span>{% if sight %}{% if sight.state != "readable" %}<span class="connection-sight-state cell-part row-more">{{ sight.state_label|breakable }}</span>{% endif %}{% if sight.state == "readable" or sight.state == "partial" %}<span class="muted row-more">{{ sight.records|breakable }}</span>{% endif %}{% if sight.state != "readable" %}{% if sight.part_reasons %}<span class="row-more">{% for reason in sight.part_reasons %}{% if forloop.last %}{{ reason|breakable }}{% else %}{{ reason|breakable:";" }} {% endif %}{% endfor %}</span>{% elif sight.remedy %}<span class="row-more">{{ sight.remedy|breakable:"." }}{% if sight.error %} <span class="muted">{{ sight.error|breakable }}</span>{% endif %}</span>{% elif sight.error %}<span class="muted row-more">{{ sight.error|breakable }}</span>{% endif %}{% endif %}{% endif %}{% if state and not state.proven and connection.mixed_evidence or state.available is False %}<small class="connection-evidence connection-evidence-{{ state.evidence }}" title="{{ state.evidence_detail }}">{{ state.evidence_label|breakable }}</small>{% endif %}</li>
 {% endwith %}

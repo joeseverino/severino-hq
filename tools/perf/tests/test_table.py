@@ -199,7 +199,7 @@ class SummaryTests(SimpleTestCase):
         self.assertTrue(any(line.startswith("total ") for line in lines))
         self.assertIn("memory idle", said)
         self.assertIn("var/perf/run.table", lines[-1])
-        rows = [line for line in lines if line.startswith("/") or line.startswith(" ")]
+        rows = [line for line in lines if line.startswith(("/", " "))]
         self.assertFalse([line for line in rows if line.split()[1:2] in (["402"], ["1360"])], "no page's width row")
 
     def test_beside_a_base_it_names_the_pages_whose_server_time_moved_past_its_spread_furthest_first(self):

@@ -8,6 +8,7 @@ one per window.
 """
 
 from collections import Counter
+from collections.abc import Callable
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
@@ -20,14 +21,14 @@ from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
 from .estate import Expiry, estate_reading
 from .ui import counted
-lazy from .history import CONTAINERS, DEPLOYS, OUTSIDE_HQ, changes, external
+lazy from .history import CONTAINERS, DEPLOYS, OUTSIDE_HQ, Moment, changes, external
 
 # How many windows of one history source are kept current: the one the
 # dashboard shows and the one last paged to.
 WINDOWS = 2
 
 
-def _whatever_window(first: date, last: date) -> tuple[Any, ...]:
+def _whatever_window(_first: date, _last: date) -> tuple[Any, ...]:
     """What is due does not depend on the window asked: the calendar keeps
     what falls inside it."""
 
@@ -93,7 +94,7 @@ def _certificate_event(expiry: Expiry) -> CalendarEvent:
 
 
 @derivation("calendar.certificates", reads=ESTATE_READS, vary=_whatever_window)
-def certificate_events(first: date, last: date) -> tuple[CalendarEvent, ...]:
+def certificate_events(_first: date, _last: date) -> tuple[CalendarEvent, ...]:
     """Only what needs a person: a certificate its provider renews is silent.
 
     A managed certificate is its renewal window, opening the day renewal is
@@ -126,7 +127,7 @@ def _registration_event(expiry: Expiry) -> CalendarEvent:
 
 
 @derivation("calendar.registrations", reads=ESTATE_READS, vary=_whatever_window)
-def registration_events(first: date, last: date) -> tuple[CalendarEvent, ...]:
+def registration_events(_first: date, _last: date) -> tuple[CalendarEvent, ...]:
     """A registration that renews itself is a day; one that does not is a window."""
 
     return tuple(_registration_event(expiry) for expiry in estate_reading().registrations)
@@ -166,9 +167,25 @@ def history_sources() -> tuple[CalendarSource, ...]:
     )
 
 
-def _moments(first: date, last: date, sources: set[str]):
+def _happened(first: date, last: date, source: str, key: Callable[[Moment], str]) -> tuple[CalendarEvent, ...]:
+    """Each moment one history source holds in the window, as a finished event.
+
+    ``key`` is the event's id, since what tells two moments of a source apart
+    is the source's own: a deploy's page, or a container's name and start.
+    """
+
     since, until = _window(first, last)
-    return external(sources, since=since, until=until)
+    return tuple(
+        CalendarEvent(
+            id=key(moment),
+            title=moment.title,
+            starts=moment.at,
+            detail=moment.detail,
+            url=moment.url,
+            state="done",
+        )
+        for moment in external({source}, since=since, until=until)
+    )
 
 
 # What the controller's readings hold: deploys, and when each container started.
@@ -177,32 +194,12 @@ _READINGS = ("control_plane.ProviderInventory",)
 
 @derivation("calendar.deploys", reads=_READINGS, ahead=WINDOWS)
 def deploy_events(first: date, last: date) -> tuple[CalendarEvent, ...]:
-    return tuple(
-        CalendarEvent(
-            id=f"deploy:{moment.url or moment.at.isoformat()}",
-            title=moment.title,
-            starts=moment.at,
-            detail=moment.detail,
-            url=moment.url,
-            state="done",
-        )
-        for moment in _moments(first, last, {DEPLOYS})
-    )
+    return _happened(first, last, DEPLOYS, lambda moment: f"deploy:{moment.url or moment.at.isoformat()}")
 
 
 @derivation("calendar.containers", reads=_READINGS, ahead=WINDOWS)
 def container_events(first: date, last: date) -> tuple[CalendarEvent, ...]:
-    return tuple(
-        CalendarEvent(
-            id=f"container:{moment.title}:{moment.at.isoformat()}",
-            title=moment.title,
-            starts=moment.at,
-            detail=moment.detail,
-            url=moment.url,
-            state="done",
-        )
-        for moment in _moments(first, last, {CONTAINERS})
-    )
+    return _happened(first, last, CONTAINERS, lambda moment: f"container:{moment.title}:{moment.at.isoformat()}")
 
 
 @derivation("calendar.changes", reads=("core.AuditLog",), ahead=WINDOWS)

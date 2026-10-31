@@ -1,16 +1,16 @@
-"""Authorized contact-submission use cases.
+"""Authorized contact-submission use cases, shared by web, Command Center, API
+and MCP so validation and audit cannot differ by adapter.
 
-The shared application boundary used by web, Command Center, API and MCP, so
-a change cannot acquire different validation or audit behavior in each
-adapter. Reads come from the stored reading (``contacts.inbox``). A change is
-written to the ``cloudflare.contact_inbox`` declaration and queued for the
-controller, which applies it through the cloudflare_api connection: HQ holds
-no credential for D1.
+Reads come from the stored reading (``contacts.inbox``). A change is written to
+the ``cloudflare.contact_inbox`` declaration and queued for the controller,
+which applies it through the cloudflare_api connection: HQ holds no credential
+for D1.
 """
 
 from dataclasses import dataclass
-from typing import Any, get_args
+from typing import Annotated, Any, get_args
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from hq.domains.contacts import inbox
@@ -23,30 +23,34 @@ from hq.platform.core.models import AuditLog
 
 from .adoption import OBSERVES_ONLY, observes_only
 from .cadence import request_reading
-from .record_errors import RecordNotFound
+from .command_fields import Describe
+from .record_errors import PolicyError, RecordNotFound
 from .resource_operations import queue_reconcile
-from .security import Capability, Principal
+from .security import Principal
 
 CONTACT_STATUSES = frozenset(get_args(ContactStatus))
+ASSIGNEE_LENGTH = 120
+REVIEW = "contact.submission.review"
+DELETE = "contact.submission.delete"
 
 
 @dataclass(frozen=True, slots=True)
 class ContactListCommand:
-    status: str = ""
-    query: str = ""
-    limit: int = 100
+    status: Annotated[str, Describe("Only submissions in this state; blank for all.")] = ""
+    query: Annotated[str, Describe("Only submissions mentioning these words.")] = ""
+    limit: Annotated[int, Describe("At most this many submissions.")] = 100
 
 
 @dataclass(frozen=True, slots=True)
 class ContactReviewCommand:
-    status: str
-    assigned_to: str = ""
-    admin_notes: str = ""
+    status: Annotated[str, Describe("Where the submission stands.")]
+    assigned_to: Annotated[str, Describe("Who is handling it.")] = ""
+    admin_notes: Annotated[str, Describe("Notes on it, for HQ only.")] = ""
 
 
 @dataclass(frozen=True, slots=True)
 class ContactDeleteCommand:
-    confirm: str
+    confirm: Annotated[str, Describe("The submission's ID again, to confirm the delete.")]
 
 
 def _status(value: str, *, allow_blank: bool = False) -> str:
@@ -54,7 +58,7 @@ def _status(value: str, *, allow_blank: bool = False) -> str:
     if not value and allow_blank:
         return ""
     if value not in CONTACT_STATUSES:
-        raise ValueError(f"Unknown contact status {value!r}.")
+        raise ValidationError({"status": ValidationError("Unknown contact status.", code="invalid_choice")})
     return value
 
 
@@ -96,7 +100,7 @@ def execute_contact_list(
     *,
     principal: Principal,
 ) -> dict[str, Any]:
-    principal.require(Capability.MANAGE_CONTACTS)
+    del principal
     return {
         "ok": True,
         **list_contact_submissions(
@@ -125,7 +129,7 @@ def _change(current: inbox.Inbox, change: dict[str, Any]) -> dict[str, Any]:
 
     database = current.database
     if database is None:
-        raise ValueError("No contact messages have been read yet.")
+        raise PolicyError("No contact messages have been read yet.")
     resource = inbox.declaration()
     previous = resource.spec if resource is not None else {}
     spec = _unconfirmed(previous, current) if inbox.Database(**_ids(previous)) == database else {}
@@ -136,7 +140,7 @@ def _change(current: inbox.Inbox, change: dict[str, Any]) -> dict[str, Any]:
     else:
         reviews.append(change)
     if len(reviews) > CONTACT_CHANGES_LIMIT or len(deletions) > CONTACT_CHANGES_LIMIT:
-        raise ValueError("Too many changes are waiting for the controller. Try again once it has run.")
+        raise PolicyError("Too many changes are waiting for the controller. Try again once it has run.")
     return {
         "connection_ref": database.connection_ref,
         "account_id": database.account_id,
@@ -155,7 +159,7 @@ def _declare(spec: dict[str, Any], *, principal: Principal) -> None:
 
     validated = validate_spec(inbox.DECLARATION, spec)
     if observes_only(inbox.DECLARATION, validated):
-        raise ValueError(f"{OBSERVES_ONLY} The Cloudflare API connection also needs D1 Write (account).")
+        raise PolicyError(f"{OBSERVES_ONLY} The Cloudflare API connection also needs D1 Write (account).")
     resource = ManagedResource.objects.select_for_update().filter(key=inbox.DECLARATION_KEY).first()
     if resource is None:
         resource = ManagedResource(key=inbox.DECLARATION_KEY, kind=inbox.DECLARATION)
@@ -163,7 +167,9 @@ def _declare(spec: dict[str, Any], *, principal: Principal) -> None:
         resource.generation += 1
     resource.spec = validated
     resource.enabled = True
-    resource.desired_fingerprint = desired_fingerprint(resource.kind, validated, True, resource_key=resource.key)
+    resource.desired_fingerprint = desired_fingerprint(
+        resource.kind, validated, enabled=True, resource_key=resource.key
+    )
     resource.full_clean()
     resource.save()
     queue_reconcile(resource, principal=principal, reason="A contact message was changed.")
@@ -177,10 +183,10 @@ def execute_contact_review(
     principal: Principal,
     current_id: int,
 ) -> dict[str, Any]:
-    principal.require(Capability.MANAGE_CONTACTS)
     status = _status(command.status)
-    if len(command.assigned_to) > 120:
-        raise ValueError("assigned_to must be at most 120 characters")
+    if len(command.assigned_to) > ASSIGNEE_LENGTH:
+        too_long = ValidationError("Too long.", code="max_length", params={"limit_value": ASSIGNEE_LENGTH})
+        raise ValidationError({"assigned_to": too_long})
     current = inbox.current()
     before = _submission(current_id, current)
     review = {
@@ -192,7 +198,7 @@ def execute_contact_review(
     with operation_context(
         interface=principal.interface,
         actor=principal.actor,
-        operation="contact.submission.review",
+        operation=REVIEW,
     ):
         _declare(_change(current, review), principal=principal)
         record_event(
@@ -216,9 +222,8 @@ def execute_contact_delete(
     principal: Principal,
     current_id: int,
 ) -> dict[str, Any]:
-    principal.require(Capability.MANAGE_CONTACTS)
     if command.confirm != str(current_id):
-        raise ValueError(f"confirm must exactly match target {current_id!r}")
+        raise ValidationError({"confirm": ValidationError("Must match the message.", code="invalid")})
     current = inbox.current()
     before = find_submission(current_id, current)
     if before is None:
@@ -228,7 +233,7 @@ def execute_contact_delete(
     with operation_context(
         interface=principal.interface,
         actor=principal.actor,
-        operation="contact.submission.delete",
+        operation=DELETE,
     ):
         _declare(_change(current, {"delete": current_id}), principal=principal)
         record_event(

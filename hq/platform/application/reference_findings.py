@@ -1,16 +1,10 @@
 """Findings about a record that points at something that is not there: a
 connection no controller has, or a domain HQ neither expects nor reads.
 
-A declaration points at another thing by a name in its ``spec``, and the
-database derives that name into a column (``ManagedResource.zone``,
-``ManagedResource.connection_ref``). Nothing refuses a name that matches
-nothing, because a declaration may name what HQ only reads. So the link is
-checked here, against everything HQ expects and everything it has read, and a
-name that matches neither is one fact on the record's node.
-
-A name is only said to match nothing when HQ holds the whole list it would be
-on: some controller reports its connections, or a reachable read listed the
-domains. Without that list HQ does not know, and says nothing.
+Nothing refuses a reference that matches nothing, since a declaration may name
+what HQ only reads (docs/Architecture.md#infrastructure-control-plane). A name is
+said to match nothing only when HQ holds the whole list it would be on: some
+controller reports its connections, or a reachable read listed the domains.
 """
 
 from collections.abc import Iterable, Mapping

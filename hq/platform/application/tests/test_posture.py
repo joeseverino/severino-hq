@@ -264,25 +264,25 @@ class ScopeTests(TestCase):
 
 
 class ToneTests(TestCase):
-    def standing(self, met, enforced):
+    def standing(self, *, met, enforced):
         from ..posture import CheckOutcome, CheckStanding
 
-        return CheckStanding(STANDARD[0], CheckOutcome(met, ""), enforced)
+        return CheckStanding(STANDARD[0], CheckOutcome(met=met, evidence=""), enforced)
 
     def test_without_advanced_posture_an_unmet_check_is_quiet(self):
-        self.assertEqual(self.standing(False, enforced=False).state, "neutral")
-        self.assertEqual(self.standing(False, enforced=False).icon, "circle")
+        self.assertEqual(self.standing(met=False, enforced=False).state, "neutral")
+        self.assertEqual(self.standing(met=False, enforced=False).icon, "circle")
 
     def test_under_advanced_posture_an_unmet_check_is_a_fault(self):
-        self.assertEqual(self.standing(False, enforced=True).state, "attention")
+        self.assertEqual(self.standing(met=False, enforced=True).state, "attention")
 
     def test_an_unread_check_is_never_a_fault(self):
-        self.assertEqual(self.standing(None, enforced=True).state, "neutral")
-        self.assertEqual(self.standing(None, enforced=True).icon, "clock")
+        self.assertEqual(self.standing(met=None, enforced=True).state, "neutral")
+        self.assertEqual(self.standing(met=None, enforced=True).icon, "clock")
 
     def test_a_qualified_pass_is_ticked_but_not_green(self):
         from ..posture import CheckOutcome, CheckStanding
 
-        found = CheckStanding(STANDARD[0], CheckOutcome(True, "", qualified=True))
+        found = CheckStanding(STANDARD[0], CheckOutcome(met=True, evidence="", qualified=True))
 
         self.assertEqual((found.state, found.icon), ("neutral", "check-circle"))

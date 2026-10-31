@@ -12,10 +12,10 @@
 </dl>
 
 {% if traffic.path and traffic.measured %}
-  <section class="card" aria-labelledby="traffic">
+  {% card heading="traffic" %}
     <div class="card-head">
       <h2 id="traffic">Traffic</h2>
-      <a class="section-foot" href="{% url 'analytics:overview' %}?days={{ traffic.days }}">All analytics &rarr;</a>
+      <a class="section-foot" href="{% url 'analytics:overview' %}?days={{ traffic.days }}">All analytics{% arrow %}</a>
     </div>
     <dl class="vitals-strip">
       <div class="vital">
@@ -27,7 +27,7 @@
         <dd><span class="vital-rate">{{ traffic.visits|breakable }}</span></dd>
       </div>
     </dl>
-  </section>
+  {% endcard %}
 {% endif %}
 
 {% if item.notes %}<h2>Notes</h2><p>{{ item.notes|breakable|linebreaksbr }}</p>{% endif %}

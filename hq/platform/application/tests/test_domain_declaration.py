@@ -31,7 +31,7 @@ WIDGETS = DomainDescriptor(
     id="test.widgets",
     label="Widgets",
     navigation=(NavigationItem("Widgets", "widgets:list", "widgets", 150, "Business"),),
-    integration=PluginIntegration(resources=lambda: load(f"{APP}.specs:resources")()),
+    integration=PluginIntegration(resources=lambda: load(f"{APP}.specs:resources")()),  # noqa: PLW0108 - loads the specs module only when resources are asked for
     apps=(APP,),
     mounts=(Mount("widgets/", f"{APP}.urls"),),
     records=Records(

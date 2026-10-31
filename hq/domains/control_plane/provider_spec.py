@@ -23,6 +23,7 @@ from pydantic import (
 )
 
 from hq.platform.application.moments import span, when_day
+from hq.platform.application.record_errors import Sentence
 from hq.platform.application.routes import reverse
 lazy from hq.platform.application.expiry import days_until
 lazy from hq.platform.application.timestamps import moment
@@ -118,17 +119,14 @@ ENVELOPE_SETTINGS = frozenset({"CONNECTION_REF", "MANAGES", "PROVIDER"})
 
 @dataclass(frozen=True, slots=True)
 class ConnectionKind:
-    """One connection provider: its name on the page, and how its credential is held.
-
-    ``credential`` is ``scoped`` or ``coarse``. The controller reports that a
-    credential reached its endpoint, never what it is allowed to do, so the only
-    honest statement about least privilege is the one the provider's credential
-    model permits: a scoped provider issues narrow tokens whose grants HQ could
-    verify; a coarse one issues a login or an admin token that is the whole
-    account.
-    """
+    """One connection provider: its name on the page, and how its credential is held."""
 
     label: str
+    # The controller reports that a credential reached its endpoint, never what
+    # it may do, so the only honest least-privilege statement is the one the
+    # provider's credential model permits: a scoped provider issues narrow
+    # tokens whose grants HQ could verify; a coarse one, a login or an admin
+    # token that is the whole account.
     credential: Literal["scoped", "coarse"]
     # The settings its credential arrives as.
     shape: ConnectionShape
@@ -148,18 +146,16 @@ class ConnectionKind:
 class ProviderModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    # ``after`` because a ``before`` validator is not allowed on a
+    # discriminated union's discriminator, and this one matches every field.
     @field_validator("*", mode="after")
     @classmethod
     def _settle_line_endings(cls, value: Any) -> Any:
         """Store one newline, whatever the browser sent.
 
-        HTML submits a textarea as CRLF and every provider returns LF, so a
-        multi-line field saved through a form never again equals the identical
-        document read back. Normalized on the way in, so the declaration and
-        the reading are comparable at all, and asked of every string field
-        rather than the two that have textareas today. Runs ``after`` because
-        a ``before`` validator is not allowed on a discriminated union's
-        discriminator, and this one matches every field.
+        HTML submits a textarea as CRLF and every provider returns LF, so a multi-line
+        field saved through a form would never equal the document read back. Asked of
+        every string field rather than the ones that have textareas today.
         """
 
         if isinstance(value, str) and "\r" in value:
@@ -181,8 +177,13 @@ class ControllerVerification(ProviderModel):
 class ControllerActionPolicy(ProviderModel):
     mode: Literal["apply", "locked"]
     automatic: bool = False
-    reason: str = ""
+    reason: Sentence = ""
     verification: ControllerVerification | None = None
+
+    def why_locked(self) -> Sentence:
+        """Why the controller may not run this, as a refusal says it."""
+
+        return self.reason or "The controller cannot run this action."
 
     @model_validator(mode="after")
     def validate_mode(self) -> ControllerActionPolicy:
@@ -208,7 +209,7 @@ def applies(*, automatic: bool = False, verification: ControllerVerification | N
     return ControllerActionPolicy(mode="apply", automatic=automatic, verification=verification)
 
 
-def locked(reason: str) -> ControllerActionPolicy:
+def locked(reason: Sentence) -> ControllerActionPolicy:
     """The controller may not run this action, and this is why.
 
     The reason is shown to whoever pressed the button, so it says what is true
@@ -221,15 +222,10 @@ def locked(reason: str) -> ControllerActionPolicy:
 def origin_is_authoritative(provider: ProviderSpec) -> bool:
     """Whether this provider's origin says where a request is *finally* served.
 
-    Two kinds of provider answer "and then what serves it", and they mean
-    different things by it. One that also *answers* for the name states where
-    the name points, which for a proxied name is the proxy. One that only
-    routes states where the request ends up. Both are origins; only the second
-    is the answer to "what serves this", so the first has to yield wherever both
-    are present.
-
-    Stated once, here, because two surfaces rank origins (the service catalog
-    and the machine board) and must agree.
+    One that also answers for a name states where the name points (for a proxied
+    name, the proxy); one that only routes states where the request ends up, and
+    only that answers "what serves this". Stated once, because the service catalog
+    and the machine board both rank origins and must agree.
     """
 
     return provider.answers is None
@@ -259,16 +255,11 @@ SERVICE_FACET_IDS = frozenset(facet for facet, _ in SERVICE_FACETS)
 class NameContext:
     """What HQ already knows about a hostname, offered to the next question.
 
-    Every field here was worked out somewhere else on the way in: which zones a
-    credential may edit, where something already answers this name, which
-    certificate already covers it. Passed rather than re-derived, because a form
-    that cannot see them asks for them again, and a page offering to issue a
-    Let's Encrypt certificate for a name in no public zone is not asking, it is
-    proposing a failure.
-
-    Declared here beside the providers that read it and built in the application
-    layer, which is the half allowed to touch the database. Every field
-    defaults, so a caller that knows nothing yet is a legal caller.
+    Each field was worked out on the way in and is passed rather than re-derived,
+    because a form that cannot see it asks again, or proposes a failure (a Let's
+    Encrypt certificate for a name in no public zone). Built in the application
+    layer, which may touch the database; every field defaults, so a caller that
+    knows nothing yet is a legal caller.
     """
 
     hostname: str = ""
@@ -345,11 +336,12 @@ class ProviderSpec:
     seed: Callable[[NameContext], dict[str, Any]] | None = None
     # Some resources are not complete without material the operator has to
     # supply: an uploaded certificate is only a name and a list of targets
-    # until the certificate itself arrives. Declared as a form and a handler so
-    # the same page collects both: asked for separately, creating one would
-    # leave an empty declaration and a second page to go and find.
+    # until the certificate itself arrives. Declared as a form and the
+    # capability that takes it, so the same page collects both: asked for
+    # separately, creating one would leave an empty declaration and a second
+    # page to go and find.
     material_form: str = ""
-    material_handler: str = ""
+    material_capability: str = ""
     # Fields that are routine tuning rather than part of the question being
     # asked. Split on required-ness instead, a spec whose validity comes from a
     # cross-field rule has no required fields at all, and its form rendered
@@ -407,7 +399,7 @@ class ProviderSpec:
     # For a kind whose found records belong to something HQ reads and does not
     # write. They are shown as observed, and neither a sweep nor a person
     # adopts one.
-    adoption_gap: str = ""
+    adoption_gap: Sentence = ""
     # The page a resource of this kind lives on, when it has one of its own.
     home: Callable[[Any], str] | None = None
     # The provider console page for a swept record, built only from ids the
@@ -590,6 +582,11 @@ class ProviderSpec:
                 f"Provider {self.kind!r} describes hostnames but names no "
                 "service facet, so nothing would ever read them."
             )
+
+    def why_not_adoptable(self) -> Sentence:
+        """Why a found record of this kind is never taken on, as a refusal says it."""
+
+        return self.adoption_gap
 
     def schema(self) -> dict[str, Any]:
         return adapter(self.spec_type).json_schema()

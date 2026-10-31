@@ -429,12 +429,12 @@ class HelperInstallSourceTests(SimpleTestCase):
         # The helper holds the stacks root the rule names; neither moves alone.
         self.assertIn(f'StacksRoot = "{STACKS_ROOT}"', self._source("controller/host/upgrade/upgrade.go"))
 
-    def test_the_host_check_admits_the_upgrade_rule_hq_renders(self):
+    def test_hq_host_verify_admits_the_upgrade_rule_hq_renders(self):
         from ..upgrades import HELPER, sudoers_command
 
-        # The check fails on any listed command it does not know, so it holds this rule too.
+        # Verify fails on any listed command it does not know, so it holds this rule too.
         self.assertEqual(sudoers_command(), f"{HELPER} upgrade *")
-        self.assertIn('program + " upgrade *"', self._source("controller/host/check.go"))
+        self.assertIn('program + " upgrade *"', self._source("controller/host/verify.go"))
 
     def test_the_signer_is_the_one_a_deploy_checks(self):
         from ..upgrades import SIGNER_ISSUER, signer

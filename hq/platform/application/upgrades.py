@@ -1,15 +1,9 @@
 """Whether a running container can be upgraded, and exactly how it would be.
 
-A plan is read-only: it changes nothing, and is what an upgrade would do. It
-names the target by digest (what gets pinned, scanned and verified), what the
-move is (patch, minor, major), what it fixes and what it would bring, whether
-the container holds data that has to be snapshotted first, how the result can
-be verified, and every reason it cannot go ahead yet, each with an id an agent
-can act on. The same plan is on the container's page and in the ``upgrades``
-resource, so a person and an agent read one answer.
-
-HQ's own image is never planned here: it is deployed by its own signed
-pipeline, and only by that.
+A plan changes nothing; what it holds is docs/Derived-Facts.md's to list. The
+same plan is on the container's page and in the ``upgrades`` resource, so a
+person and an agent read one answer, each blocker an id an agent can act on.
+HQ's own image is never upgraded from here: only its signed pipeline deploys it.
 """
 
 import re
@@ -79,14 +73,14 @@ class Plan:
         if not any(blocker.id == "no-apply-path" for blocker in self.blockers):
             return ()
         machine = self.container.machine
-        return install_steps(machine.name, deployed_here=bool(getattr(machine, "runs_hq", False)))
+        return install_steps(machine.name, deployed_here=machine.runs_hq)
 
     @property
     def install_brought(self) -> bool:
         """Whether HQ's own deploys bring the helper to its machine: only to the
         one HQ runs on, which is the one its deploy targets."""
 
-        return bool(getattr(self.container.machine, "runs_hq", False))
+        return bool(self.container.machine.runs_hq)
 
     @property
     def stateful(self) -> bool:
@@ -411,8 +405,10 @@ SUDOERS = "/etc/sudoers.d/severino-hq-upgrade"
 # holds the same constant, and nothing a sudo caller passes can move it.
 STACKS_ROOT = "/opt/apps"
 
-# An empty digest: a request the helper refuses harmlessly (no such stack),
-# which is how the check below asks sudo without running it.
+# An upgrade's arguments in the form the rule allows, naming a stack that does
+# not exist and a digest of zeros, so `sudo -l` with them asks whether the rule
+# allows such a call without naming anything real; were it run, the helper
+# would refuse it.
 _PROBE = (
     f"upgrade --operation sudo-check --project-dir {STACKS_ROOT}/example --service example "
     f"--from example/app:1 --to example/app@sha256:{'0' * 64}"
@@ -513,7 +509,12 @@ def install_steps(machine: str, *, deployed_here: bool = False) -> tuple[Step, .
             f"&& printf '%s ALL=(root) NOPASSWD: %s\\n' \"$account\" '{sudoers_command()}' "
             f"| sudo tee {SUDOERS} >/dev/null && sudo chmod 0440 {SUDOERS} && sudo visudo -cf {SUDOERS}",
         ),
-        Step("check", "Check the rule as that account", f"sudo -n -l {HELPER} {_PROBE}"),
+        Step(
+            "check",
+            "Signed in as that account, check that sudo allows it. sudo -l only says whether a call is allowed, "
+            "and the call it asks about names a stack that does not exist (example) and a digest of zeros.",
+            f"sudo -n -l {HELPER} {_PROBE}",
+        ),
     )
 
 

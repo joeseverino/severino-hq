@@ -68,20 +68,16 @@ def _service(node) -> str:
 def _unreachable_consumer(estate: FindingEstate) -> tuple[Finding, ...]:
     """A name this estate serves that the last reading could not reach.
 
-    Not a claim that the certificate is wrong: the other consumers were read
-    and agree. It is a claim about one path, from the machine that verifies to
-    the machine that serves, and a path is the kind of thing a network policy
-    decides rather than a certificate. Left unread, a consumer keeps whatever
-    it was last given and nothing here would ever notice it going stale, which
-    is the failure this rule exists to make loud.
-
-    Read from the node's facts rather than a dictionary of them: every entry
-    here shares one key, and collapsing them would report one unreachable name
-    however many there were.
+    A claim about one path, from the machine that verifies to the machine that
+    serves, never that the certificate is wrong: the other consumers were read
+    and agree. Left unread, a consumer keeps whatever it was last given and
+    nothing would notice it going stale, which this rule exists to make loud.
     """
 
     found: list[Finding] = []
     for node in estate.nodes():
+        # Every entry shares one key, so a dictionary of the node's facts would
+        # report one unreachable name however many there were.
         names = fact_values(node, "unreachable")
         if not names:
             continue

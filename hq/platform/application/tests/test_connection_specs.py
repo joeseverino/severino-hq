@@ -22,6 +22,7 @@ from ..connections import (
     list_connections,
 )
 from ..integrations import integration_graph
+from ..plugin_testing import offering
 from ..security import Capability, Principal
 from .host_only import host_only
 from .sentinel import CONNECTION as SENTINEL_CONNECTION, SENTINEL, SentinelMixin, plant_credentials
@@ -90,7 +91,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
             management_route="example:connection-list",
         )
 
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
+        with offering(spec):
             self.assertIn(spec, integration_graph().connections.values())
 
     def test_core_spec_derives_controller_abilities_and_carries_no_credential(self):
@@ -123,10 +124,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
         self.assertNoSentinel(outcome)
 
     def test_scope_coverage_is_derived_for_every_ability(self):
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs",
-            return_value=(_finance_spec(),),
-        ):
+        with offering(_finance_spec()):
             groups = connection_catalog(principal=FINANCE)
 
         finance = next(group for group in groups if group.spec.name == "example.finance")
@@ -145,10 +143,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
         provider = mock.Mock(side_effect=spec.instance_provider)
         spec = replace(spec, instance_provider=provider)
         with (
-            mock.patch(
-                "hq.platform.application.plugins.plugin_connection_specs",
-                return_value=(spec,),
-            ),
+            offering(spec),
             projection_scope(),
         ):
             connection_catalog(principal=FINANCE)
@@ -160,7 +155,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
         spec = _finance_spec()
         instance = replace(spec.instance_provider()[0], scopes_known=False)
         spec = replace(spec, instance_provider=lambda: (instance,))
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
+        with offering(spec):
             groups = connection_catalog(principal=FINANCE)
 
         states = groups[0].connections[0].abilities
@@ -181,7 +176,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
             abilities=(ability,),
             instance_provider=lambda: (instance,),
         )
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
+        with offering(spec):
             state = connection_catalog(principal=FINANCE)[0].connections[0].abilities[0]
 
         self.assertTrue(state.available)
@@ -192,10 +187,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
         self.assertFalse(state.proven)
 
     def test_missing_scope_derives_one_real_management_next_step(self):
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs",
-            return_value=(_finance_spec(),),
-        ):
+        with offering(_finance_spec()):
             connection = connection_catalog(principal=FINANCE)[0].connections[0]
 
         action = connection.recommended_action
@@ -214,7 +206,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
             abilities=(ability,),
             instance_provider=lambda: (instance,),
         )
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
+        with offering(spec):
             reader = connection_catalog(principal=FINANCE)[0].connections[0]
             operator = connection_catalog(principal=FINANCE_OPERATOR)[0].connections[0]
 
@@ -225,10 +217,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
         self.assertEqual(action.url, "/commands/project.create/")
 
     def test_machine_catalog_emits_the_same_safe_actions_as_the_web_projection(self):
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs",
-            return_value=(_finance_spec(),),
-        ):
+        with offering(_finance_spec()):
             payload = list_connections(principal=FINANCE)
 
         instance = payload["groups"][0]["instances"][0]
@@ -247,7 +236,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
             "example.private.read",
             provider,
         )
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
+        with offering(spec):
             groups = connection_catalog(principal=NONE)
 
         self.assertEqual(groups, ())
@@ -256,10 +245,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
 
 class ConnectionRegistrationTests(TestCase):
     def test_one_spec_drives_machine_discovery(self):
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs",
-            return_value=(_finance_spec(),),
-        ):
+        with offering(_finance_spec()):
             described = describe_connections()
 
         finance = next(item for item in described["connections"] if item["name"] == "example.finance")
@@ -278,14 +264,14 @@ class ConnectionRegistrationTests(TestCase):
             abilities=spec.abilities[:1],
             instance_provider=lambda: (instance,),
         )
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
+        with offering(spec):
             discovered = command_center("finance", principal=FINANCE)
 
         self.assertEqual(discovered["connections"][0].badges, ())
 
     def test_command_center_finds_the_live_instance_not_only_its_family(self):
         spec = _finance_spec()
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
+        with offering(spec):
             discovered = command_center("capital", principal=FINANCE, include_live_connections=True)
 
         self.assertEqual(discovered["connections"][0].label, "Capital One")
@@ -322,6 +308,10 @@ class ConnectionRegistrationTests(TestCase):
                 "infrastructure.resource.create",
                 "infrastructure.resource.update",
                 "infrastructure.resource.accept_observed",
+                # Taking on what the credential found live.
+                "infrastructure.resource.adopt",
+                "infrastructure.service.adopt",
+                "infrastructure.zone.adopt",
                 "infrastructure.reconcile",
                 "infrastructure.resource.remove",
                 # Scoped to the device kind, so it surfaces here for the same
@@ -393,7 +383,7 @@ class ConnectionRegistrationTests(TestCase):
             ),
         )
         with (
-            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(broken,)),
+            offering(broken),
             self.assertRaisesRegex(ImproperlyConfigured, "invalid governed kinds"),
         ):
             integration_graph()
@@ -407,10 +397,7 @@ class ConnectionRegistrationTests(TestCase):
             lambda: (),
         )
         with (
-            mock.patch(
-                "hq.platform.application.plugins.plugin_connection_specs",
-                return_value=(duplicate,),
-            ),
+            offering(duplicate),
             self.assertRaisesRegex(ImproperlyConfigured, "Duplicate connection"),
         ):
             integration_graph()
@@ -433,10 +420,7 @@ class ConnectionRegistrationTests(TestCase):
             ),
         )
         with (
-            mock.patch(
-                "hq.platform.application.plugins.plugin_connection_specs",
-                return_value=(broken,),
-            ),
+            offering(broken),
             self.assertRaisesRegex(ImproperlyConfigured, "unknown abilities"),
         ):
             connection_catalog(principal=READ)
@@ -459,10 +443,7 @@ class ConnectionRegistrationTests(TestCase):
             ),
         )
         with (
-            mock.patch(
-                "hq.platform.application.plugins.plugin_connection_specs",
-                return_value=(broken,),
-            ),
+            offering(broken),
             self.assertRaisesRegex(ImproperlyConfigured, "invalid relationship"),
         ):
             connection_catalog(principal=FINANCE)
@@ -477,7 +458,7 @@ class ConnectionRegistrationTests(TestCase):
             spec = replace(spec, instance_provider=lambda instance=instance: (instance,))
             with (
                 self.subTest(endpoint),
-                mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
+                offering(spec),
                 self.assertRaisesRegex(ImproperlyConfigured, "private URL parts") as refused,
             ):
                 list_connections(principal=FINANCE)
@@ -488,25 +469,37 @@ class ConnectionRegistrationTests(TestCase):
         instance = replace(spec.instance_provider()[0], controller_id=" ")
         spec = replace(spec, instance_provider=lambda: (instance,))
         with (
-            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
+            offering(spec),
             self.assertRaisesRegex(ImproperlyConfigured, "invalid controller id"),
         ):
             list_connections(principal=FINANCE)
 
-    def test_non_datetime_observations_fail_before_serialization(self):
-        spec = _finance_spec()
-        instance = replace(spec.instance_provider()[0], observed_at=object())
-        spec = replace(spec, instance_provider=lambda: (instance,))
-        with (
-            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
-            self.assertRaisesRegex(ImproperlyConfigured, "observation time"),
-        ):
-            list_connections(principal=FINANCE)
+    def test_every_malformed_instance_fails_closed_naming_what_is_wrong(self):
+        good = _finance_spec().instance_provider()[0]
+        cases = (
+            ("non-ConnectionInstance", object()),
+            ("incomplete instance", replace(good, kind=" ")),
+            ("invalid status", replace(good, status="fine")),
+            ("no status label", replace(good, status_label=" ")),
+            ("invalid granted scopes", replace(good, granted_scopes=("accounts:read", "accounts:read"))),
+            ("invalid granted scopes", replace(good, granted_scopes=("accounts read",))),
+            ("invalid relationship", replace(good, dependencies=(ConnectionLink("Box", resource_key=" box"),))),
+            ("invalid relationship", replace(good, targets=(ConnectionLink(" "),))),
+            ("invalid fact", replace(good, facts=(ConnectionFact("Last refresh", " "),))),
+        )
+        for refusal, emitted in cases:
+            spec = replace(_finance_spec(), instance_provider=lambda emitted=emitted: (emitted,))
+            with (
+                self.subTest(refusal),
+                offering(spec),
+                self.assertRaisesRegex(ImproperlyConfigured, refusal),
+            ):
+                list_connections(principal=FINANCE)
 
     def test_documentation_urls_are_restricted_to_safe_destinations(self):
         spec = replace(_finance_spec(), documentation_url="javascript:alert(1)")
         with (
-            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
+            offering(spec),
             self.assertRaisesRegex(ImproperlyConfigured, "documentation URL"),
         ):
             describe_connections()
@@ -522,7 +515,7 @@ class ConnectionWorkspaceTests(TestCase):
         instance = replace(spec.instance_provider()[0], kind="unclassified")
         spec = replace(spec, instance_provider=lambda: (instance,))
         with (
-            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
+            offering(spec),
             mock.patch("hq.domains.control_plane.connection_views.web_principal", return_value=FINANCE),
         ):
             response = self.client.get(reverse("control_plane:connections"))
@@ -540,7 +533,7 @@ class ConnectionWorkspaceTests(TestCase):
             instance = replace(instance, granted_scopes=(), scopes_known=False)
         spec = replace(spec, secret_store="", instance_provider=lambda: (instance,))
         with (
-            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
+            offering(spec),
             mock.patch("hq.domains.control_plane.connection_views.web_principal", return_value=FINANCE),
         ):
             return self.client.get(reverse("control_plane:connections"))
@@ -620,7 +613,10 @@ class GrantEvidenceTests(TestCase):
         )
 
         def states(*evidence):
-            return tuple(ConnectionAbilityState(self.ability(), True, (), None, item) for item in evidence)
+            return tuple(
+                ConnectionAbilityState(self.ability(), available=True, missing_scopes=(), action=None, evidence=item)
+                for item in evidence
+            )
 
         self.assertEqual(connection_authority(()), "none")
         self.assertEqual(connection_authority(states("verified")), "proven")
@@ -679,7 +675,7 @@ class GrantEvidenceTests(TestCase):
                 lambda: (instance,),
                 (self.ability(),),
             )
-            with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
+            with offering(spec):
                 return connection_catalog(principal=READ)
 
         with self.assertRaisesRegex(ImproperlyConfigured, "invalid credential model"):
@@ -695,7 +691,7 @@ class GrantEvidenceTests(TestCase):
             (self.ability(),),
         )
         with (
-            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
+            offering(spec),
             self.assertRaisesRegex(ImproperlyConfigured, "keyless but reports grants"),
         ):
             connection_catalog(principal=READ)

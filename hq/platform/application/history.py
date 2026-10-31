@@ -1,13 +1,10 @@
 """One history across what HQ did and what its readings saw change.
 
-Each connection dates its own events in its own place: HQ's audit log holds
-what anyone did through HQ and when a reading's records changed between two
-sweeps (``inventory._record_change``), GitHub its deployments, Docker when
-each container last started. The audit log page lays them on one line, and a
-drift finding asks the same history what happened near the moment it was
-first seen.
-
-Read only from what is already stored; nothing here polls.
+Each source dates its own events in its own place: the audit log what anyone
+did through HQ and when a reading's records changed (``inventory._record_change``),
+GitHub its deployments, Docker when each container last started. The audit log
+page lays them on one line, and a drift finding asks it what happened near when
+it was first seen. Read only from what is already stored; nothing here polls.
 """
 
 from collections.abc import Iterable, Sequence

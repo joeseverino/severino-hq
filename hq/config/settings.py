@@ -1,18 +1,10 @@
-"""
-Severino HQ settings.
+"""Severino HQ settings.
 
-Every setting HQ relies on is stated here, Django's defaults included, so this
-file reads as the whole configuration and no default can move underneath it.
-A value is read from the environment only where it differs per deployment or
-is secret, through the env_* readers below; every variable is in the table in
-docs/Deployment.md#configuration, and a test holds the two to each other.
-
-Production guidance:
-- DEBUG must be False (set DJANGO_DEBUG=0).
-- SECRET_KEY must come from the environment.
-- ALLOWED_HOSTS must be set explicitly.
-- Bind the app to localhost or the Tailscale interface, never the public internet.
-- Uploaded media live OUTSIDE the application code (set SEVERINO_MEDIA_ROOT).
+Every setting HQ relies on is stated here, Django's defaults included, so no
+default can move underneath it. A value comes from the environment only where
+it differs per deployment or is secret, through the env_* readers below. Every
+variable, and what production needs of it, is in the table in
+docs/Deployment.md#configuration, which a test holds to this file.
 """
 
 import contextlib
@@ -47,7 +39,7 @@ def env_str(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
 
 
-def env_bool(name: str, default: bool = False) -> bool:
+def env_bool(name: str, *, default: bool = False) -> bool:
     raw = os.environ.get(name)
     if raw is None:
         return default
@@ -351,7 +343,6 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "django.contrib.humanize",
     # Django's own form and widget templates, for the renderer below.
     "django.forms",
     "mozilla_django_oidc",
@@ -403,7 +394,11 @@ _TEMPLATE_LOADERS = [
 
 TEMPLATES = [
     {
-        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        # Django's, without the filters and tag that write a moment in a
+        # template's own words: a page shows one through ``when``.
+        "BACKEND": "hq.platform.core.template_engine.Templates",
+        # The alias Django's own backend would have, which code asks engines for.
+        "NAME": "django",
         "DIRS": [BASE_DIR / "templates"],
         # Loaders are listed explicitly, so APP_DIRS must be off: Django refuses
         # a configuration that sets both, since app_directories.Loader above is
@@ -766,7 +761,10 @@ TIME_ZONE = env_str("DJANGO_TIME_ZONE", "America/Chicago")
 USE_I18N = True
 USE_TZ = True
 
-# Dates and times as the operator reads them, 5/23/26 5:49 PM, in one module.
+# Dates and times as the operator reads them, in one module rather than
+# DATE_FORMAT: Django always localizes, a locale's own formats take precedence
+# over those settings, and a FORMAT_MODULE_PATH module is read ahead of the
+# locale's.
 FORMAT_MODULE_PATH = ["hq.config.formats"]
 
 
@@ -838,11 +836,9 @@ LOGGING = {
         },
     },
     "root": {"handlers": ["console"], "level": SEVERINO_LOG_LEVEL},
-    "loggers": {
-        "django.request": {"level": SEVERINO_LOG_LEVEL, "propagate": True},
-        "severino.request": {"level": SEVERINO_LOG_LEVEL, "propagate": True},
-        "severino": {"level": SEVERINO_LOG_LEVEL, "propagate": True},
-    },
+    # Every logger takes the root's level but Django's, which its own
+    # default logging sets to INFO.
+    "loggers": {"django": {"level": SEVERINO_LOG_LEVEL}},
 }
 
 

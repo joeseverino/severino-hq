@@ -75,19 +75,19 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if code := f.status[host+" "+key]; code != 0 {
 		w.WriteHeader(code)
-		io.WriteString(w, `{"message":"refused"}`)
+		_, _ = io.WriteString(w, `{"message":"refused"}`)
 		return
 	}
 	switch {
-	case req.Method == "POST" && strings.HasSuffix(key, "/access_tokens"):
+	case req.Method == http.MethodPost && strings.HasSuffix(key, "/access_tokens"):
 		var grant githubapi.AppsCreateInstallationAccessTokenJSONBody
 		_ = json.Unmarshal(data, &grant)
 		token := "minted-" + strconv.Itoa(len(f.grants)+1)
 		f.grants[token] = grant
-		io.WriteString(w, `{"token":"`+token+`","expires_at":"2030-01-01T00:00:00Z"}`)
+		_, _ = io.WriteString(w, `{"token":"`+token+`","expires_at":"2030-01-01T00:00:00Z"}`)
 		return
-	case req.Method != "GET":
-		io.WriteString(w, `{"id":1}`)
+	case req.Method != http.MethodGet:
+		_, _ = io.WriteString(w, `{"id":1}`)
 		return
 	}
 	answer, ok := f.routes[host+" "+key]
@@ -96,7 +96,7 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	io.WriteString(w, answer)
+	_, _ = io.WriteString(w, answer)
 }
 
 // grantOf is the grant a call's token was minted with; ok false for a JWT.
@@ -173,12 +173,14 @@ func newGitHubHarness(t *testing.T, routes map[string]string, extra runtime.Envi
 	t.Cleanup(server.Close)
 	env := extra
 	env.SSHDir = t.TempDir()
-	held := supplied(githubAppConnection("hq-app", "12345", "synthetic"))
+	held := supplied(githubAppConnection("hq-app", "12345"))
 	h := &githubHarness{githubFake: fake}
 	h.r = New(env, held, &runtime.HTTPClient{Transport: toFake{server}})
 	h.r.Now = func() time.Time { return time.Unix(1_900_000_000, 0) }
 	h.r.Commands = &Commands{Env: env, Supplied: held, Exec: func(context.Context, []string, []byte, []string) ([]byte, []byte, int, error) {
 		return nil, nil, 0, errors.New("a GitHub App connection starts no process")
+	}, Remote: func(context.Context, string, string, []byte) ([]byte, []byte, int, error) {
+		return nil, nil, 0, errors.New("a GitHub App connection makes no SSH call")
 	}}
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -244,9 +246,9 @@ func TestGitHubConnectionRefusals(t *testing.T) {
 		env  runtime.Environment
 		app  connections.Connection
 	}{
-		{"an app id that is not a number", runtime.Environment{}, githubAppConnection("hq-app", "12a", "synthetic")},
-		{"no app id", runtime.Environment{}, githubAppConnection("hq-app", "", "synthetic")},
-		{"a key name that leaves the key directory", runtime.Environment{SSHDir: "/keys"}, githubAppConnection("../hq-app", "1", "synthetic")},
+		{"an app id that is not a number", runtime.Environment{}, githubAppConnection("hq-app", "12a")},
+		{"no app id", runtime.Environment{}, githubAppConnection("hq-app", "")},
+		{"a key name that leaves the key directory", runtime.Environment{SSHDir: "/keys"}, githubAppConnection("../hq-app", "1")},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			r := New(test.env, supplied(test.app), &fakeHTTP{})
@@ -699,7 +701,7 @@ func TestGitHubImagesOfTheComposition(t *testing.T) {
 }
 
 // deliveryRoutes is a host and one extension whose latest admission is admitted.
-func deliveryRoutes(admitted string, pipeline string) map[string]string {
+func deliveryRoutes(admitted, pipeline string) map[string]string {
 	return map[string]string{
 		githubFakeAPI + " /repos/example/ext/actions/workflows/admit.yml/runs?branch=main&per_page=20&status=success": `{"workflow_runs":[{"id":50,"head_sha":"` + admitted + `","created_at":"2030-01-04T23:50:00Z","updated_at":"2030-01-05T00:00:00Z"}]}`,
 		githubFakeAPI + " /repos/example/host/actions/workflows/compose.yml/runs?branch=main&per_page=20":             pipeline,
@@ -773,11 +775,11 @@ func TestGitHubDelivery(t *testing.T) {
 			maps.Copy(routes, test.extra)
 			h := deliveryHarness(t, routes)
 
-			plan, err := h.r.runAction(runtime.ResourceKindGitHubDelivery, "reconcile", t.Context(), deliverySpec, nil, false)
+			plan, err := h.r.runAction(t.Context(), runtime.ResourceKindGitHubDelivery, "reconcile", deliverySpec, nil, false)
 			if err != nil || len(h.writes()) != 0 {
 				t.Fatalf("a plan writes nothing: %v %v", err, h.writes())
 			}
-			result, err := h.r.runAction(runtime.ResourceKindGitHubDelivery, "reconcile", t.Context(), deliverySpec, nil, true)
+			result, err := h.r.runAction(t.Context(), runtime.ResourceKindGitHubDelivery, "reconcile", deliverySpec, nil, true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -859,7 +861,7 @@ func TestGitHubDeliveryLatestAdmissionIsTheNewestListed(t *testing.T) {
 			key, value := checkRunsRoute(running, `{"check_runs":[{"id":8,"conclusion":"success"}]}`)
 			routes[key] = value
 			h := deliveryHarness(t, routes)
-			result, err := h.r.runAction(runtime.ResourceKindGitHubDelivery, "reconcile", t.Context(), deliverySpec, nil, true)
+			result, err := h.r.runAction(t.Context(), runtime.ResourceKindGitHubDelivery, "reconcile", deliverySpec, nil, true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -880,7 +882,7 @@ func TestGitHubDeliveryResultNeverReadsAsDoneWhileNotDeployed(t *testing.T) {
 	key, value := checkRunsRoute(admitted, `{"check_runs":[]}`)
 	routes[key] = value
 	h := deliveryHarness(t, routes)
-	result, err := h.r.runAction(runtime.ResourceKindGitHubDelivery, "reconcile", t.Context(), deliverySpec, nil, false)
+	result, err := h.r.runAction(t.Context(), runtime.ResourceKindGitHubDelivery, "reconcile", deliverySpec, nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}

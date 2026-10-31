@@ -1,6 +1,6 @@
 """The admission layers: each independent control a request passed, read from what enforces it."""
 
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass
 
 from django.conf import settings
 from django.utils.csp import CSP
@@ -30,6 +30,7 @@ class Layer:
 
     id: str
     label: str
+    _: KW_ONLY
     holds: bool
     detail: str
     evidence: str = ""
@@ -56,6 +57,7 @@ class ServingDeviceResolution:
     """The node serving HQ and how strongly that placement was established."""
 
     device: tailnet.Device | None
+    _: KW_ONLY
     verified: bool
     basis: str
 
@@ -93,7 +95,7 @@ def admission_layers(
         # qualifies: the previous line says the address is on the tailnet,
         # and this says whether the packet had to arrive there to be let in.
         _arrival_layer(firewall),
-        *_policy_layers(device, forwarder, serves, request, known, forwarded),
+        *_policy_layers(device, forwarder, serves, request, known, forwarded=forwarded),
         _device_layer(device, read=bool(known)),
         # Under the device claim, because it is what that claim rests on: the
         # line above says the tailnet knows this node, and this says whether the
@@ -117,7 +119,7 @@ def admission_layers(
         _tailnet_observation_layer(observer, serving),
         _gate_layer(channel),
         _sign_in_layer(identity),
-        _session_layer(request, identity),
+        _session_layer(),
         _transport_layer(request, channel),
         _canonical_layer(),
         _browser_layer(),
@@ -134,8 +136,8 @@ def _observed_control_layer(control) -> Layer | None:
     return Layer(
         control.id,
         control.label,
-        control.state == "good",
-        control.detail,
+        holds=control.state == "good",
+        detail=control.detail,
         evidence=control.evidence,
         boundary="Reverse proxy edge",
         mechanism="The proxy's access list",
@@ -151,13 +153,13 @@ def _name_layer(request) -> Layer:
     return Layer(
         "name",
         "The name is not in public DNS",
-        not answers,
-        (
+        holds=not answers,
+        detail=(
             "No public DNS record exists for this name in any domain HQ reads."
             if not answers
             else "A public DNS record exists for this name."
         ),
-        evidence=host if not answers else f"{host} → {', '.join(answers)}",
+        evidence=host if not answers else f"{host} resolves to {', '.join(answers)}",
         boundary="Exposure",
         mechanism="Public DNS records",
     )
@@ -166,23 +168,21 @@ def _name_layer(request) -> Layer:
 def _arrival_layer(firewall) -> Layer | None:
     """Whether the address above was required, or only presented.
 
-    The channel layer reads an address, and an address is a field the sender
-    writes. This reads the host firewall's own rule for HQ's port: accepted only
-    from packets that arrived on the tailnet interface, which is not a field and
-    cannot be set from somewhere else.
-
-    Absent when nothing observed it: on a machine that does not run this
-    firewall there is no reading to project, and inventing a verdict from that
-    silence is the failure this page is built to avoid.
+    The channel layer reads an address, a field the sender writes. This reads
+    the host firewall's own rule for HQ's port: accepted only from packets that
+    arrived on the tailnet interface, which no sender can set.
     """
 
+    # Absent when nothing observed it: on a machine that does not run this
+    # firewall there is no reading to project, and inventing a verdict from
+    # that silence is the failure this page is built to avoid.
     if firewall is None:
         return None
     return Layer(
         "arrival",
         firewall.label,
-        firewall.state == "good",
-        firewall.detail,
+        holds=firewall.state == "good",
+        detail=firewall.detail,
         evidence=firewall.evidence,
         boundary="Network",
         mechanism="The firewall rule",
@@ -196,8 +196,8 @@ def _channel_layer(address: str, channel: Channel) -> Layer:
     return Layer(
         "channel",
         "The address is on the tailnet",
-        channel.id == "tailnet",
-        channel.detail,
+        holds=channel.id == "tailnet",
+        detail=channel.detail,
         evidence=address,
         boundary="Network",
         mechanism="The tailnet address range",
@@ -210,6 +210,7 @@ def _policy_layers(
     serves: tailnet.Device | None,
     request,
     known: dict[str, tailnet.Device],
+    *,
     forwarded: bool,
 ) -> tuple[Layer, ...]:
     """Every independently authorized Tailnet segment in this request path.
@@ -285,8 +286,8 @@ def _policy_layer(
         return Layer(
             layer_id,
             label,
-            False,
-            f"HQ could not find {missing} on the tailnet, so it cannot check the policy for this step.",
+            holds=False,
+            detail=f"HQ could not find {missing} on the tailnet, so it cannot check the policy for this step.",
             evidence=f"port {port} · {missing} not found",
             boundary="Zero trust policy",
             mechanism="The tailnet policy",
@@ -301,9 +302,9 @@ def _policy_layer(
         return Layer(
             layer_id,
             label,
-            False,
-            verdict.detail,
-            evidence=f"{source.label} → {target.label} on {port}",
+            holds=False,
+            detail=verdict.detail,
+            evidence=f"{source.label} to {target.label} on {port}",
             boundary="Zero trust policy",
             mechanism="The tailnet policy",
             conclusive=False,
@@ -311,15 +312,15 @@ def _policy_layer(
     return Layer(
         layer_id,
         label,
-        verdict.allowed,
-        verdict.detail,
+        holds=verdict.allowed,
+        detail=verdict.detail,
         evidence=", ".join(tailnet.as_devices(verdict.via, owners)) or f"port {port}",
         # The grant itself. "Allowed" without the rule that allowed it is a
         # verdict nobody can check, and the rule is the thing an operator would
         # go and change, so the answer carries it rather than pointing at a
         # policy document and wishing them luck.
         rules=tuple(
-            f"{', '.join(tailnet.as_devices(rule.get('who') or ['?'], owners))} → "
+            f"{', '.join(tailnet.as_devices(rule.get('who') or ['?'], owners))} to "
             f"{'; '.join(tailnet.by_device(rule.get('to') or ['?'], owners))}"
             for rule in verdict.rules
         ),
@@ -348,8 +349,8 @@ def _device_layer(device: tailnet.Device | None, *, read: bool = True) -> Layer:
         return Layer(
             "device",
             "The tailnet knows this device",
-            False,
-            "HQ has not read the tailnet's devices yet, so it cannot say whether this one is among them.",
+            holds=False,
+            detail="HQ has not read the tailnet's devices yet, so it cannot say whether this one is among them.",
             boundary="Device identity",
             mechanism="The tailnet device list",
             conclusive=False,
@@ -358,8 +359,8 @@ def _device_layer(device: tailnet.Device | None, *, read: bool = True) -> Layer:
         return Layer(
             "device",
             "The tailnet knows this device",
-            False,
-            "No device on the tailnet has this address.",
+            holds=False,
+            detail="No device on the tailnet has this address.",
             boundary="Device identity",
             mechanism="The tailnet device list",
         )
@@ -372,8 +373,8 @@ def _device_layer(device: tailnet.Device | None, *, read: bool = True) -> Layer:
         return Layer(
             "device",
             "The tailnet knows this device",
-            False,
-            f"{device.label} is on the tailnet but has not been approved.",
+            holds=False,
+            detail=f"{device.label} is on the tailnet but has not been approved.",
             evidence=device.dns_name or device.name,
             boundary="Device identity",
             mechanism="Tailnet device approval",
@@ -382,8 +383,8 @@ def _device_layer(device: tailnet.Device | None, *, read: bool = True) -> Layer:
         return Layer(
             "device",
             "The tailnet knows this device",
-            False,
-            f"{device.label} is not signed for tailnet lock, so other devices ignore it. {device.lock_error}",
+            holds=False,
+            detail=f"{device.label} is not signed for tailnet lock, so other devices ignore it. {device.lock_error}",
             evidence=device.dns_name or device.name,
             boundary="Device identity",
             mechanism="Tailnet lock signature",
@@ -396,8 +397,8 @@ def _device_layer(device: tailnet.Device | None, *, read: bool = True) -> Layer:
     return Layer(
         "device",
         "The tailnet knows this device",
-        True,
-        f"{device.label} is on the tailnet, owned by {device.user or 'no reported owner'}, and approved.{expiry}",
+        holds=True,
+        detail=f"{device.label} is on the tailnet, owned by {device.user or 'no reported owner'}, and approved.{expiry}",
         evidence=device.dns_name or device.name,
         boundary="Device identity",
         mechanism="The tailnet device list",
@@ -407,12 +408,10 @@ def _device_layer(device: tailnet.Device | None, *, read: bool = True) -> Layer:
 def _lock_layer(device: tailnet.Device | None) -> Layer | None:
     """Whether this node's key was signed, or merely handed out.
 
-    Every layer above this one ultimately trusts that the coordination server
-    distributed the right public key for this node. Tailnet lock is the only
-    thing that removes that trust: with it on, a node key is filtered by every
-    peer unless a signing key vouches for it, and the coordination server does
-    not hold the signing keys. So this is not another check on the device: it
-    is the check on the thing the device check was believing.
+    Every layer above trusts that the coordination server distributed the right
+    public key for this node. Tailnet lock alone removes that trust: a node key
+    is filtered by every peer unless a signing key the server does not hold
+    vouches for it. So this checks what the device check was believing.
     """
 
     if device is None:
@@ -431,8 +430,8 @@ def _lock_layer(device: tailnet.Device | None) -> Layer | None:
         return Layer(
             "tailnet-lock",
             "Node key signed by tailnet lock",
-            False,
-            "Tailnet lock is off, so node keys are not signed.",
+            holds=False,
+            detail="Tailnet lock is off, so node keys are not signed.",
             evidence="Lock off",
             boundary="Device identity",
             mechanism="Tailnet lock status",
@@ -442,8 +441,8 @@ def _lock_layer(device: tailnet.Device | None) -> Layer | None:
         return Layer(
             "tailnet-lock",
             "Node key signed by tailnet lock",
-            False,
-            f"{device.label} has no valid tailnet lock signature, so other devices ignore it. {device.lock_error}",
+            holds=False,
+            detail=f"{device.label} has no valid tailnet lock signature, so other devices ignore it. {device.lock_error}",
             evidence="Unsigned",
             boundary="Device identity",
             mechanism="Tailnet lock signature",
@@ -451,8 +450,8 @@ def _lock_layer(device: tailnet.Device | None) -> Layer | None:
     return Layer(
         "tailnet-lock",
         "Node key signed by tailnet lock",
-        True,
-        f"Tailnet lock is on and {device.label}'s node key has a valid signature.",
+        holds=True,
+        detail=f"Tailnet lock is on and {device.label}'s node key has a valid signature.",
         evidence=f"Signed · {counted(keys, 'signing key', 'signing keys')}",
         boundary="Device identity",
         mechanism="Tailnet lock signature",
@@ -466,8 +465,8 @@ def _identity_agreement_layer(identity: Identity) -> Layer:
         return Layer(
             "identity-agreement",
             "The device's owner is the person signed in",
-            False,
-            "The tailnet reports no owner for this device, so HQ cannot compare it with the person signed in.",
+            holds=False,
+            detail="The tailnet reports no owner for this device, so HQ cannot compare it with the person signed in.",
             evidence="No device owner reported",
             boundary="Identity correlation",
             mechanism="The session and the tailnet device owner",
@@ -478,8 +477,8 @@ def _identity_agreement_layer(identity: Identity) -> Layer:
         return Layer(
             "identity-agreement",
             "The device's owner is the person signed in",
-            False,
-            "Single sign-on did not link this device's tailnet owner to your HQ account.",
+            holds=False,
+            detail="Single sign-on did not link this device's tailnet owner to your HQ account.",
             evidence=f"{identity.tailnet_user} ↔ {session_principal or 'unnamed session'}",
             boundary="Identity correlation",
             mechanism="The session and the tailnet device owner",
@@ -488,8 +487,8 @@ def _identity_agreement_layer(identity: Identity) -> Layer:
     return Layer(
         "identity-agreement",
         "The device's owner is the person signed in",
-        identity.corroborated,
-        (
+        holds=identity.corroborated,
+        detail=(
             "You signed in with your Tailscale account, and Tailscale says that account owns this device."
             if identity.agreement_basis == "SSO-signed principal link"
             else "The tailnet account that owns this device is the account signed in to HQ."
@@ -517,8 +516,8 @@ def _forwarder_layer(device: tailnet.Device | None, *, trusted: bool, peer: str)
         return Layer(
             "forwarder",
             "HQ trusts the proxy that forwarded this",
-            False,
-            "This address is not on HQ's list of trusted proxies, so HQ ignores the address it forwarded.",
+            holds=False,
+            detail="This address is not on HQ's list of trusted proxies, so HQ ignores the address it forwarded.",
             evidence=peer,
             boundary="Forwarding identity",
             mechanism="HQ's list of trusted proxies",
@@ -527,8 +526,8 @@ def _forwarder_layer(device: tailnet.Device | None, *, trusted: bool, peer: str)
         return Layer(
             "forwarder",
             "HQ trusts the proxy that forwarded this",
-            True,
-            "This address is on HQ's list of trusted proxies.",
+            holds=True,
+            detail="This address is on HQ's list of trusted proxies.",
             evidence=peer,
             boundary="Forwarding identity",
             mechanism="HQ's list of trusted proxies",
@@ -536,8 +535,8 @@ def _forwarder_layer(device: tailnet.Device | None, *, trusted: bool, peer: str)
     return Layer(
         "forwarder",
         "HQ trusts the proxy that forwarded this",
-        True,
-        f"{device.label} holds this address, which is on HQ's list of trusted proxies.",
+        holds=True,
+        detail=f"{device.label} holds this address, which is on HQ's list of trusted proxies.",
         evidence=device.dns_name or device.name,
         boundary="Forwarding identity",
         mechanism="HQ's list of trusted proxies and the tailnet device list",
@@ -572,8 +571,8 @@ def _proxy_headers_layer(request, *, trusted: bool, address: str) -> Layer | Non
         return Layer(
             "proxy-evidence",
             "The proxy's headers agree",
-            False,
-            f"The proxy did not send both {client_header} and {scheme_header}, so HQ cannot compare them.",
+            holds=False,
+            detail=f"The proxy did not send both {client_header} and {scheme_header}, so HQ cannot compare them.",
             evidence="Headers incomplete",
             boundary="Forwarding evidence",
             mechanism=mechanism,
@@ -585,8 +584,8 @@ def _proxy_headers_layer(request, *, trusted: bool, address: str) -> Layer | Non
     return Layer(
         "proxy-evidence",
         "The proxy's headers agree",
-        agrees,
-        (
+        holds=agrees,
+        detail=(
             f"{proxy}'s {client_header} and {scheme_header} headers match the address and scheme HQ used."
             if agrees
             else f"{proxy}'s {client_header} or {scheme_header} header differs "
@@ -606,8 +605,8 @@ def _tailnet_observation_layer(observer: tailnet.Device | None, serving: Serving
         return Layer(
             "tailnet-observer",
             "HQ's own machine measured this link",
-            False,
-            "The tailnet reading does not say which machine measured this link.",
+            holds=False,
+            detail="The tailnet reading does not say which machine measured this link.",
             boundary="Transport attestation",
             mechanism="Tailscale on the machine that read the tailnet",
             conclusive=False,
@@ -616,8 +615,8 @@ def _tailnet_observation_layer(observer: tailnet.Device | None, serving: Serving
         return Layer(
             "tailnet-observer",
             "HQ's own machine measured this link",
-            False,
-            "HQ could not tell which tailnet machine it runs on, so it cannot say these measurements are its own.",
+            holds=False,
+            detail="HQ could not tell which tailnet machine it runs on, so it cannot say these measurements are its own.",
             evidence=f"Measured by {observer.label} · HQ's machine not found",
             boundary="Transport attestation",
             mechanism="Tailscale on the machine that read the tailnet",
@@ -627,8 +626,8 @@ def _tailnet_observation_layer(observer: tailnet.Device | None, serving: Serving
     return Layer(
         "tailnet-observer",
         "HQ's own machine measured this link",
-        same,
-        (
+        holds=same,
+        detail=(
             "The machine that measured this link is the machine HQ runs on."
             if same
             else "A different machine measured this link, so the measurements do not describe your connection to HQ."
@@ -668,8 +667,8 @@ def _gate_layer(channel: Channel) -> Layer:
         return Layer(
             "gate",
             "Other networks are refused",
-            False,
-            "The proxy did not pass your address on, so HQ is checking the "
+            holds=False,
+            detail="The proxy did not pass your address on, so HQ is checking the "
             "proxy's address. Anyone who can reach the proxy passes.",
             evidence="Checking a proxy",
             boundary="Application edge",
@@ -678,8 +677,8 @@ def _gate_layer(channel: Channel) -> Layer:
     return Layer(
         "gate",
         "Other networks are refused",
-        enforced and channel.private,
-        (
+        holds=enforced and channel.private,
+        detail=(
             "HQ refuses any address outside its private ranges before sign-in."
             if enforced
             else "HQ is not checking which address a request comes from."
@@ -694,8 +693,8 @@ def _sign_in_layer(identity: Identity) -> Layer:
     return Layer(
         "sign-in",
         "Sign-in is single sign-on only",
-        identity.sso_only,
-        (
+        holds=identity.sso_only,
+        detail=(
             "Signing in goes through single sign-on, and no password sign-in is installed."
             if identity.sso_only
             else "Password sign-in is installed."
@@ -706,7 +705,7 @@ def _sign_in_layer(identity: Identity) -> Layer:
     )
 
 
-def _session_layer(request, identity: Identity) -> Layer:
+def _session_layer() -> Layer:
     """Whether the cookie carrying this session can leave where it was set."""
 
     secure = bool(settings.SESSION_COOKIE_SECURE)
@@ -727,8 +726,8 @@ def _session_layer(request, identity: Identity) -> Layer:
     return Layer(
         "session",
         "Session cookie is locked to this site",
-        holds,
-        (
+        holds=holds,
+        detail=(
             "Sent only over HTTPS, hidden from scripts, not sent when another "
             "site starts the request, and set only by this host."
             if holds
@@ -743,12 +742,10 @@ def _session_layer(request, identity: Identity) -> Layer:
 def _browser_layer() -> Layer:
     """What HQ tells the browser it is allowed to do with this page.
 
-    Every other layer on this page is about reaching HQ. This one is about what
-    happens after: the page is the last place a credential is held, and the
-    policy is the only boundary HQ cannot check from the inside: it is
-    enforced in someone else's browser, and a directive that has quietly
-    stopped applying looks exactly like one that is quietly working. So the
-    policy is stated here, and violations are reported back.
+    The page is the last place a credential is held, and the policy is the one
+    boundary HQ cannot check from the inside: it is enforced in someone else's
+    browser, where a directive that quietly stopped applying looks like one
+    quietly working. So the policy is stated here, and violations reported back.
     """
 
     policy = dict(settings.SECURE_CSP or {})
@@ -769,8 +766,8 @@ def _browser_layer() -> Layer:
     return Layer(
         "browser",
         "Scripts only from HQ",
-        holds,
-        (
+        holds=holds,
+        detail=(
             "A script runs only if HQ wrote its tag into this page, with a one-time code, "
             "or one of those scripts added it; a file on HQ's address is not enough. "
             "The page cannot be framed, and Trusted Types is on."
@@ -805,8 +802,8 @@ def _canonical_layer() -> Layer:
     return Layer(
         "canonical",
         "HTTPS only",
-        holds,
-        (
+        holds=holds,
+        detail=(
             "HQ redirects plain HTTP to HTTPS and tells the browser to use HTTPS only for this name."
             if holds
             else "HQ serves plain HTTP on its port."
@@ -838,8 +835,8 @@ def _transport_layer(request, channel: Channel) -> Layer:
     return Layer(
         "transport",
         "The connection is encrypted",
-        tls or tailnet,
-        detail,
+        holds=tls or tailnet,
+        detail=detail,
         evidence=evidence,
         boundary="Transport",
         mechanism="WireGuard and TLS",

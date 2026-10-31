@@ -2,12 +2,6 @@
 # runs on the interpreter UV_PYTHON names; `mise run test` walks the matrix and
 # runs test:controller once beside it.
 
-["test:django"]
-description = "Django's system checks"
-hide = true
-extends = "django"
-run = "uv run python manage.py check"
-
 ["test:plugins"]
 description = "The public plugin contract"
 hide = true
@@ -33,4 +27,5 @@ run = "uv run python manage.py test tests.fuzz.api_properties --noinput --parall
 ["test:controller"]
 description = "The Go controller's tests under the race detector"
 hide = true
+extends = "heavy"
 run = "go -C controller test -race ./..."

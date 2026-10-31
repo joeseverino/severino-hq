@@ -22,7 +22,7 @@ class ExpenseListTests(_Signed):
         response = self.client.get(reverse("expenses:list"))
 
         self.assertIn("No expenses yet.", text(response))
-        self.assertIn(("New expense →", reverse("expenses:create")), links(response))
+        self.assertIn(("New expense", reverse("expenses:create")), links(response))
         self.assertNotContains(response, "Filtered")
         self.assertNotContains(response, "$0.00")
         # A year to filter by once an expense has one.

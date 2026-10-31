@@ -57,8 +57,8 @@ def landed(arguments: list[str]) -> dict[str, str]:
 def context_admits(ignore: list[str], path: str) -> bool:
     """Whether a .dockerignore leaves ``path`` in the build context: its last matching line decides."""
     admitted = True
-    for line in ignore:
-        line = line.strip()
+    for raw in ignore:
+        line = raw.strip()
         if not line or line.startswith("#"):
             continue
         pattern = line.removeprefix("!").strip("/")
@@ -134,3 +134,73 @@ class MiseConfigTravelsTests(SimpleTestCase):
                     copied, found = unreadable_config("Dockerfile")
                     self.assertEqual(copied, 1)
                     self.assertEqual(bool(found), name != "passing")
+
+
+def passed_build_args(image: str) -> dict[str, set[str]]:
+    """The values a workflow's ``docker build -f <image>`` writes out for each ARG."""
+    values: dict[str, set[str]] = {}
+    for workflow in sorted((ROOT / ".github").rglob("*.yml")):
+        text = re.sub(r"\\\n\s*", " ", workflow.read_text())
+        for command in re.findall(r"docker build [^\n]*", text):
+            if f"-f {image} " in command:
+                for name, value in re.findall(r"--build-arg (\w+)=([^\s\"'$]+)", command):
+                    values.setdefault(name, set()).add(value)
+    return values
+
+
+def context_sources(image: str, passed: dict[str, set[str]]) -> set[str]:
+    """Every path an image's stages copy from the build context, each ARG read as its default and as each value passed."""
+    sources: set[str] = set()
+    for stage in instructions((ROOT / image).read_text()):
+        args: dict[str, set[str]] = {}
+        for keyword, arguments in stage:
+            if keyword == "ARG" and arguments:
+                name, _, default = arguments[0].partition("=")
+                args[name] = ({default} if default else set()) | passed.get(name, set())
+            elif keyword == "COPY" and not any(word.startswith("--from=") for word in arguments):
+                for source in [word for word in arguments if not word.startswith("--")][:-1]:
+                    for path in expand(source, args):
+                        sources.add(posixpath.normpath(path).removeprefix("./"))
+    return {source for source in sources if source != "." and "$" not in source}
+
+
+def expand(source: str, args: dict[str, set[str]]) -> set[str]:
+    match = re.search(r"\$\{?(\w+)\}?", source)
+    if not match or match.group(1) not in args:
+        return {source}
+    return {path for value in args[match.group(1)] for path in expand(source.replace(match.group(0), value, 1), args)}
+
+
+@tag("source")
+class BuildContextTests(SimpleTestCase):
+    """A path an image copies from its context is one its .dockerignore admits, whatever value a workflow gives its ARG."""
+
+    @tag("tree")
+    def test_every_path_an_image_copies_is_in_its_build_context(self):
+        checked = 0
+        for image in image_files():
+            path = ROOT / image
+            ignore_file = path.with_name(path.name + ".dockerignore")
+            ignore = (ignore_file if ignore_file.exists() else ROOT / ".dockerignore").read_text().splitlines()
+            for source in sorted(context_sources(image, passed_build_args(image))):
+                checked += 1
+                with self.subTest(image=image, source=source):
+                    self.assertTrue(
+                        context_admits(ignore, source), f"{image} copies {source}, which its build context leaves out"
+                    )
+        self.assertGreater(checked, 1)
+
+    @tag("tree")
+    def test_a_staged_directory_a_workflow_passes_that_the_context_leaves_out_fails(self):
+        dockerfile = "FROM base\nARG STAGED=build/composition\nCOPY ${STAGED}/ /tmp/plugin/\n"
+        workflow = (
+            'run: |\n  docker build -f Dockerfile --build-arg STAGED=build/candidate \\\n    --build-arg IMAGE="$X" .\n'
+        )
+        with tempfile.TemporaryDirectory() as folder, mock.patch(f"{__name__}.ROOT", Path(folder)):
+            (Path(folder) / ".github").mkdir()
+            (Path(folder) / ".github" / "ci.yml").write_text(workflow)
+            (Path(folder) / "Dockerfile").write_text(dockerfile)
+            sources = context_sources("Dockerfile", passed_build_args("Dockerfile"))
+            self.assertEqual(sources, {"build/composition", "build/candidate"})
+            self.assertFalse(context_admits(["*", "!build/composition/"], "build/candidate"))
+            self.assertTrue(context_admits(["*", "!build/composition/", "!build/candidate/"], "build/candidate"))

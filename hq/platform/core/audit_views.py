@@ -1,5 +1,6 @@
 """The audit log and one entry in it."""
 
+from functools import cached_property
 from typing import override
 lazy from datetime import date, datetime, time, timedelta
 
@@ -206,17 +207,16 @@ class AuditLogDetailView(PageMixin, DetailView):
     def get_queryset(self):
         return AuditLog.objects.select_related("user")
 
+    @cached_property
     def held_approval(self):
         """The approval this event opened, reviewed, if it opened one."""
 
-        if not hasattr(self, "_held_approval"):
-            held = approvals.for_audit_event(self.object)
-            self._held_approval = approvals.review(held) if held is not None else None
-        return self._held_approval
+        held = approvals.for_audit_event(self.object)
+        return approvals.review(held) if held is not None else None
 
     @override
     def get_page_title(self):
-        return "Approval" if self.held_approval() is not None else "Audit event"
+        return "Approval" if self.held_approval is not None else "Audit event"
 
     page_trail = ("Audit log", reverse_lazy("core:audit_list"))
 
@@ -231,15 +231,15 @@ class AuditLogDetailView(PageMixin, DetailView):
             path_words((key,)): value_words(value) for key, value in sorted(event.metadata.items()) if key != "changes"
         }
 
-        approval = self.held_approval()
+        approval = self.held_approval
         if approval is not None:
             context["approval"] = approval
-        context["other_events"] = self._other_events(event, approval is None)
+        context["other_events"] = self._other_events(event, with_operation=approval is None)
         context["other_rows"] = sum(len(rows) for _label, rows, _folds in context["other_events"])
         return context
 
     @staticmethod
-    def _other_events(event: AuditLog, with_operation: bool) -> list[tuple[str, list[AuditLog], str]]:
+    def _other_events(event: AuditLog, *, with_operation: bool) -> list[tuple[str, list[AuditLog], str]]:
         """The other events beside this one, one group each: the rest of its
         operation, then everything else to its object, which folds away under
         the first. Each is ``(label, rows, folds)``."""

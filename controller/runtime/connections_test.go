@@ -273,8 +273,7 @@ func TestTheEnvironmentHoldsNoConnectionSetting(t *testing.T) {
 		t.Fatalf("%+v", env)
 	}
 	environment := reflect.TypeFor[Environment]()
-	for index := range environment.NumField() {
-		field := environment.Field(index)
+	for field := range environment.Fields() {
 		if !field.IsExported() {
 			continue
 		}

@@ -73,7 +73,7 @@ func download(ctx context.Context, client *http.Client, from string, file *os.Fi
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, from, nil)
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, from, http.NoBody)
 		if err != nil {
 			return err
 		}

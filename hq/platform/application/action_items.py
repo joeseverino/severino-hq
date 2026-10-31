@@ -1,30 +1,59 @@
 """Which action items a person has set aside, and the queue under its domains.
 
-An action item is open until its owner stops raising it. What a person can do
-about one they are not going to act on now is set it aside: it leaves their
-queue and their counts, and waits below. An item is identified by what it is
-about (its source and key), and what is recorded is the revision that was set
-aside: its status and how many it stands for. It comes back on its own when it
-gets worse or its count changes, never because its wording moved, and setting
-one aside never touches another.
+An action item is open until its owner stops raising it. A person who will not
+act on one now sets it aside: it leaves their queue and their counts and waits
+below until the revision set aside (``item_revision``) moves. Setting one aside
+never touches another.
 """
 
 import hashlib
 import json
+from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any
+from typing import Annotated, Any
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from hq.platform.core.models import ActionItemRead
+from hq.platform.core.audit import record_event
+from hq.platform.core.models import ActionItemRead, AuditLog
+
+from .command_fields import Describe
+from .projection import projection_scope
+from .security import Principal, person
+lazy from . import dashboard
 
 # How long a set-aside mark outlives its item. Long enough that a finding which
 # clears and returns within a sweep or two is still recognized as set aside.
 FORGET_AFTER = timedelta(days=30)
 
+# The capabilities a person sets items aside, and brings them back, through.
+SET_ASIDE = "action_items.set_aside"
+RESTORE = "action_items.restore"
+AUDIT_LABEL = "Needs you"
+
+
+@dataclass(frozen=True, slots=True)
+class SetAsideCommand:
+    # Rows as each was drawn, key to revision (``row_value``): set aside at that revision.
+    rows: Annotated[
+        dict[str, str],
+        Describe("Items as the queue drew them, each as it stood then."),
+    ] = field(default_factory=dict)
+    # Items by key, set aside at the revision the queue holds now.
+    keys: Annotated[list[str], Describe("Items to set aside as the queue holds them now.")] = field(
+        default_factory=list
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class RestoreCommand:
+    keys: Annotated[list[str], Describe("The set-aside items to bring back into the queue.")]
+
 
 def item_key(source_id: str, item: Any) -> str:
+    # An item is identified by what it is about: its source and key.
     about = item.key or f"{item.eyebrow}:{item.title}"
     return f"{source_id}:{about}"[:200]
 
@@ -32,11 +61,12 @@ def item_key(source_id: str, item: Any) -> str:
 def item_revision(item: Any) -> str:
     """What makes a dismissed item come back.
 
-    Something to resolve returns when it gets worse or stands for more. A
+    Something to resolve returns when it gets worse or stands for more, never
+    because its wording moved. A
     notice has nothing to get worse: it returns when it reports something else.
     """
 
-    seen = ["notice", item.body] if getattr(item, "notice", False) else [item.status, item.magnitude or 1]
+    seen = ["notice", item.body] if item.notice else [item.status, item.magnitude or 1]
     return hashlib.sha256(json.dumps(seen).encode()).hexdigest()[:16]
 
 
@@ -213,3 +243,45 @@ def filter_items(
         and (not about or (item.get("subject") or {}).get("url") == about)
         and (not query or query in " ".join((item["source"], item["label"], item["detail"], item["action"])).casefold())
     ]
+
+
+def _audit(user, message: str, count: int) -> None:
+    record_event(
+        action=AuditLog.Action.UPDATED,
+        type_label=AUDIT_LABEL,
+        message=message,
+        metadata={"count": count},
+        user=user,
+        required=True,
+    )
+
+
+def set_items_aside(command: SetAsideCommand, *, principal: Principal) -> dict[str, Any]:
+    """Set items aside for the person asking: the ``action_items.set_aside`` capability.
+
+    A row names itself and its revision, so it needs no queue. Items named by
+    key alone are set aside as the queue holds them now, which is read once
+    and only for them.
+    """
+
+    if named_rows(f"{revision} {key}" for key, revision in command.rows.items()) != command.rows:
+        raise ValidationError({"rows": ValidationError("Each row names itself as it was drawn.", code="invalid")})
+    user = person(principal)
+    with transaction.atomic():
+        dismiss_rows(user, command.rows)
+        if command.keys:
+            with projection_scope():
+                set_aside(user, command.keys, aside=True, current=dashboard.work_queue())
+        count = len(command.rows) + len(command.keys)
+        _audit(user, "Set items aside.", count)
+    return {"ok": True, "count": count}
+
+
+def restore(command: RestoreCommand, *, principal: Principal) -> dict[str, Any]:
+    """Bring set-aside items back for the person asking: the ``action_items.restore`` capability."""
+
+    user = person(principal)
+    with transaction.atomic():
+        restore_rows(user, command.keys)
+        _audit(user, "Brought items back.", len(command.keys))
+    return {"ok": True, "count": len(command.keys)}

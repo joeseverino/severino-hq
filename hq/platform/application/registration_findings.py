@@ -12,25 +12,20 @@ def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
     """A domain that runs out and will not renew itself.
 
     The one fact about a domain no other credential here can see, and the only
-    one that takes everything else with it. HQ renews the certificate,
-    reconciles the records and serves every name inside the zone, and none of
-    it survives the registration lapsing. Cloudflare will serve that zone
-    perfectly for a domain about to stop being yours.
-
-    Both halves are the rule. An expiry alone fires on every domain every year
-    and is a calendar, not a finding; an expiry with auto-renew off is an outage
-    with a countdown. The registrar knows the second, which is why the sweep
-    reads the registrar rather than RDAP: RDAP is public and free and can only
-    ever answer the half that means nothing on its own.
-
-    Ninety days, matching the window a certificate gets: long enough to act on a
-    domain whose renewal failed, short enough not to live in the queue.
+    one that takes everything else with it: the certificate, the records and
+    every name inside the zone stop with the registration, while Cloudflare
+    serves that zone perfectly for a domain about to stop being yours.
     """
 
     found: list[Finding] = []
     for node in estate.nodes():
         facts = dict(node.facts)
         expires = parse_stamp(facts.get("expires_at", ""))
+        # Both halves are the rule. An expiry alone fires on every domain every
+        # year and is a calendar; an expiry with auto-renew off is an outage
+        # with a countdown. Only the registrar knows the second, which is why
+        # the sweep reads it rather than RDAP, public and free but able to
+        # answer only the half that means nothing on its own.
         if expires is None or facts.get("auto_renew") != "no":
             continue
         # A registrar reports a date, and a date parses naive. Compared against
@@ -39,6 +34,8 @@ def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
         if expires.tzinfo is None:
             expires = expires.replace(tzinfo=UTC)
         days = days_until(expires, estate.now)
+        # Ninety days, the window a certificate gets: long enough to act on a
+        # domain whose renewal failed, short enough not to live in the queue.
         if days > 90:
             continue
         domain = facts.get("domain", node.label)

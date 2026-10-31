@@ -1,15 +1,10 @@
 """What a connection's credential lacks, and the one command that replaces it.
 
 HQ holds no credential that can create tokens, so it never mints. It derives
-what the credential needs (the declared ``requires`` of every reading it feeds,
-``control_plane.credential_reads``), what it lacks (the readings the provider
-refused while the credential itself is valid), when it expires (the probe's
-reading), and the command an operator runs on their own machine to mint a
-replacement and store it in the connection's 1Password item.
-
-The command is built from references only: the task, the account id the
-readings name, and ``op://`` references to the connection item and its
-bootstrap item. No value HQ holds is a secret, so no secret can reach it.
+what the credential needs (``control_plane.credential_reads``), what it lacks,
+when it expires, and the command an operator runs on their own machine to mint
+a replacement into the connection's 1Password item, built from references only
+(the task, an account id, ``op://`` references) so no secret can reach it.
 """
 
 import re

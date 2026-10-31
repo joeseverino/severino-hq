@@ -13,7 +13,6 @@ from ..lookup import AddressCommand, NameCommand, look_up_address, look_up_name
 from ..security import Capability, Principal
 
 OPERATOR = Principal("joe", "test", frozenset(Capability))
-NOBODY = Principal("nobody", "test", frozenset({Capability.READ}))
 
 # Derived rather than written out. `test_no_tracked_file_names_a_reachable
 # _endpoint` reads every tracked file for addresses, and allows exactly two
@@ -99,16 +98,6 @@ class NameLookupTests(SimpleTestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 look_up_name(NameCommand(name=value), principal=OPERATOR, resolver=_fails)
 
-    def test_it_is_refused_without_the_capability(self):
-        from ..security import AuthorizationError
-
-        with self.assertRaises(AuthorizationError):
-            look_up_name(
-                NameCommand(name="example.test"),
-                principal=NOBODY,
-                resolver=_resolver(A_NAME),
-            )
-
 
 class AddressLookupTests(TestCase):
     # A TestCase rather than a SimpleTestCase: the reading is cached, so the
@@ -193,6 +182,16 @@ class ReadCapabilityTests(TestCase):
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["name"], "example.test")
+
+    def test_what_is_not_a_name_or_an_address_is_refused_in_the_hosts_words(self):
+        for name, payload, said in (
+            ("lookup.name", {"name": "not a name"}, "That is not a hostname."),
+            ("lookup.address", {"address": "not an address"}, "That is not an IP address."),
+        ):
+            with self.subTest(name=name):
+                result = execute_capability(name, payload, principal=OPERATOR)
+
+                self.assertEqual(result["error"], {"code": "invalid_input", "message": said})
 
     def test_the_machine_account_cannot_reach_a_third_party_by_default(self):
         """READ is granted to MCP unconditionally; this must not ride on it."""

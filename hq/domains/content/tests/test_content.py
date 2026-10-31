@@ -1,8 +1,6 @@
 """Tests for the content-index sync."""
 
 import datetime
-import json
-from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 
@@ -13,6 +11,7 @@ from hq.domains.content.content_sync import (
 )
 from hq.domains.content.models import ContentItem
 from hq.domains.projects.models import Project
+from hq.platform.application.tests import network
 from hq.platform.application.tests.markup import elements, links, select, text
 
 
@@ -174,7 +173,7 @@ class ContentSyncTests(TestCase):
                 return b" " * (limit if limit > 0 else 64 * 1024 * 1024)
 
         with (
-            patch("hq.domains.content.content_sync._OPENER.open", return_value=Response()),
+            network.answering(lambda _request, _timeout: Response()),
             self.assertRaisesMessage(ContentSyncError, "larger than an index"),
         ):
             fetch_content_index("https://example.test/content-index.json")
@@ -190,20 +189,16 @@ class ContentSyncTests(TestCase):
         CF_ACCESS_CLIENT_SECRET="client-secret",
     )
     def test_fetch_identifies_hq_and_sends_access_credentials(self):
-        class Response:
-            def __enter__(self):
-                return self
+        requests = []
 
-            def __exit__(self, *_args):
-                return False
+        def answer(request, _timeout):
+            requests.append(request)
+            return network.Response(_payload())
 
-            def read(self, *_limit):
-                return json.dumps(_payload()).encode()
-
-        with patch("hq.domains.content.content_sync._OPENER.open", return_value=Response()) as open_url:
+        with network.answering(answer):
             payload = fetch_content_index("https://example.test/content-index.json")
 
-        request = open_url.call_args.args[0]
+        (request,) = requests
         self.assertEqual(request.get_header("Accept"), "application/json")
         self.assertEqual(
             request.get_header("User-agent"),
@@ -319,7 +314,7 @@ class ContentPageTests(TestCase):
         # One type on the list: the column and its filter say nothing.
         self.assertNotIn("Type", [column.label for column in writeups.context["table"]["columns"]])
         self.assertIn("No pages yet.", text(pages))
-        self.assertIn(("New page →", f"{reverse('content:create')}?content_type=page"), links(pages))
+        self.assertIn(("New page", f"{reverse('content:create')}?content_type=page"), links(pages))
         self.assertEqual(everything.context["page"].title, "Content")
         self.assertContains(everything, "New writeup or page")
         self.assertContains(everything, "No source document")
@@ -334,3 +329,4 @@ class ContentPageTests(TestCase):
         self.assertEqual(response.context["page"].title, "New page")
         self.assertContains(response, "Save page")
         self.assertEqual(response.context["form"].initial["content_type"], "page")
+        self.assertTrue(response["Content-Type"].startswith("text/html"))

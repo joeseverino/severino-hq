@@ -9,6 +9,11 @@ from typing import Any
 _HOSTNAME = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))*$")
 
 
+# Between a name and where it leads, in a record's name: "app.example.com at
+# 192.0.2.10". A word, since a name is read aloud and copied into text.
+LEADS_TO = " at "
+
+
 def normalized_hostname(name: Any) -> str:
     """One spelling of a DNS name: lowercase, trimmed, no trailing dot.
 
@@ -50,12 +55,10 @@ def certificate_covers(domain: str, names: AbstractSet[str]) -> bool:
 def names_a_host(name: str) -> bool:
     """Whether a DNS name could ever be something that answers.
 
-    A label beginning with an underscore is reserved by RFC 8552 for metadata
-    about a domain rather than for a host in it: ``_dmarc``, ``_domainkey``,
-    ``_acme-challenge``, ``_sip._tcp``. Nothing is ever served there, and no
-    name of that shape can be a service however it is published. The record
-    type cannot tell: ``sig1._domainkey`` is a DKIM delegation published as a
-    CNAME.
+    A label beginning with an underscore is reserved by RFC 8552 for metadata about
+    a domain (``_dmarc``, ``_domainkey``, ``_acme-challenge``), so nothing is ever
+    served there. The record type cannot tell: ``sig1._domainkey`` is a DKIM
+    delegation published as a CNAME.
     """
 
     return not any(label.startswith("_") for label in str(name).split("."))

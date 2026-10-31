@@ -9,7 +9,7 @@ for it. Nothing here asks it anything.
 <div class="fact-band" role="group" aria-label="Controller status">
   {% band_fact icon="activity" label="Controller" tone=controller.standing_tone %}
     {% if not standing.known %}<strong>Never run</strong><small>No controller has connected to this HQ yet.</small>
-    {% elif standing.silent %}<strong>Not heard from for {{ standing.seen_at|timesince }}</strong><small>Last connected {{ standing.seen_at|when }}. Nothing has been read or changed since.</small>
+    {% elif standing.silent %}<strong>Not heard from for {{ standing.seen_at|when:"length" }}</strong><small>Last connected {{ standing.seen_at|when }}. Nothing has been read or changed since.</small>
     {% else %}<strong>Running</strong><small>Last connected {{ standing.seen_at|when:"ago" }}.</small>{% endif %}
   {% endband_fact %}
   {% band_fact icon="eye" label="Last read" tone=controller.failing_tone %}
@@ -18,9 +18,9 @@ for it. Nothing here asks it anything.
   {% endband_fact %}
   {% band_fact icon="clock" label="Next read" tone=controller.overdue_tone %}
     {% if not standing.known %}<strong>After the first run</strong><small>Everything is read every {{ controller.sweep_every|breakable }} once it runs.</small>
-    {% elif controller.overdue %}<strong>Overdue</strong><small>{{ controller.oldest.label|breakable }} · {% include "partials/_reading_age.html" with at=controller.oldest.attempted_at only %}. Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
+    {% elif controller.overdue %}<strong>Overdue</strong><small>{{ controller.oldest.label|breakable }}{% dot %}{% include "partials/_reading_age.html" with at=controller.oldest.attempted_at only %}. Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
     {% elif controller.sweep_due %}<strong>Shortly</strong><small>Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
-    {% elif controller.next_sweep_at %}<strong>In {{ controller.next_sweep_at|timeuntil }}</strong><small>Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
+    {% elif controller.next_sweep_at %}<strong>In {{ controller.next_sweep_at|when:"length" }}</strong><small>Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
     {% else %}<strong>After the first run</strong><small>Nothing has been read yet.</small>{% endif %}
   {% endband_fact %}
   {% band_fact icon="layers" label="Waiting to be applied" tone=controller.queue_tone %}
@@ -33,7 +33,7 @@ Never run: what the controller is, and how to start it and see why it has not
 arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
 {% endcomment %}
 {% if not standing.known %}
-<section class="card controller-start" aria-labelledby="controller-start-heading">
+{% card css="controller-start" heading="controller-start-heading" %}
   <h2 id="controller-start-heading">Start the controller</h2>
   <p class="muted">It holds your connections' credentials; HQ never does.{% if start_guide %} {% entity start_guide|outside label="Install guide" %}{% endif %}</p>
   <ol class="resolution-workflow">
@@ -41,7 +41,7 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
     <li><strong>Start it</strong>{% include "partials/_command.html" with command="sudo systemctl start severino-hq-controller.service" only %}</li>
     <li><strong>If nothing arrives</strong>{% include "partials/_command.html" with command="sudo journalctl -u severino-hq-controller.service -n 50" only %}</li>
   </ol>
-</section>
+{% endcard %}
 {% endif %}
 {% endwith %}
 

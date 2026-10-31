@@ -24,26 +24,427 @@
       }
     }
   },
+  "findingsV2": {
+    "responses": {
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "message": "findings: limit must be at least 1."
+        },
+        "ok": false
+      }
+    }
+  },
+  "getInfrastructureResourcesV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "derived": {
+            "actions": {
+              "reconcile": {
+                "automatic": true,
+                "enabled": false,
+                "reason": "This connection only reads. Its setup guide says how to let HQ make changes through it."
+              }
+            },
+            "awaiting_approval": 0,
+            "consumers": [],
+            "expiry": null,
+            "health": {
+              "label": "Working",
+              "message": "Matches HQ's settings.",
+              "reason": "Observed",
+              "state": "healthy"
+            },
+            "in_sync": true,
+            "origin_machine": null,
+            "provider_machine": null,
+            "readout": [
+              {
+                "desired": "192.0.2.10",
+                "label": "Answers with",
+                "observed": "192.0.2.10"
+              }
+            ],
+            "removal": {
+              "mode": "forget",
+              "pending": false,
+              "reason": ""
+            },
+            "resolution_error": "",
+            "services": [
+              {
+                "hostname": "sentinel.example.test",
+                "url": "/infrastructure/services/sentinel.example.test/"
+              }
+            ],
+            "unused_names": [],
+            "used_by": []
+          },
+          "operations": [],
+          "resource": {
+            "conditions": [
+              {
+                "message": "Matches HQ's settings.",
+                "reason": "Observed",
+                "since": "2026-01-15T09:30:00+00:00",
+                "status": true,
+                "type": "Ready"
+              }
+            ],
+            "enabled": true,
+            "generation": 1,
+            "health": {
+              "label": "Working",
+              "message": "Matches HQ's settings.",
+              "reason": "Observed",
+              "state": "healthy"
+            },
+            "id": "5da6c038-f78f-583a-b073-5da59683c5b1",
+            "in_sync": true,
+            "key": "sentinel-rewrite",
+            "kind": "adguard.rewrite",
+            "last_observed_at": "2026-01-15T09:30:00+00:00",
+            "observed_generation": 1,
+            "public_effect": false,
+            "spec": {
+              "answer": "192.0.2.10",
+              "domain": "sentinel.example.test"
+            },
+            "status": {
+              "answer": "192.0.2.10",
+              "domain": "sentinel.example.test"
+            },
+            "updated_at": "2026-01-15T09:30:00+00:00"
+          }
+        },
+        "ok": true
+      },
+      "404": {
+        "error": {
+          "code": "not_found",
+          "message": "That record was not found."
+        },
+        "ok": false
+      }
+    }
+  },
+  "getMachinesV2": {
+    "responses": {
+      "404": {
+        "error": {
+          "code": "not_found",
+          "message": "No machine has that name."
+        },
+        "ok": false
+      }
+    }
+  },
   "getProjectsV2": {
     "responses": {
       "200": {
         "data": {
-          "category": "other",
-          "description": "",
-          "last_push_at": null,
-          "name": "Machine readable",
-          "public_url": "",
-          "relationships": {
-            "assets": [],
-            "content": [],
-            "documentation": [],
-            "expense_ids": []
+          "name": "Selected over the wire",
+          "slug": "selected-over-the-wire"
+        },
+        "ok": true
+      },
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "details": [
+            {
+              "loc": [
+                "fields",
+                0
+              ],
+              "msg": "Input should be 'slug', 'name', 'category', 'status', 'description', 'technologies', 'repository_url', 'public_url', 'last_push_at', 'dependency_updates', 'updated_at', 'relationships'",
+              "type": "literal_error"
+            }
+          ],
+          "message": "projects: fields[0] must be one of slug, name, category, status, description, technologies, repository_url, public_url, last_push_at, dependency_updates, updated_at, relationships."
+        },
+        "ok": false
+      },
+      "404": {
+        "error": {
+          "code": "not_found",
+          "message": "No record has that slug."
+        },
+        "ok": false
+      }
+    }
+  },
+  "getReadingsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "items": [
+            {
+              "record": "perimeter"
+            }
+          ],
+          "observed_at": "2026-01-15T09:30:00+00:00"
+        },
+        "ok": true
+      }
+    }
+  },
+  "infrastructureReconcileV2": {
+    "responses": {
+      "409": {
+        "error": {
+          "code": "precondition",
+          "message": "This record is switched off in HQ."
+        },
+        "ok": false
+      }
+    }
+  },
+  "listAnalyticsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 0,
+          "coverage": {
+            "complete": false,
+            "covered_days": 0,
+            "end": "2026-01-14",
+            "expected_days": 0,
+            "missing_days": 0,
+            "sites": 0,
+            "start": "2025-12-18"
           },
-          "repository_url": "",
-          "slug": "machine-readable",
-          "status": "idea",
-          "technologies": [],
-          "updated_at": "2026-10-04T04:26:25.579275+00:00"
+          "days": 28,
+          "end": "2026-01-14",
+          "items": [],
+          "next": "",
+          "sample_interval": 1,
+          "start": "2025-12-18",
+          "total": null,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listAssetsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 0,
+          "items": [],
+          "next": "",
+          "total": 0,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listContactSubmissionsV2": {
+    "responses": {
+      "403": {
+        "error": {
+          "code": "forbidden",
+          "message": "api principal 'example-automation' lacks 'manage_contacts'."
+        },
+        "ok": false
+      }
+    }
+  },
+  "listContainersV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 0,
+          "items": [],
+          "next": "",
+          "total": null,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listContentV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 0,
+          "items": [],
+          "next": "",
+          "total": 0,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listDocumentationV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 0,
+          "items": [],
+          "next": "",
+          "total": 0,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listDomainsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 0,
+          "items": [],
+          "next": "",
+          "total": 0,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listEstateV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 4,
+          "items": [
+            {
+              "detail": "of 0",
+              "id": "hq.estate.machines",
+              "label": "Machines online",
+              "status": "",
+              "url": "/infrastructure/machines/",
+              "value": "0"
+            },
+            {
+              "detail": "1 not fully set up",
+              "id": "hq.estate.services",
+              "label": "Services",
+              "status": "",
+              "url": "/infrastructure/services/",
+              "value": "1"
+            },
+            {
+              "detail": "",
+              "id": "hq.estate.domains",
+              "label": "Domains",
+              "status": "",
+              "url": "/domains/",
+              "value": "0"
+            },
+            {
+              "detail": "",
+              "id": "hq.estate.connections",
+              "label": "Connections",
+              "status": "",
+              "url": "/infrastructure/connections/",
+              "value": "4"
+            }
+          ],
+          "next": "",
+          "total": 4,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listExpensesV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 0,
+          "items": [],
+          "next": "",
+          "total": 0,
+          "truncated": false
+        },
+        "ok": true
+      },
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "details": [
+            {
+              "loc": [
+                "year"
+              ],
+              "msg": "Input should be greater than or equal to 1",
+              "type": "greater_than_equal"
+            }
+          ],
+          "message": "expenses: year must be greater than or equal to 1."
+        },
+        "ok": false
+      }
+    }
+  },
+  "listInfrastructureResourcesV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 1,
+          "items": [
+            {
+              "conditions": [
+                {
+                  "message": "Matches HQ's settings.",
+                  "reason": "Observed",
+                  "since": "2026-01-15T09:30:00+00:00",
+                  "status": true,
+                  "type": "Ready"
+                }
+              ],
+              "enabled": true,
+              "generation": 1,
+              "health": {
+                "label": "Working",
+                "message": "Matches HQ's settings.",
+                "reason": "Observed",
+                "state": "healthy"
+              },
+              "id": "5da6c038-f78f-583a-b073-5da59683c5b1",
+              "in_sync": true,
+              "key": "sentinel-rewrite",
+              "kind": "adguard.rewrite",
+              "last_observed_at": "2026-01-15T09:30:00+00:00",
+              "observed_generation": 1,
+              "public_effect": false,
+              "spec": {
+                "answer": "192.0.2.10",
+                "domain": "sentinel.example.test"
+              },
+              "status": {
+                "answer": "192.0.2.10",
+                "domain": "sentinel.example.test"
+              },
+              "updated_at": "2026-01-15T09:30:00+00:00"
+            }
+          ],
+          "next": "",
+          "total": 1,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listMachinesV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 0,
+          "items": [],
+          "next": "",
+          "total": 0,
+          "truncated": false
         },
         "ok": true
       }
@@ -56,18 +457,12 @@
           "count": 1,
           "items": [
             {
-              "category": "other",
-              "description": "",
-              "last_push_at": null,
-              "name": "Machine readable",
-              "public_url": "",
-              "repository_url": "",
-              "slug": "machine-readable",
-              "status": "idea",
-              "technologies": [],
-              "updated_at": "2026-10-04T04:26:25.579275+00:00"
+              "slug": "selected-over-the-wire"
             }
-          ]
+          ],
+          "next": "",
+          "total": 1,
+          "truncated": false
         },
         "ok": true
       },
@@ -96,12 +491,248 @@
       }
     }
   },
+  "listReceiptsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 0,
+          "items": [],
+          "next": "",
+          "total": 0,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listSearchV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 0,
+          "items": [],
+          "next": "",
+          "total": 0,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listServicesV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 1,
+          "items": [
+            {
+              "facets": [
+                {
+                  "id": "runtime",
+                  "label": "Container",
+                  "present": false,
+                  "resources": [],
+                  "state": ""
+                },
+                {
+                  "id": "dns",
+                  "label": "DNS",
+                  "present": true,
+                  "resources": [
+                    "sentinel-rewrite"
+                  ],
+                  "state": "good"
+                },
+                {
+                  "id": "proxy",
+                  "label": "Proxy",
+                  "present": false,
+                  "resources": [],
+                  "state": ""
+                },
+                {
+                  "id": "certificate",
+                  "label": "Certificate",
+                  "present": false,
+                  "resources": [],
+                  "state": ""
+                }
+              ],
+              "faults": [
+                "Resolves to 192.0.2.10, a documentation address. Nothing answers there."
+              ],
+              "hostname": "sentinel.example.test",
+              "mark": "",
+              "origin": {
+                "address": "192.0.2.10",
+                "container": "",
+                "host": ""
+              },
+              "project": null,
+              "status": "attention",
+              "status_label": "Incomplete"
+            }
+          ],
+          "next": "",
+          "total": null,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listTailnetV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 1,
+          "items": [
+            {
+              "app_connectors": [],
+              "counts": {
+                "grants": 0,
+                "groups": 0,
+                "tags": 0,
+                "tests": 0
+              },
+              "credential_refusal": null,
+              "declaration": null,
+              "findings": [],
+              "grants": [],
+              "groups": [],
+              "known": false,
+              "locked_out": [],
+              "services": [],
+              "settings": [
+                {
+                  "label": "MagicDNS",
+                  "machines": null,
+                  "value": "Off"
+                },
+                {
+                  "label": "New devices",
+                  "machines": null,
+                  "value": "Join without approval"
+                },
+                {
+                  "label": "New users",
+                  "machines": null,
+                  "value": "Join without approval"
+                },
+                {
+                  "label": "Client updates",
+                  "machines": null,
+                  "value": "Manual"
+                },
+                {
+                  "label": "Policy edited in",
+                  "machines": null,
+                  "value": "Tailscale"
+                }
+              ],
+              "ssh_rules": [],
+              "tags": [],
+              "tests": [],
+              "unread": [
+                {
+                  "error": null,
+                  "kind": "tailscale.dns",
+                  "label": "Tailnet DNS",
+                  "refusal": null,
+                  "remedy": null,
+                  "requires": "dns:read",
+                  "state": "never_swept",
+                  "state_label": "Never read"
+                },
+                {
+                  "error": null,
+                  "kind": "tailscale.settings",
+                  "label": "Tailnet settings",
+                  "refusal": null,
+                  "remedy": null,
+                  "requires": "feature_settings:read, networking_settings:read, policy_file:read",
+                  "state": "never_swept",
+                  "state_label": "Never read"
+                },
+                {
+                  "error": null,
+                  "kind": "tailscale.user",
+                  "label": "Tailnet user",
+                  "refusal": null,
+                  "remedy": null,
+                  "requires": "users:read",
+                  "state": "never_swept",
+                  "state_label": "Never read"
+                },
+                {
+                  "error": null,
+                  "kind": "tailscale.device",
+                  "label": "Tailnet device",
+                  "refusal": null,
+                  "remedy": null,
+                  "requires": null,
+                  "state": "never_swept",
+                  "state_label": "Never read"
+                },
+                {
+                  "error": null,
+                  "kind": "tailscale.policy",
+                  "label": "Tailnet policy",
+                  "refusal": null,
+                  "remedy": null,
+                  "requires": null,
+                  "state": "never_swept",
+                  "state_label": "Never read"
+                }
+              ]
+            }
+          ],
+          "next": "",
+          "total": 1,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listUpgradesV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 0,
+          "items": [],
+          "next": "",
+          "total": null,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "lookupAddressV2": {
+    "responses": {
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "message": "That is not an IP address."
+        },
+        "ok": false
+      }
+    }
+  },
   "openapiV2": {
     "responses": {
       "401": {
         "error": {
           "code": "invalid_token",
-          "message": "An access token is required."
+          "message": "The access token was not accepted."
+        },
+        "ok": false
+      },
+      "503": {
+        "error": {
+          "code": "not_configured",
+          "message": "The machine API is not configured on this deployment."
         },
         "ok": false
       }
@@ -121,6 +752,7 @@
           "created": true,
           "project": {
             "category": "other",
+            "dependency_updates": false,
             "description": "",
             "last_push_at": null,
             "name": "Machine sync",
@@ -135,7 +767,7 @@
             "slug": "machine-sync",
             "status": "active",
             "technologies": [],
-            "updated_at": "2026-10-04T04:26:25.204589+00:00"
+            "updated_at": "2026-01-15T09:30:00+00:00"
           }
         },
         "ok": true
@@ -172,6 +804,67 @@
         "error": {
           "code": "unsupported_media_type",
           "message": "Content-Type must be application/json."
+        },
+        "ok": false
+      }
+    }
+  },
+  "projectDependencyUpdatesV2": {
+    "responses": {
+      "409": {
+        "error": {
+          "code": "precondition",
+          "message": "This project names no repository, so there is nothing to update."
+        },
+        "ok": false
+      }
+    }
+  },
+  "projectUpdateV2": {
+    "request": {
+      "expected_updated_at": "2026-01-15T09:30:00+00:00",
+      "payload": {
+        "name": "Renamed"
+      },
+      "target": "hq"
+    },
+    "responses": {
+      "200": {
+        "data": {
+          "created": false,
+          "project": {
+            "category": "other",
+            "dependency_updates": false,
+            "description": "",
+            "last_push_at": null,
+            "name": "Renamed",
+            "public_url": "",
+            "relationships": {
+              "assets": [],
+              "content": [],
+              "documentation": [],
+              "expense_ids": []
+            },
+            "repository_url": "",
+            "slug": "renamed",
+            "status": "idea",
+            "technologies": [],
+            "updated_at": "2026-01-15T09:30:00+00:00"
+          }
+        },
+        "ok": true
+      },
+      "404": {
+        "error": {
+          "code": "not_found",
+          "message": "That project was not found."
+        },
+        "ok": false
+      },
+      "409": {
+        "error": {
+          "code": "conflict",
+          "message": "That project changed after it was read."
         },
         "ok": false
       }

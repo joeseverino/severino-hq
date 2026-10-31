@@ -16,6 +16,8 @@ from tools.gate import at
 from tools.gate.tests.base import UNITTEST, GateTestCase
 
 CHECKOUT = Path(__file__).resolve().parents[3]
+# The test command as the task runs it, before setUp replaces it.
+MANAGE_PY_TEST = at.TEST
 
 # Stands in for manage.py test: records what it ran on, then exits with the status it is given.
 PROBE = """
@@ -32,8 +34,10 @@ sys.exit(int(sys.argv[2]))
 """
 
 
-@tag("source", "tree")
+@tag("source")
 class TestAtRefTests(GateTestCase):
+    """The task run on a fixture repository, whose root stands in for this checkout's."""
+
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
@@ -42,6 +46,7 @@ class TestAtRefTests(GateTestCase):
         self.root.mkdir()
         self.git("init", "--quiet")
         self.write("app.py", "VALUE = 1\n")
+        self.write("tests/__init__.py", "")
         self.write("tests/test_app.py", "old\n")
         self.write("tests/test_gone.py", "gone\n")
         self.write("hq/core/tests/browser/estate.py", "old browser\n")
@@ -53,8 +58,11 @@ class TestAtRefTests(GateTestCase):
         self.write("tests/test_app.py", "edited\n")
         self.write("tests/test_new.py", "new\n")
         Path(self.root, "tests/test_gone.py").unlink()
-        for name, value in {"ROOT": self.root, "UV_RUN": [sys.executable, "-c", PROBE], "TEST": []}.items():
-            patcher = patch.object(at, name, value)
+        for patcher in (
+            patch.object(at, "ROOT", self.root),
+            patch.object(at, "UV_RUN", [sys.executable, "-c", PROBE]),
+            patch.object(at, "TEST", []),
+        ):
             patcher.start()
             self.addCleanup(patcher.stop)
         environ = patch.dict(os.environ)
@@ -176,6 +184,26 @@ class TestAtRefTests(GateTestCase):
         self.assertIn("cannot import name 'RENAMED'", kept)
         self.assert_nothing_left()
 
+    def test_a_label_in_a_package_the_ref_lacks_names_the_oldest_ref_it_runs_at(self):
+        """A package a later commit adds names a layout the ref does not have,
+        and a runner too old to write a failure record still reads as one that
+        does not import."""
+        self.write("app.py", "VALUE = 2\nMOVED = 1\n")
+        self.write("tests/moved/__init__.py", "")
+        self.write("tests/moved/test_case.py", "import unittest\nfrom app import MOVED\n")
+        split = self.commit("split")
+        with patch.object(at, "UV_RUN", [sys.executable, "-m", "unittest"]):
+            code, out = self.run_main("tests.moved.test_case", at_ref=self.old)
+
+        self.assertEqual(code, at.UNIMPORTED)
+        verdict = out.strip().splitlines()[-1]
+        self.assertIn("DOES NOT IMPORT", verdict)
+        self.assertIn(
+            f"tests.moved is not at the ref; the oldest ref it runs at is {self.git('rev-parse', '--short', split)}",
+            verdict,
+        )
+        self.assert_nothing_left()
+
     def test_a_test_that_imports_and_fails_at_the_ref_is_a_failure(self):
         code, out = self.run_unittest_at_old(
             "import unittest\nfrom app import VALUE\n\n"
@@ -194,6 +222,21 @@ class TestAtRefTests(GateTestCase):
         self.assertEqual(code, 130)
         self.assert_nothing_left()
 
+    def test_without_at_what_follows_the_labels_reaches_manage_py_test_as_typed(self):
+        typed = ["hq.example.tests", "--parallel", "1", "-k", "example"]
+        with (
+            patch.object(at, "TEST", MANAGE_PY_TEST),
+            patch.object(at, "run", return_value=at.Step("test", ok=False, code=1)) as run,
+            patch("sys.stdout", io.StringIO()) as out,
+        ):
+            code = at.main(at.Typed(args=typed))
+
+        self.assertEqual(code, 1)
+        argv = run.call_args.args[1]
+        self.assertEqual(argv[:3], [sys.executable, "manage.py", "test"])
+        self.assertEqual(argv[-len(typed) :], typed)
+        self.assertTrue(out.getvalue().splitlines()[-1].startswith("[test] FAILED"))
+
     def test_a_ref_that_names_no_commit_is_refused(self):
         with patch("sys.stderr", io.StringIO()) as err:
             code, _ = self.run_main("label", at_ref="no-such-ref")
@@ -205,23 +248,6 @@ class TestAtRefTests(GateTestCase):
     def test_an_empty_ref_is_refused(self):
         with patch("sys.stderr", io.StringIO()):
             self.assertEqual(self.run_main("label", at_ref="")[0], 2)
-
-
-@tag("source", "tree")
-class TestHereTests(GateTestCase):
-    def test_without_at_what_follows_the_labels_reaches_manage_py_test_as_typed(self):
-        typed = ["hq.example.tests", "--parallel", "1", "-k", "example"]
-        with (
-            patch.object(at, "run", return_value=at.Step("test", ok=False, code=1)) as run,
-            patch("sys.stdout", io.StringIO()) as out,
-        ):
-            code = at.main(at.Typed(args=typed))
-
-        self.assertEqual(code, 1)
-        argv = run.call_args.args[1]
-        self.assertEqual(argv[:3], [sys.executable, "manage.py", "test"])
-        self.assertEqual(argv[-len(typed) :], typed)
-        self.assertTrue(out.getvalue().splitlines()[-1].startswith("[test] FAILED"))
 
 
 @tag("source")

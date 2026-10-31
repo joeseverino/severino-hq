@@ -11,16 +11,19 @@
   } catch { /* private window */ }
 
   // One address however its query was written: its pairs in order, empty ones
-  // left out. demo/build.py keys the same way (query_key).
-  const key = (url) => {
-    const pairs = [...url.searchParams].filter(([, value]) => value !== "");
+  // left out. demo/build.py keys the same way (query_key). A list's filter
+  // and search send the order the list is drawn in, the same rows as no sort,
+  // which the build names for each list (sorts), so that is left out too.
+  const key = (url, found) => {
+    const drawn = found?.sorts?.[url.pathname];
+    const pairs = [...url.searchParams].filter(([name, value]) => value !== "" && !(name === "sort" && value === drawn));
     pairs.sort(([a, x], [b, y]) => (a < b ? -1 : a > b ? 1 : x < y ? -1 : x > y ? 1 : 0));
     return pairs.length ? `${url.pathname}?${new URLSearchParams(pairs)}` : url.pathname;
   };
   let route;
   const routes = () => (route ??= fetch("/__fragments__/variants.json")
     .then((response) => response.json())
-    .catch(() => ({ variants: {}, searches: [], nothing: "" })));
+    .catch(() => ({ variants: {}, searches: [], nothing: "", sorts: {} })));
   // A search the demo has no answer for is answered as the nearest word it
   // has: the shortest that starts with it, else the longest it starts with.
   const nearest = (asked, words, nothing) => {
@@ -30,12 +33,24 @@
     const shorter = words.filter((w) => word.startsWith(w)).sort((a, b) => b.length - a.length)[0];
     return longer || shorter || nothing;
   };
+  const nearestOf = (asked, found) => nearest(asked, found.searches, found.nothing);
   const searchKey = (asked, found) => {
-    const word = nearest(asked, found.searches, found.nothing);
+    const word = nearestOf(asked, found);
     return key(new URL(`/search/?${new URLSearchParams({ q: word })}`, location.href));
   };
+  // What a query the demo has no copy of asked for, for demo.js to name: a
+  // sort, a page past the saved ones, a day past the saved ones, a list's
+  // search, else a filter.
+  const DAYS = ["day", "month", "on"];
+  const kindOf = (url, found) => {
+    const asked = url.searchParams;
+    if (key(url, found).includes("sort=")) return "sort";
+    if (asked.has("page")) return "page";
+    if (DAYS.some((name) => asked.has(name))) return "day";
+    return asked.get("q") ? "search" : "filter";
+  };
   // Where this document really came from, before its address is put back.
-  window.hqDemo = { key, routes, searchKey, served: location.pathname, answered: true, answeredAs: "" };
+  window.hqDemo = { key, kindOf, routes, nearest: nearestOf, searchKey, served: location.pathname, unanswered: "", answeredAs: "" };
 
   const address = document.querySelector('meta[name="hq-demo-address"]')?.content;
   if (address) {
@@ -59,13 +74,13 @@
   const reveal = () => { document.documentElement.style.visibility = ""; };
   routes().then((found) => {
     const asked = here.pathname === "/search/" ? here.searchParams.get("q") : "";
-    const target = found.variants[key(here)] || (asked ? found.variants[searchKey(asked, found)] : "");
+    const target = found.variants[key(here, found)] || (asked ? found.variants[searchKey(asked, found)] : "");
     if (target) {
       try { sessionStorage.setItem("hq-demo-asked", here.pathname + here.search); } catch { /* private window */ }
       location.replace(target + here.hash);
       return;
     }
-    window.hqDemo.answered = false;
+    window.hqDemo.unanswered = kindOf(here, found);
     reveal();
     document.dispatchEvent(new Event("hq-demo:unanswered"));
   }, reveal);

@@ -39,14 +39,19 @@ collects_last() {
 # The host image's final stage.
 sed -n '/ AS runtime$/,$p' Dockerfile >"${work}/host"
 collects_last "${work}/host" Dockerfile
-# The composition's final stage.
-sed -n '/^FROM .{HQ_IMAGE}/,$p' composition/Dockerfile >"${work}/composition"
-[ -s "${work}/composition" ] || fail "composition/Dockerfile has no final stage to read"
-collects_last "${work}/composition" composition/Dockerfile
-# The candidate composition a pull request builds inline.
-sed -n '/FROM .{HQ_IMAGE} AS runtime/,/DOCKERFILE$/p' .github/workflows/compose.yml >"${work}/candidate"
-[ -s "${work}/candidate" ] || fail "compose.yml has no candidate image to read"
-collects_last "${work}/candidate" "compose.yml's candidate image"
+# The composition's release and the candidate a pull request builds, each
+# read with the stage both extend.
+stage() { awk -v from="$1" '/^FROM / { on = ($0 ~ from) } on' composition/Dockerfile; }
+stage ' AS extended$' >"${work}/extended"
+[ -s "${work}/extended" ] || fail "composition/Dockerfile has no stage the release and the candidate extend"
+for image in release candidate; do
+    case "${image}" in
+        release) from='^FROM extended$' ;;
+        candidate) from=' AS candidate$' ;;
+    esac
+    { cat "${work}/extended"; stage "${from}"; } >"${work}/${image}"
+    collects_last "${work}/${image}" "composition/Dockerfile's ${image}"
+done
 
 # 3. The application's bytecode is compiled into the image, valid without a
 #    timestamp, and every extension wheel is installed with its own.

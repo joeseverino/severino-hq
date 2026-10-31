@@ -103,7 +103,7 @@ func TestPendingResponses(t *testing.T) {
 }
 
 func TestGlancePlanResponse(t *testing.T) {
-	raw := `{"ok": true, "panels": ["infrastructure"], "targets": {"infrastructure": [{"connections": ["ssh-host"], "key": "host-1", "request_id": "machine-1"}], "weather": {"point": "", "endpoint": "https://api.example.com"}}}`
+	raw := `{"ok": true, "panels": ["infrastructure"], "targets": {"infrastructure": [{"connections": ["ssh-host"], "key": "host-1", "request_id": "machine-1"}], "weather": {"point": "", "endpoint": "https://api.example.com"}}, "as_of": "2026-10-03T12:00:00.000001+00:00"}`
 	conforms(t, "GlancePlan", []byte(raw))
 	plan := strict[GlancePlan](t, raw)
 	if len(plan.Targets.Infrastructure) != 1 || plan.Targets.Infrastructure[0].RequestID != "machine-1" {

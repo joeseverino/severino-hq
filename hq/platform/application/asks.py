@@ -1,16 +1,10 @@
 """Asking for work that outlives the request, and saying how it stands.
 
-A request never does the work an operator asks for when that work can wait on
-something outside the process. It records the ask (a read request for the
-controller, a job for the runner) and answers at once; the work reports where
-its result is stored, and a page watching it asks how it stands.
-
-One shape says how any such work stands (``Standing``), whichever mechanism
-does it, so one control (``partials/_ask.html``) and one script behavior
-follow all of it. A status resource answers with ``Standing.as_json``.
-
-What a page may watch is handed to it signed (``watch_token``), so a status
-resource reports only on what HQ itself said to watch.
+A request for work that can wait on something outside the process records the
+ask (a read request for the controller, a job for the runner) and answers at
+once; the work reports where its result is stored, and a page watching it asks
+how it stands. One shape says so (``Standing``) whichever mechanism does it, so
+one control (``partials/_ask.html``) and one script behavior follow all of it.
 """
 
 from collections.abc import Iterable
@@ -66,7 +60,7 @@ WATCH_LIMIT = 4000
 
 @dataclass(frozen=True, slots=True)
 class Standing:
-    """How one piece of asked-for work stands."""
+    """How one piece of asked-for work stands; a status resource answers with ``as_json``."""
 
     state: str = IDLE
     # What it is doing, or how it ended, in a sentence.
@@ -106,19 +100,17 @@ class Standing:
 @dataclass(frozen=True, slots=True)
 class Ask:
     """One "do this now" control: what its button posts, and how the work it
-    last asked for stands.
-
-    Usable wherever a ``PageAction`` is, and on its own in a page's body.
-    ``status_url`` is the resource that says how the work stands while it is
-    live. ``refresh`` is a CSS selector for the part of the page the result
-    shows in, which is fetched again when the work ends; without one the page
-    is loaded again.
+    last asked for stands. Usable wherever a ``PageAction`` is, and on its own
+    in a page's body.
     """
 
     label: str
     url: str
     standing: Standing = field(default_factory=Standing)
+    # The resource that says how the work stands while it is live.
     status_url: str = ""
+    # A CSS selector for the part of the page the result shows in, fetched
+    # again when the work ends; without one the page is loaded again.
     refresh: str = ""
     name: str = "action"
     value: str = ""
@@ -166,7 +158,9 @@ def answer(
 
 
 def watch_token(subject: dict[str, Any]) -> str:
-    """What a page may ask the status of, signed."""
+    """What a page may ask the status of, signed, so a status resource reports
+    only on what HQ itself said to watch.
+    """
 
     return signing.dumps(subject, salt=_WATCH_SALT)
 
@@ -266,10 +260,11 @@ def job_standing(job: Any) -> Standing:
     """How a ``jobs.Job`` stands, in the shared shape."""
 
     states = {"queued": QUEUED, "running": RUNNING, "succeeded": DONE}
-    state = states.get(job.state, FAILED)
+    state = states.get(job.seen_state, FAILED)
     note = job.note
     if state == FAILED:
-        note = job.error.strip().splitlines()[-1] if job.error else "Failed."
+        error = job.seen_error
+        note = error.strip().splitlines()[-1] if error else "Failed."
     elif state == QUEUED and not note:
         note = WAITING
     return Standing(
@@ -277,5 +272,5 @@ def job_standing(job: Any) -> Standing:
         note,
         since=job.created_at,
         percent=job.percent if state != DONE else 100,
-        word=job.get_state_display(),
+        word=job.seen_state_display,
     )

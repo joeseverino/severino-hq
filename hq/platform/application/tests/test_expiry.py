@@ -36,7 +36,7 @@ class DaysUntilTests(SimpleTestCase):
         self.assertEqual(days_until(NOW - timedelta(hours=2), NOW), -1)
 
     def test_a_naive_moment_is_utc(self):
-        self.assertEqual(days_until(datetime(2026, 1, 11), NOW), 10)
+        self.assertEqual(days_until(datetime(2026, 1, 11), NOW), 10)  # noqa: DTZ001 - the naive moment is under test
 
     def test_renewal_window_and_opening(self):
         self.assertEqual(renewal_window({}), 30)

@@ -1,20 +1,9 @@
 """The controller bridge as an ASGI application: the contract's actions over HTTP.
 
-Built from two declarations and nothing else. The contract
-(``bridge_contract.operations``) says which paths exist, which query
-parameters each takes and whether it carries a JSON body; ``ACTIONS`` says
-what each one does. Import fails if the two name different actions.
-
-This application has no login, no session and no CSRF check: reaching it is
-the authorization, and the only way to reach it is the private Unix socket it
-is served on (``hq.platform.core.unix_server``). It is not part of the web
-application's routing, and it refuses a request that arrived on a network
-listener, so mounting it there by mistake serves nothing.
-
-A payload is held to the schema the contract declares for its operation
-before any action sees it; one that departs from it is refused whole, with the
-JSON Pointer of the member that departs. A refusal is an RFC 9457 problem.
-Sizes are bounded in both directions by the contract's ``BridgeBody``.
+Built from the contract (``bridge_contract.operations``: paths, parameters,
+bodies) and ``ACTIONS`` (what each does); import fails if they name different
+actions. It has no login, session or CSRF check, because reaching its private
+Unix socket is the authorization: docs/Architecture.md#the-controller.
 """
 
 import json
@@ -193,14 +182,23 @@ async def _http_error(request: Request, exc: Exception) -> Response:
     return problem(status, "The bridge has no such action." if status == HTTPStatus.NOT_FOUND else status.phrase)
 
 
-def _routes() -> list[Route]:
+def _routes(actions: tuple[Action, ...]) -> list[Route]:
     declared = operations()
-    by_name = {action.name: action for action in ACTIONS}
-    if len(by_name) != len(ACTIONS) or set(by_name) != set(declared):
+    by_name = {action.name: action for action in actions}
+    if len(by_name) != len(actions) or set(by_name) != set(declared):
         raise RuntimeError(
             "Bridge actions and the contract's paths differ: " + ", ".join(sorted(set(by_name) ^ set(declared)))
         )
     return [Route(f"/{name}", endpoint(by_name[name], declared[name]), methods=["POST"]) for name in sorted(declared)]
 
 
-application = UnixSocketOnly(Starlette(routes=_routes(), exception_handlers={HTTPException: _http_error}))
+def bridge(actions: tuple[Action, ...] = ACTIONS) -> UnixSocketOnly:
+    """The bridge application serving ``actions``, which name exactly the contract's paths.
+
+    Served with ``ACTIONS``; a test hands actions that record they ran.
+    """
+
+    return UnixSocketOnly(Starlette(routes=_routes(actions), exception_handlers={HTTPException: _http_error}))
+
+
+application = bridge()

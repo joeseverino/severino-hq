@@ -8,6 +8,6 @@ connection that reads the page, else its own lead action), or a plain link
 as `action_url` and `action_label`. Inside another frame the card draws
 nothing of its own; as the last thing on a page it holds the page's width.
 {% endcomment %}
-<div class="empty card" data-empty-state>
-  <p>{{ message|breakable }}{% if why %} {{ why|breakable }}{% endif %}{% if remedy %} {% if remedy.url %}<a class="empty-cta" href="{{ remedy.url }}">{{ remedy.label|breakable }} &rarr;</a>{% else %}<span class="empty-cta">{{ remedy.label|breakable }}</span>{% endif %}{% elif action_url and action_label %} <a class="empty-cta" href="{{ action_url }}">{{ action_label|breakable }} &rarr;</a>{% endif %}</p>
-</div>
+{% card element="div" css="empty" data_empty_state=True %}
+  <p>{{ message|breakable }}{% if why %} {{ why|breakable }}{% endif %}{% if remedy %} {% if remedy.url %}<a class="empty-cta" href="{{ remedy.url }}">{{ remedy.label|breakable }}{% arrow %}</a>{% else %}<span class="empty-cta">{{ remedy.label|breakable }}</span>{% endif %}{% elif action_url and action_label %} <a class="empty-cta" href="{{ action_url }}">{{ action_label|breakable }}{% arrow %}</a>{% endif %}</p>
+{% endcard %}

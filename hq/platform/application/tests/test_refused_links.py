@@ -17,14 +17,15 @@ from django.urls import reverse
 from hq.domains.jobs.models import Job
 from hq.platform.application.action_links import command_action, command_url
 from hq.platform.application.connections import ConnectionAbility, ConnectionInstance, ConnectionSpec
-from hq.platform.application.integrations import clear_integration_graph_cache
+from hq.platform.application.plugin_testing import offering
 from hq.platform.application.plugins import clear_plugin_composition_cache
 from hq.platform.application.workflow_contracts import ActionLink
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from hq_sdk.testing import held_jobs
 from tests.fixtures.example_hq_plugin import outbound as example
 
-from .markup import select
+from ..entity_links import connection_anchor
+from .markup import select, within
 from .test_outbound_work import SCRIPT, ComposedExample
 
 CLOSED = "The registry is closed for the night."
@@ -63,6 +64,17 @@ def _closed_registry() -> tuple:
     return tuple(replace(work, refuse=refuse) if work.name == example.REFRESH else work for work in DECLARED())
 
 
+def on_rows(page, *notes: str) -> list:
+    """The elements on the rows of ``notes``, so what another installed
+    extension offers on the same page is not counted."""
+
+    return [element for note in notes for element in within(page, "id", connection_anchor(note))]
+
+
+def refused_on(page, *notes: str) -> list:
+    return [element for element in on_rows(page, *notes) if element.attrs.get("aria-disabled") == "true"]
+
+
 class ConnectionsPage(ComposedExample):
     def connections(self, *notes: str, abilities: tuple[str, ...] = ("notes.lookup",)):
         spec = _notes_spec(*notes)
@@ -70,10 +82,7 @@ class ConnectionsPage(ComposedExample):
         spec = replace(
             spec, instance_provider=lambda: tuple(replace(item, ability_names=abilities) for item in provider())
         )
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
-            # The graph holds the families it was compiled with, so each page
-            # is drawn from these notes rather than an earlier call's.
-            clear_integration_graph_cache()
+        with offering(spec):
             return self.client.get(reverse("control_plane:connections"))
 
     def close_the_registry(self):
@@ -87,12 +96,14 @@ class ARefusedCommandIsDrawnUnusableTests(ConnectionsPage):
     def test_a_row_offering_refused_work_says_why_and_cannot_be_pressed(self):
         page = self.connections(example.ARCHIVED, "first-note")
 
-        (refused,) = select(page, "aria-disabled", "true")
-        self.assertEqual((refused.words, refused.attrs["title"]), ("Look up", "An archived note is not looked up."))
-        self.assertNotIn("href", refused.attrs)
-        self.assertNotIn("formaction", refused.attrs)
+        (unusable,) = refused_on(page, example.ARCHIVED, "first-note")
+        self.assertEqual((unusable.words, unusable.attrs["title"]), ("Look up", "An archived note is not looked up."))
+        self.assertNotIn("href", unusable.attrs)
+        self.assertNotIn("formaction", unusable.attrs)
         # The note that can be looked up is offered live, about its own row.
-        (live,) = (element for element in select(page, "href") if element.words == "Look up")
+        (live,) = (
+            element for element in on_rows(page, "first-note") if "href" in element.attrs and element.words == "Look up"
+        )
         self.assertEqual(parse_qs(urlsplit(live.attrs["href"]).query)["target"], ["first-note"])
 
     def test_work_about_no_record_is_refused_on_every_row_that_offers_it(self):
@@ -100,8 +111,8 @@ class ARefusedCommandIsDrawnUnusableTests(ConnectionsPage):
 
         page = self.connections("first-note", "second-note", abilities=("notes.refresh",))
 
-        refused = select(page, "aria-disabled", "true")
-        self.assertEqual([(element.words, element.attrs["title"]) for element in refused], [("Refresh", CLOSED)] * 2)
+        unusable = refused_on(page, "first-note", "second-note")
+        self.assertEqual([(element.words, element.attrs["title"]) for element in unusable], [("Refresh", CLOSED)] * 2)
 
     def test_a_press_on_refused_work_is_still_refused_before_any_job(self):
         self.close_the_registry()
@@ -119,7 +130,7 @@ class ARefusedCommandIsDrawnUnusableTests(ConnectionsPage):
             self,
             sizes=(1, 6),
             draw=lambda size: self.connections(*(f"note-{n}" for n in range(size)), abilities=("notes.refresh",)),
-            rows=lambda page: len(select(page, "aria-disabled", "true")),
+            rows=lambda page: len(refused_on(page, *(f"note-{n}" for n in range(6)))),
         )
 
 

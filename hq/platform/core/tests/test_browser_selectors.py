@@ -59,6 +59,12 @@ def markup() -> tuple[set[str], set[str], str]:
             for value in re.findall(r'\bclass="([^"]*)"', source):
                 classes.update(value.split())
             ids.update(re.findall(r'\bid="([^"{}]+)"', source))
+            # A card's class, id and data- attributes are its tag's options.
+            for options in re.findall(r"\{%\s*card\s([^%]*)%\}", source):
+                classes.update(("card", *" ".join(re.findall(r'\bcss="([^"]*)"', options)).split()))
+                ids.update(re.findall(r'\bid="([^"{}]+)"', options))
+                drawn = (name.replace("_", "-") for name in re.findall(r"\b(data_\w+)=", options))
+                text.append(f"<div {' '.join(drawn)}>")
     for library in TAG_LIBRARIES.glob("*.py"):
         source = library.read_text(encoding="utf-8")
         # A tag library writes markup too: its attributes are rendered.

@@ -67,12 +67,22 @@
      for a direction. A filled dot is solid and an empty one is a ring, so the
      count does not rest on color. The line takes the room the value leaves
      and is drawn only in a card wide enough to give it some. */
-  /* The gap keeps a short value's hit area and the first dot's apart (page.css). */
-  .kpi-figure { display: flex; align-items: center; gap: var(--space-6); min-width: 0; }
+  /* The gap keeps a short value's hit area and the first dot's apart
+     (page.css), beside it or under it. Dots that do not fit beside the value
+     take the line under it, so they never reach past the figure's column, and
+     the figure's lines pack at the top of its row so the values stand level. */
+  .kpi-figure { display: flex; flex-wrap: wrap; align-content: start; align-items: center; gap: var(--space-4) var(--space-6); min-width: 0; }
   .kpi-dots { display: inline-flex; flex-wrap: wrap; gap: var(--space-3); }
-  /* More than fit beside a value in a narrow column are set in two even rows,
-     filled column by column, rather than left to break wherever the column ends. */
+  /* Past six, dots are set in even rows filled column by column, never more
+     than four columns wide, rather than left to break wherever the column
+     ends: two rows to eight, three to the dozen that are ever drawn
+     (drawings.Dots.LIMIT). Four linked dots a target apart fit the narrowest
+     column a card sets (110px, layout.css). */
   .kpi-dots:has(> :nth-child(7)) { display: inline-grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); }
+  .kpi-dots:has(> :nth-child(9)) { grid-template-rows: repeat(3, auto); }
+  /* Rows of dots stand taller than the value: it keeps to the top of its
+     line, level with the values beside it, rather than at their middle. */
+  .kpi-figure:has(> .kpi-dots > :nth-child(7)) > .value { align-self: flex-start; }
   .kpi-dot { position: relative; display: block; width: 10px; height: 10px; border: 1.5px solid var(--muted-2); border-radius: 50%; }
   .kpi-dot.is-filled { border-color: var(--ok); background: var(--ok); }
   /* A dot that leads somewhere is hit through a square around it (page.css),
@@ -139,9 +149,8 @@
      hops and layers show their state with their own tick, in a fixed grid
      an extra mark would shift, so they carry none. */
   main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary { list-style: none; cursor: pointer; }
-  main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary::-webkit-details-marker { display: none; }
   main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary::before {
-    content: "\203A"; display: inline-block; width: 1em; margin-inline-end: var(--space-1);
+    content: "\203A" / ""; display: inline-block; width: 1em; margin-inline-end: var(--space-1);
     color: var(--muted); font-size: 1.05em; line-height: 1; text-align: center;
     transition: transform .12s ease;
   }
@@ -163,13 +172,17 @@
   .filter-bar-summary { margin: 0 0 0 auto; align-self: center; color: var(--muted); font-size: var(--text-sm); }
   .filter-bar-summary strong { color: var(--ink); }
 
-  /* A head's controls on a phone: the lead one beside the title, the rest in
-     the overflow menu, which is hidden wherever every control fits. */
-  .page-head .page-actions > .overflow-menu { display: none; }
-  @media (max-width: 640px) {
-    .page-head .page-actions > :not(:first-child):not(.overflow-menu) { display: none; }
-    .page-head .page-actions > .overflow-menu { display: flex; }
-    .page-head .page-actions { flex-wrap: nowrap; }
+  /* A head's controls: the lead and the next beside the title, the menu
+     holding every other. Its copy of the second is left out wherever the
+     second stands beside the title, and a menu holding nothing else with it.
+     A head too narrow for three controls folds the second in as well, so it
+     keeps the lead and the menu (the head is the container, page.css). */
+  .page-head .overflow-menu-panel > :first-child { display: none; }
+  .page-head .overflow-menu:not(:has(.overflow-menu-panel > :nth-child(2))) { display: none; }
+  @container page-head (width < 30rem) {
+    .page-head .page-actions > :nth-child(2):not(.overflow-menu) { display: none; }
+    .page-head .overflow-menu-panel > :first-child { display: revert; }
+    .page-head .overflow-menu:not(:has(.overflow-menu-panel > :nth-child(2))) { display: flex; }
   }
 
   /* A row's toggle, drawn by the server where a row holds something back or heads rows folded under it: the one disclosure a row has, sized to be hit, turned when open. */

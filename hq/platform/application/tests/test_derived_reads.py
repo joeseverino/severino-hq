@@ -129,6 +129,32 @@ class ApplicationTests(TestCase):
         self.assertGreaterEqual(everything["count"], 0)
 
 
+class TotalTests(TestCase):
+    """A derived list says how many matched, so a cut page is told apart from the whole."""
+
+    def setUp(self):
+        estate(2)
+
+    def test_a_cut_page_counts_every_match(self):
+        machines = list_resource("machines", {"limit": 1}, principal=READER)
+        readings = list_resource("readings", {"limit": 1}, principal=READER)
+
+        self.assertEqual((machines["count"], machines["total"], machines["truncated"]), (1, 2, True))
+        self.assertTrue(machines["next"])
+        self.assertEqual((readings["count"], readings["total"]), (1, len(OBSERVATIONS)))
+        self.assertTrue(readings["truncated"])
+
+    def test_a_page_holding_every_match_says_so(self):
+        machines = list_resource("machines", {}, principal=READER)
+        domains = list_resource("domains", {}, principal=READER)
+        estate_figures = list_resource("estate", {}, principal=READER)
+
+        for found in (machines, domains, estate_figures):
+            self.assertEqual(found["total"], found["count"])
+            self.assertFalse(found["truncated"])
+            self.assertEqual(found["next"], "")
+
+
 class AuthorizationTests(TestCase):
     def setUp(self):
         estate(1)

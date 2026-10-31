@@ -7,6 +7,8 @@ from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
+from .source import template_files
+
 APPLICATION = Path(__file__).resolve().parents[1]
 PACKAGE = "hq.platform.application"
 # What a module reads a stored provider reading through.
@@ -148,10 +150,10 @@ class OneWordingTests(SimpleTestCase):
         "Seen"), so the same age read differently from page to page."""
 
         found = [
-            f"{path.relative_to(TEMPLATES)}:{text.count(chr(10), 0, match.start()) + 1}"
-            for path in sorted(TEMPLATES.rglob("*.html"))
+            f"{name}:{text.count(chr(10), 0, match.start()) + 1}"
+            for name, path in template_files()
             if path != PARTIAL
-            for text in (path.read_text(),)
+            for text in (path.read_text(encoding="utf-8"),)
             for match in OWN_WORDING.finditer(text)
         ]
 

@@ -58,7 +58,7 @@ func TestReadersAreTheContractsSweptKinds(t *testing.T) {
 
 // runAction runs a registered action the way the controller dispatches it: the
 // spec and observed payloads arrive opaque and decode at the boundary.
-func (r *Registry) runAction(kind runtime.ResourceKind, action string, ctx context.Context, spec, observed Object, apply bool) (Result, error) {
+func (r *Registry) runAction(ctx context.Context, kind runtime.ResourceKind, action string, spec, observed Object, apply bool) (Result, error) {
 	handler, ok := r.actions[actionKey{kind, action}]
 	if !ok {
 		return Result{}, &ProviderError{Message: "no action " + string(kind) + "/" + action}
@@ -70,19 +70,19 @@ func TestActionsDecodeOnceAtTheBoundary(t *testing.T) {
 	r := New(runtime.Environment{}, supplied(), &fakeHTTP{})
 	ctx := t.Context()
 	bad := Object{"consumers": "not a list"}
-	if res, err := r.runAction(runtime.ResourceKindTLSCertificate, "renew", ctx, bad, nil, false); err != nil || !res.Changed {
+	if res, err := r.runAction(ctx, runtime.ResourceKindTLSCertificate, "renew", bad, nil, false); err != nil || !res.Changed {
 		t.Fatalf("a renewal plan answers without reading the spec: %v %+v", err, res)
 	}
 	for _, action := range []struct {
 		kind runtime.ResourceKind
 		name string
 	}{{runtime.ResourceKindTLSCertificate, "renew"}, {runtime.ResourceKindTLSCertificate, "reconcile"}, {runtime.ResourceKindTLSUploadedCertificate, "delete"}} {
-		_, err := r.runAction(action.kind, action.name, ctx, bad, nil, true)
+		_, err := r.runAction(ctx, action.kind, action.name, bad, nil, true)
 		if err == nil || err.Error() != certificateSpecInvalid {
 			t.Errorf("%s/%s: %v", action.kind, action.name, err)
 		}
 	}
-	if _, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "reconcile", ctx, Object{"domain": 5}, nil, true); err == nil {
+	if _, err := r.runAction(ctx, runtime.ResourceKindAdGuardRewrite, "reconcile", Object{"domain": 5}, nil, true); err == nil {
 		t.Error("an AdGuard spec that does not decode is refused with the decoder's error")
 	}
 	if _, err := decodePayload[NPMProxyHostSpec](Object{"connection_ref": 7}); err == nil {

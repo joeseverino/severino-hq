@@ -1,15 +1,15 @@
 {% if is_paginated %}
 <nav class="pagination">
   {% if page_obj.has_previous %}
-    <a href="?{% if table.querystring %}{{ table.querystring }}&{% endif %}page={{ page_obj.previous_page_number }}">&larr; Prev</a>
+    <a href="?{% if table.querystring %}{{ table.querystring }}&{% endif %}page={{ page_obj.previous_page_number }}"><span aria-hidden="true">←</span>&nbsp;Prev</a>
   {% else %}
-    <span class="muted">&larr; Prev</span>
+    <span class="muted"><span aria-hidden="true">←</span>&nbsp;Prev</span>
   {% endif %}
   <span class="muted">Page {{ page_obj.number|breakable }} of {{ paginator.num_pages|breakable }}</span>
   {% if page_obj.has_next %}
-    <a href="?{% if table.querystring %}{{ table.querystring }}&{% endif %}page={{ page_obj.next_page_number }}">Next &rarr;</a>
+    <a href="?{% if table.querystring %}{{ table.querystring }}&{% endif %}page={{ page_obj.next_page_number }}">Next{% arrow %}</a>
   {% else %}
-    <span class="muted">Next &rarr;</span>
+    <span class="muted">Next{% arrow %}</span>
   {% endif %}
 </nav>
 {% endif %}

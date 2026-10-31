@@ -2,18 +2,26 @@
 #MISE description="The suite composed with the set mise.local.toml names, as the image runs it; mise run test --composed"
 #MISE hide=true
 #MISE extends="django"
-#MISE env={DJANGO_DEBUG=false, SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION="0", SEVERINO_HQ_PLUGINS="{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH="{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"}
-#MISE timeout="30m"
+#MISE env={DJANGO_DEBUG=false, SEVERINO_HEAVY_BOUND="30m"}
 #USAGE arg "[arguments]..." var=#true help="Passed on to manage.py test: test labels, --tag, --parallel"
 
 # The suite runs in a copy of only what the image is built from (the paths
 # Dockerfile.dockerignore admits, tracked or new), so a test that reads docs/,
 # .git or anything else the image leaves out fails here rather than in Compose.
 # It runs as the image configures it: DEBUG off, the extension set
-# mise.local.toml names, admission off since a checkout has no admitted wheels,
-# with SEVERINO_HQ_SOURCE and SEVERINO_HQ_REVISION stamped. Without an extension set it runs the host alone
-# and says so; REQUIRE_COMPOSED=1 fails instead.
+# mise.local.toml names (tools/lib/extension-set.sh, whose first line names
+# each package's tree), with SEVERINO_HQ_SOURCE and SEVERINO_HQ_REVISION
+# stamped. Without an extension set it runs the host alone and says so;
+# REQUIRE_COMPOSED=1 fails instead.
 set -eu
+
+if [ -z "${HQ_LOCAL_PLUGINS:-}" ] && [ "${REQUIRE_COMPOSED:-0}" = 1 ]; then
+    echo "The composed suite is required and HQ_LOCAL_PLUGINS is unset: name the set with mise run setup:extensions <checkout>." >&2
+    exit 1
+fi
+# shellcheck source=tools/lib/extension-set.sh
+. ./tools/lib/extension-set.sh
+compose_extensions
 
 # The whole suite takes the heavy turn; a run its arguments narrow goes ahead
 # at once (tools/gate/turn.py).
@@ -25,13 +33,6 @@ test_arguments="${usage_arguments:-}"
 . ./tools/lib/export-tree.sh
 # shellcheck source=tools/lib/source-url.sh
 . ./tools/lib/source-url.sh
-if [ -z "${HQ_LOCAL_PLUGINS:-}" ]; then
-    if [ "${REQUIRE_COMPOSED:-0}" = 1 ]; then
-        echo "The composed suite is required and HQ_LOCAL_PLUGINS is unset (tools/dev/mise.local.example.toml)." >&2
-        exit 1
-    fi
-    echo "No HQ_LOCAL_PLUGINS supplied: the host alone, as the image runs it (tools/dev/mise.local.example.toml)."
-fi
 
 source_url="$(source_url)"
 # Named as a test run's scratch is, for this shell, so a copy left by a killed
@@ -63,12 +64,15 @@ done
 environment="${UV_PROJECT_ENVIRONMENT:-.venv}-image"
 case "${environment}" in /*) ;; *) environment="${MISE_CONFIG_ROOT}/${environment}" ;; esac
 
+# The verdict runs from the checkout, since the copy holds no tools/, and keeps
+# the run's whole report in var/gate/test-composed.txt, named by its last line.
 revision="$(git rev-parse HEAD)"
-cd "${tree}"
 status=0
 env \
     UV_PROJECT_ENVIRONMENT="${environment}" \
     SEVERINO_HQ_SOURCE="${source_url}" \
     SEVERINO_HQ_REVISION="${revision}" \
-    uv run --locked --no-default-groups python manage.py test --noinput --parallel auto "$@" || status=$?
+    uv run --locked --no-default-groups python -m tools.gate.verdict test:composed \
+    uv run --directory "${tree}" --locked --no-default-groups python manage.py test --noinput --parallel auto "$@" \
+    || status=$?
 exit "${status}"

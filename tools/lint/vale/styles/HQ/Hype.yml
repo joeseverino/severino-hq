@@ -1,0 +1,24 @@
+# A claim of quality says nothing a reader can check: name what the thing does
+# instead.
+extends: existence
+message: "'%s' praises instead of describing; say what it does"
+level: error
+ignorecase: true
+scope: raw
+tokens:
+  - seamless(?:ly)?
+  - effortless(?:ly)?
+  - blazing(?:ly)?(?:[- ]fast)?
+  - lightning[- ]fast
+  - cutting[- ]edge
+  - game[- ]chang(?:er|ing)
+  - world[- ]class
+  - best[- ]in[- ]class
+  - state[- ]of[- ]the[- ]art
+  - next[- ]generation
+  - supercharg(?:e|es|ed|ing)
+  - delightful(?:ly)?
+  - revolutionary
+  - unparalleled
+  - rock[- ]solid
+  - battle[- ]tested

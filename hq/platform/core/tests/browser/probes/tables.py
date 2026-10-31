@@ -2,23 +2,6 @@
 
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE, PAINTED_PART
 
-# How tall a table row may be, in lines of its own body text. The tallest row
-# the tables are designed for is a connection's: its name, endpoint, who holds
-# its secret, where it reaches from, and a closed "Can see" disclosure, one
-# line each, with room for the owner line to wrap once at a tablet: six. A
-# name is clamped to two lines (.table-clamp, `[data-entity]` in a cell), so a
-# row past six is a list put in a cell (a machine's every hostname, a
-# container's every port) that belongs on the record's own page, with a count
-# or the first few in the row. Half a line of slack absorbs the smaller type
-# the secondary lines are set in. A row's text can be more than six lines of
-# its width hold (a name at its field's full length beside a paragraph of
-# notes), so a cell is held to the larger of this and the row at its best:
-# its wrapping text shared evenly over the room its one-line cells leave, no
-# column narrower than its longest word, and a line of slack for each column
-# that wraps. A cell past both is a column starved while another has room to
-# give.
-ROW_LINES = 6
-
 CELLS = (
     "() => {"
     + DESCRIBE
@@ -90,114 +73,6 @@ TABLES = (
 }"""
 )
 
-ROW_HEIGHTS = (
-    "(lines) => {"
-    + DESCRIBE
-    + """
-  // A row is as tall as its tallest cell's content. The cell itself is
-  // stretched to the row, so what is measured is the visible text in it: not
-  // a closed disclosure's body, not the lines a clamp cuts off.
-  const shown = (text, cell) => {
-    const range = document.createRange();
-    range.selectNodeContents(text);
-    let bottom = range.getBoundingClientRect().bottom;
-    for (let up = text.parentElement; up && up !== cell; up = up.parentElement) {
-      if (getComputedStyle(up).overflowY !== 'visible') bottom = Math.min(bottom, box(up).bottom);
-    }
-    return bottom;
-  };
-  const height = (cell) => {
-    const top = box(cell).top + parseFloat(getComputedStyle(cell).paddingTop);
-    let bottom = top;
-    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
-    for (let text = walker.nextNode(); text; text = walker.nextNode()) {
-      if (!text.textContent.trim() || !text.parentElement.checkVisibility()) continue;
-      bottom = Math.max(bottom, shown(text, cell));
-    }
-    return bottom - top;
-  };
-  const lineOf = (style) => (style.lineHeight === 'normal' ? parseFloat(style.fontSize) * 1.2 : parseFloat(style.lineHeight));
-  const hold = (el, property, value) => {
-    const was = [el.style.getPropertyValue(property), el.style.getPropertyPriority(property)];
-    el.style.setProperty(property, value, 'important');
-    return () => (was[0] ? el.style.setProperty(property, ...was) : el.style.removeProperty(property));
-  };
-  // Each cell's narrowest: its column's width with the table laid out at
-  // min-content, the page left as it was. A table holding its columns while
-  // a row is open (tables.js) cannot lay them out again, so each is as
-  // narrow as it is held, and the row is judged at those widths.
-  const narrowest = (table, cells) => {
-    if (table.hasAttribute('data-rows-held')) return cells.map(({cell}) => box(cell).width);
-    const released = ['table-layout:auto', 'width:min-content', 'min-width:0', 'max-width:none']
-      .map((pair) => hold(table, ...pair.split(':')));
-    const widths = cells.map(({cell}) => box(cell).width);
-    released.reverse().forEach((release) => release());
-    return widths;
-  };
-  // The row at its best: the height at which the text of its cells that wrap
-  // fits the room the cells that keep one line leave, each cell as tall as
-  // the next unless its column is already at its narrowest. A cell's text is
-  // the area it covers (its content width by its height), which no share of
-  // the room makes smaller. The browser shares the room in proportion to
-  // each column's longest line, a word at a time, so a column that wraps can
-  // stand a line past its exact share: one line each. Past what any layout of
-  // the row can reach, it is no measure, and the row is judged by the budget
-  // alone.
-  const balanced = (row, cells) => {
-    const least = narrowest(row.closest('table'), cells);
-    let room = box(row).width;
-    const wrapping = [];
-    cells.forEach(({cell, style, tall}, i) => {
-      const width = box(cell).width;
-      if (tall <= 1.5 * lineOf(style)) { room -= width; return; }
-      const inset = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-      room -= inset;
-      wrapping.push({area: (width - inset) * tall, least: least[i] - inset});
-    });
-    const needs = (height) => wrapping.reduce((sum, c) => sum + Math.max(c.least, c.area / height), 0);
-    let low = 0, high = Math.max(...cells.map((c) => c.tall)) * 4;
-    if (needs(high) > room) return {height: 0, columns: 0};
-    for (let step = 0; step < 30; step++) {
-      const mid = (low + high) / 2;
-      if (needs(mid) > room) low = mid; else high = mid;
-    }
-    return {height: high, columns: wrapping.length};
-  };
-  const found = [];
-  for (const row of document.querySelectorAll('main tbody tr')) {
-    if (!row.getClientRects().length || row.cells.length === 1) continue;
-    const cells = [...row.cells].filter((cell) => cell.getClientRects().length)
-      .map((cell) => ({cell, style: getComputedStyle(cell), tall: height(cell)}));
-    let best = null;
-    for (const {cell, style, tall} of cells) {
-      const line = lineOf(style);
-      if (tall <= (lines + 0.5) * line) continue;
-      best ??= balanced(row, cells);
-      const shared = best.height + best.columns * line;
-      if (tall > Math.max(lines * line, shared) + 0.5 * line) {
-        found.push(`${describe(row.closest('table'))} row ${row.rowIndex}: ${describe(cell)} is ${(tall / line).toFixed(1)} lines, ${(shared / line).toFixed(1)} at its row's best: ${cell.textContent.trim().replace(/\\s+/g, ' ').slice(0, 60)}`);
-      }
-    }
-  }
-  return [...new Set(found)];
-}"""
-)
-
-UNPADDED_CELLS = (
-    "(selector) => {"
-    + DESCRIBE
-    + """
-  // A dialog or popover placed in a band and shown lays out in the top
-  // layer, not in the band.
-  return [...document.querySelectorAll(selector)]
-    .filter((el) => el.getBoundingClientRect().width > 0 && !el.matches(':modal, :popover-open'))
-    .filter((el) => {
-      const style = getComputedStyle(el);
-      return parseFloat(style.paddingLeft) < 4 || parseFloat(style.paddingTop) < 4;
-    })
-    .map(describe);
-}"""
-)
 
 # A row that arrives in a table already fitted, as the parser adds a long
 # table's later rows after the first are fitted, then for every record's row
@@ -252,42 +127,6 @@ TABLES_THAT_DO_NOT_FIT = """(scroll) => [...document.querySelectorAll('main ' + 
   .map(([box, table]) => (box.getAttribute('aria-label') || table.querySelector('th')?.textContent || '').trim().slice(0, 24)
     + ' +' + Math.round(table.getBoundingClientRect().width - box.clientWidth))"""
 
-NAME_EDGES = """(scroll) => [...document.querySelectorAll('main ' + scroll + ' > table')]
-  .map((table) => [table, [...table.querySelectorAll('tbody button[aria-expanded]')].find((el) => el.checkVisibility())])
-  .filter(([table, toggle]) => table.checkVisibility() && toggle)
-  .map(([table, toggle]) => {
-    const column = toggle.closest('td, th').cellIndex;
-    const edges = [...table.querySelectorAll('tbody > tr:not([data-row-detail])')]
-      .map((row) => row.children[column])
-      // A cell that holds only the toggle has no name: the name starts the next cell.
-      .map((cell) => (cell && !cell.textContent.trim() ? cell.nextElementSibling : cell))
-      .filter((cell) => cell && !cell.hasAttribute('colspan') && cell.textContent.trim())
-      .map((cell) => {
-        const range = document.createRange();
-        range.selectNodeContents(cell);
-        const first = [...range.getClientRects()].find((rect) => rect.width > 1);
-        return first ? Math.round(first.left) : null;
-      })
-      .filter((edge) => edge !== null);
-    return new Set(edges).size;
-  })"""
-
-CELLS_OFF_THE_FIRST_LINE = (
-    "(scroll) => {"
-    + DESCRIBE
-    + """
-  // A row reads from its first line: its toggle is placed there, so every
-  // cell of the row starts there too, whatever page the table is on.
-  const found = [];
-  for (const table of document.querySelectorAll('main ' + scroll + ' > table')) {
-    for (const cell of table.querySelectorAll(':scope > * > tr > *')) {
-      const align = getComputedStyle(cell).verticalAlign;
-      if (align !== 'top') found.push(`${describe(cell)} in ${describe(table)} is set ${align}`);
-    }
-  }
-  return [...new Set(found)];
-}"""
-)
 
 UNSEEN_COLUMNS = (
     "(scroll) => {"
@@ -388,31 +227,6 @@ PAST_THE_GUTTER = (
 }"""
 )
 
-# A column no row has anything in.
-EMPTY_COLUMNS = (
-    "() => {"
-    + DESCRIBE
-    + """
-  const found = [];
-  const shown = (cell) => cell.textContent.trim()
-    || [...cell.querySelectorAll('img, svg, button, input, select, a')].some((el) => el.checkVisibility());
-  for (const table of document.querySelectorAll('main table')) {
-    if (!table.checkVisibility()) continue;
-    const rows = [...table.querySelectorAll(':scope > tbody > tr:not([data-row-detail])')]
-      .filter((row) => row.checkVisibility());
-    if (!rows.length) continue;
-    const width = Math.max(...rows.map((row) => row.cells.length));
-    for (let column = 0; column < width; column++) {
-      const cells = rows.map((row) => row.cells[column]).filter((cell) => cell && cell.colSpan === 1 && cell.checkVisibility());
-      if (cells.length === rows.length && !cells.some(shown)) {
-        const head = table.tHead?.rows[0]?.cells[column];
-        found.push(`${describe(table)} column ${column + 1} ("${head ? head.textContent.trim() : ''}") is empty in every row`);
-      }
-    }
-  }
-  return found;
-}"""
-)
 
 # A table with a column of dashes, a column of marks with no words, and a
 # column of short words: the server marks the dashes blank and they are not
@@ -461,3 +275,31 @@ ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr:not([data-row-det
   shown: [...row.querySelectorAll('button[aria-expanded]')].some((toggle) => toggle.checkVisibility()),
   beside_name: row.querySelector('button[aria-expanded]')?.parentElement === row.cells[0],
 }))"""
+
+# A path's steps, as the service page draws them: an address with a port, a
+# host name and a list of networks beside sentences, in tables with ranked
+# columns to let go; what each prints is in IDENTIFIER_VALUES.
+IDENTIFIER_TABLES = """{% load value_tags %}
+{% table_region "Steps" %}<table class="data-table"><thead><tr>
+{% table_heading "Step" gutter=True %}{% table_heading "Name" "identifier" %}{% table_heading "State" "status" %}
+{% table_heading "Since" drop=3 %}{% table_heading "If it breaks" drop=2 %}{% table_heading "Read from" drop=1 %}</tr></thead><tbody>
+<tr><td>Proxy host</td><td><a href="/proxy/" data-entity="Proxy host">{{ address|breakable }}</a></td>
+<td><span class="pill">Up</span></td><td>1 day</td><td>If it is removed, the name stops reaching the app it serves.</td>
+<td>Read from the proxy's own list of hosts, a minute ago</td></tr>
+<tr><td>Forwards to</td><td>{{ address|breakable }}</td><td><span class="pill">Up</span></td><td>1 day</td>
+<td>If nothing listens there, a reader gets a gateway error.</td><td>Read from the container's ports</td></tr>
+<tr><td>Service</td><td><span data-entity="Service">{{ host|breakable }}</span></td><td></td><td>1 day</td>
+<td>The service stops answering at this name.</td><td>Declared in HQ</td></tr>
+</tbody></table>{% endtable_region %}
+{% table_region "Who is allowed" %}<table class="data-table"><thead><tr>
+{% table_heading "Access list" gutter=True %}{% table_heading "Admits by" drop=3 %}
+{% table_heading "Addresses" drop=2 %}{% table_heading "Logins" drop=1 %}</tr></thead><tbody>
+<tr><td>office only</td><td>Address rules</td><td>{{ networks|breakable }}</td><td>{{ logins|breakable }}</td></tr>
+</tbody></table>{% endtable_region %}"""
+
+IDENTIFIER_VALUES = {
+    "address": "203.0.113.214:8000",
+    "host": "status.example.com",
+    "networks": "allow 198.51.100.0/24; allow 2001:db8:a1e0::/48",
+    "logins": "none",
+}

@@ -9,7 +9,7 @@ from hq.platform.core.models import AuditLog
 
 from ..adoption import AdoptCommand, adopt, unmanaged
 from ..adoption_testing import connection
-from ..infrastructure import PolicyError
+from ..record_errors import PolicyError
 from ..report_testing import report_connections
 from ..resource_operations import OperationCommand, request_removal
 from ..security import cli_principal

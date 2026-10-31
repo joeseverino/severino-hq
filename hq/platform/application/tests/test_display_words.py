@@ -46,7 +46,7 @@ class InWordsTests(SimpleTestCase):
 class ConstructionTests(SimpleTestCase):
     def test_a_view_model_refuses_machine_text_where_it_is_built(self):
         for build in (
-            lambda: Kpi("Last read", "2026-10-22T09:36:47Z"),
+            lambda: Kpi("Last read", value="2026-10-22T09:36:47Z"),
             lambda: ListRow("Message", meta="2026-10-22"),
             lambda: Cell("[{'name': 'web'}]"),
             lambda: Insight("good", "Tailnet", "Device", "1", "Body", facts=(("Seen", "True"),)),
@@ -56,7 +56,7 @@ class ConstructionTests(SimpleTestCase):
 
     def test_a_value_that_is_not_text_is_refused(self):
         for build in (
-            lambda: Kpi("Enabled", True),
+            lambda: Kpi("Enabled", value=True),
             lambda: ListRow("Message", meta=date(2026, 10, 22)),
             lambda: Cell(None),
         ):
@@ -65,13 +65,13 @@ class ConstructionTests(SimpleTestCase):
 
     def test_a_label_or_a_facts_label_is_refused_as_a_fields_name(self):
         for build in (
-            lambda: Kpi("confirm_prune", 3),
+            lambda: Kpi("confirm_prune", value=3),
             lambda: Insight("good", "Tailnet", "Device", "1", "Body", facts=(("device_address", "192.0.2.10"),)),
         ):
             with self.assertRaises(ValueError):
                 build()
         Cell("hq_web")
-        Kpi("Containers", 3)
+        Kpi("Containers", value=3)
 
 
 class EveryDisplayTypeTests(SimpleTestCase):

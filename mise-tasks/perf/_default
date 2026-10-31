@@ -2,8 +2,7 @@
 #MISE description="For a performance claim: each page's weight, server and Chromium time, memory and cold start; --base compares with a base"
 #MISE extends="django"
 #MISE depends=[{task="setup:browser", args=["chromium"]}]
-#MISE env={SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION="0", SEVERINO_HQ_PLUGINS="{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH="{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"}
-#MISE timeout="2h"
+#MISE env={SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION="0", SEVERINO_HQ_PLUGINS="{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH="{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}", SEVERINO_HEAVY_BOUND="2h"}
 #USAGE arg "<pages>" var=#true help="Pages as dev:look names them: estate/<path>, a path (/infrastructure/containers/), a route name (control_plane:containers), or estate/all or all for every page the navigation lists"
 #USAGE flag "--image" help="Measure the built image instead of dev:scratch: the one IMAGE names, else one image:build makes for the commit"
 #USAGE flag "--seed <name>" default="showcase" help="The data set every server measured is seeded with, as dev:scratch --seed names it (hq/platform/core/seeds.py)"

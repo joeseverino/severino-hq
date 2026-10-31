@@ -5,11 +5,13 @@ call on a thread with a database connection of its own, against a WAL SQLite
 file with one writer at a time.
 """
 
+import asyncio
 import json
 import os
 import shutil
 import subprocess
 import tempfile
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from functools import cache
 from pathlib import Path
@@ -18,10 +20,19 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.test import TransactionTestCase, override_settings
+from django.utils import timezone
 
 from hq.domains.control_plane.bridge_application import application
-from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.domains.control_plane.models import (
+    DashboardMachine,
+    DashboardRefreshRequest,
+    ManagedResource,
+    OperationRequest,
+    ProviderConnection,
+)
 from hq.platform.application import cadence
+from hq.platform.application.capabilities import execute_capability
+from hq.platform.application.glance import DASHBOARD_REFRESH
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.resource_operations import OperationCommand, request_reconcile
 from hq.platform.application.security import cli_principal
@@ -142,13 +153,22 @@ def controller_binary() -> Path:
 
 class Counted:
     """The bridge application, with each call's action kept as it arrives: the
-    caller may have its answer and be gone before the application returns."""
+    caller may have its answer and be gone before the application returns.
+    A call to the action named ``held`` waits until the test releases it, so a
+    pass can be stopped where it stands while another runs."""
 
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.held = ""
+        self.reached = threading.Event()
+        self.released = threading.Event()
 
     async def __call__(self, scope, receive, send):
-        self.calls.append(scope["path"].removeprefix("/"))
+        action = scope["path"].removeprefix("/")
+        self.calls.append(action)
+        if action == self.held:
+            self.reached.set()
+            await asyncio.to_thread(self.released.wait, 120)
         await application(scope, receive, send)
 
 
@@ -161,20 +181,28 @@ class ControllerPassTests(TransactionTestCase):
         directory = manager.__enter__()
         self.socket = directory / "bridge.sock"
         self.addCleanup(manager.__exit__, None, None, None)
-        self.enterContext(override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(directory / "heartbeat")))
+        self.enterContext(
+            override_settings(
+                SEVERINO_CONTROLLER_HEARTBEAT=str(directory / "heartbeat"),
+                SEVERINO_CONTROLLER_DOORBELL=str(directory / "controller-doorbell"),
+            )
+        )
         self.bridge = Counted()
         serving = served(self.bridge, self.socket)
         serving.__enter__()
         self.addCleanup(serving.__exit__, None, None, None)
 
+    def environment(self, socket: Path | None = None) -> dict[str, str]:
+        return {
+            "PATH": os.environ.get("PATH", ""),
+            "SEVERINO_BRIDGE_SOCKET": str(socket or self.socket),
+            "HQ_CONTROLLER_ID": "example-controller",
+        }
+
     def run_pass(self, *arguments: str, socket: Path | None = None) -> tuple[int, list[dict]]:
         result = subprocess.run(
             [str(controller_binary()), *arguments],
-            env={
-                "PATH": os.environ.get("PATH", ""),
-                "SEVERINO_BRIDGE_SOCKET": str(socket or self.socket),
-                "HQ_CONTROLLER_ID": "example-controller",
-            },
+            env=self.environment(socket),
             capture_output=True,
             text=True,
             timeout=120,
@@ -218,3 +246,39 @@ class ControllerPassTests(TransactionTestCase):
         self.assertEqual(lines[-1]["ok"], False)
         self.assertIn("HQ is not serving the bridge", lines[-1]["message"])
         self.assertEqual(self.bridge.calls, [])
+
+    def test_while_a_sweep_runs_a_refresh_is_read_by_a_glance_pass_beside_it(self):
+        """A refresh asked for while a controller pass sweeps is read by a
+        glance pass that runs beside it, and answered before the sweep ends."""
+
+        self.bridge.held = "sweep-due"
+        machine = ManagedResource.objects.create(key="example-controller", kind="machine", spec={"name": "example"})
+        ProviderConnection.objects.create(
+            connection_ref="example-ssh",
+            controller_id=machine.key,
+            provider="ssh",
+            endpoint="192.0.2.10",
+            observed_at=timezone.now(),
+        )
+        DashboardMachine.objects.create(machine=machine)
+        sweep = subprocess.Popen(
+            [str(controller_binary()), "--apply"],
+            env=self.environment(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            self.assertTrue(self.bridge.reached.wait(120), "the pass never reached its sweep")
+
+            execute_capability(DASHBOARD_REFRESH, {}, principal=cli_principal())
+            code, lines = self.run_pass("--glance")
+
+            self.assertEqual(code, 0, lines)
+            self.assertIsNone(sweep.poll(), "the sweep ended before the glance pass ran")
+            request = DashboardRefreshRequest.objects.get(panel_id=f"machine-{machine.pk}")
+            self.assertIsNotNone(request.completed_at)
+        finally:
+            self.bridge.released.set()
+            out, _ = sweep.communicate(timeout=120)
+        self.assertEqual(sweep.returncode, 0, out)

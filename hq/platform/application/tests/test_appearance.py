@@ -3,13 +3,17 @@
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.contrib.auth.models import AnonymousUser
+from django.template import Context, Template
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
+from hq.platform.core.context_processors import appearance
 from hq.platform.core.models import Appearance, AuditLog
 
-from ..appearance import set_theme, theme_for
-from ..security import AuthorizationError, Capability, Principal
+from ..appearance import SET_THEME, ThemeCommand, set_theme, theme_for
+from ..capabilities import execute_capability
+from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, web_principal
 from .markup import elements, select
 
 
@@ -31,36 +35,60 @@ def pressed(response) -> list[str]:
     return [choice.attrs["value"] for choice in select(response, "aria-pressed", "true") if "value" in choice.attrs]
 
 
+def denials() -> int:
+    return AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=SET_THEME).count()
+
+
 class ThemeServiceTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.person = Principal("op", "web", frozenset())
+        self.person = web_principal(self.user)
+
+    def choose(self, theme, principal=None):
+        return execute_capability(SET_THEME, {"theme": theme}, principal=principal or self.person)
 
     def test_nobody_has_chosen_until_they_choose(self):
         self.assertEqual(theme_for(self.user), "system")
         self.assertFalse(Appearance.objects.exists())
 
+    def test_anybody_signed_out_follows_the_system(self):
+        # The context processor passes signed_in(request), which is None for
+        # anybody signed out.
+        self.assertEqual(theme_for(None), "system")
+
+    def test_a_signed_out_page_prints_its_theme(self):
+        request = RequestFactory().get("/")
+        request.user = AnonymousUser()
+        context = appearance(request)
+
+        self.assertEqual(Template("{{ THEME }}").render(Context(context)), "system")
+
     def test_a_choice_is_kept_and_recorded_once(self):
-        set_theme("dark", principal=self.person, user=self.user)
-        set_theme("dark", principal=self.person, user=self.user)
+        self.choose("dark")
+        self.choose("dark")
 
         self.assertEqual(theme_for(self.user), "dark")
-        self.assertEqual(
-            list(AuditLog.objects.filter(object_type="Appearance").values_list("message", flat=True)),
-            ["Theme set to Dark"],
-        )
+        (event,) = AuditLog.objects.filter(object_type="Appearance")
+        self.assertEqual((event.message, event.metadata["operation"]), ("Theme set to Dark", SET_THEME))
 
     def test_no_credential_can_choose_for_a_person(self):
-        for interface in ("mcp", "api", "cli"):
-            credential = Principal("example-agent", interface, frozenset({Capability.READ}))
-            with self.subTest(interface=interface), self.assertRaises(AuthorizationError):
-                set_theme("dark", principal=credential, user=self.user)
+        granted = frozenset(Capability)
+        for principal in (
+            Principal("example-agent", "mcp", granted, granted=granted),
+            Principal("example-client", "api", granted, granted=granted),
+            cli_principal(),
+        ):
+            with self.subTest(interface=principal.interface):
+                self.assertEqual(self.choose("dark", principal)["error"]["code"], "forbidden")
         self.assertEqual(theme_for(self.user), "system")
+        self.assertEqual(denials(), 3)
 
     def test_an_unknown_theme_is_refused(self):
         for theme in ("", "sepia", "DARK", "system "):
-            with self.subTest(theme=theme), self.assertRaises(ValueError):
-                set_theme(theme, principal=self.person, user=self.user)
+            with self.subTest(theme=theme):
+                self.assertEqual(
+                    self.choose(theme)["error"], {"code": "invalid_input", "message": "Choose system, light or dark."}
+                )
         self.assertFalse(Appearance.objects.exists())
 
     def test_the_choice_does_not_happen_without_its_record(self):
@@ -68,7 +96,7 @@ class ThemeServiceTests(TestCase):
             mock.patch("hq.platform.application.appearance.record_event", side_effect=RuntimeError("audit down")),
             self.assertRaises(RuntimeError),
         ):
-            set_theme("dark", principal=self.person, user=self.user)
+            set_theme(ThemeCommand("dark"), principal=self.person)
         self.assertEqual(theme_for(self.user), "system")
 
 
@@ -105,10 +133,19 @@ class ThemeSwitchTests(TestCase):
             with self.subTest(theme=theme):
                 refused = self.choose(theme)
                 self.assertEqual(refused.status_code, 400)
-                # The reply is fixed, never the exception's text.
                 self.assertEqual(refused.content, b"Choose system, light or dark.")
         self.assertEqual(self.client.post(reverse("theme")).status_code, 400)
         self.assertEqual(theme_for(self.user), "dark")
+
+    def test_an_operator_without_the_grant_is_refused_with_the_reason(self):
+        lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.SET_PREFERENCES})
+        with mock.patch("hq.platform.core.views.web_principal", return_value=lacking):
+            refused = self.choose("dark")
+
+        self.assertEqual(refused.status_code, 403)
+        self.assertIn(b"set_preferences", refused.content)
+        self.assertEqual(theme_for(self.user), "system")
+        self.assertEqual(denials(), 1)
 
     def test_it_only_changes_on_post(self):
         self.assertEqual(self.client.get(reverse("theme"), {"theme": "dark"}).status_code, 405)

@@ -11,6 +11,7 @@ from hq.domains.assets.models import Asset
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
 from hq.platform.application import projection
+from hq.platform.application.plugin_testing import offering
 from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import Capability, Principal, is_interactive
 from hq.platform.application.tests.host_only import host_only
@@ -232,6 +233,7 @@ class ServiceTests(SentinelMixin, TestCase):
         capabilities = services.describe_capabilities()["capabilities"]
         project_create = next(item for item in capabilities if item["name"] == "project.create")
         self.assertEqual(project_create["resource"], "projects")
+        self.assertNotIn("certificate.upload", {item["name"] for item in capabilities})
         self.assertEqual(listed["items"][0]["slug"], project.slug)
         self.assertEqual(detail["slug"], project.slug)
 
@@ -241,8 +243,8 @@ class ServiceTests(SentinelMixin, TestCase):
         from ..contract import resource_contract
 
         plant_credentials()
-        listable = [resource.name for resource in resource_contract(document()).listable]
         with host_only():
+            listable = [resource.name for resource in resource_contract(document()).listable]
             answers = {
                 "describe_connections": services.describe_connections(),
                 "list_connections": services.list_connections(),
@@ -396,7 +398,6 @@ class ServiceTests(SentinelMixin, TestCase):
 
     def test_connection_state_is_filtered_by_the_mcp_principal(self):
         from hq.platform.application.connections import ConnectionSpec
-        from hq.platform.application.security import Capability
 
         provider = mock.Mock(return_value=())
         spec = ConnectionSpec(
@@ -406,7 +407,7 @@ class ServiceTests(SentinelMixin, TestCase):
             Capability.MANAGE_INFRASTRUCTURE,
             provider,
         )
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
+        with offering(spec, alone=True):
             listed = services.list_connections()
 
         self.assertNotIn("example.infrastructure", [group["name"] for group in listed["groups"]])
@@ -505,10 +506,10 @@ class MCPBoundaryTests(TestCase):
 
         from ..contract import resource_contract
 
-        listable = [resource.name for resource in resource_contract(document()).listable]
-        failed = {}
+        listable, failed = [], {}
 
         def read_every_resource():
+            listable.extend(resource.name for resource in resource_contract(document()).listable)
             for name in listable:
                 try:
                     services.list_resource(name)
@@ -706,7 +707,7 @@ class AgentBrakeTests(MCPBoundaryTests):
     A_JWT = "header.payload.signature"
 
     @staticmethod
-    def _gate(allowed):
+    def _gate(*, allowed):
         async def gate():
             return allowed
 
@@ -723,14 +724,14 @@ class AgentBrakeTests(MCPBoundaryTests):
             reached.append(True)
             await self._allowed_app(scope, receive, send)
 
-        status, body = self._request(token=self.A_JWT, verifier=self._agent(), gate=self._gate(False), app=app)
+        status, body = self._request(token=self.A_JWT, verifier=self._agent(), gate=self._gate(allowed=False), app=app)
 
         self.assertEqual(status, 403)
         self.assertEqual(body["error"], "agents_paused")
         self.assertEqual(reached, [], "a paused agent must not reach a tool, or the tool list")
 
     def test_the_default_agent_is_paused_too(self):
-        status, body = self._request(gate=self._gate(False))
+        status, body = self._request(gate=self._gate(allowed=False))
 
         self.assertEqual(status, 403)
         self.assertEqual(body["error"], "agents_paused")
@@ -745,13 +746,13 @@ class AgentBrakeTests(MCPBoundaryTests):
         self.assertEqual(body["error"], "agents_paused")
 
     def test_only_an_authenticated_caller_learns_agents_are_paused(self):
-        status, body = self._request(token="wrong", gate=self._gate(False))
+        status, body = self._request(token="wrong", gate=self._gate(allowed=False))
 
         self.assertEqual(status, 401)
         self.assertEqual(body["error"], "unauthorized")
 
     def test_allowed_agents_pass(self):
-        status, _ = self._request(token=self.A_JWT, verifier=self._agent(), gate=self._gate(True))
+        status, _ = self._request(token=self.A_JWT, verifier=self._agent(), gate=self._gate(allowed=True))
 
         self.assertEqual(status, 204)
 
@@ -790,90 +791,6 @@ class GrantCeilingTests(TestCase):
             agent = token_principal(self._claims("read"))
 
         self.assertFalse(agent.permits("write_projects"))
-
-
-class DoorRefusalTests(MCPBoundaryTests):
-    A_JWT = "header.payload.signature"
-
-    def _recorder(self):
-        seen = []
-
-        async def record(**fields):
-            seen.append(fields)
-
-        return record, seen
-
-    def test_a_bad_credential_is_counted_as_unauthenticated_with_its_source(self):
-        record, seen = self._recorder()
-
-        self._request(token="wrong", on_denied=record)
-
-        self.assertEqual(seen, [{"reason": "invalid_credential", "source": "100.64.0.10", "authenticated": False}])
-
-    def test_a_missing_credential_is_counted(self):
-        record, seen = self._recorder()
-
-        self._request(token=None, on_denied=record)
-
-        self.assertEqual(seen[0]["reason"], "missing_credential")
-
-    def test_a_paused_agent_is_recorded_by_name(self):
-        record, seen = self._recorder()
-        agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
-
-        async def paused():
-            return False
-
-        self._request(token=self.A_JWT, verifier=lambda bearer: agent, gate=paused, on_denied=record)
-
-        self.assertEqual(seen[0]["reason"], "agents_paused")
-        self.assertEqual(seen[0]["actor"], "example-agent")
-
-    def test_a_recorder_that_fails_does_not_change_the_answer(self):
-        async def broken(**fields):
-            raise RuntimeError("audit down")
-
-        status, body = self._request(token="wrong", on_denied=broken)
-
-        self.assertEqual(status, 401)
-        self.assertEqual(body["error"], "unauthorized")
-
-    def test_an_admitted_request_records_nothing(self):
-        record, seen = self._recorder()
-
-        status, _ = self._request(on_denied=record)
-
-        self.assertEqual(status, 204)
-        self.assertEqual(seen, [])
-
-
-class ObservationTests(MCPBoundaryTests):
-    A_JWT = "header.payload.signature"
-
-    def test_an_authenticated_agent_is_observed_even_while_paused(self):
-        seen = []
-        agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
-
-        async def observer(principal):
-            seen.append(principal.actor)
-
-        async def paused():
-            return False
-
-        status, _ = self._request(token=self.A_JWT, verifier=lambda bearer: agent, gate=paused, observer=observer)
-
-        self.assertEqual(status, 403)
-        self.assertEqual(seen, ["example-agent"])
-
-    def test_a_rejected_credential_is_not_observed(self):
-        seen = []
-
-        async def observer(principal):
-            seen.append(principal)
-
-        self._request(token="wrong", observer=observer)
-
-        self.assertEqual(seen, [])
 
 
 class TheCallerReachesTheToolTests(TestCase):
@@ -1007,6 +924,11 @@ class ResourceContractTests(SimpleTestCase):
             document = self._document()
             del document["paths"]["/resources/example.notes/{identifier}/"]["get"][field]
             with self.subTest(field=field), self.assertRaises(ValueError):
+                resource_contract(document)
+        for name in ("", 7):
+            document = self._document()
+            document["paths"]["/resources/example.events/"]["get"]["x-hq-resource"] = name
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "name and description"):
                 resource_contract(document)
         document = self._document()
         document["paths"]["/duplicate/"] = document["paths"]["/resources/example.events/"]

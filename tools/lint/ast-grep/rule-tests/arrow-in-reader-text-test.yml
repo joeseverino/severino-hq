@@ -1,0 +1,13 @@
+id: arrow-in-reader-text
+valid:
+  - |
+    def name():
+        """``a`` → "A"."""
+  - 'label = f"{before} to {after}"'
+  - '# before → after'
+invalid:
+  - 'label = f"{before} → {after}"'
+  - 'line = " → ".join(hops)'
+  - 'ended("a → b")'
+  - 'LINES = ["- Receipts → HQ only"]'
+  - 'message = "from " f"{a} → {b}"'

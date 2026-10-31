@@ -35,8 +35,8 @@ func unmoved(path string) bool {
 	if path == "" || path == "/" || strings.HasSuffix(path, "/") || !filepath.IsAbs(path) {
 		return false
 	}
-	real, err := filepath.EvalSymlinks(filepath.Dir(path))
-	if err != nil || strings.TrimSuffix(real, "/")+"/"+filepath.Base(path) != path {
+	resolved, err := filepath.EvalSymlinks(filepath.Dir(path))
+	if err != nil || strings.TrimSuffix(resolved, "/")+"/"+filepath.Base(path) != path {
 		return false
 	}
 	info, err := os.Lstat(path)

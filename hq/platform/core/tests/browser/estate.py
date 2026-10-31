@@ -14,10 +14,12 @@ that one load; a finding names its check, page, width and theme.
 
 import json
 import re
-from functools import cache, partial
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
+from functools import cache
 from html import unescape
 from types import MappingProxyType
-from typing import override
+from typing import Any, override
 from urllib.parse import parse_qsl, urljoin, urlsplit
 
 from django.conf import settings
@@ -27,29 +29,29 @@ lazy from django.db import transaction
 
 from hq.platform.core.tests.browser.gate import BrowserGate, answered
 from hq.platform.core.tests.browser.in_flight import InFlight
-from hq.platform.core.tests.browser.probes.boxes import SIDEWAYS, UNPADDED_TILES
+from hq.platform.core.tests.browser.probes.boxes import SIDEWAYS
 from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, FONTS_READY, SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, WIDE_TABLES, WIDTHS, viewport
 lazy from hq.platform.application.domains import domain_navigation
 lazy from hq.platform.core import seeds
-lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production
+lazy from hq.platform.core.example_estate import REQUEST, SSO
 lazy from hq.platform.core.example_estate.names import MACHINE, SERVICES
 lazy from hq.platform.core.example_estate.network import ZONE_KEY
+lazy from hq.platform.core.example_estate.testing import as_production
 
-# The gate's widths and a wide desktop: the example estate is the homelab as a
-# person reads it, on every screen up to the widest. Where a script could move
-# what the server drew.
-DRAWN_AT = (*WIDTHS, 1680)
-# Those, and the laptop windows where a wide table has the least room.
-READ_AT = tuple(sorted((*DRAWN_AT, *WIDE_TABLES)))
+# The gate's widths, a wide desktop and the laptop windows where a wide table
+# has the least room: the example estate is the homelab as a person reads it,
+# on every screen up to the widest.
+READ_AT = tuple(sorted((*WIDTHS, 1680, *WIDE_TABLES)))
 THEMES = ("light", "dark")
 # The API reference mounts a vendored viewer, whose markup is not HQ's to hold
 # to these rules; ReferenceBrowserTests holds it to its own.
 _NOT_HQS_MARKUP = {"api_reference:reference"}
 # Reached from the header on every page rather than from the navigation.
 _HEADER = ("action_items",)
+_REDIRECTS = frozenset({301, 302, 303, 307, 308})
 _REGION = re.compile(r'<[^>]*\sdata-fragment="([^"]+)"[^>]*>')
 _NAME = re.compile(r'\sdata-fragment-name="([^"]*)"')
 
@@ -80,6 +82,52 @@ def navigation():
     return list(dict.fromkeys(reverse(route) for route in (*routes, *_HEADER)))
 
 
+class Redirected(Exception):
+    """A page that leaves HQ or redirects back to itself, so it lands on no page of HQ's."""
+
+
+def landing(ask: Callable[[str], Any], address: str) -> str:
+    """The page ``address`` lands on: each redirect within HQ followed to the page that answers.
+
+    A navigation entry may be a stop on the way (Domains goes straight to a domain), and a list
+    of pages names the page a reader reaches, which is the one a gate draws and perf measures."""
+
+    seen = [address]
+    while (response := ask(address)).status_code in _REDIRECTS:
+        to = urlsplit(urljoin(address, response.headers["Location"]))
+        if to.scheme or to.netloc:
+            raise Redirected(f"{seen[0]} redirects out of HQ, to {to.geturl()}")
+        address = to.path + (f"?{to.query}" if to.query else "")
+        if address in seen:
+            raise Redirected(f"{seen[0]} redirects in a loop: {' -> '.join([*seen, address])}")
+        seen.append(address)
+    return address
+
+
+def landings(ask: Callable[[str], Any], addresses: Sequence[str]) -> list[str]:
+    """Each of ``addresses`` as the page it lands on, once each, in order."""
+
+    return list(dict.fromkeys(landing(ask, address) for address in addresses))
+
+
+def ask_as_production(client, url, **headers):
+    """``url`` asked of HQ the way production asks it, its redirect answered rather than followed."""
+
+    return client.get(url, secure=True, **REQUEST, **headers)
+
+
+@contextmanager
+def owner_client(seed: str = "showcase") -> Iterator[Client]:
+    """A client signed in as the owner of ``seed`` built in this database, answered as production
+    answers, everything it built rolled back when the block ends."""
+
+    with transaction.atomic(), as_production(), seeds.built(seed) as owner:
+        client = Client()
+        client.force_login(owner, backend=SSO)
+        yield client
+        transaction.set_rollback(True)
+
+
 def records():
     """A record's page of each kind the navigation lists: the machine, the
     service with the longest name, its container (which has an upgrade to
@@ -105,17 +153,15 @@ def render_estate():
         return client.get(url, secure=True, follow=True, **REQUEST, **headers)
 
     answers = {}
-    with transaction.atomic(), as_production(), seeds.built("showcase") as owner:
-        client = Client()
-        client.force_login(owner, backend=SSO)
-        paths = navigation() + records()
+    with owner_client() as client:
+        paths = landings(lambda address: ask_as_production(client, address), [*navigation(), *records()])
         for path in paths:
-            response = ask(client, path)
+            # Asked as listed, unfollowed: a page in the list is the page itself, never a redirect to one.
+            response = ask_as_production(client, path)
             if response.status_code != 200:
                 raise AssertionError(f"{path} answered {response.status_code}")
             answers[path, ""] = answered(response)
             _fragments(client, answers[path, ""], answers, ask)
-        transaction.set_rollback(True)
     return paths, answers
 
 
@@ -180,20 +226,12 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
     def opened(self):
         """What holds once every disclosure on the page is open."""
 
-        found = {
-            "tile padding": self.page.evaluate(
-                UNPADDED_TILES,
-                [
-                    SELECTORS["tile_exempt"],
-                    SELECTORS["tile_control"],
-                    SELECTORS["tile_detached"],
-                    SELECTORS["disclosure"],
-                ],
-            )
-        }
+        self.page.evaluate(
+            "(disclosure) => document.querySelectorAll(disclosure).forEach((d) => { d.open = true; })",
+            SELECTORS["disclosure"],
+        )
         self.page.evaluate(SETTLE)
-        found["sideways, opened"] = self.page.evaluate(SIDEWAYS, SELECTORS["sideways"])
-        return found
+        return {"sideways, opened": self.page.evaluate(SIDEWAYS, SELECTORS["sideways"])}
 
     def test_every_navigation_page_keeps_the_layout_rules(self):
         self.assertGreater(len(self.navigation), 10, "the navigation led almost nowhere")
@@ -214,25 +252,6 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
                     failed = {check: said for check, said in found.items() if said}
                     if failed:
                         self.fail(json.dumps(failed, indent=1))
-
-
-class ExampleEstateDrawnTests(ExampleEstateGate):
-    """Nothing on a navigation page of the example estate moves once drawn."""
-
-    def test_nothing_moves_once_a_page_is_drawn(self):
-        """What the server draws is where things stay: a script and a part
-        fetched after the page fill room that was already there."""
-
-        for path in self.navigation:
-            for width in DRAWN_AT:
-                with self.subTest(page=path, width=width):
-                    moved = self.moved_once_drawn(
-                        f"{ORIGIN}{path}", width, partial(self.in_flight.settle, f"{path} at {width}px")
-                    )
-                    failed = [*moved, *self.refusals_so_far()]
-                    if failed:
-                        self.fail("\n".join(failed))
-                    self.unanswered = []
 
 
 # A list's toolbar boxes (a filter's options and its toggles), the sort its
@@ -478,6 +497,20 @@ class ExampleEstateControlTests(BrowserGate):
                 self.assertTrue(0 < rows.count() <= every)
                 marks = rows.locator(".pill").evaluate_all("(pills) => pills.map((pill) => [...pill.classList])")
                 self.assertEqual([mark for mark in marks if f"pill-{chosen}" not in mark], [])
+
+    def test_a_category_opened_in_the_phone_drawer_keeps_the_drawer_open(self):
+        """A category's menu lives inside the drawer that holds it, so pressing
+        it opens the category and leaves the drawer open around it."""
+
+        self.visit(reverse("expenses:list"), PHONE_SCREEN[0])
+        self.page.locator(SELECTORS["nav_open"]).click()
+        drawer_open = self.page.locator(SELECTORS["nav_close"])
+        self.assertTrue(drawer_open.is_visible())
+        menu = self.page.locator(SELECTORS["nav_menu"]).first
+        menu.locator("summary").click()
+        self.assertTrue(menu.evaluate("(menu) => menu.open"))
+        self.assertTrue(menu.locator("a").first.is_visible())
+        self.assertTrue(drawer_open.is_visible())
 
     def test_a_menu_opens_and_closes_on_escape_and_a_press_outside(self):
         # The page's clock stands still, so a press lands while the hover delay

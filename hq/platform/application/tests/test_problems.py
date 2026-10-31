@@ -4,7 +4,9 @@ from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -152,9 +154,11 @@ class FirstSeenTests(TestCase):
             self.assertFalse(note_open_problems())
             first_seen._looked.clear()
             # Another process: the stored look still says none is due.
-            with mock.patch("hq.platform.application.problems._host_entries") as looked:
+            with CaptureQueriesContext(connection) as asked:
                 self.assertFalse(note_open_problems())
-            looked.assert_not_called()
+
+        # The read of the stored look, and no look, which derives the queue and records it.
+        self.assertLessEqual(len(asked), 1)
 
     def test_a_problem_found_by_a_report_says_since_when_on_its_card(self):
         with host_only():

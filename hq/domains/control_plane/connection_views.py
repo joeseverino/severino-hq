@@ -1,5 +1,6 @@
 """The connections page and asking the controller to read now."""
 
+from functools import cached_property
 from typing import ClassVar, override
 
 from django.views import View
@@ -38,17 +39,16 @@ class ConnectionListView(PageMixin, TemplateView):
     template_name = "control_plane/connection_list.html"
     page_title = "Connections"
 
+    @cached_property
     def _connections(self):
-        if not hasattr(self, "_context"):
-            self._context = connections_context(principal=web_principal(self.request.user), request=self.request)
-        return self._context
+        return connections_context(principal=web_principal(self.request.user), request=self.request)
 
     @override
     def get_page_actions(self):
         # Beside the title with every other page's controls, not on a line of
         # their own halfway down the summary.
         inspect = reverse("connection")
-        found = self._connections()
+        found = self._connections
         actions = []
         if found.setups or found.unconfigured or found.again:
             # What the page is for when growing HQ: always reachable, whether
@@ -67,7 +67,7 @@ class ConnectionListView(PageMixin, TemplateView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["connections"] = self._connections()
+        context["connections"] = self._connections
         return context
 
 

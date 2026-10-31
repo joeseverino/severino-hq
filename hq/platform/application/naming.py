@@ -1,14 +1,10 @@
 """What HQ already knows about a hostname, gathered once for whatever asks next.
 
-Every fact here is the output of work done elsewhere: the connection sweep says
-which zones a credential may edit, the service view resolves where a name is
-already served, the certificate registry knows what already covers it. This
-brings them to where they are needed, so a form does not ask for an address HQ
-already shows, or offer a certificate for a name no credential can prove.
-
-Kept out of ``control_plane.providers`` because this queries and that module
-declares. Providers say what they would do with each fact; this is the half that
-goes and gets them.
+Every fact here is work done elsewhere (the sweep's editable zones, where a name
+is already served, what certificate covers it), brought to where it is needed so
+a form does not ask for an address HQ already shows, or offer a certificate for
+a name no credential can prove. Kept out of ``control_plane.providers``, which
+declares what it would do with each fact; this is the half that queries.
 """
 
 from hq.domains.control_plane.names import certificate_covers, normalized_hostname
@@ -29,20 +25,19 @@ lazy from .connections import connection_rows
 def name_context(hostname: str) -> NameContext:
     """Everything HQ can say about one name, without being told.
 
-    Built per request rather than cached. A cache that outlived the request
+    Built per request rather than cached: a cache that outlived the request
     would answer "which zones can you reach" with what was true before the
-    credential was replaced, which is the one question whose staleness leads
-    somewhere expensive.
-
-    Within one request it is shared through `read_once`: a page that asks about
-    many names resolves each resource once, not once per name and reader.
+    credential was replaced, the one question whose staleness leads somewhere
+    expensive.
     """
 
     hostname = normalized_hostname(hostname)
     if not hostname:
         return NameContext()
-    # Joins the caller's scope when there is one; otherwise one of its own, so
-    # even a single ask resolves each resource once rather than once per reader.
+    # Within a request the reads are shared through `read_once`, so a page that
+    # asks about many names resolves each resource once, not once per name and
+    # reader. This joins the caller's scope when there is one; otherwise one of
+    # its own, so even a single ask resolves each resource once.
     with projection_scope():
         zones, swept = _reported_zones()
         return NameContext(
@@ -154,26 +149,20 @@ def _origin_for(hostname: str) -> str:
 def _reachable(origin: str) -> str:
     """The same origin, with the machine named as the network reaches it.
 
-    A stack says which machine it runs on by name, because that is what the
-    machine is called and what everything inside HQ matches on. A proxy is not
-    HQ: nginx resolves what it is given, and it has never heard the name.
-
-    The inverse of what every other surface asks, and asked of the same index,
-    so the name-to-address direction and the address-to-name direction cannot
-    disagree about which pair belongs together. Resolved against declarations
-    alone, deliberately: this fills in a form field, and the address an
-    operator should see there is the one somebody wrote down, not one inferred
-    from where a credential happens to point. It is also one query on a path
-    that runs once per service.
-
-    Unchanged when HQ knows no address for the machine, which leaves the
-    operator a wrong-looking value to correct rather than a plausible one to
-    trust.
+    A stack names its machine by name, which everything inside HQ matches on; a
+    proxy is not HQ, and nginx has never heard the name. Unchanged when HQ knows
+    no address for the machine, which leaves the operator a wrong-looking value
+    to correct rather than a plausible one to trust.
     """
 
     host, port = split_endpoint(origin)
     if not host or not port:
         return origin
+    # The inverse of what every other surface asks, of the same index, so the
+    # two directions cannot disagree about which pair belongs together. From
+    # declarations alone: this fills in a form field, whose address should be
+    # the one somebody wrote down, not one inferred from where a credential
+    # points; and it is one query on a path that runs once per service.
     index = read_once("naming.declared_index", lambda: index_of(declared=declared_machines()))
     address = index.address_for(host)
     return join_endpoint(address, port) if address else origin

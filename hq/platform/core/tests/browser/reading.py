@@ -16,11 +16,13 @@ _PROBE_PAGE = """{% load table_tags stylesheet_tags %}<!doctype html><html><head
 </head><body><main>"""
 
 
-def probe(markup):
-    """``markup``, in the table tags, as a page."""
+def probe(markup, **values):
+    """``markup``, in the table tags, as a page. ``values`` are what it
+    prints: a template's literal is already marked safe, so a filter that
+    holds a name (``breakable``) would pass it as it is."""
 
     return Template(_PROBE_PAGE + markup + "</main></body></html>").render(
-        Context({"static": settings.STATIC_URL, "nonce": NONCE})
+        Context({"static": settings.STATIC_URL, "nonce": NONCE, **values})
     )
 
 

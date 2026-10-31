@@ -2,8 +2,7 @@
 #MISE description="The suite as production configures it, with the coverage floor"
 #MISE hide=true
 #MISE extends="django"
-#MISE env={DJANGO_DEBUG=false}
-#MISE timeout="30m"
+#MISE env={DJANGO_DEBUG=false, SEVERINO_HEAVY_BOUND="30m"}
 
 # DJANGO_DEBUG unset: the settings take the defaults production takes (secure
 # cookies, cached templates, no live static). The development defaults are

@@ -1,15 +1,9 @@
 """HQ as a service of its own.
 
-Derived, never configured. The names are the site host and the concrete
-allowed hosts. The machine is the one answering at an address HQ is reached at:
-the address a request arrived on, what its names are seen resolving to, or the
-host's own routing addresses. Each is matched against the addresses machines
-carry, the same way the "this device" pill matches the caller's address, and
-the host's own addresses also against the endpoints a tailnet device reports,
-since a machine known only to the tailnet carries only tailnet addresses.
-Loopback and link-local addresses name no machine.
-
-Read-only. HQ's own service is not a declaration and nothing reconciles it.
+Derived, never configured: the names are the site host and the concrete
+allowed hosts, and the machine is the one answering at an address HQ is reached
+at (``hq_machine``). Read-only: HQ's own service is not a declaration and
+nothing reconciles it.
 """
 
 import ipaddress
@@ -200,9 +194,13 @@ def hq_machine(
     """
 
     served = tuple(served_at)
+    # Matched against the addresses machines carry, the same way the "this
+    # device" pill matches the caller's address.
     for address in hq_addresses(hostnames, answers, served):
         if owner := index.at(address):
             return owner
+    # A machine known only to the tailnet carries only tailnet addresses, so
+    # the host's own addresses are also matched against device endpoints.
     mine = set(own_addresses(served))
     owners = {
         owner

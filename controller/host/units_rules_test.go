@@ -134,7 +134,7 @@ func unitFailureBreaks(t *testing.T, dir string, read func(name, key string) str
 		// fails through the unit that cannot start without it.
 		return mountFailureBreaks(t, dir, read(name, "Where"), name)
 	}
-	if kind != "service" && kind != "timer" && kind != "path" {
+	if kind != "service" && kind != "timer" && kind != "path" && kind != "socket" {
 		return []string{fmt.Sprintf("%s: no failure drop-in covers a %s", name, kind)}
 	}
 	if !strings.HasPrefix(name, "severino-hq-") {
@@ -185,12 +185,14 @@ func TestAUnitThatBreaksARuleIsNamed(t *testing.T) {
 		{name: "an exemption no loop needs", write: map[string]string{"severino-hq-web.service.d/" + onFailureDropIn: "[Unit]\n"}},
 		{name: "a loop with no exemption", drop: "severino-hq-controller.service.d/" + onFailureDropIn},
 		{name: "a mount nothing requires", write: map[string]string{"run-example.mount": "[Mount]\nWhere=/run/example\n"}},
-		{name: "a unit type no drop-in covers", write: map[string]string{"severino-hq-example.socket": "[Socket]\n"}},
+		{name: "a unit type no drop-in covers", write: map[string]string{"severino-hq-example.slice": "[Slice]\n"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			dir := copyUnits(t)
 			for name, body := range c.write {
-				os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755)
+				if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+					t.Fatal(err)
+				}
 				if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
 					t.Fatal(err)
 				}
@@ -213,8 +215,12 @@ func TestShippedLeavesOutTemplatesAndStrays(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{"a.service", "a.timer", "b.path", "a.service.d/10-x.conf",
 		"a.service.d/20-y.conf.example", "connect.conf.example", "README", ".DS_Store", "nested/deeper/c.service"} {
-		os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755)
-		os.WriteFile(filepath.Join(dir, name), nil, 0o644)
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	shipped, err := Shipped(dir)

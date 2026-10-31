@@ -1,24 +1,12 @@
-"""A gate's last line names what failed, so nobody reads back through its output.
+"""A gate's last lines name what failed and the command that reruns just that,
+so nobody reads back through its output, and above them each failed task's
+last lines.
 
-Each step's output reaches the terminal unchanged, and what failed is named by
-what saw it fail: mise's `-c` summary (`[task] exited with status N`), read on
-the way past, names each task, and the test runner writes each failed test,
-the exception it raised and its traceback, into the folder the step names in
-HQ_TEST_REPORTS (hq/platform/core/test_runner.py). How long each task took is
-read the same way, from the `[task] Finished in` line mise prints after a task
-that passed; a task that failed prints no time. mise turns that line off in a
-task's own environment, so a `mise run` inside a task prints it only when
-asked, as `run` asks.
-
-The line, with every failed task and test on a line of its own, is also
-written to `var/gate/<name>.txt`, whose path is printed above it, for a reader
-whose copy of the output was cut. Each failed test's line there carries the
-exception it raised; the tasks' times follow the list, slowest first, then the
-tracebacks, so the file alone says why and where the time went.
-
-`python -m tools.gate.verdict <name> <command...>` runs one command this way,
-and `... <name> --step <label> <command...> [--step ...]` several in turn,
-each named by its label when nothing in it names what failed.
+Each failed task is named as mise names it and each failed test as the test
+runner records it, and `var/gate/<name>.txt` keeps the lines whole, beside the
+run before it in `<name>.prev.txt` (docs/Development.md, The gates).
+`python -m tools.gate.verdict <name> <command...>` runs one command so, and
+`--step <label> <command...>...` several.
 """
 
 from __future__ import annotations
@@ -26,11 +14,14 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
 import time
-from dataclasses import dataclass, field
+from collections import deque
+from collections.abc import Collection
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -39,8 +30,13 @@ ROOT = Path(__file__).resolve().parents[2]
 # helper does not import, so it runs where only tools/ is). GateVerdictTests
 # runs that runner's record under a gate, which holds the two to one shape.
 REPORTS = "HQ_TEST_REPORTS"
-# A line of mise's `-c` summary.
-TASK = re.compile(r"\[([^\]\s]+)\] exited with status \d+")
+# A line of mise's `-c` summary, and the line a task that failed alone ends on,
+# under the name of each task it runs inside. Anchored, so a tool that quotes
+# such a line from a file (a formatter's diff of a test) names nothing.
+TASK = re.compile(r"^(?:\[[^\]\s]+\] )*\[([^\]\s]+)\] (?:exited with status \d+|ERROR task failed)\s*$")
+# The runner's heading over a failed test's traceback, under the task whose
+# run printed it: the test's id is in the parentheses.
+FAILED_UNDER = re.compile(r"^(?:\[[^\]\s]+\] )*\[([^\]\s]+)\] (?:FAIL|ERROR): \S+ \(([^)\s]+)\)")
 # The line mise prints after a task that passed, its time as Rust prints a
 # Duration: in seconds from one second up, in ms, µs or ns below.
 TIMED = re.compile(r"\[([^\]\s]+)\] Finished in (\d+(?:\.\d+)?)(ns|µs|ms|s)\b")
@@ -49,11 +45,27 @@ UNITS = {"ns": 1e-9, "µs": 1e-6, "ms": 1e-3, "s": 1.0}
 # into a pipe (and wherever CLICOLOR_FORCE is set), so a line is read without
 # them while the copy passed through keeps its color.
 ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+# How the test loader reports a module that raised on import, whatever the
+# runner around it writes: a ref older than the failure record writes none.
+UNIMPORTED = re.compile(r"^ImportError: Failed to import test module: (\S+)")
 # A traceback kept in the file stops here.
 KEPT_LINES = 60
-# Past this many failing tests the line names the first few and counts the rest.
+# A failed task's last lines kept in the file, and shown above the verdict, so
+# why it failed is read there rather than by running it again.
+TAIL_KEPT = 20
+TAIL_SHOWN = 5
+# Each task's name a line is printed under, outermost first.
+PREFIX = re.compile(r"\[([^\]\s]+)\] ?")
+# Past this many failing tests the line names the first few and counts the rest,
+# and the rerun names their classes.
 SHOWN = 10
 VERDICTS = ROOT / "var" / "gate"
+# The command that reruns a test by label, by the task or gate it failed under.
+TESTS_RERUN = {"test:composed": "mise run test --composed"}
+TEST_RERUN = "mise run test"
+MISE_RUN = "mise run "
+# How the test loader names a module that raised on import.
+FAILED_IMPORT = "unittest.loader._FailedTest."
 
 
 @dataclass(frozen=True)
@@ -69,6 +81,45 @@ def failed_tests(folder: Path) -> list[FailedTest]:
     return [FailedTest(**record) for path in sorted(folder.glob("*.json")) for record in json.loads(path.read_text())]
 
 
+def test_label(test: str) -> str:
+    """The label that runs a failed test again: its id, a class fixture's class, an unimported module."""
+
+    if fixture := re.fullmatch(r"\w+ \(([\w.]+)\)", test):
+        return fixture[1]
+    return test.split(" ", 1)[0].removeprefix(FAILED_IMPORT)
+
+
+def narrowed(labels: list[str]) -> list[str]:
+    """The labels, or past SHOWN of them their classes, so the rerun stays one line."""
+
+    if len(labels) <= SHOWN:
+        return labels
+    classes = [label.rsplit(".", 1)[0] if label.rsplit(".", 1)[-1].startswith("test") else label for label in labels]
+    return list(dict.fromkeys(classes))
+
+
+def leaves(steps: list[Step]) -> set[str]:
+    """Every failed task named beside one of its own `<task>:<leaf>` tasks: an
+    aggregate fails because its leaf did, so only the leaf is named."""
+
+    named = {task for step in steps if not step.ok for task in step.tasks}
+    return {task for task in named if any(other.startswith(f"{task}:") for other in named)}
+
+
+def command_line(cmd: list[str]) -> str:
+    """A step's command as typed at a prompt, from the checkout, or nothing for
+    one no prompt takes on one line (an inline script)."""
+
+    if any("\n" in word for word in cmd):
+        return ""
+    words = list(cmd)
+    if words[:1] == ["env"]:
+        words = words[1:]
+    if words[:1] == [sys.executable]:
+        words[:1] = ["uv", "run", "python"]
+    return shlex.join(words)
+
+
 @dataclass
 class Step:
     label: str
@@ -78,32 +129,68 @@ class Step:
     tests: list[FailedTest] = field(default_factory=list)
     seconds: float = 0.0
     took: dict[str, float] = field(default_factory=dict)
+    unimported: list[str] = field(default_factory=list)
+    # The command the step ran, which reruns a failure it names nothing in.
+    command: list[str] = field(default_factory=list)
+    # Each failed test's label, by the task whose run printed it.
+    under: dict[str, str] = field(default_factory=dict)
+    # The last lines printed under each task's name, and the step's own under "".
+    said: dict[str, deque[str]] = field(default_factory=dict)
 
     def read(self, line: str) -> None:
         line = ESCAPE.sub("", line)
-        for task in TASK.findall(line):
-            if task not in self.tasks:
-                self.tasks.append(task)
+        self.hear(line)
+        if (module := UNIMPORTED.match(line)) and module[1] not in self.unimported:
+            self.unimported.append(module[1])
+        if (task := TASK.match(line)) and task[1] not in self.tasks:
+            self.tasks.append(task[1])
+        if failed := FAILED_UNDER.match(line):
+            self.under.setdefault(test_label(failed[2]), failed[1])
         for task, amount, unit in TIMED.findall(line):
             self.took[task] = float(amount) * UNITS[unit]
 
-    def failures(self) -> list[str]:
+    def hear(self, line: str) -> None:
+        """Keep ``line`` among the last said under each task it is printed under,
+        past mise's own line that the task failed."""
+
+        if TASK.match(line) or not line.strip():
+            return
+        self.said.setdefault("", deque(maxlen=TAIL_KEPT)).append(line)
+        at = 0
+        while prefix := PREFIX.match(line, at):
+            at = prefix.end()
+            if line[at:].strip():
+                self.said.setdefault(prefix[1], deque(maxlen=TAIL_KEPT)).append(line[at:])
+
+    def tails(self, aggregates: Collection[str] = ()) -> dict[str, list[str]]:
+        """Each failed leaf task's last lines, or the step's own when it names
+        no task: whatever failed but a test, whose traceback says why."""
+
+        if self.ok:
+            return {}
+        named = [task for task in self.tasks if task not in aggregates]
+        keys = [(task, task) for task in named if task not in self.under.values()]
+        if not named and not self.tests:
+            keys = [(self.label, "")]
+        return {name: list(self.said[key]) for name, key in keys if self.said.get(key)}
+
+    def failures(self, aggregates: Collection[str] = ()) -> list[str]:
         if self.ok:
             return []
-        named = list(self.tasks)
+        named = [task for task in self.tasks if task not in aggregates]
         if self.tests:
             more = len(self.tests) - SHOWN
             shown = ", ".join(failed.test for failed in self.tests[:SHOWN])
             named.append(f"tests: {shown}" + (f" and {more} more" if more > 0 else ""))
         return named or [self.label]
 
-    def everything_failed(self) -> list[str]:
+    def everything_failed(self, aggregates: Collection[str] = ()) -> list[str]:
         """Every failed task and test, none counted away, each test with the exception it raised."""
 
         if self.ok:
             return []
         tests = [f"{failed.test}: {failed.exception}" if failed.exception else failed.test for failed in self.tests]
-        return [*self.tasks, *tests] or [self.label]
+        return [*(task for task in self.tasks if task not in aggregates), *tests] or [self.label]
 
     def tracebacks(self) -> list[str]:
         """Each failed test's traceback under its name, cut at KEPT_LINES."""
@@ -116,6 +203,20 @@ class Step:
                 cut = ["..."] if len(report) > KEPT_LINES else []
                 lines += ["", f"{failed.test}:", *report[:KEPT_LINES], *cut]
         return lines
+
+
+def hand_on(tests: list[FailedTest]) -> None:
+    """Write a step's failed tests into the folder of the gate this one runs under, when it runs under one.
+
+    A gate that runs another (`check` runs `test --composed`) hands its step a
+    folder of its own, so without this the outer verdict would name the inner
+    gate's task and lose its tests.
+    """
+
+    if (outer := os.environ.get(REPORTS)) and tests:
+        handle, _ = tempfile.mkstemp(suffix=".json", dir=outer)
+        with os.fdopen(handle, "w") as record:
+            json.dump([asdict(failed) for failed in tests], record)
 
 
 def pass_through(output: int, step: Step) -> None:
@@ -135,9 +236,11 @@ def pass_through(output: int, step: Step) -> None:
 def run(label: str, cmd: list[str], cwd: Path = ROOT) -> Step:
     """Run a command, its output passed through, and gather what failed in it."""
 
-    step = Step(label)
+    step = Step(label, command=cmd)
     started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="gate-") as reports:
+        # mise turns its Finished line off in a task's own environment, so a mise run
+        # inside a task prints it only when asked.
         env = {**os.environ, "PYTHONUNBUFFERED": "1", REPORTS: reports, "MISE_TASK_TIMINGS": "1"}
         with subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
             assert proc.stdout
@@ -152,6 +255,7 @@ def run(label: str, cmd: list[str], cwd: Path = ROOT) -> Step:
                 proc.wait()
                 raise
         step.tests = failed_tests(Path(reports))
+    hand_on(step.tests)
     step.seconds = time.monotonic() - started
     step.code = proc.returncode
     step.ok = step.code == 0
@@ -160,10 +264,46 @@ def run(label: str, cmd: list[str], cwd: Path = ROOT) -> Step:
 
 def verdict(name: str, started: float, steps: list[Step], passed: str = "", outcome: str = "FAILED") -> str:
     elapsed = f"{time.monotonic() - started:.1f}s"
-    failed = [failure for step in steps for failure in step.failures()]
+    aggregates = leaves(steps)
+    failed = [failure for step in steps for failure in step.failures(aggregates)]
     if failed:
         return f"[{name}] {outcome} in {elapsed}: {'; '.join(failed)}"
     return f"[{name}] passed in {elapsed}{passed}"
+
+
+def test_reruns(name: str, steps: list[Step], tests: str) -> dict[str, list[str]]:
+    """Each failed test's label, under the command that reruns it."""
+
+    labels: dict[str, dict[str, None]] = {}
+    for step in steps:
+        for failed in step.tests:
+            label = test_label(failed.test)
+            command = tests or TESTS_RERUN.get(step.under.get(label, "")) or TESTS_RERUN.get(name, TEST_RERUN)
+            labels.setdefault(command, {})[label] = None
+    return {command: list(named) for command, named in labels.items()}
+
+
+def rerun(name: str, steps: list[Step], tests: str = "") -> str:
+    """The command that runs again just what failed: each failed leaf task, the
+    failed tests by label rather than the task that ran them, and a failed step
+    that names neither by its own command. Every `mise run` among them is one,
+    `:::` between its runs."""
+
+    aggregates = leaves(steps)
+    failed = [step for step in steps if not step.ok]
+    runs = [
+        task for step in failed for task in step.tasks if task not in aggregates and task not in step.under.values()
+    ]
+    others = [typed for step in failed if not step.tasks and not step.tests and (typed := command_line(step.command))]
+    others += [
+        shlex.join([*shlex.split(command), *narrowed(named)])
+        for command, named in test_reruns(name, failed, tests).items()
+    ]
+    runs += [command.removeprefix(MISE_RUN) for command in others if command.startswith(MISE_RUN)]
+    others = [command for command in others if not command.startswith(MISE_RUN)]
+    if runs := list(dict.fromkeys(runs)):
+        others.insert(0, MISE_RUN + ("-c " if len(runs) > 1 else "") + " ::: ".join(runs))
+    return "; ".join(others)
 
 
 def timings(steps: list[Step]) -> list[str]:
@@ -177,16 +317,37 @@ def timings(steps: list[Step]) -> list[str]:
 
 
 def close(
-    name: str, started: float, steps: list[Step], passed: str = "", failed: str = "", outcome: str = "FAILED"
+    name: str,
+    started: float,
+    steps: list[Step],
+    passed: str = "",
+    failed: str = "",
+    outcome: str = "FAILED",
+    tests: str = "",
 ) -> None:
-    """Print the closing verdict, after the path of the file that keeps it whole."""
+    """Print the closing verdict, ending on the command that reruns what failed,
+    after the path of the file that keeps it whole, the last run's beside it.
 
-    named = [failure for step in steps for failure in step.everything_failed()]
-    line = verdict(name, started, steps, passed, outcome) + (failed if named else "")
-    path = VERDICTS / f"{re.sub(r'[^\w.-]+', '-', name).strip('-')}.txt"
+    ``tests`` is the command a failed test reruns under, when it is not
+    ``mise run test``."""
+
+    aggregates = leaves(steps)
+    named = [failure for step in steps for failure in step.everything_failed(aggregates)]
+    line = verdict(name, started, steps, passed, outcome)
+    if named:
+        line += failed + (f"; rerun: {command}" if (command := rerun(name, steps, tests)) else "")
+    stem = re.sub(r"[^\w.-]+", "-", name).strip("-")
+    path = VERDICTS / f"{stem}.txt"
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        path.replace(VERDICTS / f"{stem}.prev.txt")
     kept = [traceback for step in steps for traceback in step.tracebacks()]
-    path.write_text("\n".join([line, *named, *timings(steps), *kept]) + "\n")
+    tails = {task: said for step in steps for task, said in step.tails(aggregates).items()}
+    ended = [part for task, said in tails.items() for part in ("", f"{task} ended on:", *said)]
+    path.write_text("\n".join([line, *named, *ended, *timings(steps), *kept]) + "\n")
+    for task, said in tails.items():
+        shown = (f"[{name}]   {said_line}" for said_line in said[-TAIL_SHOWN:])
+        print(f"[{name}] {task} ended on:", *shown, sep="\n", flush=True)
     print(f"[{name}] verdict kept in {path}", flush=True)
     print(line, flush=True)
 

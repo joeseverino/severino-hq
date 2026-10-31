@@ -180,8 +180,8 @@ class FigureDrawingTests(SimpleTestCase):
     def test_a_dot_that_is_a_thing_names_itself_and_leads_to_its_page(self):
         drawing = Dots(
             (
-                Dot(False, "beta · 192.0.2.2 · offline", "/machines/beta/"),
-                Dot(True, "alpha · 192.0.2.1 · online", "/machines/alpha/"),
+                Dot(filled=False, tip="beta · 192.0.2.2 · offline", url="/machines/beta/"),
+                Dot(filled=True, tip="alpha · 192.0.2.1 · online", url="/machines/alpha/"),
             )
         )
         html = self.render(Kpi("Machines", "1", url="/machines/", drawing=drawing))

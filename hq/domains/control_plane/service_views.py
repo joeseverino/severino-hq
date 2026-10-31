@@ -11,6 +11,7 @@ from django.views import View
 from django.views.generic import TemplateView
 
 from hq.platform.application.adoption import unmanaged_services
+from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.connections import machines_once
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.exposure import OPEN
@@ -37,7 +38,7 @@ from hq.platform.application.service_list import listed_service, listed_services
 from hq.platform.application.services import alias_target
 from hq.platform.application.ui import PageNavigation, PageSection
 lazy from hq.platform.application.page_relations import for_service
-lazy from hq.platform.application.pins import SERVICE, move, ordered, toggle
+lazy from hq.platform.application.pins import MOVE, PIN, SERVICE, ordered
 
 from .models import ManagedResource
 from .names import normalized_hostname
@@ -275,25 +276,29 @@ class ServicePinView(View):
     bump a generation, queue a reconcile, or change anything about the world.
     """
 
+    capability = PIN
+
+    def payload(self, name: str) -> dict:
+        return {"kind": SERVICE, "key": name}
+
     def post(self, request, hostname: str):
         name = normalized_hostname(hostname)
         if not name:
             raise Http404("No such service.")
-        toggle(request.user, SERVICE, name)
+        result = execute_capability(self.capability, self.payload(name), principal=web_principal(request.user))
+        if not result["ok"]:
+            messages.error(request, result["error"]["message"])
         return redirect(safe_next(request) or reverse("control_plane:services"))
 
 
-class ServiceMoveView(View):
+class ServiceMoveView(ServicePinView):
     """Move one favorite past its neighbor.
 
     Up and down rather than dragging: it is one POST, it works without script,
     and it says out loud which two things swapped, which a drag does not.
     """
 
-    def post(self, request, hostname: str):
-        name = normalized_hostname(hostname)
-        if not name:
-            raise Http404("No such service.")
-        delta = -1 if request.POST.get("direction") == "up" else 1
-        move(request.user, SERVICE, name, delta)
-        return redirect(safe_next(request) or reverse("control_plane:services"))
+    capability = MOVE
+
+    def payload(self, name: str) -> dict:
+        return {"kind": SERVICE, "key": name, "up": self.request.POST.get("direction") == "up"}

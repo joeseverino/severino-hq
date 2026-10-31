@@ -17,15 +17,12 @@
     {% include "partials/_kpi_grid.html" with label="Traffic" items=kpis %}
 
     <p class="muted reading-note">
-      {{ totals.start|when:"day" }}{% if totals.start|date:"Ymd" != totals.end|date:"Ymd" %} – {{ totals.end|when:"day" }}{% endif %}{% if totals.sample_interval > 1 %} · estimated from 1 in {{ totals.sample_interval|breakable }} visits{% endif %}{% if observed_at %} · {% include "partials/_reading_age.html" with at=observed_at only %}{% endif %}
-      {% if coverage.expected_days and not coverage.complete %}
-        · {{ coverage.covered_days|breakable }} of {{ coverage.expected_days|breakable }} days read so far, the rest still loading
-      {% endif %}
+      {{ totals.start|when:"day" }}{% if totals.start != totals.end %} – {{ totals.end|when:"day" }}{% endif %}{% if totals.sample_interval > 1 %}{% dot %}estimated from 1 in {{ totals.sample_interval|breakable }} visits{% endif %}{% if observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=observed_at only %}{% endif %}{% if coverage.expected_days and not coverage.complete %}{% dot %}{{ coverage.covered_days|breakable }} of {{ coverage.expected_days|breakable }} days read so far, the rest still loading{% endif %}
     </p>
 
     <div class="breakdown-grid">
       {% for panel in breakdowns %}
-        <section class="card" aria-labelledby="breakdown-{{ panel.dimension }}">
+        {% card heading="breakdown-"|add:panel.dimension %}
           <h2 id="breakdown-{{ panel.dimension }}">{{ panel.label|breakable }}</h2>
           {% if panel.rows %}
             <ol class="bar-list">
@@ -40,11 +37,11 @@
           {% else %}
             {% include "partials/_empty_state.html" with message="No data in this window." only %}
           {% endif %}
-        </section>
+        {% endcard %}
       {% endfor %}
     </div>
 
-    <section class="card" aria-labelledby="vitals">
+    {% card heading="vitals" %}
       <h2 id="vitals">Page speed</h2>
       {% if not vitals_measured %}
         <p class="muted">Not enough visits to measure.</p>
@@ -65,7 +62,7 @@
         {% endfor %}
       </dl>
       {% endif %}
-    </section>
+    {% endcard %}
   {% else %}
     {% include "partials/_empty_state.html" with message="No visits recorded yet." remedy=page.remedy only %}
   {% endif %}

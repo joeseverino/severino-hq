@@ -1,7 +1,7 @@
 <div class="topology-node-body" data-topology-body-of="{{ item.node.id }}">
   <header class="topology-detail-head">
     <h2>{% entity item.link %}</h2>
-    <span class="muted">{{ item.node.subtitle|breakable }} · {{ item.degree|counted:"link" }}</span>
+    <span class="muted">{{ item.node.subtitle|breakable }}{% dot %}{{ item.degree|counted:"link" }}</span>
     {% if item.node.status_label %}<span class="pill pill-{{ item.node.status }}">{{ item.node.status_label|breakable }}</span>{% endif %}
   </header>
   {% if item.node.detail %}<p class="muted">{{ item.node.detail|breakable }}</p>{% endif %}
@@ -14,7 +14,7 @@
   <dl class="topology-facts">
     {% if item.node.pageviews is not None %}
       <div class="topology-fact">
-        <dt>Traffic · {{ traffic_window_days|counted:"day" }}</dt>
+        <dt>Traffic{% dot %}{{ traffic_window_days|counted:"day" }}</dt>
         <dd>
           <strong>{{ item.node.pageviews|breakable }}</strong> pageviews from
           <strong>{{ item.node.visits|breakable }}</strong> visits.
@@ -91,12 +91,12 @@
                   {% for link in row.entities %}
                     <li>
                       <span class="topology-relation-value">{% entity link %}</span>
-                      <span class="topology-relation-source muted">{{ link.kind_label|breakable }}{% if row.observed_age %} · {% include "partials/_reading_age.html" with at=row.observed_at only %}{% endif %}</span>
+                      <span class="topology-relation-source muted">{{ link.kind_label|breakable }}{% if row.observed_age %}{% dot %}{% include "partials/_reading_age.html" with at=row.observed_at only %}{% endif %}</span>
                     </li>
                   {% endfor %}
                 </ul>
               {% elif row.detail or row.observed_age %}
-                <p class="topology-relation-source muted">{{ row.detail|breakable }}{% if row.detail and row.observed_age %} · {% endif %}{% if row.observed_age %}{% include "partials/_reading_age.html" with at=row.observed_at only %}{% endif %}</p>
+                <p class="topology-relation-source muted">{{ row.detail|breakable }}{% if row.detail and row.observed_age %}{% dot %}{% endif %}{% if row.observed_age %}{% include "partials/_reading_age.html" with at=row.observed_at only %}{% endif %}</p>
               {% endif %}
             </li>
           {% endfor %}

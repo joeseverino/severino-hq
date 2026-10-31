@@ -34,6 +34,18 @@ const systemColor = {
 
 const colorFunctions = "rgba?|hsla?|hwb|lab|lch|oklab|oklch|color";
 
+// Text a stylesheet draws is read aloud as text unless it says otherwise, so
+// a mark drawn for the eye (a disclosure's chevron, a separator, an arrow)
+// was heard as "›" or "north east arrow". A generated string says what a
+// reader hears after a slash: `"›" / ""` for a mark, the words themselves
+// for text that means something (`"Dismissed: " / "Dismissed: "`).
+// A space before a mark is where a line may break, so the mark would open
+// the next line: one drawn after a word is joined to it by a no-break space
+// (`"\a0·"`). A space a hex escape ends with is the escape's own.
+const strandedMark =
+  "/(?<!\\\\[0-9a-f]{1,6}) (?:[·•→←↗›‹»«]|\\\\0*(?:b7|2022|2192|2190|2197|203a|2039|bb|ab)(?![0-9a-f]))/i";
+const unspokenContent = { "/^content$/": [`/^\\s*(["'])(?:(?!\\1).)+\\1\\s*$/`, strandedMark] };
+
 export default {
   // The app sheets share one set of tokens, so a property one sheet reads may
   // be defined in another.
@@ -54,7 +66,13 @@ export default {
       ...literalFontSize,
       ...spacingLiteral,
       ...systemColor,
+      ...unspokenContent,
     },
+    // A face that arrives late and is swapped in moves every line it sets, so
+    // each is shown only if it is ready for the first paint. Its file is
+    // preloaded beside the stylesheet so it usually is (StyleContractTests).
+    "at-rule-property-required-list": { "font-face": ["font-display"] },
+    "declaration-property-value-allowed-list": { "font-display": ["optional"] },
     // What names a value (a term, a band's or a tile's label) is said in
     // sentence case; capitals are for a kicker over a group (`.eyebrow`).
     "rule-selector-property-disallowed-list": {
@@ -69,7 +87,7 @@ export default {
         "color-no-hex": null,
         "color-named": null,
         "function-disallowed-list": null,
-        "declaration-property-value-disallowed-list": { ...literalFontSize, ...spacingLiteral },
+        "declaration-property-value-disallowed-list": { ...literalFontSize, ...spacingLiteral, ...unspokenContent },
       },
     },
     {
@@ -83,6 +101,7 @@ export default {
           "/(^|-)font-size$/": ["/^[\\d.]/"],
           ...spacingLiteral,
           ...systemColor,
+          ...unspokenContent,
         },
       },
     },

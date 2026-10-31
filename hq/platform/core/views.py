@@ -15,20 +15,20 @@ from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
 from hq.platform.application import capability_policy, fragments
-from hq.platform.application.agent_access import set_agents_paused
-from hq.platform.application.appearance import set_theme
+from hq.platform.application.agent_access import SET_AGENT_ACCESS
+from hq.platform.application.appearance import SET_THEME
 from hq.platform.application.avatars import avatar_of
+from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.command_center import command_center
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.search import global_search
 from hq.platform.application.security import AuthorizationError, safe_next, web_principal
 from hq.platform.application.ui import counted
-lazy from hq.platform.application import lookup
 lazy from hq.platform.application.approvals import awaiting_ids, entry_event
 lazy from hq.platform.application.connection_catalog import connection_catalog
 lazy from hq.platform.application.hq_context import hq_context
-lazy from hq.platform.application.lookup import AddressCommand, stored_address
+lazy from hq.platform.application.lookup import LOOK_UP_ADDRESS, AddressCommand, stored_address
 lazy from hq.platform.application.posture import estate_posture
 lazy from hq.platform.application.request_path import request_path
 
@@ -41,19 +41,7 @@ lazy from .throttle import lockout
 
 
 class ThrottledLoginView(LoginView):
-    """The password form, with a cost attached to guessing at it.
-
-    Refused *before* the credentials are checked. Validating first and
-    discarding the result would still answer the attacker's actual question
-    (response timing, and the difference between "no such user" and "locked",
-    both leak whether a guess was close) and would spend a password hash per
-    attempt doing it, which is the expensive operation an attacker wants to
-    provoke.
-
-    The message names no account and no address. It says the door is shut and
-    when it reopens, which is everything a locked-out operator needs and
-    nothing an attacker can use to tell whether they found a real username.
-    """
+    """The password form, with a cost attached to guessing at it."""
 
     template_name = "auth/login.html"
 
@@ -63,16 +51,12 @@ class ThrottledLoginView(LoginView):
 
     @override
     def get(self, request, *args, **kwargs):
-        """Go straight to Pocket ID rather than asking which door to use.
+        """Go straight to Pocket ID: signing in is already a redirect to the
+        identity provider, so stopping to confirm that decides nothing."""
 
-        Signing in is already a redirect to the identity provider, so stopping
-        to confirm that is a click that decides nothing.
-
-        Except after signing out, where bouncing would immediately return the
-        still-valid provider session and make the sign-out look broken. There,
-        the page is shown so leaving is possible.
-        """
-
+        # Except after signing out, where bouncing would immediately return the
+        # still-valid provider session and make the sign-out look broken. There,
+        # the page is shown so leaving is possible.
         if self.sso_only and not {"signed_out", "sso_failed"} & set(request.GET):
             target = reverse("oidc_authentication_init")
             # Checked here even though the provider library checks it again
@@ -102,11 +86,21 @@ class ThrottledLoginView(LoginView):
             # the attempt is answered the same way whatever was submitted.
             return HttpResponseForbidden("Password sign-in is disabled.")
 
+        # Refused *before* the credentials are checked. Validating first and
+        # discarding the result would still answer the attacker's actual
+        # question (response timing, and the difference between "no such user"
+        # and "locked", both leak whether a guess was close) and would spend a
+        # password hash per attempt doing it, which is the expensive operation
+        # an attacker wants to provoke.
         state = lockout(request.POST.get("username", ""), client_ip(request))
         if not state.locked:
             return super().post(request, *args, **kwargs)
         form = self.get_form()
         form.errors.pop("__all__", None)
+        # The message names no account and no address. It says the door is
+        # shut and when it reopens, which is everything a locked-out operator
+        # needs and nothing an attacker can use to tell whether they found a
+        # real username.
         form.add_error(
             None,
             f"Too many failed sign-in attempts. Try again in {counted(state.minutes_remaining, 'minute')}.",
@@ -147,11 +141,11 @@ class AgentAccessView(View):
         requested = request.POST.get("paused")
         if requested not in {"0", "1"}:
             return HttpResponseBadRequest("paused must be 0 or 1")
-        set_agents_paused(
-            requested == "1",
-            principal=web_principal(request.user),
-            user=request.user,
+        result = execute_capability(
+            SET_AGENT_ACCESS, {"paused": requested == "1"}, principal=web_principal(request.user)
         )
+        if not result["ok"]:
+            return HttpResponseForbidden(result["error"]["message"])
         return redirect(safe_next(request, fallback=reverse("dashboard")))
 
 
@@ -159,16 +153,12 @@ class ThemeView(View):
     """Choose system, light or dark. The form sends a choice, never a toggle."""
 
     def post(self, request):
-        try:
-            set_theme(
-                request.POST.get("theme", ""),
-                principal=web_principal(request.user),
-                user=request.user,
-            )
-        except ValueError:
-            # A fixed reply: the service's own message is for logs and callers
-            # in-process, not something a request gets to read back.
-            return HttpResponseBadRequest("Choose system, light or dark.")
+        result = execute_capability(
+            SET_THEME, {"theme": request.POST.get("theme", "")}, principal=web_principal(request.user)
+        )
+        if not result["ok"]:
+            refusal = HttpResponseBadRequest if result["error"]["code"] == "invalid_input" else HttpResponseForbidden
+            return refusal(result["error"]["message"])
         return redirect(safe_next(request, fallback=reverse("dashboard")))
 
 
@@ -194,7 +184,7 @@ class AvatarView(View):
 
 
 class AgentPolicyView(PageMixin, TemplateView):
-    """Capability policy. Reads from matrix(), writes through apply_changes()."""
+    """Capability policy. Reads from matrix(), writes through the ``agents.policy.set`` capability."""
 
     template_name = "core/agent_policy.html"
     page_title = "Agents"
@@ -235,9 +225,15 @@ class AgentPolicyView(PageMixin, TemplateView):
         return context
 
     def post(self, request):
-        changed, problems = capability_policy.apply_changes(
-            request.POST, principal=web_principal(request.user), user=request.user
+        result = execute_capability(
+            capability_policy.SET_POLICY,
+            {"rules": capability_policy.submitted_rules(request.POST)},
+            principal=web_principal(request.user),
         )
+        if not result["ok"]:
+            messages.error(request, result["error"]["message"])
+            return redirect("agent_policy")
+        changed, problems = result["changed"], result["problems"]
         for problem in problems:
             messages.error(request, problem)
         if changed:
@@ -370,7 +366,7 @@ class SearchView(PageMixin, TemplateView):
 class ApprovalEntryView(View):
     """A stable link to a held request's audit entry."""
 
-    def get(self, request, approval_id):
+    def get(self, _request, approval_id):
         event = entry_event(approval_id)
         if event is None:
             return redirect(f"{reverse('core:audit_list')}?awaiting=1")
@@ -423,37 +419,29 @@ class HQView(PageMixin, TemplateView):
 class PublicAddressView(View):
     """What the public internet says about one address, as a fragment.
 
-    A GET serves what HQ already holds and asks no one. A POST runs the lookup,
-    the same application service the `lookup.address` capability runs, and
-    stores what it finds.
+    A GET serves what HQ already holds and asks no one. A POST runs the
+    `lookup.address` capability, which stores what it finds.
     """
 
     template_name = "core/_public_address.html"
 
     def get(self, request):
         address = request.GET.get("address", "")
-        return self._render(
-            request,
-            address,
-            lambda principal: stored_address(AddressCommand(address=address), principal=principal),
-        )
+        context = {"address": address, "reading": None}
+        try:
+            context["reading"] = stored_address(AddressCommand(address=address), principal=web_principal(request.user))
+        except (ValueError, AuthorizationError) as error:
+            context["failure"] = str(error)
+        return render(request, self.template_name, context)
 
     def post(self, request):
         if request.headers.get("X-Requested-With") != "XMLHttpRequest":
             return redirect("connection")
         address = request.POST.get("address", "")
-        return self._render(
-            request,
-            address,
-            lambda principal: lookup.look_up_address(
-                AddressCommand(address=address, refresh=True), principal=principal
-            ),
+        result = execute_capability(
+            LOOK_UP_ADDRESS, {"address": address, "refresh": True}, principal=web_principal(request.user)
         )
-
-    def _render(self, request, address, read):
-        context = {"address": address, "reading": None}
-        try:
-            context["reading"] = read(web_principal(request.user))
-        except (ValueError, AuthorizationError) as error:
-            context["failure"] = str(error)
+        context = {"address": address, "reading": result if result["ok"] else None}
+        if not result["ok"]:
+            context["failure"] = result["error"]["message"]
         return render(request, self.template_name, context)

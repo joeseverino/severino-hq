@@ -1,5 +1,6 @@
 """A run of tests takes the machine's heavy turn only when it runs everything,
-a whole tree of it, or a browser."""
+a whole tree of it, or a browser, and a task that loads the machine whatever
+it is given always takes it."""
 
 import re
 import shlex
@@ -7,7 +8,7 @@ import shlex
 from django.test import tag
 
 from hq.platform.core.test_runner import BROWSER_TESTS
-from tests.mise_tasks import body, mise_tasks
+from tests.mise_tasks import body, mise_tasks, runs
 from tools.gate.tests.base import GateTestCase
 from tools.gate.turn import narrow
 
@@ -66,11 +67,44 @@ class HeavyTaskTests(GateTestCase):
                     self.assertLess(run.index("test_arguments="), run.index("tools/lib/heavy-turn.sh\n"))
                     continue
                 arguments = [word for word in words if not word.startswith(("2>", ">"))]
-                takes_it = (task["shell"] or "").startswith("tools/lib/heavy.sh ") or (
-                    task["file"] and re.search(r"(?m)^\. .*tools/lib/heavy-turn\.sh\"?$", run)
-                )
                 if re.search(r"(?m)^\s*light_run=", run):
                     # dev:look's weight is the pages it names, which it weighs itself before the turn.
-                    self.assertTrue(takes_it)
+                    self.assertTrue(takes_the_turn(task))
                     continue
-                self.assertEqual(bool(takes_it), not narrow(arguments), " ".join(arguments))
+                self.assertEqual(takes_the_turn(task), not narrow(arguments), " ".join(arguments))
+
+    def test_a_task_that_loads_the_machine_whatever_it_is_given_takes_the_heavy_turn(self):
+        """An image build or container, CodeQL's database, Go's tests and every
+        shell suite at once each hold memory a second heavy run would need, run
+        alone or under a gate. Read in the task's run and the scripts it names."""
+
+        loading = {
+            name: task
+            for name, task in mise_tasks().items()
+            if LOADS.search("\n".join(code(text) for text in (body(task), *(path.read_text() for path in runs(task)))))
+        }
+        self.assertGreater(len(loading), 10)
+        for name, task in loading.items():
+            with self.subTest(task=name):
+                self.assertTrue(takes_the_turn(task))
+
+
+# A command that loads the machine whatever its arguments.
+LOADS = re.compile(
+    r"\bdocker (?:build|buildx build|run)\b|\bcodeql database\b|\bgo (?:-C \S+ )?test\b|tests/shell/test-|\btrivy image\b"
+)
+
+
+def code(text: str) -> str:
+    """A script's lines less its comments."""
+
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+
+
+def takes_the_turn(task: dict) -> bool:
+    """Whether every run of the task holds the heavy turn: its shell is the
+    wrapper, or its file sources the line that runs it again under it."""
+
+    return (task["shell"] or "").startswith("tools/lib/heavy.sh ") or bool(
+        task["file"] and re.search(r"(?m)^\. .*tools/lib/heavy-turn\.sh\"?$", body(task))
+    )

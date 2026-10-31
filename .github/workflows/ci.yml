@@ -54,7 +54,7 @@ jobs:
       - name: Install Cosign
         uses: ./.github/actions/cosign
       - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -149,7 +149,7 @@ jobs:
     # guide runs it: the runner's user, which owns the workspace, and the
     # host's IPC namespace, without which Chromium runs out of shared memory.
     container:
-      image: mcr.microsoft.com/playwright/python:v1.64.1-noble@sha256:330d401ae23c905896a0c26c66c36fc971b621519e7b11b435a8328d7bf6e031
+      image: mcr.microsoft.com/playwright/python:v1.64.1-resolute@sha256:e0006b47eb8c8eb548acebc35ece5968a331051c8f33ae5cd45e9cafd65fdc83
       options: --user 1001 --ipc=host
     strategy:
       fail-fast: false
@@ -234,13 +234,13 @@ jobs:
         with:
           persist-credentials: false
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: python
           # The suite is named in the config, beside the rules it filters.
           config-file: ./.github/codeql/codeql-config.yml
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           category: "/language:python"
 
@@ -288,18 +288,17 @@ jobs:
         if: env.PROVEN == ''
       - uses: ./.github/actions/toolchain
         if: env.PROVEN == ''
-      # A promotion runs one tool, so it installs that one rather than the
-      # toolchain the build and its checks need.
+      # A promotion runs crane and Trivy, so it installs those rather than the
+      # toolchain the build and its checks need. Trivy is lazy in mise.toml,
+      # so a build installs it here too.
       - name: Read the pinned mise
         id: mise
-        if: env.PROVEN != ''
         run: echo "version=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
-      - name: Install the pinned crane
-        if: env.PROVEN != ''
-        uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+      - name: Install the pinned crane and Trivy
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
         with:
           version: ${{ steps.mise.outputs.version }}
-          install_args: crane
+          install_args: ${{ env.PROVEN != '' && 'crane trivy' || 'trivy' }}
           cache: false
       - name: Build the production image
         id: build
@@ -320,7 +319,7 @@ jobs:
           IMAGE: ${{ steps.build.outputs.image }}
         run: mise run build
       - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -375,6 +374,19 @@ jobs:
         env:
           DIGEST: ${{ steps.publish.outputs.digest || steps.promote.outputs.digest }}
         run: cosign sign --yes "$DIGEST"
+      # What the image holds, as Trivy reads it (Debian packages, Python
+      # distributions, each Go binary's modules), in CycloneDX, signed by the
+      # same workflow identity as the image and stored beside it in the
+      # registry. Rekor's entry keeps only the envelope's hashes, so the list
+      # is exactly as visible as the image. Trivy needs no vulnerability
+      # database for an SBOM.
+      - name: Attest the SBOM
+        env:
+          DIGEST: ${{ steps.publish.outputs.digest || steps.promote.outputs.digest }}
+        run: |
+          set -euo pipefail
+          trivy image --quiet --format cyclonedx --output sbom.cdx.json "$DIGEST"
+          cosign attest --yes --type cyclonedx --predicate sbom.cdx.json "$DIGEST"
 
   # A pull request's image, checked from the registry while its composition
   # runs: the same gates main runs inside Build before it publishes. IMAGE
@@ -395,7 +407,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

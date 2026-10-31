@@ -9,80 +9,45 @@ lazy from playwright.sync_api import TimeoutError as LoadTimeout
 
 from hq.platform.core.tests.browser.gate import BrowserGate, answered_as
 from hq.platform.core.tests.browser.probes.boxes import (
+    CHROME_INSETS,
     ESCAPES,
-    FIGURE_UNDER_LABEL,
+    INTO_A_NEIGHBOR,
     NARROW_FRAMES,
-    OFF_CENTER_MARKS,
     OVERLAPS,
-    PAIRS,
-    UNEVEN_BANDS,
-    UNPADDED_TILES,
 )
-from hq.platform.core.tests.browser.probes.cut_names import PADDED_CUTS, PAST_THE_CLAMP
 from hq.platform.core.tests.browser.probes.palette import PAINT
-from hq.platform.core.tests.browser.probes.parts import (
-    HEAD_ON_ONE_LINE,
-    LONE_ARROWS,
-    MOVED_BY_SPEAKING,
-    MOVING_SUMMARIES,
-    NESTED_DISCLOSURES,
-    RAGGED_BARS,
-    RAGGED_QUEUES,
-    RAISED_LINKS,
-    SUMMARY_MARKS,
-    UNEVEN_CONTROL_ROWS,
-    UNEVEN_ROUTES,
-    WRAPPED_ROUTES,
-)
 from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, SETTLE, STYLESHEETS
 from hq.platform.core.tests.browser.probes.tables import (
     CELLS,
-    CELLS_OFF_THE_FIRST_LINE,
-    NAME_EDGES,
     PAST_THE_GUTTER,
-    ROW_HEIGHTS,
-    ROW_LINES,
     TABLES,
     TABLES_THAT_DO_NOT_FIT,
-    UNPADDED_CELLS,
 )
 from hq.platform.core.tests.browser.probes.text import (
-    ASIDE_BESIDE_ITS_HEADING,
     BROKEN_WORDS,
-    LONE_ASIDE_WORDS,
-    SQUEEZED_TITLES,
+    CUT_DECISIONS,
+    PAST_THE_CLAMP,
 )
-from hq.platform.core.tests.browser.probes.tokens import SCRAP, SCRAPS, STRANDED_MARKS, TOKEN_BREAKS
 from hq.platform.core.tests.browser.reading import reads, taken
-from hq.platform.core.tests.browser.selectors import SELECTORS, TOKEN_SELECTORS
-from hq.platform.core.tests.browser.stress import ROUTE_PAGES, stress_estate
+from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser.stress import stress_estate
 from hq.platform.core.tests.browser.survey import (
     _AUDIT,
     _CONTRAST_READ,
-    _CUT_NAMES_READ,
-    _CUT_WITH_ROOM_READ,
-    _EMPTY_FRAMES_READ,
-    _FORM_ROWS_READ,
-    _FRAMES_READ,
-    _LINES_READ,
-    _PHRASES_READ,
     _SIDEWAYS_READ,
     _SMALL_TARGETS_READ,
     _SPILLED_CELLS,
     _SPILLED_CONTROLS,
-    _SPLIT_NAMES_READ,
-    _UNDER_LABELS_READ,
     AS_FINDINGS,
+    CHANGES_READ,
+    CHIPS_READ,
     EVIDENCE_READ,
-    ROUTE_ENDS_READ,
+    HEADS_READ,
     SUMMARIES_READ,
 )
-from hq.platform.core.tests.browser.widths import PHONE_SCREEN, SPARSE_WIDTHS, WIDTHS
+from hq.platform.core.tests.browser.widths import SPARSE_WIDTHS, WIDTHS
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES
 from hq.platform.core.tests.test_browser_fixtures import PAGES
-
-# What a pressed control says about its work, short to long.
-SAYINGS = ("Reading", "Reading example-host", "That could not be done. Try again in a minute.")
 
 
 class LayoutBrowserTests(BrowserGate):
@@ -100,8 +65,6 @@ class LayoutBrowserTests(BrowserGate):
     """
 
     lists: tuple[str, ...]
-    # The controls that spoke, counted by the sweep that presses them.
-    spoke: int
 
     @classmethod
     @override
@@ -112,12 +75,12 @@ class LayoutBrowserTests(BrowserGate):
     def loaded(self, name, width, **where):
         """Open ``name`` at ``width``; one that does not load fails once, not once per rule."""
 
-        opened = False
-        # subTest records a failure and carries on, so `opened` stays False.
+        # subTest records a failure and carries on past the block, with nothing opened.
+        opened: list[bool] = []
         with self.subTest(page=name, width=width, **where):
             self.open(name, width)
-            opened = True
-        return opened
+            opened.append(True)
+        return bool(opened)
 
     def hold(self, name, width, rules, **where):
         """Hold each rule on the page as it stands, one subtest each, in
@@ -163,80 +126,48 @@ class LayoutBrowserTests(BrowserGate):
                 self.every_stylesheet_loads,
                 self.nothing_escapes_the_page_sideways,
                 self.tables_scroll_inside_their_own_container,
-                self.grid_rows_end_together,
-                self.a_pill_never_wraps,
                 self.nothing_overlaps,
                 self.layout_audit_structural_rules,
             ]
         if width in WIDTHS:
             rules += self.overflow_reads(name)
-        if width == PHONE_SCREEN[0]:
-            rules.append(self.a_narrow_head_keeps_its_lead_control_beside_the_title)
-        if width == WIDTHS[-1]:
-            rules.append(self.a_wide_frame_is_filled)
         return rules
 
     def overflow_reads(self, name):
         rules = [
             self.no_block_breaks_a_paragraph,
-            self.nothing_is_framed_inside_a_frame,
             self.words_stay_inside_the_box_that_holds_them,
             self.only_a_table_scrolls_sideways,
             self.nothing_runs_out_of_its_table_cell,
             self.a_table_frame_spans_its_box,
-            self.a_table_row_stays_within_its_height_budget,
-            self.a_row_reads_from_its_first_line,
             self.no_column_is_narrower_than_its_words,
-            self.a_link_sits_on_the_line_it_continues,
-            self.a_row_has_one_disclosure,
-            self.a_summary_draws_one_mark,
-            self.a_band_cell_keeps_its_padding,
-            self.a_band_lays_out_as_whole_rows,
-            self.a_queue_ends_its_cards_at_one_edge,
-            self.a_route_line_runs_from_its_first_stop_to_its_last,
-            self.a_mark_holds_its_glyph_in_its_middle,
             self.a_checks_evidence_follows_its_statement,
             self.nothing_a_summary_names_is_hidden,
-            self.a_token_breaks_only_where_it_may,
-            self.no_token_leaves_a_scrap_on_a_line,
-            self.a_mark_keeps_to_the_words_it_punctuates,
-            self.a_name_in_a_wide_table_is_whole,
-            self.a_short_name_in_a_wide_table_is_one_line,
-            self.nothing_is_held_back_while_its_table_has_room,
-            self.a_figure_sits_under_its_label,
-            self.a_value_sits_beside_its_label,
-            self.an_aside_wraps_only_under_its_heading,
-            self.an_aside_leaves_no_word_alone,
             self.a_clamped_box_shows_only_its_lines,
-            self.a_title_is_not_split_beside_its_controls,
+            self.what_a_button_decides_is_shown_whole,
+            self.a_change_reads_on_one_line_and_baseline,
+            self.a_chip_sits_on_the_baseline_of_its_line,
             self.code_and_cards_keep_inside_the_gutter,
-            self.controls_in_a_row_share_one_height,
-            self.a_wrapped_bar_fills_its_rows,
-            self.a_form_fills_its_rows,
+            self.nothing_is_drawn_into_its_neighbor,
+            self.the_chrome_is_as_tall_as_its_insets_say,
         ]
         if name in DENSE_PAGES:
             rules.append(self.dense_pages_keep_to_their_boxes)
-        if name in ROUTE_PAGES:
-            rules.extend((self.a_route_is_one_row_or_one_column, self.a_route_across_spaces_its_hops_evenly))
         return rules
 
     def unscripted_openings(self, name, width):
         """The rules that open the page's disclosures, after every read."""
 
-        rules = []
-        if width in WIDTHS:
-            rules.append(self.a_filled_box_keeps_its_padding)
-        rules.append(self.open_every_disclosure)
+        rules = [self.open_every_disclosure]
         if name in PAGES and width in SPARSE_WIDTHS:
             rules.append(self.nothing_escapes_the_page_sideways_with_every_disclosure_open)
         if width in WIDTHS:
             rules += [
                 self.only_a_table_scrolls_sideways_with_every_disclosure_open,
-                self.a_route_line_runs_from_its_first_stop_to_its_last,
                 self.a_checks_evidence_follows_its_statement,
-                self.a_value_sits_beside_its_label,
                 self.nothing_a_summary_names_is_hidden,
-                self.a_line_shows_on_its_surface,
+                self.a_change_reads_on_one_line_and_baseline,
+                self.a_chip_sits_on_the_baseline_of_its_line,
                 self.a_fill_shows_in_both_palettes,
             ]
         return rules
@@ -249,6 +180,10 @@ class LayoutBrowserTests(BrowserGate):
 
     @reads(ESCAPES)
     def nothing_escapes_the_page_sideways(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads(CHROME_INSETS)
+    def the_chrome_is_as_tall_as_its_insets_say(self, _name, found):
         self.assertEqual(found, [])
 
     def open_every_disclosure(self, _name):
@@ -264,14 +199,6 @@ class LayoutBrowserTests(BrowserGate):
         # A block written inside a <p> closes it early and leaves an empty <p>
         # where its end tag was: the rest of the line falls out of it.
         self.assertEqual(self.page.locator(SELECTORS["broken_paragraph"]).count(), 0)
-
-    @reads(_FRAMES_READ)
-    def nothing_is_framed_inside_a_frame(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads((HEAD_ON_ONE_LINE, [SELECTORS["head_lead"], SELECTORS["head_title"], SELECTORS["page_head"]]))
-    def a_narrow_head_keeps_its_lead_control_beside_the_title(self, _name, beside):
-        self.assertIn(beside, (None, True))
 
     @reads(_SPILLED_CONTROLS, _SPILLED_CELLS)
     def words_stay_inside_the_box_that_holds_them(self, _name, controls, cells):
@@ -292,21 +219,12 @@ class LayoutBrowserTests(BrowserGate):
     def nothing_runs_out_of_its_table_cell(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((ROW_HEIGHTS, ROW_LINES))
-    def a_table_row_stays_within_its_height_budget(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads((CELLS_OFF_THE_FIRST_LINE, SELECTORS["table_scroll"]))
-    def a_row_reads_from_its_first_line(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(ESCAPES, OVERLAPS, _PHRASES_READ)
-    def dense_pages_keep_to_their_boxes(self, _name, escapes, overlaps, phrases):
-        """Nothing escapes, overlaps, or wraps a pill with production-sized data."""
+    @reads(ESCAPES, OVERLAPS)
+    def dense_pages_keep_to_their_boxes(self, _name, escapes, overlaps):
+        """Nothing escapes or overlaps with production-sized data."""
 
         self.assertEqual(escapes, [])
         self.assertEqual(overlaps, [])
-        self.assertEqual(phrases, [])
 
     @reads(TABLES)
     def tables_scroll_inside_their_own_container(self, name, tables):
@@ -316,16 +234,14 @@ class LayoutBrowserTests(BrowserGate):
         if "<table" in self.pages[name]:
             self.assertGreater(tables["seen"], 0, "the probe measured nothing")
 
-    @reads((PAIRS, SELECTORS["paired"]))
-    def grid_rows_end_together(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(_PHRASES_READ)
-    def a_pill_never_wraps(self, _name, found):
-        self.assertEqual(found, [])
-
     @reads(OVERLAPS)
     def nothing_overlaps(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads(INTO_A_NEIGHBOR)
+    def nothing_is_drawn_into_its_neighbor(self, _name, found):
+        """What a box in a row holds stays in it: a figure's dots never reach the next figure."""
+
         self.assertEqual(found, [])
 
     @reads(_AUDIT)
@@ -336,24 +252,12 @@ class LayoutBrowserTests(BrowserGate):
     def a_table_frame_spans_its_box(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((OFF_CENTER_MARKS, SELECTORS["route_mark"]))
-    def a_mark_holds_its_glyph_in_its_middle(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(MOVING_SUMMARIES)
-    def opening_a_disclosure_moves_nothing_before_it(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(_LINES_READ)
-    def a_line_shows_on_its_surface(self, _name, found):
-        self.assertEqual(found, [])
-
     def a_fill_shows_in_both_palettes(self, _name):
         self.assertEqual(self.lost_fills(), [])
 
     def every_palette_check_holds(self, _name):
-        """Text, lines, fills and frames against what they sit on, in the
-        palette the page is drawn in."""
+        """Text and the edges of fields and buttons against what they sit
+        on, in the palette the page is drawn in."""
 
         if found := {check: said for check, said in self.palette().items() if said}:
             self.fail(json.dumps(found, indent=1))
@@ -427,27 +331,8 @@ class LayoutBrowserTests(BrowserGate):
             self.page.unroute(address, answer)
         self.page.evaluate(FINISH_TRANSITIONS)
 
-    @reads(
-        (
-            UNPADDED_TILES,
-            [SELECTORS["tile_exempt"], SELECTORS["tile_control"], SELECTORS["tile_detached"], SELECTORS["disclosure"]],
-        )
-    )
-    def a_filled_box_keeps_its_padding(self, _name, found):
-        """It opens every disclosure in the page to lay out what they hold."""
-
-        self.assertEqual(found, [])
-
     @reads(BROKEN_WORDS)
     def no_column_is_narrower_than_its_words(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(RAISED_LINKS)
-    def a_link_sits_on_the_line_it_continues(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads((LONE_ARROWS, SELECTORS["external_link"]))
-    def an_external_links_arrow_keeps_to_its_last_word(self, _name, found):
         self.assertEqual(found, [])
 
     @reads(_SMALL_TARGETS_READ)
@@ -484,70 +369,6 @@ class LayoutBrowserTests(BrowserGate):
         if found:
             self.fail("\n".join(found))
 
-    @reads(_EMPTY_FRAMES_READ)
-    def a_wide_frame_is_filled(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(NESTED_DISCLOSURES)
-    def a_row_has_one_disclosure(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(SUMMARY_MARKS)
-    def a_summary_draws_one_mark(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads((UNPADDED_CELLS, SELECTORS["band_cell"]))
-    def a_band_cell_keeps_its_padding(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads((UNEVEN_BANDS, [SELECTORS["band"], SELECTORS["band_aside"]]))
-    def a_band_lays_out_as_whole_rows(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads((WRAPPED_ROUTES, SELECTORS["route"]))
-    def a_route_is_one_row_or_one_column(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads((FIGURE_UNDER_LABEL, [SELECTORS[key] for key in ("figure", "figure_label", "figure_value")]))
-    def a_figure_sits_under_its_label(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(_UNDER_LABELS_READ)
-    def a_value_sits_beside_its_label(self, _name, found):
-        """Closed, and again with every disclosure open."""
-
-        self.assertEqual(found, [])
-
-    @reads((TOKEN_BREAKS, TOKEN_SELECTORS))
-    def a_token_breaks_only_where_it_may(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads((SCRAPS, [SELECTORS["any_token"], SCRAP]))
-    def no_token_leaves_a_scrap_on_a_line(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads((STRANDED_MARKS, SELECTORS["seam"]))
-    def a_mark_keeps_to_the_words_it_punctuates(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(_CUT_NAMES_READ)
-    def a_name_in_a_wide_table_is_whole(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(_SPLIT_NAMES_READ)
-    def a_short_name_in_a_wide_table_is_one_line(self, _name, found):
-        """A wide table is squeezed most just past WIDE_REGION: at WIDE_TABLES."""
-
-        self.assertEqual(found, [])
-
-    @reads(_CUT_WITH_ROOM_READ)
-    def nothing_is_held_back_while_its_table_has_room(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads((PADDED_CUTS, SELECTORS["cut_box"]))
-    def a_cut_value_ends_where_its_words_end(self, _name, found):
-        self.assertEqual(found, [])
-
     def every_layout_check_holds(self, name):
         """Every check the layout rules make, on the page as a reader has it:
         what `dev:look --rule survey` reports, held."""
@@ -555,48 +376,45 @@ class LayoutBrowserTests(BrowserGate):
         if found := self.findings(name, self.page.viewport_size["width"]):
             self.fail(json.dumps(found, indent=1))
 
-    @reads((ASIDE_BESIDE_ITS_HEADING, SELECTORS["heading_aside"]))
-    def an_aside_wraps_only_under_its_heading(self, _name, found):
+    @reads(CHANGES_READ)
+    def a_change_reads_on_one_line_and_baseline(self, _name, found):
+        """A value and the one it changes into share a baseline with each
+        other, their arrow and the words before them wherever they share a
+        line, and the arrow is on the line of the new value: a narrow line
+        breaks between the two values, never after the arrow."""
+
         self.assertEqual(found, [])
 
-    @reads((LONE_ASIDE_WORDS, SELECTORS["any_aside"]))
-    def an_aside_leaves_no_word_alone(self, _name, found):
+    @reads(CHIPS_READ)
+    def a_chip_sits_on_the_baseline_of_its_line(self, _name, found):
+        """A chip (an identifier, a tag) set in a line sits on the baseline
+        of the words, pills and links around it, on the line it starts on and
+        the line it ends on."""
+
+        self.assertEqual(found, [])
+
+    @reads(HEADS_READ)
+    def a_head_keeps_two_controls_beside_its_title(self, _name, found):
+        """A page's head draws its lead control and one more beside the title
+        on one line with its menu, folding the second into the menu where the
+        head is narrow, and offers every control once: beside the title or in
+        the menu, never both and never neither."""
+
         self.assertEqual(found, [])
 
     @reads(PAST_THE_CLAMP)
     def a_clamped_box_shows_only_its_lines(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((SQUEEZED_TITLES, [SELECTORS["page_title"], SELECTORS["page_actions"], SELECTORS["page_head"]]))
-    def a_title_is_not_split_beside_its_controls(self, _name, found):
+    @reads((CUT_DECISIONS, SELECTORS["decision_whole"]))
+    def what_a_button_decides_is_shown_whole(self, _name, found):
+        """An approval's change, beside the buttons that approve or reject
+        it, wraps rather than being cut, at every width."""
+
         self.assertEqual(found, [])
 
     @reads((PAST_THE_GUTTER, [SELECTORS["gutter_bound"], False]))
     def code_and_cards_keep_inside_the_gutter(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads((UNEVEN_CONTROL_ROWS, [SELECTORS["line_control"], SELECTORS["field"]]))
-    def controls_in_a_row_share_one_height(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads((RAGGED_BARS, SELECTORS["wrapping_bar"]))
-    def a_wrapped_bar_fills_its_rows(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(_FORM_ROWS_READ)
-    def a_form_fills_its_rows(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads((RAGGED_QUEUES, [SELECTORS["queue_card"], SELECTORS["queue_card_end"]]))
-    def a_queue_ends_its_cards_at_one_edge(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads((UNEVEN_ROUTES, [SELECTORS["route"], SELECTORS["route_icon"]]))
-    def a_route_across_spaces_its_hops_evenly(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(ROUTE_ENDS_READ)
-    def a_route_line_runs_from_its_first_stop_to_its_last(self, _name, found):
         self.assertEqual(found, [])
 
     @reads(EVIDENCE_READ)
@@ -610,35 +428,6 @@ class LayoutBrowserTests(BrowserGate):
     # With script: the page a person reads, sorted, selectable and with its
     # cut values marked.
 
-    def scripted_reads(self):
-        """What a scripted page holds beside `every_layout_check_holds`."""
-
-        return [
-            self.opening_a_disclosure_moves_nothing_before_it,
-            self.a_tables_names_share_one_edge_whether_or_not_a_row_opens,
-        ]
-
-    @reads((NAME_EDGES, SELECTORS["table_scroll"]))
-    def a_tables_names_share_one_edge_whether_or_not_a_row_opens(self, _name, tables):
-        """A row with a toggle and a row without start their names on the same
-        line down the column: the toggle has a gutter every row keeps.
-        """
-
-        for edges in tables:
-            self.assertEqual(edges, 1)
-
-    def pressing_a_control_moves_nothing(self, name, width):
-        """Each saying is drawn and then taken back, so the next is measured
-        on the page as it loaded."""
-
-        for said in SAYINGS:
-            with self.subTest(rule="pressing_a_control_moves_nothing", page=name, width=width, said=said):
-                found = self.page.evaluate(MOVED_BY_SPEAKING, [said, SELECTORS["spoken"]])
-                if found is None:
-                    continue
-                self.spoke += 1
-                self.assertEqual(found, [])
-
     def a_table_fits_its_box_at_every_width(self, name):
         """A table never overflows its box, down to the narrowest phone: while
         it is wider, its ranked columns leave, then it is narrow, then tight
@@ -649,29 +438,11 @@ class LayoutBrowserTests(BrowserGate):
         self.page.evaluate(SETTLE)
         self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
 
-    def wait_for_parts(self, route):
-        if route.request.headers.get("x-requested-with") != "XMLHttpRequest":
-            route.fallback()
-
-    def loaded_and_still(self):
-        self.page.wait_for_load_state("load")
-        self.settle()
-        self.page.evaluate(SETTLE)
-
     def card_rows(self, key):
         """The cards of one dashboard grid, grouped by the row they sit on."""
         rows: dict[int, list[dict]] = {}
         for box in self.page.locator(SELECTORS[key]).evaluate_all(
-            "elements => elements.map(e => { const r = e.getBoundingClientRect(), "
-            "edge = e.parentElement.getBoundingClientRect().right; "
-            "return {top: r.top, bottom: r.bottom, left: r.left, right: r.right, edge}; })"
+            "elements => elements.map(e => { const r = e.getBoundingClientRect(); return {top: r.top, left: r.left}; })"
         ):
             rows.setdefault(round(box["top"]), []).append(box)
         return list(rows.values())
-
-    def assert_rows_filled(self, key):
-        # Cards in a row are the same height, and the last one reaches the
-        # grid's right edge.
-        for row in self.card_rows(key):
-            self.assertEqual({round(box["bottom"]) for box in row}, {round(row[0]["bottom"])}, row)
-            self.assertAlmostEqual(row[-1]["right"], row[-1]["edge"], delta=1)

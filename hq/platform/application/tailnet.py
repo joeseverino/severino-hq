@@ -1,15 +1,10 @@
 """Whether one machine on the tailnet may reach another, and on which port.
 
-HQ does not evaluate the policy. Tailscale does, during the sweep: for each
-device and port it is asked which principals a rule admits, and the answer
-(with groups already flattened to the users in them) is what gets stored. What
-happens here is set membership. That distinction is the whole design: a second
-implementation of an access policy would be believed exactly as much as the
-real one and wrong in ways nobody notices until it matters.
-
-So every verdict below is reported as what the policy says, never as what
-Tailscale did, and a question the sweep cannot answer says so rather than
-guessing.
+HQ does not evaluate the policy: Tailscale does, during the sweep, and HQ only
+checks set membership against its answer, since a second implementation of an
+access policy would be believed as much as the real one and wrong unnoticed. So
+a verdict is what the policy says, never what Tailscale did, and a question the
+sweep cannot answer says so rather than guessing.
 """
 
 import json
@@ -17,6 +12,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from ipaddress import ip_address
+from typing import Any
 
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
@@ -88,14 +84,11 @@ class Device:
 
     @property
     def principals(self) -> frozenset[str]:
-        """Every name a rule could admit this device by.
+        """Every name a rule could admit this device by: owner, tag or alias.
 
-        Three kinds, not two. A policy may name a device by its owner, by a
-        tag, or by an alias it gives one of the device's addresses, and a
-        policy written the third way is admitting the machine rather than
-        whoever is signed in on it, which is a stricter thing to say and the
-        reason to write it. Counting only the first two reports a device the
-        policy plainly admits as refused.
+        A policy naming an alias of one of the device's addresses admits the
+        machine rather than whoever is signed in on it, so counting only owners
+        and tags reports a device the policy plainly admits as refused.
         """
 
         return frozenset({self.user, *self.tags, *self.aliases} - {""})
@@ -111,7 +104,7 @@ class Device:
         return tuple((port, self.reach[port]) for port in self.ports)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Verdict:
     """One answer, and the reason it is that answer."""
 
@@ -279,34 +272,38 @@ def may_reach(source: str, target: str, port: int, known: dict[str, Device] | No
     who_answers = known.get(target)
     if who_asks is None or who_answers is None:
         missing = source if who_asks is None else target
-        return Verdict(False, False, f"{missing} was not in the last read of the tailnet.")
+        return Verdict(allowed=False, known=False, detail=f"{missing} was not in the last read of the tailnet.")
     if not who_asks.principals:
         return Verdict(
-            False,
-            False,
-            f"{source} has no user or tag, so no rule can match it.",
+            allowed=False,
+            known=False,
+            detail=f"{source} has no user or tag, so no rule can match it.",
         )
     admitted = who_answers.reach.get(port)
     if admitted is None:
         return Verdict(
-            False,
-            False,
-            f"Port {port} on {target} was not checked.",
+            allowed=False,
+            known=False,
+            detail=f"Port {port} on {target} was not checked.",
         )
+    # The sweep stored Tailscale's own answer for each device and port, with
+    # groups already flattened to the users in them, so this is set membership.
     matched = tuple(sorted(who_asks.principals & set(admitted)))
     owners = alias_owners(known)
     if matched:
         return Verdict(
-            True,
-            True,
-            ended(f"Allowed: {', '.join(as_devices(matched, owners))} to {owners.get(target, target)} on {port}"),
+            allowed=True,
+            known=True,
+            detail=ended(
+                f"Allowed: {', '.join(as_devices(matched, owners))} to {owners.get(target, target)} on {port}"
+            ),
             via=matched,
             rules=who_answers.rules.get(port, ()),
         )
     return Verdict(
-        False,
-        True,
-        f"No rule allows {', '.join(as_devices(sorted(who_asks.principals), owners))} "
+        allowed=False,
+        known=True,
+        detail=f"No rule allows {', '.join(as_devices(sorted(who_asks.principals), owners))} "
         f"to {owners.get(target, target)} on {port:d}. Allowed: "
         f"{ended(', '.join(as_devices(admitted, owners)))}",
         rules=who_answers.rules.get(port, ()),
@@ -513,61 +510,72 @@ def policy_allowing(document: str, *, source: str, target: str, port: int) -> tu
     """The same policy with one path opened, and a sentence saying what moved.
 
     Returns ``("", "")`` when the policy already admits the path, so a caller
-    proposes nothing rather than an empty change.
-
-    Two edits, and the second is what makes the first survive contact with
-    Tailscale. A policy carries its own tests, and a test asserting that this
-    source may *not* reach this target on this port contradicts the grant being
-    added: Tailscale runs those tests before accepting a policy and refuses the
-    whole document when one fails. Adding the grant alone would be rejected in
-    full, so the assertion moves with it.
-
-    The port is appended rather than inserted. A reviewer reads the diff of the
-    single most dangerous document in the estate, and an insertion renumbers
-    every element after it: one added port rendering as four changed lines is
-    a diff that hides what it is.
+    proposes nothing rather than an empty change. A policy test denying the path
+    moves with the grant, or Tailscale would refuse the whole document.
     """
 
     parsed = json.loads(document)
-    grants = list(parsed.get("grants") or [])
-    wanted = f"tcp:{port}"
-    changed: list[str] = []
+    granted = _grant(parsed, source, target, f"tcp:{port}")
+    if not granted:
+        return "", ""
+    asserted = f"{target}:{port}"
+    tests = [dict(test) for test in (parsed.get("tests") or ())]
+    moved: list[str] = []
+    # A policy carries its own tests, and Tailscale runs them before accepting
+    # a policy, refusing the whole document when one fails. A test asserting
+    # this source may not reach this target on this port contradicts the grant,
+    # so the grant alone would be rejected in full: the assertion moves with it.
+    for test in tests:
+        if _denies(test, source, asserted):
+            _accept(test, asserted)
+            moved.append(f"{asserted} moved from denied to accepted for {source}")
+    parsed["tests"] = tests
+    return json.dumps(parsed), "; ".join((granted, *moved))
 
+
+def _grant(parsed: dict[str, Any], source: str, target: str, wanted: str) -> str:
+    """Open ``wanted`` from ``source`` to ``target`` in the policy's grants, on
+    the grant between the two when there is one, and say what changed; ``""``
+    when that grant already carries it."""
+
+    grants = list(parsed.get("grants") or [])
     existing = next(
         (grant for grant in grants if source in (grant.get("src") or ()) and target in (grant.get("dst") or ())),
         None,
     )
-    if existing is not None:
-        ports = list(existing.get("ip") or ())
-        if wanted in ports:
-            return "", ""
-        existing["ip"] = [*ports, wanted]
-        changed.append(f"{wanted} added to the grant from {source} to {target}")
-    else:
-        grants.append({"src": [source], "dst": [target], "ip": [wanted]})
-        changed.append(f"a grant from {source} to {target} on {wanted}")
+    if existing is None:
+        parsed["grants"] = [*grants, {"src": [source], "dst": [target], "ip": [wanted]}]
+        return f"a grant from {source} to {target} on {wanted}"
+    ports = list(existing.get("ip") or ())
+    if wanted in ports:
+        return ""
+    # Appended rather than inserted: a reviewer reads the diff of the most
+    # dangerous document in the estate, and an insertion renumbers every
+    # element after it, so one added port would render as several changed lines.
+    existing["ip"] = [*ports, wanted]
     parsed["grants"] = grants
+    return f"{wanted} added to the grant from {source} to {target}"
 
-    asserted = f"{target}:{port}"
-    tests = [dict(test) for test in (parsed.get("tests") or ())]
-    for test in tests:
-        if test.get("src") != source or test.get("proto", "tcp") != "tcp":
-            continue
-        denied = list(test.get("deny") or ())
-        if asserted not in denied:
-            continue
-        denied.remove(asserted)
-        if denied:
-            test["deny"] = denied
-        else:
-            test.pop("deny", None)
-        accepted = list(test.get("accept") or ())
-        if asserted not in accepted:
-            test["accept"] = [*accepted, asserted]
-        changed.append(f"{asserted} moved from denied to accepted for {source}")
-    parsed["tests"] = tests
 
-    return json.dumps(parsed), "; ".join(changed)
+def _denies(test: dict[str, Any], source: str, asserted: str) -> bool:
+    """Whether a policy test asserts that ``source`` may not reach ``asserted`` over TCP."""
+
+    return test.get("src") == source and test.get("proto", "tcp") == "tcp" and asserted in (test.get("deny") or ())
+
+
+def _accept(test: dict[str, Any], asserted: str) -> None:
+    """Move ``asserted`` from the test's denials to its acceptances, dropping
+    a denial list it leaves empty."""
+
+    denied = list(test["deny"])
+    denied.remove(asserted)
+    if denied:
+        test["deny"] = denied
+    else:
+        test.pop("deny", None)
+    accepted = list(test.get("accept") or ())
+    if asserted not in accepted:
+        test["accept"] = [*accepted, asserted]
 
 
 # Names for ports no connection or container on the destination explains.
@@ -683,7 +691,7 @@ class _PortNamer:
         self.hq_port = scoped_served_port()
 
     def name(self, port: int, targets) -> str:
-        if port == self.hq_port and any(getattr(t, "runs_hq", False) for t in targets):
+        if port == self.hq_port and any(target.runs_hq for target in targets):
             return site_label()
         if any(self._opens(target, port) for target in targets):
             return CONNECTION_LABELS["ssh"]
@@ -702,7 +710,7 @@ class _PortNamer:
 
         refs = {*target.reached_by, *target.opened_by}
         names = {str(name).lower() for name in (target.name, *target.aliases)}
-        addresses = {host_of(address) for address in getattr(target, "addresses", ())}
+        addresses = {host_of(address) for address in target.addresses}
         for item in self.service_ports:
             if item.port != port:
                 continue
@@ -745,21 +753,19 @@ def _policy_admits_only_named() -> bool:
 def posture_facts() -> tuple[tuple[str, str], ...]:
     """Policy settings worth a finding, as topology facts on the tailnet connection.
 
-    ``devices-join-unapproved`` when device approval is read and off, and
-    tailnet lock is not on; ``empty-group-granted`` for each group with no
-    members that a grant or shell rule names.
-
-    Tailnet lock is approval by signature: a new node is filtered out by every
-    peer until a signing key vouches for it, and the coordination server holds
-    none of those keys. That is the stronger of the two, and Tailscale will
-    not run device approval beside it, so asking for approval under lock asks
-    for something that cannot be turned on.
+    Whether the policy admits only named principals to HQ's machine, and each
+    weakness: devices joining unapproved, and a granted group or tag that no
+    member or device holds.
     """
 
     found = policy()
     entries: list[tuple[str, str]] = []
     if _policy_admits_only_named():
         entries.append((HQ_ADMITS_ONLY_NAMED, "yes"))
+    # Tailnet lock is approval by signature: every peer filters a new node out
+    # until a signing key vouches for it, and the coordination server holds
+    # none of those keys. Tailscale will not run device approval beside it, so
+    # approval read as off under lock asks for something that cannot be on.
     if found.settings.get("devicesApprovalOn") is False and not found.lock.get("enabled"):
         entries.append(("devices-join-unapproved", "Off"))
     named = {

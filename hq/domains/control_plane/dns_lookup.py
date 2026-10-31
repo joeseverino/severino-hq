@@ -1,18 +1,10 @@
-"""Gateways to the two public registries HQ does not run itself.
+"""Gateways to the two public registries HQ does not run itself: a resolver
+for what a name or an address answers publicly, and RDAP for who holds an
+address, from the registries rather than a copy of them.
 
-In the Django app rather than in ``application/``, matching ``projects.github``:
-the outbound call, the scheme guard, the timeout and the one exception type
-live together, and the service above injects these as defaults so no test
-opens a socket.
-
-A resolver answers what the public internet returns for a name and what name an
-address gives for itself. RDAP answers who holds an address, from the
-registries rather than from a copy of them.
-
-Bounded because this runs in the process holding the session store: https only,
-a short timeout, and the only caller-supplied value is one the service has
-already checked is a hostname or an address. No credential travels with it,
-which is what makes the call acceptable here rather than controller work.
+Bounded because this runs in the process holding the session store: https
+only, a short timeout, and only a value the service checked is a hostname or an
+address. No credential travels with it, which is why it runs here.
 """
 
 import json
@@ -138,6 +130,9 @@ class _HTTPSOnlyRedirects(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
+# The outbound call, its scheme guard, its timeout and its one exception type
+# live together in the Django app, as ``projects.github``'s do, and the service
+# above injects these functions as defaults so no test opens a socket.
 _opener = urllib.request.build_opener(_HTTPSOnlyRedirects)
 # An RDAP or DNS answer is kilobytes; anything past this is not one.
 MAX_ANSWER_BYTES = 1024 * 1024
@@ -169,12 +164,10 @@ def _answer(response) -> object:
 def _get(url: str, *, timeout: int | None = None, accept: str) -> dict:
     """One JSON reading, or ``LookupUnavailable``.
 
-    Every failure collapses to one exception deliberately. The resolver reports
-    a missing parameter as a 400 with prose, a name that does not exist as a
-    200 with an empty list, and an address with no PTR record as a 200 carrying
-    an error beside a full body: distinctions too inconsistent to hand
-    upward. A caller can act on "no answer"; it cannot act on which flavor
-    of no answer this is.
+    Every failure is that one exception: the resolver answers a missing parameter
+    with a 400 in prose, an unknown name with an empty 200, and an address with no
+    PTR record with a 200 carrying an error, and a caller can act on "no answer",
+    never on which kind it is.
     """
 
     seconds = timeout or settings.SEVERINO_LOOKUP_TIMEOUT_SECONDS

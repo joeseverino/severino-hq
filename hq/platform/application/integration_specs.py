@@ -9,11 +9,12 @@ from typing import Any
 
 from pydantic import BaseModel, TypeAdapter
 
+from . import command_fields
 from .search_contracts import SearchDefinition
 from .security import Capability
 from .ui import ended
 lazy from . import records
-lazy from .labels import human_label
+lazy from .labels import human_label, lower_first
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,10 +36,15 @@ TARGET_KINDS: dict[str, TargetKind] = {
 
 @cache
 def command_schema(command_type: type) -> dict[str, Any]:
-    """Build an immutable command type's closed JSON Schema once."""
+    """Build an immutable command type's closed JSON Schema once, with what
+    each field declares through its ``command_fields`` markers written in."""
 
     schema = TypeAdapter(command_type).json_schema()
     schema.setdefault("additionalProperties", False)
+    properties = schema.get("properties", {})
+    for name, declared in command_fields.marked(command_type).items():
+        if name in properties:
+            properties[name] = {**properties[name], **declared}
     return schema
 
 
@@ -60,6 +66,15 @@ def declares_idempotency_key(command_type: type) -> bool:
     """Whether the command carries the key into its own domain operation."""
 
     return IDEMPOTENCY_FIELD in command_schema(command_type).get("properties", {})
+
+
+# Where the record a command acts on goes in what asking for it wants done.
+TARGET = "{target}"
+
+
+# A command's ``reached_from`` when the page of whatever it acts on sends
+# it, so search does not offer it.
+ON_ITS_PAGE = "its own page"
 
 
 # The caller's stale-write token, handed only to a handler that names it.
@@ -129,6 +144,21 @@ class CapabilitySpec:
     # The words for a mode or state of the command, by name, where one
     # button cannot say them all: ``(("all", "Refresh all"),)``.
     variants: tuple[tuple[str, str], ...] = ()
+    # The route of the page a person starts the command from, for one that
+    # needs a value only that page hands out (a held change's id, a token HQ
+    # gave a live record), or ``ON_ITS_PAGE`` for one the page of whatever it
+    # acts on sends. Search links there instead of to the command's form, and
+    # the form says where to start.
+    reached_from: str = ""
+    # What asking for the command wants done, read after "example-agent
+    # wants to", with ``{target}`` where the record it acts on goes: "keep
+    # the live version of {target}". Only for a name that does not read
+    # that way with its target after it (``wanted``).
+    wants: str = ""
+    # Where a switch stands now, for one whose state no record's detail holds:
+    # called with its target when it takes one, else with nothing. The command
+    # page says it and offers only the button that changes it.
+    state: Callable[..., bool] | None = None
 
     @property
     def required_capabilities(self) -> tuple[Capability | str, ...]:
@@ -141,6 +171,27 @@ class CapabilitySpec:
         """The command's name wherever a person reads it."""
 
         return self.label or human_label(self.name)
+
+    def wanted(self, variant: str = "") -> str:
+        """What asking for the command wants done, ``{target}`` where its
+        record goes: its declared ``wants``, else its words mid-sentence with
+        the target after them ("delete the message {target}" from "Delete a
+        message"), or a variant's words for it ("turn off updates for
+        {target}")."""
+
+        if variant:
+            phrase = lower_first(self.words(variant))
+            return f"{phrase} for {TARGET}" if self.target_kind else phrase
+        if self.wants:
+            return self.wants
+        phrase = lower_first(self.title)
+        if not self.target_kind:
+            return phrase
+        verb, _, rest = phrase.partition(" ")
+        article, _, noun = rest.partition(" ")
+        if article in ("a", "an") and noun:
+            phrase = f"{verb} the {noun}"
+        return f"{phrase} {TARGET}"
 
     def words(self, variant: str = "") -> str:
         """What a button for the command says: its verb, else its name, or

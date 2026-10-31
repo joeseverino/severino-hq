@@ -1,14 +1,10 @@
 """Primitives every read projection needs, declared once.
 
-Small on purpose, and deliberately dependency-free: this is imported by modules
-that serialize projects, assets, content, expenses and infrastructure, and a
-shared module that reached for any of their models would make importing one of
-them mean importing all of them.
-
-What lives here is the handful of rules every surface shares: paging bounds,
-the page-size ceiling, the timestamp rendering and the refusal of an input
-that cannot narrow. Each is defined once so a change to it reaches every
-surface.
+Dependency-free on purpose: modules serializing projects, assets, content,
+expenses and infrastructure import it, and a shared module that reached for
+their models would make importing one mean importing all. The rules every
+surface shares (paging bounds, the page-size ceiling, timestamp rendering, the
+refusal of an input that cannot narrow) are each defined once here.
 """
 
 from collections.abc import Callable, Iterator, Mapping
@@ -52,15 +48,13 @@ class QueryRefusal(ValueError):
 def projection_scope(seed: Mapping[str, Any] | None = None, *, apart: bool = False) -> Iterator[None]:
     """Share exact read results for one assembled projection, then forget them.
 
-    This is request/use-case memoization, not a process cache. Nested composers
-    reuse the active scope and the outermost caller clears it in ``finally``,
-    so two consumers assembling one answer cannot disagree or repeat a read,
-    while the next request always sees current state.
-
-    ``apart`` opens a scope of its own whatever is in progress, for asking a
-    question again as it was first asked: it starts from ``seed`` alone.
+    Request and use-case memoization, never a process cache: two consumers
+    assembling one answer cannot disagree or repeat a read, and the next request
+    sees current state. ``apart`` opens a scope of its own, starting from
+    ``seed`` alone, for asking a question again as it was first asked.
     """
 
+    # Nested composers reuse the active scope; the outermost caller clears it.
     current = _READ_SCOPE.get()
     if current is not None and not apart:
         if seed:
@@ -99,13 +93,10 @@ def day_span(first: date, last: date | None = None) -> tuple[datetime, datetime 
     """A run of local days as the moments a datetime column is filtered by.
 
     Returns ``(start, end)``: the first day's midnight and the midnight after
-    the last, in HQ's timezone, for ``column__gte=start, column__lt=end``.
-    ``last`` left out means from the first day on, and ``end`` is None.
-
-    Asked this way the database compares the column as stored and can use its
-    index. Asked as ``column__date__gte=day`` it has to turn every row's moment
-    into a local date first, which on SQLite is a call back into Python per
-    row: the slow part of a read that returns a few hundred rows of thousands.
+    the last, in HQ's timezone, for ``column__gte=start, column__lt=end``; with
+    ``last`` left out, from the first day on and ``end`` None. Compared as
+    stored, the column can use its index, where ``column__date__gte=day`` makes
+    SQLite call back into Python for every row.
     """
 
     def day(value: date) -> date:
@@ -161,14 +152,11 @@ def iso(value: Any) -> str | None:
 def guarded(queryset: QuerySet) -> QuerySet:
     """A list read's queryset, with a fetch its rows did not plan for caught.
 
-    A foreign key, a one-to-one or a deferred field read from a row that did
-    not fetch it costs a query per row. Under test and in development that
-    read raises ``FieldFetchBlocked``, so the missing ``select_related`` is
-    found by the first test that renders the list. In production it is fetched
-    once for every row of the page, never once per row and never as an error.
-
-    Django's fetch modes do not reach the queries of a reverse foreign key or
-    many-to-many manager; a query budget holds those.
+    A related or deferred field read from a row that did not fetch it costs a
+    query per row. Under test and in development it raises ``FieldFetchBlocked``,
+    so the first test that renders the list finds the missing ``select_related``;
+    in production it is fetched once for the whole page. A reverse foreign key or
+    many-to-many manager is beyond Django's fetch modes; a query budget holds it.
     """
 
     return queryset.fetch_mode(FETCH_RAISE if settings.SEVERINO_STRICT_FETCH else FETCH_PEERS)
@@ -202,7 +190,23 @@ def listing(
             matches |= Q(**{f"{field}__icontains": query})
         qs = qs.filter(matches)
     items = list(qs.order_by(*order)[: page_size(limit)])
-    return {"items": [serialize(row) for row in items], "count": len(items)}
+    return {"items": [serialize(row) for row in items], "count": len(items), "total": matched(qs, items, limit)}
+
+
+def complete(items: list[Any]) -> dict[str, Any]:
+    """A collection holding every match, in the fields every list read answers with.
+
+    For a projection a page and a read both draw: the page renders the same
+    dict the read returns, so neither adds paging fields the other lacks.
+    """
+
+    return {"items": items, "count": len(items), "total": len(items), "truncated": False, "next": ""}
+
+
+def matched(rows, page: list[Any], limit: int) -> int:
+    """How many rows the page was cut from: counted only when the page is full."""
+
+    return len(page) if len(page) < page_size(limit) else rows.count()
 
 
 def addressable(model, serialize, slug: str) -> dict[str, Any]:

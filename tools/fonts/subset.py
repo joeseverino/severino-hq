@@ -1,13 +1,8 @@
 """The served Inter: the release's variable font cut to what HQ prints and the
 features its stylesheets ask for.
 
-    uv run python -m tools.fonts.subset          # writes SERVED (mise run fix)
-    uv run python -m tools.fonts.subset --check  # fails when SERVED is behind (lint:drift-font)
-
-The source is Inter's own release (UPSTREAM beside this file). Both variable
-axes stay: weight, cut to the 400 to 700 the @font-face declares, and optical
-size, which browsers set from the font size, so headings and figures keep
-their display spacing.
+`mise run fix` writes SERVED from Inter's own release (UPSTREAM beside this
+file), and lint:drift-font fails when SERVED is behind (`--check`).
 """
 
 import argparse
@@ -25,6 +20,9 @@ SOURCE = ROOT / "tools/fonts/InterVariable.woff2"
 SERVED = ROOT / "static/fonts/inter/inter-variable-latin.woff2"
 STYLESHEETS = ROOT / "static/css"
 
+# Both variable axes stay: weight, cut to the range the @font-face declares, and
+# optical size, which browsers set from the font size, so headings and figures
+# keep their display spacing.
 WEIGHTS = (400, 700)
 
 # Latin-1, the typographic punctuation HQ's copy uses on purpose (RUF001-003 in

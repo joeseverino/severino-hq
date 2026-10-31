@@ -156,17 +156,12 @@ class ValidationTests(TestCase):
     def test_a_record_refused_while_writing_rolls_back_every_record(self):
         """Model validation passes a record that the use case then refuses."""
 
-        from dataclasses import replace
         from unittest import mock
 
-        from .. import registry_import
+        from .. import assets
         from ..record_errors import RecordNotFound
 
-        def refuse(command, *, principal):
-            raise RecordNotFound("refused while writing")
-
-        refusing = replace(registry_import._ASSET, upsert=refuse)
-        with mock.patch.object(registry_import, "_ASSET", refusing):
+        with mock.patch.object(assets, "save_asset", side_effect=RecordNotFound("refused while writing")):
             result = run()
 
         self.assertFalse(result["ok"])

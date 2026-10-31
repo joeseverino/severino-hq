@@ -1,0 +1,8 @@
+# ast-grep's project for the test code lint:ast-grep reads: structural rules
+# over every test*.py and *_testing.py module, one file each under rules/. The
+# source rules beside this directory exclude the tests, so these are a project
+# of their own.
+ruleDirs:
+  - rules
+testConfigs:
+  - testDir: rule-tests

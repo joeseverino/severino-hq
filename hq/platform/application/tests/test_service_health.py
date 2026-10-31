@@ -1,5 +1,6 @@
 """A service's state says what was checked, and what answers behind its proxy."""
 
+from datetime import timedelta
 from ipaddress import ip_network
 from unittest import mock
 
@@ -9,6 +10,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 
 from ..projection import projection_scope
+from ..service_context import part_rows
 from ..services import find_service
 
 
@@ -26,14 +28,14 @@ def in_place(key: str, kind: str, spec: dict) -> ManagedResource:
     )
 
 
-def containers(*records: dict) -> None:
+def containers(*records: dict, observed_at=None) -> None:
     ProviderInventory.objects.update_or_create(
         kind="portainer.container",
         defaults={
             "records": list(records),
             "reachable": True,
             "connected": True,
-            "observed_at": timezone.now(),
+            "observed_at": observed_at or timezone.now(),
             "controller_id": "example-controller",
         },
     )
@@ -118,6 +120,22 @@ class ServiceHealthTests(TestCase):
         health = self.health()
 
         self.assertEqual((health.state, health.label), ("good", "Health check passing"))
+
+    def test_a_health_read_from_an_out_of_date_reading_says_so_and_asserts_nothing_live(self):
+        self.proxy(8080)
+        containers(
+            {"host": "lab-1", "name": "app", "ports": [8080], "state": "running", "status": "Up 2 hours (healthy)"},
+            observed_at=timezone.now() - timedelta(days=30),
+        )
+
+        with projection_scope():
+            service = find_service("app.example.com")
+            health = service.health
+            steps = {row.label: row.health for row in part_rows(service, service.path.primary) if row.hop}
+
+        self.assertEqual((health.state, health.label), ("attention", "Out of date"))
+        self.assertTrue(health.detail.startswith("Health check passing when last read"), health.detail)
+        self.assertEqual(steps["Container"], ("Running when last read", "pill-unprobed"))
 
     def test_no_state_reads_as_healthy(self):
         self.proxy(8080)
