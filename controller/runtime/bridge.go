@@ -64,7 +64,7 @@ func NewSocketBridge(path string) (*SocketBridge, error) {
 type send func(ctx context.Context, contentType string, body io.Reader) (*http.Response, error)
 
 // call runs one action under the bridge's deadline and decodes its answer.
-func (b *SocketBridge) call(ctx context.Context, payload any, result any, request send) error {
+func (b *SocketBridge) call(ctx context.Context, payload, result any, request send) error {
 	var body io.Reader
 	if payload != nil {
 		encoded, err := json.Marshal(payload)

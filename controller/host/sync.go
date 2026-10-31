@@ -61,7 +61,7 @@ func (m *Machine) extract(ctx context.Context, image, dir string) error {
 		return fmt.Errorf("could not open the image %s", image)
 	}
 	container := strings.TrimSpace(string(out))
-	defer m.run(context.WithoutCancel(ctx), "docker", "rm", "--force", container)
+	defer func() { _ = m.run(context.WithoutCancel(ctx), "docker", "rm", "--force", container) }()
 	for _, item := range TreeItems {
 		target := filepath.Join(dir, item)
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {

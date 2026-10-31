@@ -1,0 +1,19 @@
+# Who a request's session signed in is request_identity.signed_in. Every
+# request Django serves has a user; only one the MCP boundary admitted has
+# none. That case is answered once, so no reader decides on its own whether a
+# missing or anonymous user counts as signed in.
+id: user-asked-by-signed-in
+language: python
+severity: error
+message: Whether a request has a user is asked outside request_identity.signed_in.
+note: Ask request_identity.signed_in(request).
+ignores:
+  - "**/platform/application/request_identity.py"
+rule:
+  any:
+    - pattern: getattr($OBJ, $NAME)
+    - pattern: getattr($OBJ, $NAME, $DEFAULT)
+    - pattern: hasattr($OBJ, $NAME)
+constraints:
+  NAME:
+    regex: ^["']user["']$

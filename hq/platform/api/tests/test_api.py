@@ -518,7 +518,7 @@ class TransportTests(SentinelMixin, TestCase):
         with _serving():
             response = self.client.post(
                 "/api/v2/capabilities/project.dependency_updates/",
-                data=json.dumps({"target": "example", "payload": {"enabled": False}}),
+                data=json.dumps({"target": "example", "payload": {"dependency_updates": False}}),
                 content_type="application/json",
                 HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
                 HTTP_IDEMPOTENCY_KEY="k0",
@@ -565,7 +565,7 @@ class TransportTests(SentinelMixin, TestCase):
 
         from hq.domains.control_plane.models import CapabilityRule
         from hq.domains.projects.models import Project
-        from hq.platform.application.approvals import approve
+        from hq.platform.application.approvals import ApproveCommand, approve
         from hq.platform.application.security import web_principal
 
         body = {"payload": {"name": "Approved", "slug": "approved", "status": "active"}}
@@ -573,7 +573,7 @@ class TransportTests(SentinelMixin, TestCase):
         self._rule(CapabilityRule.Rule.APPROVE)
         with _serving():
             held = self._post("project.create", body, token=_token(scope="write_projects"), idempotency_key="k3")
-            approve(held.json()["data"]["approval"]["id"], principal=operator)
+            approve(ApproveCommand(held.json()["data"]["approval"]["id"]), principal=operator)
             again = self._post("project.create", body, token=_token(scope="write_projects"), idempotency_key="k3")
         self.assertNotIn("Idempotency-Replayed", again)
         self.assertEqual(Project.objects.filter(slug="approved").count(), 1)
@@ -757,7 +757,7 @@ class TransportTests(SentinelMixin, TestCase):
         )
         project_update = next(spec for spec in specs if spec["name"] == "project.update")
         self.assertEqual(project_update["request_schema"]["required"], ["target"])
-        nested = views._request_schema(
+        nested = views.request_schema(
             {
                 "input_schema": {
                     "type": "object",
@@ -815,10 +815,12 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertIn("cloudflare.dns_record", {ability["name"] for ability in state["abilities"]})
 
     def test_connections_never_invoke_a_family_the_token_cannot_read(self):
-        with (
-            _serving(),
-            patch("hq.platform.application.connections._controller_instances") as provider,
-        ):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from hq.domains.control_plane.models import ProviderConnection
+
+        with _serving(), CaptureQueriesContext(connection) as queries:
             response = self.client.get(
                 "/api/v2/connections/",
                 HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
@@ -829,7 +831,8 @@ class TransportTests(SentinelMixin, TestCase):
         core = next(item for item in data["connections"] if item["name"] == "infrastructure.controllers")
         self.assertFalse(core["permitted"])
         self.assertEqual(data["groups"], [])
-        provider.assert_not_called()
+        # The family's instances are the controller's reports, and none was read.
+        self.assertFalse([query for query in queries if ProviderConnection._meta.db_table in query["sql"]])
 
     def test_topology_exposes_safe_nodes_edges_and_canonical_actions(self):
         from django.utils import timezone
@@ -1002,20 +1005,17 @@ class TransportTests(SentinelMixin, TestCase):
                 self.assertEqual(response.json()["error"]["code"], "invalid_input")
                 self.assertNotIn(value.split("=")[1], response.json()["error"]["message"])
 
-    def test_a_refusal_answers_with_its_curated_reason_never_its_arguments(self):
-        from hq.platform.application.findings import InvalidFindingsQuery
+    def test_a_refusal_answers_with_the_reason_the_application_gave(self):
+        from hq.platform.application.findings import InvalidFindingsQuery, findings
+        from hq.platform.application.security import cli_principal
 
-        refusal = InvalidFindingsQuery("findings: limit must be at least 1.")
-        refusal.args = ("internal detail of whatever raised it",)
+        with self.assertRaises(InvalidFindingsQuery) as refused:
+            findings(principal=cli_principal(), limit=0)
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
-        with (
-            _serving(),
-            host_only(),
-            patch("hq.platform.application.findings._narrowing", side_effect=refusal),
-        ):
-            response = self.client.get("/api/v2/findings/", **headers)
+        with _serving(), host_only():
+            response = self.client.get("/api/v2/findings/?limit=0", **headers)
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["error"]["message"], refusal.reason)
+        self.assertEqual(response.json()["error"]["message"], refused.exception.reason)
 
     def test_resource_read_requires_its_declared_grant(self):
         with _serving():

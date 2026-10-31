@@ -1,29 +1,21 @@
-{% comment %}A machine's state and addresses, on its title's line (`page_aside`).{% endcomment %}
+{% comment %}
+A machine's state and addresses, on its title's line (`page_aside`), one run
+of parts with each dot written straight after the part before it.
+
+One state, as on the list. Presence decides when the tailnet reports the
+machine; each connection's own answer is under "Read through".
+
+"this device": you are reading this on the machine it describes. HQ judges the
+caller's address for the network gate before any view runs, and every machine
+carries the addresses it answers at, so the page can say so. Outside the
+presence block on purpose: a machine the tailnet has never heard of is still
+the one you are sitting at.
+
+"also known as": the other names this same machine answers to. Two credentials
+name one machine differently and neither is wrong (a Portainer environment and
+an SSH item for the same VPS) so the names fold together and the ones not
+chosen are said here rather than dropped.
+{% endcomment %}
 <p class="page-title-meta">
-      {% comment %}
-      One state, as on the list. Presence decides when the tailnet reports the
-      machine; each connection's own answer is under "Read through".
-      {% endcomment %}
-      <span class="pill pill-{{ machine.state.1 }}">{{ machine.state.0|breakable }}</span>{% if machine.state_since %} since {{ machine.state_since|breakable }}{% endif %}
-      {% if is_this_device %}
-        {% comment %}
-        You are reading this on the machine it describes. HQ judges the caller's
-        address for the network gate before any view runs, and every machine
-        carries the addresses it answers at, so the page can say so. Outside the
-        presence block on purpose: a machine the tailnet has never heard of is
-        still the one you are sitting at.
-        {% endcomment %}
-        · <span class="pill pill-reachable" title="You are viewing this page from this machine">this device</span>
-      {% endif %}
-      {% if machine.role %} · {{ machine.role|breakable }}{% endif %}
-      {% if not reached_links %} · no connection reads it{% if not machine.declaration %}; another record names it{% endif %}{% endif %}
-      {% if machine.address and not header_addresses %} · <code>{{ machine.address|breakable }}</code>{% endif %}
-      {% for label, address, holder in header_addresses %} · <span class="muted">{{ label|breakable }}</span> <code>{{ address|breakable }}</code>{% if holder %} <span class="muted">{{ holder|breakable }}</span>{% endif %}{% endfor %}
-      {% comment %}
-      The other names this same machine answers to. Two credentials name one
-      machine differently and neither is wrong (a Portainer environment and an
-      SSH item for the same VPS) so the names fold together and the ones not
-      chosen are said here rather than dropped.
-      {% endcomment %}
-      {% if machine.aliases %} · also known as {% for alias in machine.aliases %}<code>{{ alias|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}
+      <span class="pill pill-{{ machine.state.1 }}">{{ machine.state.0|breakable }}</span>{% if machine.state_since %} since {{ machine.state_since|breakable }}{% endif %}{% if is_this_device %}{% dot %}<span class="pill pill-reachable" title="You are viewing this page from this machine">this device</span>{% endif %}{% if machine.role %}{% dot %}{{ machine.role|breakable }}{% endif %}{% if not reached_links %}{% dot %}no connection reads it{% if not machine.declaration %}; another record names it{% endif %}{% endif %}{% if machine.address and not header_addresses %}{% dot %}<code>{{ machine.address|breakable }}</code>{% endif %}{% for label, address, holder in header_addresses %}{% dot %}<span class="muted">{{ label|breakable }}</span> <code>{{ address|breakable }}</code>{% if holder %} <span class="muted">{{ holder|breakable }}</span>{% endif %}{% endfor %}{% if machine.aliases %}{% dot %}also known as {% for alias in machine.aliases %}<code>{{ alias|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}
 </p>

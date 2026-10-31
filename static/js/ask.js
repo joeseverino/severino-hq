@@ -54,31 +54,86 @@
   };
   hqEvery(() => document.querySelectorAll("[data-ask][data-ask-since]").forEach(tick), { ms: 1000 });
 
-  // What a control says is drawn under it, over the page. Near an edge it is
-  // moved back onto the screen, by however much of it would be off.
-  const EDGE = 14;
-  const keepOnScreen = (said) => {
-    said.style.removeProperty("--ask-shift");
-    const box = said.getBoundingClientRect();
-    if (!box.width) return;
-    const width = document.documentElement.clientWidth;
-    const shift = Math.min(0, width - EDGE - box.right) || Math.max(0, EDGE - box.left);
-    if (shift) said.style.setProperty("--ask-shift", `${Math.round(shift)}px`);
+  // A note that says a word (`data-ask-word`, partials/_ask.html) says the
+  // state's word and its sentence, of which a table cell shows the word: the
+  // sentence is the button's title as well, which its reason is otherwise.
+  const part = (name, text) => {
+    const span = document.createElement("span");
+    span.className = name;
+    span.textContent = text;
+    return span;
   };
-  const placeSaid = () => document.querySelectorAll(".ask-said").forEach(keepOnScreen);
-  new MutationObserver((changes) => {
-    new Set(changes.map((change) => change.target.parentElement?.closest(".ask-said") || change.target.closest?.(".ask-said")))
-      .forEach((said) => said && keepOnScreen(said));
-  }).observe(document.body, { subtree: true, childList: true, characterData: true });
-  window.addEventListener("resize", placeSaid);
-  placeSaid();
-
-  const say = (control, text) => {
+  const say = (control, text, word = "") => {
     const note = control.querySelector("[data-ask-note]");
     if (!note) return;
+    // The server writes what the button is for apart from its title, which
+    // holds the work's last note while there is one (`data-ask-reason`,
+    // action_tags.ask_button).
+    control.querySelectorAll("[data-ask-button]").forEach((button) => {
+      const title = text || button.dataset.askReason || "";
+      if (title) button.title = title;
+      else button.removeAttribute("title");
+    });
     // Written only when it changes: a live region reads out every write.
-    if (note.textContent !== text) note.textContent = text;
+    const said = "askWord" in note.dataset && text ? `${word}${text}` : text;
+    if (note.textContent === said) return;
+    if (said === text) note.textContent = text;
+    else note.replaceChildren(part("ask-word", word), part("ask-sentence", text));
     if (control.matches(".ask-quiet")) note.hidden = !text;
+    if ("askWord" in note.dataset) sayBelow(control, text && word ? `${word}: ${text}` : text);
+  };
+
+  // A table's row shows the note's word alone, and a phone has no title to
+  // hover: the row's open line says the word and the sentence, under the
+  // button's label. The server draws it there (`data-ask-why`, _ask.html,
+  // through table_tags._detail_row) when the work already stood somewhere;
+  // otherwise it is drawn here as that line draws it, and opens the row's
+  // toggle by being there (tables.css).
+  const sayBelow = (control, said) => {
+    const row = control.closest(".data-table > tbody > tr:not(.row-detail)");
+    const button = control.querySelector("[data-ask-button]");
+    if (!row || !button) return;
+    const key = button.getAttribute("formaction") || "";
+    let detail = row.nextElementSibling?.matches("[data-row-detail]") ? row.nextElementSibling : null;
+    const copies = [control, detail].filter(Boolean)
+      .flatMap((root) => [...root.querySelectorAll("[data-ask-why]")].filter((why) => why.dataset.askWhy === key));
+    if (!said) {
+      copies.forEach((why) => {
+        const term = why.closest("dd")?.previousElementSibling;
+        if (term?.matches("dt")) term.remove();
+        (why.closest(".row-columns > dd") || why).remove();
+      });
+      return;
+    }
+    if (copies.length) {
+      copies.forEach((why) => { why.textContent = said; });
+      return;
+    }
+    const why = part("ask-why row-below", said);
+    why.dataset.askWhy = key;
+    why.dataset.label = button.textContent.trim();
+    control.append(why);
+    if (!detail) {
+      detail = document.createElement("tr");
+      detail.className = "row-detail";
+      detail.dataset.rowDetail = "";
+      detail.insertCell().colSpan = [...row.cells].reduce((width, cell) => width + cell.colSpan, 0);
+      row.after(detail);
+    }
+    const cell = detail.cells[0];
+    let list = cell.querySelector(":scope > .row-columns");
+    if (!list) {
+      list = document.createElement("dl");
+      list.className = "row-columns";
+      cell.append(list);
+    }
+    const term = document.createElement("dt");
+    const value = document.createElement("dd");
+    term.dataset.label = "";
+    value.dataset.label = "";
+    term.textContent = why.dataset.label;
+    value.append(why.cloneNode(true));
+    list.append(term, value);
   };
 
   // Draws one standing on a control. Everything a control shows comes through
@@ -100,7 +155,7 @@
       if (standing.live) button.setAttribute("aria-disabled", "true");
       else button.removeAttribute("aria-disabled");
     });
-    say(control, standing.note || "");
+    say(control, standing.note || "", standing.label || "");
     tick(control);
     const label = control.querySelector("[data-ask-label]");
     if (label && standing.label) label.textContent = standing.label;
@@ -121,7 +176,7 @@
   const reloadedRecently = () => {
     try {
       return Date.now() - Number(window.sessionStorage.getItem(reloadedKey) || 0) < RELOAD_GAP_MS;
-    } catch (_error) {
+    } catch {
       return true;
     }
   };
@@ -135,13 +190,13 @@
       const link = document.createElement("a");
       link.href = window.location.href;
       link.textContent = "Show it";
-      note.replaceChildren("A newer reading is in. ", link);
+      note.replaceChildren(part("ask-sentence", "A newer reading is in. "), link);
       note.hidden = false;
     };
     if (touched || !showing() || reloadedRecently()) return offer();
     try {
       window.sessionStorage.setItem(reloadedKey, String(Date.now()));
-    } catch (_error) {
+    } catch {
       return offer();
     }
     window.location.reload();
@@ -160,7 +215,7 @@
     if (!selector) return reload(control);
     try {
       await refresh(selector);
-    } catch (_error) {
+    } catch {
       reload(control);
     }
   };
@@ -179,6 +234,7 @@
         // under us, which will answer again.
         if (response.status === 404 || response.status === 403) return end();
         if (!response.ok) throw new Error(String(response.status));
+        // eslint-disable-next-line no-restricted-syntax -- how asked-for work stands is data every copy of its control draws, not a region
         const standing = await response.json();
         if (standing.live) {
           controls().forEach((control) => draw(control, standing));
@@ -222,7 +278,7 @@
   // page away to sign in.
   const ask = async (control, action, body, { quiet = false } = {}) => {
     if (control.getAttribute("aria-busy") === "true") return;
-    if (!quiet) draw(control, { state: "queued", live: true, note: "Asking…", seconds: 0 });
+    if (!quiet) draw(control, { state: "queued", label: "Waiting", live: true, note: "Asking…", seconds: 0 });
     try {
       const response = await hqFetch(action, {
         method: "POST",
@@ -230,6 +286,7 @@
         credentials: "same-origin",
         renewSession: !quiet,
       });
+      // eslint-disable-next-line no-restricted-syntax -- the ask's answer is how the work stands, data every copy of its control draws
       const standing = response.ok ? await response.json() : null;
       if (!standing) throw new Error("no answer");
       if (standing.live && standing.status) {
@@ -245,8 +302,8 @@
       }
       if (quiet && standing.state === "idle") return;
       await land(control, standing);
-    } catch (_error) {
-      if (!quiet) draw(control, { state: "failed", live: false, note: "The request could not be sent." });
+    } catch {
+      if (!quiet) draw(control, { state: "failed", label: "Failed", live: false, note: "The request could not be sent." });
     }
   };
 

@@ -7,7 +7,7 @@ Activity calendar: one month of plan vs. execution.
 per ChartSeries slot), missed, planned, empty. Paging is plain links so a month
 can be linked to directly and works without JavaScript.
 {% endcomment %}
-<figure class="chart-card card calendar-card" id="{{ calendar_id|default:'training-calendar' }}" data-fragment data-fragment-name="calendar" data-fragment-links data-fragment-history="replace">
+{% card element="figure" css="chart-card calendar-card" id=calendar_id|default:'training-calendar' data_fragment=True data_fragment_name="calendar" data_fragment_links=True data_fragment_history="replace" %}
   <figcaption class="calendar-head">
     <div class="calendar-head-copy">
       <h2>{{ calendar.title|breakable }}</h2>
@@ -38,8 +38,7 @@ can be linked to directly and works without JavaScript.
     <caption class="visually-hidden">{% if calendar.period_label %}{{ calendar.title|breakable:"," }} {{ calendar.period_label|breakable:"." }}{% else %}{{ calendar.title|breakable:"." }}{% endif %} {{ calendar.description|breakable }}</caption>
     <thead>
       <tr>
-        {% comment %}Two letters: single ones give two T's and two S's.{% endcomment %}
-        {% for day in calendar.weeks.0 %}<th scope="col" class="calendar-weekday"><span aria-hidden="true">{{ day.when|date:"D"|slice:":2"|breakable }}</span><span class="visually-hidden">{{ day.when|date:"l" }}</span></th>{% endfor %}
+        {% for day in calendar.weeks.0 %}<th scope="col" class="calendar-weekday"><span aria-hidden="true">{{ day.when|when:"initials" }}</span><span class="visually-hidden">{{ day.when|when:"weekday" }}</span></th>{% endfor %}
       </tr>
     </thead>
     <tbody>
@@ -49,8 +48,8 @@ can be linked to directly and works without JavaScript.
             {% if day.filler %}
               <td class="calendar-day is-filler"></td>
             {% else %}
-              <td class="calendar-day is-{{ day.state }}"{% if day.detail %} data-tip="{{ day.when|date:"D" }} {{ day.when|day }} · {{ day.detail }}"{% endif %}>
-                <span class="calendar-date" aria-hidden="true">{{ day.when|date:"j" }}</span>
+              <td class="calendar-day is-{{ day.state }}"{% if day.detail %} data-tip="{{ day.when|day }} · {{ day.detail }}"{% endif %}>
+                <span class="calendar-date" aria-hidden="true">{{ day.when|when:"numeral" }}</span>
                 {% comment %}Without this a screen reader gets a grid of bare numbers.{% endcomment %}
                 <span class="visually-hidden">{{ day.when|day }}: {{ day.detail|default:"nothing logged"|breakable }}</span>
                 <span class="calendar-marks" aria-hidden="true">
@@ -65,4 +64,4 @@ can be linked to directly and works without JavaScript.
       {% endfor %}
     </tbody>
   </table>
-</figure>
+{% endcard %}

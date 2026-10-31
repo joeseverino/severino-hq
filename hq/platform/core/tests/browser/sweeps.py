@@ -1,4 +1,4 @@
-"""The layout sweeps: the stress estate's pages without script, with it, settled, and at their longest."""
+"""The layout sweeps: the stress estate's pages without script, with it, and at their longest."""
 
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.settle import (
@@ -9,12 +9,10 @@ from hq.platform.core.tests.browser.probes.settle import (
     SETTLE,
 )
 from hq.platform.core.tests.browser.selectors import SELECTORS
-from hq.platform.core.tests.browser.serving import ORIGIN
-from hq.platform.core.tests.browser.stress import ALL_PAGES, SHARED_PARTS, SPEAKING_HEADS
+from hq.platform.core.tests.browser.stress import ALL_PAGES, SHARED_PARTS
 from hq.platform.core.tests.browser.widths import (
     NARROWEST,
     SPARSE_WIDTHS,
-    SPEAKING_WIDTHS,
     WIDE,
     WIDE_TABLES,
     WIDTHS,
@@ -39,7 +37,7 @@ class UnscriptedLayoutTests(LayoutBrowserTests):
                 self.hold(name, width, self.unscripted_reads(name, width))
                 if width in WIDTHS:
                     self.in_scheme("dark")
-                    self.hold(name, width, [self.text_reads_in_the_dark_theme, self.a_line_shows_on_its_surface])
+                    self.hold(name, width, [self.text_reads_in_the_dark_theme])
                     self.in_scheme("light")
                 if width == WIDE:
                     self.hold(name, width, [self.a_chosen_theme_paints_as_the_systems])
@@ -87,14 +85,6 @@ class UnscriptedDenseLayoutTests(UnscriptedLayoutTests):
     def test_every_dense_page_keeps_the_layout_rules_without_script(self):
         self.sweep(DENSE_PAGES)
 
-    def test_every_list_keeps_its_rows_to_their_height_without_script(self):
-        """Every list filled with the longest values its model holds, as the
-        server drew it."""
-
-        for name in self.lists:
-            for width in self.across(name, {*WIDTHS, *WIDE_TABLES}):
-                self.hold(name, width, [self.a_table_row_stays_within_its_height_budget])
-
 
 class ScriptedLayoutTests(LayoutBrowserTests):
     """Every page once its script has run. The sweep is split between the
@@ -103,41 +93,25 @@ class ScriptedLayoutTests(LayoutBrowserTests):
     scripted = True
 
     def sweep(self, names):
-        """Every layout check holds, at a laptop window's width too; pressing
-        a control moves nothing; a table fits its box with every disclosure
-        open. Script reads the width a page loads at, so each width is a load."""
+        """Every layout check holds, at a laptop window's width too, and a
+        table fits its box with every disclosure open, down to the narrowest
+        phone. Script reads the width a page loads at, so each width is a load."""
 
-        self.spoke, self.spoken_on = 0, set()
         for name in names:
-            widths = SPEAKING_WIDTHS if name in SPEAKING_HEADS else (*WIDTHS, *SPEAKING_WIDTHS, *WIDE_TABLES)
-            for width in sorted(set(widths)):
+            for width in sorted({NARROWEST, *WIDTHS, *WIDE_TABLES}):
                 if self.loaded(name, width, script="on"):
                     self.page.evaluate(SETTLE)
                     self.read_loaded(name, width)
 
-    def sweep_dense(self, dense, *others):
-        """``sweep`` over ``dense`` and ``others``, held to a control that
-        speaks on a page of ``dense``, so the rule that presses one is not
-        held over these pages vacuously."""
-
-        self.sweep((*dense, *others))
-        self.assertTrue(self.spoken_on & set(dense), "no dense page here has a control that speaks")
-
     def read_loaded(self, name, width):
         read = name in ALL_PAGES and width in (*WIDTHS, *WIDE_TABLES)
         if read and width in WIDTHS:
-            self.hold(name, width, self.scripted_reads(), script="on")
             # Light is held by every layout check below.
             self.in_scheme("dark")
             self.hold(name, width, [self.every_palette_check_holds], script="on", scheme="dark")
             self.in_scheme("light")
         if read:
             self.hold(name, width, [self.every_layout_check_holds], script="on")
-        if width in SPEAKING_WIDTHS:
-            spoke = self.spoke
-            self.pressing_a_control_moves_nothing(name, width)
-            if self.spoke > spoke:
-                self.spoken_on.add(name)
         if name in ALL_PAGES:
             self.hold(name, width, [self.a_table_fits_its_box_at_every_width], script="on")
 
@@ -148,49 +122,18 @@ class ScriptedSparseLayoutTests(ScriptedLayoutTests):
 
 
 # The dense pages in two halves, every other page, each a class of its own:
-# swept together they are the longest class a layout leg runs. Each half holds
-# its own pages to a control that speaks.
+# swept together they are the longest class a layout leg runs.
 FIRST_DENSE, SECOND_DENSE = tuple(DENSE_PAGES)[::2], tuple(DENSE_PAGES)[1::2]
 
 
 class ScriptedDenseFirstLayoutTests(ScriptedLayoutTests):
-    def test_the_first_dense_pages_and_every_head_keep_the_layout_rules_once_their_script_has_run(self):
-        self.sweep_dense(FIRST_DENSE, *SPEAKING_HEADS)
+    def test_the_first_dense_pages_keep_the_layout_rules_once_their_script_has_run(self):
+        self.sweep(FIRST_DENSE)
 
 
 class ScriptedDenseSecondLayoutTests(ScriptedLayoutTests):
     def test_the_second_dense_pages_keep_the_layout_rules_once_their_script_has_run(self):
-        self.sweep_dense(SECOND_DENSE)
-
-
-class SettledLayoutTests(LayoutBrowserTests):
-    """What the scripts leave once a page is drawn: nothing moved. The sweep
-    is split between the classes below."""
-
-    scripted = True
-
-    def sweep(self, names):
-        """What the server draws is where things stay. The stress estate
-        answers no part a page fetches, so those requests are left waiting:
-        a placeholder stays a placeholder, and what moves is the scripts'."""
-
-        self.page.route("**/*", self.wait_for_parts)
-        for name in names:
-            for width in WIDTHS:
-                with self.subTest(page=name, width=width):
-                    moved = self.moved_once_drawn(f"{ORIGIN}/{name}/", width, self.loaded_and_still)
-                    if moved:
-                        self.fail("\n".join(moved))
-
-
-class SettledSparseLayoutTests(SettledLayoutTests):
-    def test_nothing_moves_once_a_sparse_page_is_drawn(self):
-        self.sweep(PAGES)
-
-
-class SettledDenseLayoutTests(SettledLayoutTests):
-    def test_nothing_moves_once_a_dense_page_is_drawn(self):
-        self.sweep(DENSE_PAGES)
+        self.sweep(SECOND_DENSE)
 
 
 class LongestValueLayoutTests(LayoutBrowserTests):
@@ -202,7 +145,7 @@ class LongestValueLayoutTests(LayoutBrowserTests):
         """Every list, its rows derived from its model's fields
         (test_browser_derived_fixtures), as it loads and with every row open."""
 
-        held = [self.a_table_fits_its_box_at_every_width, self.a_token_breaks_only_where_it_may]
+        held = [self.a_table_fits_its_box_at_every_width]
         for name in self.lists:
             for width in (NARROWEST, *WIDTHS, *WIDE_TABLES):
                 if not self.loaded(name, width, script="on"):

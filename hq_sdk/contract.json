@@ -1,5 +1,5 @@
 {
-  "api_version": 5,
+  "api_version": 6,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -273,7 +273,14 @@
           "PRUNE_DOCUMENTATION",
           "DELETE_CALENDAR",
           "MANAGE_INFRASTRUCTURE",
-          "REQUEST_CERTIFICATE_RENEWAL"
+          "REQUEST_CERTIFICATE_RENEWAL",
+          "UPLOAD_CERTIFICATE",
+          "UPLOAD_RECEIPT",
+          "DECIDE_APPROVALS",
+          "GOVERN_AGENTS",
+          "SET_PREFERENCES",
+          "PIN_FAVORITES",
+          "SET_ASIDE_ACTION_ITEMS"
         ]
       },
       "CapabilitySpec": {
@@ -294,7 +301,10 @@
           "target_initial_fields=",
           "label=",
           "verb=",
-          "variants="
+          "variants=",
+          "reached_from=",
+          "wants=",
+          "state="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -314,6 +324,13 @@
           "title": {
             "kind": "property"
           },
+          "wanted": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "variant="
+            ]
+          },
           "words": {
             "kind": "method",
             "parameters": [
@@ -322,6 +339,38 @@
             ]
           }
         }
+      },
+      "Choices": {
+        "bases": [],
+        "constructor": [
+          "options"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "Describe": {
+        "bases": [],
+        "constructor": [
+          "text"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "Names": {
+        "bases": [],
+        "constructor": [
+          "resource",
+          "key="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "ON_ITS_PAGE": {
+        "kind": "value",
+        "type": "str"
       },
       "Principal": {
         "bases": [],
@@ -351,6 +400,16 @@
           }
         }
       },
+      "Refers": {
+        "bases": [],
+        "constructor": [
+          "model",
+          "field"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
       "StrictCommand": {
         "bases": [
           "BaseModel"
@@ -370,7 +429,12 @@
       },
       "describe_capabilities": {
         "kind": "function",
-        "parameters": []
+        "parameters": [
+          "*",
+          "principal",
+          "name=",
+          "resource="
+        ]
       },
       "execute_capability": {
         "kind": "function",
@@ -586,6 +650,15 @@
           },
           "is_stale": {
             "kind": "property"
+          },
+          "seen_error": {
+            "kind": "property"
+          },
+          "seen_state": {
+            "kind": "property"
+          },
+          "seen_state_display": {
+            "kind": "property"
           }
         }
       },
@@ -605,12 +678,6 @@
         "kind": "class",
         "members": {}
       },
-      "reap": {
-        "kind": "function",
-        "parameters": [
-          "kind="
-        ]
-      },
       "start": {
         "kind": "function",
         "parameters": [
@@ -629,10 +696,6 @@
         "kind": "value",
         "type": "Decimal"
       },
-      "MINUS": {
-        "kind": "value",
-        "type": "str"
-      },
       "money": {
         "kind": "function",
         "parameters": [
@@ -646,6 +709,15 @@
         "kind": "function",
         "parameters": [
           "value"
+        ]
+      },
+      "signed_number": {
+        "kind": "function",
+        "parameters": [
+          "value",
+          "figure",
+          "*",
+          "plus="
         ]
       },
       "to_money": {
@@ -1939,13 +2011,13 @@
           "categories",
           "rows",
           "empty",
+          "series=",
           "width=",
           "height=",
           "plot_left=",
           "plot_right=",
           "plot_top=",
           "plot_bottom=",
-          "series",
           "bars"
         ],
         "fields": [],
@@ -2037,6 +2109,12 @@
           "many="
         ]
       },
+      "ended": {
+        "kind": "function",
+        "parameters": [
+          "text"
+        ]
+      },
       "line_chart": {
         "kind": "function",
         "parameters": [
@@ -2099,6 +2177,12 @@
       "main": {
         "kind": "function",
         "parameters": []
+      },
+      "sentence_closes": {
+        "kind": "function",
+        "parameters": [
+          "source_root"
+        ]
       },
       "template_violations": {
         "kind": "function",
@@ -2360,7 +2444,9 @@
         }
       },
       "ServiceWriteMixin": {
-        "bases": [],
+        "bases": [
+          "WriteMessages"
+        ],
         "constructor": [],
         "kind": "class",
         "members": {
@@ -2382,6 +2468,10 @@
               "self"
             ]
           },
+          "identity_result_key": {
+            "kind": "attribute",
+            "type": "str"
+          },
           "reload": {
             "kind": "method",
             "parameters": [
@@ -2396,6 +2486,25 @@
             ]
           }
         }
+      },
+      "WriteMessages": {
+        "bases": [],
+        "constructor": [],
+        "kind": "class",
+        "members": {
+          "created_message": {
+            "kind": "attribute",
+            "type": "str"
+          },
+          "deleted_message": {
+            "kind": "attribute",
+            "type": "str"
+          },
+          "updated_message": {
+            "kind": "attribute",
+            "type": "str"
+          }
+        }
       }
     }
   },
@@ -2406,7 +2515,6 @@
       "allocation",
       "allocation-legend",
       "btn",
-      "card",
       "card-columns",
       "cell-data",
       "chart-axis",
@@ -2417,6 +2525,7 @@
       "compact-table",
       "count",
       "danger",
+      "danger-link",
       "data-table",
       "date-col",
       "domain-charts",
@@ -2436,6 +2545,7 @@
       "form-actions",
       "ghost",
       "help",
+      "icon-link",
       "inline",
       "key-col",
       "kv",
@@ -2483,7 +2593,6 @@
       "row-more",
       "save-bar",
       "section-foot",
-      "section-head",
       "section-period",
       "split",
       "stacked",
@@ -2505,7 +2614,6 @@
         "capfirst",
         "center",
         "cut",
-        "date",
         "default",
         "default_if_none",
         "dictsort",
@@ -2541,9 +2649,6 @@
         "slugify",
         "stringformat",
         "striptags",
-        "time",
-        "timesince",
-        "timeuntil",
         "title",
         "truncatechars",
         "truncatechars_html",
@@ -2559,14 +2664,6 @@
         "yesno"
       ],
       "libraries": {
-        "humanize": [
-          "apnumber",
-          "intcomma",
-          "intword",
-          "naturalday",
-          "naturaltime",
-          "ordinal"
-        ],
         "static": [
           "get_media_prefix",
           "get_static_prefix",
@@ -2590,7 +2687,6 @@
         "include",
         "load",
         "lorem",
-        "now",
         "partial",
         "partialdef",
         "querystring",
@@ -2621,6 +2717,9 @@
         "argument": "optional"
       },
       "or_empty": {
+        "argument": "none"
+      },
+      "outside": {
         "argument": "none"
       },
       "readout": {
@@ -2767,12 +2866,12 @@
           "message"
         ]
       },
-      "partials/_form_field.html": {
-        "about": "Label, control, help text and validation errors for one form field.",
-        "optional": [],
-        "required": [
-          "field"
-        ]
+      "partials/_form_errors.html": {
+        "about": "What was wrong with a submitted form as a whole, above its fields.",
+        "optional": [
+          "form"
+        ],
+        "required": []
       },
       "partials/_insight_grid.html": {
         "about": "Readings that need interpreting, each with its next step.",
@@ -2827,7 +2926,6 @@
       "partials/_timeline.html": {
         "about": "Chronological linked events, from `hq_sdk.ui.Timeline`.",
         "optional": [
-          "plain",
           "timeline"
         ],
         "required": []
@@ -2841,18 +2939,68 @@
       }
     },
     "tags": {
+      "arrow": {
+        "classes": [],
+        "parameters": [],
+        "parts": []
+      },
+      "card": {
+        "classes": [
+          "css"
+        ],
+        "parameters": [
+          "*",
+          "busy=",
+          "css=",
+          "element=",
+          "heading=",
+          "id=",
+          "label=",
+          "**data"
+        ],
+        "parts": []
+      },
+      "dot": {
+        "classes": [],
+        "parameters": [],
+        "parts": []
+      },
       "empty_value": {
-        "parameters": []
+        "classes": [],
+        "parameters": [],
+        "parts": []
       },
       "entity": {
+        "classes": [],
         "parameters": [
           "link",
           "code=",
           "label=",
           "mark="
-        ]
+        ],
+        "parts": []
+      },
+      "outside_link": {
+        "classes": [
+          "css"
+        ],
+        "parameters": [
+          "*",
+          "css=",
+          "entity=",
+          "label=",
+          "modal=",
+          "tip=",
+          "title=",
+          "tone=",
+          "url="
+        ],
+        "parts": []
       },
       "post_button": {
+        "classes": [
+          "css"
+        ],
         "parameters": [
           "label",
           "url",
@@ -2862,25 +3010,57 @@
           "css=",
           "title=",
           "disabled="
-        ]
+        ],
+        "parts": []
       },
       "reference": {
+        "classes": [],
         "parameters": [
           "row",
           "field"
-        ]
+        ],
+        "parts": []
       },
       "referenced_by": {
+        "classes": [],
         "parameters": [
           "thing",
           "identity=",
           "cards="
-        ]
+        ],
+        "parts": []
+      },
+      "row_group": {
+        "classes": [],
+        "parameters": [
+          "label",
+          "count=",
+          "*",
+          "folds="
+        ],
+        "parts": []
       },
       "row_toggle": {
-        "parameters": []
+        "classes": [],
+        "parameters": [],
+        "parts": []
+      },
+      "section_head": {
+        "classes": [],
+        "parameters": [
+          "*",
+          "id=",
+          "lede="
+        ],
+        "parts": [
+          "aside"
+        ]
       },
       "table_heading": {
+        "classes": [
+          "css",
+          "note_css"
+        ],
         "parameters": [
           "label",
           "kind=",
@@ -2896,9 +3076,13 @@
           "select_all=",
           "note=",
           "note_css="
-        ]
+        ],
+        "parts": []
       },
       "table_region": {
+        "classes": [
+          "css"
+        ],
         "parameters": [
           "label",
           "*",
@@ -2906,7 +3090,16 @@
           "chart=",
           "pane=",
           "room="
-        ]
+        ],
+        "parts": []
+      },
+      "words": {
+        "classes": [],
+        "parameters": [
+          "capability",
+          "variant="
+        ],
+        "parts": []
       }
     }
   }

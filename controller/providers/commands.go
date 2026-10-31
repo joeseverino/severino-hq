@@ -16,15 +16,24 @@ import (
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
-// Exec runs one process. A start failure is err; a non-zero exit is exit.
+// Exec runs one local process. A start failure is err; a non-zero exit is exit.
 type Exec func(ctx context.Context, argv []string, stdin []byte, env []string) (stdout, stderr []byte, exit int, err error)
+
+// RemoteOperation makes one forced operation on the host of the SSH
+// connection ref, with payload on its standard input, and answers as Exec
+// does: a failure to reach the remote command is err or exit 255, and the
+// command's own failure is its exit.
+type RemoteOperation func(ctx context.Context, ref, operation string, payload []byte) (stdout, stderr []byte, exit int, err error)
 
 // Commands runs local tools and SSH operations for one pass. A failure is
 // recorded as a step HQ can see; the tool's own output never reaches a result.
+// Exec and Remote replace the process runner and the SSH client, each nil for
+// the real one.
 type Commands struct {
 	Env      runtime.Environment
 	Supplied runtime.Connections
 	Exec     Exec
+	Remote   RemoteOperation
 	Log      *slog.Logger
 
 	mu       sync.Mutex
@@ -134,6 +143,12 @@ func (c *Commands) Run(ctx context.Context, argv []string, input []byte, step, s
 		run = execProcess
 	}
 	stdout, stderr, exit, err := run(ctx, argv, input, c.environment(env))
+	return c.result(step, subject, env, stdout, stderr, exit, err)
+}
+
+// result is a call's output, or the failure Run and SSH both record: a start
+// failure by its kind, a non-zero exit by its code.
+func (c *Commands) result(step, subject string, env map[string]string, stdout, stderr []byte, exit int, err error) ([]byte, error) {
 	if errors.Is(err, errOutputLimit) {
 		c.logger().Warn(fmt.Sprintf("controller step failed: %s (output over limit)", step),
 			slog.String("event", "controller.step.failed"), slog.String("step", step))
@@ -162,7 +177,9 @@ func (c *Commands) Run(ctx context.Context, argv []string, input []byte, step, s
 }
 
 // SSH runs one forced operation on a connection's host, with host keys pinned
-// and nothing read from an SSH config.
+// and nothing read from an SSH config. The remote side receives operation as
+// the command, which a forced command reads as SSH_ORIGINAL_COMMAND, and
+// payload on its standard input.
 func (c *Commands) SSH(ctx context.Context, ref, operation string, payload []byte) ([]byte, error) {
 	target, err := c.Supplied.SSH(ref)
 	if err != nil {
@@ -172,18 +189,18 @@ func (c *Commands) SSH(ctx context.Context, ref, operation string, payload []byt
 	if dir == "" {
 		return nil, &ProviderError{Err: runtime.ErrSettingMissing}
 	}
-	argv := []string{
-		"ssh", "-F", "/dev/null",
-		"-o", "BatchMode=yes",
-		"-o", "IdentitiesOnly=yes",
-		"-o", "StrictHostKeyChecking=yes",
-		"-o", "UserKnownHostsFile=" + filepath.Join(dir, "known_hosts"),
-		"-o", "GlobalKnownHostsFile=/dev/null",
-		"-o", "ConnectTimeout=" + strconv.Itoa(runtime.SSHConnectTimeoutSeconds),
-		"-i", filepath.Join(dir, ref),
-		"-p", strconv.Itoa(target.Port),
-		"--", target.User + "@" + target.Host,
-		operation,
+	remote := c.Remote
+	if remote == nil {
+		call := sshCall{
+			target:         target,
+			identity:       filepath.Join(dir, ref),
+			knownHosts:     filepath.Join(dir, "known_hosts"),
+			connectTimeout: runtime.SSHConnectTimeout,
+		}
+		remote = func(ctx context.Context, _, operation string, payload []byte) ([]byte, []byte, int, error) {
+			return call.run(ctx, operation, payload)
+		}
 	}
-	return c.Run(ctx, argv, payload, "SSH "+operation+" for "+ref, ref, nil)
+	stdout, stderr, exit, err := remote(ctx, ref, operation, payload)
+	return c.result("SSH "+operation+" for "+ref, ref, nil, stdout, stderr, exit, err)
 }

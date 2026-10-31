@@ -11,10 +11,10 @@ agents alike. Setup, tasks and layout: [Development](docs/Development.md).
    exist there.
 2. Ready is the [definition of done](#definition-of-done).
 
-`mise tasks` lists the verbs to start from, `mise run <task> --help` what each
-takes; `--hidden` adds the steps they run, each still runnable by the name a
-verdict gives it. A gate closes on a verdict line naming every failed task and
-test.
+`mise tasks` lists the verbs to start from; `--hidden` adds the steps they
+run, each still runnable by the name a verdict gives it. `mise tasks info
+<task>` says what a task takes without running it; `mise run <task> --help`
+adds the examples a task carries (`dev:look`'s).
 
 - `mise run fast [BASE]` while editing. It selects through Python imports and
   app names, so a rule held only by a string or a template needs `check`.
@@ -34,15 +34,17 @@ A CI job is named for the task it runs, so a gate goes in its job's file under
 `mise-tasks/` (`mise-tasks/lint.toml` for `lint:*`), never in a workflow.
 
 The composed suite (`mise run test --composed`, run as the image runs it) is where the
-host and its extensions first meet, which CI cannot reach. The machine's own
-gitignored `mise.local.toml` names the extension set, and an agent leaves it as
-it is; without it the pass runs the host alone. `mise doctor project` says
-whether the set is named, found and importable
-([The extension set](docs/Development.md#the-extension-set)).
+host and its extensions first meet, which CI cannot reach. It loads the set
+the gitignored `mise.local.toml` names. A worktree Claude Code makes gets a
+copy of the main checkout's through `.worktreeinclude`, and an agent leaves
+it as it is; it names the extensions' main checkouts, so composing an
+extension worktree instead is
+[one variable on the command line](docs/Development.md#the-extension-set).
 
 A test that reads the repository rather than running the product carries
 `@tag("source")` and runs only in `lint:source` (`mise run lint:source
-<labels>` for some), since no image ships those files. The suite runs in
+<labels>` for some), since no image ships those files; one that walks a
+tree also carries `tree` (`test_tree_tag.py` says when). The suite runs in
 parallel on WAL SQLite through `hq/platform/core/test_runner.py`: read it
 before changing the test database. A new host domain:
 [New Domain](docs/New-Domain.md).
@@ -125,18 +127,13 @@ architecture test, a glob) fails when its path matches nothing.
   own.
 - Every mutation is atomic and audit-attributed. Machine writes are safely
   retryable with durable idempotency.
-- Plugin code imports `hq_sdk`, never `application`, `core`, or another host
-  app (`python -m hq_sdk.validation src`).
 - A change to `hq_sdk`'s shape (`hq_sdk/contract.json`) is a fleet change:
   decide whether `PLUGIN_API_VERSION` moves, and give a new export a case in
   `tests/sdk_consumer/consumer.py` ([Plugins](docs/Plugins.md)).
-- Derived files are never edited by hand: `mise run fix` writes them and
-  `mise run lint` names any that is behind.
-- List views use `TableListMixin`; direct view mutations and MCP model access
-  are rejected by architecture tests.
-- A link to a command's form is built by
-  `hq.platform.application.action_links.command_url` and nothing else
-  (`test_remedy_links.py` follows every remedy HQ emits).
+- The shared mechanisms (a list view's table, a command's link, the derived
+  files, plugin imports) are held by the architecture tests, the
+  `lint:drift-*` gates and `hq_sdk.validation`, whose failures name the one
+  way to do it.
 - An href built from data HQ did not write (a reading, an attestation, a
   manifest, the public contact form) passes through `web_url`, in Python or as
   the template filter, so it is an http(s) address or no link at all.
@@ -176,15 +173,12 @@ adding UI; grow a primitive rather than styling a page.
 
 ## Structural checks
 
-- Ruff's C901, `CognitiveComplexityTests` and `FileSizeTests` have no
-  allowance list: a function over either complexity bound is split into named
-  steps, a file over the size bound by responsibility.
 - A Ruff rule is switched off only in `pyproject.toml`, with the reason beside
   it; a line-level `# noqa` names its code and says why.
-- `lint:mypy` holds the seams `pyproject.toml` names (`files`) fully
-  annotated, and the browser test package to attributes and calls that exist,
-  without demanding annotations there. A `# type: ignore[code]` is for a wrong
-  stub, with the reason.
+- A `# type: ignore[code]` is for a wrong stub, with the reason.
+- A new `lint:ast-grep` rule is a file of its own, with its reason, in
+  `tools/lint/ast-grep/rules` (`test-code/rules` for tests and test-support
+  modules), and its cases in `rule-tests/`.
 - A docstring says what the thing is and why it exists. How it works lives in
   the one doc or comment that owns the mechanism, so a long docstring is
   trimmed as its file is touched.

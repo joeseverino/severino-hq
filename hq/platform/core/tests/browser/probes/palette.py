@@ -1,4 +1,4 @@
-"""Probes of color: contrast, faint lines, field edges and the fills a theme paints."""
+"""Probes of color: contrast, field and button edges, and the fills a theme paints."""
 
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 
@@ -7,9 +7,8 @@ TEXT_CONTRAST = 4.5
 
 LARGE_TEXT_CONTRAST = 3.0
 
-# The least a dividing line may differ from its surface. The faint line token
-# on a card is 1.15:1, the plain one on a tinted panel 1.08:1; below this a
-# line is the surface's own color.
+# The least a fill may differ from the surface it sits on to show at all:
+# below this it is the surface's own color.
 LINE_CONTRAST = 1.07
 
 # WCAG 1.4.11: what identifies a control, a field's edge, clears 3:1.
@@ -105,36 +104,6 @@ CONTRAST = (
 }"""
 )
 
-# A line drawn to separate things (a divider, a frame's edge) is seen against
-# the surface it is drawn on. A faint token on a tinted panel is a line in the
-# panel's own color: the rows it was meant to part run together.
-FAINT_LINES = (
-    "([scope, least]) => {"
-    + DESCRIBE
-    + _COLOR
-    + """
-  const found = [];
-  for (const root of document.querySelectorAll(scope)) {
-    for (const el of root.querySelectorAll('*')) {
-      if (!el.checkVisibility()) continue;
-      const style = getComputedStyle(el);
-      for (const side of ['Top', 'Right', 'Bottom', 'Left']) {
-        if (parseFloat(style[`border${side}Width`]) < 1 || ['none', 'hidden'].includes(style[`border${side}Style`])) continue;
-        const color = rgba(style[`border${side}Color`]);
-        if (color[3] === 0) continue;
-        // A box that paints its own fill is edged against what is outside it,
-        // by its border or by the fill itself.
-        const fill = rgba(style.backgroundColor);
-        const filled = fill[3] > 0 && el.parentElement;
-        const behind = filled ? background(el.parentElement) : background(el);
-        const measured = Math.max(ratio(over(color, behind), behind), filled ? ratio(over(fill, behind), behind) : 0);
-        if (measured < least) found.push(`${describe(el)} ${side.toLowerCase()} ${measured.toFixed(2)}:1 on ${behind.slice(0, 3).map(Math.round)}`);
-      }
-    }
-  }
-  return [...new Set(found)];
-}"""
-)
 
 # A field is found by its edge: the border it draws, or, for a control drawn
 # bare inside one that acts as the field (a search box's frame, a drop zone),

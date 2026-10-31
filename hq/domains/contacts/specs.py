@@ -37,7 +37,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             label="List messages",
         ),
         CapabilitySpec(
-            "contact.submission.review",
+            contact_submissions.REVIEW,
             "Mark one message read, replied, archived or spam, and keep a note on it.",
             "remote_write",
             Capability.MANAGE_CONTACTS,
@@ -55,7 +55,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             label="Review a message",
         ),
         CapabilitySpec(
-            "contact.submission.delete",
+            contact_submissions.DELETE,
             "Delete one message sent through the contact form.",
             "destructive",
             Capability.MANAGE_CONTACTS,

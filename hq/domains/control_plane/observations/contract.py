@@ -99,7 +99,7 @@ class ObservationSpec:
     containers: Callable[[Mapping[str, Any]], Iterable[str]] = _none
     # The record's name as a person would say it, and what it is in a few
     # words beside that name ("bridge · 172.21.0.0/16").
-    title: Callable[[Mapping[str, Any]], str] = lambda record: ""
+    title: Callable[[Mapping[str, Any]], str] = lambda _record: ""
     describe: Callable[[Mapping[str, Any]], str] = _blank
     # What a record is to the subject it joins, as a short present-tense
     # phrase shown beside its title: "Served by Pages project".
@@ -153,7 +153,7 @@ class ObservationSpec:
     restricts: bool = False
     # What a record tells about the connection that read it, as ``(key, value)``
     # facts the findings read off that connection's node.
-    facts: Callable[[Mapping[str, Any]], tuple[tuple[str, str], ...]] = lambda record: ()
+    facts: Callable[[Mapping[str, Any]], tuple[tuple[str, str], ...]] = lambda _record: ()
     # Whether its records are what people sent (names, addresses, messages),
     # kept for the one page whose capability covers them. The readings any
     # reader may open count them and never list them.
@@ -221,7 +221,7 @@ def registry(specs: tuple[ObservationSpec, ...]) -> Mapping[str, ObservationSpec
     for spec in specs:
         if spec.kind in found:
             raise ValueError(f"Duplicate observation kind {spec.kind!r}.")
-        if isinstance(spec.requires, str) or any(not name.strip() or ";" in name for name in spec.requires):
+        if any(not name.strip() or ";" in name for name in spec.requires):
             raise ValueError(f"{spec.kind!r}: requires is a tuple of permission names.")
         if spec.facet and spec.facet not in READING_FACETS:
             raise ValueError(f"{spec.kind!r}: unknown facet {spec.facet!r}.")

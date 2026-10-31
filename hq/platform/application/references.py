@@ -1,18 +1,9 @@
 """One way for a record to name a thing in HQ, and for that thing to list what names it.
 
-A reference is the text ``kind:identity``: the two things ``entity_links``
-turns into a name and a page. A machine, a domain, a service and a tracked
-record are named as the topology names them; a row of a model is named by the
-kind its model declares with ``Referable``.
-
-A model stores one in a ``ReferenceField``, beside a column of the same name
-ending ``_name`` that keeps what the thing was called when the reference was
-saved. ``resolve`` answers a reference with its link, or with that stored name
-as plain text when it names nothing. ``referenced_by`` answers a thing with
-every row that names it, across every installed model, in one statement.
-
-Nothing here imports a model: the fields are found on the installed models, so
-an extension's records refer to the host's, and the host's to an extension's,
+A reference is the text ``kind:identity``, the two things ``entity_links`` turns
+into a name and a page (docs/Plugins.md#references is the contract). Nothing
+here imports a model: the fields are found on the installed models, so an
+extension's records refer to the host's, and the host's to an extension's,
 with neither naming the other.
 """
 
@@ -20,7 +11,7 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import cache
-from typing import Any, override
+from typing import TYPE_CHECKING, Any, override
 
 from django import forms
 from django.apps import apps
@@ -32,13 +23,18 @@ from django.db.models.functions import Cast
 
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-lazy from . import security
+lazy from . import entity_links, security
 lazy from .demo import showing_demo
-lazy from .entity_links import NODE_KINDS, EntityLink, entity_link, kind_label, node_name
+lazy from .entity_links import NODE_KINDS, entity_link, kind_label, node_name
 lazy from .projection import read_once
 lazy from .security import Principal, cli_principal
 lazy from .topology import derive_topology
 lazy from .ui import Insight
+
+# Named for annotations alone: a class's annotations can be read as it is made
+# (a dataclass's are), which would load a lazy import at once.
+if TYPE_CHECKING:
+    from .entity_links import EntityLink
 
 # The kinds the topology names by their label, which is what their page is addressed by.
 ESTATE_KINDS = ("machine", "zone", "service")
@@ -66,23 +62,22 @@ class Reference:
 
 @dataclass(frozen=True, slots=True)
 class Referable:
-    """Declared on a model as ``referable``: its rows can be referred to.
+    """Declared on a model as ``referable``: its rows can be referred to."""
 
-    ``kind`` is the link builder's kind for a record it already names, and the
-    model's own label otherwise. ``key`` is the field its page is addressed by.
-    ``shows`` are the columns its name and page are built from, and ``name``
-    the attribute that says the name (``str(row)`` when blank). A field asks
-    for a ``role`` rather than a kind when any model may fill it. ``requires``
-    is the capability a viewer needs before the row is named to them.
-    """
-
+    # The link builder's kind for a record it already names; the model's own
+    # label otherwise.
     kind: str = ""
+    # The field its page is addressed by.
     key: str = "pk"
+    # The columns its name and page are built from.
     shows: tuple[str, ...] = ()
+    # The attribute that says the name; ``str(row)`` when blank.
     name: str = ""
     noun: str = ""
     plural: str = ""
+    # What a field asks for, rather than a kind, when any model may fill it.
     role: str = ""
+    # The capability a viewer needs before the row is named to them.
     requires: str = ""
     # Offered in a form's list. A kind with thousands of rows is referred to by hand.
     pickable: bool = True
@@ -115,15 +110,10 @@ class Target:
 class ReferenceField(models.CharField):
     """A column holding one reference, or "" for none.
 
-    ``kinds`` and ``role`` say what it may name; neither means anything HQ
-    names, less the kinds in ``but``. ``heading`` is what the rows that name a thing are listed under on
-    that thing's page. ``shows`` are the columns one such line is built from:
-    its link is ``str(row)`` to ``row.get_absolute_url()``, and ``note`` an
-    attribute that says a few words beside it.
-
-    The model declares a second column, this one's name with ``_name``, for
-    what the thing was called. ``clean`` fills it and refuses a new reference
-    that names nothing; a reference already stored is kept when its thing goes.
+    Its arguments, and the ``_name`` column beside it that keeps what the thing
+    was called, are docs/Plugins.md#references. ``clean`` fills that name and
+    refuses a new reference that names nothing; one already stored is kept
+    when its thing goes.
     """
 
     def __init__(
@@ -243,7 +233,7 @@ def _reader() -> Principal:
 
 def _name_length(field: ReferenceField) -> int:
     column = field.model._meta.get_field(field.name_attname)
-    return int(getattr(column, "max_length", None) or 200)
+    return int(column.max_length or 200)
 
 
 def _unique(names: Iterable[str]) -> tuple[str, ...]:
@@ -383,7 +373,7 @@ def _found(references: Iterable[Reference], *, principal: Principal) -> dict[Ref
             found[Reference(kind, identity)] = (
                 entity_link(kind, identity, label=target.name_of(row))
                 if kind in NODE_KINDS
-                else EntityLink(
+                else entity_links.EntityLink(
                     label=target.name_of(row),
                     url=row.get_absolute_url(),
                     kind=kind,
@@ -433,7 +423,7 @@ def resolve_many(stored: Sequence[tuple[str, str]], *, principal: Principal) -> 
     links: list[EntityLink | None] = []
     for reference, (value, name) in zip(parsed, stored, strict=True):
         if reference is None:
-            links.append(EntityLink(label=name or str(value), kind_label="Not in HQ") if value else None)
+            links.append(entity_links.EntityLink(label=name or str(value), kind_label="Not in HQ") if value else None)
         elif reference.kind in known and not _may_name(known[reference.kind], principal):
             links.append(None)
         elif reference in found:
@@ -442,7 +432,7 @@ def resolve_many(stored: Sequence[tuple[str, str]], *, principal: Principal) -> 
             noun = _safe_noun(reference.kind)
             # A stored name is the real one, which a demonstration does not show.
             label = noun if showing_demo() else (name or reference.identity)
-            links.append(EntityLink(label=label, kind=reference.kind, kind_label=noun))
+            links.append(entity_links.EntityLink(label=label, kind=reference.kind, kind_label=noun))
     return links
 
 
@@ -527,23 +517,28 @@ class ReferenceChoiceField(forms.ChoiceField):
 
 
 def bind(form: forms.BaseForm, *, principal: Principal) -> None:
-    """Fill every reference picker on ``form`` with what this viewer may choose.
+    """Fill every reference picker on ``form`` with what this viewer may choose."""
 
-    A picker with nothing to offer is left off the form.
+    pickers = [name for name, field in form.fields.items() if isinstance(field, ReferenceChoiceField)]
+    for name in pickers:
+        field = form.fields[name]
+        held = form.initial.get(name) or getattr(form.instance, name, "")
+        kept = getattr(form.instance, f"{name}{NAME_SUFFIX}", "")
+        field.choices = choices(field.reference, principal=principal, held=(held, kept))
+    leave_off_unoffered(form, pickers)
+
+
+def leave_off_unoffered(form: forms.BaseForm, pickers: Iterable[str]) -> None:
+    """Drop each of ``pickers`` that offers nothing to choose from ``form``.
+
+    The one rule for a reference picker on any form, the record's own or a
+    command's: an empty list reads as a broken field. One the form cannot be
+    sent without stays, so its emptiness is said rather than hidden.
     """
 
-    unoffered: list[str] = []
-    for name, field in form.fields.items():
-        if isinstance(field, ReferenceChoiceField):
-            held = form.initial.get(name) or getattr(form.instance, name, "")
-            kept = getattr(form.instance, f"{name}{NAME_SUFFIX}", "")
-            found = choices(field.reference, principal=principal, held=(held, kept))
-            if len(found) > 1:
-                field.choices = found
-            else:
-                unoffered.append(name)
-    for name in unoffered:
-        del form.fields[name]
+    for name in [name for name in pickers if not form.fields[name].required]:
+        if not any(_option_values(form.fields[name].choices)):
+            del form.fields[name]
 
 
 class ReferencePickerMixin:
@@ -563,43 +558,95 @@ def choices(field: ReferenceField, *, principal: Principal, held: tuple[str, str
     gone, so saving the form does not drop it.
     """
 
-    known = targets()
-    estate_kinds = [
-        kind for kind in (*ESTATE_KINDS, *_certificate_kinds()) if kind not in known and field.accepts(kind)
+    offered = [
+        (heading, options)
+        for heading, options in (*_estate_groups(field, principal), *_record_groups(field, principal))
+        if options
     ]
+    return keeping_held([("", "Nothing"), *offered], [held])
+
+
+NO_LONGER_OFFERED = "No longer in HQ"
+
+
+def keeping_held(options: Sequence[tuple[Any, Any]], held: Iterable[tuple[str, str]]) -> list[tuple[Any, Any]]:
+    """``options`` with each held ``(value, name)`` still among them.
+
+    A value the list no longer offers is added under a heading of its own, so
+    a form shows what the record holds and saving it unchanged keeps it rather
+    than dropping it or quietly choosing another.
+    """
+
+    offered = set(_option_values(options))
+    missing: dict[str, str] = {}
+    for value, name in held:
+        if value and value not in offered:
+            missing.setdefault(value, name or value)
+    if not missing:
+        return list(options)
+    return [*options, (NO_LONGER_OFFERED, list(missing.items()))]
+
+
+def _option_values(options: Iterable[tuple[Any, Any]]) -> Iterable[Any]:
+    """Every value in a choices list, whether flat or grouped."""
+
+    for value, label in options:
+        if isinstance(label, (list, tuple)):
+            yield from (option for option, _name in label)
+        else:
+            yield value
+
+
+type _Group = tuple[str, list[tuple[str, str]]]
+
+
+def _estate_groups(field: ReferenceField, principal: Principal) -> list[_Group]:
+    """The infrastructure a column takes, one group per kind, read off the topology."""
+
+    known = targets()
+    kinds = [kind for kind in (*ESTATE_KINDS, *_certificate_kinds()) if kind not in known and field.accepts(kind)]
+    estate = _estate(principal) if kinds else {}
+    return [
+        (
+            _plural(kind).capitalize(),
+            _by_name((str(Reference(kind, identity)), name) for identity, name in estate.get(kind, {}).items()),
+        )
+        for kind in kinds
+    ]
+
+
+def _record_groups(field: ReferenceField, principal: Principal) -> list[_Group]:
+    """The records a column takes that this principal may name, one group per
+    model, read in one statement."""
+
     picked = [
         target
-        for target in known.values()
+        for target in targets().values()
         if target.declared.pickable and field.accepts(target.kind) and _may_name(target, principal)
     ]
-    groups: list[tuple[Any, Any]] = [("", "Nothing")]
-    seen: set[str] = set()
-    estate = _estate(principal) if estate_kinds else {}
-    for kind in estate_kinds:
-        options = sorted(
-            ((str(Reference(kind, identity)), name) for identity, name in estate.get(kind, {}).items()),
-            key=lambda option: option[1].casefold(),
-        )
-        if options:
-            plural = NODE_KINDS[kind].plural if kind in NODE_KINDS else f"{_noun(kind).lower()}s"
-            groups.append((plural.capitalize(), options))
-            seen.update(value for value, _name in options)
     rows = _rows([(target.model, target.columns, Q()) for target in picked])
-    for target, found in zip(picked, rows, strict=True):
-        options = sorted(
-            (
+    return [
+        (
+            target.plural.capitalize(),
+            _by_name(
                 (str(Reference(target.kind, str(getattr(row, target.declared.key)))), target.name_of(row))
                 for row in found
             ),
-            key=lambda option: option[1].casefold(),
         )
-        if options:
-            groups.append((target.plural.capitalize(), options))
-            seen.update(value for value, _name in options)
-    value, name = held
-    if value and value not in seen:
-        groups.append(("No longer in HQ", [(value, name or value)]))
-    return groups
+        for target, found in zip(picked, rows, strict=True)
+    ]
+
+
+def _plural(kind: str) -> str:
+    """An infrastructure kind's plural noun: its page's, or its registry noun's."""
+
+    return NODE_KINDS[kind].plural if kind in NODE_KINDS else f"{_noun(kind).lower()}s"
+
+
+def _by_name(options: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Options in the order a reader looks for them: by name, whatever its case."""
+
+    return sorted(options, key=lambda option: option[1].casefold())
 
 
 # ----- What names a thing --------------------------------------------------------
@@ -641,7 +688,7 @@ def referenced_by(kind: str, identity: str, *, principal: Principal) -> tuple[Me
         for row in found:
             groups[field.heading].append(
                 Mention(
-                    EntityLink(
+                    entity_links.EntityLink(
                         # Named as the model names it everywhere else.
                         label=known[field.model].name_of(row) if field.model in known else str(row),
                         url=row.get_absolute_url(),
@@ -683,49 +730,63 @@ def dangling(
     fields = [field for field in reference_fields() if not models_ or field.model in models_]
     if not fields:
         return ()
-    held = _held(fields)
-    parsed = {value: Reference.parse(value) for values in held for value in values}
-    names = _found({reference for reference in parsed.values() if reference}, principal=principal)
-    known = targets()
-
-    def names_nothing(value: str) -> bool:
-        reference = parsed[value]
-        if reference is None:
-            return True
-        hidden = reference.kind in known and not _may_name(known[reference.kind], principal)
-        return reference not in names and not hidden
-
-    gone = [{value for value in values if names_nothing(value)} for values in held]
+    gone = [
+        (field, values)
+        for field, values in zip(fields, _naming_nothing(_held(fields), principal), strict=True)
+        if values
+    ]
     parts = [
         (
             field.model,
             _unique(("pk", field.attname, field.name_attname, *field.shows)),
             Q(**{f"{field.attname}__in": values}),
         )
-        for field, values in zip(fields, gone, strict=False)
-        if values
+        for field, values in gone
     ]
-    live = [field for field, values in zip(fields, gone, strict=False) if values]
-    found: list[Insight] = []
-    for field, rows in zip(live, _rows(parts), strict=True):
-        for row in rows:
-            name = getattr(row, field.name_attname) or getattr(row, field.attname)
-            found.append(
-                Insight(
-                    status="attention",
-                    eyebrow="Links",
-                    title=f"{source(row)} links to {name}, which HQ does not have",
-                    value="",
-                    body="Choose something else for it, or clear the link.",
-                    action="Open record",
-                    url=row.get_absolute_url(),
-                    key=f"reference:{field.model._meta.label_lower}:{row.pk}:{field.attname}",
-                    family="Links to nothing",
-                    # A row's own link, checked against every record and reading at once.
-                    observed_at=None,
-                )
-            )
-    return tuple(found)
+    return tuple(
+        _dangling_item(field, row, source)
+        for (field, _values), rows in zip(gone, _rows(parts), strict=True)
+        for row in rows
+    )
+
+
+def _naming_nothing(held: list[set[str]], principal: Principal) -> list[set[str]]:
+    """Of each column's references, the ones that name nothing, in one read of
+    what they could name."""
+
+    parsed = {value: Reference.parse(value) for values in held for value in values}
+    named = _found({reference for reference in parsed.values() if reference}, principal=principal)
+    return [{value for value in values if _names_nothing(parsed[value], named, principal)} for values in held]
+
+
+def _names_nothing(reference: Reference | None, named: Mapping[Reference, EntityLink], principal: Principal) -> bool:
+    """Whether a reference names nothing. One of a kind this principal may not
+    be told about is not reported to it, named or not."""
+
+    if reference is None:
+        return True
+    target = targets().get(reference.kind)
+    hidden = target is not None and not _may_name(target, principal)
+    return reference not in named and not hidden
+
+
+def _dangling_item(field: ReferenceField, row: models.Model, source: Callable[[models.Model], str]) -> Insight:
+    """The queue's item for one row whose reference names nothing."""
+
+    name = getattr(row, field.name_attname) or getattr(row, field.attname)
+    return Insight(
+        status="attention",
+        eyebrow="Links",
+        title=f"{source(row)} links to {name}, which HQ does not have",
+        value="",
+        body="Choose something else for it, or clear the link.",
+        action="Open record",
+        url=row.get_absolute_url(),
+        key=f"reference:{field.model._meta.label_lower}:{row.pk}:{field.attname}",
+        family="Links to nothing",
+        # A row's own link, checked against every record and reading at once.
+        observed_at=None,
+    )
 
 
 def _held(fields: Sequence[ReferenceField]) -> list[set[str]]:

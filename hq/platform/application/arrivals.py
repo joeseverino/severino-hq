@@ -2,19 +2,9 @@
 
 The one reading HQ takes of real traffic rather than of an API: which device or
 address reached HQ, how (the tailnet leg, the proxy that forwarded it), when it
-last did, and how many requests in the current window. ``note`` counts every
-request in memory and writes at most once per source per
-``SEVERINO_REQUEST_PATH_SECONDS`` in each process, best effort: a request never
-waits on a failed write and never fails because of one. A record older than
-``WINDOW`` is dropped on write and ignored on read, and at most
-``MAX_SOURCES`` are kept.
-
-A page load never writes: a safe request (GET, HEAD, OPTIONS) is only counted in
-memory, with how its source arrived. The next unsafe request (a POST such as the
-dashboard's glance refresh) writes every source that is due, in one write.
-
-The record schema (``control_plane.observations.hq.ArrivalRecord``) admits
-nothing else: no path, query, header value, body or user agent.
+last did, and how many requests in the current window. The record schema
+(``control_plane.observations.hq.ArrivalRecord``) admits nothing else: no path,
+query, header value, body or user agent.
 """
 
 import logging
@@ -43,6 +33,8 @@ lazy from .timestamps import moment
 
 logger = logging.getLogger(__name__)
 
+# A record older than the window is dropped on write and ignored on read, and
+# at most MAX_SOURCES are kept.
 WINDOW = timedelta(days=7)
 MAX_SOURCES = 64
 
@@ -66,7 +58,13 @@ def _every() -> int:
 
 
 def note(request) -> None:
-    """Count this request; on an unsafe one, write every source that is due."""
+    """Count this request; on an unsafe one, write every source that is due.
+
+    A page load (a safe request) is only counted in memory. The next unsafe one
+    (a POST such as the dashboard's glance refresh) writes each source this
+    process has not written within ``SEVERINO_REQUEST_PATH_SECONDS``, in one
+    write, best effort: a request never fails because of a failed write.
+    """
 
     every = _every()
     if every <= 0:

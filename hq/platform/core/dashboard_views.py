@@ -15,16 +15,16 @@ from hq.platform.application import action_items as queue_state, fragments, gett
 from hq.platform.application.cadence import controller_standing
 from hq.platform.application.calendar import calendar_month, month_of
 from hq.platform.application.calendar_entries import calendar_choices
+from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.connection_setup import docs_url
 from hq.platform.application.dashboard import dashboard_highlights, operating_snapshot
 from hq.platform.application.derivations import every_revision
 from hq.platform.application.glance import (
+    DASHBOARD_REFRESH,
+    DASHBOARD_REFRESH_STALE,
+    DASHBOARD_SETTINGS,
     dashboard_configuration,
-    dashboard_panels,
     glance_context,
-    request_dashboard_refresh,
-    request_stale_panel_refresh,
-    save_dashboard_settings,
 )
 from hq.platform.application.outward_links import link_choices, outward_links
 from hq.platform.application.pages import page_context
@@ -33,7 +33,7 @@ from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import ListRow
 from hq.platform.application.visit_refresh import worth_asking
-lazy from hq.platform.application.pins import DASHBOARD_LINK, replace
+lazy from hq.platform.application.pins import CHOOSE, DASHBOARD_LINK
 
 # A queue of this many or fewer is read on the dashboard itself, each card
 # with its button; a longer one is a count and a link to its page.
@@ -70,7 +70,11 @@ class DashboardLinkChoiceView(View):
             for href in request.POST.getlist("href")
             if href.lower() in offered
         }
-        replace(request.user, DASHBOARD_LINK, keep)
+        result = execute_capability(
+            CHOOSE, {"kind": DASHBOARD_LINK, "keys": sorted(keep)}, principal=web_principal(request.user)
+        )
+        if not result["ok"]:
+            messages.error(request, result["error"]["message"])
         # One answer for both callers. A browser follows this and lands on the
         # dashboard; a fetch follows it too and reads the panel out of the page
         # it gets back, so what is shown is what was stored rather than what the
@@ -234,21 +238,13 @@ class DashboardGlanceView(View):
         button posts the full one.
         """
 
-        principal = web_principal(request.user)
-        if request.POST.get("scope") != "stale":
-            request_dashboard_refresh(principal=principal)
-            return render(request, self.template_name, glance_context(), status=202)
-        configuration = dashboard_configuration()
-        panels = dashboard_panels(configuration)
-        requested = request_stale_panel_refresh(panels, principal=principal)
-        if requested:
-            panels = tuple({**panel, "refreshing": True} if panel["id"] in requested else panel for panel in panels)
-        return render(
-            request,
-            self.template_name,
-            glance_context(configuration, panels),
-            status=202 if requested else 200,
-        )
+        name = DASHBOARD_REFRESH_STALE if request.POST.get("scope") == "stale" else DASHBOARD_REFRESH
+        result = execute_capability(name, {}, principal=web_principal(request.user))
+        if not result["ok"]:
+            return render(request, self.template_name, glance_context(), status=403)
+        # Drawn after the ask, so each panel asked for shows its refresh.
+        status = 202 if name == DASHBOARD_REFRESH or result["requested"] else 200
+        return render(request, self.template_name, glance_context(), status=status)
 
 
 class DashboardGlanceSettingsView(View):
@@ -263,15 +259,16 @@ class DashboardGlanceSettingsView(View):
         )
 
     def post(self, request):
-        try:
-            save_dashboard_settings(
-                weather_point=request.POST.get("weather_point", ""),
-                weather_label=request.POST.get("weather_label", ""),
-                infrastructure_label=request.POST.get("infrastructure_label", ""),
-                principal=web_principal(request.user),
-            )
-        except ValueError as exc:
-            messages.error(request, str(exc))
-        else:
+        result = execute_capability(
+            DASHBOARD_SETTINGS,
+            {
+                field: request.POST.get(field, "")
+                for field in ("weather_point", "weather_label", "infrastructure_label")
+            },
+            principal=web_principal(request.user),
+        )
+        if result["ok"]:
             messages.success(request, "Dashboard settings saved.")
+        else:
+            messages.error(request, result["error"]["message"])
         return redirect("dashboard")

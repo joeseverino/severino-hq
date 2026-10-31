@@ -1,16 +1,10 @@
 """Every container that is running, and whether what it runs is okay.
 
-One row per running container, joined from what HQ already reads: the sweep's
-container list (where it runs, its image reference), Portainer's image list
-(what that reference was when pulled), the public registry's tags for the image
-(``registry.image``), what its publisher attached to the digest that runs: its
-package list and provenance (``registry.digest``), those packages checked
-against OSV (``registry.vulnerabilities``), and the releases and advisories on
-the GitHub repository it is built from (``registry.upstream``). HQ's own image
-adds the GitHub App's word on how it was built (``github_estate.build_of``).
-
-Nothing here reads anything. The answers are only as fresh as those readings,
-and a page says when they were taken.
+One row per running container, joined from readings HQ already holds: the
+sweep's containers, Portainer's images, the ``registry.*`` readings of each
+image and its upstream, and for HQ's own image the GitHub App's word on how it
+was built. Nothing here reads anything, so the answers are only as fresh as
+those readings, and a page says when they were taken.
 """
 
 import re
@@ -163,6 +157,9 @@ class Running:
     hidden: bool = False
     # Docker's short ID, which is also the hostname inside it.
     id: str = ""
+    # The systemd unit its label names, which runs it: its stop, start and
+    # restart go through that unit, never Docker.
+    unit: str = ""
 
     @classmethod
     def of(
@@ -189,6 +186,7 @@ class Running:
             watcher=(watchers or {}).get((host, name), ("", False))[0],
             hidden=(watchers or {}).get((host, name), ("", False))[1],
             id=str(record.get("id", "")),
+            unit=str(record.get("unit", "")),
         )
 
     @property

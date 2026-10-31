@@ -92,7 +92,7 @@
    dash inside, so it reads as "no reading" beside a period that was skipped,
    by shape as well as by color. */
 .cadence-mark.is-no-data { background: transparent; border-style: dashed; color: var(--muted-2); }
-.cadence-mark.is-no-data::before { content: "\2013"; }
+.cadence-mark.is-no-data::before { content: "\2013" / ""; }
 .cadence-label { font-size: var(--text-3xs); color: var(--muted-2); white-space: nowrap; }
 .cadence-note { margin: 0; font-size: var(--text-xs); color: var(--muted); line-height: 1.5; }
 /* Anchored at the top-left of its containing block. At its static position, a
@@ -236,7 +236,9 @@
   0% { inset-inline-start: -30%; }
   100% { inset-inline-start: 100%; }
 }
-.job-note { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+/* Its line is held while the work has nothing to say, so the panel keeps its
+   height as the note comes and goes. */
+.job-note { min-block-size: 1lh; margin: 0; color: var(--muted); font-size: var(--text-sm); }
 .job-progress[data-state="failed"] .job-bar i,
 .job-progress[data-state="lost"] .job-bar i { background: var(--danger); }
 .job-progress[data-state="succeeded"] .job-bar i { background: var(--ok, var(--accent)); }

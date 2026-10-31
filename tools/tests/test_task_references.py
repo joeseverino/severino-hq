@@ -24,9 +24,11 @@ STAND_IN = re.compile(r"[$%<>{}\[\]]|^$")
 # Names in a fixture's own mise config, which no task of this checkout's is.
 FIXTURE_TASKS = {
     # The throwaway configs the heavy turn's suite builds: a holder, and a
-    # heavy task run from inside another.
+    # heavy task run from inside another, and two heavy tasks asked together.
     ("tests/shell/test-heavy.sh", "example-holder"),
     ("tests/shell/test-heavy.sh", "hang"),
+    ("tests/shell/test-heavy.sh", "first"),
+    ("tests/shell/test-heavy.sh", "second"),
     # The fixture config fast's tests run their gates from.
     ("tools/gate/tests/test_fast.py", "gate:*"),
 }

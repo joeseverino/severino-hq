@@ -39,7 +39,7 @@ class DeclaredOnceTests(TestCase):
                 self.assertNotIn(IDEMPOTENCY_FIELD, schema.get("required", ()))
 
     def test_the_published_schema_is_the_one_execution_validates_against(self):
-        described = {item["name"]: item for item in describe_capabilities()["capabilities"]}
+        described = {item["name"]: item for item in describe_capabilities(principal=cli_principal())["capabilities"]}
 
         for name in (REFRESH, RECONCILE):
             schema = described[name]["input_schema"]
@@ -198,7 +198,7 @@ class PolicyTests(TestCase):
         from hq.platform.application.projects import DEPENDENCY_UPDATES
 
         project = Project.objects.create(name="Example", slug="example")
-        payload = {"enabled": False, IDEMPOTENCY_FIELD: "switch-once"}
+        payload = {"dependency_updates": False, IDEMPOTENCY_FIELD: "switch-once"}
 
         def switch():
             return execute_capability(DEPENDENCY_UPDATES, payload, principal=cli_principal(), target="example")

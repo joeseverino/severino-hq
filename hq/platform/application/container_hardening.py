@@ -1,15 +1,10 @@
 """The compose change that meets each "How it runs" check a container fails.
 
-Derived from what HQ already read of the container (Docker's inspect of it,
-``portainer.runtime``, and its mounts) and written for its own compose service,
-so the operator pastes it rather than composing it. Only for a check that is
-not met: a met check, or one HQ could not read, is never given a change.
-
-A change that can break the container says so beside itself: a non-root user
-needs its files readable, a read-only mount refuses every write (``docker cp``
-into it included), dropping capabilities takes the ones it quietly relied on.
-What HQ cannot write, because the answer is not in anything it read, is said
-as a reason instead, naming what is missing.
+Derived from what HQ already read of the container (Docker's inspect,
+``portainer.runtime``, its mounts) and written for its own compose service, so
+the operator pastes it rather than composing it. A met check, or one HQ could
+not read, gets no change; one that can break the container carries its
+``caution``, and one HQ cannot write is an ``Unwritten`` naming what is missing.
 """
 
 from collections.abc import Mapping
@@ -140,7 +135,7 @@ def _listed(key: str, values) -> str:
     return f"{key}:\n" + "\n".join(f'  - "{value}"' for value in values)
 
 
-def _privileged(container, runtime, unmet):
+def _privileged(_container, _runtime, unmet):
     if "not-privileged" in unmet:
         yield Change(
             ("not-privileged",),
@@ -150,12 +145,12 @@ def _privileged(container, runtime, unmet):
         )
 
 
-def _process_namespace(container, runtime, unmet):
+def _process_namespace(_container, _runtime, unmet):
     if "own-process-namespace" in unmet:
         yield Removal("own-process-namespace", ("pid: host",))
 
 
-def _security_options(container, runtime, unmet):
+def _security_options(_container, runtime, unmet):
     """``security_opt`` once, for both checks it can fail: what it keeps
     without the unconfined options, and no-new-privileges added."""
 
@@ -180,12 +175,12 @@ def _security_options(container, runtime, unmet):
     yield Change(tuple(sorted(wanted)), "security_opt", _listed("security_opt", kept), " ".join(cautions))
 
 
-def _system_paths(container, runtime, unmet):
+def _system_paths(container, _runtime, unmet):
     if "no-system-path-writable" not in unmet:
         return
     mounts = container.mounts or ()
     binds = [mount for mount in mounts if mount.get("type") == "bind"]
-    offending = {id(mount) for mount in writable_system_binds(binds, holds_socket(container))}
+    offending = {id(mount) for mount in writable_system_binds(binds, docker_held=holds_socket(container))}
     lines = [
         f"{mount.get('source')}:{mount.get('destination')}"
         + (":ro" if mount.get("read_only") or id(mount) in offending else "")
@@ -200,7 +195,7 @@ def _system_paths(container, runtime, unmet):
     )
 
 
-def _capabilities(container, runtime, unmet):
+def _capabilities(_container, runtime, unmet):
     if "no-powerful-capability" not in unmet:
         return
     added = [str(cap) for cap in runtime.get("cap_add") or ()]
@@ -216,7 +211,7 @@ def _capabilities(container, runtime, unmet):
     )
 
 
-def _devices(container, runtime, unmet):
+def _devices(_container, runtime, unmet):
     if "no-devices" in unmet:
         yield Removal(
             "no-devices",
@@ -225,7 +220,7 @@ def _devices(container, runtime, unmet):
         )
 
 
-def _network(container, runtime, unmet):
+def _network(_container, _runtime, unmet):
     if "own-network" in unmet:
         yield Removal(
             "own-network",
@@ -235,7 +230,7 @@ def _network(container, runtime, unmet):
         )
 
 
-def _ports(container, runtime, unmet):
+def _ports(_container, runtime, unmet):
     if "ports-bound" not in unmet:
         return
     lines = []
@@ -261,7 +256,7 @@ def _port(binding: Mapping[str, Any]) -> str:
     return port.removesuffix("/tcp")
 
 
-def _memory(container, runtime, unmet):
+def _memory(_container, runtime, unmet):
     if "memory-limited" not in unmet:
         return
     used = int(runtime.get("memory_usage") or 0)
@@ -336,7 +331,7 @@ def _user(container, runtime, unmet):
     yield Change(("not-root",), "user", f'user: "{NON_ROOT}"', caution)
 
 
-def _socket(container, runtime, unmet):
+def _socket(_container, _runtime, unmet):
     if "no-docker-socket" in unmet:
         yield Unwritten(
             "no-docker-socket",

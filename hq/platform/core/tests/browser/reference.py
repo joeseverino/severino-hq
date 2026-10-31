@@ -20,7 +20,7 @@ def _opaque(color: str) -> tuple[int, ...]:
     """A computed color's red, green and blue, without its opacity, as 0-255:
     ``rgb(255, 255, 255)`` and ``color(srgb 1 1 1 / 0.8)`` are one color."""
 
-    numbers = [float(n) for n in re.findall(r"[\d.]+", color.split("/")[0])]
+    numbers = [float(n) for n in re.findall(r"[\d.]+", color.split("/", maxsplit=1)[0])]
     if color.startswith("color("):
         return tuple(round(n * 255) for n in numbers[:3])
     return tuple(round(n) for n in numbers[:3])

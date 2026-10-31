@@ -1,7 +1,6 @@
 """The claims HQ makes about itself, and the silence each one breaks."""
 
 from datetime import timedelta
-from unittest import mock
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -10,6 +9,7 @@ from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 
 from ..action_links import ActionLink
 from ..findings import InvalidFindingsQuery, derive_findings, finding_rules, findings, rule_for
+from ..plugin_testing import offering
 from ..reach import TAILNET
 from ..security import Capability, Principal
 from ..topology import derive_topology
@@ -930,7 +930,7 @@ class ReachedButUnmeasuredTests(TestCase):
             ),
         )
         principal = Principal("reader", "test", frozenset({Capability.READ}))
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
+        with offering(spec, alone=True):
             projection = derive_topology(principal=principal)
         return [f for f in derive_findings(projection, principal=principal) if f.rule == "reached-but-unmeasured"]
 

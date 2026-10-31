@@ -1,0 +1,59 @@
+id: patch-reaches-no-private-name
+valid:
+  - mock.patch("hq.platform.application.plugins.installed_plugin_apps", return_value=[])
+  - patch("socket.getaddrinfo", getaddrinfo)
+  - patch("example.public.name")
+  - mock.patch.object(derivations, "GIVES_WAY", 0.2)
+  - mock.patch.object(sys, "path", [])
+  - mock.patch.object(store, "get", side_effect=error)
+  - mock.patch.object(type(self), "__init__", init)
+  - patch.multiple(settings, DEBUG=True)
+  - 'mock.patch.dict(os.environ, {"usage_base": "HEAD"})'
+  - mock.patch.object(os, "_exit")
+  - unittest.mock.patch.object(os, "_exit")
+  - mock.patch.object(derivations, "_awaited", awaiting)
+  - mock.patch.object(derivations._NO_REQUEST, "wait", giving_way)
+  - mock.patch("hq.platform.application.search._fts5_available", return_value=False)
+  - mock.patch.object(look, "_relay", relay)
+  - module._helper(1, "_x")
+  - mock.patch.dict(settings.CACHES, {})
+  - patch.dict(in_dict=registry.MODELS, values={})
+  - patch.dict("hq.platform.core.audit.REGISTRY", {})
+invalid:
+  - mock.patch("django.db.models._thing")
+  - |
+    patch(
+        "pkg.mod._name",
+    )
+  - mock.patch("hq.platform.application.problems._host_entries", return_value=())
+  - patch("hq.domains.content.content_sync._OPENER.open", return_value=None)
+  - |
+    patch(
+        "tools.pipeline._steps",
+    )
+  - unittest.mock.patch(target="hq_sdk._internal.thing")
+  - |
+    @mock.patch("hq.platform.core.look._rules")
+    def test_it(self, rules):
+        pass
+  - mock.patch.object(derivations, "_clock", return_value=moment)
+  - |
+    with (
+        patch.object(
+            bridge_application,
+            "_run",
+        ) as run,
+    ):
+        pass
+  - mock.patch.object(registry_import, "_ASSET", refusing)
+  - mock.patch.object(derivations._IN_FLIGHT, "get")
+  - mock.patch.object(target=derivations, attribute="_store")
+  - 'patch.multiple(derivations, _clock=lambda: moment)'
+  - patch.multiple("hq.platform.application.derivations._Frame", until=None)
+  - patch.multiple(derivations._FRAME, set=None)
+  - mock.patch.object(os, "_exit_now")
+  - mock.patch.dict(audit._AUDITED_MODELS)
+  - 'patch.dict(_AUDITED_MODELS, {Expense: "Expense"})'
+  - mock.patch.dict(in_dict=audit._AUDITED_MODELS, clear=True)
+  - mock.patch.dict("hq.platform.core.audit._AUDITED_MODELS")
+  - stack.enter_context(mock.patch.dict(audit._AUDITED_MODELS))

@@ -6,9 +6,11 @@ from contextlib import contextmanager
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import override
 
 
 class _Quiet(SimpleHTTPRequestHandler):
+    @override
     def log_message(self, format, *args):
         pass
 

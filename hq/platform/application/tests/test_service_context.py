@@ -7,6 +7,8 @@ entry says which object it changed. These prove the page reads those rather than
 asking for a column that points at infrastructure.
 """
 
+from unittest import mock
+
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
@@ -267,7 +269,6 @@ class OneWindowSourceTests(SimpleTestCase):
 class TopologyWindowTests(TestCase):
     def test_a_node_names_the_window_its_traffic_was_counted_over(self):
         from datetime import timedelta
-        from unittest import mock
 
         from django.utils import timezone
 
@@ -324,6 +325,94 @@ class PartRowTests(TestCase):
         self.assertEqual(read.health, ("Online", "pill-reachable"))
 
 
+class StepsTests(SimpleTestCase):
+    def test_a_machine_the_proxy_and_what_it_forwards_to_share_is_one_step(self):
+        from types import SimpleNamespace
+
+        from ..path_model import Hop, Route
+        from ..service_context import part_rows
+
+        steps = (
+            ("network", "100.64.0.1"),
+            ("machine", "example-box"),
+            ("ingress", "192.0.2.1:8000"),
+            ("upstream", "192.0.2.1:8000"),
+            ("machine", "example-box"),
+            ("container", "example-web"),
+        )
+        route = Route("internal DNS", tuple(Hop(kind, kind.capitalize(), name) for kind, name in steps))
+        with mock.patch("hq.platform.application.machines.machine", return_value=None):
+            rows = part_rows(SimpleNamespace(claims=()), route)
+
+        shown = [row.hop.step for row in rows]
+        self.assertEqual(shown, ["network", "machine", "ingress", "upstream", "container"])
+        self.assertEqual([hop.step for hop in route.line_hops], ["network", "machine", "ingress", "container"])
+
+
+class ObservedHealthTests(SimpleTestCase):
+    """A hop no declaration supplies reads its health from the machine it lands on."""
+
+    def health(self, steps, machine, step):
+        from types import SimpleNamespace
+
+        from ..path_model import Hop, Route
+        from ..service_context import part_rows
+
+        hops = tuple(Hop(kind, kind.capitalize(), name) for kind, name in steps)
+        with mock.patch("hq.platform.application.machines.machine", return_value=machine):
+            rows = part_rows(SimpleNamespace(claims=()), Route("internal DNS", hops))
+        return next(row.observed_health for row in rows if row.hop.step == step)
+
+    def box(self, *, online=True, containers=()):
+        from ..machines import Machine
+        from ..tailnet_presence import Presence
+
+        return Machine(name="example-box", presence=Presence(online=online), containers=containers)
+
+    def test_a_machine_shows_its_own_state(self):
+        self.assertEqual(
+            self.health((("machine", "example-box"),), self.box(), "machine"), ("Online", "pill-reachable")
+        )
+
+    def test_a_machine_hq_does_not_know_shows_nothing(self):
+        self.assertIsNone(self.health((("machine", "example-box"),), None, "machine"))
+
+    def test_the_link_to_a_machine_is_its_tailnet_presence(self):
+        steps = (("network", "100.64.0.1"), ("machine", "example-box"))
+
+        self.assertEqual(self.health(steps, self.box(), "network"), ("Connected", "pill-reachable"))
+        self.assertEqual(self.health(steps, self.box(online=False), "network"), ("Disconnected", "pill-unreachable"))
+
+    def test_a_link_with_no_presence_shows_nothing(self):
+        from ..machines import Machine
+
+        steps = (("network", "100.64.0.1"), ("machine", "example-box"))
+
+        self.assertIsNone(self.health(steps, Machine(name="example-box"), "network"))
+        self.assertIsNone(self.health((("network", "100.64.0.1"),), self.box(), "network"))
+
+    def test_a_forward_and_its_container_read_the_running_container(self):
+        from types import SimpleNamespace
+
+        app = SimpleNamespace(name="app", state="running", healthy=True)
+        sick = SimpleNamespace(name="app", state="restarting", healthy=False)
+        steps = (("machine", "example-box"), ("upstream", "app:80"), ("container", "app"))
+
+        self.assertEqual(self.health(steps, self.box(containers=(app,)), "upstream"), ("Running", "pill-reachable"))
+        self.assertEqual(
+            self.health(steps, self.box(containers=(sick,)), "container"), ("Restarting", "pill-unreachable")
+        )
+
+    def test_a_container_the_machine_is_not_running_shows_nothing(self):
+        steps = (("machine", "example-box"), ("container", "app"))
+
+        self.assertIsNone(self.health(steps, self.box(), "container"))
+        self.assertIsNone(self.health((("container", "app"),), self.box(), "container"))
+
+    def test_a_step_no_reading_covers_shows_nothing(self):
+        self.assertIsNone(self.health((("dns", "example.com"),), self.box(), "dns"))
+
+
 class EmptyColumnTests(SimpleTestCase):
     def test_a_column_no_row_fills_is_not_drawn(self):
         section = ServiceSection(
@@ -345,3 +434,18 @@ class EmptyColumnTests(SimpleTestCase):
         )
 
         self.assertEqual(section.columns, ("Name", "Note"))
+
+    def test_a_link_alone_fills_its_column(self):
+        section = ServiceSection(
+            id="example",
+            label="Example",
+            columns=("Name", "Where", "Extra"),
+            records=((Cell("one"), Cell("", url="/somewhere/"), Cell("")),),
+        )
+
+        self.assertEqual(section.columns, ("Name", "Where"))
+
+    def test_a_section_needs_a_page_id_and_a_label(self):
+        for fields in ({"id": "Not an id!", "label": "Example"}, {"id": "example", "label": "  "}):
+            with self.subTest(**fields), self.assertRaises(ValueError):
+                ServiceSection(columns=(), records=(), **fields)

@@ -89,7 +89,7 @@ func (r *run) recorded() (int, bool) {
 	if err != nil {
 		return 0, false
 	}
-	r.u.Out.Write(result)
+	_, _ = r.u.Out.Write(result)
 	code, err := os.ReadFile(filepath.Join(r.state, "exit"))
 	if exit, parseErr := strconv.Atoi(strings.TrimSpace(string(code))); err == nil && parseErr == nil {
 		return exit, true
@@ -679,6 +679,6 @@ func (r *run) finish(outcome string, code int) int {
 	if err != nil {
 		fmt.Fprintln(r.u.Err, "hq-host upgrade: the result could not be recorded in", r.state)
 	}
-	io.Copy(r.u.Out, &body)
+	_, _ = io.Copy(r.u.Out, &body)
 	return code
 }

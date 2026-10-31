@@ -10,7 +10,7 @@ from collections import deque
 from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
-from typing import Any, cast, override
+from typing import TYPE_CHECKING, Any, cast, override
 from unittest import TestResult, mock
 from urllib.parse import urlsplit
 
@@ -18,7 +18,7 @@ from django.conf import settings
 from django.test import Client, RequestFactory, SimpleTestCase
 from django.urls import reverse
 from django.utils.csp import CSP
-lazy from playwright.sync_api import Browser, BrowserContext, Error as BrowserError, Playwright
+lazy from playwright.sync_api import Error as BrowserError
 
 from hq.platform.core.speculation import rules_document
 from hq.platform.core.test_runner import stall_watch
@@ -27,22 +27,23 @@ from hq.platform.core.tests.browser.probes.settle import (
     DEAF_WHILE_PROBED,
     FINISH_TRANSITIONS,
     FONTS_READY,
-    IN_THE_HEAD,
-    MOVED_SINCE_DRAWN,
     PAINTED,
     PUT_BACK,
-    SETTLE,
     STAND_IN,
     STILL,
-    UNTIL_DRAWN,
     hushed,
 )
 from hq.platform.core.tests.browser.reading import _in_one_trip, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
-from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, slow_frames, static_file
+from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, static_file
 from hq.platform.core.tests.browser.survey import _PALETTE, AS_FINDINGS, _as_is, geometry_probes
 from hq.platform.core.tests.browser.uncaught import Uncaught
 from hq.platform.core.tests.browser.widths import viewport
+
+# Named for annotations alone: a class's annotations can be read as it is made
+# (a dataclass's are), which would load a lazy import at once.
+if TYPE_CHECKING:
+    from playwright.sync_api import Browser, BrowserContext, Playwright
 
 
 def failure_name(params):
@@ -337,12 +338,10 @@ class BrowserGate(SimpleTestCase):
         self.close_context()
         test = getattr(self, self._testMethodName, None)
         options.setdefault("java_script_enabled", getattr(test, "scripted", self.scripted))
-        # Scripts asked for while this is a list wait in it (moved_once_drawn).
+        # Scripts asked for while this is a list wait in it, unanswered.
         self.held = None
         self.context = self.browser.new_context(**options)
         self.context.set_default_timeout(5000)
-        if slow := slow_frames():
-            self.context.add_init_script(slow)
         if options["java_script_enabled"]:
             self.context.expose_binding("hqRefused", self.refused_by_policy)
             self.context.add_init_script(_REPORT_REFUSALS)
@@ -494,39 +493,6 @@ class BrowserGate(SimpleTestCase):
         self.page.goto(f"{ORIGIN}/{name}/", wait_until="load")
         self.page.evaluate(FONTS_READY)
 
-    def moved_once_drawn(self, url, width, settled):
-        """What moves on ``url`` after it is first drawn.
-
-        The page is drawn with its deferred scripts held back, which is what a
-        reader sees before they run, and every box that shows is noted. A
-        script the parser waits for is part of that drawing, so it is let
-        through. Then the rest run, ``settled`` waits for what they start, and
-        every element that stands somewhere else is named.
-        """
-
-        self.held = []
-        self.page.set_viewport_size(viewport(width))
-        self.page.goto(url, wait_until="commit")
-        for _frame in range(600):
-            parsing = self.page.evaluate(UNTIL_DRAWN)
-            if parsing is None:
-                break
-            waiting = [route for route in self.held if route.request.url in set(parsing)]
-            for route in waiting:
-                self.held.remove(route)
-                self.answer(route)
-            # A parser stopped in the head has no frame to draw, so it is
-            # asked again at once rather than waited on for one.
-            if not waiting and not self.page.evaluate(IN_THE_HEAD):
-                self.page.evaluate(SETTLE)
-        else:
-            raise AssertionError(f"{url} at {width}px was never drawn")
-        held, self.held = self.held, None
-        for route in held:
-            self.answer(route)
-        settled()
-        return self.page.evaluate(MOVED_SINCE_DRAWN)
-
     def geometry(self, path, width):
         """What the layout invariants find on the page as loaded, by check:
         every one the gates hold on a page as a reader has it."""
@@ -553,14 +519,15 @@ class BrowserGate(SimpleTestCase):
         return lost_fills(steps, LINE_CONTRAST)
 
     def palette(self):
-        """What depends on the palette: frames drawn by a border, text, lines
-        and fills against what they sit on."""
+        """What depends on the palette: text, and the edges of fields and
+        buttons, against what they sit on."""
 
         return self.checked(_PALETTE)
 
     def findings(self, path, width):
         """What the layout rules find in HQ's own markup, checks that found
-        nothing left out: the geometry and the frames in the palette loaded.
+        nothing left out: the geometry and the palette checks in the palette
+        loaded, and the fills in both.
         The vendored markup is stood in for while they read, and put back
         however they end: each probe runs on its own."""
 

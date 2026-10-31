@@ -2,24 +2,9 @@
 
     DJANGO_STATIC_ROOT=/tmp/hq-static python manage.py bench_contention
 
-Seeds Django's test database (never the real one) as ``bench_pages`` does,
-then browses every page from several threads twice: alone, and while writers
-run beside it. The writers are the two that hold SQLite's one write lock in
-production: the controller landing a report (``bench.unchanged_sweep``, the
-bridge's own actions) every ``--sweep-every`` seconds, and an import writing
-rows in batches back to back, one transaction each, as a job the runner runs.
-
-The web application's pass runs too (``core.ahead``): what a write unsettles
-is asked again off any request, so a page finds it stored. ``--no-ahead``
-leaves it out, so every page derives what a write unsettled.
-
-Every statement each thread runs is timed. A ``BEGIN IMMEDIATE`` is where a
-connection asks for the write lock, and so is a write outside a transaction,
-so their time is the wait for it, read against the busy timeout that turns a
-long wait into an error. Reported per
-phase: page latency (median, p95, p99, worst), the writes and lock waits a
-browsing request makes, what the writers waited and took, every error, the
-derivations requests ran, and the process's peak memory.
+What it seeds, the writers it browses beside and what it reports:
+docs/Architecture.md, A page while HQ writes. The web application's pass
+(``core.ahead``) runs too unless ``--no-ahead`` leaves it out.
 """
 
 import random
@@ -88,6 +73,9 @@ def _statements() -> Iterator[dict[str, Any]]:
             return execute(sql, params, many, context)
         finally:
             took = (time.perf_counter() - started) * 1000
+            # A ``BEGIN IMMEDIATE`` is where a connection asks for the write
+            # lock, so its time is the wait for it, read against the busy
+            # timeout that turns a long wait into an error.
             if sql.lstrip()[:5].upper() == "BEGIN":
                 seen["waits"].append(took)
             elif written := WRITE.match(sql):
@@ -147,7 +135,8 @@ def _reader(seeded: Seeded, urls: list[str], tally: RoleTimings, headers: dict[s
 
 
 def _controller(tally: RoleTimings, every: float, stop: threading.Event):
-    """A report every ``every`` seconds; none at all is back to back."""
+    """The controller landing a report (``bench.unchanged_sweep``, the bridge's
+    own actions) every ``every`` seconds; none at all is back to back."""
 
     def step() -> None:
         _once(tally, unchanged_sweep)
@@ -167,7 +156,7 @@ def _importer(seeded: Seeded, tally: RoleTimings, batch: int, stop: threading.Ev
     template = Expense.objects.get(pk=seeded.expense.pk)
     fields = {f.attname: getattr(template, f.attname) for f in Expense._meta.concrete_fields if not f.primary_key}
 
-    def batches(progress) -> dict[str, Any]:
+    def batches(_progress) -> dict[str, Any]:
         written: list[int] = []
 
         def write() -> None:
@@ -231,11 +220,11 @@ class Command(BaseCommand):
                 # The first sweep of a seeded estate adopts what it finds.
                 unchanged_sweep()
             for writers in (False, True):
-                self._phase(seeded, urls, options, writers)
+                self._phase(seeded, urls, options, writers=writers)
         finally:
             teardown_databases(databases, verbosity=0)
 
-    def _phase(self, seeded: Seeded, urls: list[str], options: dict[str, Any], writers: bool) -> None:
+    def _phase(self, seeded: Seeded, urls: list[str], options: dict[str, Any], *, writers: bool) -> None:
         reading, sweeping, importing = RoleTimings(), RoleTimings(), RoleTimings()
         go, stop = threading.Event(), threading.Event()
         with _machine_client() as headers:

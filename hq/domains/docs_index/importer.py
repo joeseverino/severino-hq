@@ -1,24 +1,10 @@
-"""
-Documentation manifest importer.
+"""Documentation manifest importer.
 
-Reads a JSON array like:
-
-    [{
-        "doc_id": "rb-adguard-001",
-        "title": "AdGuard Home Runbook",
-        "path": "Infra/DNS/AdGuard Home.md",
-        "doc_type": "runbook",
-        "system": "AdGuard Home",
-        "environment": "homelab",
-        "status": "active",
-        "sensitivity": "sensitive",
-        "related_projects": ["example-dns"],
-        "related_assets": ["example-workstation"],
-        "last_reviewed": "2026-05-16"
-    }, ...]
-
-and upserts DocumentationRecord rows. The Obsidian vault stays the source of
-truth: HQ tracks only metadata and relationships.
+Upserts DocumentationRecord rows from the manifest the vault MCP emits: a JSON
+array with one object per doc, its frontmatter fields (``frontmatter_schema``)
+plus its vault ``path`` and its relations by slug (``related_projects``,
+``related_assets``). The vault stays the source of truth; HQ tracks only
+metadata and relationships.
 """
 
 from collections.abc import Iterable
@@ -80,7 +66,7 @@ _FIELD_ALIASES = {"system": ("system", "system_service")}
 
 def _is_blank(value: Any) -> bool:
     # The doctor's notion of absent, so a doc it passes is one HQ accepts.
-    return value is None or value == "" or value == []
+    return value is None or value in ("", [])
 
 
 def _enforce_contract(entry: dict, doc_id: str) -> None:
@@ -88,10 +74,6 @@ def _enforce_contract(entry: dict, doc_id: str) -> None:
 
     Every missing field of ``REQUIRED_FIELDS`` is named at once, with the
     doc_id, so one preflight run is enough to fix an entry.
-
-    ``DOC_ID_PREFIXES`` is the vault-doc id namespace, so it binds vault docs
-    only. Content entries owe the required fields but not the prefixes: their
-    ids belong to the site content, not to the vault schema.
     """
     label = doc_id or "(no doc_id)"
     missing = [
@@ -104,6 +86,8 @@ def _enforce_contract(entry: dict, doc_id: str) -> None:
             f"{label}: {counted(len(missing), 'required field missing', 'required fields missing')}: "
             f"{', '.join(missing)}"
         )
+    # ``DOC_ID_PREFIXES`` is the vault-doc id namespace, so it binds vault docs
+    # only: a content entry's id belongs to the site content.
     if _is_content_entry(entry):
         _enforce_content_contract(entry, label)
         return
@@ -144,7 +128,7 @@ def _build_record_defaults(entry: dict) -> dict:
         frontmatter_schema.DOC_TYPES,
         field="doc_type",
     )
-    defaults = {
+    return {
         "title": entry.get("title") or doc_id,
         "doc_type": doc_type,
         "system_service": entry.get("system") or entry.get("system_service") or "",
@@ -170,7 +154,6 @@ def _build_record_defaults(entry: dict) -> dict:
         "published_at": _coerce_date(entry.get("published_at")),
         "notes": entry.get("notes") or "",
     }
-    return defaults
 
 
 def validate_manifest_data(items: Iterable[dict]) -> list[dict]:
@@ -405,21 +388,18 @@ def import_manifest_data(
     report_orphans: bool = False,
     prune_orphans: bool = False,
 ) -> dict[str, Any]:
-    """Upsert the manifest and return a stats dict.
-
-    The returned ``stats`` is the contract `import_docs_manifest --json` emits
-    and the `hq sync` wrapper parses. Keys (treat as additive: do not rename):
-
-    - ``created`` / ``updated`` / ``skipped``: DocumentationRecord counts.
-    - ``missing_relations`` (int) + ``missing_relations_detail`` (list of
-      ``{doc_id, kind, slug}``): doc relations pointing at an absent registry slug.
-    - ``content_items_synced`` / ``content_items_pruned``: mirrored ContentItem counts.
-    - ``orphans`` (list of doc_id) + ``orphans_pruned`` / ``orphans_pruned_records``
-      present only when ``report_orphans``/``prune_orphans``.
-    """
+    """Upsert the manifest and return its stats, the contract
+    `import_docs_manifest --json` emits and the `hq sync` wrapper parses."""
     if not isinstance(items, list):
         raise ManifestImportError("Manifest must be a JSON array of records.")
 
+    # The keys are additive, never renamed: ``created`` / ``updated`` /
+    # ``skipped`` count DocumentationRecords; ``missing_relations`` and its
+    # ``missing_relations_detail`` (``{doc_id, kind, slug}``) name doc relations
+    # pointing at an absent registry slug; ``content_items_synced`` /
+    # ``content_items_pruned`` count mirrored ContentItems; and ``orphans`` (doc
+    # ids), ``orphans_pruned`` and ``orphans_pruned_records`` appear only when
+    # ``report_orphans`` / ``prune_orphans`` asks for them.
     stats: dict[str, Any] = {
         "created": 0,
         "updated": 0,

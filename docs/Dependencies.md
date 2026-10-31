@@ -55,7 +55,8 @@ change `version:` in `static/vendor/scalar/UPSTREAM` and run
 
 ## Advisories
 
-`mise run lint:audit` runs `pip-audit` against `uv.lock`, and an
+`mise run lint:audit` runs `uv audit` against `uv.lock`, every group
+included, and an
 extension's admission audits its lock through the same
 `tools/pipeline/audit.sh`. The image gates scan the built image with
 Trivy. When an advisory lands against a transitive dependency, move only

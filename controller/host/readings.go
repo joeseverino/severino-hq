@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -39,7 +40,7 @@ func Reported(dir string, shipped []string) ([]string, error) {
 			if !ok {
 				continue
 			}
-			for _, started := range strings.Fields(value) {
+			for started := range strings.FieldsSeq(value) {
 				if instance(started) && slices.Contains(shipped, template(started)) {
 					seen[started] = true
 				}
@@ -64,14 +65,15 @@ func instance(name string) bool {
 }
 
 func template(instance string) string {
-	return instance[:strings.Index(instance, "@")] + "@" + instance[strings.LastIndex(instance, "."):]
+	name, _, _ := strings.Cut(instance, "@")
+	return name + "@" + instance[strings.LastIndex(instance, "."):]
 }
 
 // UnitState asks systemd for UnitProperties of each unit, in UTC with
 // instants in seconds, and returns its answer.
 func (m *Machine) UnitState(ctx context.Context, units []string) ([]byte, error) {
 	if len(units) == 0 {
-		return nil, fmt.Errorf("no units to ask about")
+		return nil, errors.New("no units to ask about")
 	}
 	args := append([]string{"show", "--timestamp=unix", "--property=" + strings.Join(UnitProperties, ","), "--"}, units...)
 	command := m.Command(ctx, "systemctl", args...)
@@ -89,7 +91,7 @@ func Tailnet(ctx context.Context, socket, path string) ([]byte, error) {
 			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
 		}},
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://local-tailscaled.sock"+path, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://local-tailscaled.sock"+path, http.NoBody)
 	if err != nil {
 		return nil, err
 	}

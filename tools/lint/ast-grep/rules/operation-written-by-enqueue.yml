@@ -1,0 +1,16 @@
+# An operation enters the queue through resource_operations.enqueue. Its key
+# column is unique, and enqueue lets that column settle two writers on one
+# key; a caller that checks for the key and then creates the row has a race of
+# its own between the two.
+id: operation-written-by-enqueue
+language: python
+severity: error
+message: An OperationRequest row is written outside resource_operations.enqueue.
+note: Queue it with resource_operations.enqueue.
+ignores:
+  - "**/platform/application/resource_operations.py"
+rule:
+  pattern: OperationRequest.objects.$WRITE($$$)
+constraints:
+  WRITE:
+    regex: ^(create|get_or_create|update_or_create)$

@@ -156,7 +156,7 @@ class BreakableTests(SimpleTestCase):
         (strut,) = with_class(str(breakable("example.com/example-path")), "strut")
         self.assertEqual(strut.attrs.get("aria-hidden"), "true")
         self.assertEqual(strut.words, "")
-        pieces = strut.attrs["data-strut"].split("​")
+        pieces = strut.attrs["data-strut"].split("\u200b")
         self.assertEqual("".join(pieces), "example.com/example-path")
         self.assertGreater(len(pieces), 1)
         self.assertEqual(with_class(str(breakable("Receipt for example-docker-host-01")), "strut"), [])
@@ -227,3 +227,39 @@ class LeadActionTests(SimpleTestCase):
         from hq.platform.application.pages import PageAction
 
         self.assertEqual(self.lead(PageAction("Remove", "/r/", danger=True)), "Remove")
+
+
+class HeadActionsTests(SimpleTestCase):
+    """A head draws two controls beside its title and offers the rest in its menu."""
+
+    def split(self, *actions):
+        from hq.platform.core.templatetags.action_tags import head_actions
+
+        beside, menu = head_actions(actions)
+        return [action.label for action in beside], [action.label for action in menu]
+
+    def test_the_lead_and_the_next_stand_beside_the_title_and_a_destructive_one_waits(self):
+        from hq.platform.application.pages import PageAction
+
+        self.assertEqual(
+            self.split(
+                PageAction("Restart", "/restart/", method="post"),
+                PageAction("Stop", "/stop/", danger=True),
+                PageAction("Edit", "/edit/"),
+                PageAction("Remove", "/remove/", danger=True),
+            ),
+            (["Restart", "Edit"], ["Edit", "Stop", "Remove"]),
+        )
+
+    def test_the_menu_holds_every_control_but_the_lead_the_second_first(self):
+        from hq.platform.application.pages import PageAction
+
+        beside, menu = self.split(*(PageAction(label, f"/{label}/") for label in "abcd"))
+        self.assertEqual(beside, ["a", "b"])
+        self.assertEqual(menu, ["b", "c", "d"])
+
+    def test_one_control_has_no_menu_and_none_draws_nothing(self):
+        from hq.platform.application.pages import PageAction
+
+        self.assertEqual(self.split(PageAction("Edit", "/edit/")), (["Edit"], []))
+        self.assertEqual(self.split(), ([], []))

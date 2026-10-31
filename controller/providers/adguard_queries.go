@@ -104,15 +104,9 @@ type queryNames struct {
 }
 
 func (n queryNames) covers(name string) bool {
-	if n.exact[name] {
-		return true
-	}
-	for _, zone := range n.zones {
-		if name != zone && strings.HasSuffix(name, "."+zone) {
-			return true
-		}
-	}
-	return false
+	return n.exact[name] || slices.ContainsFunc(n.zones, func(zone string) bool {
+		return name != zone && strings.HasSuffix(name, "."+zone)
+	})
 }
 
 func summarizeQueries(get func(string) (json.RawMessage, error), domains []string, ref string, now time.Time, anonymized bool) ([]any, error) {

@@ -5,23 +5,6 @@ import (
 	"log/slog"
 )
 
-func (w *Worker) glance(ctx context.Context) {
-	plan, err := w.Bridge.GlancePlan(ctx, w.ID)
-	if err != nil {
-		w.logger().Warn("glance plan unavailable", slog.Any("error", err))
-		return
-	}
-	if len(plan.Panels) == 0 {
-		return
-	}
-	result, err := w.Providers.Glance(ctx, plan)
-	if err != nil {
-		w.logger().Warn("glance read failed", slog.Any("error", err))
-		return
-	}
-	w.post("glance", w.Bridge.Glance(ctx, w.ID, result))
-}
-
 func (w *Worker) sweep(ctx context.Context) error {
 	verdict, err := w.Bridge.SweepDue(ctx, w.ID)
 	if err != nil {

@@ -9,13 +9,11 @@ column or a sentence (docs/Design.md, "Values read as what they are").
 import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from pathlib import Path
 
-from django.conf import settings
 from django.template.base import Lexer, TokenType
 from django.test import SimpleTestCase, tag
 
-from hq.platform.core.tests.test_template_values import filters, template_paths
+from hq.platform.core.tests.test_template_values import filters, template_sources
 
 # The classes a chip is drawn by: one of these, or any class ending "-chip".
 CHIPS = {"chip", "pill", "tag"}
@@ -25,7 +23,6 @@ FIGURES = {
     "money": "an amount",
     "counted": "a count and the words for it",
     "length": "a count",
-    "intcomma": "a number",
     "floatformat": "a number",
     "bytes": "a size",
 }
@@ -50,11 +47,11 @@ class Site:
         return f"{self.path}:{self.line}: {{{{ {self.value} }}}}"
 
 
-def is_figure(contents: str, percent: bool = False) -> bool:
+def is_figure(contents: str, *, percent: bool = False) -> bool:
     """Whether a printed variable is a number: through a figure's filter, by a
     count's or a total's name, or followed by a percent sign."""
 
-    printed = contents.split("|")[0].strip()
+    printed = contents.split("|", maxsplit=1)[0].strip()
     return percent or bool(FIGURES.keys() & set(filters(contents))) or bool(_FIGURE_NAME.search(printed))
 
 
@@ -110,7 +107,7 @@ def figures_in_chips(source: str, path: str = "") -> list[Site]:
     return [
         Site(path, tokens[at].lineno, tokens[at].contents)
         for at, percent in reader.inside
-        if is_figure(tokens[at].contents, percent)
+        if is_figure(tokens[at].contents, percent=percent)
     ]
 
 
@@ -153,12 +150,7 @@ class FiguresInChipsTests(SimpleTestCase):
 @tag("source", "tree")
 class TemplateChipTests(SimpleTestCase):
     def test_no_template_prints_a_figure_in_a_chip(self):
-        root = Path(settings.BASE_DIR)
-        found = [
-            site
-            for path in template_paths()
-            for site in figures_in_chips(path.read_text(encoding="utf-8"), str(path.relative_to(root)))
-        ]
+        found = [site for name, source in template_sources().items() for site in figures_in_chips(source, name)]
 
         self.assertEqual(
             [str(site) for site in found],

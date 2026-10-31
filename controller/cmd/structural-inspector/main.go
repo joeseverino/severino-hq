@@ -41,7 +41,7 @@ func show(n ast.Node) string {
 }
 func ident(n ast.Node, s string) bool { v, ok := n.(*ast.Ident); return ok && v.Name == s }
 func signature(t *ast.FuncType) string {
-	copy := *t
+	clone := *t
 	fields := func(list *ast.FieldList) *ast.FieldList {
 		if list == nil {
 			return nil
@@ -58,9 +58,9 @@ func signature(t *ast.FuncType) string {
 		}
 		return out
 	}
-	copy.Params = fields(t.Params)
-	copy.Results = fields(t.Results)
-	return show(&copy)
+	clone.Params = fields(t.Params)
+	clone.Results = fields(t.Results)
+	return show(&clone)
 }
 
 func stringPrefix(n ast.Expr, constants map[string]bool) bool {
@@ -456,8 +456,8 @@ func main() {
 			if c.Pos() < file.Package && strings.HasPrefix(c.Text, "// Code generated ") && strings.HasSuffix(c.Text, " DO NOT EDIT.") {
 				r.Generated = true
 			}
-			if strings.HasPrefix(c.Text, "//go:generate ") {
-				r.Directives = append(r.Directives, strings.TrimPrefix(c.Text, "//go:generate "))
+			if after, ok := strings.CutPrefix(c.Text, "//go:generate "); ok {
+				r.Directives = append(r.Directives, after)
 			}
 		}
 	}

@@ -30,35 +30,35 @@ class ConnectionEventTests(TestCase):
         self.assertEqual(event.summary, "Probed, reachable")
 
     def test_an_unchanged_probe_writes_nothing_and_a_change_is_recorded(self):
-        def sweep(ok):
+        def sweep(*, ok):
             report_connections(
                 [{"connection_ref": "example-dns", "provider": "cloudflare_dns", "ok": ok}],
                 principal=cli_principal(),
                 controller_id="example-controller",
             )
 
-        sweep(True)
-        sweep(True)
-        sweep(True)
+        sweep(ok=True)
+        sweep(ok=True)
+        sweep(ok=True)
         self.assertEqual(AuditLog.objects.filter(connection="example-dns").count(), 1)
 
-        sweep(False)
+        sweep(ok=False)
         latest = AuditLog.objects.filter(connection="example-dns").first()
         self.assertEqual(AuditLog.objects.filter(connection="example-dns").count(), 2)
         self.assertEqual(latest.summary, "Probed, unreachable")
 
     def test_starting_to_manage_is_a_kept_settings_change(self):
-        def sweep(manages):
+        def sweep(*, manages):
             report_connections(
                 [{"connection_ref": "example-dns", "provider": "cloudflare_dns", "ok": True, "manages": manages}],
                 principal=cli_principal(),
                 controller_id="example-controller",
             )
 
-        sweep(False)
+        sweep(manages=False)
         self.assertFalse(AuditLog.objects.filter(action=AuditLog.Action.SETTINGS_CHANGED).exists())
-        sweep(True)
-        sweep(True)
+        sweep(manages=True)
+        sweep(manages=True)
         changes = AuditLog.objects.filter(connection="example-dns", action=AuditLog.Action.SETTINGS_CHANGED)
         self.assertEqual([event.summary for event in changes], ["Allowed to manage its records"])
 

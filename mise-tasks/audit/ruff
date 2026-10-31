@@ -1,0 +1,38 @@
+#!/bin/sh
+#MISE description="Ruff's findings counted per rule for the rules given, over the paths and globs given, read-only"
+#MISE hide=true
+#USAGE arg "<rules>" help="Rule codes or prefixes, comma-separated, as --select takes them (ARG,FBT003)"
+#USAGE arg "[paths]" var=#true help="What to count, the repository without: a path (hq_sdk), a glob of Ruff's (**/tests/**) for only the Python files it matches or holds, or !glob (!**/tests/**) to leave them out"
+
+# Each word is held to a path's characters before Ruff sees it, so no word can
+# become a flag or a setting of its own (fix = true) and turn the read into a
+# write. The words are mise's shell-quoted parse of the arguments.
+set -euf
+
+# Ruff reads include as TOML, each glob a literal string: the quotes are
+# Ruff's to read, never the shell's.
+# shellcheck disable=SC2089
+q="'"
+paths=""
+include=""
+exclude=""
+eval "set -- ${usage_paths:-}"
+for word; do
+    case "${word}" in
+    "" | -* | *[!A-Za-z0-9_./*!-]* | ?*!*)
+        printf 'audit:ruff: %s is not a path or a glob of letters, digits and _ . / * -\n' "${word}" >&2
+        exit 2
+        ;;
+    !*) exclude="${exclude:+${exclude},}${word#!}" ;;
+    *\*.py | *\*.pyi) include="${include:+${include}, }${q}${word}${q}" ;;
+    *\**) include="${include:+${include}, }${q}${word}/**/*.py${q}" ;;
+    *) paths="${paths} ${word}" ;;
+    esac
+done
+
+# paths holds words without spaces, and set -f leaves their globs to Ruff.
+# shellcheck disable=SC2086,SC2090
+uv run ruff check --select "${usage_rules:?}" --statistics --no-cache --exit-zero \
+    ${include:+--config "include = [${include}]"} \
+    ${exclude:+--extend-exclude "${exclude}"} \
+    -- ${paths:-.}

@@ -1,6 +1,7 @@
 {% comment %}
 One route as a strip of hops, from application.paths: the route's line_hops,
-each machine once and no forwarding; the hop-by-hop table keeps every hop.
+each machine once and no forwarding; the step-by-step table (step_hops) keeps
+the forwarding.
 On HQ's own name, viewed through it, the route is the one this request took
 (service_context.routes_for): each hop it proved has a green icon, said once in
 the key under the strip, and the evidence left to the connection page. Shared by the service
@@ -17,7 +18,7 @@ where they would not.
       <span class="hop-label">{{ hop.label|breakable }}</span>
       <span class="hop-body"><strong>{% if hop.link and hop.link.url %}{% entity hop.link %}{% elif hop.name %}<span>{{ hop.name|breakable }}</span>{% elif hop.detail %}<span>{{ hop.detail|breakable }}</span>{% else %}{% empty_value %}{% endif %}{% if hop.certificate and not hop.certificate.unread %}{% with certificate=hop.certificate %}{% include "control_plane/_certificate_mark.html" %}{% endwith %}{% endif %}</strong>
       {% if hop.certificate.unread %}<small>{{ hop.certificate.line|breakable }}</small>{% endif %}
-      {% if hop.facts %}<small class="hop-facts">{% for text, url in hop.facts %}{% if url %}{% entity url|outside label=text %}{% else %}{{ text|breakable }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</small>{% endif %}
+      {% if hop.facts %}<small class="hop-facts">{% for text, url in hop.facts %}{% if url %}{% entity url|outside label=text %}{% else %}{{ text|breakable }}{% endif %}{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</small>{% endif %}
       {% if hop.unread %}<small>{{ hop.unread|capfirst|breakable }}</small>{% endif %}</span>
     </li>
   {% endfor %}

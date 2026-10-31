@@ -15,6 +15,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -180,13 +181,13 @@ func rsaJWK(jwk jsonWebKey) (crypto.Signer, error) {
 		}
 		numbers[name] = number
 	}
-	if !numbers["e"].IsInt64() || numbers["e"].Int64() > 1<<31-1 {
+	if !numbers["e"].IsInt64() || numbers["e"].Int64() > math.MaxInt32 {
 		return nil, errors.New("exponent out of range")
 	}
 	key := &rsa.PrivateKey{
-		PublicKey: rsa.PublicKey{N: numbers["n"], E: int(numbers["e"].Int64())},
-		D:         numbers["d"],
-		Primes:    []*big.Int{numbers["p"], numbers["q"]},
+		N: numbers["n"], E: int(numbers["e"].Int64()),
+		D:      numbers["d"],
+		Primes: []*big.Int{numbers["p"], numbers["q"]},
 	}
 	if err := key.Validate(); err != nil {
 		return nil, err

@@ -11,8 +11,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/connections"
 )
 
 // Where the controller's container finds what it is given: each path is the
@@ -39,6 +42,9 @@ type Controller struct {
 	CertStore string
 	// Tailscaled is the tailscale daemon's local API socket.
 	Tailscaled string
+	// UnitSocket is root's socket for a container's unit (UnitSocket on a
+	// host); its directory is lent to the pass when it is there.
+	UnitSocket string
 	// Spool is root's own directory a valid dependency handoff is moved to
 	// (RenovateSpool on a host), and DependencyRun the outcome of the last
 	// run (DependencyRunFile), given to the next pass.
@@ -58,13 +64,41 @@ type Controller struct {
 	Stdout, Stderr io.Writer
 }
 
-// Run launches the pass; apply executes queued work, otherwise it plans.
-func (c *Controller) Run(ctx context.Context, apply bool) error {
+// Pass is what one launch asks of the controller.
+type Pass int
+
+const (
+	// Plan looks at what is queued and changes nothing.
+	Plan Pass = iota
+	// Apply executes queued work and sweeps.
+	Apply
+	// Glance reads only the dashboard panels HQ is waiting on, beside any
+	// other pass. Its container is given less than a controller pass's: the
+	// connections the glance reads and their identities, the host's roots and
+	// the bridge; no certificate state, unit socket, host reading or way to
+	// hand work back to root.
+	Glance
+)
+
+// PortainerProvider is the provider name of a Portainer connection, as the
+// controller's registry declares it (held to it by a test there).
+const PortainerProvider = "portainer"
+
+// glanceReads is whether a glance pass is given a connection: what it reads a
+// machine through, Portainer or an SSH transport, whatever provider names it.
+func glanceReads(connection connections.Connection) bool {
+	return connection.Provider == PortainerProvider || connection.SSHTransport != nil
+}
+
+// Run launches one pass.
+func (c *Controller) Run(ctx context.Context, pass Pass) error {
 	if err := c.Connections(); err != nil {
 		return err
 	}
-	if err := c.prepareACME(); err != nil {
-		return err
+	if pass != Glance {
+		if err := c.prepareACME(); err != nil {
+			return err
+		}
 	}
 	c.pruneRuns()
 	run, err := os.MkdirTemp(c.SecretDir, "run.")
@@ -73,10 +107,7 @@ func (c *Controller) Run(ctx context.Context, apply bool) error {
 	}
 	defer os.RemoveAll(run)
 
-	if err := c.copySecrets(ctx, run); err != nil {
-		return err
-	}
-	if err := c.prepareOut(run); err != nil {
+	if err := c.copySecrets(ctx, run, pass == Glance); err != nil {
 		return err
 	}
 	image, source, err := c.image(ctx)
@@ -87,12 +118,16 @@ func (c *Controller) Run(ctx context.Context, apply bool) error {
 	if _, err := rand.Read(nonce); err != nil {
 		return errors.New("no randomness for the run nonce")
 	}
+	role := "controller"
+	if pass == Glance {
+		role = "glance"
+	}
 	args := []string{
 		"run", "--rm", "--network", "host", "--user", fmt.Sprintf("%d:%d", WebUID, WebGID), "--cap-drop", "ALL",
 		"--no-healthcheck",
-		// A nonce the sweep is handed too, so it can tell which container it
+		// A nonce the pass is handed too, so it can tell which container it
 		// finds is itself: a fixed label any container could set.
-		"--label", "severino-hq.role=controller",
+		"--label", "severino-hq.role=" + role,
 		"--label", "severino-hq.run=" + hex.EncodeToString(nonce),
 		"--env", "HQ_CONTROLLER_RUN=" + hex.EncodeToString(nonce),
 		"--security-opt", "no-new-privileges:true",
@@ -100,34 +135,69 @@ func (c *Controller) Run(ctx context.Context, apply bool) error {
 		"--entrypoint", "/usr/local/bin/hq-controller",
 		"--mount", readOnly(filepath.Join(run, "connections.json"), controllerConnections),
 		"--mount", readOnly(filepath.Join(run, "ssh"), controllerSSH),
-		"--mount", "type=bind,source=" + c.ACME + ",target=" + controllerACME,
-		"--mount", "type=bind,source=" + filepath.Join(run, "out") + ",target=" + controllerOut,
-		"--env", controllerOutEnv + "=" + controllerOut,
 		"--env", "HQ_CONTROLLER_CONNECTIONS=" + controllerConnections,
 		"--env", "HQ_CONTROLLER_SSH_DIR=" + controllerSSH,
-		"--env", "HQ_ACME_DIR=" + controllerACME,
-		"--env", "HQ_CONTROLLER_IMAGE=" + image,
-		"--env", "SEVERINO_HQ_SOURCE_REPOSITORY=" + source,
 	}
-	readings, err := c.readings(ctx, run)
-	if err != nil {
-		return err
+	if pass == Glance {
+		roots, err := c.roots(run)
+		if err != nil {
+			return err
+		}
+		args = append(args, roots...)
+	} else {
+		if err := c.prepareOut(run); err != nil {
+			return err
+		}
+		args = append(args,
+			"--mount", "type=bind,source="+c.ACME+",target="+controllerACME,
+			"--mount", "type=bind,source="+filepath.Join(run, "out")+",target="+controllerOut,
+			"--env", controllerOutEnv+"="+controllerOut,
+			"--env", "HQ_ACME_DIR="+controllerACME,
+			"--env", "HQ_CONTROLLER_IMAGE="+image,
+			"--env", "SEVERINO_HQ_SOURCE_REPOSITORY="+source,
+		)
+		readings, err := c.readings(ctx, run)
+		if err != nil {
+			return err
+		}
+		args = append(args, readings...)
+		args = append(args, c.unitSocket()...)
 	}
-	args = append(args, readings...)
 	// The bridge, from the declaration the web container is given it by.
 	args = append(args,
 		"--mount", "type=volume,source="+bridgeVolume()+",target="+filepath.Dir(BridgeSocket)+",readonly",
 		"--env", "SEVERINO_BRIDGE_SOCKET="+BridgeSocket,
 		image)
-	if apply {
+	switch pass {
+	case Apply:
 		args = append(args, "--apply")
+	case Glance:
+		args = append(args, "--glance")
 	}
 	command := c.Command(ctx, "docker", args...)
 	command.Stdout, command.Stderr = c.Stdout, c.Stderr
 	err = command.Run()
-	// A pass that failed after minting still leaves tokens worth running.
-	c.takeHandoff(run)
+	if pass != Glance {
+		// A pass that failed after minting still leaves tokens worth running.
+		c.takeHandoff(run)
+	}
 	return err
+}
+
+// unitSocket lends the pass the unit socket's directory, the only way it
+// asks root to act on a container's unit. A bind's source must exist, so a
+// host whose socket unit has not been installed yet lends nothing, and the
+// controller refuses that work as out of reach.
+func (c *Controller) unitSocket() []string {
+	dir := filepath.Dir(c.UnitSocket)
+	if info, err := os.Lstat(dir); err != nil || !info.IsDir() {
+		return nil
+	}
+	target := filepath.Dir(UnitSocket)
+	return []string{
+		"--mount", "type=bind,source=" + dir + ",target=" + target,
+		"--env", "SEVERINO_UNIT_SOCKET=" + filepath.Join(target, filepath.Base(c.UnitSocket)),
+	}
 }
 
 func readOnly(source, target string) string {
@@ -183,8 +253,9 @@ func (c *Controller) pruneRuns() {
 
 // copySecrets copies the connections document and the identities into the
 // run under the renderer's lock, held shared, so the run holds one
-// generation if a render replaces them meanwhile.
-func (c *Controller) copySecrets(ctx context.Context, run string) error {
+// generation if a render replaces them meanwhile. A glance's document holds
+// only the connections it reads.
+func (c *Controller) copySecrets(ctx context.Context, run string, glance bool) error {
 	if err := os.Mkdir(filepath.Join(run, "ssh"), 0o700); err != nil {
 		return err
 	}
@@ -192,9 +263,12 @@ func (c *Controller) copySecrets(ctx context.Context, run string) error {
 	if err != nil {
 		return err
 	}
+	document := filepath.Join(c.SecretDir, "controller-connections.json")
 	err = c.Connections()
-	if err == nil {
-		err = copyFile(filepath.Join(c.SecretDir, "controller-connections.json"), filepath.Join(run, "connections.json"), 0o400)
+	if err == nil && glance {
+		err = copyGlanceConnections(document, filepath.Join(run, "connections.json"))
+	} else if err == nil {
+		err = copyFile(document, filepath.Join(run, "connections.json"), 0o400)
 	}
 	if err == nil {
 		err = copyTree(filepath.Join(c.SecretDir, "ssh"), filepath.Join(run, "ssh"))
@@ -204,6 +278,25 @@ func (c *Controller) copySecrets(ctx context.Context, run string) error {
 		return err
 	}
 	return c.ownTree(run)
+}
+
+// copyGlanceConnections writes to the connections in from that a glance reads.
+func copyGlanceConnections(from, to string) error {
+	data, err := os.ReadFile(from)
+	if err != nil {
+		return err
+	}
+	document, err := connections.Decode(data)
+	if err != nil {
+		return err
+	}
+	document.Connections = slices.DeleteFunc(document.Connections, func(connection connections.Connection) bool {
+		return !glanceReads(connection)
+	})
+	if data, err = document.Encode(); err != nil {
+		return err
+	}
+	return os.WriteFile(to, data, 0o400)
 }
 
 // copyTree copies the regular files and directories under from into to, if
@@ -254,30 +347,27 @@ func (c *Controller) image(ctx context.Context) (string, string, error) {
 	return image, source, nil
 }
 
-// readings are what root reads on the host and hands the container as files:
-// each read-only, the controller's to read, and named whether or not it could
-// be taken where the controller reports a missing one.
-func (c *Controller) readings(ctx context.Context, run string) ([]string, error) {
-	var args []string
-	give := func(name string, data []byte, target string) error {
-		path := filepath.Join(run, name)
-		if err := os.WriteFile(path, data, 0o400); err != nil {
-			return err
-		}
-		root, err := os.OpenRoot(run)
-		if err != nil {
-			return err
-		}
-		defer root.Close()
-		if err := c.Owner(root, name); err != nil {
-			return err
-		}
-		args = append(args, "--mount", readOnly(path, target))
-		return nil
+// give writes data to name in run, the controller's to read, and mounts it
+// read-only at target.
+func (c *Controller) give(run, name string, data []byte, target string) ([]string, error) {
+	path := filepath.Join(run, name)
+	if err := os.WriteFile(path, data, 0o400); err != nil {
+		return nil, err
 	}
+	root, err := os.OpenRoot(run)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	if err := c.Owner(root, name); err != nil {
+		return nil, err
+	}
+	return []string{"--mount", readOnly(path, target)}, nil
+}
 
-	// The roots this host added to its own trust store. Public roots are
-	// always trusted; these only add to them.
+// roots are the roots this host added to its own trust store. Public roots
+// are always trusted; these only add to them.
+func (c *Controller) roots(run string) ([]string, error) {
 	var bundle []byte
 	certs, _ := filepath.Glob(filepath.Join(c.CertStore, "*.crt"))
 	for _, cert := range certs {
@@ -285,12 +375,32 @@ func (c *Controller) readings(ctx context.Context, run string) ([]string, error)
 			bundle = append(bundle, data...)
 		}
 	}
-	if len(bundle) > 0 {
-		if err := give("ca.pem", bundle, controllerCA); err != nil {
-			return nil, err
-		}
-		args = append(args, "--env", "HQ_CONTROLLER_CA_FILE="+controllerCA)
+	if len(bundle) == 0 {
+		return nil, nil
 	}
+	args, err := c.give(run, "ca.pem", bundle, controllerCA)
+	if err != nil {
+		return nil, err
+	}
+	return append(args, "--env", "HQ_CONTROLLER_CA_FILE="+controllerCA), nil
+}
+
+// readings are what root reads on the host and hands the container as files:
+// each read-only, the controller's to read, and named whether or not it could
+// be taken where the controller reports a missing one.
+func (c *Controller) readings(ctx context.Context, run string) ([]string, error) {
+	var args []string
+	give := func(name string, data []byte, target string) error {
+		mount, err := c.give(run, name, data, target)
+		args = append(args, mount...)
+		return err
+	}
+
+	roots, err := c.roots(run)
+	if err != nil {
+		return nil, err
+	}
+	args = append(args, roots...)
 
 	// The 1Password CLI, lent for the run rather than built into an image the
 	// internet-facing web container shares. Absent, the mount is too.

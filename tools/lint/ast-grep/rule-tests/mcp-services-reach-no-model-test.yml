@@ -1,0 +1,11 @@
+id: mcp-services-reach-no-model
+valid:
+  - 'from hq.platform.application import projections'
+  - 'from . import services'
+  - 'records = projections.records()'
+invalid:
+  - 'from hq.domains.jobs.models import Job'
+  - 'from .models import Job'
+  - 'from models import Job'
+  - 'Job.objects.filter(state="open")'
+  - 'count = model.objects.count()'

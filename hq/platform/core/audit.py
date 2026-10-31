@@ -109,6 +109,7 @@ _IMMUTABLE: frozenset[type] = frozenset(
 
 # Names the audit receivers of one model, so they can be found on the signal.
 AUDIT_DISPATCH_UID = "hq.audit"
+_SIGNALS = (post_init, post_save, post_delete)
 
 
 def _tracked(model) -> tuple[str, ...]:
@@ -124,13 +125,10 @@ def _tracked(model) -> tuple[str, ...]:
 def _capture(instance, names: tuple[str, ...]) -> dict:
     """What a later save is compared against, at the cost a read can afford.
 
-    This runs for every instance a query returns, and almost none of them are
-    saved. An immutable value is held as it is; anything else (a JSON dict or
-    list, a file) is made readable now, because it can be changed in place and
-    the change has to show.
-
-    Only fields actually loaded: touching a deferred one fires a query per
-    field per instance, which would turn a list page into hundreds of queries.
+    This runs for every instance a query returns, and almost none are saved.
+    An immutable value is held as it is; anything else (a JSON dict or list, a
+    file) is made readable now, since it can change in place. Only loaded fields
+    are read: a deferred one would fire a query per field per instance.
     """
     loaded = instance.__dict__
     held = {}
@@ -210,6 +208,7 @@ def operation_context(*, interface: str, actor: str, operation: str, operation_i
 def audit_operation(*, operation: str, principal: object | None = None, operation_id: str = "") -> Iterator[None]:
     """Attribute a plugin operation without restating adapter fallbacks."""
 
+    # A plugin hands whatever principal it holds, or none.
     with operation_context(
         interface=getattr(principal, "interface", None) or "cli",
         actor=getattr(principal, "actor", None) or "local-operator",
@@ -236,6 +235,35 @@ def audited_labels() -> dict[type, str]:
     return dict(_AUDITED_MODELS)
 
 
+@contextmanager
+def withdrawn(*models: type[Model]) -> Iterator[dict[type, str]]:
+    """Take `models` out of audit for the block, yielding each one's label.
+
+    For a test that audits a model its own way: inside the block the model has
+    no audit receiver and may be registered again, and after it the registry
+    and the model signals' receivers are as they were.
+    """
+
+    unknown = [model.__name__ for model in models if model not in _AUDITED_MODELS]
+    if unknown:
+        raise LookupError(f"Not audited: {', '.join(unknown)}.")
+    registry = dict(_AUDITED_MODELS)
+    receivers = {signal: list(signal.receivers) for signal in _SIGNALS}
+    labels = {model: _AUDITED_MODELS.pop(model) for model in models}
+    for signal in _SIGNALS:
+        for model in models:
+            signal.disconnect(sender=model, dispatch_uid=AUDIT_DISPATCH_UID)
+    try:
+        yield labels
+    finally:
+        _AUDITED_MODELS.clear()
+        _AUDITED_MODELS.update(registry)
+        for signal, kept in receivers.items():
+            with signal.lock:
+                signal.receivers = kept
+                signal.sender_receivers_cache.clear()
+
+
 def register_audit(
     model: type[Model],
     type_label: str,
@@ -247,14 +275,11 @@ def register_audit(
 ) -> None:
     """Register a model so create/update/delete events land in the audit log.
 
-    `redact` names fields whose values must never reach the log. The field is
-    still reported as having changed (that a token was rotated is worth
-    logging) but the values are replaced.
-
-    `connection` returns the connection_ref an instance's work goes through.
-
-    `redact_for` names further fields to redact for one instance, where whether
-    a value may be logged depends on the row (a declaration of a withheld kind).
+    `redact` names fields whose values never reach the log, though the change
+    is still reported (a token rotated is worth logging). `redact_for` names
+    more for one instance, where it depends on the row (a declaration of a
+    withheld kind). `connection` returns the connection_ref an instance's work
+    goes through; `observation` names fields that only record HQ looking.
     """
 
     if model in _AUDITED_MODELS:
@@ -271,16 +296,17 @@ def register_audit(
     names = _tracked(model)
 
     @receiver(post_init, sender=model, weak=False, dispatch_uid=AUDIT_DISPATCH_UID)
-    def _on_init(sender, instance, **kwargs):
+    def _on_init(instance, **kwargs):
         # What the row looked like when it was read. Taken here rather than
         # re-read on save, which would put a second query on every write.
-        instance._audit_snapshot = _capture(instance, names)
+        instance._audit_snapshot = _capture(instance, names)  # noqa: SLF001 - audit's own attribute, kept on each instance it watches
 
     @receiver(post_save, sender=model, weak=False, dispatch_uid=AUDIT_DISPATCH_UID)
-    def _on_save(sender, instance, created, **kwargs):
+    def _on_save(instance, created, **kwargs):
         changes = {}
         if not created:
             changes = _changes(
+                # One read before its model was registered carries no capture, and claims no change.
                 _shown(getattr(instance, "_audit_snapshot", None)),
                 _snapshot(instance, names),
                 secret | frozenset(redact_for(instance) if redact_for else ()),
@@ -292,7 +318,7 @@ def register_audit(
             # diff rather than before it, so the timestamp still appears beside
             # a real change and only disappears when it is the whole story.
             if looked and changes and set(changes) <= looked:
-                instance._audit_snapshot = _capture(instance, names)
+                instance._audit_snapshot = _capture(instance, names)  # noqa: SLF001 - audit's own attribute, kept on each instance it watches
                 return
             if not changes:
                 return
@@ -300,15 +326,17 @@ def register_audit(
             action=AuditLog.Action.CREATED if created else AuditLog.Action.UPDATED,
             obj=instance,
             type_label=type_label,
+            # What this save meant, when the one saving it knows; once.
+            message=str(instance.__dict__.pop("audit_said", "") or ""),
             metadata={"changes": changes} if changes else None,
             connection=_connection_of(connection, instance),
         )
         # Re-armed for the next save in the same request: without this, a
         # second save would re-report the first one's changes.
-        instance._audit_snapshot = _capture(instance, names)
+        instance._audit_snapshot = _capture(instance, names)  # noqa: SLF001 - audit's own attribute, kept on each instance it watches
 
     @receiver(post_delete, sender=model, weak=False, dispatch_uid=AUDIT_DISPATCH_UID)
-    def _on_delete(sender, instance, **kwargs):
+    def _on_delete(instance, **kwargs):
         # What going away meant, when the one removing it knows: a read request
         # answered, a declaration forgotten. "Deleted" otherwise.
         record_event(
@@ -402,7 +430,7 @@ def record_event(
         user = None
 
     object_type = type_label or (obj.__class__.__name__ if obj is not None else "")
-    object_id = str(getattr(obj, "pk", "")) if obj is not None else ""
+    object_id = str(obj.pk) if obj is not None else ""
     object_repr = ""
     if obj is not None:
         try:

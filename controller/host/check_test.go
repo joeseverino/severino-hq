@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -18,11 +19,6 @@ type checkHost struct {
 	t       *testing.T
 	checker *Checker
 	out     bytes.Buffer
-	runners []string
-	account string
-	rules   string
-	// unlisted makes sudo refuse to list the account's rules.
-	unlisted bool
 	// verify is what `sudo -n hq-host verify` prints and whether it passed;
 	// password makes sudo ask for one instead.
 	verify    string
@@ -38,18 +34,14 @@ type checkHost struct {
 	nftDenied     bool
 }
 
-const goodRules = "Matching Defaults entries:\n    env_reset, secret-marker-example\nUser deployer may run the following commands:\n    (root) NOPASSWD: %s/deploy/bin/hq-host deploy *\n"
-
 func newCheckHost(t *testing.T) *checkHost {
 	t.Helper()
 	root := t.TempDir()
-	h := &checkHost{t: t, runners: []string{"actions.runner.example.service"}, account: "deployer",
-		verify: "The host is its release.", free: 1 << 40,
+	h := &checkHost{t: t, verify: "The host is its release.", free: 1 << 40,
 		tables: "table inet host_filter\ntable ip filter\ntable inet " + EgressTable + "\n",
 		// nft lists with a tab per level and wraps a long set.
 		table: strings.Replace(EgressRules(), "100.64.0.0/10, ", "100.64.0.0/10,\n\t\t\t\t     ", 1)}
 	lib := filepath.Join(root, "lib")
-	h.rules = fmt.Sprintf(goodRules, lib)
 	h.checker = &Checker{
 		Lib: lib, Systemd: filepath.Join(root, "systemd"), RootUID: uint32(os.Getuid()),
 		Release: filepath.Join(root, "release"), Main: filepath.Join(root, "main"),
@@ -71,35 +63,27 @@ func newCheckHost(t *testing.T) *checkHost {
 
 func (h *checkHost) file(path string, mode os.FileMode) {
 	h.t.Helper()
-	os.MkdirAll(filepath.Dir(path), 0o755)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		h.t.Fatal(err)
+	}
 	if err := os.WriteFile(path, nil, mode); err != nil {
 		h.t.Fatal(err)
 	}
-	os.Chmod(path, mode)
+	if err := os.Chmod(path, mode); err != nil {
+		h.t.Fatal(err)
+	}
 }
 
 func (h *checkHost) command(ctx context.Context, name string, args ...string) *exec.Cmd {
 	call := strings.Join(append([]string{name}, args...), " ")
 	answer := func(out string, code int) *exec.Cmd {
-		return exec.CommandContext(ctx, "/bin/sh", "-c", `printf '%s' "$1"; exit "$2"`, "sh", out, fmt.Sprint(code))
+		return exec.CommandContext(ctx, "/bin/sh", "-c", `printf '%s' "$1"; exit "$2"`, "sh", out, strconv.Itoa(code))
 	}
 	switch {
 	case name == "sudo" && args[0] != "-n":
 		h.t.Errorf("a sudo that could prompt: %s", call)
-	case strings.HasPrefix(call, "systemctl list-units"):
-		var lines []string
-		for _, unit := range h.runners {
-			lines = append(lines, unit+" loaded active running Example runner")
-		}
-		return answer(strings.Join(lines, "\n")+"\n", 0)
-	case strings.HasPrefix(call, "systemctl show -p User"):
-		return answer(h.account+"\n", 0)
 	case strings.HasPrefix(call, "systemctl show --timestamp=unix"):
 		return answer("Id="+DriftUnit+"\n"+h.drift, 0)
-	case call == "sudo -n -l -U "+h.account && h.unlisted:
-		return answer("sudo: a password is required\n", 1)
-	case call == "sudo -n -l -U "+h.account:
-		return answer(h.rules, 0)
 	case strings.HasPrefix(call, "sudo -n nft list") && h.nftDenied:
 		return answer("sudo: a password is required\n", 1)
 	case call == "sudo -n nft list tables":
@@ -149,18 +133,11 @@ func ranAt(started time.Time, passed bool) string {
 func TestACurrentHostIsReady(t *testing.T) {
 	h := newCheckHost(t)
 
-	// The upgrade rule HQ's container-upgrade plan renders is HQ's too.
-	h.rules += fmt.Sprintf("    (root) NOPASSWD: %s/deploy/bin/hq-host upgrade *\n", h.checker.Lib)
-
 	out := h.check(CheckReady)
 
-	h.says(out, "ok      deployer may run nothing through sudo that HQ does not render")
-	h.says(out, "ok      the host is the release it runs")
+	h.says(out, "ok      the host is the release it runs, the runner's sudo rules with it")
 	h.says(out, "ok      every established unit is installed")
-	h.says(out, filepath.Join(h.checker.Lib, "deploy/bin/hq-host")+" is root's alone")
-	if strings.Contains(out, "secret-marker-example") {
-		t.Error("the check printed the sudo rules")
-	}
+	h.says(out, filepath.Join(h.checker.Lib, "deploy", "bin", "hq-host")+" is root's alone")
 }
 
 func TestEachHostFaultFailsAndSaysWhatItIs(t *testing.T) {
@@ -168,37 +145,32 @@ func TestEachHostFaultFailsAndSaysWhatItIs(t *testing.T) {
 		arrange func(*checkHost)
 		says    string
 	}{
-		"a runner with unrestricted sudo": {func(h *checkHost) { h.rules = "    (ALL : ALL) ALL\n" }, "may run any command"},
-		"a runner without the rule":       {func(h *checkHost) { h.rules = "    (root) NOPASSWD: /usr/bin/true\n" }, "has no NOPASSWD sudo rule"},
-		"a runner whose rule runs another subcommand": {func(h *checkHost) {
-			h.rules = fmt.Sprintf("    (root) NOPASSWD: %[1]s/deploy/bin/hq-host deployed, %[1]s/deploy/bin/hq-host upgrade *\n", h.checker.Lib)
-		}, "has no NOPASSWD sudo rule"},
-		"a runner granted a command HQ does not render": {func(h *checkHost) {
-			h.rules += "    (root) NOPASSWD: /usr/local/lib/example/retired *\n"
-		}, "deployer may run /usr/local/lib/example/retired * through sudo, which HQ does not render"},
-		"a runner whose HQ rule is widened": {func(h *checkHost) {
-			h.rules += fmt.Sprintf("    (root) NOPASSWD: %s/deploy/bin/hq-host *\n", h.checker.Lib)
-		}, "deployer may run <lib>/deploy/bin/hq-host * through sudo, which HQ does not render"},
-		"a runner whose sudo rules cannot be listed": {func(h *checkHost) { h.unlisted = true }, "could not list deployer's sudo rules"},
-		"a runner that runs as root":                 {func(h *checkHost) { h.account = "root" }, "the Actions runner runs as 'root'"},
-		"two runners":                                {func(h *checkHost) { h.runners = append(h.runners, "actions.runner.other.service") }, "expected one Actions runner unit"},
-		"a full disk":                                {func(h *checkHost) { h.free = 1 << 20 }, "the deploy needs 512 MiB"},
+		"a full disk": {func(h *checkHost) { h.free = 1 << 20 }, "the deploy needs 512 MiB"},
 		"an established unit missing": {func(h *checkHost) {
 			os.Remove(filepath.Join(h.checker.Systemd, "severino-hq-backup.timer"))
 		}, "severino-hq-backup.timer is not installed"},
 		"a host that is not its release": {func(h *checkHost) {
 			h.verify, h.verifyErr = "drift: deploy/bin/hq-host differs from the image's\n", true
 		}, "FAIL    deploy/bin/hq-host differs from the image's"},
+		"a runner sudo rule verify finds": {func(h *checkHost) {
+			h.verify, h.verifyErr = "drift: deployer may run any command through sudo\n", true
+		}, "FAIL    deployer may run any command through sudo"},
 		"a sudo target others can write": {func(h *checkHost) {
-			os.Chmod(filepath.Join(h.checker.Lib, "deploy", "bin", "hq-host"), 0o775)
+			if err := os.Chmod(filepath.Join(h.checker.Lib, "deploy", "bin", "hq-host"), 0o775); err != nil {
+				h.t.Fatal(err)
+			}
 		}, "hq-host is writable by its group or others"},
 		"a directory above a sudo target others can write": {func(h *checkHost) {
-			os.Chmod(filepath.Join(h.checker.Lib, "deploy", "bin"), 0o777)
+			if err := os.Chmod(filepath.Join(h.checker.Lib, "deploy", "bin"), 0o777); err != nil {
+				h.t.Fatal(err)
+			}
 		}, "bin is writable by its group or others; a sudo rule runs " + "<lib>/deploy/bin/hq-host"},
 		"a sudo target that is a link": {func(h *checkHost) {
 			path := filepath.Join(h.checker.Lib, "deploy", "bin", "hq-host")
 			os.Remove(path)
-			os.Symlink("/bin/sh", path)
+			if err := os.Symlink("/bin/sh", path); err != nil {
+				h.t.Fatal(err)
+			}
 		}, "hq-host is a symlink"},
 		"a sudo target that is missing": {func(h *checkHost) {
 			os.Remove(filepath.Join(h.checker.Lib, "deploy", "bin", "hq-host"))
@@ -235,17 +207,21 @@ func TestTheRenovateEgressTableIsTheRenderedOne(t *testing.T) {
 }
 
 // Where sudo needs a password, the drift unit's run since the release was
-// installed is the evidence; without one there is no verdict on the host.
+// installed is the evidence, for the runner's sudo rules as for the tree, and
+// the check lists no account's rules itself (the fake refuses any other
+// call); without such a run there is no verdict on the host.
 func TestWithoutSudoTheDriftUnitIsTheEvidence(t *testing.T) {
 	h := newCheckHost(t)
 	h.password = true
 	installed := time.Now().Add(-time.Hour).Truncate(time.Second)
-	os.Chtimes(filepath.Join(h.checker.Lib, ".source"), installed, installed)
+	if err := os.Chtimes(filepath.Join(h.checker.Lib, ".source"), installed, installed); err != nil {
+		t.Fatal(err)
+	}
 
 	h.says(h.check(CheckUnverified), "UNKNOWN hq-host verify needs a password here")
 
 	h.drift = ranAt(installed.Add(time.Minute), true)
-	h.says(h.check(CheckReady), "ok      the host is the release it runs ("+DriftUnit)
+	h.says(h.check(CheckReady), "ok      the host is the release it runs, the runner's sudo rules with it ("+DriftUnit)
 
 	h.drift = ranAt(installed.Add(-time.Minute), true)
 	h.check(CheckUnverified)

@@ -1,21 +1,18 @@
 """Asset commands and queries shared by web, MCP, and CLI adapters."""
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Any
-
-from django.db import transaction
+from functools import partial
+from typing import Annotated, Any
 
 from hq.domains.assets.models import Asset
-from hq.domains.projects.models import Project
-from hq.platform.core.audit import operation_context
 
-from .domains import records_of
+from .command_fields import Describe, Names, Refers
 from .entity_links import EntityLink, entity_link
 from .projection import addressable, iso, listing
-from .record_errors import RecordConflict, RecordNotFound
 from .record_links import linked
+from .record_saves import Held, Link, linked_saver
 from .security import Principal
 from .upserts import upsert_by_slug
 lazy from . import zones
@@ -36,21 +33,24 @@ def managed_domain(asset: Asset) -> EntityLink | None:
 
 @dataclass(frozen=True, slots=True)
 class AssetCommand:
-    item_name: str
-    slug: str = ""
-    vendor: str = ""
-    category: str = "other"
-    purchase_date: date | None = None
-    total_cost: Decimal = Decimal("0.00")
-    business_use_percentage: int = 100
-    payment_method: str = ""
-    serial_number: str = ""
-    warranty_date: date | None = None
-    status: str = Asset.Status.ACTIVE
-    notes: str = ""
-    related_projects: tuple[str, ...] = ()
-    # ``kind:identity`` of the machine, domain or certificate this asset is.
-    infrastructure: str = ""
+    item_name: Annotated[str, Describe("What the asset is called.")]
+    slug: Annotated[str, Describe("Its address in HQ; blank derives one from the name.")] = ""
+    vendor: Annotated[str, Describe("Who it was bought from.")] = ""
+    category: Annotated[str, Describe("What type of asset it is.")] = "other"
+    purchase_date: Annotated[date | None, Describe("When it was bought.")] = None
+    total_cost: Annotated[Decimal, Describe("What it cost in all.")] = Decimal("0.00")
+    business_use_percentage: Annotated[int, Describe("How much of its use is for the business, as a percentage.")] = 100
+    payment_method: Annotated[str, Describe("How it was paid for.")] = ""
+    serial_number: Annotated[str, Describe("The maker's serial number.")] = ""
+    warranty_date: Annotated[date | None, Describe("When its warranty ends.")] = None
+    status: Annotated[str, Describe("Whether it is in use, or how it left.")] = Asset.Status.ACTIVE
+    notes: Annotated[str, Describe("Anything else worth keeping.")] = ""
+    related_projects: Annotated[tuple[str, ...], Names("projects"), Describe("The projects this asset serves.")] = ()
+    infrastructure: Annotated[
+        str,
+        Refers(Asset, "infrastructure"),
+        Describe("The machine, domain or certificate this asset is, as type:identity."),
+    ] = ""
 
 
 def serialize_asset(asset: Asset, *, relationships: bool = False) -> dict[str, Any]:
@@ -89,48 +89,12 @@ def get_asset(slug: str) -> dict[str, Any]:
     return addressable(Asset, serialize_asset, slug)
 
 
-@transaction.atomic
-def save_asset(
-    command: AssetCommand,
-    *,
-    principal: Principal,
-    current_slug: str | None = None,
-    expected_updated_at: str | None = None,
-) -> dict[str, Any]:
-    principal.require(records_of("assets").write)
-    operation = "asset.create" if current_slug is None else "asset.update"
-    with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
-        if current_slug is None:
-            asset = Asset()
-            created = True
-        else:
-            try:
-                asset = Asset.objects.select_for_update().get(slug=current_slug)
-            except Asset.DoesNotExist as exc:
-                raise RecordNotFound("That asset was not found.") from exc
-            created = False
-            if expected_updated_at and asset.updated_at.isoformat() != expected_updated_at:
-                raise RecordConflict("That asset changed after it was read.")
-
-        values = asdict(command)
-        project_slugs = values.pop("related_projects")
-        projects = list(Project.objects.filter(slug__in=project_slugs))
-        found_slugs = {project.slug for project in projects}
-        missing = sorted(set(project_slugs) - found_slugs)
-        if missing:
-            raise RecordNotFound("A related project was not found.")
-
-        for field, value in values.items():
-            setattr(asset, field, value)
-        asset.full_clean()
-        asset.save()
-        asset.related_projects.set(projects)
-
-    return {
-        "ok": True,
-        "created": created,
-        "asset": serialize_asset(asset, relationships=True),
-    }
+save_asset = linked_saver(
+    "assets",
+    partial(serialize_asset, relationships=True),
+    refusals=Held("That asset was not found.", "That asset changed after it was read."),
+    links={"related_projects": Link("slug", "A related project was not found.")},
+)
 
 
 def upsert_asset(

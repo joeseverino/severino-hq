@@ -1,0 +1,10 @@
+#!/bin/sh
+#MISE description="Once per machine, in the main checkout: name the extension set in mise.local.toml from the extension checkouts, so the composed suite and dev servers load it, then check it with mise doctor project; a worktree Claude Code makes copies the file"
+#MISE hide=true
+#USAGE arg "<checkout>..." var=#true help="Each extension checkout: one package, or a repository of them under packages/"
+set -eu
+
+uv run --quiet python -m tools.dev.extension_set
+# A fresh mise reads the file just written; the values this task was started
+# with would win over it through get_env.
+exec env -u HQ_LOCAL_PYTHONPATH -u HQ_LOCAL_PLUGINS mise doctor project

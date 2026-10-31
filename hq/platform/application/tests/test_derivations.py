@@ -169,13 +169,15 @@ class AutocommitRevisionTests(TransactionTestCase):
             count = register(_readings)
             self.assertEqual(count(), 0)
             before = _revision(READING)
-            try:
+
+            def write_then_fail():
                 with transaction.atomic():
                     UpstreamReading.objects.create(key="gone", value={}, observed_at=MOMENT)
                     self.assertEqual(count(), 1)
                     raise RuntimeError
-            except RuntimeError:
-                pass
+
+            with self.assertRaises(RuntimeError):
+                write_then_fail()
 
             self.assertEqual(_revision(READING), before)
             self.assertEqual(count(), 0)
@@ -241,20 +243,20 @@ class DerivationTests(TestCase):
         deadline = MOMENT + timedelta(minutes=5)
         with (
             declared("test.clock", reads=("core.UpstreamReading",)) as (register, calls),
-            mock.patch.object(derivations, "_clock", return_value=MOMENT) as clock,
+            frozen(MOMENT),
         ):
             due = register(lambda: derivations.reached(deadline))
 
             self.assertEqual((due(), due(), len(calls)), (False, False, 1))
-            clock.return_value = deadline
-            self.assertEqual((due(), due(), len(calls)), (True, True, 2))
+            with frozen(deadline):
+                self.assertEqual((due(), due(), len(calls)), (True, True, 2))
 
     def test_a_derivation_holds_no_longer_than_one_it_calls(self):
         deadline = MOMENT + timedelta(minutes=5)
         with (
             declared("test.inner", reads=("core.UpstreamReading",)) as (inner, _),
             declared("test.outer", reads=("core.UpstreamReading",)) as (outer, calls),
-            mock.patch.object(derivations, "_clock", return_value=MOMENT) as clock,
+            frozen(MOMENT),
         ):
             due = inner(lambda: derivations.reached(deadline))
             both = outer(lambda: (due(),))
@@ -263,8 +265,8 @@ class DerivationTests(TestCase):
             # Answered from the cache, the inner one still passes its deadline on.
             caches[revisions.CACHE_ALIAS].delete_many([key for key in self._keys() if key.startswith("test.outer")])
             self.assertEqual((both(), len(calls)), ((False,), 2))
-            clock.return_value = deadline
-            self.assertEqual((both(), len(calls)), ((True,), 3))
+            with frozen(deadline):
+                self.assertEqual((both(), len(calls)), ((True,), 3))
 
     def _keys(self) -> list[str]:
         with connection.cursor() as cursor:
@@ -277,7 +279,7 @@ class DerivationTests(TestCase):
             declared("test.narrow", reads=("core.UpstreamReading",)) as (narrow, _calls),
         ):
             inner = wide(_readings)
-            outer = narrow(lambda: inner())
+            outer = narrow(lambda: inner())  # noqa: PLW0108 - a function of its own, so it registers apart from the one it calls
 
             with self.assertRaisesMessage(ImproperlyConfigured, "assets_asset"):
                 outer()
@@ -327,11 +329,11 @@ class DerivationTests(TestCase):
     def test_an_unreadable_or_unwritable_cache_means_deriving(self):
         with declared("test.cache", reads=("core.UpstreamReading",)) as (register, calls):
             count = register(_readings)
-            broken = mock.Mock()
-            broken.get.side_effect = broken.set_many.side_effect = RuntimeError("down")
+            store = caches[revisions.CACHE_ALIAS]
 
             with (
-                mock.patch.object(derivations, "_store", return_value=broken),
+                mock.patch.object(store, "get", side_effect=RuntimeError("down")),
+                mock.patch.object(store, "set", side_effect=RuntimeError("down")),
                 self.assertLogs("severino.derivations", "ERROR"),
             ):
                 self.assertEqual((count(), count(), len(calls)), (0, 0, 2))
@@ -354,7 +356,7 @@ class DerivationTests(TestCase):
         deadline = MOMENT + timedelta(minutes=5)
         with (
             declared("test.standing", reads=("core.UpstreamReading",)) as (register, _),
-            mock.patch.object(derivations, "_clock", return_value=MOMENT),
+            frozen(MOMENT),
         ):
             due = register(lambda: derivations.reached(deadline))
 
@@ -374,13 +376,14 @@ class DerivationTests(TestCase):
     def test_an_answer_that_was_not_stored_has_no_standing(self):
         with (
             declared("test.unstored", reads=("core.UpstreamReading",)) as (register, _),
-            mock.patch.object(derivations, "_keep", return_value=False),
+            frozen(MOMENT),
         ):
-            count = register(_readings)
+            # An answer that stands no longer than now is not kept.
+            gone = register(lambda: derivations.passed(MOMENT))
 
             with projection_scope():
-                count()
-                self.assertIsNone(derivations.standing(count))
+                self.assertFalse(gone())
+                self.assertIsNone(derivations.standing(gone))
 
 
 class ClockTests(SimpleTestCase):
@@ -388,7 +391,7 @@ class ClockTests(SimpleTestCase):
         frame = derivations._Frame(frozenset())
         token = derivations._FRAME.set(frame)
         try:
-            with mock.patch.object(derivations, "_clock", return_value=now):
+            with frozen(now):
                 return ask(), frame.until
         finally:
             derivations._FRAME.reset(token)
@@ -461,7 +464,7 @@ SAMPLES = {
     "estate.relations": lambda s: _of("topology", "relation_graph")(principal=cli_principal()),
     "estate.findings": lambda s: _of("findings", "estate_findings")(principal=web_principal(s.user)),
     "estate.services": lambda s: _of("services", "_service_catalog")(),
-    "attention.queue": lambda s: _of("domains", "_host_attention")(),
+    "attention.queue": lambda s: _of("domains", "host_attention")(),
     "attention.by_subject": lambda s: _of("problems", "_by_subject")(),
     "attention.work": lambda s: _of("dashboard", "work_queue")(),
     "attention.count": lambda s: _of("dashboard", "waiting")(s.user.pk),
@@ -494,7 +497,7 @@ def _clock_read_directly():
             f"{caller.f_code.co_filename}:{caller.f_lineno} reads the clock inside a "
             "derivation; ask hq.platform.application.derivations instead."
         )
-    return derivations._clock()
+    return derivations.clock()
 
 
 class DeclaredDerivationTests(TestCase):

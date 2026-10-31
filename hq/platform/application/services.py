@@ -1,32 +1,9 @@
 """A service: one hostname, and everything that has to be true for it to answer.
 
-HQ's infrastructure registry is keyed by resource: a row per DNS rewrite, per
-proxy host, per certificate. That is the right shape for a controller, which
-reconciles one declaration at a time and has no opinion about the others. It is
-the wrong shape for the question an operator actually asks, which is never "did
-that rewrite apply" but "does this name work, and if not, which part is
-missing".
-
-The join is the hostname, and nothing new is stored to make it. A rewrite
-already names one. A proxy host already lists the ones it answers for, and where
-it forwards them. A certificate already covers a set of them, wildcards
-included. A project already publishes to one. This module reads those four
-things and puts them side by side.
-
-There is no Service model and there should not be one. A service is a fact about
-the declarations, so a stored copy could disagree with them, and the entire
-value here is being the thing that cannot.
-
-Two consequences:
-
-- A service does not hang off a project. A repository is how something gets
-  built, and much of what an operator runs was built by somebody else; keyed on
-  a project, those would be unrepresentable. The project is an annotation
-  on a service when one happens to publish there, and absent otherwise.
-- A provider is never named here. Which providers supply which facet, and how to
-  read hostnames out of their specs, is declared by the providers themselves in
-  ``control_plane.providers``. This module knows there are facets, not what they
-  are made of.
+The registry is keyed by resource, the shape a controller reconciles; an
+operator asks whether a name works, and which part is missing. This joins the
+declarations by the hostname each already names and stores nothing, so there is
+no Service model to disagree with them (docs/Architecture.md#providers).
 """
 
 from collections.abc import Iterable
@@ -68,8 +45,14 @@ OBSERVED_MARK = "observed"
 @dataclass(frozen=True)
 class Service:
     hostname: str
+    # Which providers supply which facet, and how to read hostnames out of their
+    # specs, is declared by the providers in ``control_plane.providers``; this
+    # module knows there are facets, not what they are made of.
     facets: tuple[ServiceFacet, ...]
     origin: Origin | None = None
+    # An annotation when a project publishes here, never the key: much of what
+    # an operator runs was built by somebody else, and keyed on a project it
+    # would be unrepresentable.
     project: dict[str, str] | None = None
     faults: tuple[str, ...] = ()
     # Other names that reach this same service, folded in rather than listed
@@ -173,14 +156,10 @@ class Service:
     def zone_key(self) -> str:
         """The domain HQ manages that this name lives in, if it manages one.
 
-        A service and a domain are different pages about overlapping things,
-        one is a hostname and everything that has to be true for it to answer,
-        the other is a zone and every record published in it. example.com is
-        both, so each page links to the other.
-
-        Matched through the provider that says it contains records, so the tie
-        is the one the registry already declares rather than a second opinion
-        about what a domain is.
+        A service and a domain are different pages about overlapping things
+        (example.com is both), so each links to the other. Matched through the
+        provider that says it contains records, so the tie is the one the
+        registry already declares rather than a second opinion.
         """
 
         for resource in enabled_resources():
@@ -196,17 +175,15 @@ class Service:
     def origin_is_news(self) -> bool:
         """Whether saying where this is served adds anything to the cards.
 
-        It usually does not. Once a facet names the container and another prints
-        the address it forwards to, a sentence repeating both is a third copy of
-        one fact.
-
-        It earns its place twice: when something outside answers the name, which
-        no facet can report, and when the address belongs to no machine HQ
-        knows, which is the one thing here worth interrupting for.
+        It usually does not: once a facet names the container and another
+        prints the address it forwards to, a sentence repeating both is a third
+        copy of one fact.
         """
 
         if self.origin is None:
             return False
+        # Something outside answering the name, which no facet can report, or
+        # an address no machine HQ knows holds, the one thing worth interrupting for.
         if self.origin.external or not self.origin.known:
             return True
         # Nothing identified what is running, so the note carries the caveat.
@@ -266,14 +243,13 @@ class Service:
 def _certificates_in_use() -> dict[str, dict[str, Any]]:
     """The certificate each proxied name is actually served with.
 
-    Observed, never declared. HQ does not hold the material for an internally
-    signed certificate: the CA that signs it is deliberately air-gapped,
-    so it can never own one, and a page that only counts what HQ declares
-    would report "no certificate covers this" for names served over TLS.
-
-    Read from the sweeps of the kinds that declare ``served_certificate``,
-    because the proxy is the thing that chooses which certificate answers.
+    Observed, never declared: HQ never holds an internally signed certificate,
+    whose CA is air-gapped, so counting only what HQ declares would report "no
+    certificate covers this" for names served over TLS.
     """
+
+    # The sweeps of the kinds that declare ``served_certificate``, because the
+    # proxy is the thing that chooses which certificate answers.
 
     readers = {kind: spec.served_certificate for kind, spec in PROVIDERS.items() if spec.served_certificate is not None}
     found: dict[str, dict[str, Any]] = {}
@@ -315,8 +291,8 @@ def _service_catalog() -> tuple[Service, ...]:
             tuple(by_target.get(hostname, ())),
             tuple(alias_claims.get(hostname, ())),
             tuple(answers.get(hostname, ())),
-            hostname in routed,
-            served_with.get(hostname, frozenset()),
+            routed=hostname in routed,
+            served_with=served_with.get(hostname, frozenset()),
         )
         for hostname, facets in sorted(declared.items())
     )
@@ -574,6 +550,7 @@ def _assemble(
     aliases: tuple[str, ...] = (),
     alias_claims: tuple[tuple[str, Claim], ...] = (),
     answers: tuple[str, ...] = (),
+    *,
     routed: bool = True,
     served_with: frozenset[str] = frozenset(),
 ) -> Service:
@@ -645,21 +622,16 @@ def _serving(index: Readings | None, origin_address: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(item.title for item in found if item.title))
 
 
-# The provider whose inventory records are containers. Named once, here, because
-# the runtime card is the one surface that has to know which sweep to read; every
-# other reference to it in this module goes through this.
-
-
 def _observed(facet_id: str, origin: Origin | None, running: _ContainersRunning) -> Running | None:
     """What HQ found supplying this facet without having been told.
 
-    Only the runtime facet can answer, because the origin has already done the
-    work: a proxy forwards to an address and a port, and the
-    container inventory says which container on that machine is listening.
-
-    Never a Claim. HQ does not manage this, cannot reconcile it, and a card that
-    blurred the two would offer an Edit link that edits nothing.
+    Never a Claim: HQ does not manage this, cannot reconcile it, and a card
+    that blurred the two would offer an Edit link that edits nothing.
     """
+
+    # Only the runtime facet can answer, because the origin has already done the
+    # work: a proxy forwards to an address and a port, and the container
+    # inventory says which container on that machine is listening.
 
     if facet_id != "runtime" or origin is None or not origin.container:
         return None
@@ -745,16 +717,13 @@ def _points_nowhere(origin: Origin | None, dns: ServiceFacet | None = None) -> s
     A parked name is a legitimate thing to have and an easy thing to forget, so
     HQ says which it is looking at rather than reporting the record as healthy
     because the record exists.
-
-    Unless the provider answers on its own behalf. A proxied record puts the
-    provider in front of the name: the address in it is a placeholder that no
-    packet is meant to reach, and the redirect or page served there is the
-    point. Reading that as "resolves to somewhere nothing answers" would report
-    a working redirect as a fault.
     """
 
     if origin is None:
         return ""
+    # A proxied record's address is a placeholder: the redirect or page the
+    # provider serves there is the point, and reading it as "nothing answers"
+    # would report a working redirect as a fault.
     if _served_by_the_provider(dns):
         return ""
 

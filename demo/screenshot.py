@@ -24,23 +24,21 @@ MARGIN = 20
 @dataclass(frozen=True, slots=True)
 class Shot:
     """One picture: where it is written under docs/images, the demo page it
-    shows, and what of it.
-
-    ``follow`` names a link on ``page`` whose page is shown instead, for a page
-    whose address the build numbers. ``frame`` names Playwright locators: the
-    shot runs the window's width from the top of the first thing they match to
-    the bottom of the last, with `MARGIN` above it and ``below`` under it;
-    without one it is the window as it opens. A frame that ends inside a list
-    ends at its last row's edge (``below=0``), so the next row is not shown
-    cut through.
-    """
+    shows, and what of it."""
 
     path: str
     page: str
     width: int = 1360
     height: int = 900
+    # A link on ``page`` whose page is shown instead, for a page whose address
+    # the build numbers.
     follow: str = ""
+    # Playwright locators: the shot runs the window's width from the top of the
+    # first thing they match to the bottom of the last, with `MARGIN` above it
+    # and ``below`` under it; without one it is the window as it opens.
     frame: tuple[str, ...] = ()
+    # 0 for a frame that ends inside a list, so it ends at its last row's edge
+    # and the next row is not shown cut through.
     below: int = MARGIN
 
 

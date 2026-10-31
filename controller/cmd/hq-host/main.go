@@ -2,7 +2,8 @@
 // to keep HQ running on this machine.
 //
 //	hq-host run-web          the web container (severino-hq-web.service)
-//	hq-host controller       one controller pass, planning; --apply to apply
+//	hq-host controller       one controller pass, planning; --apply to apply,
+//	                         --glance to read only the dashboard panels HQ waits on
 //	hq-host renovate         run the dependency handoff a pass spooled
 //	hq-host install          install the release in the root-owned tree
 //	hq-host deploy IMAGE     verify and pull IMAGE, then hand over to its hq-host
@@ -12,6 +13,7 @@
 //	hq-host bootstrap        write the host's own configuration from host.json
 //	hq-host backup           back up HQ's volumes: database, uploads and exports
 //	hq-host upgrade ARGS     move one compose service to a pinned image (package upgrade)
+//	hq-host unit --serve     stop, start or restart the unit a container names (package unit)
 //	hq-host check            the deploy host's half of a preflight, as any account
 package main
 
@@ -32,11 +34,15 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/host"
+	"github.com/joeseverino/severino-hq/controller/host/unit"
 	"github.com/joeseverino/severino-hq/controller/host/upgrade"
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
 
-const usage = "usage: hq-host run-web | controller [--apply] | renovate | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | upgrade ARGS | check --release DIR --main DIR"
+const usage = "usage: hq-host run-web | controller [--apply | --glance] | renovate | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | upgrade ARGS | unit --serve | check --release DIR --main DIR"
+
+// passes are the controller passes `hq-host controller` launches, by flag.
+var passes = map[string]host.Pass{"": host.Plan, "--apply": host.Apply, "--glance": host.Glance}
 
 // hostConfig is the host's own configuration, which bootstrap reads.
 const hostConfig = "/etc/severino-hq/host.json"
@@ -54,10 +60,13 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 		fmt.Fprintln(stderr, usage)
 		return 2
 	}
-	// An upgrade answers in JSON whatever happens, a refusal to run as
+	// An upgrade or a unit answers in JSON whatever happens, a refusal to run as
 	// anyone but root included.
 	if args[0] == "upgrade" {
 		return upgrade.Main(ctx, args[1:], getenv, euid, stdout, stderr)
+	}
+	if args[0] == "unit" {
+		return unit.Main(ctx, args[1:], euid, stdin, stdout)
 	}
 	// A preflight runs its check as the operator's own account.
 	if args[0] == "check" {
@@ -72,12 +81,12 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 	case "run-web":
 		err = runWeb(ctx, args[1:], getenv, stdout, stderr, log)
 	case "controller":
-		apply := len(args) == 2 && args[1] == "--apply"
-		if len(args) > 2 || (len(args) == 2 && !apply) {
+		pass, known := passes[strings.Join(args[1:], " ")]
+		if !known {
 			fmt.Fprintln(stderr, usage)
 			return 2
 		}
-		err = controller(stdout, stderr).Run(ctx, apply)
+		err = controller(stdout, stderr).Run(ctx, pass)
 	case "renovate":
 		if len(args) != 1 {
 			fmt.Fprintln(stderr, usage)
@@ -109,15 +118,15 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 			return 1
 		}
 		if err == nil {
-			fmt.Fprintln(stdout, "The host is its release: the tree, the units and nothing else.")
+			fmt.Fprintln(stdout, "The host is its release: the tree, the units, the runner's sudo rules and nothing else.")
 		}
 	case "backup":
 		err = machine(stdout).Backup(ctx, getenv)
 	case "bootstrap":
 		var data []byte
 		if data, err = os.ReadFile(hostConfig); err == nil {
-			var config host.HostConfig
-			if config, err = host.ReadHostConfig(data); err == nil {
+			var config host.Config
+			if config, err = host.ReadConfig(data); err == nil {
 				err = machine(stdout).Bootstrap(ctx, config)
 			}
 		}
@@ -228,6 +237,7 @@ func controller(stdout, stderr io.Writer) *host.Controller {
 		ACME:          host.ACMEDir,
 		CertStore:     "/usr/local/share/ca-certificates",
 		Tailscaled:    "/var/run/tailscale/tailscaled.sock",
+		UnitSocket:    host.UnitSocket,
 		Spool:         host.RenovateSpool,
 		DependencyRun: host.DependencyRunFile,
 		Connections:   requireConnections,

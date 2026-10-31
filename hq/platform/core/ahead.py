@@ -1,33 +1,10 @@
 """Derived answers kept current for as long as the web application runs.
 
-A derived answer stops standing when a table it reads is written or when its
-moment comes (``hq.platform.application.derivations``). Left there, the next
-request pays for deriving it again, and with a controller reporting every few
-minutes while HQ is in use, many requests a person makes are that next request.
-
-So the question is asked again when the change lands. Every statement a
-connection runs is seen here; one that writes a table a remembered question
-reads says so once its transaction commits, and one thread then asks again
-whatever no longer stands. It never runs inside the writing transaction or the
-writer's thread, and a rolled-back write says nothing. The same thread wakes
-when the earliest remembered answer's moment comes.
-
-Writes that land together are one change: the pass starts once none has landed
-for a moment. Writes that land while it is deriving are answered by one more
-pass, not one each: a pass asks only what does not stand at the revisions it
-reads, so a question is derived at most once per state of its tables. While
-writes keep landing (an import), what a pass derives is unsettled before it is
-read, so each pass waits twice as long for them to settle, up to
-``SETTLES_LONGEST``, and a request derives what it asks for itself, as it would
-with no pass at all. The first pass that nothing interrupts restores the wait.
-
-A request never waits on the pass: it derives what it needs itself, and the
-pass later finds that answer stored. The pass pauses between questions while a
-request is deriving. Only a request needing an answer another thread is
-deriving waits, for that answer.
-
-Nothing here decides what is true. A request that arrives before the thread
-has finished derives for itself, exactly as it did before.
+An answer stops standing when a table it reads is written or its moment comes,
+and with a controller reporting every few minutes the next request would pay to
+derive it again. So one thread asks again once the write commits
+(docs/Architecture.md, Asked again when the change lands). Nothing here decides
+what is true: a request that comes first derives for itself.
 """
 
 import logging
@@ -110,10 +87,15 @@ class _Keeper:
                 logger.exception("ahead.pass_failed")
             finally:
                 close_old_connections()
-            self.interrupted(self._woken.is_set())
+            self.interrupted(written=self._woken.is_set())
 
-    def interrupted(self, written: bool) -> None:
-        """A pass ended, with or without writes landing while it derived."""
+    def interrupted(self, *, written: bool) -> None:
+        """A pass ended, with or without writes landing while it derived.
+
+        While writes keep landing (an import) what a pass derives is unsettled
+        before it is read, so each such pass doubles the wait for them to settle,
+        up to ``SETTLES_LONGEST``; the first pass nothing interrupts restores it.
+        """
 
         self.within = min(self.within * 2, SETTLES_LONGEST) if written else SETTLES_WITHIN
 

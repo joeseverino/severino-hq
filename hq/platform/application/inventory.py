@@ -1,15 +1,10 @@
 """What the providers hold, and which of it HQ does not manage.
 
-The controller fetches every record a provider holds on each pass. This records
-what HQ does not manage. It is a cache and stays one: nothing reconciles from it,
-and HQ never becomes a second copy of AdGuard. What it buys is the difference
-between a registry and a console: an operator can see what exists, and adopt
-what HQ should be looking after.
-
-Adoption is safe because the spec is read back out of the live record through
-the provider's own ``from_record``. The declaration starts equal to the world,
-so the first reconciliation after adopting changes nothing. Anything else would
-mean adopting a host quietly reset it to HQ's defaults.
+The controller fetches every record a provider holds on each pass, and this keeps
+what HQ does not manage, so an operator can see what exists and adopt what HQ
+should look after (docs/Architecture.md says why adopting changes nothing). It
+is a cache and stays one: nothing reconciles from it, and HQ never becomes a
+second copy of AdGuard.
 """
 
 import hashlib
@@ -45,15 +40,13 @@ lazy from .facts import inventory_records
 def record_token(kind: str, identity: tuple[str, ...]) -> str:
     """A short, stable handle for one live record, safe to put in a URL.
 
-    Derived rather than stored because nothing persists an unmanaged record,
-    it exists only in the last sweep. Hashed rather than joined because an
-    identity contains a DNS value, and a TXT record's value is neither short nor
-    URL-safe.
-
-    Shared with whatever else needs to name the same record, so a page offering
-    to adopt something computes the same handle the adoption looks it up by.
+    Derived rather than stored, since an unmanaged record exists only in the
+    last sweep, and shared, so a page offering to adopt something computes the
+    same handle the adoption looks it up by.
     """
 
+    # Hashed rather than joined: an identity contains a DNS value, and a TXT
+    # record's value is neither short nor URL-safe.
     return hashlib.sha256("\x1f".join((kind, *identity)).encode()).hexdigest()[:16]
 
 
@@ -61,27 +54,18 @@ def record_token(kind: str, identity: tuple[str, ...]) -> str:
 def record_inventory(payload: dict[str, Any], *, principal: Principal, controller_id: str = "") -> dict[str, Any]:
     """Store one controller sweep, replacing whatever the last one said.
 
-    Replaced rather than merged: this describes a provider at a moment, and
-    merging would keep records that have since been deleted, which is the one
-    thing a staleness-aware cache must not do.
-
-    ``payload`` is the contract's ``Inventory``, which the bridge holds every
-    sweep to before this runs; a member is read as the type the contract gives it.
-
-    A provider that could not be reached is the exception, and the reason is
-    the same one. "The credential is missing" and "the provider is empty" are
-    different facts, and a sweep that reports the first must not be stored as
-    the second: doing so deletes what HQ knew about a host that never changed,
-    and every surface downstream then says the containers are gone. So a failed
-    report keeps the last records and the moment they were seen, and records
-    only that the provider could not be confirmed. The data ages visibly
-    instead of vanishing silently, which is what ``observed_at`` is for.
+    Replaced rather than merged: merging would keep records since deleted, the
+    one thing a staleness-aware cache must not do. A provider that could not be
+    reached keeps its last records and when they were seen, so the data ages
+    visibly instead of vanishing (``_record_report``). ``payload`` is the
+    contract's ``Inventory``, which the bridge holds every sweep to first.
     """
 
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     observed_at = timezone.now()
     stored = []
     summary: dict[str, dict[str, Any]] = {}
+    # Each member is read as the type the contract gives it.
     for kind, report in sorted(payload.items()):
         if kind not in PROVIDERS and kind not in OBSERVATION_KINDS:
             # A controller ahead of this HQ. Ignored rather than rejected: the
@@ -89,65 +73,12 @@ def record_inventory(payload: dict[str, Any], *, principal: Principal, controlle
             # controller upgrade take the whole inventory down.
             continue
         if report.get("carried"):
-            # A kind on its own clock that was not due: nothing was asked of
-            # the provider, so what HQ holds is untouched. A refusal reported
-            # with it (the provider's allowance is spent) is an attempt, and
-            # is stored as one beside the records it could not replace.
-            parts = clean_refused_parts(kind, report.get("refused_parts"))
-            if parts:
-                ProviderInventory.objects.filter(kind=kind).update(
-                    refused_parts=parts, controller_id=controller_id, updated_at=observed_at
-                )
+            if _record_carried(kind, report, controller_id, observed_at):
                 stored.append(kind)
             continue
-        reached = report["ok"]
-        connected = report.get("connected", True)
-        records = report["records"]
-        error = report.get("error", "")
-        refusal = report.get("refusal", "") if not reached else ""
-        observation = OBSERVATIONS.get(kind)
-        if observation is not None:
-            records, refused = observation.clean(records)
-            if refused:
-                error = error or (f"{counted(refused, 'record')} did not match the {kind} schema.")
-        seen = {"records": records, "observed_at": observed_at}
-        # A refused read refuses every part; only a read that answered has some.
-        parts = clean_refused_parts(kind, report.get("refused_parts")) if reached else []
-        # The last records, for a kind whose changes are worth a moment on the
-        # history (see ``_record_change``); other kinds pay no query for it.
-        logs_changes = reached and getattr(PROVIDERS.get(kind), "from_record", None) is not None
-        before = (
-            ProviderInventory.objects.filter(kind=kind).values_list("records", flat=True).first()
-            if logs_changes
-            else None
-        )
-        row, _ = ProviderInventory.objects.update_or_create(
-            kind=kind,
-            # An unreachable provider leaves the last sweep's records and the
-            # moment it took them exactly where they were.
-            defaults={
-                "reachable": reached,
-                "connected": connected,
-                "error": error[:500],
-                "refusal": refusal,
-                "refused_parts": parts,
-                "controller_id": controller_id,
-                **(seen if reached else {}),
-            },
-            create_defaults={
-                "reachable": reached,
-                "connected": connected,
-                "error": error[:500],
-                "refusal": refusal,
-                "refused_parts": parts,
-                "controller_id": controller_id,
-                **seen,
-            },
-        )
+        row = _record_report(kind, report, controller_id, observed_at)
         stored.append(kind)
         summary[kind] = _summary(row)
-        if before is not None:
-            _record_change(row, before, records, controller_id)
 
     # Adoption is not done here. A record in a domain HQ has been made
     # responsible for is HQ's, but which records those are is `zones`' to say,
@@ -161,6 +92,78 @@ def record_inventory(payload: dict[str, Any], *, principal: Principal, controlle
     }
 
 
+def _record_carried(kind: str, report: dict[str, Any], controller_id: str, observed_at: datetime) -> bool:
+    """A kind on its own clock that was not due: whether there was anything
+    to store.
+
+    Nothing was asked of the provider, so what HQ holds is untouched. A refusal
+    reported with it (the provider's allowance is spent) is an attempt, and is
+    stored as one beside the records it could not replace.
+    """
+
+    parts = clean_refused_parts(kind, report.get("refused_parts"))
+    if parts:
+        ProviderInventory.objects.filter(kind=kind).update(
+            refused_parts=parts, controller_id=controller_id, updated_at=observed_at
+        )
+    return bool(parts)
+
+
+def _record_report(kind: str, report: dict[str, Any], controller_id: str, observed_at: datetime) -> ProviderInventory:
+    """Store what one kind's report says, keeping the last records when the
+    provider could not be reached, and log a change in records worth one."""
+
+    reached = report["ok"]
+    records, error = _schema_records(kind, report["records"], report.get("error", ""))
+    state = {
+        "reachable": reached,
+        "connected": report.get("connected", True),
+        "error": error[:500],
+        "refusal": report.get("refusal", "") if not reached else "",
+        # A refused read refuses every part; only a read that answered has some.
+        "refused_parts": clean_refused_parts(kind, report.get("refused_parts")) if reached else [],
+        "controller_id": controller_id,
+    }
+    seen = {"records": records, "observed_at": observed_at}
+    before = _last_records(kind) if reached else None
+    row, _ = ProviderInventory.objects.update_or_create(
+        kind=kind,
+        # An unreachable provider leaves the last sweep's records and the
+        # moment it took them exactly where they were. "The credential is
+        # missing" and "the provider is empty" are different facts: storing the
+        # first as the second deletes what HQ knew about a host that never
+        # changed, and every surface downstream says the containers are gone.
+        defaults={**state, **(seen if reached else {})},
+        create_defaults={**state, **seen},
+    )
+    if before is not None:
+        _record_change(row, before, records, controller_id)
+    return row
+
+
+def _schema_records(kind: str, records: list[Any], error: str) -> tuple[list[Any], str]:
+    """The records a reading's schema keeps, and the report's error, or one
+    counting the records the schema refused when the report gave none."""
+
+    observation = OBSERVATIONS.get(kind)
+    if observation is None:
+        return records, error
+    kept, refused = observation.clean(records)
+    if refused and not error:
+        error = f"{counted(refused, 'record')} did not match the {kind} schema."
+    return kept, error
+
+
+def _last_records(kind: str) -> list[Any] | None:
+    """The last records of a kind whose changes are worth a moment on the
+    history (see ``_record_change``); other kinds pay no query for it."""
+
+    provider = PROVIDERS.get(kind)
+    if provider is None or provider.from_record is None:
+        return None
+    return ProviderInventory.objects.filter(kind=kind).values_list("records", flat=True).first()
+
+
 READING_AUDIT_TYPE = "Reading"
 
 
@@ -168,12 +171,9 @@ def _record_change(row: ProviderInventory, before: list[Any], after: list[Any], 
     """A reading's records changed between two sweeps: the moment, for the history.
 
     Readings keep only their latest records, so without this a DNS record or a
-    policy edited outside HQ changes nothing anyone can point at in time.
-
-    Compared as what a declaration of each record would hold (the kind's
-    ``from_record``), so a container's "Up 3 days" is not a change and its image
-    is. A kind with no such shape is not logged. Counts only, never the records:
-    a policy document in the log is a second copy of it.
+    policy edited outside HQ changes nothing anyone can point at in time. How
+    records compare is docs/Derived-Facts.md#history. Counts only, never
+    the records: a policy document in the log is a second copy of it.
     """
 
     provider = PROVIDERS.get(row.kind)
@@ -219,19 +219,10 @@ def _summary(row: ProviderInventory) -> dict[str, Any]:
 def confirm_observed(payload: dict[str, Any]) -> int:
     """Mark declarations the sweep just found still matching as observed.
 
-    A declaration is "in sync" when what HQ asked for is what is there, and a
-    sweep is HQ going and looking. Nothing queues a reconcile for a resource
-    that has not drifted, so without this an unchanged declaration would never
-    be recorded as observed.
-
-    Only where the spec still matches the live record. A declaration that has
-    drifted is exactly the one a reconcile should visit, and quietly calling it
+    Nothing queues a reconcile for a resource that has not drifted, so without
+    this an unchanged declaration would never be recorded as observed. Only
+    where the spec still matches the live record: calling a drifted one
     observed would hide the difference this whole model exists to surface.
-
-    A declaration whose observation changed is saved, so the change is audited
-    and indexed. The rest, found exactly as they were last observed, take the
-    moment in one statement for the whole sweep: no save, no event and nothing
-    to index.
     """
 
     seen = timezone.now()
@@ -251,6 +242,9 @@ def confirm_observed(payload: dict[str, Any]) -> int:
             if drift:
                 _record_drift(resource, drift)
                 continue
+            # One whose observation changed is saved, so the change is audited
+            # and indexed; the rest take the moment in one statement for the
+            # whole sweep, with no save, no event and nothing to index.
             if not _observe(resource, found, seen):
                 unchanged.append(resource.pk)
             confirmed += 1
@@ -315,16 +309,10 @@ def retire_departed(payload: dict[str, Any]) -> list[str]:
     """Forget containers a complete listing of their machine no longer holds.
 
     The listing includes stopped containers, so one missing from it was
-    deleted, not stopped: a one-off ``docker run``, or a compose service
-    renamed. HQ cannot create a container (its compose file defines it), so a
-    declaration of one that is gone can never be met, and keeping it only
-    raises a finding nobody can clear. The sweep that adopts what appears
-    forgets what departs.
-
-    Only machines this sweep listed: an unreachable one lists nothing and
-    retires nothing. A container marked on demand is kept, being declared
-    precisely because it comes and goes. Nothing is kept out, so a container
-    that returns under the same name is adopted again.
+    deleted, not stopped. HQ cannot create a container (its compose file
+    defines it), so a declaration of one that is gone can never be met and
+    only raises a finding nobody can clear. The sweep that adopts what appears
+    forgets what departs, and one that returns under its name is adopted again.
     """
 
     report = payload.get(CONTAINER_KIND)
@@ -339,6 +327,9 @@ def retire_departed(payload: dict[str, Any]) -> list[str]:
     retired = []
     for resource in ManagedResource.objects.filter(kind=CONTAINER_KIND):
         identity = record_identity(CONTAINER_KIND, resource.spec)
+        # Only machines this sweep listed: an unreachable one lists nothing and
+        # retires nothing. A container marked on demand is kept, being declared
+        # precisely because it comes and goes.
         if identity[0] not in hosts or identity in listed or resource.spec.get("on_demand"):
             continue
         retired.append(resource.key)
@@ -401,12 +392,10 @@ def _canonical_document(text: str) -> str:
     """A JSON document reduced to what it says, so layout is not a difference.
 
     HQ stores a document such as the tailnet policy minified, and the provider
-    hands it back pretty-printed. Compared as text they never match, so a
-    policy would read as drifted from the moment it was applied.
-
-    Only a value that parses as a JSON object or array is touched; anything else,
-    including a policy written as HuJSON with comments, is compared as the text
-    it is, which errs towards reporting a difference.
+    hands it back pretty-printed, so compared as text a policy would read as
+    drifted from the moment it was applied. Anything but a JSON object or array,
+    a HuJSON policy with comments included, is compared as the text it is,
+    which errs towards reporting a difference.
     """
 
     stripped = text.strip()
@@ -422,15 +411,10 @@ def _canonical_document(text: str) -> str:
 def _record_drift(resource: ManagedResource, drift: tuple[tuple[str, str, str], ...]) -> None:
     """Say what the sweep found instead, rather than leaving the last good word.
 
-    A declaration the live record contradicts is described, not left with the
-    condition from the last time it matched.
-
-    Still not marked observed: this is not what HQ asked for, and the timestamp
-    has to keep meaning "last seen as declared" or it means nothing. What gets
-    written is the disagreement itself, named field by field, because which side
-    is wrong is not HQ's to decide: often it is the declaration that is out of
-    date, and an operator can only see that if HQ says which value it is arguing
-    about.
+    Not marked observed, so the timestamp keeps meaning "last seen as
+    declared". The disagreement is named field by field because which side is
+    wrong is not HQ's to decide: often the declaration is out of date, and an
+    operator sees that only if HQ says which value it is arguing about.
     """
 
     # ``Drifted`` asserted true, not ``Ready`` asserted false. A condition here
@@ -522,10 +506,7 @@ def record_step_failures(
 
     Reported at the end of a pass and written onto the rows the sweep wrote at
     the start of it, so a failure that happened after the sweep still lands on
-    the right connection. Every connection this controller carries is written,
-    including the ones with nothing to report: a pass that cleared a failure
-    has to be able to say so, and only writing failures would leave the last
-    one standing forever.
+    the right connection.
     """
 
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
@@ -538,6 +519,9 @@ def record_step_failures(
             continue
         by_ref.setdefault(subject, []).append({"step": step[:200], "reason": item["reason"][:120]})
     updated = 0
+    # Every connection this controller carries is written, those with nothing
+    # to report included: a pass that cleared a failure has to be able to say
+    # so, or the last one would stand forever.
     for connection in ProviderConnection.objects.filter(controller_id=controller_id):
         failing = by_ref.get(connection.connection_ref, [])
         if connection.failing_steps == failing:
@@ -554,12 +538,10 @@ def record_connections(
 ) -> dict[str, Any]:
     """Store what one controller can currently reach, replacing its last answer.
 
-    Scoped to the controller that reported it, so a connection this one no
-    longer carries goes away without touching another controller's. A credential
-    revoked in 1Password stops being offered on the next sweep, which is the
-    whole point of holding this as an observation rather than as a list. The
-    exception is a report that carries none, which marks the rows it held
-    rather than removing them (``ProviderConnection.unreported_at``).
+    Held as an observation rather than a list, so a credential revoked in
+    1Password stops being offered on the next sweep. Scoped to the controller
+    that reported it; a report that carries none marks the rows it held rather
+    than removing them (``ProviderConnection.unreported_at``).
     """
 
     principal.require(Capability.MANAGE_INFRASTRUCTURE)

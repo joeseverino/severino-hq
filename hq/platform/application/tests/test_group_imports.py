@@ -38,6 +38,7 @@ IMAGE_COPY = re.compile(r"^COPY ((?:--exclude=\S+ )+)\. /app$", re.MULTILINE)
 # What the image's suite collects: Django's discovery pattern, in packages only.
 TEST_MODULE = "test*.py"
 NOT_INSTALLED = (ImportError, ModuleNotFoundError)
+TYPE_CHECKING = ("TYPE_CHECKING", "typing.TYPE_CHECKING")
 
 
 def normalized(name: str) -> str:
@@ -146,7 +147,8 @@ def loaded_imports(path: Path, *, lazy_waits: bool) -> set[str]:
     """The full name of every module ``path`` imports as it loads.
 
     A function's body runs when it is called, and an import in a ``try`` that
-    catches its absence may fail; a lazy import is counted unless ``lazy_waits``.
+    catches its absence may fail; a lazy import is counted unless ``lazy_waits``;
+    one under ``if TYPE_CHECKING:`` never runs.
     """
 
     package = ".".join(path.relative_to(ROOT).with_suffix("").parts)
@@ -162,6 +164,9 @@ def loaded_imports(path: Path, *, lazy_waits: bool) -> set[str]:
             pending.extend(node.handlers + node.orelse + node.finalbody)
             continue
         if isinstance(node, ast.Import | ast.ImportFrom) and node.is_lazy and lazy_waits:
+            continue
+        if isinstance(node, ast.If) and ast.unparse(node.test) in TYPE_CHECKING:
+            pending.extend(node.orelse)
             continue
         if isinstance(node, ast.Import):
             names.update(alias.name for alias in node.names)

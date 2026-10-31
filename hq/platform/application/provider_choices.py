@@ -1,13 +1,10 @@
 """Answers that are a matter of live data rather than of type.
 
-Most spec fields are fully described by their annotation: a port is an integer
-between 1 and 65535, a scheme is one of two strings. Where a certificate
-installs is not. It has to name something that exists, so it is offered as a
-menu of what exists rather than a text box that needs the exact slug.
-
-Kept out of ``control_plane.providers`` because these read the database and that
-module declares rather than queries. Providers point at these by name, the same
-late-bound way a domain points at its attention provider.
+Most spec fields are described by their annotation; where a certificate
+installs has to name something that exists, so it is a menu of what exists
+rather than a text box that needs the exact slug. Kept out of
+``control_plane.providers``, which declares rather than queries; providers name
+these late-bound, as a domain names its attention provider.
 """
 
 from collections.abc import Set as AbstractSet
@@ -66,7 +63,7 @@ def proxy_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]
     return {"certificate_resource": tuple(options)}
 
 
-def certificate_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
+def certificate_choices(_context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """Where a certificate can be installed."""
 
     return {"install_on": tuple(_install_targets())}
@@ -88,7 +85,7 @@ def _install_targets(exclude: AbstractSet[str] = frozenset()):
     )
 
 
-def tailnet_device(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
+def tailnet_device(_context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """The devices the tailnet actually reported, and the credential to use.
 
     Offered rather than typed: the name has to match what the tailnet calls the
@@ -113,7 +110,7 @@ def tailnet_device(context: NameContext) -> dict[str, tuple[tuple[str, str], ...
     }
 
 
-def delivery_target(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
+def delivery_target(_context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """Which credential reaches the target, and which certificate names it."""
 
     return {
@@ -130,7 +127,7 @@ def delivery_target(context: NameContext) -> dict[str, tuple[tuple[str, str], ..
     }
 
 
-def uploaded_certificate_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
+def uploaded_certificate_choices(_context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """The same install targets an issued certificate can go to, less cPanel.
 
     Deploying is deploying: a proxy does not care which authority signed the
@@ -143,7 +140,7 @@ def uploaded_certificate_choices(context: NameContext) -> dict[str, tuple[tuple[
     return {"install_on": tuple(_install_targets(exclude=UPLOADED_CERTIFICATE_REFUSALS.keys()))}
 
 
-def dns_record(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
+def dns_record(_context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """The zone a record belongs to, and what kind of record it is."""
 
     return {
@@ -156,17 +153,14 @@ def dns_record(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     }
 
 
-def container_stack(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
+def container_stack(_context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """Where a stack can run, and which Portainer reaches it.
 
-    Both menus come from the connection sweep, because a Portainer is the only
-    thing that knows which machines it holds: HQ lists a printer and a phone as
-    readily as a Docker host, and a machine registered this morning is available
-    whether or not anything has been declared about it.
-
-    Read from the connection rather than from the containers found on it, so a
-    machine that is running nothing is still offered. That is precisely when
-    this form is being filled in.
+    Both menus come from the connection sweep, since only a Portainer knows
+    which machines it holds: HQ lists a printer as readily as a Docker host, and
+    a machine registered this morning is available whether or not anything is
+    declared about it. Read from the connection rather than its containers, so a
+    machine running nothing, exactly when this form is filled in, is offered.
     """
 
     described = _declared_roles()
@@ -192,7 +186,7 @@ def _declared_roles() -> dict[str, str]:
     }
 
 
-def zone(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
+def zone(_context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """Which domain to take responsibility for, and through which credential."""
 
     return {
@@ -202,20 +196,13 @@ def zone(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
 
 
 def _known_zones() -> tuple[tuple[str, str], ...]:
-    """Every zone HQ has seen, declared ones first.
+    """Every zone HQ has seen, declared ones first and undeclared ones labeled.
 
-    Not restricted to declared domains, deliberately. Restricting it reads as
-    the stricter, safer choice and is neither: adopting a record from a zone
-    that has not been declared yet produces a resource whose own zone is missing
-    from the menu, so the next person to open its edit form is told their
-    unmodified record is invalid. A menu that cannot describe what already
-    exists is a worse failure than one that offers a zone nobody declared.
-
-    Undeclared zones are labeled rather than hidden, which is the nudge without
-    the dead end.
-
-    Shared by the two forms that ask which domain, so declaring one and adding a
-    record to one cannot come to disagree about what a domain is.
+    Restricting it to declared domains reads as safer and is not: a record
+    adopted from an undeclared zone would find its own zone missing from the
+    menu, and its next editor would be told the unmodified record is invalid.
+    Labeled rather than hidden is the nudge without the dead end. Shared by both
+    forms that ask which domain, so they cannot disagree about what one is.
     """
 
     declared = {
@@ -264,16 +251,11 @@ def _connection_choices(provider: str) -> tuple[tuple[str, str], ...]:
 def machine_address_notes() -> dict[str, dict[str, str]]:
     """Which of a machine's addresses HQ can see without being told.
 
-    A declaration carries addresses for two unrelated reasons, and the form
-    presented both the same way. Some are the only record there is: nothing in
-    the estate reports the printer on the LAN, or the public address of a VPS.
-    The rest repeat a reading the tailnet gives on every sweep, and those are
-    also the key that ties HQ's name for a machine to the tailnet's, which calls
-    the same laptop something else entirely.
-
-    So the field stays writable and says which is which. Locking it would break
-    the printer; leaving it silent invites somebody to correct HQ about a value
-    HQ is watching.
+    Some declared addresses are the only record there is (a LAN printer, a VPS's
+    public address); the rest repeat the tailnet's reading on every sweep and
+    tie HQ's name for a machine to the tailnet's. The field stays writable and
+    says which is which: locking it would break the printer, and silence invites
+    somebody to correct HQ about a value HQ is watching.
     """
 
     return {"addresses": observed_addresses()}

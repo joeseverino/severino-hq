@@ -1,0 +1,33 @@
+# Production code never patches: a module HQ runs reaches what it needs through
+# a setting, an argument or a public name it reads, never by swapping a name
+# out from under the code that reads it. Patching is for test code, which is
+# tests/, a test*.py module, and a test-support module named testing.py or
+# *_testing.py (a fixture tests and demos stand in with), and which the
+# test-code rules read.
+id: production-never-patches
+language: python
+severity: error
+message: A production module imports unittest.mock, and production code never patches.
+note: >-
+  Reach the code through a setting, an argument or a public name it reads. A
+  stand-in that only tests and demos use belongs in a test-support module
+  (named testing.py or ending in _testing.py), where the test-code rules read it.
+ignores:
+  - "**/testing.py"
+  - "**/*_testing.py"
+rule:
+  any:
+    # import unittest.mock, import unittest.mock as m
+    - kind: import_statement
+      has: { stopBy: end, kind: dotted_name, regex: ^unittest\.mock$ }
+    # from unittest.mock import patch
+    - kind: import_from_statement
+      has: { field: module_name, regex: ^unittest\.mock$ }
+    # from unittest import mock, from unittest import mock as m
+    - kind: import_from_statement
+      all:
+        - has: { field: module_name, regex: ^unittest$ }
+        - has: { any: [{ kind: dotted_name }, { kind: aliased_import }], regex: ^mock(\s+as\s+\w+)?$ }
+    # import unittest, then unittest.mock.patch(...)
+    - kind: attribute
+      regex: ^unittest\.mock$

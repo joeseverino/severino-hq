@@ -9,7 +9,7 @@ glance (how it is doing, where it runs), beside its name rather than under it.
 {% endcomment %}
 <header class="page-head">
   <div class="page-head-copy">
-    {% if page.trail %}<p class="page-trail">{% for label, url in page.trail %}<a href="{{ url }}">{{ label|breakable }}</a>{% endfor %}</p>{% endif %}
+    {% if page.trail %}<p class="page-trail">{% for label, url in page.trail %}<span><a href="{{ url }}">{{ label|breakable }}</a></span>{% endfor %}</p>{% endif %}
     <div class="page-title-row">
       <h1>{{ page.title|breakable }}</h1>
       {% for badge in page_badges %}<span class="pill{% if badge.tone %} pill-{{ badge.tone }}{% endif %}"{% if badge.title %} title="{{ badge.title }}"{% endif %}>{{ badge.label|breakable }}</span>{% endfor %}
@@ -19,22 +19,20 @@ glance (how it is doing, where it runs), beside its name rather than under it.
   </div>
   {% if page.actions %}
     {% comment %}
-    Every control beside the title on a wide screen, the lead one first. On a
-    phone only that one stays there and the rest sit behind "More", so a head
-    is always one line: a toolbar wrapped between a title and its lede reads as
-    neither.
+    The lead control and the next the page names beside the title, and every
+    one but the lead in the menu, which the stylesheet trims to what is not
+    already beside it and folds the second into on a narrow head. So a head is
+    always one short line: a toolbar wrapped between a title and its lede
+    reads as neither.
     {% endcomment %}
-    {% with lead=page.actions|lead_action %}
+    {% with split=page.actions|head_actions %}
     <div class="page-actions">
-      {% include "partials/_page_action.html" with action=lead extra="" %}
-      {% for action in page.actions %}
-        {% if action != lead %}{% include "partials/_page_action.html" with extra="" %}{% endif %}
-      {% endfor %}
-      {% if page.actions|length > 1 %}
+      {% for action in split.0 %}{% include "partials/_page_action.html" with extra="" %}{% endfor %}
+      {% if split.1 %}
         <details class="overflow-menu" data-menu>
           <summary aria-label="More actions">{% include "partials/_icon.html" with name="more" %}</summary>
           <div class="overflow-menu-panel">
-            {% for action in page.actions %}{% if action != lead %}{% include "partials/_page_action.html" with extra="" %}{% endif %}{% endfor %}
+            {% for action in split.1 %}{% include "partials/_page_action.html" with extra="" %}{% endfor %}
           </div>
         </details>
       {% endif %}

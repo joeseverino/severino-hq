@@ -9,16 +9,22 @@ from dataclasses import replace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.core.models import AuditLog
 
 from ..approvals import (
+    APPROVE,
     MAX_PENDING_PER_ACTOR,
+    REJECT,
     ApprovalError,
+    ApproveCommand,
+    RejectCommand,
     approve,
     compare,
     pending,
@@ -245,6 +251,8 @@ class HeldRequestTests(TestCase):
 
         self.assertFalse(refused["ok"])
         self.assertEqual(refused["error"]["code"], "too_many_pending_approvals")
+        self.assertIn(f"already has {MAX_PENDING_PER_ACTOR} changes waiting", refused["error"]["message"])
+        self.assertNotIn(mcp_principal().actor, refused["error"]["message"])
         self.assertEqual(ApprovalRequest.objects.count(), MAX_PENDING_PER_ACTOR)
 
     def test_reading_is_never_held(self):
@@ -371,7 +379,7 @@ class DecisionTests(TestCase):
     def test_approval_queues_the_work_and_the_controller_can_then_claim_it(self):
         held = self.held()
 
-        approve(str(held.id), principal=an_operator())
+        approve(ApproveCommand(str(held.id)), principal=an_operator())
 
         operation = OperationRequest.objects.get()
         self.assertEqual(operation.action, OperationRequest.Action.RECONCILE)
@@ -382,24 +390,21 @@ class DecisionTests(TestCase):
         self.assertEqual(claimed["operation"]["id"], str(operation.id))
 
     def test_pausing_agents_holds_the_work_an_agent_queued(self):
-        from django.contrib.auth import get_user_model
-
-        from hq.platform.application.agent_access import set_agents_paused
+        from hq.platform.application.agent_access import AgentAccessCommand, set_agents_paused
 
         operator = an_operator()
-        person = get_user_model().objects.get(username=operator.actor)
-        approve(str(self.held().id), principal=operator)
+        approve(ApproveCommand(str(self.held().id)), principal=operator)
         operation = OperationRequest.objects.get()
         claim = lambda: claim_next_operation(  # noqa: E731
             "controller-example", capabilities=((GATED_KIND, "reconcile"),)
         )
 
-        set_agents_paused(True, principal=operator, user=person)
+        set_agents_paused(AgentAccessCommand(paused=True), principal=operator)
         self.assertIsNone(claim()["operation"])
         operation.refresh_from_db()
         self.assertEqual(operation.state, OperationRequest.State.QUEUED)
 
-        set_agents_paused(False, principal=operator, user=person)
+        set_agents_paused(AgentAccessCommand(paused=False), principal=operator)
         self.assertEqual(claim()["operation"]["id"], str(operation.id))
 
     def test_approving_an_amendment_applies_exactly_the_document_held(self):
@@ -409,7 +414,7 @@ class DecisionTests(TestCase):
             capability="infrastructure.resource.update",
         )
 
-        approve(str(held.id), principal=an_operator())
+        approve(ApproveCommand(str(held.id)), principal=an_operator())
 
         self.resource.refresh_from_db()
         self.assertEqual(self.resource.spec["document"], wanted)
@@ -419,45 +424,45 @@ class DecisionTests(TestCase):
         held = self.held()
 
         with self.assertRaises(AuthorizationError):
-            approve(str(held.id), principal=mcp_principal())
+            approve(ApproveCommand(str(held.id)), principal=mcp_principal())
 
         held.refresh_from_db()
         self.assertEqual(held.state, ApprovalRequest.State.PENDING)
         self.assertFalse(OperationRequest.objects.exists())
 
     def test_a_token_holding_every_capability_still_cannot_approve(self):
-        """Not a capability. Deliberately.
+        """The check is the interface, which a token cannot acquire.
 
-        A capability to approve is one more grant a compromised credential could
-        turn out to have, and then the hold would be worth nothing. The check is
-        the interface, which a token cannot acquire.
+        A grant to approve is one more thing a compromised credential could turn
+        out to have, and then the hold would be worth nothing. So the capability
+        to decide is held only in the browser, and the decision asks again.
         """
 
         held = self.held()
         omnipotent = Principal("well-equipped-token", "mcp", frozenset(Capability))
 
         with self.assertRaises(AuthorizationError):
-            approve(str(held.id), principal=omnipotent)
+            approve(ApproveCommand(str(held.id)), principal=omnipotent)
 
     def test_an_operator_who_shares_the_requesting_name_is_refused(self):
         held = self.held()
 
         with self.assertRaises(AuthorizationError):
-            approve(str(held.id), principal=an_operator(held.requested_actor))
+            approve(ApproveCommand(str(held.id)), principal=an_operator(held.requested_actor))
 
     def test_a_decision_cannot_be_taken_twice(self):
         held = self.held()
-        approve(str(held.id), principal=an_operator())
+        approve(ApproveCommand(str(held.id)), principal=an_operator())
 
         with self.assertRaises(ApprovalError):
-            approve(str(held.id), principal=an_operator("second-operator"))
+            approve(ApproveCommand(str(held.id)), principal=an_operator("second-operator"))
 
         self.assertEqual(OperationRequest.objects.count(), 1)
 
     def test_rejecting_answers_the_caller_and_applies_nothing(self):
         held = self.held()
 
-        reject(str(held.id), principal=an_operator(), note="Not wanted.")
+        reject(RejectCommand(str(held.id), note="Not wanted."), principal=an_operator())
 
         held.refresh_from_db()
         self.assertEqual(held.state, ApprovalRequest.State.REJECTED)
@@ -486,7 +491,7 @@ class DecisionTests(TestCase):
         )
 
         with self.assertRaises(ApprovalError):
-            approve(str(held.id), principal=an_operator())
+            approve(ApproveCommand(str(held.id)), principal=an_operator())
 
         held.refresh_from_db()
         self.assertEqual(held.state, ApprovalRequest.State.STALE)
@@ -497,13 +502,31 @@ class DecisionTests(TestCase):
         held.expires_at = timezone.now() - timezone.timedelta(minutes=1)
         held.save(update_fields=("expires_at",))
 
+        # Before anything sweeps it: out of the queue, and refused.
         self.assertEqual(pending(), ())
+        held.refresh_from_db()
+        self.assertEqual(held.state, ApprovalRequest.State.PENDING, "reading the queue writes nothing")
         with self.assertRaises(ApprovalError):
-            approve(str(held.id), principal=an_operator())
+            approve(ApproveCommand(str(held.id)), principal=an_operator())
 
         held.refresh_from_db()
         self.assertEqual(held.state, ApprovalRequest.State.EXPIRED)
         self.assertFalse(OperationRequest.objects.exists())
+
+    def test_the_sweep_leaves_a_live_request_and_marks_one_nobody_answered_lapsed(self):
+        from ..approvals import lapse_expired
+
+        held = self.held()
+
+        self.assertEqual(lapse_expired(), 0)
+        self.assertEqual(pending(), (held,))
+
+        held.expires_at = timezone.now() - timezone.timedelta(minutes=1)
+        held.save(update_fields=("expires_at",))
+
+        self.assertEqual(lapse_expired(), 1)
+        held.refresh_from_db()
+        self.assertEqual(held.state, ApprovalRequest.State.EXPIRED)
 
 
 @override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
@@ -555,9 +578,9 @@ class FloorTests(TestCase):
         self.resource = declare_policy()
 
     def test_writing_a_gated_declaration_without_consent_is_refused(self):
-        from ..infrastructure import PolicyError
+        from ..record_errors import PolicyError
 
-        with self.assertRaises(PolicyError):
+        with self.assertRaisesMessage(PolicyError, "This change needs a person to approve it."):
             save_managed_resource(
                 ManagedResourceCommand(
                     key=POLICY_KEY,
@@ -569,10 +592,10 @@ class FloorTests(TestCase):
             )
 
     def test_queueing_work_on_a_gated_declaration_without_consent_is_refused(self):
-        from ..infrastructure import PolicyError
+        from ..record_errors import PolicyError
         from ..resource_operations import OperationCommand, request_reconcile
 
-        with self.assertRaises(PolicyError):
+        with self.assertRaisesMessage(PolicyError, "This change needs a person to approve it."):
             request_reconcile(
                 OperationCommand(idempotency_key="direct", reason=""),
                 principal=Principal("a-token", "mcp", frozenset({Capability.MANAGE_INFRASTRUCTURE})),
@@ -739,9 +762,9 @@ class SurfaceTests(TestCase):
 
         entry = self._entry(ApprovalRequest.objects.get(pk=held["approval"]["id"]))
 
-        self.assertContains(entry, "Would be created")
+        self.assertContains(entry, "Asked with")
         self.assertContains(entry, "Held project")
-        self.assertContains(entry, "Create project")
+        self.assertContains(entry, "wants to create a project")
 
     def test_the_awaiting_view_is_the_queue(self):
         page = self.client.get(f"{reverse('core:audit_list')}?awaiting=1")
@@ -755,7 +778,7 @@ class SurfaceTests(TestCase):
 
         self.assertContains(self._entry(self.held), "Approve")
 
-        reject(str(self.held.id), principal=web_principal(self.user))
+        reject(RejectCommand(str(self.held.id)), principal=web_principal(self.user))
 
         settled = self._entry(self.held)
         self.assertNotContains(settled, "Approve")
@@ -765,6 +788,25 @@ class SurfaceTests(TestCase):
         page = self.client.get(reverse("control_plane:detail", kwargs={"key": POLICY_KEY}))
 
         self.assertContains(page, "waiting for your approval")
+
+    def test_the_queue_and_the_resource_page_leave_a_request_past_its_expiry_as_it_was(self):
+        """Reading is not answering: the sweep marks it lapsed, a GET only stops offering it."""
+
+        self.held.expires_at = timezone.now() - timezone.timedelta(minutes=1)
+        self.held.save(update_fields=("expires_at",))
+        before = AuditLog.objects.count()
+
+        queue = self.client.get(f"{reverse('core:audit_list')}?awaiting=1")
+        resource = self.client.get(reverse("control_plane:detail", kwargs={"key": POLICY_KEY}))
+
+        self.assertEqual(len(queue.context["events"]), 1)
+        self.assertContains(resource, "waiting for your approval")
+        self.held.refresh_from_db()
+        self.assertEqual(self.held.state, ApprovalRequest.State.PENDING)
+        self.assertEqual(
+            (ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING).count(), AuditLog.objects.count()),
+            (2, before),
+        )
 
     def test_approving_from_the_page_applies_it(self):
         response = self.client.post(
@@ -779,6 +821,55 @@ class SurfaceTests(TestCase):
             ManagedResource.objects.get(key=POLICY_KEY).spec["document"],
             policy_document("group:elsewhere"),
         )
+
+    def test_the_decision_is_audited_under_whoever_decided(self):
+        self.client.post(
+            reverse("control_plane:approval_decision", kwargs={"approval_id": self.held.id}),
+            {"decision": "approve"},
+        )
+
+        decided = AuditLog.objects.get(object_type="Approval", object_id=str(self.held.id), metadata__operation=APPROVE)
+        self.assertEqual((decided.metadata["actor"], decided.metadata["interface"]), ("reviewer", "web"))
+        self.assertEqual(decided.user, self.user)
+
+    def test_a_decision_that_cannot_be_taken_says_why_on_the_page(self):
+        reject(RejectCommand(str(self.held.id)), principal=web_principal(self.user))
+
+        response = self.client.post(
+            reverse("control_plane:approval_decision", kwargs={"approval_id": self.held.id}),
+            {"decision": "approve"},
+        )
+
+        said = [str(message) for message in get_messages(response.wsgi_request)]
+        self.assertEqual(said, ["That request is already rejected."])
+
+    def test_a_token_is_refused_the_decision_whatever_it_holds_before_anything_moves(self):
+        omnipotent = frozenset(Capability)
+        for principal in (
+            Principal("example-agent", "mcp", omnipotent, granted=omnipotent),
+            Principal("example-client", "api", omnipotent, granted=omnipotent),
+            cli_principal(),
+        ):
+            for name, payload in (
+                (APPROVE, {"approval_id": str(self.held.id)}),
+                (REJECT, {"approval_id": str(self.held.id)}),
+            ):
+                with self.subTest(interface=principal.interface, capability=name):
+                    result = execute_capability(name, payload, principal=principal)
+
+                    self.assertEqual(result["error"]["code"], "forbidden")
+        self.held.refresh_from_db()
+        self.assertEqual(self.held.state, ApprovalRequest.State.PENDING)
+        self.assertEqual(AuditLog.objects.filter(action=AuditLog.Action.DENIED).count(), 6)
+
+    def test_a_decision_naming_no_request_is_invalid(self):
+        for payload in ({}, {"approval_id": str(self.held.id), "decision": "approve"}):
+            with self.subTest(payload=payload):
+                result = execute_capability(APPROVE, payload, principal=web_principal(self.user))
+
+                self.assertEqual(result["error"]["code"], "invalid_input")
+        self.held.refresh_from_db()
+        self.assertEqual(self.held.state, ApprovalRequest.State.PENDING)
 
     def test_the_page_needs_a_signed_in_operator(self):
         self.client.logout()

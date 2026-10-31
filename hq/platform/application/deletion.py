@@ -5,20 +5,24 @@ A record domain's delete is built from its declaration by
 """
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
 
 from django.db import transaction
 
 from hq.domains.calendars.models import Entry
 from hq.platform.core.audit import operation_context
 
-from .record_errors import RecordConflict, RecordNotFound
+from .command_fields import Describe
+from .record_saves import Held, held
 from .security import Capability, Principal
+
+# A delete runs for every record domain, so its refusals name none.
+_RECORD = Held("That record was not found.", "That record changed after it was read.")
 
 
 @dataclass(frozen=True, slots=True)
 class DeleteCommand:
-    confirm: str
+    confirm: Annotated[str, Describe("The record's identifier again, to confirm the delete.")]
 
 
 def delete_record(
@@ -41,12 +45,7 @@ def delete_record(
         transaction.atomic(),
         operation_context(interface=principal.interface, actor=principal.actor, operation=operation),
     ):
-        try:
-            obj = model.objects.select_for_update().get(**lookup)
-        except model.DoesNotExist as exc:
-            raise RecordNotFound("That record was not found.") from exc
-        if expected_updated_at and obj.updated_at.isoformat() != expected_updated_at:
-            raise RecordConflict("That record changed after it was read.")
+        obj = held(model, _RECORD, lookup, expected_updated_at)
         label = str(obj)
         cleanup = after_commit(obj) if after_commit else None
         obj.delete()

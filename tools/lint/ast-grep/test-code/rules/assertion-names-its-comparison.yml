@@ -1,0 +1,26 @@
+# A comparison belongs in the assertion, not inside a boolean.
+# assertTrue(a > b) fails with "False is not true", which says nothing about
+# a or b; assertGreater(a, b) prints both. CodeQL flags it too, after a push.
+# A comparison inside a call (any(x > y for ...)) is the predicate being
+# asserted, and is left be.
+id: assertion-names-its-comparison
+language: python
+severity: error
+message: An assertion hides a comparison inside a boolean, so its failure prints neither side.
+note: >-
+  Use the assertion that names the comparison (assertEqual, assertNotEqual,
+  assertLess, assertLessEqual, assertGreater, assertGreaterEqual, assertIs,
+  assertIsNot, assertIn, assertNotIn), or its negation for assertFalse.
+rule:
+  any:
+    - pattern: $CASE.$ASSERT($FIRST)
+    - pattern: $CASE.$ASSERT($FIRST, $$$REST)
+constraints:
+  ASSERT:
+    regex: ^assert(True|False)$
+  FIRST:
+    any:
+      - kind: comparison_operator
+      - kind: parenthesized_expression
+        has:
+          kind: comparison_operator

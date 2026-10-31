@@ -1,24 +1,10 @@
 """The calendar: every dated thing HQ holds, composed into one view.
 
-Every domain, host section or extension alike, declares *sources* through
-``PluginIntegration.calendars``. A source names a stream of dated things the
-domain already holds (a certificate's expiry, a domain's registration, a
-deploy) and answers one question: what falls between two days. The calendar
-stores nothing a source can derive. What it owns is what only it knows: the
-operator's own entries (``calendars.models.Entry``, the "My Calendar" source)
-and which sources each operator has unchecked.
-
-A source is read once per window and composed here, so a domain never learns
-which others exist, and a source that fails is said beside its name in the
-calendar list instead of taking the page down with it.
-
-Three shapes cover everything a source emits:
-
-- a **mark**: a dot on its day, read by color. Many fit one day.
-- an **item**: a line with a title (an appointment, an expiry).
-- a **span**: an item over several days (a certificate's renewal window:
-  opens, then expires).
-  Spans keep a lane across the week so a bar lines up from cell to cell.
+Each domain declares sources (docs/Plugins.md#calendar-sources), read once per
+window and composed here, so a domain never learns which others exist and a
+source that fails is said beside its name rather than taking the page down.
+The calendar stores nothing a source can derive: it owns the operator's own
+entries (``calendars.models.Entry``) and which sources each has unchecked.
 """
 
 import logging
@@ -35,6 +21,7 @@ lazy from hq.platform.application.routes import reverse
 from .entity_links import web_url
 lazy from . import domains
 lazy from .calendar_entries import own_sources
+lazy from .moments import month as month_name, weekday
 
 logger = logging.getLogger("severino.calendar")
 
@@ -119,6 +106,8 @@ class CalendarEvent:
 
     @property
     def span(self) -> bool:
+        # A line over several days (a certificate's renewal window: opens, then
+        # expires), drawn as a bar that keeps its lane across the week.
         return self.days > 1
 
     @property
@@ -166,7 +155,7 @@ class CalendarSource:
         if not 0 <= self.slot <= SERIES_SLOTS:
             raise ValueError(f"Calendar source slot must be 0 to {SERIES_SLOTS}.")
         if not callable(self.events):
-            raise ValueError("A calendar source's events must be callable.")
+            raise TypeError("A calendar source's events must be callable.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -238,6 +227,13 @@ class CalendarCell:
 
         return f"day-{self.day.isoformat()}"
 
+    @property
+    def month_of(self) -> str:
+        """The month's name on its first day ("Oct"), where a grid that runs
+        into a second month shows which one; blank on every other day."""
+
+        return month_name(self.day, short=True) if self.day.day == 1 else ""
+
 
 @dataclass(frozen=True, slots=True)
 class CalendarMonth:
@@ -266,6 +262,18 @@ class CalendarMonth:
     @property
     def is_current(self) -> bool:
         return self.month == self.today.replace(day=1)
+
+    @property
+    def url(self) -> str:
+        """This month on the calendar page, with no day open."""
+
+        return month_url(self.month)
+
+    @property
+    def weekdays(self) -> tuple[tuple[str, str], ...]:
+        """Each column's heading: short ("Sun"), and its full name."""
+
+        return tuple((weekday(cell.day, short=True), weekday(cell.day)) for cell in self.weeks[0]) if self.weeks else ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -30,7 +30,7 @@ for package in hq hq/platform hq/platform/core hq/platform/core/tests; do
     cp "${package}/__init__.py" "${repo}/${package}/"
 done
 cp hq/platform/core/tests/task.py "${repo}/hq/platform/core/tests/"
-cp tools/gate/__init__.py tools/gate/check.py tools/gate/verdict.py "${repo}/tools/gate/"
+cp tools/gate/__init__.py tools/gate/check.py tools/gate/host.py tools/gate/verdict.py "${repo}/tools/gate/"
 # Hermetic: the fixture is a throwaway repository, so no signing and no hooks.
 git_() {
     git -C "${repo}" -c user.name=test -c user.email=test@example.com \
@@ -82,6 +82,8 @@ cat >"${bin}/mise" <<'EOF'
 #!/bin/sh
 echo "mise $* REQUIRE_COMPOSED=${REQUIRE_COMPOSED:-}" >>"${TEST_LOG}"
 case "$*" in
+    # The host's half is the real task's program, reaching the fake ssh.
+    "run check:host") exec python3 -m tools.gate.host ;;
     *"test --composed"*) exit "${TEST_FAIL_COMPOSED:-0}" ;;
     *) exit "${TEST_FAIL_CI:-0}" ;;
 esac
@@ -138,6 +140,7 @@ says "READY"
 grep -qx "${GATES} REQUIRE_COMPOSED=" "${TEST_LOG}" || fail "the pipeline's gates did not run"
 grep -qx "mise run test --composed REQUIRE_COMPOSED=1" "${TEST_LOG}" || fail "the composed suite ran without being required"
 [ -f "${repo}/var/gate/check-release.txt" ] || fail "a release run's verdict is not kept apart from a plain run's"
+logged "mise run check:host" "the host was not reached through check:host"
 logged "ssh -o BatchMode=yes deploy.example.test uname -s -m" "the host was not asked its platform"
 logged "GOOS=linux GOARCH=amd64 CGO_ENABLED=0" "the check was not built for the host's platform"
 logged "check --release" "the host did not run hq-host check"

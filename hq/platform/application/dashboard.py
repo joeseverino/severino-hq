@@ -26,7 +26,7 @@ from .read_models import recent_activity
 from .security import Capability
 from .workflows import serialize_workflow
 lazy from .action_items import item_key, item_revision, waiting_count
-lazy from .ui import DomainOverview
+lazy from .ui import DomainOverview, Insight
 
 
 @derivation("dashboard.highlights", reads=DASHBOARD_READS, vary=composed_variant)
@@ -96,12 +96,9 @@ def waiting(user_pk: int) -> int:
     return waiting_count(work_queue(), user_pk)
 
 
-def queue_item(source_id: str, source: str, item: Any) -> dict[str, Any]:
+def queue_item(source_id: str, source: str, item: Insight) -> dict[str, Any]:
     """One action item in the shape the queue partial and the API carry."""
 
-    subject = getattr(item, "subject", None)
-    since = getattr(item, "since", None)
-    observed_at = getattr(item, "observed_at", None)
     return {
         "key": item_key(source_id, item),
         "revision": item_revision(item),
@@ -115,13 +112,13 @@ def queue_item(source_id: str, source: str, item: Any) -> dict[str, Any]:
         "action": item.action,
         "workflow": serialize_workflow(item.workflow),
         "actions": [asdict(action) for action in item.actions],
-        "subject": asdict(subject) if subject else None,
-        "notice": bool(getattr(item, "notice", False)),
-        "family": getattr(item, "family", ""),
-        "since": since.isoformat() if since else "",
-        "observed_at": observed_at.isoformat() if observed_at else "",
-        "facts": [list(fact) for fact in getattr(item, "facts", ())],
-        "links": [asdict(link) for link in getattr(item, "links", ())],
+        "subject": asdict(item.subject) if item.subject else None,
+        "notice": item.notice,
+        "family": item.family,
+        "since": item.since.isoformat() if item.since else "",
+        "observed_at": item.observed_at.isoformat() if item.observed_at else "",
+        "facts": [list(fact) for fact in item.facts],
+        "links": [asdict(link) for link in item.links],
     }
 
 

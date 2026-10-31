@@ -1,14 +1,10 @@
 """Which documentation an AI-facing surface may name, stated once.
 
-MCP and API results, search and the relationship lists every record carries
-all ask the same question of a documentation record. Answered in five places,
-a sensitivity added to one of them would quietly widen one surface and not
-the others.
-
-The set is defined beside the model's sensitivity choices, which it is made
-of, and the model's own ``is_safe_for_ai_export`` reads it there. This module
-is how every other surface asks: it imports the model, never the reverse, so
-persistence does not depend on the application layer.
+MCP and API results, search and every record's relationship lists ask the same
+question of a documentation record; answered in each, a sensitivity added to one
+would quietly widen one surface and not the others. The set lives beside the
+model's sensitivity choices it is made of, and this module imports it, never
+the reverse, so persistence does not depend on the application layer.
 """
 
 from django.db.models import QuerySet

@@ -1,12 +1,9 @@
 """Import a documentation manifest from a JSON file or stdin.
 
-Examples:
-
     python manage.py import_docs_manifest path/to/docs_manifest.json
     cat docs_manifest.json | python manage.py import_docs_manifest -
 
-The manifest is the same JSON shape the web import accepts. See
-``docs_index/importer.py`` for the schema.
+The manifest is the shape the web import accepts (``docs_index/importer.py``).
 """
 
 import json
@@ -21,6 +18,7 @@ from hq.domains.docs_index.importer import (
     validate_manifest_data,
 )
 from hq.platform.application.documentation import sync_documentation
+from hq.platform.application.record_errors import PolicyError
 from hq.platform.application.security import cli_principal
 from hq.platform.application.ui import counted
 
@@ -124,7 +122,7 @@ class Command(BaseCommand):
                 prune_orphans=options["prune"],
                 confirm_prune=options["prune"],
             )
-        except ManifestImportError as exc:
+        except (ManifestImportError, PolicyError) as exc:
             raise CommandError(str(exc)) from exc
         if not result["ok"]:
             raise CommandError(f"Manifest validation failed: {result['problems']}")
@@ -153,7 +151,7 @@ class Command(BaseCommand):
         summary = {key: value for key, value in stats.items() if key not in {"missing_relations_detail", "orphans"}}
         self.stdout.write(self.style.SUCCESS(f"Manifest imported: {summary}"))
         for entry in stats.get("missing_relations_detail", []):
-            self.stdout.write(self.style.WARNING(f"  missing {entry['kind']}: {entry['doc_id']} → {entry['slug']}"))
+            self.stdout.write(self.style.WARNING(f"  missing {entry['kind']}: {entry['doc_id']} names {entry['slug']}"))
         if report_orphans:
             self._report_orphans(stats, pruned=options["prune"])
         if stats.get("content_items_pruned"):

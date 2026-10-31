@@ -1,0 +1,17 @@
+# An arrow between two values is drawn for the eye: a screen reader says it
+# as "right arrow", or skips it. Text a person reads or hears says the
+# relation in words; a page that draws the arrow hands both values to
+# templates/partials/_change.html, which hides the arrow from a reader and
+# says its word instead. A docstring is for the code's reader and may use one.
+id: arrow-in-reader-text
+language: python
+severity: error
+message: An arrow in a string a person reads or hears is said as "right arrow"; say the relation in words.
+note: Write the word ("to", "at"), or hand both values to a template that includes partials/_change.html.
+rule:
+  kind: string
+  regex: "→"
+  not:
+    # A docstring: a bare string statement, which no page shows.
+    inside:
+      kind: expression_statement

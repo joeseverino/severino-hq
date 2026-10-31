@@ -1,7 +1,4 @@
 {% comment %}HQ's status, release and machine, on its title's line (`page_aside`).{% endcomment %}
 <p class="page-title-meta">
-  {% if hq.parts %}<a class="pill pill-{{ hq.status.0 }}" href="{% if hq.status.0 == "serious" %}#problems-here{% else %}#hq-{{ hq.parts.0 }}-heading{% endif %}">{{ hq.status.1|breakable }}</a>{% else %}<span class="pill pill-{{ hq.status.0 }}">{{ hq.status.1|breakable }}</span>{% endif %}
-  {% if hq.release.revision %} · <code>{{ hq.release.short|breakable }}</code>{% endif %}
-  {% if hq.machine %} · on {% entity hq.machine.link %}{% endif %}
-  {% if hq.container.uptime %} · {{ hq.container.uptime|breakable }}{% endif %}
+  {% if hq.parts %}<a class="pill pill-{{ hq.status.0 }}" href="{% if hq.status.0 == "serious" %}#problems-here{% else %}#hq-{{ hq.parts.0 }}-heading{% endif %}">{{ hq.status.1|breakable }}</a>{% else %}<span class="pill pill-{{ hq.status.0 }}">{{ hq.status.1|breakable }}</span>{% endif %}{% if hq.release.revision %}{% dot %}<code>{{ hq.release.short|breakable }}</code>{% endif %}{% if hq.machine %}{% dot %}on {% entity hq.machine.link %}{% endif %}{% if hq.container.uptime %}{% dot %}{{ hq.container.uptime|breakable }}{% endif %}
 </p>

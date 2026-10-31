@@ -204,7 +204,7 @@ func TestTailnetDeviceReconcile(t *testing.T) {
 			api := newTailnetAPI(t, map[string]tailnetAnswer{"POST /device/nEDGE/key": c.answer})
 			r := tailnetRegistry(t, api)
 			r.Env.TailnetStatus = writeTailnetStatus(t, tailnetStatus)
-			res, err := r.runAction(runtime.ResourceKindTailscaleDevice, "reconcile", t.Context(), c.spec, nil, c.apply)
+			res, err := r.runAction(t.Context(), runtime.ResourceKindTailscaleDevice, "reconcile", c.spec, nil, c.apply)
 			if c.failure != "" || c.name == "unknown device" {
 				if failure, _, _ := runtime.Classify(err); err == nil || failure != c.failure {
 					t.Fatalf("%v %q", err, failure)
@@ -246,7 +246,7 @@ func TestTailscaleApproveRoutes(t *testing.T) {
 			})
 			r := tailnetRegistry(t, api)
 			r.Env.TailnetStatus = writeTailnetStatus(t, tailnetStatus)
-			res, err := r.runAction(runtime.ResourceKindTailscaleDevice, "approve-routes", t.Context(), Object{"name": "an-edge"}, nil, c.apply)
+			res, err := r.runAction(t.Context(), runtime.ResourceKindTailscaleDevice, "approve-routes", Object{"name": "an-edge"}, nil, c.apply)
 			if c.read.status != 0 || c.name == "malformed routes" {
 				if failure, _, _ := runtime.Classify(err); err == nil || failure != c.failure {
 					t.Fatalf("%v %q", err, failure)
@@ -316,7 +316,7 @@ const (
 func policyReconcile(t *testing.T, api *tailnetAPIServer, document string, apply bool) (Result, error) {
 	t.Helper()
 	r := tailnetRegistry(t, api)
-	return r.runAction(runtime.ResourceKindTailscalePolicy, "reconcile", t.Context(), Object{"document": document}, nil, apply)
+	return r.runAction(t.Context(), runtime.ResourceKindTailscalePolicy, "reconcile", Object{"document": document}, nil, apply)
 }
 
 // The write is held to the version the deny check judged, taken from that

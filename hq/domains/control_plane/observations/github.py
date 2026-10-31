@@ -1,11 +1,6 @@
 """Readings of GitHub: each repository the App's installation covers, the
 public profile of each account a sign-in names, and how each dependency update
-run ended.
-
-One record per repository, as the App's read-only token sees it: the default
-branch's head and its checks, open pull requests, the latest run of each
-workflow and any waiting on an approval, the latest release, recent
-deployments, open security alerts, and the build artifacts with an expiry.
+run ended. What a repository's record holds is docs/Derived-Facts.md#github.
 
 Which repositories is the installation's own list, so choosing them on GitHub
 is the configuration. Secrets, variables' values and log contents are never

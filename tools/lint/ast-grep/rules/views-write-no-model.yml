@@ -1,0 +1,33 @@
+# A web view may query for rendering, but a write belongs to a use case, where
+# it is authorized, atomic and audited. The files are every view module:
+# views.py and the *_views.py split from one, as
+# test_architecture.view_modules names them.
+id: views-write-no-model
+language: python
+severity: error
+message: A web view writes a model directly.
+note: Call the application service that owns the write.
+files:
+  - "**/views.py"
+  - "**/*_views.py"
+rule:
+  kind: call
+  has:
+    field: function
+    kind: attribute
+    any:
+      # An instance's own write, whatever holds the instance.
+      - has:
+          field: attribute
+          regex: ^(save|delete)$
+      # A write through a model's manager.
+      - all:
+          - has:
+              field: attribute
+              regex: ^(create|get_or_create|update_or_create|bulk_create|bulk_update)$
+          - has:
+              field: object
+              kind: attribute
+              has:
+                field: attribute
+                regex: ^objects$

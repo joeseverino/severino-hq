@@ -1,8 +1,10 @@
-from unittest import mock
+import json
+from urllib.error import URLError
 
 from django.test import SimpleTestCase
 
 from ..osv import OSVReadError, finding, matches, query_of
+from .network import Response, answering
 
 
 class QueryTests(SimpleTestCase):
@@ -31,18 +33,26 @@ class QueryTests(SimpleTestCase):
 
 class MatchTests(SimpleTestCase):
     def test_every_matched_package_and_how_many_were_asked(self):
-        answer = {"results": [{"vulns": [{"id": "GHSA-1", "modified": "m"}]}, {}]}
-        with mock.patch("hq.platform.application.osv._post", return_value=answer) as post:
+        asked = []
+
+        def osv(request, timeout=None):
+            asked.append(request)
+            # The shape of OSV's querybatch answer: one result per query, in order.
+            return Response({"results": [{"vulns": [{"id": "GHSA-1", "modified": "m"}]}, {}]})
+
+        with answering(osv):
             checked, found = matches(["pkg:npm/a@1", "pkg:npm/b@2", "pkg:rpm/x/y@1"])
 
         self.assertEqual((checked, found), (2, {"pkg:npm/a@1": [("GHSA-1", "m")]}))
-        self.assertEqual(len(post.call_args.args[1]["queries"]), 2)
+        (request,) = asked
+        self.assertEqual((request.get_method(), request.full_url), ("POST", "https://api.osv.dev/v1/querybatch"))
+        self.assertEqual(len(json.loads(request.data)["queries"]), 2)
 
     def test_an_unreachable_osv_says_so(self):
-        with (
-            mock.patch("hq.platform.application.osv._read", side_effect=OSVReadError("Could not reach OSV")),
-            self.assertRaises(OSVReadError),
-        ):
+        def unreachable(request, timeout=None):
+            raise URLError("no route to host")
+
+        with answering(unreachable), self.assertRaisesMessage(OSVReadError, "Could not reach OSV"):
             matches(["pkg:npm/a@1"])
 
 

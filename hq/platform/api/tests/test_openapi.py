@@ -22,12 +22,15 @@ from jsonschema import ValidationError
 from hq.platform.application.capabilities import capability_registry, describe_capabilities
 from hq.platform.application.domains import all_domains
 from hq.platform.application.resources import resource_registry
+from hq.platform.application.security import cli_principal, could_hold
 
 from .. import openapi, views
 from ..testing import Contract, ContractClient
 from .test_api import _OTHER_KEY as OTHER_KEY, ISSUER, RESOURCE, _serving, _token
 
 VALIDATOR = importlib.util.find_spec("openapi_spec_validator") is not None
+# A list that matched nothing, with every field the collection contract requires.
+EMPTY_PAGE = {"items": [], "count": 0, "total": 0, "truncated": False, "next": ""}
 
 
 def _operations(value: dict) -> list[tuple[str, str, dict]]:
@@ -61,13 +64,17 @@ class DocumentTests(SimpleTestCase):
                     {method.lower() for method in pattern.callback.__hq_methods__},
                 )
 
-    def test_every_capability_appears(self):
+    def test_every_capability_a_token_could_hold_appears(self):
         found = {
             operation["x-hq-capability"]
             for _, _, operation in _operations(self.document)
             if "x-hq-capability" in operation
         }
-        self.assertEqual(found, set(capability_registry()))
+        holdable = {
+            name for name, spec in capability_registry().items() if could_hold("api", spec.required_capabilities)
+        }
+        self.assertEqual(found, holdable)
+        self.assertNotIn("certificate.upload", found)
 
     def test_every_resource_operation_appears(self):
         listed, detailed = set(), set()
@@ -135,10 +142,14 @@ class DocumentTests(SimpleTestCase):
             self.assertEqual(refs, ["#/components/parameters/IdempotencyKey"], path)
 
     def test_the_request_body_is_the_one_the_view_validates(self):
-        spec = next(spec for spec in describe_capabilities()["capabilities"] if spec["name"] == "project.update")
+        spec = next(
+            spec
+            for spec in describe_capabilities(principal=cli_principal())["capabilities"]
+            if spec["name"] == "project.update"
+        )
         self.assertEqual(
             self.document["components"]["schemas"]["ProjectUpdateRequest"],
-            views._request_schema(spec),
+            views.request_schema(spec),
         )
 
     def test_tags_are_the_nav_tree(self):
@@ -172,6 +183,19 @@ class DocumentTests(SimpleTestCase):
         groups = [tag["name"] for tag in tags if tag["name"].startswith("nav.")]
         parents = [tag["parent"] for tag in tags if "parent" in tag]
         self.assertEqual(groups, list(dict.fromkeys(parents)))
+
+    def test_each_resource_and_capability_is_tagged_with_the_domain_it_belongs_to(self):
+        """Its declaring domain, else the domain of its web page or subject, else the API's own."""
+
+        tags = openapi._Tags(resource_registry(), capability_registry())
+        self.assertEqual(tags.of_resource("projects"), "hq.projects")
+        self.assertEqual(tags.of_resource("services"), "hq.services")
+        self.assertEqual(tags.of_resource("search"), openapi.API_TAG)
+        self.assertEqual(tags.of_capability("project.create"), "hq.projects")
+        self.assertEqual(tags.of_capability("pin.toggle"), openapi.API_TAG)
+        declaring = next(domain for domain in all_domains() if domain.integration.capabilities)
+        declared = next(iter(declaring.integration.capabilities())).name
+        self.assertEqual(tags.of_capability(declared), declaring.id)
 
     def test_every_operation_has_a_name_short_enough_for_a_sidebar(self):
         """A summary is a title; the sentence about it is the description."""
@@ -218,16 +242,18 @@ class DocumentTests(SimpleTestCase):
         }
         examples = json.loads(openapi.EXAMPLES_PATH.read_text(encoding="utf-8"))
         self.assertTrue(examples)
+        stale = "an example no longer fits its operation: `mise run fix:api-examples` records them again"
         for operation_id, entry in examples.items():
-            path, method = operations[operation_id]
-            for status, body in entry.get("responses", {}).items():
-                with self.subTest(operation=operation_id, status=status):
-                    contract.validate(contract.response_pointer(path, method, int(status)), body)
-            if "request" in entry:
-                contract.validate(
-                    ["paths", path, method, "requestBody", "content", "application/json", "schema"],
-                    entry["request"],
-                )
+            with self.subTest(stale, operation=operation_id):
+                path, method = operations[operation_id]
+                for status, body in entry.get("responses", {}).items():
+                    with self.subTest(stale, operation=operation_id, status=status):
+                        contract.validate(contract.response_pointer(path, method, int(status)), body)
+                if "request" in entry:
+                    contract.validate(
+                        ["paths", path, method, "requestBody", "content", "application/json", "schema"],
+                        entry["request"],
+                    )
 
 
 @override_settings(
@@ -315,7 +341,7 @@ class ContractClientTests(SimpleTestCase):
         self._answer(
             "/api/v2/resources/projects/",
             200,
-            {"ok": True, "data": {"items": [], "count": 0, "filters": {"query": "example"}}},
+            {"ok": True, "data": {**EMPTY_PAGE, "filters": {"query": "example"}}},
         )
 
     def test_resource_collection_metadata_does_not_relax_items_or_count(self):

@@ -89,7 +89,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
             *(name for part in SETTING_PARTS.values() for name in part.requires),
         ),
         parts=tuple(SETTING_PARTS.values()),
-        title=lambda record: "Tailnet settings",
+        title=lambda _record: "Tailnet settings",
         relation="Tailnet settings",
     ),
     ObservationSpec(

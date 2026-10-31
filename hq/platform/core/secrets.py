@@ -1,20 +1,10 @@
-"""Encrypting the few secrets HQ has to hold, and refusing to hold them otherwise.
+"""Encrypting the few secrets an operator hands HQ on purpose, and refusing to hold them otherwise.
 
-HQ deliberately keeps provider credentials out of the web container: they are
-rendered to a root-owned file the controller reads and HQ cannot. That covers
-every credential HQ *uses*.
-
-It does not cover a secret an operator hands to HQ on purpose. An internally
-signed certificate is generated on an air-gapped machine and has to reach Nginx
-Proxy Manager somehow; today that is a copy and paste into a web form, and doing
-it through HQ is the same key crossing the same wire. Keeping it afterwards is
-what makes "install this on another service too" a click rather than a trip back
-to the offline CA.
-
-So: encrypted at rest, with a key that is not in the database. If the key is not
-configured, storing fails loudly. A secret store that silently degrades to
-plaintext is worse than not having one, because the operator believes the first
-sentence of this docstring.
+The credentials HQ uses never reach the web container. A secret handed to it (an
+internally signed certificate's key, kept so installing it on another service is
+a click) is encrypted at rest with a key that is not in the database; with no
+key, storing fails loudly, since a store that degrades to plaintext is worse
+than none.
 """
 
 import base64
@@ -30,6 +20,12 @@ class SecretsUnavailable(UpstreamUnavailable):
     """No key material is configured, so nothing can be stored or read."""
 
 
+# What sealing says without a key, and what a use case that seals refuses with.
+NO_STORE_KEY = (
+    "HQ's settings need a secret store key of at least 32 characters before HQ can hold a secret. Nothing was stored."
+)
+
+
 def available() -> bool:
     return bool(_configured_key())
 
@@ -41,10 +37,7 @@ def _configured_key() -> str:
 def _cipher() -> Fernet:
     key = _configured_key()
     if len(key) < 32:
-        raise SecretsUnavailable(
-            "HQ's settings need a secret store key of at least 32 characters "
-            "before HQ can hold a secret. Nothing was stored."
-        )
+        raise SecretsUnavailable(NO_STORE_KEY)
     # Derived rather than required to be a Fernet key, so the value in 1Password
     # is an ordinary long secret like every other entry rather than something
     # with a format the operator has to generate correctly.

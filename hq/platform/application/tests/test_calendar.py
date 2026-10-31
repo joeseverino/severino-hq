@@ -9,7 +9,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.calendars.models import Entry
+from hq.domains.calendars.models import Entry, Preference
 from hq.platform.core.models import AuditLog
 
 from ..calendar import (
@@ -21,20 +21,22 @@ from ..calendar import (
     month_of,
 )
 from ..calendar_entries import (
+    CHOOSE_SOURCE,
     EntryCommand,
     calendar_choices,
-    choose_source,
     list_agenda,
     occurrences,
     save_entry,
     upcoming,
 )
+from ..calendar_sources import container_events, deploy_events
+from ..capabilities import execute_capability
 from ..deletion import DeleteCommand, delete_calendar_entry
 from ..domains import Domain, domain_navigation, host_domains
+from ..history import CONTAINERS, DEPLOYS, Moment
 from ..moments import when_day
 from ..plugins import NavigationItem, PluginIntegration
-from ..record_errors import RecordNotFound
-from ..security import AuthorizationError, Capability, Principal, cli_principal, mcp_principal
+from ..security import AuthorizationError, Capability, Principal, cli_principal, mcp_principal, web_principal
 from .markup import all_elements, hrefs, select, text, texts, with_class
 
 TODAY = date(2026, 10, 14)
@@ -62,12 +64,12 @@ def _source(id, events, **kwargs):
 
 class ContractTests(SimpleTestCase):
     def test_an_event_refuses_what_cannot_be_drawn(self):
-        aware = timezone.make_aware(datetime(2026, 10, 1, 9))
+        aware = datetime(2026, 10, 1, 9, tzinfo=timezone.get_current_timezone())
         for kwargs in (
             {"id": "", "title": "x", "starts": TODAY},
             {"id": "a", "title": " ", "starts": TODAY},
             {"id": "a", "title": "x", "starts": TODAY, "state": "maybe"},
-            {"id": "a", "title": "x", "starts": datetime(2026, 10, 1, 9)},
+            {"id": "a", "title": "x", "starts": datetime(2026, 10, 1, 9)},  # noqa: DTZ001 - a naive start is refused
             {"id": "a", "title": "x", "starts": TODAY, "ends": TODAY - timedelta(days=1)},
             {"id": "a", "title": "x", "starts": TODAY, "ends": aware},
             {"id": "a", "title": "x", "starts": TODAY, "ends": TODAY + timedelta(days=3), "mark": True},
@@ -135,6 +137,17 @@ class MonthTests(TestCase):
         self.assertTrue(next(cell for cell in cells if cell.day == date(2026, 10, 13)).past)
         self.assertFalse(next(cell for cell in cells if cell.day == date(2026, 9, 30)).in_month)
         self.assertEqual((month.previous, month.next), (date(2026, 9, 1), date(2026, 11, 1)))
+
+    def test_a_month_heads_its_columns_names_its_first_days_and_links_to_itself(self):
+        with _with():
+            month = calendar_month(date(2026, 10, 1), today=TODAY)
+        cells = {cell.day: cell for week in month.weeks for cell in week}
+
+        self.assertEqual(month.weekdays[0], ("Sun", "Sunday"))
+        self.assertEqual(month.weekdays[-1], ("Sat", "Saturday"))
+        self.assertEqual([cells[date(2026, 10, 1)].month_of, cells[date(2026, 11, 1)].month_of], ["Oct", "Nov"])
+        self.assertEqual(cells[date(2026, 10, 2)].month_of, "")
+        self.assertEqual(month.url, f"{reverse('calendar:month')}?month=2026-10")
 
     def test_a_span_keeps_its_lane_across_the_week(self):
         trip = CalendarEvent("trip", "Trip", date(2026, 10, 12), date(2026, 10, 16))
@@ -308,12 +321,69 @@ class WriteTests(TestCase):
             self.assertFalse(agent.permits("write_expenses"))
             self.assertFalse(agent.permits(Capability.DELETE_CALENDAR))
 
-    def test_choices_are_per_operator_and_name_a_real_source(self):
+    def test_choices_are_per_person_and_name_a_real_source(self):
         user = get_user_model().objects.create_user("calendar-chooser")
-        choose_source(user, "history.deploys", True)
-        self.assertEqual(calendar_choices(user), {"history.deploys": True})
-        with self.assertRaises(RecordNotFound):
-            choose_source(user, "no.such", False)
+        other = get_user_model().objects.create_user("calendar-other")
+        principal = web_principal(user)
+
+        chosen = execute_capability(CHOOSE_SOURCE, {"source": "history.deploys", "shown": True}, principal=principal)
+
+        self.assertEqual(chosen["choices"], {"history.deploys": True})
+        self.assertEqual((calendar_choices(user), calendar_choices(other)), ({"history.deploys": True}, {}))
+        unknown = execute_capability(CHOOSE_SOURCE, {"source": "no.such", "shown": False}, principal=principal)
+        self.assertEqual(unknown["error"]["code"], "not_found")
+        invalid = execute_capability(CHOOSE_SOURCE, {"source": "history.deploys", "shown": "x"}, principal=principal)
+        self.assertEqual(invalid["error"]["code"], "invalid_input")
+
+    def test_a_credential_keeps_no_calendar_choices(self):
+        refused = execute_capability(
+            CHOOSE_SOURCE, {"source": "history.deploys", "shown": True}, principal=cli_principal()
+        )
+
+        self.assertEqual(refused["error"]["code"], "forbidden")
+        self.assertFalse(Preference.objects.exists())
+
+
+class HistorySourceTests(SimpleTestCase):
+    """Each deploy and container start in the window is a finished event of its own."""
+
+    def _events(self, source, moments):
+        def external(sources, *, since, until):
+            asked.append((set(sources), since, until))
+            return moments
+
+        asked = []
+        with mock.patch("hq.platform.application.calendar_sources.external", external):
+            events = source.__wrapped__(TODAY, TODAY)
+        return events, asked
+
+    def test_a_deploy_is_known_by_its_page_or_else_its_time(self):
+        at = datetime.combine(TODAY, time(9), tzinfo=timezone.get_current_timezone())
+        moments = [
+            Moment(at=at, source=DEPLOYS, title="Deploy hq", url="https://example.com/runs/1"),
+            Moment(at=at, source=DEPLOYS, title="Deploy hq"),
+        ]
+        events, asked = self._events(deploy_events, moments)
+
+        self.assertEqual(
+            [event.id for event in events], ["deploy:https://example.com/runs/1", f"deploy:{at.isoformat()}"]
+        )
+        self.assertEqual({event.state for event in events}, {"done"})
+        self.assertEqual(asked[0][0], {DEPLOYS})
+        self.assertEqual(asked[0][2] - asked[0][1], timedelta(days=1))
+
+    def test_a_container_start_is_known_by_its_name_and_time(self):
+        at = datetime.combine(TODAY, time(9), tzinfo=timezone.get_current_timezone())
+        moments = [
+            Moment(at=at, source=CONTAINERS, title="example-web", detail="restarted"),
+            Moment(at=at + timedelta(hours=1), source=CONTAINERS, title="example-web"),
+        ]
+        events, asked = self._events(container_events, moments)
+
+        self.assertEqual(len({event.id for event in events}), 2)
+        first = events[0]
+        self.assertEqual((first.title, first.starts, first.detail), ("example-web", at, "restarted"))
+        self.assertEqual(asked[0][0], {CONTAINERS})
 
 
 class PlacementTests(SimpleTestCase):

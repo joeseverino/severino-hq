@@ -31,7 +31,7 @@ lazy from .routes import reverse
 NOT_READ = "Not read yet"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class CheckOutcome:
     """``met`` is None when there is nothing to read it from."""
 
@@ -159,7 +159,7 @@ def _from_control(control, kinds: tuple[str, ...]) -> CheckOutcome:
     met = {"good": True, "neutral": None, "attention": None}.get(control.state, False)
     if met is None:
         return _not_read(kinds, control.evidence)
-    return CheckOutcome(met, "" if met else control.evidence)
+    return CheckOutcome(met=met, evidence="" if met else control.evidence)
 
 
 def _readers(kinds: tuple[str, ...]) -> tuple[str, ...]:
@@ -184,10 +184,12 @@ def _not_read(kinds: tuple[str, ...], evidence: str = NOT_READ) -> CheckOutcome:
     readers = [provider for provider in _readers(kinds) if provider in CONNECTION_LABELS]
     if readers and not connected.intersection(readers):
         labels = " or ".join(CONNECTION_LABELS[provider] for provider in readers)
-        return CheckOutcome(None, evidence, remedy=f"connect {labels}", remedy_url=_setup_url())
+        return CheckOutcome(met=None, evidence=evidence, remedy=f"connect {labels}", remedy_url=_setup_url())
     if not cadence.controller_standing(present()).known:
-        return CheckOutcome(None, evidence, remedy="run the controller", remedy_url=reverse("control_plane:controller"))
-    return CheckOutcome(None, evidence)
+        return CheckOutcome(
+            met=None, evidence=evidence, remedy="run the controller", remedy_url=reverse("control_plane:controller")
+        )
+    return CheckOutcome(met=None, evidence=evidence)
 
 
 def _setup_url() -> str:
@@ -195,7 +197,11 @@ def _setup_url() -> str:
 
 
 def _sign_in(_inputs) -> CheckOutcome:
-    return CheckOutcome(True, "") if sso_only() else CheckOutcome(False, "Password sign-in installed")
+    return (
+        CheckOutcome(met=True, evidence="")
+        if sso_only()
+        else CheckOutcome(met=False, evidence="Password sign-in installed")
+    )
 
 
 def _edge(inputs) -> CheckOutcome:
@@ -227,8 +233,8 @@ def _tailnet_policy(_inputs) -> CheckOutcome:
     if not policy.known and not policy.acls:
         return _not_read((TAILNET_POLICY_KIND,))
     if _allows_everyone(policy):
-        return CheckOutcome(False, "An allow-all rule")
-    return CheckOutcome(True, counted(len(policy.grants) + len(policy.acls), "rule", "rules"))
+        return CheckOutcome(met=False, evidence="An allow-all rule")
+    return CheckOutcome(met=True, evidence=counted(len(policy.grants) + len(policy.acls), "rule", "rules"))
 
 
 def _tailnet_lock(_inputs) -> CheckOutcome:
@@ -239,9 +245,9 @@ def _tailnet_lock(_inputs) -> CheckOutcome:
         return _not_read((TAILNET_LOCK_KIND,), (snapshot.error if snapshot is not None else "") or NOT_READ)
     keys = lock.get("trusted_keys") or 0
     return (
-        CheckOutcome(True, counted(keys, "signing key", "signing keys"))
+        CheckOutcome(met=True, evidence=counted(keys, "signing key", "signing keys"))
         if lock.get("enabled")
-        else CheckOutcome(False, "Off")
+        else CheckOutcome(met=False, evidence="Off")
     )
 
 
@@ -257,11 +263,11 @@ def _scope(inputs) -> CheckOutcome:
         if connection.instance.credential_model == "coarse" and connection.instance.kind in scoped
     )
     if broad:
-        return CheckOutcome(False, f"Full account access: {', '.join(broad)}")
+        return CheckOutcome(met=False, evidence=f"Full account access: {', '.join(broad)}")
     if not any(connection.instance.credential_model not in ("none", "") for connection in connections):
-        return CheckOutcome(None, "No connections yet", remedy="add a connection", remedy_url=_setup_url())
+        return CheckOutcome(met=None, evidence="No connections yet", remedy="add a connection", remedy_url=_setup_url())
     if any(connection.instance.credential_model in ("", "unknown") for connection in connections):
-        return CheckOutcome(None, NOT_READ)
+        return CheckOutcome(met=None, evidence=NOT_READ)
     return _scoped_where_offered(connections, scoped)
 
 
@@ -280,7 +286,7 @@ def _scoped_where_offered(connections, scoped: set[str]) -> CheckOutcome:
     if whole:
         said.append(f"nothing narrower offered for {', '.join(whole)}")
     evidence = ", ".join(said)
-    return CheckOutcome(True, evidence[:1].upper() + evidence[1:], qualified=bool(whole))
+    return CheckOutcome(met=True, evidence=evidence[:1].upper() + evidence[1:], qualified=bool(whole))
 
 
 def _approval(_inputs) -> CheckOutcome:
@@ -289,10 +295,12 @@ def _approval(_inputs) -> CheckOutcome:
         return _not_read((REPOSITORY_KIND,))
     production = found.production_environment
     if production is None:
-        return CheckOutcome(False, "No production environment")
+        return CheckOutcome(met=False, evidence="No production environment")
     reviewers = production.get("reviewers") or ()
     return (
-        CheckOutcome(True, f"Reviewers: {', '.join(reviewers)}") if reviewers else CheckOutcome(False, "No reviewers")
+        CheckOutcome(met=True, evidence=f"Reviewers: {', '.join(reviewers)}")
+        if reviewers
+        else CheckOutcome(met=False, evidence="No reviewers")
     )
 
 

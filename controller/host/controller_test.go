@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/connections"
 )
 
 // Values that may reach the container only inside the mounted document.
@@ -28,7 +30,7 @@ var launchVariables = []string{
 	"HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_CONTROLLER_IMAGE", "SEVERINO_HQ_SOURCE_REPOSITORY",
 	"HQ_CONTROLLER_CA_FILE", "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK",
 	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS",
-	"HQ_CONTROLLER_OUT", "SEVERINO_DEPENDENCY_RUN",
+	"HQ_CONTROLLER_OUT", "SEVERINO_DEPENDENCY_RUN", "SEVERINO_UNIT_SOCKET",
 }
 
 type launch struct {
@@ -47,14 +49,24 @@ func newLaunch(t *testing.T) *launch {
 	f := newFakeHost(t)
 	f.running = running
 	secrets := filepath.Join(f.root, "secrets")
-	os.MkdirAll(filepath.Join(secrets, "ssh"), 0o700)
-	os.WriteFile(filepath.Join(secrets, "ssh", reference), []byte("an identity\n"), 0o600)
+	if err := os.MkdirAll(filepath.Join(secrets, "ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(secrets, "ssh", reference), []byte("an identity\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	document, _ := json.Marshal(map[string]any{"schema_version": 2, "connections": []any{
 		map[string]any{"ref": reference, "api_token": map[string]string{"api_token": sentinel}},
 	}})
-	os.WriteFile(filepath.Join(secrets, "controller-connections.json"), document, 0o400)
-	os.MkdirAll(filepath.Join(secrets, "web"), 0o700)
-	os.WriteFile(filepath.Join(secrets, "web", AppEnvName), []byte("DJANGO_SECRET_KEY=sentinel-application-secret\n"), 0o400)
+	if err := os.WriteFile(filepath.Join(secrets, "controller-connections.json"), document, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(secrets, "web"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(secrets, "web", AppEnvName), []byte("DJANGO_SECRET_KEY=sentinel-application-secret\n"), 0o400); err != nil {
+		t.Fatal(err)
+	}
 
 	l := &launch{f: f, mounted: map[string][]byte{}}
 	program := f.machine.Command
@@ -88,6 +100,7 @@ func newLaunch(t *testing.T) *launch {
 		ACME:          filepath.Join(f.root, "acme"),
 		CertStore:     filepath.Join(f.root, "certs"),
 		Tailscaled:    filepath.Join(f.root, "absent.sock"),
+		UnitSocket:    filepath.Join(f.root, "unit", "unit.sock"),
 		Spool:         filepath.Join(f.root, "spool"),
 		DependencyRun: filepath.Join(f.root, "state", "renovate", "dependency-run.json"),
 		Connections:   func() error { return nil },
@@ -112,9 +125,9 @@ func bind(mount string) (source, target string, ok bool) {
 	return found[1], found[2], true
 }
 
-func (l *launch) run(t *testing.T, apply bool) {
+func (l *launch) run(t *testing.T, pass Pass) {
 	t.Helper()
-	if err := l.controller.Run(context.Background(), apply); err != nil {
+	if err := l.controller.Run(context.Background(), pass); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -132,7 +145,7 @@ func (l *launch) envs() []string {
 func TestConnectionsAreMountedAndNeverPassedAsEnvironment(t *testing.T) {
 	l := newLaunch(t)
 
-	l.run(t, true)
+	l.run(t, Apply)
 
 	document, _ := os.ReadFile(filepath.Join(l.controller.SecretDir, "controller-connections.json"))
 	if string(l.mounted["/run/secrets/controller-connections.json"]) != string(document) {
@@ -169,7 +182,7 @@ func TestTheDocumentIsCopiedUnderTheSharedLock(t *testing.T) {
 		return nil
 	}
 
-	l.run(t, false)
+	l.run(t, Plan)
 
 	if strings.Join(l.order, " ") != "lock unlock" {
 		t.Errorf("lock order %v", l.order)
@@ -182,7 +195,7 @@ func TestTheDocumentIsCopiedUnderTheSharedLock(t *testing.T) {
 func TestNothingOfHQsOwnIsGivenToTheController(t *testing.T) {
 	l := newLaunch(t)
 
-	l.run(t, true)
+	l.run(t, Apply)
 
 	joined := strings.Join(l.args, "\n")
 	for _, absent := range []string{"target=/data", AppEnvName, "sentinel-application-secret", "doorbell", "source=" + RunDir + ",", "docker.sock"} {
@@ -200,7 +213,7 @@ func TestNothingOfHQsOwnIsGivenToTheController(t *testing.T) {
 func TestTheBridgeIsTheWebContainersOwnReadOnly(t *testing.T) {
 	l := newLaunch(t)
 
-	l.run(t, true)
+	l.run(t, Apply)
 
 	var bridge []string
 	for _, arg := range l.args {
@@ -222,11 +235,47 @@ func TestTheBridgeIsTheWebContainersOwnReadOnly(t *testing.T) {
 	}
 }
 
+// The unit socket's directory reaches the controller's container and never
+// the web container, which faces the network and shares the account.
+func TestTheUnitSocketIsLentToTheControllerAlone(t *testing.T) {
+	l := newLaunch(t)
+	dir := filepath.Dir(l.controller.UnitSocket)
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	l.run(t, Apply)
+
+	joined := strings.Join(l.args, "\n")
+	if !strings.Contains(joined, "type=bind,source="+dir+",target="+UnitSocketDir+"\n") {
+		t.Errorf("the controller is not lent the unit socket's directory: %v", l.args)
+	}
+	if !slices.Contains(l.envs(), "SEVERINO_UNIT_SOCKET="+UnitSocket) {
+		t.Errorf("the controller is not told where the unit socket is: %v", l.envs())
+	}
+	web := strings.Join(Web{Image: running}.Args(), " ")
+	if strings.Contains(web, UnitSocketDir) || strings.Contains(web, "SEVERINO_UNIT_SOCKET") {
+		t.Errorf("the web container reaches the unit socket: %s", web)
+	}
+}
+
+// A host whose socket unit is not installed yet lends nothing, since a bind
+// of a missing source would stop the pass.
+func TestNoUnitSocketIsLentWhereThereIsNone(t *testing.T) {
+	l := newLaunch(t)
+
+	l.run(t, Apply)
+
+	if joined := strings.Join(l.args, "\n"); strings.Contains(joined, "SEVERINO_UNIT_SOCKET") || strings.Contains(joined, UnitSocketDir) {
+		t.Errorf("a missing unit socket is lent: %v", l.args)
+	}
+}
+
 func TestAnUnsafeDocumentStopsTheLaunch(t *testing.T) {
 	l := newLaunch(t)
-	l.controller.Connections = func() error { return errors.New("Controller secret directory must be on tmpfs.") }
+	l.controller.Connections = func() error { return errors.New("controller secret directory must be on tmpfs") }
 
-	if err := l.controller.Run(context.Background(), true); err == nil {
+	if err := l.controller.Run(context.Background(), Apply); err == nil {
 		t.Fatal("launched on a refused document")
 	}
 	if l.args != nil {
@@ -237,7 +286,7 @@ func TestAnUnsafeDocumentStopsTheLaunch(t *testing.T) {
 func TestReadingsAreNamedWhetherOrNotTheyCouldBeTaken(t *testing.T) {
 	l := newLaunch(t)
 
-	l.run(t, false)
+	l.run(t, Plan)
 
 	envs := l.envs()
 	for _, want := range []string{
@@ -264,9 +313,11 @@ func TestReadingsAreNamedWhetherOrNotTheyCouldBeTaken(t *testing.T) {
 func TestTheRenderersStatusIsMountedAsACopy(t *testing.T) {
 	l := newLaunch(t)
 	status := filepath.Join(l.controller.SecretDir, "status.json")
-	os.WriteFile(status, []byte(`{"schema_version":1}`), 0o644)
+	if err := os.WriteFile(status, []byte(`{"schema_version":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
-	l.run(t, false)
+	l.run(t, Plan)
 
 	if string(l.mounted["/run/severino-hq/render-status/hq.json"]) != `{"schema_version":1}` {
 		t.Errorf("mounted %q", l.mounted["/run/severino-hq/render-status/hq.json"])
@@ -280,9 +331,11 @@ func TestTheRenderersStatusIsMountedAsACopy(t *testing.T) {
 
 func TestALinkedStatusIsNotFollowed(t *testing.T) {
 	l := newLaunch(t)
-	os.Symlink(filepath.Join(l.controller.SecretDir, "controller-connections.json"), filepath.Join(l.controller.SecretDir, "status.json"))
+	if err := os.Symlink(filepath.Join(l.controller.SecretDir, "controller-connections.json"), filepath.Join(l.controller.SecretDir, "status.json")); err != nil {
+		t.Fatal(err)
+	}
 
-	l.run(t, false)
+	l.run(t, Plan)
 
 	if _, ok := l.mounted["/run/severino-hq/render-status/hq.json"]; ok {
 		t.Error("a linked status was mounted")
@@ -294,11 +347,15 @@ func TestALinkedStatusIsNotFollowed(t *testing.T) {
 
 func TestHostRootsAndTheOpCLIAreLent(t *testing.T) {
 	l := newLaunch(t)
-	os.MkdirAll(l.controller.CertStore, 0o755)
-	os.WriteFile(filepath.Join(l.controller.CertStore, "example.crt"), []byte("ROOT\n"), 0o644)
+	if err := os.MkdirAll(l.controller.CertStore, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(l.controller.CertStore, "example.crt"), []byte("ROOT\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	l.controller.LookPath = func(string) (string, error) { return "/usr/bin/op", nil }
 
-	l.run(t, false)
+	l.run(t, Plan)
 
 	if string(l.mounted["/run/secrets/severino_controller_ca.pem"]) != "ROOT\n" {
 		t.Error("the host's roots were not lent")
@@ -310,7 +367,9 @@ func TestHostRootsAndTheOpCLIAreLent(t *testing.T) {
 
 func TestReportedIsEveryUnitWithAStateOfItsOwn(t *testing.T) {
 	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "a-.service.d"), 0o755)
+	if err := os.MkdirAll(filepath.Join(dir, "a-.service.d"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	files := map[string]string{
 		"a.service":                   "",
 		"job@.service":                "",
@@ -320,7 +379,9 @@ func TestReportedIsEveryUnitWithAStateOfItsOwn(t *testing.T) {
 		"a-.service.d/10-failed.conf": "[Unit]\nOnFailure=job@two.service  job@.service job@$(id).service a.service\n",
 	}
 	for name, body := range files {
-		os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	shipped, _ := Shipped(dir)
 
@@ -358,7 +419,9 @@ func TestTheFirewallIsDistilled(t *testing.T) {
 			t.Fatal(err)
 		}
 		var reading Firewall
-		json.Unmarshal(data, &reading)
+		if err := json.Unmarshal(data, &reading); err != nil {
+			t.Fatal(err)
+		}
 		if reading.AcceptRequiresInterface != (name == "bound") || reading.ForeignInterfaceDropped != (name == "bound") {
 			t.Errorf("%s: %+v", name, reading)
 		}
@@ -370,10 +433,16 @@ func TestTheFirewallIsDistilled(t *testing.T) {
 
 func TestTheCertificateStateIsTheControllersWithoutFollowingLinks(t *testing.T) {
 	l := newLaunch(t)
-	os.MkdirAll(filepath.Join(l.controller.ACME, "live", "example"), 0o700)
-	os.WriteFile(filepath.Join(l.controller.ACME, "live", "example", "privkey.pem"), []byte("key"), 0o600)
+	if err := os.MkdirAll(filepath.Join(l.controller.ACME, "live", "example"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(l.controller.ACME, "live", "example", "privkey.pem"), []byte("key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	outside := t.TempDir()
-	os.Symlink(outside, filepath.Join(l.controller.ACME, "escape"))
+	if err := os.Symlink(outside, filepath.Join(l.controller.ACME, "escape")); err != nil {
+		t.Fatal(err)
+	}
 	var owned []string
 	l.controller.Owner = func(root *os.Root, name string) error {
 		if root.Name() == l.controller.ACME {
@@ -382,11 +451,113 @@ func TestTheCertificateStateIsTheControllersWithoutFollowingLinks(t *testing.T) 
 		return nil
 	}
 
-	l.run(t, false)
+	l.run(t, Plan)
 
 	slices.Sort(owned)
 	want := []string{".", "escape", "live", "live/example", "live/example/privkey.pem"}
 	if !slices.Equal(owned, want) {
 		t.Errorf("owned %v", owned)
+	}
+}
+
+// glanceDocument is a rendered document with a connection of each kind a
+// glance reads and one it does not.
+func glanceDocument(t *testing.T, l *launch) {
+	t.Helper()
+	store := connections.Store{Vault: "Example", Item: "example"}
+	document, err := connections.Document{SchemaVersion: connections.SchemaVersion, Connections: []connections.Connection{
+		{Ref: "example-portainer", Provider: "portainer", Store: store,
+			APIToken: &connections.APIToken{URL: "https://portainer.example.com", APIToken: "portainer-token"}},
+		{Ref: "example-ssh", Provider: "ssh", Store: store,
+			SSHTransport: &connections.SSHTransport{Host: "192.0.2.10", User: "example", HostKey: "key", Identity: "example-ssh", Port: "22"}},
+		{Ref: "example-dns", Provider: "cloudflare_dns", Store: store,
+			APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: sentinel}},
+	}}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := filepath.Join(l.controller.SecretDir, "controller-connections.json")
+	if err := os.Remove(rendered); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(rendered, document, 0o400); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A glance pass is given the connections it reads a machine through and the
+// identities they name, and none of the rest.
+func TestAGlanceIsGivenOnlyTheConnectionsItReads(t *testing.T) {
+	l := newLaunch(t)
+	glanceDocument(t, l)
+
+	l.run(t, Glance)
+
+	document, err := connections.Decode(l.mounted[controllerConnections])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var refs []string
+	for _, connection := range document.Connections {
+		refs = append(refs, connection.Ref)
+	}
+	if !slices.Equal(refs, []string{"example-portainer", "example-ssh"}) {
+		t.Errorf("the glance is given %v", refs)
+	}
+	if strings.Contains(string(l.mounted[controllerConnections]), sentinel) {
+		t.Error("the glance is given a credential it does not read")
+	}
+	if l.args[len(l.args)-1] != "--glance" || l.args[len(l.args)-2] != running {
+		t.Errorf("the launch ends %v", l.args[len(l.args)-2:])
+	}
+	if !slices.Contains(l.args, "severino-hq.role=glance") {
+		t.Errorf("the glance's container is not labeled as one: %v", l.args)
+	}
+}
+
+// A glance pass is given less than a controller pass: no certificate state,
+// unit socket, reading of this host, delivery or way to hand root work.
+func TestAGlanceIsGivenNothingElseOfTheControllers(t *testing.T) {
+	l := newLaunch(t)
+	glanceDocument(t, l)
+	for _, dir := range []string{filepath.Dir(l.controller.UnitSocket), l.controller.CertStore} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(l.controller.CertStore, "example.crt"), []byte("ROOT\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l.controller.LookPath = func(string) (string, error) { return "/usr/bin/op", nil }
+
+	l.run(t, Glance)
+
+	var names []string
+	for _, env := range l.envs() {
+		name, _, _ := strings.Cut(env, "=")
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	want := []string{"HQ_CONTROLLER_CA_FILE", "HQ_CONTROLLER_CONNECTIONS", "HQ_CONTROLLER_RUN", "HQ_CONTROLLER_SSH_DIR", "SEVERINO_BRIDGE_SOCKET"}
+	if !slices.Equal(names, want) {
+		t.Errorf("the glance is told %v, want %v", names, want)
+	}
+	var targets []string
+	for i, arg := range l.args {
+		if arg == "--mount" {
+			_, target, _ := strings.Cut(l.args[i+1], ",target=")
+			target, _, _ = strings.Cut(target, ",")
+			targets = append(targets, target)
+		}
+	}
+	slices.Sort(targets)
+	if want := []string{filepath.Dir(BridgeSocket), controllerConnections, controllerSSH, controllerCA}; !slices.Equal(targets, slices.Sorted(slices.Values(want))) {
+		t.Errorf("the glance mounts %v", targets)
+	}
+	if string(l.mounted[controllerCA]) != "ROOT\n" {
+		t.Error("the host's roots were not lent to the glance")
+	}
+	if _, err := os.Stat(l.controller.ACME); err == nil {
+		t.Error("a glance made the certificate state")
 	}
 }

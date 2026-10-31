@@ -1,5 +1,4 @@
 {% load static %}
-{% load humanize %}
 {% load stylesheet_tags %}
 {% load value_tags %}
 {% rendered_copy as saved_copy %}
@@ -308,7 +307,6 @@
   <script src="{% static 'js/app.js' %}" {% csp_nonce_attr %} defer></script>
   <script src="{% static 'js/ask.js' %}" {% csp_nonce_attr %} defer></script>
   <script src="{% static 'js/connection.js' %}" {% csp_nonce_attr %} defer></script>
-  <script src="{% static 'js/topology.js' %}" {% csp_nonce_attr %} defer></script>
   {% block scripts_extra %}{% endblock %}
 </body>
 </html>

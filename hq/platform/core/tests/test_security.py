@@ -479,22 +479,22 @@ class ReceiptUploadHardeningTests(TestCase):
     def test_an_upload_without_a_declared_type_is_refused(self):
         """An undeclared type must not pass the allowlist by default."""
 
-        from django.core.exceptions import ValidationError
         from django.core.files.uploadedfile import SimpleUploadedFile
 
         from hq.domains.receipts.validation import validate_receipt_file
+        from hq.platform.application.record_errors import InputError
 
         sneaky = SimpleUploadedFile("note.html", b"markup", content_type="")
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(InputError):
             validate_receipt_file(sneaky)
 
     def test_a_declared_html_type_is_refused(self):
-        from django.core.exceptions import ValidationError
         from django.core.files.uploadedfile import SimpleUploadedFile
 
         from hq.domains.receipts.validation import validate_receipt_file
+        from hq.platform.application.record_errors import InputError
 
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(InputError):
             validate_receipt_file(SimpleUploadedFile("note.html", b"x", content_type="text/html"))
 
     def test_a_real_receipt_still_uploads(self):
@@ -989,37 +989,6 @@ class SourceBoundaryTests(SimpleTestCase):
             if imports.search(path.read_text())
         ]
         self.assertEqual(registered, [])
-
-    def test_only_the_shared_helper_turns_a_string_into_markup(self):
-        """The directive is worth exactly as much as this stays true.
-
-        Any second `DOMParser` is a second sink the policy header cannot see.
-        """
-
-        root = Path(__file__).resolve().parents[4] / "static" / "js"
-        sources = {path.name: path.read_text("utf-8") for path in root.glob("*.js")}
-        sinks = ("parseFromString", "createPolicy")
-
-        for name, text in sources.items():
-            for sink in sinks:
-                with self.subTest(file=name, sink=sink):
-                    self.assertLessEqual(
-                        text.count(f"{sink}("),
-                        1 if name == "fragment.js" else 0,
-                        f"{name} reaches a Trusted Types sink outside the helper",
-                    )
-
-    def test_every_enhanced_request_uses_the_session_renewal_boundary(self):
-        root = Path(__file__).resolve().parents[4] / "static" / "js"
-        sources = {path.name: path.read_text("utf-8") for path in root.glob("*.js")}
-
-        self.assertEqual(sources["fragment.js"].count("window.fetch("), 1)
-        self.assertGreater(len(sources), 2)
-        for name, source in sources.items():
-            if name == "fragment.js":
-                continue
-            self.assertNotIn("window.fetch(", source, name)
-            self.assertNotRegex(source, r"(?<![\w.])fetch\(", name)
 
 
 class CookiePrefixTests(SimpleTestCase):

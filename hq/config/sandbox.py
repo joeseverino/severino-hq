@@ -3,10 +3,6 @@
 Each run gets its own directories, made by the process that starts it and
 inherited by parallel workers through the environment, removed when it ends.
 An explicit setting still wins.
-
-Every path a run makes in the temporary directory is named for the process
-that started it, so the files of a run that was killed, and never reached its
-cleanup, can be told from those of a run still going.
 """
 
 import atexit
@@ -17,6 +13,9 @@ import shutil
 import tempfile
 from pathlib import Path
 
+# Every path a run makes in the temporary directory is named for the process
+# that started it, so the files of a run that was killed, and never reached its
+# cleanup, can be told from those of a run still going.
 PREFIX = "severino-test-"
 # severino-test-<pid>.sqlite3, its clones (_N), sidecars (-wal, -shm), and
 # severino-test-<kind>-<pid>-<random> directories.
@@ -57,7 +56,7 @@ def sweep_abandoned(directory: Path, pid: int) -> list[Path]:
 def _directory(variable: str, kind: str) -> str:
     if variable not in os.environ:
         os.environ[variable] = tempfile.mkdtemp(prefix=f"{PREFIX}{kind}-{os.getpid()}-")
-        atexit.register(shutil.rmtree, os.environ[variable], True)
+        atexit.register(shutil.rmtree, os.environ[variable], ignore_errors=True)
     return os.environ[variable]
 
 

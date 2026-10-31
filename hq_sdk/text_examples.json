@@ -27,6 +27,16 @@
       "output": "1,200 projects need output"
     }
   ],
+  "ended": [
+    {
+      "input": "'Renews through Example'",
+      "output": "Renews through Example."
+    },
+    {
+      "input": "'Renews through Example, Inc.'",
+      "output": "Renews through Example, Inc."
+    }
+  ],
   "money": [
     {
       "input": "1234.5",
@@ -47,6 +57,20 @@
     {
       "input": "None",
       "output": "\u2013"
+    }
+  ],
+  "signed_number": [
+    {
+      "input": "-29, '{} bpm'",
+      "output": "\u2212\u206029 bpm"
+    },
+    {
+      "input": "1.25, '{:.1f} min', plus=True",
+      "output": "+\u20601.2 min"
+    },
+    {
+      "input": "-0.04, '{:.1f} min'",
+      "output": "0.0 min"
     }
   ],
   "span": [

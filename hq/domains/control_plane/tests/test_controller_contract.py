@@ -17,7 +17,7 @@ from referencing.jsonschema import DRAFT202012
 
 from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.domains.control_plane.bridge_contract import contract, limit
-from hq.domains.control_plane.models import DashboardConfiguration, ManagedResource
+from hq.domains.control_plane.models import DashboardConfiguration, ManagedResource, OperationRequest
 from hq.platform.application.glance import panel_specs
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.resource_operations import (
@@ -70,6 +70,7 @@ class ControllerContractTests(TestCase):
             ManagedResourceCommand(key="example-wildcard", kind="tls.certificate", spec=certificate_spec()),
             principal=cli_principal(),
         )
+        OperationRequest.objects.all().delete()  # applied, so the reconcile its save queued is done
         self.resource = ManagedResource.objects.get(key="example-wildcard")
 
     def test_every_bridge_action_is_in_the_contract(self):

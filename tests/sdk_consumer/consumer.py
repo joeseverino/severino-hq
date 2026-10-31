@@ -10,8 +10,9 @@ fails the gate the day one of those stops being an error.
 
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Any, assert_type, override
+from typing import Annotated, Any, assert_type, override
 
+from django.db import models
 from django.urls import reverse_lazy
 
 from hq_sdk import (
@@ -22,11 +23,15 @@ from hq_sdk import (
     outbound,
     pages,
     reads,
+    references,
     resources,
     site,
     tables,
     testing,
+    ui,
+    validation,
     workflows,
+    writes,
 )
 
 
@@ -69,6 +74,27 @@ def amounts() -> None:
 
     money.quantize_money(1.5)  # type: ignore[arg-type]
     money.money("1.00")  # type: ignore[arg-type]
+    # A sign is the amount's own, written by money(); there is no sign to spell by hand.
+    money.MINUS  # type: ignore[attr-defined]  # noqa: B018 - the access is the case
+
+
+def signs(pace: float, beats: int, unread: float | None) -> None:
+    # The figure is written from the value's own kind, so it can use its format specs.
+    assert_type(money.signed_number(pace, lambda minutes: f"{minutes:.1f} min", plus=True), str)
+    assert_type(money.signed_number(-beats, lambda drop: f"{drop:,d} bpm"), str)
+    assert_type(money.signed_number(Decimal("-1.5"), lambda amount: f"{amount:.2f}%"), str)
+    assert_type(money.signed_number(unread, str), str)
+
+    money.signed_number("1.5", str)  # type: ignore[type-var]
+    money.signed_number(pace, lambda minutes: minutes)  # type: ignore[arg-type,return-value]
+    money.signed_number(pace, str, True)  # type: ignore[call-arg]
+
+
+def sentences(registrar: str) -> None:
+    assert_type(ui.ended(f"Renews through {registrar}"), str)
+
+    ui.ended(None)  # type: ignore[arg-type]
+    assert_type(validation.sentence_closes("src"), list[str])
 
 
 def the_demo(due: date, at: datetime) -> None:
@@ -95,9 +121,12 @@ def no_progress() -> dict[str, Any]:
 
 
 def work() -> None:
-    assert_type(jobs.start("example.import", "Import", importing), jobs.Job)
-    assert_type(jobs.reap(), int)
-    assert_type(jobs.reap("example.import"), int)
+    job = jobs.start("example.import", "Import", importing)
+    assert_type(job, jobs.Job)
+    assert_type(job.seen_state, str)
+    assert_type(job.seen_state_display, str)
+    assert_type(job.seen_error, str)
+    jobs.reap()  # type: ignore[attr-defined]
 
     jobs.start("example.import", "Import", no_progress)  # type: ignore[arg-type]
     jobs.start("example.import", "Import")  # type: ignore[call-arg]
@@ -138,9 +167,84 @@ def declared_words(spec: capabilities.CapabilitySpec) -> None:
     assert_type(spec.words(), str)
     assert_type(spec.words("all"), str)
     assert_type(spec.requested("example"), str)
+    # What asking for it wants done, read after "wants to".
+    capabilities.CapabilitySpec(
+        "example.keep",
+        "Keep a note.",
+        "local_write",
+        "example.write",
+        Noting,
+        noting,
+        "key",
+        wants="keep the note {target}",
+    )
+    assert_type(spec.wants, str)
+    assert_type(spec.wanted(), str)
+    assert_type(spec.wanted("on"), str)
 
     outbound.ask("example.lookup", label="Look")  # type: ignore[call-arg]
     spec.words(1)  # type: ignore[arg-type]
+
+
+class Note(models.Model):
+    about = references.ReferenceField(heading="Notes")
+    about_name = models.CharField(max_length=200)
+
+    @override
+    def __str__(self) -> str:
+        return self.about_name
+
+
+class Noting(capabilities.StrictCommand):
+    # A field says what it is, which records it names, or which choices it takes.
+    note: Annotated[str, capabilities.Describe("What to write down.")]
+    project: Annotated[str, capabilities.Names("example.projects"), capabilities.Describe("The project it is for.")]
+    owner: Annotated[str, capabilities.Names("example.people", key="email")]
+    tone: Annotated[str, capabilities.Choices((("plain", "Plain"), ("loud", "Loud")))]
+    about: Annotated[str, capabilities.Refers(Note, "about")]
+
+
+def noting(command: Noting, *, principal: capabilities.Principal) -> dict[str, Any]:
+    return {}
+
+
+def a_command_that_starts_somewhere() -> None:
+    # Where a person starts a command is its page's route, or the page of what it acts on.
+    started = capabilities.CapabilitySpec(
+        "example.note", "Write a note.", "local_write", "example.write", Noting, noting, reached_from="example:notes"
+    )
+    assert_type(started.reached_from, str)
+    assert_type(capabilities.ON_ITS_PAGE, str)
+    # A switch whose state no record holds declares where it stands.
+    capabilities.CapabilitySpec(
+        "example.quiet", "Quiet notes.", "local_write", "example.write", Noting, noting, state=lambda: False
+    )
+    capabilities.CapabilitySpec(
+        "example.pin",
+        "Pin a note.",
+        "local_write",
+        "example.write",
+        Noting,
+        noting,
+        reached_from=capabilities.ON_ITS_PAGE,
+    )
+    assert_type(capabilities.Names("example.projects").key, str)
+    assert_type(capabilities.Choices({"plain": "Plain"}.items()).options, tuple[tuple[str, str], ...])
+
+    capabilities.Describe()  # type: ignore[call-arg]
+    capabilities.Names(resource=1)  # type: ignore[arg-type]
+    capabilities.Choices(("plain", "loud"))  # type: ignore[arg-type]
+    assert_type(capabilities.Refers(Note, "about").field, str)
+    capabilities.Refers("example.note", "about")  # type: ignore[arg-type]
+    capabilities.CapabilitySpec(
+        "example.pin",
+        "Pin.",
+        "local_write",
+        "example.write",
+        Noting,
+        noting,
+        reached_from=None,  # type: ignore[arg-type]
+    )
 
 
 def a_page() -> None:
@@ -236,3 +340,43 @@ def the_deployment() -> None:
     assert_type(testing.plain("2 weeks"), str)
 
     testing.plain(2)  # type: ignore[arg-type]
+
+
+class Renamed(writes.ServiceCreateMixin):
+    """A write view rewords what it says by overriding the defaults it inherits."""
+
+    created_message = "{noun} {target} added."
+
+
+class Welcoming(writes.WriteMessages):
+    """A mixin that rewords a message for several views subclasses the root,
+    so it wins in whichever order a view writes its bases."""
+
+    created_message = "{noun} {target} is in."
+
+
+class WelcomedFirst(Welcoming, writes.ServiceCreateMixin):
+    pass
+
+
+class WelcomedLast(writes.ServiceCreateMixin, Welcoming):
+    pass
+
+
+class Miscounted(writes.WriteMessages):
+    created_message = 3  # type: ignore[assignment]
+
+
+class Unsaid(writes.ServiceDeleteMixin):
+    deleted_message = None  # type: ignore[assignment]
+
+
+def announcements() -> None:
+    assert_type(writes.ServiceWriteMixin.created_message, str)
+    assert_type(writes.ServiceWriteMixin.updated_message, str)
+    assert_type(writes.ServiceWriteMixin.deleted_message, str)
+    assert_type(writes.ServiceWriteMixin.identity_result_key, str)
+    assert_type(Renamed.created_message, str)
+    assert_type(writes.WriteMessages.created_message, str)
+    assert_type(WelcomedFirst.created_message, str)
+    assert_type(WelcomedLast.created_message, str)

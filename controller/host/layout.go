@@ -39,7 +39,8 @@ func StartPeriod(value string) (time.Duration, error) {
 const (
 	// WebUID and WebGID are the account the image runs HQ as. It owns the
 	// application environment and the doorbell directory.
-	WebUID, WebGID = 10001, 10001
+	WebUID = 10001
+	WebGID = 10001
 
 	// Container is the web container's name: the controller launcher and the
 	// scheduled jobs find HQ by it.
@@ -50,6 +51,8 @@ const (
 	SecretsUnit = "severino-hq-secrets.service"
 	// ControllerUnit runs one controller pass.
 	ControllerUnit = "severino-hq-controller.service"
+	// GlanceUnit runs one glance pass, beside a controller pass.
+	GlanceUnit = "severino-hq-glance.service"
 	// BackupUnit snapshots HQ's volumes.
 	BackupUnit = "severino-hq-backup.service"
 	// DeployFreeBytes is the free space on / a deploy needs before it pulls.
@@ -82,6 +85,11 @@ const (
 	// bridge volume. The web container is told it, and the controller mounts
 	// that volume, from this one declaration.
 	BridgeSocket = "/run/hq-bridge/bridge.sock"
+	// UnitSocketDir holds the socket root's `hq-host unit --serve` answers
+	// on (severino-hq-unit.socket). Only WebUID may enter it, and only the
+	// controller's container mounts it, at the same path.
+	UnitSocketDir = "/run/severino-hq-unit"
+	UnitSocket    = UnitSocketDir + "/unit.sock"
 	// ACMEDir is the controller's certificate state on the host.
 	ACMEDir = "/opt/apps/severino-hq/secrets/acme"
 

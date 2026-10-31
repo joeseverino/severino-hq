@@ -95,9 +95,10 @@ func requestFailure(err error) *ProviderError {
 func origin(u *url.URL) string {
 	port := u.Port()
 	if port == "" {
-		if u.Scheme == "https" {
+		switch u.Scheme {
+		case "https":
 			port = "443"
-		} else if u.Scheme == "http" {
+		case "http":
 			port = "80"
 		}
 	}

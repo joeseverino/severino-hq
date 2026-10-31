@@ -140,7 +140,7 @@ class ClassTimeTests(SimpleTestCase):
         return {name.rsplit(".", 1)[-1]: seconds for name, seconds in result.class_times.items()}
 
     def test_a_serial_run_times_each_class_with_its_set_up(self):
-        result = CompositionTextResult(io.StringIO(), True, 0)
+        result = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
         self.run_timed(result)
 
         self.assertEqual(self.times(result), {"Slow": 6, "Quick": 2})
@@ -149,13 +149,13 @@ class ClassTimeTests(SimpleTestCase):
         worker = CompositionRemoteResult()
         tests = self.run_timed(worker)
 
-        parent = CompositionTextResult(io.StringIO(), True, 0)
+        parent = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
         for event in pickle.loads(pickle.dumps(worker.events)):
             FileClonedParallelSuite.handle_event(None, parent, tests, event)
         self.assertEqual(self.times(parent), {"Slow": 6, "Quick": 2})
 
     def test_the_report_puts_the_slowest_first_beside_the_load(self):
-        result = CompositionTextResult(io.StringIO(), True, 0)
+        result = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
         result.class_times = {"example.Quick": 2.0, "example.Slow": 6.0}
         stream = io.StringIO()
         report_class_times(result, stream, (1.0, 2.0, 3.0))
@@ -190,13 +190,13 @@ class FailureRecordTests(SimpleTestCase):
     """Each failed test reaches the gate running the suite as the result saw
     it, whether it ran here or in a parallel worker."""
 
-    def run_failing(self, result, subtests=True):
+    def run_failing(self, result, *, subtests=True):
         tests = list(unittest.defaultTestLoader.loadTestsFromTestCase(_failing_class()))
         tests = [test for test in tests if subtests or test._testMethodName != "test_subtests"]
         unittest.TestSuite(tests).run(result)
         return tests
 
-    def assert_recorded(self, result, subtests=True):
+    def assert_recorded(self, result, *, subtests=True):
         failed = {each.test.rsplit(".", 1)[-1]: each for each in vars(result)["failed"].values()}
         self.assertEqual(set(failed), {"test_compares", "test_raises", *(["test_subtests"] if subtests else [])})
         self.assertEqual(failed["test_compares"].exception, "AssertionError: 'expected' != 'found'")
@@ -206,7 +206,7 @@ class FailureRecordTests(SimpleTestCase):
             self.assertEqual(failed["test_subtests"].exception, "AssertionError: 0 != -1")
 
     def test_a_serial_run_records_each_failed_test_once(self):
-        result = CompositionTextResult(io.StringIO(), True, 0)
+        result = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
         self.run_failing(result)
 
         self.assert_recorded(result)
@@ -217,7 +217,7 @@ class FailureRecordTests(SimpleTestCase):
         worker = CompositionRemoteResult()
         tests = self.run_failing(worker, subtests=False)
 
-        parent = CompositionTextResult(io.StringIO(), True, 0)
+        parent = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
         for event in pickle.loads(pickle.dumps(worker.events)):
             FileClonedParallelSuite.handle_event(None, parent, tests, event)
         self.assert_recorded(parent, subtests=False)

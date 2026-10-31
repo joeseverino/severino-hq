@@ -11,6 +11,7 @@ from django.views.generic import (
 )
 
 from hq.platform.application import related
+from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import document_link
 from hq.platform.application.expenses import costs_by_category
 from hq.platform.application.moments import when_day
@@ -130,7 +131,7 @@ class ExpenseDetailView(PageMixin, DetailView):
     def get_page_actions(self):
         pk = self.object.pk
         return (
-            PageAction("Edit", reverse("expenses:edit", args=[pk])),
+            PageAction(capability_words("expense.update"), reverse("expenses:edit", args=[pk])),
             PageAction("Delete", reverse("expenses:delete", args=[pk]), danger=True),
         )
 

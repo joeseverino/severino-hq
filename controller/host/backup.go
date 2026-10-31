@@ -130,7 +130,10 @@ func (m *Machine) snapshot(ctx context.Context, database, snapshot string) error
 	}
 	out, err := m.Command(ctx, "sqlite3", snapshot, "PRAGMA integrity_check;").Output()
 	if result := strings.TrimSpace(string(out)); err != nil || result != "ok" {
-		return fmt.Errorf("the snapshot failed its integrity check: %v %s", err, result)
+		if err != nil {
+			return fmt.Errorf("the snapshot failed its integrity check: %w %s", err, result)
+		}
+		return fmt.Errorf("the snapshot failed its integrity check: %s", result)
 	}
 	return nil
 }
@@ -313,7 +316,7 @@ func prune(dir string, retention time.Duration, now time.Time) error {
 	for _, entry := range entries {
 		name := entry.Name()
 		if !entry.Type().IsRegular() || !strings.HasPrefix(name, archivePrefix) ||
-			!(strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".tar.gz.age")) {
+			!strings.HasSuffix(name, ".tar.gz") && !strings.HasSuffix(name, ".tar.gz.age") {
 			continue
 		}
 		info, err := entry.Info()

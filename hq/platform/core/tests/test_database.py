@@ -63,7 +63,7 @@ class TurnsTests(SimpleTestCase):
 
     def statement(self, *, takes_lock=True, after=0.01) -> float:
         self.now += after
-        pause = self.turns.before(takes_lock)
+        pause = self.turns.before(takes_lock=takes_lock)
         self.now += pause
         self.turns.after()
         return pause

@@ -1,18 +1,9 @@
 """Count the rows each pending check constraint would refuse when it is added.
 
 Adding a check constraint rebuilds the table on SQLite, and the rebuild fails
-if one stored row breaks the rule. A migration may delete or rewrite those
-rows first, so a row is only a refusal if it is still there when the
-constraint is added.
-
-The database is copied through SQLite's backup API from a read-only handle,
-and the copy is migrated as ``migrate`` would migrate it: the same plan, every
-operation run in order. Just before each ``AddConstraint`` of a check, the rows
-its ``CHECK`` refuses are counted; a constraint with refused rows is not added
-to the copy, so the run goes on and counts the rest. The original file is never
-written, and the copy is deleted.
-
-Exit status 1 when a pending constraint would be refused by a row.
+if one stored row breaks the rule. A migration may delete or rewrite those rows
+first, so a copy is migrated as ``migrate`` would, counting just before each
+added check. Exit status 1 when a pending constraint would be refused by a row.
 """
 
 import sqlite3
@@ -73,8 +64,7 @@ def _check(app: str, migration: str, position: int, operation: AddConstraint, mo
         name=operation.constraint.name,
         table=model._meta.db_table,
         key=model._meta.pk.column,
-        # The SQL of the CHECK itself; Django has no public name for it.
-        condition=operation.constraint._get_check_sql(model, editor),
+        condition=operation.constraint._get_check_sql(model, editor),  # noqa: SLF001 - the CHECK's SQL, which Django has no public name for
     )
 
 
@@ -110,7 +100,8 @@ class Counted:
 
 class _CountFirst(AddConstraint):
     """An ``AddConstraint`` that counts the rows its check refuses at the point
-    in the plan where it runs, and adds the constraint only when there are none."""
+    in the plan where it runs, and adds the constraint only when there are none,
+    so the run goes on and counts the rest."""
 
     def __init__(self, operation: AddConstraint, migration: str, position: int, found: list[Counted]):
         super().__init__(operation.model_name, operation.constraint)
@@ -132,6 +123,8 @@ class _CountFirst(AddConstraint):
             super().database_forwards(app_label, schema_editor, from_state, to_state)
 
 
+# Through SQLite's backup API from a read-only handle, so the original file is
+# never written; the copy lives in a temporary folder and is deleted with it.
 def _copy(path: Path, to: Path) -> None:
     source = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
     target = sqlite3.connect(to)
@@ -178,7 +171,7 @@ def _migrate(found: list[Counted]) -> list[tuple[str, str]]:
         for index, operation in enumerate(migration.operations):
             if _adds_a_check(operation):
                 migration.operations[index] = _CountFirst(operation, migration.name, index + 1, found)
-    state = executor._create_project_state(with_applied_migrations=True)
+    state = executor._create_project_state(with_applied_migrations=True)  # noqa: SLF001 - migrate's own state, which Django has no public name for
     try:
         executor.migrate(targets, plan=plan, state=state)
     except Exception as failed:

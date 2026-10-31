@@ -13,7 +13,8 @@ from django.test import TestCase
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
 from hq.platform.application import pins
-from hq.platform.core.example_estate import FAVORITES, names, records, throwaway_media
+from hq.platform.core.example_estate import FAVORITES, names, records
+from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.management.commands.seed import records_held
 
 

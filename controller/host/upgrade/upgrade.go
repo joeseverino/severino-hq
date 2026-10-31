@@ -98,7 +98,7 @@ var patterns = map[string]*regexp.Regexp{
 	"from":      regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_./:@-]{0,254}$`),
 	"to":        regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_./:-]{0,200}@sha256:[0-9a-f]{64}$`),
 	"tag":       regexp.MustCompile(`^[A-Za-z0-9_.-]{1,128}$`),
-	"wait":      regexp.MustCompile(`^[0-9]{1,4}$`),
+	"wait":      regexp.MustCompile(`^\d{1,4}$`),
 	"name":      regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`),
 }
 
@@ -106,8 +106,8 @@ var (
 	absolute = regexp.MustCompile(`^/[A-Za-z0-9_./-]+$`)
 	project  = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 	seconds  = map[string]*regexp.Regexp{
-		"poll":   regexp.MustCompile(`^[0-9]{1,3}$`),
-		"settle": regexp.MustCompile(`^[0-9]{1,4}$`),
+		"poll":   regexp.MustCompile(`^\d{1,3}$`),
+		"settle": regexp.MustCompile(`^\d{1,4}$`),
 	}
 )
 
@@ -247,7 +247,7 @@ func refuse(out io.Writer, err error) int {
 func write(out io.Writer, value any) {
 	encoder := json.NewEncoder(out)
 	encoder.SetEscapeHTML(false)
-	encoder.Encode(value)
+	_ = encoder.Encode(value)
 }
 
 // Parse reads the arguments: each flag once with a value, nothing else.

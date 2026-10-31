@@ -22,6 +22,7 @@ from django.urls import reverse
 
 from hq.platform.core import example_estate
 from hq.platform.core.example_estate import names, records
+from hq.platform.core.example_estate.testing import throwaway_media
 
 from ..routes import routed
 
@@ -143,7 +144,7 @@ class RenderedPageTests(TestCase):
         cls.user = get_user_model().objects.create_superuser(
             "rendered-pages", "rendered@example.test", "unused-password"
         )
-        with example_estate.throwaway_media():
+        with throwaway_media():
             example_estate.seed()
 
     def setUp(self):

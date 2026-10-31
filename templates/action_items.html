@@ -27,10 +27,11 @@ The page is titled Needs you, so its card is titled by what it holds: the one
 area when there is one, else that it is a list of what to do.
 {% endcomment %}
 {% if action_groups %}
-<section class="card action-items-card" data-triage-routes data-dismiss="{% url 'action_items_set_aside' %}" data-restore="{% url 'action_items_bring_back' %}">
+{% url 'action_items_set_aside' as set_aside_url %}{% url 'action_items_bring_back' as bring_back_url %}
+{% card css="action-items-card" data_triage_routes=True data_dismiss=set_aside_url data_restore=bring_back_url %}
   {% section_head %}{% if action_groups|length == 1 %}{{ action_groups.0.label|breakable }}{% elif action_query or action_status or action_source or action_about %}Matches{% else %}To do{% endif %} <span class="count" data-queue-count>{{ action_item_total|breakable }}</span>{% aside %}{% post_button "Dismiss all" aside_all_url css="btn compact ghost" %}{% endsection_head %}
   {% include "partials/_queue_groups.html" with groups=action_groups prefix="queue" aside_url=aside_all_url titled=action_groups|length|add:"-1" %}
-</section>
+{% endcard %}
 {% elif action_query or action_status or action_source or action_about %}
   {% url 'action_items' as all_actions_url %}
   {% include "partials/_empty_state.html" with message="Nothing matches." action_url=all_actions_url action_label="Clear filters" only %}
@@ -44,16 +45,16 @@ nothing to resolve. Kept apart from what needs doing; dismissing one is the end
 of it unless it reports something else.
 {% endcomment %}
 {% if notice_groups %}
-  <section class="card action-items-card">
+  {% card css="action-items-card" %}
     {% section_head %}Notices <span class="count" data-queue-count>{{ notice_total|breakable }}</span>{% aside %}{% post_button "Dismiss all" notices_aside_url css="btn compact ghost" %}{% endsection_head %}
     {% include "partials/_queue_groups.html" with groups=notice_groups prefix="notice" aside_url=notices_aside_url %}
-  </section>
+  {% endcard %}
 {% endif %}
 
 {% if aside_groups %}
-  <details class="card section-fold action-items-aside">
+  {% card element="details" css="section-fold action-items-aside" %}
     <summary><h2>Dismissed <span class="count">{{ aside_total|breakable }}</span></h2></summary>
     {% include "partials/_queue_groups.html" with groups=aside_groups prefix="aside" %}
-  </details>
+  {% endcard %}
 {% endif %}
 {% endblock %}

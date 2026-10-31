@@ -36,7 +36,7 @@ IMAGE_BEHIND = "image-behind"
 IMAGE_UNTAGGED = "image-untagged"
 
 
-def add(nodes, edges, resources, machine: Callable[[Any], str]) -> None:
+def add(nodes, machine: Callable[[Any], str]) -> None:
     """Container facts on machines."""
 
     _image_facts(nodes, machine)

@@ -31,14 +31,9 @@ CONTAINER_STACK_KIND = "portainer.stack"
 class PortainerContainerSpec(ProviderModel):
     """One container HQ is responsible for keeping up, not for defining.
 
-    Deliberately identity and nothing else. A container's definition lives in
-    whatever compose file created it, which HQ does not see and must not
-    pretend to own: declaring one here says "this is mine to watch and to
-    cycle", and reconciliation is locked because there is nothing to converge.
-
-    A container Portainer did not create cannot be declared as a stack, but
-    every container can be started, stopped and restarted, because those are
-    Docker's verbs rather than Portainer's.
+    Identity and nothing else: its definition lives in whatever compose file
+    created it, which HQ does not see, so declaring one says "this is mine to
+    watch and to cycle", and reconciliation is locked with nothing to converge.
     """
 
     connection_ref: str = Field(
@@ -335,6 +330,8 @@ CONTAINER = ProviderSpec(
     PortainerContainerSpec,
     actions={
         "reconcile": locked("Saved in HQ. Its compose file does not change."),
+        # Any container, even one Portainer did not create and so cannot be
+        # declared as a stack: these are Docker's verbs, not Portainer's.
         "restart": applies(),
         "start": applies(),
         "stop": applies(),

@@ -5,7 +5,6 @@ from decimal import Decimal
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase
@@ -15,6 +14,7 @@ from hq.domains.assets.models import Asset
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 from hq.domains.receipts.validation import MAX_RECEIPT_BYTES, validate_receipt_file
+from hq.platform.application.record_errors import InputError
 from hq.platform.application.tests.markup import links, text
 
 
@@ -93,10 +93,10 @@ class ReceiptFileRuleTests(SimpleTestCase):
         upload = SimpleUploadedFile("big.pdf", b"", content_type="application/pdf")
         upload.size = MAX_RECEIPT_BYTES + 1024 * 1024
 
-        with self.assertRaises(ValidationError) as refused:
+        with self.assertRaises(InputError) as refused:
             validate_receipt_file(upload)
 
-        self.assertEqual(refused.exception.messages, ["This file is 16 MB. The limit is 15 MB."])
+        self.assertEqual(refused.exception.reason, "This file is 16 MB. The limit is 15 MB.")
 
 
 class ReceiptEditTests(TestCase):

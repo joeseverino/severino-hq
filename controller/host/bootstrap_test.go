@@ -20,7 +20,7 @@ const hostJSON = `{
 }`
 
 func TestTheHostConfigurationIsReadStrictly(t *testing.T) {
-	if _, err := ReadHostConfig([]byte(hostJSON)); err != nil {
+	if _, err := ReadConfig([]byte(hostJSON)); err != nil {
 		t.Fatalf("the example was refused: %v", err)
 	}
 	for name, change := range map[string][2]string{
@@ -36,7 +36,7 @@ func TestTheHostConfigurationIsReadStrictly(t *testing.T) {
 		"an account with spaces": {`"deployer"`, `"de ployer"`},
 		"a credential with a /":  {`op_connect_example`, `op/connect`},
 	} {
-		if _, err := ReadHostConfig([]byte(strings.Replace(hostJSON, change[0], change[1], 1))); err == nil {
+		if _, err := ReadConfig([]byte(strings.Replace(hostJSON, change[0], change[1], 1))); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
 	}
@@ -44,10 +44,14 @@ func TestTheHostConfigurationIsReadStrictly(t *testing.T) {
 
 func TestBootstrapWritesWhatOnlyTheHostKnows(t *testing.T) {
 	f := newFakeHost(t)
-	config, _ := ReadHostConfig([]byte(hostJSON))
+	config, _ := ReadConfig([]byte(hostJSON))
 	stale := filepath.Join(f.machine.Systemd, SecretsUnit+".d", "20-credential-mount.conf")
-	os.MkdirAll(filepath.Dir(stale), 0o755)
-	os.WriteFile(stale, []byte("[Service]\nRuntimeDirectory=severino-hq-op\n"), 0o644)
+	if err := os.MkdirAll(filepath.Dir(stale), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stale, []byte("[Service]\nRuntimeDirectory=severino-hq-op\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := f.machine.Bootstrap(context.Background(), config); err != nil {
 		t.Fatal(err)
@@ -90,7 +94,7 @@ func TestBootstrapWritesWhatOnlyTheHostKnows(t *testing.T) {
 func TestARuleVisudoRefusesIsNotInstalled(t *testing.T) {
 	f := newFakeHost(t)
 	f.fail = []string{"visudo"}
-	config, _ := ReadHostConfig([]byte(hostJSON))
+	config, _ := ReadConfig([]byte(hostJSON))
 
 	if err := f.machine.Bootstrap(context.Background(), config); err == nil {
 		t.Fatal("a refused rule was installed")
@@ -110,7 +114,7 @@ func TestTheVerifierIsThePinnedDigestOrNothing(t *testing.T) {
 			w.WriteHeader(http.StatusBadGateway)
 			return
 		}
-		w.Write(served)
+		_, _ = w.Write(served)
 	}))
 	defer server.Close()
 	target := filepath.Join(t.TempDir(), "verifier", "cosign")

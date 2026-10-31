@@ -1,15 +1,10 @@
 """Everything HQ derives about its connections, for every adapter.
 
 The connections page, the HTTP API, MCP, the CLI and the SDK read this one
-projection: each connection with what its credential can see, how fresh each
-reading is, what the provider refused and the credential fix, its last
-activity and whether a read was asked for; the summary counts; the security
-posture; and HQ's own request path. None of them derives a fact the others
-cannot return.
-
-The posture has two halves. The estate half is the same for every caller. The
-request half (how the request being answered reached HQ) exists only where
-there is a request, and is returned under ``request``.
+projection: each connection with what its credential can see and how fresh,
+what the provider refused and the credential fix, its last activity and any
+read asked for; the summary counts; the security posture; and HQ's own request
+path. None of them derives a fact the others cannot return.
 """
 
 from dataclasses import asdict, dataclass
@@ -54,7 +49,7 @@ from .path_model import ServicePath
 from .paths import hq_path
 from .posture import Inputs, Posture, posture
 from .problems import problem_counts
-from .projection import projection_scope, read_once
+from .projection import complete, projection_scope, read_once
 from .record_errors import RecordNotFound
 from .request_path import joined
 from .security import Principal
@@ -339,8 +334,7 @@ class ConnectionsContext:
         estate = self.estate_posture
         items = [row.as_dict() for row in self.rows]
         return {
-            "items": items,
-            "count": len(items),
+            **complete(items),
             "summary": {
                 "connections": estate.connection_count,
                 "attention": estate.attention_count,
@@ -389,6 +383,9 @@ class ConnectionsContext:
             "hq_path": serialize_path(self.hq_path) if self.hq_path else None,
             "read_all": asdict(self.read_all) if self.read_all else None,
             "reading_everything_since": _moment(self.reading_everything_since),
+            # The posture's request half (how the request being answered
+            # reached HQ) exists only where there is a request; the estate
+            # half above is the same for every caller.
             "request": self._request() if self.answers_request else None,
         }
 

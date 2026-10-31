@@ -1,13 +1,9 @@
 """References: how a record names a thing in HQ, and how a page lists what names it.
 
-A model keeps a reference in a ``ReferenceField`` beside a ``<name>_name``
-column, and says its own rows can be referred to with ``referable =
-Referable(...)``. Both are found on the installed models, so nothing is
-registered. A template shows one with ``{% reference row "field" as link %}``
-and ``{% entity link %}``, and what names a row with ``{% referenced_by row %}``.
-
-A sync that copies records in stores what ``as_stored`` answers, and a domain
-reports its own rows whose reference names nothing with ``dangling``.
+A model keeps one in a ``ReferenceField`` beside a ``<name>_name`` column, and
+says its rows may be named with ``referable = Referable(...)``; both are found
+on the installed models, so nothing is registered. The fields, tags and
+helpers: docs/Plugins.md, References.
 """
 
 from hq.platform.application.references import (

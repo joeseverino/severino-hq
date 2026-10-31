@@ -1,14 +1,14 @@
 """Infrastructure desired state and policy-gated operation requests."""
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
 
 from django.conf import settings
 from django.db import transaction
 lazy from django.utils.text import slugify
 
 from hq.domains.control_plane.desired_state import advance_dependents, desired_fingerprint
-from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.caddy import CADDY_ROUTE_KIND
 from hq.domains.control_plane.provider_adapters.declarations import (
     DELIVERY_TARGET_KIND,
@@ -17,6 +17,7 @@ from hq.domains.control_plane.provider_adapters.declarations import (
 from hq.domains.control_plane.providers import (
     PROVIDERS,
     enabled_controller_actions,
+    registry_label,
     resolve_provider_spec,
     shown_spec,
     spec_withheld,
@@ -27,24 +28,28 @@ lazy from hq.domains.control_plane.provider_spec import ProviderResolutionContex
 
 from .adoption import OBSERVES_ONLY, observes_only
 from .approvals import consent_gap
-from .projection import page_size, read_once
-from .record_errors import RecordConflict, RecordNotFound
-from .security import Capability, Principal
+from .command_fields import Choices, Describe
+from .projection import matched, page_size, read_once
+from .record_errors import PolicyError
+from .record_saves import Held, held
+from .security import Principal
 lazy from .delivery_progress import deploying_label
 lazy from .locate import names_by_connection
 lazy from .resource_capabilities import kind_converges
-
-
-class PolicyError(ValueError):
-    """An operation is valid in shape but disallowed by current policy."""
+lazy from .resource_operations import queue_reconcile
 
 
 @dataclass(frozen=True, slots=True)
 class ManagedResourceCommand:
-    key: str
-    kind: str
-    spec: dict[str, Any]
-    enabled: bool = True
+    key: Annotated[str, Describe("The key the record is stored under.")]
+    kind: Annotated[
+        str,
+        # The registry's kinds, the only ones validate_spec accepts.
+        Choices((kind, registry_label(kind)) for kind in PROVIDERS),
+        Describe("What type of record it is."),
+    ]
+    spec: Annotated[dict[str, Any], Describe("What HQ expects of it, in the shape its type takes.")]
+    enabled: Annotated[bool, Describe("Whether HQ keeps the live record as it expects.")] = True
 
 
 def list_managed_resources(*, limit: int = 50, kind: str | None = None, kinds: str | None = None) -> dict[str, Any]:
@@ -57,8 +62,9 @@ def list_managed_resources(*, limit: int = 50, kind: str | None = None, kinds: s
         resources = resources.filter(kind=kind)
     elif kinds:
         resources = resources.filter(kind__in=kinds.split(","))
-    items = [serialize_resource(resource) for resource in resources[: page_size(limit)]]
-    return {"items": items, "count": len(items)}
+    page = list(resources[: page_size(limit)])
+    items = [serialize_resource(resource) for resource in page]
+    return {"items": items, "count": len(items), "total": matched(resources, page, limit)}
 
 
 def enabled_resources() -> tuple[ManagedResource, ...]:
@@ -135,16 +141,15 @@ def declared_machines() -> tuple[dict[str, Any], ...]:
 def resolved_spec(resource: ManagedResource, targets: tuple[dict[str, Any], ...] | None = None) -> dict[str, Any]:
     """The spec as a controller would see it, falling back to the authored one.
 
-    A certificate names where it installs; the settings each of those places
-    needs live on the place. Where resolution cannot happen (a target that no
-    longer exists) the authored spec stands in and the certificate covers
-    nothing. That surfaces as an uncovered name, which is exactly true: HQ
-    cannot demonstrate that anything covers it.
-
     The only implementation: a projection that resolved a spec differently from
     the one beside it would disagree about which names a certificate covers.
     """
 
+    # A certificate names where it installs; the settings each of those places
+    # needs live on the place. Where resolution cannot happen (a target that no
+    # longer exists) the authored spec stands in and the certificate covers
+    # nothing, which surfaces as an uncovered name: exactly true, since HQ
+    # cannot demonstrate that anything covers it.
     try:
         return resolve_provider_spec(
             resource.kind,
@@ -165,12 +170,11 @@ def suggest_key(kind: str, spec: dict[str, Any]) -> str:
 
     The create form, adoption and onboarding all call this, so they suggest the
     same key even for a provider with several records per hostname.
-
-    The provider says what to call its own records. The hostname and facet are
-    the fallback, which is what every provider that has exactly one record per
-    name would have said anyway.
     """
 
+    # The provider says what to call its own records. The hostname and facet
+    # are the fallback, which is what every provider that has exactly one
+    # record per name would have said anyway.
     provider = PROVIDERS[kind]
     if provider.key_hint is not None:
         hint = provider.key_hint(spec)
@@ -257,12 +261,10 @@ def resource_health(resource: ManagedResource) -> dict[str, str]:
     ):
         if condition_type in active:
             condition = active[condition_type]
-            if state == "degraded":
-                label = deploying_label(resource)
-                state, label = ("deploying", label) if label else (state, "Has a problem")
+            deploying = deploying_label(resource) if state == "degraded" else ""
             return {
-                "state": state,
-                "label": label,
+                "state": "deploying" if deploying else state,
+                "label": deploying or label,
                 "reason": condition.get("reason", ""),
                 "message": condition.get("message", ""),
             }
@@ -330,17 +332,12 @@ def controller_contract(resource: ManagedResource) -> dict[str, Any]:
 def _can_change_the_public_internet(kind: str) -> bool:
     """Whether declaring this could actually alter something publicly visible.
 
-    The switch this guards exists because public DNS is the one surface where a
-    mistake is immediately everybody's problem. It is not a reason to refuse
-    every resource that happens to be publicly visible: a domain declaration
-    records which zones HQ is responsible for and has no reconcile a controller
-    could run: gating it would stop the operator saying what HQ owns while
-    preventing no change to anything.
-
-    So the question is not "is this public" but "could the controller act on
-    it". A provider whose every action is locked cannot, by construction.
+    The public-DNS switch guards only what the controller could act on: a
+    domain declaration has no reconcile, and gating it would stop the operator
+    saying what HQ owns while preventing no change to anything.
     """
 
+    # A provider whose every action is locked cannot act, by construction.
     return any(action_kind == kind for action_kind, _ in enabled_controller_actions())
 
 
@@ -355,6 +352,42 @@ def _refuse_withheld(kind: str, current_key: str | None) -> None:
         raise PolicyError("This record is changed from its own page, not here.")
 
 
+# What a write says when the declaration it changes is gone, or changed since
+# it was read.
+MANAGED_RECORD = Held(missing="That record was not found.", stale="That record changed after it was read.")
+
+
+def _refuse_authored(command: ManagedResourceCommand, validated_spec: dict[str, Any], *, principal: Principal) -> None:
+    """Refuse an authored or edited declaration HQ may not act on.
+
+    An adopted spec is never asked: it asserts exactly what the provider
+    already holds, so nothing anybody would agree to, publish or manage has
+    changed.
+    """
+
+    # A kind that needs a person's agreement does not get written by a caller
+    # that has not got one. The capability boundary has already held such a
+    # request and answered the caller properly; this is the floor under that, so
+    # a path added later cannot write one of these by not going through it.
+    gap = consent_gap(command.kind, principal=principal)
+    if gap:
+        raise PolicyError(gap)
+    if not command.enabled:
+        return
+    if (
+        PROVIDERS[command.kind].public_effect
+        and _can_change_the_public_internet(command.kind)
+        and not settings.SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS
+    ):
+        raise PolicyError(
+            "Public DNS changes are off in HQ's settings. Turn them on there "
+            "to allow them, or save this record switched off."
+        )
+    # A declaration HQ would act on needs a connection that manages.
+    if observes_only(command.kind, validated_spec):
+        raise PolicyError(OBSERVES_ONLY)
+
+
 @transaction.atomic
 def save_managed_resource(
     command: ManagedResourceCommand,
@@ -364,60 +397,28 @@ def save_managed_resource(
     expected_updated_at: str | None = None,
     copied_from_live: bool = False,
 ) -> dict[str, Any]:
-    """Write one declaration.
+    """Write one declaration, for a caller the capability runner or HQ itself authorized.
 
     ``copied_from_live`` says the spec was read from the provider moments ago
-    rather than authored. It exempts the write from the public-DNS switch
-    below, and only that: an adopted record asserts exactly what the provider
-    already holds, so reconciling it changes nothing. The switch exists to stop
-    HQ changing public DNS; refusing to *write down* a record that is already
-    published would stop nothing and leave every public record unadopted.
+    rather than authored, which exempts it from ``_refuse_authored``: refusing
+    to *write down* a record that is already published would stop nothing and
+    leave every public record unadopted.
     """
 
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
     _refuse_withheld(command.kind, current_key)
     validated_spec = validate_spec(command.kind, command.spec)
-    # A kind that needs a person's agreement does not get written by a caller
-    # that has not got one. The capability boundary has already held such a
-    # request and answered the caller properly; this is the floor under that, so
-    # a path added later cannot write one of these by not going through it.
-    # Exempted for an adopted spec for the same reason the public-DNS switch
-    # below is: it asserts exactly what the provider already holds, so nothing
-    # anybody would have to agree to has changed.
-    gap = "" if copied_from_live else consent_gap(command.kind, principal=principal)
-    if gap:
-        raise PolicyError(gap)
+    if not copied_from_live:
+        _refuse_authored(command, validated_spec, principal=principal)
     provider = PROVIDERS[command.kind]
-    if (
-        command.enabled
-        and not copied_from_live
-        and provider.public_effect
-        and _can_change_the_public_internet(command.kind)
-        and not settings.SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS
-    ):
-        raise PolicyError(
-            "Public DNS changes are off in HQ's settings. Turn them on there "
-            "to allow them, or save this record switched off."
-        )
-    # An authored or edited declaration is one HQ would act on; its connection
-    # must manage. An adopted spec restates what the provider holds.
-    if command.enabled and not copied_from_live and observes_only(command.kind, validated_spec):
-        raise PolicyError(OBSERVES_ONLY)
 
     operation = "infrastructure.resource.create" if current_key is None else "infrastructure.resource.update"
     with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
-        if current_key is None:
-            resource = ManagedResource()
-            created = True
-        else:
-            try:
-                resource = ManagedResource.objects.select_for_update().get(key=current_key)
-            except ManagedResource.DoesNotExist as exc:
-                raise RecordNotFound("That record was not found.") from exc
-            if expected_updated_at and resource.updated_at.isoformat() != expected_updated_at:
-                raise RecordConflict("That record changed after it was read.")
-            created = False
-
+        created = current_key is None
+        resource = (
+            ManagedResource()
+            if created
+            else held(ManagedResource, MANAGED_RECORD, {"key": current_key}, expected_updated_at)
+        )
         changed = (
             created
             or resource.key != command.key
@@ -435,7 +436,7 @@ def save_managed_resource(
         resource.desired_fingerprint = desired_fingerprint(
             resource.kind,
             resource.spec,
-            resource.enabled,
+            enabled=resource.enabled,
             targets=delivery_targets(),
             resource_key=resource.key,
         )
@@ -446,12 +447,28 @@ def save_managed_resource(
         # A target says how a place takes a certificate. Editing one changes
         # what every certificate installed there resolves to, so their desired
         # state is recomputed here rather than waiting for each to be saved.
-        provider = PROVIDERS.get(resource.kind)
-        if changed and provider is not None and provider.resolution_input:
+        if changed and provider.resolution_input:
             advance_dependents(delivery_targets())
+        applying = _apply_saved(resource, principal=principal) if changed and not copied_from_live else None
 
     return {
         "ok": True,
         "created": created,
         "resource": serialize_resource(resource),
+        "applying": applying,
     }
+
+
+def _apply_saved(resource: ManagedResource, *, principal: Principal) -> dict[str, Any] | None:
+    """Queue the reconcile that applies a saved declaration, as the operation queued.
+
+    Only for a kind the controller applies on its own, which it would queue at
+    its next pass anyway; queued with the write, the doorbell rings and the
+    change is applied now rather than at the controller's floor. A kind whose
+    reconcile is asked for by hand stays that way.
+    """
+
+    automatic = enabled_controller_actions(automatic_only=True)
+    if not resource.enabled or (resource.kind, OperationRequest.Action.RECONCILE) not in automatic:
+        return None
+    return queue_reconcile(resource, principal=principal, reason="HQ's copy of it changed.")["operation"]

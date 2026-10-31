@@ -1,4 +1,4 @@
-"""Every task of this checkout as mise reads it, one list: mise.toml's and those under mise-tasks/."""
+"""Every task of this checkout as mise reads it, one list: mise.toml's and those under mise-tasks/, and the files each runs."""
 
 import functools
 import json
@@ -43,3 +43,35 @@ def body(task: dict[str, Any]) -> str:
         return scripts
     declared = tomllib.loads(Path(task["source"]).read_text())[task["name"]].get("vars", {})
     return _VAR.sub(lambda var: declared[var[1]], scripts)
+
+
+def runs(task: dict[str, Any]) -> list[Path]:
+    """The files of this checkout a task's run names: a script by its path, or
+    a module the dotted way (``python -m a.b``, ``manage.py test a.b.Case``).
+
+    A file task is its own script, so it names none."""
+
+    if task["file"]:
+        return []
+    run = body(task)
+    scripts = [ROOT / path for path in re.findall(r"[\w/.-]+\.(?:sh|py)\b", run) if (ROOT / path).is_file()]
+    for dotted in re.findall(r"\b[a-z_]+(?:\.\w+)+", run):
+        parts = dotted.split(".")
+        found = next(
+            (
+                ROOT.joinpath(*parts[:end]).with_suffix(".py")
+                for end in range(len(parts), 0, -1)
+                if ROOT.joinpath(*parts[:end]).with_suffix(".py").is_file()
+            ),
+            None,
+        )
+        if found and found not in scripts:
+            scripts.append(found)
+    return scripts
+
+
+@functools.cache
+def run_files() -> frozenset[str]:
+    """Every file of this checkout a task's run names, from its root."""
+
+    return frozenset(path.relative_to(ROOT).as_posix() for task in mise_tasks().values() for path in runs(task))

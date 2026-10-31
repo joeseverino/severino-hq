@@ -25,10 +25,16 @@ from hq.platform.application.topology import topology as application_topology
 from hq.platform.mcp.identity import current_principal
 
 
-def describe_capabilities() -> dict[str, Any]:
-    """Describe every JSON-executable HQ capability and its canonical schema."""
+def describe_capabilities(name: str = "", resource: str = "") -> dict[str, Any]:
+    """Describe JSON-executable HQ capabilities and their canonical schemas.
 
-    return describe_application_capabilities()
+    The whole catalog is large: narrow it. ``name`` is a capability name or a
+    prefix of whole dotted segments (``infrastructure`` returns every
+    ``infrastructure.*``); ``resource`` keeps the capabilities that act on that
+    resource, as `describe_resources` names it.
+    """
+
+    return describe_application_capabilities(principal=current_principal(), name=name, resource=resource)
 
 
 def execute_capability(
@@ -120,6 +126,8 @@ def list_resource(name: str, filters: dict[str, Any] | None = None, fields: list
 
     ``fields`` is a field mask read in each item: ``name`` keeps that whole value and
     ``runs.status`` keeps only ``status`` inside it, in every element of a list.
+    A page is bounded by ``limit``: ``truncated`` says more matched than it holds,
+    ``total`` how many where HQ counts them, and ``next`` how to ask for the rest.
     """
 
     return list_application_resource(name, filters, principal=current_principal(), strict=True, fields=fields)
@@ -149,7 +157,7 @@ def audit_registry() -> dict[str, Any]:
     return audit_application_registry()
 
 
-def export_year_summary(year: int, format: str = "md") -> dict[str, Any]:
+def export_year_summary(year: int, format: str = "md") -> dict[str, Any]:  # noqa: A002 - the MCP tool's parameter, by name
     """Export one safe year summary as Markdown or JSON."""
 
     return export_application_year_summary(year, format, principal=current_principal())

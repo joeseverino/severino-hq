@@ -39,7 +39,7 @@ A year with no expenses is said by the count above; its breakdowns do not draw.
     <h2>Largest expenses, {{ year|breakable }}</h2>
     <ul class="list-rows">
       {% for e in largest_expenses %}
-        <li><span class="row-main">{% entity "expense"|entity_of:e.pk label=e.label %}</span><span class="row-meta">{{ e.date|when }} · {{ e.get_category_display|breakable }} · <strong>{{ e.total_cost|money }}</strong></span></li>
+        <li><span class="row-main">{% entity "expense"|entity_of:e.pk label=e.label %}</span><span class="row-meta">{{ e.date|when }}{% dot %}{{ e.get_category_display|breakable }}{% dot %}<strong>{{ e.total_cost|money }}</strong></span></li>
       {% endfor %}
     </ul>
   </section>
@@ -57,7 +57,7 @@ mostly empty card. A reading with nothing in it is not drawn.
     <h2>By status</h2>
     <ul class="list-rows">
       {% for group in status_groups %}
-        <li><span class="row-main"><strong>{{ group.label|breakable }}</strong></span><span class="row-meta">{% for status in group.counts %}<a href="{{ status.url }}">{{ status.label|breakable }} {{ status.count|breakable }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</span></li>
+        <li><span class="row-main"><strong>{{ group.label|breakable }}</strong></span><span class="row-meta">{% for status in group.counts %}<a href="{{ status.url }}">{{ status.label|breakable }} {{ status.count|breakable }}</a>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</span></li>
       {% endfor %}
     </ul>
   </section>
@@ -76,7 +76,7 @@ mostly empty card. A reading with nothing in it is not drawn.
 
   {% if docs_needing_review %}
   <section>
-    {% section_head %}Documents due for review{% aside %}<a class="subtle-link" href="{{ docs_needing_review_url }}">All &rarr;</a>{% endsection_head %}
+    {% section_head %}Documents due for review{% aside %}<a class="subtle-link" href="{{ docs_needing_review_url }}">All{% arrow %}</a>{% endsection_head %}
     <ul class="list-rows">
       {% for link, reviewed in docs_needing_review %}
         <li><span class="row-main">{% entity link %}</span><span class="row-meta">{% if reviewed %}last reviewed {{ reviewed|when:"day" }}{% else %}never reviewed{% endif %}</span></li>
@@ -91,7 +91,7 @@ mostly empty card. A reading with nothing in it is not drawn.
 Each export once, by what it holds, its files beside it: a list on a card,
 not a wall of buttons.
 {% endcomment %}
-<section class="card" aria-labelledby="exports-heading">
+{% card heading="exports-heading" %}
   {% section_head id="exports-heading" %}Exports{% aside %}<span class="count">Without secrets, sensitive documents' text or receipt files</span>{% endsection_head %}
   <dl class="kv">
     <dt>Expenses</dt><dd class="dot-list"><span><a href="{% url 'reports:expenses_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></span><span><a href="{% url 'reports:expenses_csv' %}">All years CSV</a></span></dd>
@@ -101,5 +101,5 @@ not a wall of buttons.
     <dt>Projects</dt><dd><span><a href="{% url 'reports:projects_csv' %}">CSV</a></span></dd>
     <dt>Documents</dt><dd><span><a href="{% url 'reports:documentation_csv' %}">CSV</a></span></dd>
   </dl>
-</section>
+{% endcard %}
 {% endblock %}

@@ -1,18 +1,10 @@
 """What a page may print: text, markup or a number.
 
 Django prints a value with ``str()``, so a value its builder never put in words
-reaches the page as Python spells it. What prints: markup (``SafeData``, or
-anything with ``__html__``: a form field, an error list), text, a lazy
-translation, a number that is not a flag (a str or int enum member is one of
-these), and a UUID or a path, each of which has one written form. Everything
-else is refused: a flag, None, a date or a length of time, a mapping, a
-sequence, bytes, a plain enum member, a model instance, any other object. Its
-builder says it in words (``moments.when``, ``ui.MISSING``, a count, a name).
-
-Where ``SEVERINO_STRICT_PRINT`` holds (under test and with DEBUG) a refusal
-raises ``Unprintable``. Elsewhere it is logged, naming the type and the place,
-never the value, and the mark for a missing value prints instead, so one
-forgotten value never takes a page down.
+reaches the page as Python spells it. Markup, text, a number that is not a flag,
+a UUID and a path print; anything else is refused, and its builder says it in
+words (``moments.when``, ``ui.MISSING``, a count, a name). How a refusal is
+answered in each setting: docs/Plugins.md#what-a-template-prints.
 """
 
 import logging
@@ -42,6 +34,7 @@ def refusal(value: object) -> str | None:
         return None
     if isinstance(value, bool):
         return "a flag"
+    # Each has one written form; a str or int enum member is one of these.
     if isinstance(value, (Number, UUID, PurePath)):
         return None
     if value is None:

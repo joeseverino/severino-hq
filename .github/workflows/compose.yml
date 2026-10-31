@@ -84,6 +84,109 @@ env:
   WITHHELD_DIR: /tmp/severino-hq-withheld
 
 jobs:
+  # The checks an extension passes before admission (plugin-checks.yml), run
+  # with this pull request's host. Build HQ reuses wheels admitted against
+  # main, so only this job sees a host change that breaks an extension before
+  # it merges, and the composition fails with it. A job of its own: it needs
+  # no host image, so it runs beside the composition rather than ahead of its
+  # suite, and the extension code it runs shares no job with Build HQ's
+  # registry credential and signing identity.
+  extensions:
+    name: Check extensions
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out host
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the toolchain pins
+        id: pins
+        run: echo "mise=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
+
+      - name: Read the composition set
+        # A secret, passed through the environment as Build HQ reads it.
+        env:
+          COMPOSITION_EXTENSIONS: ${{ secrets.COMPOSITION_EXTENSIONS }}
+        run: python3 -m tools.pipeline.composition_set write composition-set.json
+
+      - name: Mask the extension names for the rest of the job
+        run: python3 -m tools.pipeline.composition_set mask composition-set.json
+
+      # HQ's app, asked to read the extensions' code and nothing else.
+      - name: Mint a token that can only read the extensions
+        id: reader
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HQ_APP_KEY }}
+          owner: ${{ github.repository_owner }} # zizmor: ignore[github-app] scoped by the installation, so no private repository name reaches the public log
+          permission-contents: read
+
+      - name: Find coordinated extension branches
+        env:
+          GH_TOKEN: ${{ steps.reader.outputs.token }}
+          BRANCH: ${{ github.head_ref }}
+        run: tools/pipeline/coordinated-branches.sh composition-set.json "$BRANCH" coordinated.txt
+
+      - name: Check out each extension as this pull request meets it
+        # Its coordinated branch when one was found above, else its default
+        # branch: what each will be checked and admitted with once this
+        # merges. Without .git, so no copy carries the reader token.
+        env:
+          GH_TOKEN: ${{ steps.reader.outputs.token }}
+        run: tools/pipeline/extension-branches.sh checkout composition-set.json coordinated.txt
+
+      - name: Build the extension installer
+        # The host's Python ABI and uv, holding none of this job's
+        # credentials: where extension code is checked.
+        run: |
+          docker build -f composition/Dockerfile --target installer-base \
+            -t "severino-hq-installer:$GITHUB_SHA" .
+
+      - name: Check each extension against this host
+        run: tools/pipeline/check-extensions.sh composition-set.json "severino-hq-installer:$GITHUB_SHA"
+
+      - name: Install the pinned age
+        if: failure()
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          version: ${{ steps.pins.outputs.mise }}
+          install_args: age
+          cache: false
+      - name: Seal the withheld output
+        id: seal
+        if: failure()
+        run: |
+          set -euo pipefail
+          tools/pipeline/seal-failure-logs.sh "$WITHHELD_DIR" failure-logs.tar.age
+          if [ -f failure-logs.tar.age ]; then echo "sealed=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Upload the sealed output
+        # Named apart from Build HQ's, since both can fail in one run;
+        # `mise run failure-logs` opens every failure-logs* artifact.
+        if: failure() && steps.seal.outputs.sealed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: failure-logs-extensions
+          path: failure-logs.tar.age
+          retention-days: 14
+
+      - name: Say where the reason is
+        if: failure() && steps.seal.outputs.sealed == 'true'
+        run: |
+          {
+            echo "### An extension fails this host"
+            echo
+            echo "Withheld output, for the operator: \`mise run failure-logs ${GITHUB_RUN_ID}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   compose:
     name: Build HQ
     # A fork's pull request is not composed: reading the extensions' admission
@@ -139,7 +242,7 @@ jobs:
 
       - name: Authenticate to GHCR
         # Once, for every registry read and the push at the end.
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -160,7 +263,7 @@ jobs:
 
       # Installed once for the whole job: the host image is verified with it
       # below, every extension admission is verified with it before install,
-      # and the published composition is signed with it at the end.
+      # and the published composition is signed and attested with it at the end.
       - name: Install Cosign
         uses: ./.github/actions/cosign
 
@@ -185,7 +288,7 @@ jobs:
         with:
           client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
           private-key: ${{ secrets.HQ_APP_KEY }}
-          owner: ${{ github.repository_owner }}
+          owner: ${{ github.repository_owner }} # zizmor: ignore[github-app] scoped by the installation (see Build HQ's reader)
           permission-actions: read
           permission-contents: read
 
@@ -221,29 +324,20 @@ jobs:
         run: tools/pipeline/coordinated-branches.sh composition-set.json "$BRANCH" coordinated.txt
 
       - name: Check out each extension as this pull request meets it
-        # Its coordinated branch when one was found above, else its default
-        # branch: what each will be checked and admitted with once this
-        # merges. Without .git, so no copy carries the reader token.
-        if: github.event_name == 'pull_request'
+        # For the coordinated branches built below. Without .git, so no copy
+        # carries the reader token.
+        if: steps.coordinated.outputs.found == 'true'
         env:
           GH_TOKEN: ${{ steps.reader.outputs.token }}
         run: tools/pipeline/extension-branches.sh checkout composition-set.json coordinated.txt
 
       - name: Build the extension installer
         # The host's Python ABI and uv, holding none of this job's
-        # credentials: where extension code is checked and built below.
-        if: github.event_name == 'pull_request'
+        # credentials: where a coordinated branch is built below.
+        if: steps.coordinated.outputs.found == 'true'
         run: |
           docker build -f composition/Dockerfile --target installer-base \
             -t "severino-hq-installer:$GITHUB_SHA" .
-
-      - name: Check each extension against this host
-        # The checks an extension passes before admission (plugin-checks.yml),
-        # run with this pull request's host. The composition below reuses
-        # wheels admitted against main, so only this step sees a host change
-        # that breaks an extension before it merges.
-        if: github.event_name == 'pull_request'
-        run: tools/pipeline/check-extensions.sh composition-set.json "severino-hq-installer:$GITHUB_SHA"
 
       - name: Decide whether anything changed
         id: fingerprint
@@ -387,38 +481,13 @@ jobs:
         if: github.event_name == 'pull_request' && steps.coordinated.outputs.found == 'true'
         env:
           HQ_IMAGE: ${{ steps.host.outputs.image }}
-          INSTALLER_IMAGE: severino-hq-installer:${{ github.sha }}
         run: |
           set -euo pipefail
           staged=build/candidate
-          docker build -f - -t "severino-hq-candidate:$GITHUB_SHA" \
+          docker build -f composition/Dockerfile --target candidate -t "severino-hq-candidate:$GITHUB_SHA" \
             --build-arg HQ_IMAGE="$HQ_IMAGE" \
-            --build-arg INSTALLER_IMAGE="$INSTALLER_IMAGE" \
-            --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="$(cat "$staged/references")" . <<'DOCKERFILE'
-          ARG HQ_IMAGE
-          ARG INSTALLER_IMAGE
-          FROM ${INSTALLER_IMAGE} AS installer
-          COPY build/candidate/*.whl build/candidate/digests /tmp/plugin/
-          RUN set -eu; \
-              awk 'NF { \
-                  if (NF != 2 || length($1) != 64 || $1 !~ /^[0-9a-f]+$/) exit 1; \
-                  print "/tmp/plugin/" $2 " --hash=sha256:" $1 }' /tmp/plugin/digests > /tmp/plugin/requirements.txt; \
-              expected=$(grep -c . /tmp/plugin/requirements.txt); \
-              found=$(find /tmp/plugin -maxdepth 1 -type f -name '*.whl' | wc -l); \
-              test "$expected" -eq "$found"; \
-              uv pip install --quiet --python /usr/local/bin/python --prefix /install \
-                --no-cache --no-deps --require-hashes -r /tmp/plugin/requirements.txt
-          FROM ${HQ_IMAGE} AS runtime
-          ARG SEVERINO_HQ_PLUGIN_REFERENCES
-          USER root
-          COPY --from=installer /install /usr/local
-          RUN ! command -v pip && ! python -c 'import pip'
-          ENV SEVERINO_HQ_PLUGINS=${SEVERINO_HQ_PLUGIN_REFERENCES} \
-              SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION=0
-          RUN DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
-              python manage.py collectstatic --noinput --clear --verbosity 0
-          USER severino
-          DOCKERFILE
+            --build-arg STAGED=build/candidate \
+            --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="$(cat "$staged/references")" .
 
       - name: Name the composed image the checks below run
         # The candidate a coordinated change built here, else the composition
@@ -470,7 +539,7 @@ jobs:
       - name: Install the pinned Trivy
         if: >-
           steps.fingerprint.outputs.build == 'true'
-        uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
         with:
           version: ${{ steps.pins.outputs.mise }}
           install_args: trivy
@@ -536,6 +605,21 @@ jobs:
         env:
           IMAGE: ${{ steps.publish.outputs.image }}
         run: cosign sign --yes "$IMAGE"
+      # What the composition holds, as Trivy reads it (Debian packages, Python
+      # distributions, extensions included, each Go binary's modules), in
+      # CycloneDX, signed by the same workflow identity as the image and stored
+      # beside it in the registry. Trivy writes the list to a file, never the
+      # log, and needs no vulnerability database for it.
+      - name: Attest the SBOM
+        if: >-
+          env.IS_RELEASE == 'true' &&
+          (steps.fingerprint.outputs.build == 'true')
+        env:
+          IMAGE: ${{ steps.publish.outputs.image }}
+        run: |
+          set -euo pipefail
+          trivy image --quiet --format cyclonedx --output sbom.cdx.json "$IMAGE"
+          cosign attest --yes --type cyclonedx --predicate sbom.cdx.json "$IMAGE"
 
       # Deploy is started by the composition it deploys, and by nothing else
       # but a person: it is handed the commit, and a link back to this run.
@@ -552,7 +636,7 @@ jobs:
 
       - name: Install the pinned age
         if: failure()
-        uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
         with:
           version: ${{ steps.pins.outputs.mise }}
           install_args: age

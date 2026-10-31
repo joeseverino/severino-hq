@@ -1,0 +1,31 @@
+# The measurements audit:ast counts, as ast-grep rules: shapes Ruff has no
+# rule for. Each is a count for an audit to read, never a gate.
+id: long-docstring
+language: python
+severity: info
+message: A docstring over 8 lines
+rule:
+  kind: string
+  # Eight line breaks: nine lines or more.
+  regex: '^(?:[^\n]*\n){8}'
+  inside:
+    kind: expression_statement
+    nthChild: 1
+    inside:
+      any:
+        - kind: module
+        - kind: block
+          inside:
+            any:
+              - kind: function_definition
+              - kind: class_definition
+---
+id: getattr-with-default
+language: python
+severity: info
+message: getattr of a literal name with a default
+rule:
+  pattern: getattr($OBJ, $NAME, $DEFAULT)
+constraints:
+  NAME:
+    kind: string

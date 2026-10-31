@@ -1,13 +1,10 @@
 """The tools an operator reaches for, declared once.
 
-A tool is not a new kind of thing: each is backed by registered capabilities,
-which already carry the behavior, the authorization and the other adapters.
-This module only says which belong together on a page and in what order.
-
-A registry rather than tabs hard-coded into a template, for the reason
-`application.domains` is one: a tool in the markup but not the nav, or the
-reverse, is a silent hole rather than a failure. The strip, the routing, the
-default and the empty state all derive from one tuple.
+Each tool is backed by registered capabilities, which already carry the
+behavior and the authorization; this says which belong together on a page and
+in what order. A registry rather than tabs in a template, as `application.domains`
+is one: a tool in the markup but not the nav is a silent hole, so the strip, the
+routing, the default and the empty state all derive from one tuple.
 """
 
 from dataclasses import dataclass

@@ -1,0 +1,10 @@
+# "Findings" is the name of a page, and stays one.
+extends: existence
+message: "'%s' is HQ's own word; say 'problem', or just say the thing"
+level: error
+ignorecase: true
+nonword: true
+scope: [shown, ~comment & ~code]
+tokens:
+  - '(?<![\w-])(?:an?|the|this|that|each|every|one|no) finding(?![\w-])'
+  - '(?<![\w-])(?!(?-i:Findings)(?![\w-]))findings(?![\w-])'

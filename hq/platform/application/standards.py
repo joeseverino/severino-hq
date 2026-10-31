@@ -1,11 +1,9 @@
 """A standard something is held to, and how one thing measures against it.
 
 One primitive for every standard HQ keeps (a repository's access and settings,
-how a container is run): each check says why it matters and how to fix it,
-and whether it applies to a given subject. A check answers True (met), False
-(not met) or None (HQ cannot read it), and "cannot read" is never "not met".
-A subject may declare a check its job requires it to fail, with the reason:
-that check is "by design", shown with the reason and never a gap.
+how a container is run), so each check says why it matters and how to fix it.
+"Cannot read" is never "not met", and a check a subject's job requires it to
+fail, declared with the reason, is "by design" and never a gap.
 """
 
 from collections.abc import Callable, Mapping
@@ -22,6 +20,7 @@ INTENDED = "intended"
 class Check:
     id: str
     label: str
+    # True (met), False (not met) or None (HQ cannot read it).
     test: Callable[[Any], bool | None]
     why: str
     fix: str

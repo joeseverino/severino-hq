@@ -3,12 +3,12 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -45,9 +45,15 @@ func newRenovation(t *testing.T) *renovation {
 	t.Helper()
 	root := t.TempDir()
 	lib := filepath.Join(root, "lib")
-	os.MkdirAll(filepath.Join(lib, "deploy", "renovate"), 0o755)
-	os.WriteFile(filepath.Join(lib, "deploy", "renovate", "image"), []byte(exampleImage+"\n"), 0o644)
-	os.WriteFile(filepath.Join(lib, "deploy", "renovate", "config.json"), []byte("{}\n"), 0o644)
+	if err := os.MkdirAll(filepath.Join(lib, "deploy", "renovate"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(lib, "deploy", "renovate", "image"), []byte(exampleImage+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(lib, "deploy", "renovate", "config.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	v := &renovation{docker: "exit 0", network: renovateNetworkJSON, loaded: filepath.Join(root, "loaded.nft")}
 	v.r = &Renovator{
 		Machine:    &Machine{Lib: lib, LogDir: filepath.Join(root, "log")},
@@ -69,7 +75,7 @@ func newRenovation(t *testing.T) *renovation {
 			return exec.CommandContext(ctx, "/bin/sh", "-c", v.docker)
 		}
 		answer := func(out string, code int) *exec.Cmd {
-			return exec.CommandContext(ctx, "/bin/sh", "-c", `printf '%s' "$1"; exit "$2"`, "sh", out, fmt.Sprint(code))
+			return exec.CommandContext(ctx, "/bin/sh", "-c", `printf '%s' "$1"; exit "$2"`, "sh", out, strconv.Itoa(code))
 		}
 		switch {
 		case name == "docker" && slices.Equal(args[:2], []string{"network", "inspect"}):
@@ -84,7 +90,7 @@ func newRenovation(t *testing.T) *renovation {
 			if v.nftFails {
 				code = 1
 			}
-			return exec.CommandContext(ctx, "/bin/sh", "-c", `cat > "$1"; exit "$2"`, "sh", v.loaded, fmt.Sprint(code))
+			return exec.CommandContext(ctx, "/bin/sh", "-c", `cat > "$1"; exit "$2"`, "sh", v.loaded, strconv.Itoa(code))
 		}
 		return answer("", 0)
 	}
@@ -113,7 +119,9 @@ func (v *renovation) outcome(t *testing.T) DependencyRun {
 		t.Fatal(err)
 	}
 	var keys map[string]json.RawMessage
-	json.Unmarshal(data, &keys)
+	if err := json.Unmarshal(data, &keys); err != nil {
+		t.Fatal(err)
+	}
 	if err := exactKeys(keys, "version", "started_at", "finished_at", "runs"); err != nil {
 		t.Error(err)
 	}
@@ -128,12 +136,14 @@ func (v *renovation) outcome(t *testing.T) DependencyRun {
 func (v *renovation) nothingLeft(t *testing.T) {
 	t.Helper()
 	var left []string
-	filepath.WalkDir(v.r.Spool, func(path string, _ os.DirEntry, _ error) error {
+	if err := filepath.WalkDir(v.r.Spool, func(path string, _ os.DirEntry, _ error) error {
 		if path != v.r.Spool {
 			left = append(left, path)
 		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if len(left) != 0 {
 		t.Errorf("left %v", left)
 	}
@@ -285,8 +295,12 @@ func TestNothingSpooledIsNothingToDo(t *testing.T) {
 func TestWhatAnEarlierRunLeftIsRemoved(t *testing.T) {
 	v := newRenovation(t)
 	left := filepath.Join(v.r.Spool, "run.killed")
-	os.MkdirAll(left, 0o700)
-	os.WriteFile(filepath.Join(left, "0.env"), []byte("RENOVATE_TOKEN="+exampleToken+"\n"), 0o400)
+	if err := os.MkdirAll(left, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(left, "0.env"), []byte("RENOVATE_TOKEN="+exampleToken+"\n"), 0o400); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := v.r.Run(context.Background()); err != nil {
 		t.Fatal(err)
@@ -297,7 +311,9 @@ func TestWhatAnEarlierRunLeftIsRemoved(t *testing.T) {
 
 func TestAnUnpinnedImageIsNeverRun(t *testing.T) {
 	v := newRenovation(t)
-	os.WriteFile(filepath.Join(v.r.Lib, "deploy", "renovate", "image"), []byte("ghcr.io/renovatebot/renovate:latest\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(v.r.Lib, "deploy", "renovate", "image"), []byte("ghcr.io/renovatebot/renovate:latest\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	v.spool(t, exampleRun("example"))
 
 	if err := v.r.Run(context.Background()); err == nil {
@@ -347,7 +363,9 @@ func TestTheShippedRenovateFilesAreWhatARunNeeds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	json.Unmarshal(data, &repository)
+	if err := json.Unmarshal(data, &repository); err != nil {
+		t.Fatal(err)
+	}
 	for _, rule := range repository.PackageRules {
 		for _, command := range rule.PostUpgradeTasks.Commands {
 			if !slices.ContainsFunc(global.AllowedCommands, func(pattern string) bool { return regexp.MustCompile(pattern).MatchString(command) }) {

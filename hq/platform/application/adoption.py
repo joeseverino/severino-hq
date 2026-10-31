@@ -2,19 +2,14 @@
 
 ``unmanaged`` lists live records no declaration claims; ``adopt`` turns one
 into a declaration, and ``adopt_service`` does so for every record a name has.
-
-A record is adopted only through a connection that manages: one whose item
-declares ``manages`` (rendered as ``<PREFIX>_MANAGES=1``). Every other
-connection observes. What it reads is shown as observed and never declared.
-
-A declaration an operator stops managing leaves a ``NotManaged`` row. Adoption
-skips that record until an operator manages it again, which clears the row.
-Both are audited through the model's registration.
+Which connections may adopt, and the ``NotManaged`` row a declaration an
+operator stops managing leaves, are docs/Derived-Facts.md#adoption.
 """
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any
+from functools import cached_property
+from typing import Annotated, Any
 
 from django.db import transaction
 lazy from django.core.exceptions import ValidationError
@@ -24,18 +19,22 @@ from hq.domains.control_plane.models import ManagedResource, NotManaged, Provide
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS, registry_label, service_facets
 
+from .command_fields import Describe, Names
 from .conditions import stamped
 from .inventory import record_identity, record_token, service_hostnames
-from .record_errors import RecordNotFound
+from .record_errors import PolicyError, RecordNotFound
 from .security import Principal
 lazy from .connections import connection_rows
 lazy from .infrastructure import (
     ManagedResourceCommand,
-    PolicyError,
     enabled_resources,
     save_managed_resource,
     suggest_key,
 )
+
+# The capabilities that adopt, by name, for the pages that offer them.
+ADOPT = "infrastructure.resource.adopt"
+ADOPT_SERVICE = "infrastructure.service.adopt"
 
 OBSERVES_ONLY = "This connection only reads. Its setup guide says how to let HQ make changes through it."
 
@@ -50,29 +49,36 @@ def manages_through(
     at least one to exist: which of them read it is not known.
     """
 
-    # Read on first use, so a caller with nothing to ask costs no query.
-    loaded: list[dict[str, list[tuple[str, bool]]]] = []
+    return _Management(connections)
 
-    def by_provider() -> dict[str, list[tuple[str, bool]]]:
-        if not loaded:
-            rows = connection_rows() if connections is None else connections
-            found: dict[str, list[tuple[str, bool]]] = {}
-            for row in rows:
-                found.setdefault(row.provider, []).append((row.connection_ref, row.manages))
-            loaded.append(found)
-        return loaded[0]
 
-    def manages(kind: str, connection_ref: str = "") -> bool:
-        known = by_provider()
-        if connection_ref:
-            return any(ref == connection_ref and flag for rows in known.values() for ref, flag in rows)
+class _Management:
+    """Whether each connection manages, by provider, read on first use so a
+    caller with nothing to ask costs no query."""
+
+    def __init__(self, connections: Iterable[ProviderConnection] | None) -> None:
+        self._connections = connections
+
+    @cached_property
+    def _by_provider(self) -> dict[str, list[tuple[str, bool]]]:
+        rows = connection_rows() if self._connections is None else self._connections
+        found: dict[str, list[tuple[str, bool]]] = {}
+        for row in rows:
+            found.setdefault(row.provider, []).append((row.connection_ref, row.manages))
+        return found
+
+    def __call__(self, kind: str, connection_ref: str = "") -> bool:
+        return self._named_manages(connection_ref) if connection_ref else self._every_of_kind_manages(kind)
+
+    def _named_manages(self, connection_ref: str) -> bool:
+        return any(ref == connection_ref and flag for rows in self._by_provider.values() for ref, flag in rows)
+
+    def _every_of_kind_manages(self, kind: str) -> bool:
         provider = PROVIDERS.get(kind)
         if provider is None:
             return False
-        found = [flag for name in provider.connection_providers for _, flag in known.get(name, ())]
+        found = [flag for name in provider.connection_providers for _, flag in self._by_provider.get(name, ())]
         return bool(found) and all(found)
-
-    return manages
 
 
 def observes_only(kind: str, spec, manages=None) -> bool:
@@ -104,7 +110,7 @@ def keep_out(kind: str, token: str, label: str, *, principal) -> None:
         token=token,
         defaults={
             "label": label[:300],
-            "actor": str(getattr(principal, "actor", "") or "")[:160],
+            "actor": principal.actor[:160],
         },
     )
 
@@ -328,7 +334,7 @@ def find_unmanaged(kind: str, hostname: str = "", *, token: str = "") -> Unmanag
 
 @dataclass(frozen=True, slots=True)
 class AdoptServiceCommand:
-    hostname: str
+    hostname: Annotated[str, Names("services"), Describe("The hostname whose live records to manage in HQ.")]
 
 
 @transaction.atomic
@@ -355,7 +361,7 @@ def adopt_service(
 
     writable = [item for item in found.items if not item.observed_only]
     if not writable:
-        raise PolicyError(f"{found.hostname} is read through read-only connections.")
+        raise PolicyError("HQ reads that name only through connections that only read.")
     adopted = [
         adopt(
             # By token, not by hostname: a service may be served by several
@@ -371,13 +377,13 @@ def adopt_service(
 
 @dataclass(frozen=True, slots=True)
 class AdoptCommand:
-    kind: str
-    hostname: str = ""
-    key: str = ""
+    kind: Annotated[str, Describe("The type of record to bring under HQ's management.")]
+    hostname: Annotated[str, Describe("The hostname whose record to adopt.")] = ""
+    key: Annotated[str, Describe("The key the managed record is stored under; blank derives one.")] = ""
     # Set when adopting one specific record rather than everything a hostname
     # answers with. Takes precedence: it identifies exactly one row, where a
     # hostname may match several.
-    token: str = ""
+    token: Annotated[str, Describe("The token HQ gave the one live record when it read it.")] = ""
 
 
 def adopt(
@@ -387,28 +393,24 @@ def adopt(
 ) -> dict[str, Any]:
     """Bring a record the provider already holds under HQ's management.
 
-    The spec comes from the live record, so adopting asserts nothing new: the
-    resource is created already in sync with the world, and the first
-    reconciliation is a no-op. That is the whole safety argument, and it is why
-    this reads the record again at adoption time rather than trusting a spec
-    posted by a browser: a form could carry a stale or edited copy, and the
-    point of adopting is to capture what is actually there.
-
-    Routed through ``save_managed_resource`` rather than creating a row, so the
-    capability check, the spec validation, the fingerprint and the audit record
-    are the ones every other write already uses.
+    The spec is the live record, read again here rather than posted by a form
+    that could carry a stale or edited copy, so adopting asserts nothing new:
+    the resource is born in sync and its first reconciliation is a no-op.
     """
 
     found = find_unmanaged(command.kind, command.hostname, token=command.token)
     if found is None:
         raise RecordNotFound("HQ found no new record of that type to manage. It may be managed already, or gone.")
-    if PROVIDERS[found.kind].adoption_gap:
-        raise PolicyError(PROVIDERS[found.kind].adoption_gap)
+    provider = PROVIDERS[found.kind]
+    if provider.adoption_gap:
+        raise PolicyError(provider.why_not_adoptable())
     if found.observed_only:
         raise PolicyError(
-            f"This {found.label.lower()} is read through a connection that only reads. "
+            "This record is read through a connection that only reads. "
             "Its setup guide says how to let HQ make changes through it, which adopting needs."
         )
+    # Every other write's capability check, spec validation, fingerprint and
+    # audit record, rather than a row created here.
     result = save_managed_resource(
         ManagedResourceCommand(
             key=command.key or suggested_key(found),
@@ -428,17 +430,10 @@ def adopt(
 def _record_as_observed(key: str, found: Unmanaged) -> None:
     """Mark an adopted resource as seen, because it just was.
 
-    Everything else here is born unobserved and waits for a controller to go
-    and look, which is right: a declaration somebody typed is a claim about a
-    world nobody has checked. Adoption is the one case where that is false. The
-    spec was read from the live record moments ago, so a resource created from
-    it is in sync by construction: that is the entire safety argument for
-    adopting rather than declaring.
-
-    Left unmarked, it says "never reported" forever: nothing queues a
-    reconcile for a resource that has not drifted, so the first look never
-    comes, and a service assembled from it reads as incomplete while every part
-    of it is running.
+    A typed declaration is born unobserved; an adopted one was read from the
+    live record moments ago. Left unmarked it would say "never reported"
+    forever, since nothing queues a reconcile for a resource that has not
+    drifted, and a service assembled from it would read as incomplete.
     """
 
     resource = ManagedResource.objects.filter(key=key).first()

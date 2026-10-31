@@ -451,19 +451,6 @@ func (r *Registry) npmInventory(ctx context.Context) ([]any, error) {
 	return found, nil
 }
 
-func npmNames(values []string) []string {
-	seen := map[string]bool{}
-	out := []string{}
-	for _, value := range values {
-		name := hostname(value)
-		if name != "" && !seen[name] {
-			seen[name] = true
-			out = append(out, name)
-		}
-	}
-	return out
-}
-
 // npmCertificateNames names each certificate by id for the readers that show
 // one. Best effort: the certificate kind reports its own read's failure.
 func (r *Registry) npmCertificateNames(ctx context.Context, ref string) map[int]string {
@@ -519,22 +506,17 @@ func (r *Registry) npmCertificates(ctx context.Context, ref string) ([]NPMCertif
 		return nil, err
 	}
 	serves := r.npmServes(ctx, ref)
-	out := []NPMCertificateRecord{}
-	for _, cert := range certs {
+	return recordsOf(certs, func(cert npmapi.CertificateObject) (NPMCertificateRecord, error) {
 		id, err := npmID(cert.Id, "certificate")
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, NPMCertificateRecord{
+		return NPMCertificateRecord{
 			ID:        id,
 			Name:      cert.NiceName,
 			Provider:  cert.Provider,
 			Domains:   cert.DomainNames,
 			ExpiresOn: deref(cert.ExpiresOn),
-			Serves:    npmNames(serves[id]),
-		})
-	}
-	return out, nil
+			Serves:    distinctNames(serves[id], hostname),
+		}, err
+	})
 }
 
 func npmTarget(scheme, host string) string {
@@ -568,21 +550,13 @@ func npmHostRecords[T, R any](ctx context.Context, r *Registry, ref string, src 
 		resolved, err := npmID(id, what)
 		return NPMHostRecord{
 			ID:          resolved,
-			Hostnames:   npmNames(domains),
+			Hostnames:   distinctNames(domains, hostname),
 			Certificate: names[int(certificate)],
 			SSLForced:   bool(sslForced),
 			Enabled:     bool(enabled),
 		}, err
 	}
-	out := []R{}
-	for _, host := range hosts {
-		rec, err := record(host, base)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, rec)
-	}
-	return out, nil
+	return recordsOf(hosts, func(host T) (R, error) { return record(host, base) })
 }
 
 type npmHostBase func(id *npmapi.Id, domains []string, certificate npmapi.CertificateId, sslForced, enabled npmapi.Flag) (NPMHostRecord, error)
@@ -612,13 +586,9 @@ func (r *Registry) npmStreams(ctx context.Context, ref string) ([]NPMStreamRecor
 	if err != nil {
 		return nil, err
 	}
-	out := []NPMStreamRecord{}
-	for _, stream := range streams {
+	return recordsOf(streams, func(stream npmapi.StreamObject) (NPMStreamRecord, error) {
 		id, err := npmID(stream.Id, "stream")
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, NPMStreamRecord{
+		return NPMStreamRecord{
 			ID:             id,
 			IncomingPort:   stream.IncomingPort,
 			ForwardingHost: stream.ForwardingHost,
@@ -626,9 +596,8 @@ func (r *Registry) npmStreams(ctx context.Context, ref string) ([]NPMStreamRecor
 			TCP:            bool(stream.TcpForwarding),
 			UDP:            bool(stream.UdpForwarding),
 			Enabled:        bool(stream.Enabled),
-		})
-	}
-	return out, nil
+		}, err
+	})
 }
 
 func (r *Registry) npmAccessLists(ctx context.Context, ref string) ([]NPMAccessListRecord, error) {
@@ -646,27 +615,22 @@ func (r *Registry) npmAccessLists(ctx context.Context, ref string) ([]NPMAccessL
 			}
 		}
 	}
-	out := []NPMAccessListRecord{}
-	for _, list := range lists {
+	return recordsOf(lists, func(list npmAccessList) (NPMAccessListRecord, error) {
 		id, err := npmID(list.Id, "access list")
-		if err != nil {
-			return nil, err
-		}
 		logins := []string{}
 		for _, login := range list.Items {
 			if name := deref(login.Username); name != "" {
 				logins = append(logins, name)
 			}
 		}
-		out = append(out, NPMAccessListRecord{
+		return NPMAccessListRecord{
 			ID:         id,
 			Name:       list.Name,
 			SatisfyAny: bool(list.SatisfyAny),
 			PassAuth:   bool(list.PassAuth),
 			Clients:    npmClients(list),
 			Logins:     logins,
-			Protects:   npmNames(protects[id]),
-		})
-	}
-	return out, nil
+			Protects:   distinctNames(protects[id], hostname),
+		}, err
+	})
 }

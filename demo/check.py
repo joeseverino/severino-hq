@@ -122,6 +122,33 @@ def _sample() -> list[str]:
     return picked
 
 
+def _queries_linked(here: str, page: str) -> set[str]:
+    """The saved-copy key of each page with a query that ``page``, shown at
+    ``here``, links: a sort and a list's pages past those the build keeps
+    are left out, and so is a download, which the static host serves
+    whatever its query."""
+
+    keys = set()
+    for href in re.findall(r'href="((?:/[^"#?]*)?\?[^"#]*)"', page):
+        address = urlsplit(urljoin(here, unescape(href)))
+        pairs = sorted((name, value) for name, value in parse_qsl(address.query) if value)
+        asked = dict(pairs)
+        if not pairs or "sort" in asked or not asked.get("page", "1").isdigit():
+            continue
+        if int(asked.get("page", "1")) > _MOST_PAGES_OF_A_LIST or (OUT / address.path.lstrip("/")).is_file():
+            continue
+        keys.add(f"{address.path}?{urlencode(pairs)}")
+    return keys
+
+
+def _shown_at(file: Path, text: str) -> str:
+    """The address a saved page is shown at: a copy's own, else its folder."""
+
+    shown = re.search(r'name="hq-demo-address" content="([^"]+)"', text)
+    saved = file.parent.relative_to(OUT).as_posix()
+    return unescape(shown.group(1)) if shown else ("/" if saved == "." else f"/{saved}/")
+
+
 def _pages_linked(here: str, page: str) -> list[str]:
     """The saved-copy key of each page of a list that ``page``, shown at
     ``here``, links under its list, up to the pages the build keeps."""
@@ -142,6 +169,12 @@ def _script_sources(page: str) -> list[str]:
     policy = _POLICY.search(page)
     directives = (directive.split() for directive in unescape(policy[1] if policy else "").split(";"))
     return next((sources for name, *sources in directives if name == "script-src"), [])
+
+
+def _suggested(placeholder: str | None) -> list[str]:
+    """The words a search box's placeholder suggests trying, as it quotes them."""
+
+    return re.findall(r"“([^”]+)”", placeholder or "")
 
 
 def _exists(path: str) -> bool:
@@ -208,6 +241,91 @@ class DemoSiteTests(unittest.TestCase):
         self.assertLessEqual(items, _MOST_ITEMS)
         connection = (OUT / "connection" / "index.html").read_text(encoding="utf-8")
         self.assertEqual(re.findall(r'class="conn-layer conn-layer-(?!holds")(\w+)"', connection), [])
+
+    def test_a_list_s_toolbar_filters_and_says_what_it_cannot_search(self):
+        # A filter ticked in a list's toolbar, which sends the order the list
+        # is drawn in with it, opens its saved copy with the box still ticked;
+        # typing in the list's own search says the demo can't, and leaves the
+        # page and what was typed where they are.
+        from playwright.sync_api import sync_playwright
+
+        lists = json.loads((OUT / "__fragments__" / "variants.json").read_text(encoding="utf-8"))["sorts"]
+        self.assertTrue(lists, "the demo has lists with a toolbar")
+        with sync_playwright() as playwright:
+            browser = playwright.webkit.launch()
+            page = browser.new_page(viewport={"width": 1360, "height": 900})
+            for path in sorted(lists):
+                with self.subTest(path=path):
+                    page.goto(self.origin + path, wait_until="networkidle")
+                    choice = page.locator("[data-table-toolbar] input[type=checkbox]").first
+                    menu = choice.locator("xpath=ancestor::details")
+                    if menu.count():
+                        menu.locator("summary").click()
+                    name, value = choice.get_attribute("name"), choice.get_attribute("value")
+                    choice.check()
+                    page.wait_for_url(re.compile(rf"[?&]{re.escape(name)}="))
+                    page.wait_for_load_state("networkidle")
+                    self.assertEqual(page.locator("#content > .messages").count(), 0, "the filter was saved")
+                    ticked = page.locator(f'[data-table-toolbar] input[name="{name}"][value="{value}"]')
+                    self.assertTrue(ticked.is_checked(), "the copy shows the filter it answers")
+                    page.goto(self.origin + path, wait_until="networkidle")
+                    page.locator("[data-table-toolbar] input[type=search]").press_sequentially("example", delay=40)
+                    page.wait_for_timeout(400)
+                    self.assertEqual(page.url, self.origin + path, "typing reloads nothing")
+                    self.assertEqual(page.locator("[data-table-toolbar] input[type=search]").input_value(), "example")
+                    self.assertIn("Find anything", page.locator("#content > .messages").inner_text())
+            browser.close()
+
+    def test_what_a_page_or_its_copies_link_with_a_query_is_saved(self):
+        # Each address with a query a page links (a day, a filter, a search
+        # result's command) opens a saved copy, and so does each one those
+        # copies, the searches and the command center's answers link in turn:
+        # the months either side of today, a command a search found.
+        saved = json.loads((OUT / "__fragments__" / "variants.json").read_text(encoding="utf-8"))
+        variants = saved["variants"]
+        answers = json.loads((OUT / "__fragments__" / "index.json").read_text(encoding="utf-8"))
+        first: set[str] = {key for key in variants if key.startswith("/search/?")}
+        for file in OUT.rglob("index.html"):
+            if "__q" not in file.parts:
+                text = file.read_text(encoding="utf-8")
+                first |= _queries_linked(_shown_at(file, text), text)
+        offered = {key: f"{key} (linked)" for key in first}
+        for key in sorted(first & variants.keys()):
+            text = (OUT / variants[key].strip("/") / "index.html").read_text(encoding="utf-8")
+            offered.update((linked, f"{key} -> {linked}") for linked in _queries_linked(key, text))
+        for asked, file in answers.items():
+            if asked.endswith("|palette"):
+                text = (OUT / file.lstrip("/")).read_text(encoding="utf-8")
+                offered.update((linked, f"palette {asked} -> {linked}") for linked in _queries_linked("/search/", text))
+        missing = sorted(why for key, why in offered.items() if key not in variants and key not in saved["refused"])
+        self.assertEqual(missing[:20], [])
+        refused = sorted(key for key in offered if key in saved["refused"])
+        self.assertEqual(refused[:20], [], "a linked address HQ refused is never offered")
+
+    def test_asking_for_a_reading_again_says_the_demo_cannot(self):
+        # A row's Refresh says so where it was pressed, never that the
+        # request failed; the dashboard's Refresh says so as a message, and
+        # never that something would have been saved.
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            browser = playwright.webkit.launch()
+            page = browser.new_page(viewport={"width": 1360, "height": 900})
+            page.goto(self.origin + "/infrastructure/connections/", wait_until="networkidle")
+            row = page.locator("tbody [data-ask]").first
+            row.locator("[data-ask-button]").click()
+            note = row.locator("[data-ask-note]")
+            page.wait_for_function("note => note.textContent.trim()", arg=note.element_handle())
+            self.assertIn("demo", note.inner_text())
+            self.assertEqual(page.locator("#content > .messages").count(), 0, "said once, in the row")
+            page.goto(self.origin + "/", wait_until="networkidle")
+            refresh = page.locator(".glance-refresh").first
+            refresh.locator("xpath=ancestor::details[1]/summary").click()
+            refresh.click()
+            said = page.locator("#content > .messages")
+            said.wait_for()
+            self.assertIn("demo can't read", said.inner_text())
+            browser.close()
 
     def test_a_list_s_next_page_is_saved(self):
         # Next under a list, filtered or not, opens a saved copy, up to the
@@ -404,6 +522,67 @@ class DemoSiteTests(unittest.TestCase):
         self.assertTrue(dialog.get_by_role("heading", name="About this demo").is_visible())
         page.keyboard.press("Escape")
         self.assertFalse(dialog.evaluate("dialog => dialog.open"), "Escape closes it")
+
+    def test_the_command_center_answers_what_is_typed(self):
+        # About this demo's Find anything and ⌘K open it; it lists what it
+        # offers, answers a word as it is typed, and a word the demo has no
+        # search for is answered as HQ answers one nothing matches, in the
+        # palette and after Enter, about the word typed.
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            browser = playwright.webkit.launch()
+            page = browser.new_page(viewport={"width": 1360, "height": 800})
+            page.goto(self.origin + "/", wait_until="networkidle")
+            for opening in ("about", "keys"):
+                with self.subTest(opening=opening):
+                    if opening == "about":
+                        page.get_by_role("link", name="About this demo").click()
+                        offered = self._answer_to(
+                            page,
+                            page.locator("#modal-demo-about").get_by_role("link", name="Find anything").click,
+                        )
+                    else:
+                        offered = self._answer_to(page, lambda: page.keyboard.press("Meta+k"))
+                    palette = page.locator("#modal-command-center")
+                    self.assertTrue(palette.evaluate("dialog => dialog.open"))
+                    self.assertTrue(offered, "it lists what it offers")
+                    page.keyboard.press("Escape")
+                    page.keyboard.press("Escape")
+            page.keyboard.press("Meta+k")
+            box = page.locator("#command-center-query")
+            for word in _suggested(box.get_attribute("placeholder")):
+                with self.subTest(word=word):
+                    found = self._answer_to(page, lambda typed=word[:4]: box.fill(typed))
+                    self.assertTrue(found, f"typing {word[:4]} finds something")
+            self._answer_to(page, lambda: box.fill("xyzzy"))
+            self.assertIn("“xyzzy”", page.locator(".command-center-empty").inner_text())
+            with page.expect_navigation(wait_until="networkidle"):
+                box.press("Enter")
+            self.assertEqual(page.locator('main input[name="q"]').input_value(), "xyzzy")
+            self.assertNotIn(self._nothing(), page.locator("body").inner_text())
+            browser.close()
+
+    @staticmethod
+    def _answer_to(page, act) -> int:
+        """The palette's choices once its answer to ``act`` has replaced what
+        it showed before, and none when it failed."""
+
+        page.evaluate("document.querySelector('[data-command-center-results]').dataset.shown = ''")
+        act()
+        page.wait_for_function(
+            "() => { const r = document.querySelector('[data-command-center-results]');"
+            " return !r.hasAttribute('aria-busy')"
+            " && (!('shown' in r.dataset) || r.textContent.includes('Could not load results')); }"
+        )
+        results = page.locator("[data-command-center-results]")
+        if "Could not load results" in results.inner_text():
+            return 0
+        return results.locator("[data-command-center-option]").count()
+
+    @staticmethod
+    def _nothing() -> str:
+        return json.loads((OUT / "__fragments__" / "variants.json").read_text(encoding="utf-8"))["nothing"]
 
     def test_a_missing_address_is_answered_by_hq_s_own_not_found_page(self):
         # GitHub Pages serves 404.html for an address it has no file for.

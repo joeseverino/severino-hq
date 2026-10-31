@@ -1,14 +1,9 @@
 """The contact inbox, as the controller last read it.
 
-The public site's contact form writes each message to a Cloudflare D1 table.
-HQ holds no credential for it: the controller reads the table through the
-cloudflare_api connection (the ``cloudflare.contact_submission`` reading) and
-applies HQ's changes (the ``cloudflare.contact_inbox`` declaration). Every
-function here reads what is stored and nothing else, so no page waits on D1.
-
-A change HQ has asked for and the reading does not show yet is laid over the
-row and marked pending, so a page shows what was asked for and that it is not
-done.
+Every function here reads what is stored, so no page waits on D1, which HQ
+holds no credential for: the controller reads and changes the table (The
+controller, in Architecture). A change it has not applied yet is laid over
+what it read (``_laid_over``).
 """
 
 from dataclasses import dataclass, field
@@ -107,6 +102,11 @@ def _pending(row: dict[str, Any] | None, review: dict[str, Any] | None) -> bool:
 
 
 def _laid_over(rows: list[dict[str, Any]], spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """The rows as HQ has asked for them: a deletion hides its row at once, and
+    a review the reading does not show yet replaces the reviewed fields and
+    marks the row pending, so a page shows what was asked for and that it is
+    not done."""
+
     reviews = {int(review["id"]): review for review in spec.get("reviews") or ()}
     deleted = {int(identifier) for identifier in spec.get("deletions") or ()}
     shown = []
@@ -116,9 +116,12 @@ def _laid_over(rows: list[dict[str, Any]], spec: dict[str, Any]) -> list[dict[st
             continue
         review = reviews.get(identifier)
         waiting = _pending(row, review)
-        if waiting and review is not None:
-            row = {**row, **{name: review.get(name, "") for name in REVIEWED}}
-        shown.append({**row, "pending": waiting, "message_preview": str(row.get("message", ""))[:PREVIEW_LENGTH]})
+        reviewed = (
+            {**row, **{name: review.get(name, "") for name in REVIEWED}} if waiting and review is not None else row
+        )
+        shown.append(
+            {**reviewed, "pending": waiting, "message_preview": str(reviewed.get("message", ""))[:PREVIEW_LENGTH]}
+        )
     return shown
 
 

@@ -53,7 +53,7 @@
     </details>
   {% endfor %}
   {% for label, url in section.actions %}
-    <p class="muted"><a class="subtle-link" href="{{ url }}">{{ label|breakable }} &rarr;</a></p>
+    <p class="muted"><a class="subtle-link" href="{{ url }}">{{ label|breakable }}{% arrow %}</a></p>
   {% endfor %}
 </section>
 {% endfor %}

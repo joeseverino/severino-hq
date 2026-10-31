@@ -447,7 +447,7 @@ def controller_summary(actions, labels) -> ControllerSummary | None:
             off.setdefault(allowed.reason, []).append(labels(verb))
     # Each reason is a whole sentence about the record, so it stands alone.
     lines = tuple(off)
-    if len(off) and sum(len(names) for names in off.values()) == len(actions):
+    if off and sum(len(names) for names in off.values()) == len(actions):
         return ControllerSummary("HQ does not change this", "declared", lines, frozenset(off))
     automatic = any(allowed.automatic for allowed in actions.values())
     return ControllerSummary(

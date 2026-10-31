@@ -1,5 +1,5 @@
 [Unit]
-Description=Check that the host is its release: the root-owned tree, the units and nothing else
+Description=Check that the host is its release: the root-owned tree, the units, the runner's sudo rules and nothing else
 Documentation=https://github.com/joeseverino/severino-hq/blob/main/docs/Deployment.md
 
 [Service]

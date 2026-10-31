@@ -1,8 +1,11 @@
 #!/bin/sh
 #MISE description="Its decimal is the C module on libmpdec, not the pure-Python fallback"
+#MISE env={SEVERINO_HEAVY_BOUND="30m"}
 #MISE hide=true
 #MISE depends=["image:build"]
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 
 # A Python built without libmpdec still imports decimal, as _pydecimal, which
 # runs money arithmetic many times slower; only _decimal says which one it got.

@@ -1,5 +1,7 @@
 """Canonical search use case shared by web, CLI, TUI, and MCP adapters."""
 
+import threading
+
 from django.db import connection
 from django.db.models import CharField, F, IntegerField, Q, QuerySet, Value
 from django.db.models.functions import Cast
@@ -24,7 +26,8 @@ class UnknownSearchScope(ValueError):
     pass
 
 
-_fts5_ready = False
+# Set once the FTS table has been seen.
+_FTS5_READY = threading.Event()
 
 
 def _fts5_available() -> bool:
@@ -35,10 +38,11 @@ def _fts5_available() -> bool:
     False would silently pin that process to the icontains fallback until
     restart.
     """
-    global _fts5_ready
-    if not _fts5_ready:
-        _fts5_ready = connection.vendor == "sqlite" and "search_index_fts" in connection.introspection.table_names()
-    return _fts5_ready
+    if not _FTS5_READY.is_set() and (
+        connection.vendor == "sqlite" and "search_index_fts" in connection.introspection.table_names()
+    ):
+        _FTS5_READY.set()
+    return _FTS5_READY.is_set()
 
 
 def _authorize(scope: str, principal: Principal) -> None:
@@ -258,11 +262,11 @@ def search_records(scope: str, query: str, *, principal: Principal, limit: int =
     hits = _hits_by_scope([scope], query, limit).get(scope, [])
     records = _fetch_records(definition, [object_id for object_id, _ in hits])
     items = []
-    for object_id, snippet in hits:
+    for object_id, matched in hits:
         record = records.get(object_id)
         if record is None:
             continue
-        snippet = _snippet(definition, record, query, snippet)
+        snippet = _snippet(definition, record, query, matched)
         items.append(
             {
                 "id": object_id,

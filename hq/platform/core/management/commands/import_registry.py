@@ -1,11 +1,9 @@
-"""Import one JSON document of projects and assets.
+"""Import one JSON document of projects and assets, through the ``hq.import`` capability.
 
     python manage.py import_registry registry.json
     cat registry.json | python manage.py import_registry - --check-only
 
-The document is ``{"projects": [...], "assets": [...]}``; each record takes the
-fields of ``project.upsert`` or ``asset.upsert`` and needs a slug. Runs the
-``hq.import`` capability.
+The document's shape and what an import does: docs/Derived-Facts.md.
 """
 
 import json

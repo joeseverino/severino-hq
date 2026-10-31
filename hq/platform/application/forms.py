@@ -25,12 +25,9 @@ class MultipleFileInput(forms.FileInput):
 class MultipleFileField(forms.FileField):
     """A ``FileField`` that validates every selected file, not just one.
 
-    ``FileField.clean`` is written for a single upload. Pointed at a multiple
-    input it keeps whichever file the widget happened to return and discards the
-    rest, so an operator who selected three files would see one imported and no
-    error explaining the other two. This runs the field's own validation
-    (size, extension, whatever a subclass adds) over each upload and returns
-    the full list, so the caller gets either every file or the first failure.
+    ``FileField.clean`` keeps one file of a multiple input and drops the rest
+    with no error. This runs the field's own validation over each upload, so
+    the caller gets every file or the first failure.
     """
 
     widget = MultipleFileInput

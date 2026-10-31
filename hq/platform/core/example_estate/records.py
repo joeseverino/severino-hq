@@ -125,7 +125,9 @@ def projects():
 def _runbooks():
     today = timezone.localdate()
     for doc_id, title, environment, about, written, reviewed in RUNBOOKS:
-        record = DocumentationRecord.objects.create(
+        record = _about(
+            DocumentationRecord,
+            about,
             doc_id=doc_id,
             title=title,
             doc_type="runbook",
@@ -134,7 +136,6 @@ def _runbooks():
             sensitivity="internal",
             last_reviewed=today - timedelta(days=written),
         )
-        record.related_projects.set(Project.objects.filter(slug__in=about))
         # Reviewed since, and mirrored again.
         record.last_reviewed = today - timedelta(days=reviewed)
         record.save()
@@ -143,7 +144,9 @@ def _runbooks():
 def _writeups():
     today = timezone.localdate()
     for slug, title, project, days in WRITEUPS:
-        item = ContentItem.objects.create(
+        item = _about(
+            ContentItem,
+            (project,),
             title=title,
             slug=slug,
             content_type="lab_writeup",
@@ -151,9 +154,16 @@ def _writeups():
             published_url=f"https://example.com/writeups/{slug}/",
             published_at=today - timedelta(days=days),
         )
-        item.related_projects.set(Project.objects.filter(slug=project))
         # Each writeup cites the runbooks of the project it is about.
         item.related_documentation.set(DocumentationRecord.objects.filter(related_projects__slug=project))
+
+
+def _about(model, projects: tuple[str, ...], **fields):
+    """A record of ``model``, written about the projects named by slug."""
+
+    record = model.objects.create(**fields)
+    record.related_projects.set(Project.objects.filter(slug__in=projects))
+    return record
 
 
 def calendar():

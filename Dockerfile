@@ -9,8 +9,8 @@
 # mise.toml reads Go's release from go.mod, so mise loads neither without it.
 # mise is the release min_version names, from its image by digest
 # (lint:toolchain holds the tag to min_version).
-FROM python:3.15-slim-trixie@sha256:533b0b2f9b5d46fd097091cf826f27902f1d6c3bca714b6dc74551356aa97a51 AS tools
-COPY --from=ghcr.io/jdx/mise:2026.10.18@sha256:fc31de7b93d195613deb600d42c65a164b0205716ade38132aadeabac3838248 /usr/local/bin/mise /usr/local/bin/mise
+FROM python:3.15-slim-trixie@sha256:f786b2e19cf9bb54e96bfcd4c1b40c4c56336c22e60607ffd4b080ae5b5dee83 AS tools
+COPY --from=ghcr.io/jdx/mise:2026.10.21@sha256:a9a1654a19d150535bcaede142ff69368f18ec11f32986f6ed944d1c811702af /usr/local/bin/mise /usr/local/bin/mise
 ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
 COPY mise.toml mise.lock ./
@@ -20,7 +20,7 @@ RUN mise install go uv \
     && install -D "$(mise which uv)" /opt/bin/uv
 
 
-FROM python:3.15-slim-trixie@sha256:533b0b2f9b5d46fd097091cf826f27902f1d6c3bca714b6dc74551356aa97a51 AS build
+FROM python:3.15-slim-trixie@sha256:f786b2e19cf9bb54e96bfcd4c1b40c4c56336c22e60607ffd4b080ae5b5dee83 AS build
 COPY --from=tools /opt/bin/uv /usr/local/bin/uv
 # The cache mount and /install are different filesystems, so files are copied.
 ENV UV_COMPILE_BYTECODE=1 \
@@ -32,16 +32,42 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml uv.lock ./
 # The export is complete and hashed: nothing resolves, and a file that differs
-# from the lock is refused.
+# from the lock is refused. pycparser is left out: only cffi's binding builder
+# reads it, and the build deletes that builder below.
 # HQ is English only (LANGUAGE_CODE, no LocaleMiddleware), so Django's other
 # locales are deleted. The locale package and `en` stay: Django reads formats
 # and LANG_INFO from them.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv export --locked --no-default-groups --no-emit-project \
+    uv export --locked --no-default-groups --no-emit-project --no-emit-package pycparser \
         --format requirements-txt --output-file /tmp/hq-runtime.txt > /dev/null \
     && uv pip install --python /usr/local/bin/python --prefix /install \
         --require-hashes --no-deps -r /tmp/hq-runtime.txt \
     && find /install/lib -type d -path '*/site-packages/django/*locale/*' -prune ! -name en -exec rm -rf {} +
+# Django's apps and database backends HQ never loads are deleted: neither uv
+# nor Django installs part of a package. A contrib app stays when
+# INSTALLED_APPS names it, and sites because auth's forms and views import it;
+# a backend stays when it is SQLite's or the base it builds on. The admin
+# modules of the apps that stay register with the admin, which is not
+# installed, so they go too. image:verify:django imports what stays and names
+# anything left that HQ does not load.
+RUN cd /install/lib/python*/site-packages/django \
+    && find contrib -mindepth 1 -maxdepth 1 -type d ! -name __pycache__ \
+        ! -name auth ! -name contenttypes ! -name messages ! -name sessions \
+        ! -name sites ! -name staticfiles -exec rm -rf {} + \
+    && find db/backends -mindepth 1 -maxdepth 1 -type d ! -name __pycache__ \
+        ! -name base ! -name sqlite3 -exec rm -rf {} + \
+    && find contrib -path '*/__pycache__/admin.*.pyc' -delete \
+    && find contrib -name admin.py -delete
+# The same for the other packages: the tests and benchmarks they ship; cffi's
+# Python package, which builds bindings, where the bindings HQ runs (argon2's)
+# load only its compiled backend, _cffi_backend; python-multipart's old
+# `multipart` name, which starlette does not use; and pydantic.v1, the legacy
+# API pydantic itself reaches only for a type defining __get_validators__,
+# which nothing installed defines. image:verify:packages holds each reason and
+# names any top-level module left that HQ does not load.
+RUN cd /install/lib/python*/site-packages \
+    && find . -mindepth 2 -maxdepth 2 -type d \( -name tests -o -name benchmarks \) -exec rm -rf {} + \
+    && rm -rf cffi multipart pydantic/v1 /install/bin/cffi-gen-src
 
 
 # The controller and the root secret renderer, one static binary each: CGO off,
@@ -65,7 +91,7 @@ RUN go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-controller ./cmd/hq
         -o /out/hq-host ./cmd/hq-host
 
 
-FROM python:3.15-slim-trixie@sha256:533b0b2f9b5d46fd097091cf826f27902f1d6c3bca714b6dc74551356aa97a51 AS runtime
+FROM python:3.15-slim-trixie@sha256:f786b2e19cf9bb54e96bfcd4c1b40c4c56336c22e60607ffd4b080ae5b5dee83 AS runtime
 
 # Non-root user. UID/GID 10001 to be predictable in volume permissions.
 # `apt-get upgrade` applies Debian security fixes published after the base
@@ -78,13 +104,15 @@ ARG DEBIAN_SECURITY_RELEASE=
 # the composition installs extension wheels in a stage of its own
 # (composition/Dockerfile), so pip here would only be code nothing runs:
 # its vendored libraries still count against the image in a scan.
+#
+# The controller speaks SSH in process, so no OpenSSH client ships. The
+# database is backed up from the host, with the host's sqlite3.
 RUN python -m pip uninstall --yes pip \
     && groupadd --system --gid 10001 severino \
     && useradd  --system --uid 10001 --gid severino \
                 --home /app --shell /usr/sbin/nologin severino \
     && apt-get update && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends \
-        sqlite3 ca-certificates openssh-client \
+    && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -103,8 +131,9 @@ COPY --from=controller /out/hq-controller /usr/local/bin/hq-controller
 
 WORKDIR /app
 # The controller's source is the controller stage's input: its programs are
-# copied in built, and HQ never reads the source.
-COPY --exclude=controller . /app
+# copied in built, and HQ never reads the source. The toolchain and dependency
+# manifests and locks are the tools and build stages' inputs in the same way.
+COPY --exclude=controller --exclude=mise.toml --exclude=mise.lock --exclude=pyproject.toml --exclude=uv.lock . /app
 # The renderer root runs on the host. It ships in the root-run tree, beside
 # the units that name it, so the manifest below covers it: the host's copy is
 # the signed image's, byte for byte, and checked daily like every script.

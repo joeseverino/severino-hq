@@ -30,3 +30,13 @@ func TestADeployTakesExactlyOneImage(t *testing.T) {
 		}
 	}
 }
+
+// A unit request is answered in JSON before the root check every other
+// command makes, so its caller reads a refusal the same way from any account.
+func TestAUnitRequestIsAnsweredInJSONAsAnyAccount(t *testing.T) {
+	var stdout strings.Builder
+	code := run(context.Background(), []string{"unit", "--serve"}, func(string) string { return "" }, 1000, strings.NewReader("stop example.service\n"), &stdout, io.Discard)
+	if code != 0 || !strings.Contains(stdout.String(), `"outcome":"refused"`) {
+		t.Errorf("exited %d with %q", code, stdout.String())
+	}
+}

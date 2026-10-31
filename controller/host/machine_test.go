@@ -3,6 +3,7 @@ package host
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,7 +35,15 @@ type fakeHost struct {
 	// it names has only those; one it does not holds any file asked for.
 	files   map[string]map[string]string
 	created string
+	// runners, runnerUser and sudoRules are the Actions runner units, the
+	// account the one runs as, and what root's `sudo -l -U` lists for it.
+	runners    []string
+	runnerUser string
+	sudoRules  string
 }
+
+// sudoListing is sudo-rs's listing of an account's rules, as root sees it.
+const sudoListing = "Matching Defaults entries for %[1]s on example:\n    env_reset, secret-marker-example\n\nUser %[1]s may run the following commands on example:\n%[2]s"
 
 // program is what each command an install or a deploy runs does here: it is
 // recorded, and answers as the host would.
@@ -62,6 +71,16 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 			}
 		}
 		return answer("", 3)
+	case strings.HasPrefix(call, "systemctl list-units"):
+		var lines []string
+		for _, unit := range f.runners {
+			lines = append(lines, unit+" loaded active running Example runner")
+		}
+		return answer(strings.Join(lines, "\n")+"\n", 0)
+	case strings.HasPrefix(call, "systemctl show -p User"):
+		return answer(f.runnerUser+"\n", 0)
+	case call == "sudo -n -l -U "+f.runnerUser:
+		return answer(f.sudoRules, 0)
 	case strings.HasPrefix(call, "docker inspect --format {{.Config.Image}}"):
 		return answer(f.running+"\n", 0)
 	case strings.HasPrefix(call, "docker inspect --format {{.Image}}"):
@@ -80,19 +99,23 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 		return answer(imageID+"\n", 0)
 	case strings.HasPrefix(call, "docker cp"):
 		// A path under /app is the fake image's; anything else is one file.
-		from := args[len(args)-2]
-		if item, ok := strings.CutPrefix(from[strings.Index(from, ":")+1:], "/app/"); ok {
+		_, source, _ := strings.Cut(args[len(args)-2], ":")
+		if item, ok := strings.CutPrefix(source, "/app/"); ok {
 			return exec.CommandContext(ctx, "cp", "-R", filepath.Join(f.image, item), args[len(args)-1])
 		}
 		if held, ok := f.files[f.created]; ok {
-			body, ok := held[from[strings.Index(from, ":")+1:]]
+			body, ok := held[source]
 			if !ok {
 				return answer("", 1)
 			}
-			os.WriteFile(args[len(args)-1], []byte(body), 0o600)
+			if err := os.WriteFile(args[len(args)-1], []byte(body), 0o600); err != nil {
+				f.t.Fatal(err)
+			}
 			return answer("", 0)
 		}
-		os.WriteFile(args[len(args)-1], []byte("#!/bin/sh\n"), 0o700)
+		if err := os.WriteFile(args[len(args)-1], []byte("#!/bin/sh\n"), 0o700); err != nil {
+			f.t.Fatal(err)
+		}
 	case name == "cp":
 		return exec.CommandContext(ctx, "cp", args...)
 	}
@@ -118,8 +141,12 @@ func newFakeHost(t *testing.T) *fakeHost {
 	f.machine.Own = func(string) error { return nil }
 	f.machine.Verifier = func(context.Context) error { return nil }
 	f.machine.Sudoers = filepath.Join(root, "sudoers.d")
+	f.runners, f.runnerUser = []string{"actions.runner.example.service"}, "deployer"
+	f.sudoRules = fmt.Sprintf(sudoListing, f.runnerUser, "    (root) NOPASSWD: "+filepath.Join(lib, "deploy", "bin", "hq-host")+" deploy *\n")
 	for _, dir := range []string{"systemd", "sbin", "run", "run/severino-hq", "run/severino-hq-secrets", "sudoers.d", "image/app"} {
-		os.MkdirAll(filepath.Join(root, dir), 0o755)
+		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	f.ship("severino-hq-web.service", "[Service]\nExecStart=/bin/true\n\n[Install]\nWantedBy=multi-user.target\n")
 	f.ship("severino-hq-secrets.service", "[Service]\nExecStart=/bin/true\n")
@@ -128,25 +155,37 @@ func newFakeHost(t *testing.T) *fakeHost {
 	f.ship("severino-hq-controller.service", "[Service]\nExecStart=/bin/true\n")
 	f.ship("severino-hq-controller.path", "[Path]\nPathChanged=/run/severino-hq/controller-doorbell\n")
 	f.ship("severino-hq-connect.conf.example", "[Service]\n")
-	os.MkdirAll(filepath.Join(lib, "deploy", "tmpfiles"), 0o755)
-	os.WriteFile(filepath.Join(lib, "deploy", "tmpfiles", "severino-hq.conf"), []byte("d /run/severino-hq 0755 10001 10001 -\n"), 0o644)
+	if err := os.MkdirAll(filepath.Join(lib, "deploy", "tmpfiles"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(lib, "deploy", "tmpfiles", "severino-hq.conf"), []byte("d /run/severino-hq 0755 10001 10001 -\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	// The image ships the same tree, its programs and a marker of its own.
-	exec.Command("cp", "-R", filepath.Join(lib, "deploy"), filepath.Join(f.image, "deploy")).Run()
+	if err := exec.Command("cp", "-R", filepath.Join(lib, "deploy"), filepath.Join(f.image, "deploy")).Run(); err != nil {
+		t.Fatal(err)
+	}
 	for name, body := range map[string]string{
 		"deploy/bin/hq-host":        "#!/bin/sh\n",
 		"hq/config/synced-release":  "",
 		"hq/config/controller.json": "{}\n",
 	} {
 		path := filepath.Join(f.image, name)
-		os.MkdirAll(filepath.Dir(path), 0o755)
-		os.WriteFile(path, []byte(body), 0o644)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return f
 }
 
 func (f *fakeHost) ship(name, body string) {
 	path := filepath.Join(f.machine.UnitDir(), name)
-	os.MkdirAll(filepath.Dir(path), 0o755)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		f.t.Fatal(err)
+	}
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		f.t.Fatal(err)
 	}
@@ -221,7 +260,9 @@ func TestADroppedUnitIsRetiredAndTheHostsOwnAreNot(t *testing.T) {
 	f := newFakeHost(t)
 	shipped, _ := Shipped(f.machine.UnitDir())
 	for _, name := range []string{"severino-hq-old.timer", "severino-hq-web.service", "other.service", "severino-hq-notes.txt"} {
-		os.WriteFile(filepath.Join(f.machine.Systemd, name), nil, 0o644)
+		if err := os.WriteFile(filepath.Join(f.machine.Systemd, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	retired, err := Retired(shipped, f.machine.Systemd)

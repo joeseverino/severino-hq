@@ -1,6 +1,7 @@
 """dev:look reads what it was asked only from its task, reads --css as a file
 from the checkout, reports page by page, shoots a dialog open as a reader
-opens it, and compares against a base in a worktree it always removes."""
+opens it, and compares against a base in a worktree it always removes, keeping
+the base's shots."""
 
 import io
 import os
@@ -79,18 +80,19 @@ class AskedTests(SimpleTestCase):
 @tag("source")
 class AskedFirstTests(SimpleTestCase):
     def refused_before_the_base(self, asked, said):
-        """``asked`` refused with ``said`` before any look at a base began."""
+        """``asked`` refused with ``said`` before any look at a base began.
+
+        The base names no commit, so a look at it first would be refused for that instead.
+        """
 
         for kept in ("clock_at", "asked"):
             self.addCleanup(lambda kept=kept: kept in vars(look.Look) and delattr(look.Look, kept))
-        environment = {**ASKED, "usage_base": "HEAD", "usage_seed": "showcase", **asked}
+        environment = {**ASKED, "usage_base": "example-missing", "usage_seed": "showcase", **asked}
         with (
             mock.patch.dict(os.environ, environment, clear=True),
-            mock.patch.object(look, "_look_at") as base,
             self.assertRaisesMessage(AssertionError, said),
         ):
             look.Look.setUpClass()
-        base.assert_not_called()
 
     def test_a_rule_that_does_not_exist_is_refused_with_the_rules_that_do_before_the_base_is_looked_at(self):
         self.refused_before_the_base(
@@ -235,18 +237,15 @@ class PopoverTests(SimpleTestCase):
 
 class _Folds:
     """A page with a fold of rows, as tables.js answers presses: pressing the
-    fold shows its rows, and marks each as cut, which shows its toggle, only
-    once the timer the press set has run."""
+    fold shows its rows and marks each as cut, which shows its toggle."""
 
     def __init__(self, rows):
-        self.rows, self.folded, self.timer, self.marked, self.opened = rows, False, False, False, set()
+        self.rows, self.folded, self.opened = rows, False, set()
 
     def evaluate(self, script, toggles=None):
-        if script == look._AFTER_THE_PAGES_TIMERS:
-            self.marked = self.marked or self.timer
-        elif script == look._PRESS_SHOWN and toggles == look._FOLD_TOGGLES:
-            self.folded = self.timer = True
-        elif script == look._PRESS_SHOWN and toggles == look.ROW_TOGGLES and self.marked:
+        if script == look._PRESS_SHOWN and toggles == look._FOLD_TOGGLES:
+            self.folded = True
+        elif script == look._PRESS_SHOWN and toggles == look.ROW_TOGGLES and self.folded:
             self.opened |= set(self.rows)
 
 
@@ -262,11 +261,78 @@ class _Expander:
 
 @tag("source")
 class ExpandTests(SimpleTestCase):
-    def test_the_rows_a_fold_shows_are_opened_once_the_page_has_marked_them(self):
+    def test_the_rows_a_fold_shows_are_opened_after_it(self):
         page = _Folds(["example-row-one", "example-row-two"])
         _Expander(page).expand_rows()
         self.assertTrue(page.folded)
         self.assertEqual(page.opened, {"example-row-one", "example-row-two"})
+
+
+class _Drawing:
+    """A page that answers a press at once but draws it only on the next
+    frame, which settling waits for: what a disclosure or a row opened is
+    there to read only once the page has drawn it."""
+
+    def __init__(self):
+        self.pressed, self.drawn, self.rounds = set(), set(), 0
+
+    def evaluate(self, script, _arg=None):
+        if script == look._OPEN_ONCE:
+            self.rounds += 1
+            self.pressed.add("disclosures")
+            return self.rounds == 1
+        if script == look._PRESS_SHOWN:
+            self.pressed.add(_arg)
+        return None
+
+    def wait_for_function(self, _script, arg=None):
+        pass
+
+    def seen(self):
+        return frozenset(self.drawn)
+
+
+class _Looker:
+    """The look at one page, with what ``--eval`` read and what the
+    screenshot shot each kept as the page had drawn it."""
+
+    draw_as_asked = look.Look.draw_as_asked
+    open_everything = look.Look.open_everything
+    expand_rows = look.Look.expand_rows
+    with_each_dialog = look.Look.with_each_dialog
+    look = look.Look.look
+    css, script, dialogs = "", "() => document.title", []
+
+    def __init__(self, page):
+        self.page, self.read = page, {}
+
+    def settle(self):
+        self.page.drawn |= self.page.pressed
+
+    def refused(self, _name, _width):
+        return ""
+
+    def evaluate_script(self, _name, _width):
+        self.read["eval"] = self.page.seen()
+
+    def screenshot(self, _name, _width):
+        self.read["shot"] = self.page.seen()
+
+
+@tag("source")
+class EvalOrderTests(SimpleTestCase):
+    def test_eval_reads_the_page_the_screenshot_shows_with_every_disclosure_and_row_opened_and_drawn(self):
+        page = _Drawing()
+        asked = {**ASKED, "usage_open": "true", "usage_expand": "true"}
+        with (
+            tempfile.TemporaryDirectory() as out,
+            mock.patch.object(look, "OUT", Path(out)),
+            mock.patch.dict(os.environ, asked),
+        ):
+            looker = _Looker(page)
+            looker.look("example", 402, "")
+        self.assertEqual(looker.read["eval"], {"disclosures", look._FOLD_TOGGLES, look.ROW_TOGGLES})
+        self.assertEqual(looker.read["eval"], looker.read["shot"])
 
 
 class _Dialogs:
@@ -732,6 +798,34 @@ class WorktreeTests(SimpleTestCase):
                 self.assertEqual(look._look_at("HEAD", "survey", 0.0), ({}, {}, {}))
             self.assertEqual(seen["test"], "new\n")
             self.assertIsNone(seen["database"], "the base migrates a database of its own")
+
+    def test_the_bases_shots_are_kept_after_its_worktree_goes_and_this_runs_shots_beside_them(self):
+        with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
+            checkout = _repository(Path(folder))
+            out = checkout / "var" / "look"
+            (out / "base").mkdir(parents=True)
+            (out / "base" / "stale-402.png").write_bytes(b"stale")
+            (out / "earlier-402.png").write_bytes(b"earlier")
+
+            def relay(_command, _sink, _ref, cwd, env):
+                Path(cwd, "var", "look").mkdir(parents=True)
+                Path(cwd, "var", "look", "example-402.png").write_bytes(b"base")
+                Path(env["usage_found_into"]).write_text("[]", encoding="utf-8")
+
+            with (
+                mock.patch.dict(os.environ, ASKED, clear=True),
+                mock.patch.object(look, "LENS", ()),
+                mock.patch.object(look, "OUT", out),
+                mock.patch.object(look, "_relay", relay),
+                mock.patch("sys.stdout", new_callable=io.StringIO),
+            ):
+                look._look_at("HEAD", "survey", 0.0)
+            self.assertEqual(sorted(path.name for path in (out / "base").iterdir()), ["example-402.png"])
+            # This run then empties all but the base's before it shoots.
+            look._empty(out, keep=look.BASE_OUT)
+            self.assertEqual([path.name for path in out.iterdir()], ["base"])
+            look._empty(out)
+            self.assertEqual(list(out.iterdir()), [])
 
     def test_a_base_that_names_nothing_is_refused(self):
         with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):

@@ -1,28 +1,14 @@
 """HQ's machine API as an OpenAPI 3.2 document, derived and never hand-written.
 
-Every path comes from hq_api's URLconf, every operation's methods, success type
-and error statuses from its view's ``_endpoint`` declaration, every capability
-from the capability registry (its request body is the JSON Schema the view
-already validates against, ``_request_schema``), every resource from the
-resource registry, and the tag tree from the domain registry, so the grouping
-is HQ's nav. A capability, resource or domain added anywhere appears here with
-no edit.
-
 Served at /api/v2/openapi.json with whatever extensions this deployment
-composes. ``hq-api.openapi.json`` beside this module is the host alone,
-committed for clients and code generation:
-
-    python manage.py api_openapi          # rewrite hq-api.openapi.json
-    python manage.py api_openapi --check  # exit 1 on drift
-
-Examples are responses the suite really received, recorded into
-``openapi-examples.json`` (see hq_api/testing.py) and validated against
-this document on every run.
+composes; ``hq-api.openapi.json`` beside this module is the host alone,
+committed for clients and code generation. Where each part comes from, and
+how the committed copy is rewritten: API.md, "The document".
 """
 
 import json
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any, override
@@ -36,10 +22,12 @@ from hq.platform.application.capabilities import capability_registry, describe_c
 from hq.platform.application.domains import Domain, all_domains
 from hq.platform.application.integration_specs import RESERVED_QUERY_FIELD
 from hq.platform.application.resources import describe_resources, resource_registry
+from hq.platform.application.security import Principal
 lazy from hq.platform.application.routes import routed
 lazy from hq.platform.mcp.declarations import tool_contract
 
 from . import urls, views
+from .security import INTERFACE
 
 OPENAPI_VERSION = "3.2.0"
 DOCUMENT_PATH = Path(__file__).with_name("hq-api.openapi.json")
@@ -155,6 +143,31 @@ class _Components:
         return rewritten
 
 
+def _declared_resources(domain: Domain) -> list[str]:
+    """The resources a domain declares: its integration's, then its records'."""
+
+    integration = domain.integration
+    names = [spec.name for spec in integration.resources()] if integration.resources else []
+    return [*names, domain.records.resource] if domain.records else names
+
+
+def _declared_capabilities(domain: Domain) -> list[str]:
+    """The capabilities a domain's integration declares."""
+
+    integration = domain.integration
+    return [spec.name for spec in integration.capabilities()] if integration.capabilities else []
+
+
+def _first_declarer(domains: Iterable[Domain], declared: Callable[[Domain], list[str]]) -> dict[str, str]:
+    """Each name some domain declares, owned by the first domain to declare it."""
+
+    owner: dict[str, str] = {}
+    for domain in domains:
+        for name in declared(domain):
+            owner.setdefault(name, domain.id)
+    return owner
+
+
 class _Tags:
     """The tag tree: nav groups and their domains in the bar's order, from the domain registry.
 
@@ -166,19 +179,10 @@ class _Tags:
 
     def __init__(self, resources: dict[str, Any], capabilities: dict[str, Any]) -> None:
         self.domains = {domain.id: domain for domain in all_domains()}
-        self.resource_owner: dict[str, str] = {}
-        self.capability_owner: dict[str, str] = {}
-        pages: dict[str, str] = {}
-        for domain in self.domains.values():
-            integration = domain.integration
-            for spec in integration.resources() if integration.resources else ():
-                self.resource_owner.setdefault(spec.name, domain.id)
-            if domain.records:
-                self.resource_owner.setdefault(domain.records.resource, domain.id)
-            for spec in integration.capabilities() if integration.capabilities else ():
-                self.capability_owner.setdefault(spec.name, domain.id)
-            for item in domain.navigation:
-                pages.setdefault(item.route, domain.id)
+        domains = self.domains.values()
+        self.resource_owner = _first_declarer(domains, _declared_resources)
+        self.capability_owner = _first_declarer(domains, _declared_capabilities)
+        pages = _first_declarer(domains, lambda domain: [item.route for item in domain.navigation])
         for name, resource in resources.items():
             if name not in self.resource_owner and resource.web_route in pages:
                 self.resource_owner[name] = pages[resource.web_route]
@@ -189,12 +193,12 @@ class _Tags:
         self.used: set[str] = set()
 
     def of_resource(self, name: str) -> str:
-        return self._use(self.resource_owner.get(name, API_TAG))
+        return self.use(self.resource_owner.get(name, API_TAG))
 
     def of_capability(self, name: str) -> str:
-        return self._use(self.capability_owner.get(name, API_TAG))
+        return self.use(self.capability_owner.get(name, API_TAG))
 
-    def _use(self, tag: str) -> str:
+    def use(self, tag: str) -> str:
         self.used.add(tag)
         return tag
 
@@ -272,7 +276,10 @@ class _Builder:
             }
         )
         self.failure = self.components.typed({"Failure": views.Failure})["Failure"]
-        self.capabilities = describe_capabilities()["capabilities"]
+        # What a token could ever run: /api/v2 is called with tokens.
+        self.capabilities = describe_capabilities(principal=Principal("openapi", INTERFACE, frozenset()))[
+            "capabilities"
+        ]
         self.resources = describe_resources()["resources"]
         self.resource_specs = resource_registry()
         self.tags = _Tags(self.resource_specs, capability_registry())
@@ -369,7 +376,7 @@ class _Builder:
                 method,
                 view,
                 _camel(view.__name__),
-                self.tags._use(API_TAG),
+                self.tags.use(API_TAG),
                 **({"parameters": query} if query else {}),
                 **(
                     {"description": "Also served to the signed-in operator's web session."}
@@ -383,14 +390,14 @@ class _Builder:
     # path before its template.
 
     def capability_paths(self, template: str, method: str, view: Any) -> None:
-        generic = views._request_schema({"input_schema": {"type": "object"}, "target": None})
+        generic = views.request_schema({"input_schema": {"type": "object"}, "target": None})
         generic["properties"]["target"] = {"type": ["string", "integer"]}
         self.operation(
             template,
             method,
             view,
             _camel(view.__name__),
-            self.tags._use(API_TAG),
+            self.tags.use(API_TAG),
             parameters=[_path_parameter("name", {"type": "string"}, "A capability name.")],
             requestBody=_body(generic),
         )
@@ -399,7 +406,7 @@ class _Builder:
             body = {
                 "$ref": self.components.add(
                     f"{_pascal(name)}Request",
-                    self.components.hoist(views._request_schema(spec), _pascal(name)),
+                    self.components.hoist(views.request_schema(spec), _pascal(name)),
                 )
             }
             grants = ", ".join(spec["required_capabilities"]) or "none"
@@ -426,7 +433,7 @@ class _Builder:
             method,
             view,
             _camel(view.__name__),
-            self.tags._use(API_TAG),
+            self.tags.use(API_TAG),
             parameters=[_path_parameter("name", {"type": "string"}, "A resource name."), _FIELDS],
         )
         for spec in self.resources:
@@ -466,7 +473,7 @@ class _Builder:
             method,
             view,
             _camel(view.__name__),
-            self.tags._use(API_TAG),
+            self.tags.use(API_TAG),
             parameters=[
                 _path_parameter("name", {"type": "string"}, "A resource name."),
                 _path_parameter("identifier", {"type": "string"}, "The record's identifier."),

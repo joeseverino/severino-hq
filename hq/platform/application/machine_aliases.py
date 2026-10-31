@@ -69,26 +69,17 @@ def same_machine(
 ) -> dict[str, str]:
     """Names that are one machine.
 
-    Two things name one machine differently and neither is wrong: a Portainer
-    calls a VPS by its environment name, a 1Password SSH item calls it whatever
-    the operator called it, and a tailnet calls it whatever its owner typed into
-    that laptop years ago. Kept apart, one machine is several rows with a
-    fraction of its facts each.
-
-    The address is what they all agree on, so it is the identity, and the
-    index is what turns an address into the one name kept for it, so the fold
-    here and the machine a proxy is said to forward to are the same judgment.
-    ``10.0.0.5`` and ``10.0.0.5:22`` are one machine.
-
-    The name kept is the index's: a declaration first, then the name containers
-    are reported under, then a credential's: most deliberate first.
-
-    A machine whose address HQ has never recorded stays its own row. That is not
-    a failure to detect a duplicate; it is HQ declining to assert two things are
-    one when nothing it holds says so.
+    A Portainer, a 1Password SSH item and a tailnet each name one machine their
+    own way and none is wrong; kept apart, it is several rows with a fraction
+    of its facts each. The address they agree on is the identity, and the name
+    kept is the index's (``index_of``), so this fold and the machine a proxy
+    forwards to are one judgment.
     """
 
     presence = present or {}
+    # A machine whose address HQ has never recorded folds nowhere and stays its
+    # own row: HQ declines to assert two things are one when nothing it holds
+    # says so.
     aliases = _connection_aliases(index, connections)
     # A credential that opens a shell at an address something else already
     # claims is a second name for that machine, not a second machine.

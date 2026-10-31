@@ -1,8 +1,8 @@
 {% extends "page.html" %}
 {% block page %}
 {% include "partials/_kpi_grid.html" with label="Notes summary" items=example_metrics %}
-<section class="card" id="example-notes">
-  <div class="section-head"><h2>Notes</h2></div>
+{% card id="example-notes" heading="example-notes-heading" %}
+  {% section_head id="example-notes-heading" %}Notes{% aside %}<span class="count">{{ notes|length }}</span>{% endsection_head %}
   {% table_region "Notes" %}
     <table class="data-table">
       <thead><tr>{% table_heading "Note" "identifier" %}{% table_heading "The registry lists" %}{% table_heading "Look up" "control" hidden=True %}</tr></thead>
@@ -17,5 +17,5 @@
       </tbody>
     </table>
   {% endtable_region %}
-</section>
+{% endcard %}
 {% endblock %}

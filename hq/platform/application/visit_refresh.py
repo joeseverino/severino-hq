@@ -1,51 +1,30 @@
 """Asking for a page's own readings when somebody opens it.
 
-A sweep reads everything on a clock. A page about one machine or one service
-is about a few readings, and whoever opened it is looking at those now: so the
-open page asks, and only for what that page is assembled from.
-
-The rules that keep that from becoming a way to make HQ call its providers:
-
-The page names its subject and nothing else. Which kinds sit behind a machine
-or a service is looked up here; a request cannot name a connection or a kind,
-and a subject HQ does not know asks for nothing.
-
-Opening a page never logs in to a machine. A kind whose reader opens a shell
-is not asked for from here at all: the sweep reads those on its own clock, and
-a host counts its logins.
-
-A kind is asked for again only when its last *attempt* is older than
-``freshness`` allows, here as everywhere. The attempt, not the last reading
-that worked: a provider that is down or refusing stores nothing new, and
-judged by its last good reading it would be due again the moment it had been
-asked, and asked without end.
-
-And nothing is asked for that could not be answered. A request nothing answers
-forces sweeps until it expires, so only a kind the sweep reads and has stored,
-while a controller is arriving to read it, is ever asked for.
-
-Asking is ``cadence.request_reads``, which is how a read is requested, and how
-the read stands is ``asks.read_standing``, which is how any asked-for read is
-followed. This decides when to ask and for what, and nothing about how.
+Whoever opened a page about one machine, service or record is looking at its
+readings now, so it asks for what it is assembled from (docs/Design.md, "A page
+about one thing asks"). It names only its subject, never a connection or a kind, so this
+cannot become a way to make HQ call its providers. This decides when to ask and
+for what; ``cadence.request_reads`` asks and ``asks.read_standing`` follows.
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
-from hq.platform.core.audit import operation_context
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .asks import Standing, read_standing, read_status_url
 from .cadence import controller_standing, forced_reads, request_reads, swept
+from .command_fields import Describe
 from .freshness import PAGE_VISIT, freshness
-from .security import Capability, Principal
+from .record_errors import RecordNotFound
+from .security import Principal
 lazy from . import machines
 lazy from .credential_sight import fed_kinds
 lazy from .entity_links import entity_link
@@ -63,9 +42,10 @@ class Reads:
 def askable(kind: str) -> bool:
     """Whether opening a page may ask for ``kind``.
 
-    The sweep must read it, or the request is never answered. And its reader
-    must not log in to a machine: those are left to the sweep's own clock.
-    A kind nothing declares is neither, so it is not asked for.
+    The sweep must read it, or the request is never answered and forces sweeps
+    until it expires. And its reader must not log in to a machine: a host
+    counts its logins, so those are left to the sweep's own clock. A kind
+    nothing declares is neither, so it is not asked for.
     """
 
     if not swept(kind):
@@ -102,6 +82,14 @@ def _service_reads(hostname: str) -> Reads | None:
     return Reads(tuple(sorted({claim.kind for facet in service.facets for claim in facet.claims})))
 
 
+def _resource_reads(key: str) -> Reads | None:
+    """A record is read as its kind: a container's state and the verbs its
+    page offers come from the sweep of containers."""
+
+    kind = ManagedResource.objects.filter(key=key).values_list("kind", flat=True).first()
+    return None if kind is None else Reads((kind,))
+
+
 # A page about no one thing, by name, and what it is assembled from: the
 # dashboard's queue says what GitHub holds, so opening it asks GitHub again.
 PAGES: dict[str, Reads] = {"dashboard": Reads((REPOSITORY_KIND,))}
@@ -109,6 +97,7 @@ PAGES: dict[str, Reads] = {"dashboard": Reads((REPOSITORY_KIND,))}
 SUBJECTS: dict[str, Callable[[str], Reads | None]] = {
     "machine": _machine_reads,
     "service": _service_reads,
+    "resource": _resource_reads,
     "page": PAGES.get,
 }
 
@@ -125,6 +114,9 @@ def _due(kinds: tuple[str, ...], now: datetime) -> list[str]:
     """The kinds old enough to ask for again, not already asked for."""
 
     asked = {read.kind for read in forced_reads() if read.kind}
+    # Judged by the last attempt, not the last reading that worked: a provider
+    # that is down or refusing stores nothing new, and judged by its last good
+    # reading it would be due again the moment it was asked, without end.
     attempted = {
         kind: max(observed_at, updated_at)
         for kind, observed_at, updated_at in ProviderInventory.objects.filter(kind__in=kinds).values_list(
@@ -173,23 +165,31 @@ def _answer(requested: list[str], kinds: tuple[str, ...]) -> dict[str, Any]:
     }
 
 
-def request_visit_refresh(subject: str, name: str, *, principal: Principal) -> dict[str, Any] | None:
-    """Ask for the readings behind one page that are due; None for no such page.
+VISIT_REFRESH = "visit.refresh"
 
-    Silent for a principal who cannot ask: the page still renders, and nothing
-    is read, or said to be being read, for somebody who could not have pressed
-    Refresh.
+
+@dataclass(frozen=True, slots=True)
+class VisitRefreshCommand:
+    """The page that was opened: what it is about, and which one."""
+
+    subject: Annotated[str, Describe("What type of page was opened.")]
+    name: Annotated[str, Describe("Which one.")]
+
+
+def request_visit_refresh(command: VisitRefreshCommand, *, principal: Principal) -> dict[str, Any]:
+    """Ask for the readings behind one page that are due.
+
+    Asks for nothing, and promises nothing, while no controller is arriving to
+    read it: a request then would force sweeps when it returns, for a page
+    that has long been closed.
     """
 
-    reads = reads_of(subject, name)
+    del principal
+    reads = reads_of(command.subject, command.name)
     if reads is None:
-        return None
+        raise RecordNotFound("HQ has no such page.")
     standing = controller_standing()
-    if not standing.known or standing.silent or not principal.permits(Capability.MANAGE_INFRASTRUCTURE):
-        # Nobody is there to read it, or nobody entitled is asking. Asking
-        # would leave a request that forces sweeps when the controller
-        # returns, and a page promising a reading that is not coming.
-        return _answer([], ())
-    with operation_context(interface=principal.interface, actor=principal.actor, operation="visit.refresh"):
-        requested = list(request_reads(_due(reads.kinds, timezone.now()), principal=principal))
-    return _answer(requested, reads.kinds)
+    if not standing.known or standing.silent:
+        return {"ok": True, **_answer([], ())}
+    requested = list(request_reads(_due(reads.kinds, timezone.now())))
+    return {"ok": True, **_answer(requested, reads.kinds)}

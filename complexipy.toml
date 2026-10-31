@@ -1,0 +1,15 @@
+# Cognitive complexity (SonarSource's definition) for lint:complexity: no
+# function outside tests asks a reader to hold more than twenty units of
+# branching and nesting. A function over the bound is split into named steps.
+paths = ["demo", "hq", "hq_sdk", "tools"]
+exclude = ["**/tests/**", "**/migrations/**", "**/test*.py"]
+max-complexity-allowed = 20
+# The bound holds for every function: no snapshot of ones over it is read,
+# so a stray complexipy-snapshot.json allows nothing, and none is written.
+snapshot-ignore = true
+snapshot-create = false
+# An inline ignore comment is an allowance list by another name.
+no-ignore = true
+cache-dir = "var/complexipy"
+# A failure names each function over the bound, and a pass prints nothing else.
+failed = true

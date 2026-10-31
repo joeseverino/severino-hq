@@ -29,7 +29,7 @@ lazy from .outbound_work import clear_outbound_work_cache
 lazy from .plugin_admission import enforce_plugin_admission
 lazy from .security import host_capabilities
 
-PLUGIN_API_VERSION = 5
+PLUGIN_API_VERSION = 6
 
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
 PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -102,7 +102,7 @@ class PluginManifest:
     mcp_write_capabilities: tuple[str, ...] = ()
 
 
-def _import(spec: str) -> Any:
+def import_reference(spec: str) -> Any:
     module_name, separator, attribute = spec.partition(":")
     if not separator or not module_name or not attribute:
         raise ImproperlyConfigured(f"Plugin reference {spec!r} must use 'module:attribute'.")
@@ -113,7 +113,7 @@ def _import(spec: str) -> Any:
 
 
 def _load_manifest(reference: str) -> PluginManifest:
-    manifest = _import(reference)
+    manifest = import_reference(reference)
     if not isinstance(manifest, PluginManifest):
         raise ImproperlyConfigured(f"{reference!r} did not expose PluginManifest.")
     return manifest
@@ -228,12 +228,9 @@ def _validate_capabilities(manifest: PluginManifest) -> None:
 def _validate(manifest: PluginManifest) -> None:
     """Everything a manifest must satisfy before HQ will boot with it.
 
-    Grouped rather than tabulated: this is fail-closed startup validation, and
-    somebody auditing it should be able to read the requirements in order. A
-    table of rules would be shorter and harder to check.
-
-    Order is load-bearing: identity first, because every later message names
-    the plugin by the id validated there.
+    Fail-closed startup validation, grouped rather than tabulated so an auditor
+    reads the requirements in order. Identity comes first: every later message
+    names the plugin by the id validated there.
     """
 
     _validate_identity(manifest)
@@ -330,7 +327,7 @@ def installed_integrations() -> tuple[tuple[PluginManifest, PluginIntegration], 
 
     integrations = []
     for plugin in installed_plugins():
-        provider: Callable[[], PluginIntegration] = _import(plugin.integration_provider)
+        provider: Callable[[], PluginIntegration] = import_reference(plugin.integration_provider)
         integration = provider()
         if not isinstance(integration, PluginIntegration):
             raise ImproperlyConfigured(f"Plugin {plugin.id!r} integration provider must return PluginIntegration.")
@@ -420,11 +417,10 @@ def _identity(provider: Callable[..., Any]) -> str:
     """Which function answers, so one provider is never answered with what
     another stored.
 
-    A function is named by where it is defined and what it is written to do,
-    which every process running one release agrees on, and by what it was
-    built holding: a closure made again on every call is the same provider
-    while it holds the same things. Anything that cannot be told apart that
-    way is known only as itself.
+    Named by where it is defined, what it is written to do (which every process
+    running one release agrees on) and what it was built holding, so a closure
+    made again on every call is the same provider while it holds the same
+    things. Anything that cannot be told apart that way is known only as itself.
     """
 
     if isinstance(provider, partial):
@@ -632,15 +628,11 @@ def gather_attention(
 ) -> tuple[dict[str, Any], ...]:
     """Collect, validate, attribute and order attention items from any sources.
 
-    ``sources`` is ``(id, label, provider)`` per contributor, which is
-    all this needs to know, so the host's own sections and installed
-    extensions are gathered by one implementation rather than two that could
-    drift on what "urgent" means or on which statuses count.
-
-    Each entry carries its source so a composing surface can say where an item
-    came from without the contributor restating its own name. Ordering is a
-    property of the status vocabulary rather than of the caller, so every
-    surface that renders these agrees on urgency instead of re-sorting to taste.
+    ``sources`` is ``(id, label, provider)`` per contributor, so the host's own
+    sections and installed extensions are gathered by one implementation that
+    cannot drift on what "urgent" means. Each entry carries its source, so a
+    surface can say where an item came from; the order is the status
+    vocabulary's (``ordered_attention``), so every surface agrees on urgency.
     """
 
     gathered: list[dict[str, Any]] = []
@@ -683,14 +675,11 @@ def ordered_attention(entries: Iterable[dict[str, Any]]) -> tuple[dict[str, Any]
 def plugin_attention_items() -> tuple[dict[str, Any], ...]:
     """What every installed extension believes needs a decision now.
 
-    Extensions only. This is the SDK surface a composing extension uses to
-    render its sibling domains; HQ's own dashboard composes *every* domain and
-    calls ``application.domains.domain_attention_items`` instead.
-
-    Takes no exclusions: the queue is the one place a `serious` item is
-    guaranteed to appear, so nothing may remove a domain from it.
-    A composer that also renders per-domain panels should group these by
-    `source_id` rather than fetch the same question from a second channel.
+    Extensions only: the SDK surface a composing extension renders its siblings
+    with; HQ's own dashboard calls ``application.domains.domain_attention_items``.
+    No exclusions, since the queue is the one place a `serious` item is sure to
+    appear. A composer with per-domain panels groups these by `source_id` rather
+    than asking a second channel.
     """
 
     # A notice reports something and asks for nothing, so it is not a
@@ -700,7 +689,7 @@ def plugin_attention_items() -> tuple[dict[str, Any], ...]:
         for entry in gather_attention(
             (plugin.id, plugin.name, integration.attention) for plugin, integration in installed_integrations()
         )
-        if not getattr(entry["item"], "notice", False)
+        if not entry["item"].notice
     )
 
 

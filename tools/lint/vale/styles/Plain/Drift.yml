@@ -1,0 +1,8 @@
+extends: existence
+message: "'%s' is HQ's own word; say 'changed outside HQ'"
+level: error
+ignorecase: true
+nonword: true
+scope: [shown, ~comment & ~code]
+tokens:
+  - '(?<![\w-])(?:drift(?:ed|s|ing)?)(?![\w-])'

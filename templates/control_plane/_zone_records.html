@@ -47,7 +47,7 @@ value under its name (`record.summary`), so the two still read as two.
             <td class="actions-col">
               {% if record.managed %}
                 <span class="row-actions">
-                  <a class="subtle-link" href="{{ record.edit_url|returning_to:request.get_full_path }}">Edit</a>
+                  <a class="subtle-link" href="{{ record.edit_url|returning_to:request.get_full_path }}">{% words "infrastructure.resource.update" %}</a>
                   <a class="subtle-link" href="{{ record.remove_url }}">{% words "infrastructure.resource.remove" %}</a>
                 </span>
               {% endif %}

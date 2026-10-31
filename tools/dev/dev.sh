@@ -2,7 +2,8 @@
 # A development server in the profile its mise task names (HQ_DEV_PROFILE):
 # `secure` for `mise run dev`, `scratch` for `mise run dev:scratch`. The task's
 # env says where it listens and what it opens; this refuses what env cannot,
-# then serves the production ASGI path with reload.
+# then serves the production ASGI path, with reload unless `--no-reload` asks
+# for the lighter server without the reloader's supervising process.
 set -eu
 unset CDPATH
 
@@ -72,11 +73,16 @@ for dir in $(printf '%s' "${PYTHONPATH:-}" | tr ':' ' '); do
     reload_dirs="$reload_dirs $dir"
 done
 reload_skipped="$root/.claude/worktrees $root/.venv $root/var"
+if [ "${usage_reload:-}" = false ]; then
+    serving="without reload: a change takes a restart"
+else
+    serving="reloading on changes to Python and templates in $reload_dirs, but for $reload_skipped"
+fi
 
 if [ "${usage_plan:-false}" = true ]; then
     # Before any secret is read or any file touched, so the plan holds neither.
     env | grep -E '^(DJANGO_|SEVERINO_|UVICORN_|HQ_DEV_|PYTHONPATH=)' | grep -Ev '^[A-Z_]*(SECRET_KEY|_SECRET)=' | sort
-    echo "serve: $host:$port, reloading on changes to Python and templates in $reload_dirs, but for $reload_skipped"
+    echo "serve: $host:$port, $serving"
     exit 0
 fi
 
@@ -139,15 +145,21 @@ fi
 # Uvicorn watches with watchfiles (the dev group), the reloader that reads
 # --reload-include and --reload-exclude. A template edit restarts it too: with
 # DEBUG off, as `dev` runs, templates are cached until the server restarts.
-set -- --reload --reload-include '*.html'
-for dir in $reload_dirs; do
-    set -- "$@" --reload-dir "$dir"
-done
-# Uvicorn reads an exclude that is no directory as a pattern, which an
-# absolute path cannot be.
-for dir in $reload_skipped; do
-    if [ -d "$dir" ]; then
-        set -- "$@" --reload-exclude "$dir"
-    fi
-done
-exec uv run python -m uvicorn hq.config.asgi:application --host "$host" --port "$port" "$@"
+set --
+if [ "${usage_reload:-}" != false ]; then
+    set -- --reload --reload-include '*.html'
+    for dir in $reload_dirs; do
+        set -- "$@" --reload-dir "$dir"
+    done
+    # Uvicorn reads an exclude that is no directory as a pattern, which an
+    # absolute path cannot be.
+    for dir in $reload_skipped; do
+        if [ -d "$dir" ]; then
+            set -- "$@" --reload-exclude "$dir"
+        fi
+    done
+fi
+# The environment's own interpreter, which uv has synced by now: `uv run`
+# would stay on as a parent process holding memory of its own.
+python=$(uv run python -c 'import sys; print(sys.executable)')
+exec "$python" -m uvicorn hq.config.asgi:application --host "$host" --port "$port" "$@"

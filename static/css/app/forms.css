@@ -41,6 +41,9 @@
 .field.compact { margin-bottom: 0; }
 .field label { display: block; font-weight: 600; margin-bottom: var(--space-2); font-size: var(--text-sm); }
 .field input, .field select, .field textarea { width: 100%; }
+/* A list box is as wide as its field, so a long option wraps inside it
+   rather than running under its edge where no one can scroll to it. */
+.field select:is([multiple], [size]) option { white-space: normal; overflow-wrap: anywhere; padding-block: var(--space-1); }
 .field textarea { resize: vertical; min-height: 80px; }
 /* A field that is the form's subject (a title, a note) takes the whole row. */
 .form .field.is-wide { flex-basis: 100%; }
@@ -292,11 +295,9 @@
 
 /* Wrapped, a tag sits on its first line: an inline block's baseline is its
    last, which a row aligned on baselines (an opened row's panel) would lift
-   over the rows above, as base.css does for an identifier. */
+   over the rows above, as base.css does for an identifier, and where an
+   engine has no `baseline-source` it sits on its last line's baseline. */
 .tag { display: inline-block; padding: 1px var(--space-4); margin-right: var(--space-2); background: var(--bg-tint); border-radius: 999px; font-size: var(--text-2xs); color: var(--ink-2); baseline-source: first; }
-@supports not (baseline-source: first) {
-  .tag { vertical-align: top; }
-}
 
 .search-page-form input[type=search] { flex-basis: 420px; }
 .command-center-grid {
@@ -337,9 +338,10 @@ a.discovery-link:hover strong { color: var(--accent); }
 /* A key to press is said only where there are keys: not on a touch screen. */
 @media (hover: none) { .keyboard-only { display: none; } }
 .command-runner { margin: 0; max-width: 56rem; }
-/* What a command acts on, when the page was opened for one thing. */
-.command-target p { margin: 0; }
-.command-target .field-label { display: block; color: var(--muted); font-size: var(--text-xs); }
+/* What a command acts on, when the page was opened for one thing, and where
+   a switch stands for it: facts the form names, not fields to fill. */
+:is(.command-target, .command-state) p { margin: 0; }
+:is(.command-target, .command-state) .field-label { display: block; color: var(--muted); font-size: var(--text-xs); }
 /* The confirmation closes the form, a row of its own under the fields it confirms. */
 .command-form > .command-confirm { flex-basis: 100%; }
 .command-effect-note { margin: 0 0 var(--space-7); }

@@ -3,9 +3,9 @@ Nothing at all when there is nothing to show, so the row closes up instead of
 carrying a card that says so.
 {% endcomment %}
 {% if recent_contacts %}
-<section class="card">
+{% card %}
   {% section_head %}Messages{% aside %}{% if unread_contacts_count %}<span class="count">{{ unread_contacts_count|breakable }} unread</span>{% endif %}{% endsection_head %}
   {% include "partials/_record_list.html" with rows=recent_contacts %}
-  <p class="section-foot"><a href="{% url 'contacts:list' %}">All messages &rarr;</a></p>
-</section>
+  <p class="section-foot"><a href="{% url 'contacts:list' %}">All messages{% arrow %}</a></p>
+{% endcard %}
 {% endif %}

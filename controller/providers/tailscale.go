@@ -157,7 +157,8 @@ type tailnetSettings struct {
 	ACLsExternallyManagedOn     *bool `json:"aclsExternallyManagedOn"`
 }
 
-// Records the Tailscale readers report.
+// TailnetReachRule and the records after it are what the Tailscale readers
+// report.
 type TailnetReachRule struct {
 	Who  []string `json:"who"`
 	To   []string `json:"to"`
@@ -305,14 +306,11 @@ func httpStatus(err error) int {
 // decodeTailnet decodes one answer strictly: an empty answer or one of the
 // wrong shape is an error naming what was read.
 func decodeTailnet[T any](raw json.RawMessage, what string) (T, error) {
-	var target T
 	if len(raw) == 0 || string(raw) == "null" {
-		return target, &ProviderError{Message: what + " is empty"}
+		var empty T
+		return empty, &ProviderError{Message: what + " is empty"}
 	}
-	if err := json.Unmarshal(raw, &target); err != nil {
-		return target, &ProviderError{Message: what + " is unreadable", Err: err}
-	}
-	return target, nil
+	return decodeAs[T](raw, what+" is unreadable")
 }
 
 // tailnetRefused classifies one refused tailnet request. The token was just
@@ -450,6 +448,16 @@ func stamp(moment time.Time) string {
 	return moment.UTC().Format(time.RFC3339)
 }
 
+// stampText is a time the daemon wrote as text, through stamp: Go writes an
+// unset time.Time as 0001-01-01T00:00:00Z, which names no moment.
+func stampText(text string) string {
+	moment, err := time.Parse(time.RFC3339, text)
+	if err != nil {
+		return text
+	}
+	return stamp(moment)
+}
+
 func tailnetRecord(node tailnetNode) (TailscaleDeviceRecord, bool) {
 	name := strings.TrimSpace(node.HostName)
 	if name == "" {
@@ -460,8 +468,8 @@ func tailnetRecord(node tailnetNode) (TailscaleDeviceRecord, bool) {
 		PublicKey:      node.PublicKey,
 		DNSName:        strings.TrimRight(node.DNSName, "."),
 		Online:         node.Online,
-		LastSeen:       node.LastSeen,
-		KeyExpires:     node.KeyExpiry,
+		LastSeen:       stampText(node.LastSeen),
+		KeyExpires:     stampText(node.KeyExpiry),
 		Addresses:      nonNil(node.TailscaleIPs),
 		OS:             node.OS,
 		ExitNodeInUse:  node.ExitNode,
@@ -469,7 +477,7 @@ func tailnetRecord(node tailnetNode) (TailscaleDeviceRecord, bool) {
 		DirectEndpoint: node.CurAddr,
 		Endpoints:      nonNil(node.Addrs),
 		Relay:          node.Relay,
-		LastHandshake:  node.LastHandshake,
+		LastHandshake:  stampText(node.LastHandshake),
 		Active:         node.Active,
 		RxBytes:        node.RxBytes,
 		TxBytes:        node.TxBytes,
@@ -507,12 +515,9 @@ func apiDeviceRecord(device tsapi.Device) (TailscaleDeviceRecord, bool) {
 }
 
 func exitRoute(routes []string) bool {
-	for _, route := range routes {
-		if route == "0.0.0.0/0" || route == "::/0" {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(routes, func(route string) bool {
+		return route == "0.0.0.0/0" || route == "::/0"
+	})
 }
 
 func identitiesFrom(devices []tsapi.Device) map[string]tsapi.Device {
@@ -687,9 +692,9 @@ func (r *Registry) tailscaleDeviceReconcile(ctx context.Context, spec TailnetDev
 		return Result{}, tailnetWriteFailed("the key change for "+name, "devices:core", err)
 	}
 	status := TailnetDeviceStatus{Name: name, Online: current.Online, KeyExpiryDisabled: wanted}
-	message := fmt.Sprintf("%s has an expiry date again.", name)
+	message := name + " has an expiry date again."
 	if wanted {
-		message = fmt.Sprintf("%s now stays on the tailnet.", name)
+		message = name + " now stays on the tailnet."
 	}
 	return result(true, status, "Reconciled", "The device is as declared.", message), nil
 }
@@ -729,7 +734,7 @@ func (r *Registry) tailscaleApproveRoutes(ctx context.Context, spec TailnetDevic
 	if len(pending) == 0 {
 		msg := "Nothing to approve."
 		if len(advertised) == 0 {
-			msg = fmt.Sprintf("%s advertises no routes.", name)
+			msg = name + " advertises no routes."
 		}
 		return result(false, status, "Reconciled", "Every route this device advertises is approved.", msg), nil
 	}

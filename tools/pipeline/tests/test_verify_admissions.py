@@ -22,7 +22,7 @@ WHEEL = "example_alpha-1.0-py3-none-any.whl"
 class FakeRun:
     """git and node as Compose runs them: node writes an entry unless told to fail."""
 
-    def __init__(self, node_fails: bool = False):
+    def __init__(self, *, node_fails: bool = False):
         self.node_fails = node_fails
         self.calls: list[list[str]] = []
 
@@ -63,7 +63,7 @@ class VerifyAdmissionsTests(SimpleTestCase):
         if "wheel" in files:
             (directory / wheel).write_bytes(b"wheel")
 
-    def verify(self, run, candidate=False, coordinated=""):
+    def verify(self, run, *, candidate=False, coordinated=""):
         (self.root / "set.json").write_text(json.dumps({"extensions": self.extensions}))
         (self.root / "coordinated.txt").write_text(coordinated)
         paths = {

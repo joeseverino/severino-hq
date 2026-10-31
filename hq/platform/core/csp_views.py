@@ -38,22 +38,18 @@ def _csp_violations(payload):
     return []
 
 
+# Still behind the network gate, and CSRF-exempt only for a body it never trusts.
 @login_not_required
 @csrf_exempt
 @require_POST
 def csp_report(request):
     """Record a Content-Security-Policy violation the browser refused to run.
 
-    The policy is the one boundary HQ cannot verify from the inside: it is
-    enforced in someone else's browser, and until the browser says so, a
-    directive that is quietly failing looks exactly like a directive that is
-    quietly working. This is where it says so.
-
-    Unauthenticated by necessity: a violation report is sent without
-    credentials, so requiring a session would silence reports from the sign-in
-    page, which is the page where one would matter most. It is still behind
-    the network gate, still CSRF-exempt only for a body it never trusts, and
-    it answers the same 204 whatever it decides, so nothing here is an oracle.
+    The policy is enforced in someone else's browser, so a directive quietly
+    failing looks like one quietly working until the browser says so. A report
+    comes without credentials, and the sign-in page is where one matters most,
+    so this needs no session; it answers 204 whatever it decides, so nothing
+    here is an oracle.
     """
 
     if len(request.body) > _CSP_REPORT_MAX_BYTES:

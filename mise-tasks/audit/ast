@@ -1,0 +1,40 @@
+#!/bin/sh
+#MISE description="Python docstrings over 8 lines and getattr of a literal name with a default, counted per file, read-only"
+#MISE hide=true
+#USAGE arg "[globs]" var=#true help="Which files, the repository without: a glob (hq/**) for only the files it matches, or !glob (!**/tests/**) to leave them out"
+
+# ast-grep matches the rules in tools/audit/ast-grep.yml; each word is held to
+# a glob's characters, so none can become a flag of ast-grep's (--update-all
+# rewrites files). The words are mise's shell-quoted parse of the arguments.
+set -euf
+
+globs=""
+eval "set -- ${usage_globs:-}"
+for word; do
+    case "${word}" in
+    "" | -* | *[!A-Za-z0-9_./*!-]* | ?*!*)
+        printf 'audit:ast: %s is not a glob of letters, digits and _ . / * - !\n' "${word}" >&2
+        exit 2
+        ;;
+    *) globs="${globs} --globs ${word}" ;;
+    esac
+done
+
+# A file between the two, since a failed scan must not read as no findings.
+found="$(mktemp)"
+trap 'rm -f "${found}"' EXIT
+# globs holds words without spaces, and set -f leaves their globs to ast-grep.
+# shellcheck disable=SC2086
+ast-grep scan --rule tools/audit/ast-grep.yml --json=stream ${globs} . >"${found}"
+jq -rs '
+    group_by(.file)
+    | map({
+        file: .[0].file,
+        docstrings: map(select(.ruleId == "long-docstring")) | length,
+        getattrs: map(select(.ruleId == "getattr-with-default")) | length
+    })
+    | sort_by(-(.docstrings + .getattrs), .file)
+    | (["docstrings>8", "getattr-default", "file"] | @tsv),
+      (.[] | [.docstrings, .getattrs, .file] | @tsv),
+      ([(map(.docstrings) | add // 0), (map(.getattrs) | add // 0), "total"] | @tsv)
+' "${found}"

@@ -161,7 +161,7 @@ func (d *drill) untouched() {
 	if d.read("stacks/app/compose.yaml") != composeFile {
 		d.t.Error("the compose file changed")
 	}
-	if _, err := os.Stat(filepath.Join(d.root, "volumes/app_data/added")); err == nil {
+	if _, err := os.Stat(filepath.Join(d.root, "volumes", "app_data", "added")); err == nil {
 		d.t.Error("a file the upgraded service added survived")
 	}
 	if d.read("volumes/app_data/state") != "original\n" {
@@ -250,7 +250,9 @@ func (d *drill) compose(ctx context.Context, args []string) *exec.Cmd {
 		if d.swapOnUp != "" {
 			conf := filepath.Join(d.stack, "app.conf")
 			os.Remove(conf)
-			os.Symlink(d.swapOnUp, conf)
+			if err := os.Symlink(d.swapOnUp, conf); err != nil {
+				d.t.Fatal(err)
+			}
 		}
 	}
 	return answer(ctx, "", 0)
@@ -289,7 +291,7 @@ func (d *drill) docker(ctx context.Context, args []string) *exec.Cmd {
 	switch {
 	case args[0] == "inspect" && strings.Contains(args[2], ".Mounts"):
 		mounts := []map[string]any{
-			{"Type": "volume", "Name": "app_data", "Source": filepath.Join(d.root, "volumes/app_data"), "Destination": "/data", "RW": true},
+			{"Type": "volume", "Name": "app_data", "Source": filepath.Join(d.root, "volumes", "app_data"), "Destination": "/data", "RW": true},
 			{"Type": "bind", "Source": filepath.Join(d.stack, "app.conf"), "Destination": "/etc/app.conf", "RW": true},
 			{"Type": "bind", "Source": "/etc/ssl/certs", "Destination": "/etc/ssl/certs", "RW": false},
 		}
@@ -309,7 +311,9 @@ func (d *drill) docker(ctx context.Context, args []string) *exec.Cmd {
 		return answer(ctx, "running "+d.live+" 0 t0\n", 0)
 	case args[0] == "volume" && (args[1] == "inspect" || args[1] == "create"):
 		path := filepath.Join(d.root, "volumes", args[len(args)-1])
-		os.MkdirAll(path, 0o755)
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			d.t.Fatal(err)
+		}
 		return answer(ctx, path+"\n", 0)
 	case args[0] == "pull" && d.pullFails:
 		return answer(ctx, "", 1)
@@ -415,7 +419,9 @@ func TestAKeptOverrideKeepsTheOverridesOwnerAndMode(t *testing.T) {
 	if err := os.Chown(d.override, -1, gid); err != nil {
 		t.Fatal(err)
 	}
-	os.Chmod(d.override, 0o640)
+	if err := os.Chmod(d.override, 0o640); err != nil {
+		t.Fatal(err)
+	}
 
 	d.expect(Kept, "kept", d.upgrade())
 
@@ -601,7 +607,9 @@ func TestWhatTheArgumentsAndFilesSayIsRefusedWithoutDocker(t *testing.T) {
 		"an argument with no value":  {args("--tag"), "an argument has no value"},
 		"a service with a newline":   {args("--service", "app\nother"), "service is not a name"},
 		"a stack outside the root": {func(d *drill) []string {
-			os.MkdirAll(filepath.Join(d.root, "elsewhere", "app"), 0o755)
+			if err := os.MkdirAll(filepath.Join(d.root, "elsewhere", "app"), 0o755); err != nil {
+				d.t.Fatal(err)
+			}
 			d.write("elsewhere/app/compose.yaml", composeFile)
 			return []string{"--project-dir", filepath.Join(d.root, "elsewhere", "app")}
 		}, "not directly under"},
@@ -612,24 +620,36 @@ func TestWhatTheArgumentsAndFilesSayIsRefusedWithoutDocker(t *testing.T) {
 			return []string{"--project-dir", filepath.Join(d.root, "stacks") + "/../elsewhere"}
 		}, "climbs out"},
 		"a symlinked stack directory": {func(d *drill) []string {
-			os.Symlink(d.stack, filepath.Join(d.root, "stacks", "linked"))
+			if err := os.Symlink(d.stack, filepath.Join(d.root, "stacks", "linked")); err != nil {
+				d.t.Fatal(err)
+			}
 			return []string{"--project-dir", filepath.Join(d.root, "stacks", "linked")}
 		}, "the project directory is a symlink"},
 		"a symlinked compose file": {func(d *drill) []string {
-			os.MkdirAll(filepath.Join(d.root, "stacks", "other"), 0o755)
-			os.Symlink(filepath.Join(d.stack, "compose.yaml"), filepath.Join(d.root, "stacks", "other", "compose.yaml"))
+			if err := os.MkdirAll(filepath.Join(d.root, "stacks", "other"), 0o755); err != nil {
+				d.t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join(d.stack, "compose.yaml"), filepath.Join(d.root, "stacks", "other", "compose.yaml")); err != nil {
+				d.t.Fatal(err)
+			}
 			return []string{"--project-dir", filepath.Join(d.root, "stacks", "other")}
 		}, "the compose file is a symlink"},
 		"a symlinked override": {func(d *drill) []string {
-			os.Symlink(filepath.Join(d.stack, "compose.yaml"), d.override)
+			if err := os.Symlink(filepath.Join(d.stack, "compose.yaml"), d.override); err != nil {
+				d.t.Fatal(err)
+			}
 			return nil
 		}, "the compose override is a symlink"},
 		"a group-writable compose file": {func(d *drill) []string {
-			os.Chmod(filepath.Join(d.stack, "compose.yaml"), 0o664)
+			if err := os.Chmod(filepath.Join(d.stack, "compose.yaml"), 0o664); err != nil {
+				d.t.Fatal(err)
+			}
 			return nil
 		}, "the compose file is writable by its group or others"},
 		"a world-writable stack directory": {func(d *drill) []string {
-			os.Chmod(d.stack, 0o757)
+			if err := os.Chmod(d.stack, 0o757); err != nil {
+				d.t.Fatal(err)
+			}
 			return nil
 		}, "the project directory is writable by its group or others"},
 	} {

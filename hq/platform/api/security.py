@@ -1,14 +1,9 @@
 """Who a machine client is, proven by a token HQ did not issue.
 
-Pocket ID mints; HQ only verifies. That asymmetry is the whole design. There is
-no credential table here to leak, no minting UI to guard, and no second answer
-to "who may do this": revoking a client is done in the identity provider that
-already owns every other credential in the fleet.
-
-The permission keys declared on the Pocket ID API resource are deliberately the
-*same strings* as HQ's capability names. A mapping table between the two would
-be a third place for the authorization model to live, and the first thing to go
-stale the next time a plugin adds a capability.
+Pocket ID mints and HQ only verifies, so there is no credential here to leak
+and revoking a client happens where every other credential is revoked. Its
+permission keys are HQ's capability names, with no mapping table between them
+(HQ verifies; it does not issue, in API).
 """
 
 import logging
@@ -38,15 +33,11 @@ logger = logging.getLogger("severino.api")
 class ClientReason(Exception):
     """An error carrying a sentence written for the caller.
 
-    ``str(exception)`` is not that sentence. It is whatever the exception
-    happens to hold (a path, a query, a driver's own words) and returning it
-    from an API is how internal detail escapes one accident at a time. Static
-    analysis reads it as stack-trace exposure for exactly that reason, and is
-    right to: the guarantee cannot rest on which types are raised here, because
-    one broader catch anywhere ends it.
-
-    So the message a client sees is an attribute, set deliberately at the raise
-    site. An exception that does not carry one has nothing to say publicly.
+    ``str(exception)`` holds whatever the error happened to (a path, a query, a
+    driver's own words), and which types are raised here can't keep it out of
+    a response, since one broader catch anywhere ends that. So the sentence a
+    client sees is ``reason``, set at the raise site, and an error without one
+    has nothing to say publicly.
     """
 
     code = "error"

@@ -1,34 +1,9 @@
-"""Time every page over a populated scratch database.
+"""Time every page and action over a populated scratch database.
 
     DJANGO_STATIC_ROOT=/tmp/hq-static python manage.py bench_pages
 
-Builds Django's test database (never the real one), fills it with
-``hq.platform.core.bench.seed``, then requests each page as a signed-in
-operator through the whole middleware stack. Reports median and p95 wall time,
-the query count, how many of those queries repeat one already made in the same
-request, how many derivations the request ran, and the response size. The
-timed requests follow three others, so a page is measured as it is served
-between two changes of what it derives from.
-
-``--sweeps`` also measures the request a person actually makes: the first one
-after the controller reported. Before each timed request it lands a sweep that
-changes nothing (``bench.unchanged_sweep``) and asks again what no longer
-stands, as the web application does once a write commits (``core.ahead``);
-``--no-ahead`` leaves that out, which is what the request cost before. Run it
-with the extensions installed to measure what production serves.
-
-The pages are read from the URL configuration: every route that answers a GET.
-A route that takes arguments is requested with the seeded record ``SAMPLES``
-names for it; one with none listed is reported as not benched, so a new detail
-page shows up here until it is given a sample.
-
-Actions are measured the same way: every route that answers a POST is one, and
-``ACTIONS`` names what each is posted. An action is posted as the page's script
-posts it, inside a transaction that is rolled back, so the estate every later
-round sees is the seeded one. What an action would do outside the database is
-held: the controller's doorbell is not rung and a job's work is recorded but
-not run, so the time is the request's own. A route with no entry is reported
-as not exercised, with ``UNSAFE``'s reason where there is one.
+What it seeds, requests and reports: docs/Architecture.md, What a request
+costs. Run it with the extensions installed to measure what production serves.
 """
 
 import functools
@@ -41,10 +16,12 @@ from collections import Counter
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, override
-from unittest import mock
 
+import jwt
+from cryptography.hazmat.primitives.asymmetric import rsa
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
@@ -52,7 +29,9 @@ from django.db import connection, transaction
 from django.test import Client, override_settings
 from django.test.utils import CaptureQueriesContext, setup_databases, teardown_databases
 from django.urls import URLPattern, reverse
+from jwt.algorithms import RSAAlgorithm
 
+from hq.platform.api.security import KEYS
 from hq.platform.application.derivations import counting, derive_ahead
 from hq.platform.application.outbound_work import SUBJECT_FIELD
 from hq.platform.application.projects import REFRESH
@@ -62,6 +41,11 @@ from hq.platform.application.security import host_capabilities
 from hq.platform.core.bench import ZONES, Seeded, seed, unchanged_sweep
 lazy from hq.domains.jobs.testing import held_jobs
 lazy from hq.platform.core.models import LinkedAccount
+
+# Who the bench's machine client says signed its token, and for which API.
+BENCH_ISSUER = "https://sso.example.com"
+BENCH_RESOURCE = "https://hq.example.com"
+BENCH_KID = "bench"
 
 # Routes that are not a page an operator loads. Named, with the reason.
 SKIPPED = {
@@ -108,9 +92,9 @@ SAMPLES: dict[str, Callable[[Seeded], dict[str, Any]]] = {
     "calendar:entry": lambda s: {"uid": s.entry.uid},
     "calendar:entry_edit": lambda s: {"uid": s.entry.uid},
     "calendar:entry_delete": lambda s: {"uid": s.entry.uid},
-    "zones:detail": lambda s: {"zone": ZONES[0]},
-    "zones:mail": lambda s: {"zone": ZONES[0]},
-    "control_plane:machine": lambda s: {"name": "lab-1"},
+    "zones:detail": lambda _s: {"zone": ZONES[0]},
+    "zones:mail": lambda _s: {"zone": ZONES[0]},
+    "control_plane:machine": lambda _s: {"name": "lab-1"},
     "control_plane:service": lambda s: {"hostname": s.resource.spec["domain_names"][0]},
     "control_plane:detail": lambda s: {"key": s.resource.key},
     "control_plane:edit": lambda s: {"key": s.resource.key},
@@ -119,7 +103,7 @@ SAMPLES: dict[str, Callable[[Seeded], dict[str, Any]]] = {
     "jobs:status": lambda s: {"pk": s.job.pk},
     "core:audit_detail": lambda s: {"pk": s.audit.pk},
     "core:approval_entry": lambda s: {"approval_id": s.approval.pk},
-    "command": lambda s: {"name": "expense.create"},
+    "command": lambda _s: {"name": "expense.create"},
 }
 
 # The same page asked a narrower question: searched, filtered, sorted, paged.
@@ -139,9 +123,9 @@ class PostedAction:
     """What one action is posted: its route arguments, its form, and what must
     exist first (made inside the same rolled-back transaction)."""
 
-    kwargs: Callable[[Seeded], dict[str, Any]] = lambda seeded: {}
-    data: Callable[[Seeded], dict[str, Any]] = lambda seeded: {}
-    prepare: Callable[[Seeded], None] = lambda seeded: None
+    kwargs: Callable[[Seeded], dict[str, Any]] = lambda _seeded: {}
+    data: Callable[[Seeded], dict[str, Any]] = lambda _seeded: {}
+    prepare: Callable[[Seeded], None] = lambda _seeded: None
     headers: dict[str, str] = field(default_factory=lambda: {"X-Requested-With": "XMLHttpRequest"})
 
 
@@ -152,9 +136,9 @@ def _link_github(seeded: Seeded) -> None:
 # The actions exercised: each changes only the scratch database.
 ACTIONS: dict[str, PostedAction] = {
     "watching_refresh": PostedAction(prepare=_link_github),
-    "jobs:ask": PostedAction(kwargs=lambda s: {"name": REFRESH}, data=lambda s: {SUBJECT_FIELD: s.project.slug}),
+    "jobs:ask": PostedAction(kwargs=lambda _s: {"name": REFRESH}, data=lambda s: {SUBJECT_FIELD: s.project.slug}),
     "control_plane:read_now": PostedAction(data=lambda s: {"kind": s.resource.kind}),
-    "control_plane:visit": PostedAction(data=lambda s: {"subject": "machine", "name": "lab-1"}),
+    "control_plane:visit": PostedAction(data=lambda _s: {"subject": "machine", "name": "lab-1"}),
     "dashboard_glance": PostedAction(),
 }
 
@@ -257,11 +241,21 @@ def _actions(seeded: Seeded) -> tuple[list[tuple[str, str, PostedAction]], list[
 
 @contextmanager
 def _held_outside() -> Iterator[None]:
-    """Hold what an action does outside the database: the doorbell stays
-    unrung and a job's work is recorded, not run."""
+    """Hold what an action does outside the database: the markers it writes
+    (the doorbell, the controller's heartbeat, the activity marker) land in a
+    throwaway directory, and a job's work is recorded, not run."""
 
-    with mock.patch("hq.platform.application.cadence._touch"), held_jobs():
-        yield
+    with tempfile.TemporaryDirectory(prefix="severino-bench-") as directory:
+        markers = Path(directory)
+        with (
+            override_settings(
+                SEVERINO_CONTROLLER_DOORBELL=str(markers / "controller-doorbell"),
+                SEVERINO_CONTROLLER_HEARTBEAT=str(markers / "controller-heartbeat"),
+                SEVERINO_ACTIVITY_MARKER=str(markers / "hq-activity"),
+            ),
+            held_jobs(),
+        ):
+            yield
 
 
 @contextmanager
@@ -283,6 +277,8 @@ def _controller_arriving() -> Iterator[None]:
 def _post(client: Client, url: str, action: PostedAction, seeded: Seeded):
     """One post of an action over the seeded estate, undone afterwards."""
 
+    # Posted as the page's script posts it, and rolled back, so the estate every
+    # later round sees is the seeded one.
     with transaction.atomic():
         action.prepare(seeded)
         with CaptureQueriesContext(connection) as captured:
@@ -331,18 +327,37 @@ def _api_lists() -> list[tuple[str, str]]:
 def _machine_client() -> Iterator[dict[str, str]]:
     """Headers the API accepts as a client granted everything an operator holds.
 
-    The token is not verified: a signature check needs an identity provider,
-    and what it costs is not the page's doing.
+    The token is signed by a key made for the run and held as the key thread
+    holds the identity provider's, so each request pays the signature check a
+    served one does.
     """
 
-    claims = {"client_id": "bench", "scope": " ".join(sorted(map(str, host_capabilities())))}
-    with (
-        # Not ``setup_test_environment``: it instruments every template render
-        # to keep a copy of its context, which a served page never pays for.
-        override_settings(SEVERINO_API_RESOURCE="https://hq.example.com", ALLOWED_HOSTS=["testserver"]),
-        mock.patch("hq.platform.api.views.verify", return_value=claims),
-    ):
-        yield {"Authorization": "Bearer bench"}
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    now = datetime.now(tz=UTC)
+    claims = {
+        "iss": BENCH_ISSUER,
+        "aud": BENCH_RESOURCE,
+        "client_id": "bench",
+        "scope": " ".join(sorted(map(str, host_capabilities()))),
+        "iat": now,
+        "exp": now + timedelta(days=1),
+    }
+    token = jwt.encode(claims, key, algorithm="RS256", headers={"kid": BENCH_KID})
+    published = RSAAlgorithm.to_jwk(key.public_key(), as_dict=True)
+    held = KEYS.held
+    KEYS.held = {BENCH_KID: jwt.PyJWK({**published, "kid": BENCH_KID, "use": "sig", "alg": "RS256"})}
+    try:
+        with override_settings(
+            OIDC_ISSUER=BENCH_ISSUER,
+            OIDC_RP_SIGN_ALGO="RS256",
+            SEVERINO_API_RESOURCE=BENCH_RESOURCE,
+            # Not ``setup_test_environment``: it instruments every template render
+            # to keep a copy of its context, which a served page never pays for.
+            ALLOWED_HOSTS=["testserver"],
+        ):
+            yield {"Authorization": f"Bearer {token}"}
+    finally:
+        KEYS.held = held
 
 
 # A region that names the part of its page it is: `data-fragment` (its
@@ -362,7 +377,7 @@ def _asked_again(client: Client, page: str, url: str) -> list[tuple[str, str, di
     if response.status_code != 200:
         return []
     body = response.getvalue().decode(errors="replace")
-    path = url.split("?")[0]
+    path = url.split("?", maxsplit=1)[0]
     again = [
         (f"{page} #{name}", url, {"X-Fragment": name})
         for name in sorted({name for address, name in _PART.findall(body) if address in ("", path)})
@@ -376,6 +391,8 @@ def _measure(
     client: Client, page: str, url: str, rounds: int, headers: dict[str, str] | None = None
 ) -> tuple[PageTiming, list[str]]:
     get = functools.partial(client.get, url, headers=headers)
+    # The timed requests follow three others, so a page is measured as it is
+    # served between two changes of what it derives from.
     for _ in range(3):
         response = get()
     times = []
@@ -405,8 +422,11 @@ def _measure(
     )
 
 
-def _swept(client: Client, url: str, rounds: int, headers: dict[str, str] | None, ahead: bool) -> dict[str, Any]:
-    """The first request after each of ``rounds`` sweeps that changed nothing."""
+def _swept(client: Client, url: str, rounds: int, headers: dict[str, str] | None, *, ahead: bool) -> dict[str, Any]:
+    """The first request after each of ``rounds`` sweeps that changed nothing:
+    the request a person actually makes, after the controller reported. With
+    ``ahead``, what no longer stands is asked again first, as the web
+    application does once a write commits (``core.ahead``)."""
 
     times, asking, derived, statuses = [], [], 0, set()
     for _ in range(rounds):
@@ -479,8 +499,8 @@ class Command(BaseCommand):
         pages, left = _pages(seeded)
         pages += _api_lists()
         actions, unexercised = _actions(seeded)
-        with _machine_client() as headers:
-            client = Client(headers=headers, raise_request_exception=False)
+        with _machine_client() as machine_headers:
+            client = Client(headers=machine_headers, raise_request_exception=False)
             client.force_login(seeded.user)
             wanted = [(page, url, None) for page, url in pages if options["only"] in page]
             asked = [again for page, url, _ in wanted for again in _asked_again(client, page, url)]
@@ -492,12 +512,15 @@ class Command(BaseCommand):
                 # The first sweep of the seeded estate adopts what it finds.
                 with _held_outside():
                     unchanged_sweep()
-                for result, (_page, url, headers) in zip(results, wanted + asked, strict=False):
+                for result, (_page, url, asked_with) in zip(results, wanted + asked, strict=False):
                     held = client.get(url)
-                    if headers and "If-None-Match" in headers and "ETag" in held:
+                    headers = asked_with
+                    if asked_with and "If-None-Match" in asked_with and "ETag" in held:
                         # The validator a browser holds now, after that sweep.
-                        headers = {**headers, "If-None-Match": held["ETag"]}
-                    for name, value in _swept(client, url, options["rounds"], headers, not options["no_ahead"]).items():
+                        headers = {**asked_with, "If-None-Match": held["ETag"]}
+                    for name, value in _swept(
+                        client, url, options["rounds"], headers, ahead=not options["no_ahead"]
+                    ).items():
                         setattr(result, name, value)
             with _held_outside(), _controller_arriving():
                 results += [

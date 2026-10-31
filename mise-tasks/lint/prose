@@ -1,0 +1,13 @@
+#!/bin/sh
+#MISE description="Vale holds the wording to tools/lint/vale: no history in source, no em dash or hedged plural, none of HQ's own words on a page"
+#MISE hide=true
+set -u
+
+# Vale reads the tree; plain_words hands it the template attributes and tag
+# literals it cannot read. Both run, so one report names every finding.
+status=0
+vale --config=tools/lint/vale/.vale.ini --glob='!{**/node_modules/**,**/vendor/**,**/*.gen.go}' \
+	hq hq_sdk templates static controller tools tests demo deploy composition docs mise-tasks \
+	AGENTS.md README.md CLAUDE.md manage.py entrypoint.sh || status=1
+uv run python -m hq.platform.core.plain_words templates || status=1
+exit "$status"

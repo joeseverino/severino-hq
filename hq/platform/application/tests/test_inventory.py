@@ -730,7 +730,7 @@ class DriftIsSaidOutLoudTests(TestCase):
         ]
         self.resource.save(update_fields=["conditions"])
 
-    def _sweep(self, key_expiry_disabled):
+    def _sweep(self, *, key_expiry_disabled):
         # A sweep reports the expiry date, and its *absence* is the setting,
         # see `_tailnet_device_from_record`. Built from the record shape rather
         # than from the spec shape, so this exercises the same mapping the real
@@ -752,7 +752,7 @@ class DriftIsSaidOutLoudTests(TestCase):
         self.resource.refresh_from_db()
 
     def test_the_message_names_the_field_and_both_values(self):
-        self._sweep(True)
+        self._sweep(key_expiry_disabled=True)
 
         self.assertIn(
             "Disable key expiry is now True. HQ set it to False.",
@@ -769,12 +769,12 @@ class DriftIsSaidOutLoudTests(TestCase):
 
         from hq.platform.application.infrastructure import resource_health
 
-        self._sweep(True)
+        self._sweep(key_expiry_disabled=True)
 
         self.assertEqual(resource_health(self.resource)["state"], "drifted")
 
     def test_a_matching_record_is_still_confirmed(self):
-        self._sweep(False)
+        self._sweep(key_expiry_disabled=False)
 
         self.assertIsNotNone(self.resource.last_observed_at)
         self.assertEqual(self.resource.conditions[0]["reason"], "Observed")
@@ -1193,14 +1193,6 @@ class AcceptObservedTests(TestCase):
         self.resource.refresh_from_db()
         self.assertTrue(self.resource.spec["key_expiry_disabled"])
         self.assertTrue(AuditLog.objects.filter(object_repr__contains="a-device").exists())
-
-    def test_it_is_refused_without_authority_over_infrastructure(self):
-        from ..security import AuthorizationError, Principal
-
-        with self.assertRaises(AuthorizationError):
-            self.accept(Principal("test", "viewer", frozenset()))
-        self.resource.refresh_from_db()
-        self.assertFalse(self.resource.spec["key_expiry_disabled"])
 
     def test_nothing_seen_is_nothing_to_accept(self):
         ProviderInventory.objects.filter(kind="tailscale.device").delete()

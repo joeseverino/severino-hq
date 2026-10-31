@@ -299,7 +299,7 @@ func (r *Registry) githubAvatar(ctx context.Context, address string) (string, er
 // fetchPicture GETs an image of at most limit bytes. What it is comes from its
 // own bytes, never from the response's word for it, and no redirect is followed.
 func fetchPicture(ctx context.Context, address string, limit int) (string, []byte, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, http.NoBody)
 	if err != nil {
 		return "", nil, &ProviderError{Message: "the picture's address is not valid", Failure: runtime.FailureClassAddress}
 	}

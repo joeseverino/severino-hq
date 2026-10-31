@@ -1,5 +1,6 @@
 {% extends "page.html" %}
 {% block page %}
+{% include "partials/_visit_refresh.html" with subject="resource" name=resource.key %}
 {% comment %}
 Nothing to act on while a removal is in flight, so the head offers nothing and
 this says why. Otherwise the page would invite an operator to edit something
@@ -36,6 +37,7 @@ declaration's machinery: the controller's actions are the buttons above, and
 {% endcomment %}
 {% if container.standing %}
   {% include "control_plane/_container_band.html" with standing=container.standing running=container.running machine=container.machine edit_url=container.edit_url %}
+  {% if container.running.unit %}<p class="muted" data-run-by-unit="{{ container.running.unit }}">The systemd unit <code>{{ container.running.unit|breakable }}</code> runs it, and Start, Stop and Restart go through that unit.</p>{% endif %}
   {% if container.item %}{% include "control_plane/_container_detail.html" with item=container.item plan=container.plan readiness=container.readiness edit_url=container.edit_url %}{% endif %}
 {% endif %}
 
@@ -88,7 +90,7 @@ declaration's machinery: the controller's actions are the buttons above, and
           <summary>{{ resource.status.unreachable_consumers|length }} could not be checked</summary>
           <ul>
             {% for item in resource.status.unreachable_consumers %}
-              <li>{% if item.domain %}<strong>{{ item.consumer|breakable }}</strong> &middot; {{ item.domain|breakable:":" }}{% else %}<strong>{{ item.consumer|breakable:":" }}</strong>{% endif %} {{ item.reason|breakable }}</li>
+              <li>{% if item.domain %}<strong>{{ item.consumer|breakable }}</strong>{% dot %}{{ item.domain|breakable:":" }}{% else %}<strong>{{ item.consumer|breakable:":" }}</strong>{% endif %} {{ item.reason|breakable }}</li>
             {% endfor %}
           </ul>
         </details>
@@ -167,6 +169,10 @@ stretches across the page.
         {% else %}
           <dt>State</dt>
           <dd><span class="muted">Not read yet.</span></dd>
+        {% endif %}
+        {% if container.running.unit %}
+          <dt>Run by</dt>
+          <dd data-run-by-unit="{{ container.running.unit }}"><code>{{ container.running.unit|breakable }}</code> <span class="muted">Start, Stop and Restart go through this systemd unit.</span></dd>
         {% endif %}
         {% if container.serves %}
           <dt>Serves</dt>
@@ -275,16 +281,11 @@ certificate, so the relation reads from both ends.
 {% comment %}
 Beside the raw readings rather than in the head, so a download never sits at
 the same weight as Reconcile. Still offered while a removal is in flight: the
-one thing worth doing then is reading what it was.
+one thing worth doing then is reading what it was. The certificate's link only when there is something to download. A link
+saying a thing cannot be done yet is a status report filed in the wrong place.
 {% endcomment %}
 <p class="muted">
-  <a href="{% url 'control_plane:report_download' resource.key %}">Download this record (JSON)</a>
-  {% comment %}
-  Only when there is something to download. A link saying a thing cannot be
-  done yet is a status report filed in the wrong place.
-  {% endcomment %}
-  {% if resource.status.certificate_pem %}
-    · <a href="{% url 'control_plane:certificate_download' resource.key %}">Download public certificate (.pem)</a>
+  <a href="{% url 'control_plane:report_download' resource.key %}">Download this record (JSON)</a>{% if resource.status.certificate_pem %}{% dot %}<a href="{% url 'control_plane:certificate_download' resource.key %}">Download public certificate (.pem)</a>
   {% endif %}
 </p>
 
@@ -308,7 +309,7 @@ above it found is not a row.
               <span class="muted">{{ operation.affected|length|counted:"name serves a different certificate,names serve a different certificate" }}</span>
               <ul class="operation-evidence row-below" data-label="Affected">
                 {% for item in operation.affected %}
-                  <li><strong>{{ item.consumer|breakable }}</strong> · {{ item.domain|breakable }}<br><span class="muted">Expected <code title="{{ operation.expected_fingerprint_sha256 }}">{{ operation.expected_fingerprint_sha256|slice:":12"|breakable }}…</code>, found <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12"|breakable }}…</code></span></li>
+                  <li><strong>{{ item.consumer|breakable }}</strong>{% dot %}{{ item.domain|breakable }}<br><span class="muted">Expected <code title="{{ operation.expected_fingerprint_sha256 }}">{{ operation.expected_fingerprint_sha256|slice:":12"|breakable }}…</code>, found <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12"|breakable }}…</code></span></li>
                 {% endfor %}
               </ul>
             {% elif operation.matched %}

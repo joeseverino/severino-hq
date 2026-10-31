@@ -29,8 +29,8 @@ func oauthConnection(provider runtime.ConnectionProvider, ref, clientID, clientS
 }
 
 // githubAppConnection is a GitHub App's connection.
-func githubAppConnection(ref, appID, signingKey string) connections.Connection {
-	return connections.Connection{Ref: ref, Provider: string(runtime.ConnectionProviderGitHubApp), GitHubApp: &connections.GitHubApp{AppID: appID, SigningKey: signingKey}}
+func githubAppConnection(ref, appID string) connections.Connection {
+	return connections.Connection{Ref: ref, Provider: string(runtime.ConnectionProviderGitHubApp), GitHubApp: &connections.GitHubApp{AppID: appID, SigningKey: "synthetic"}}
 }
 
 // serviceAccountConnection is a 1Password service account's connection.

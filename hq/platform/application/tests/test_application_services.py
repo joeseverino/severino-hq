@@ -82,8 +82,7 @@ class CapabilityTests(TestCase):
         self.assertEqual(result, {"ok": True, "value": "works"})
 
     def test_registry_emits_stable_json_schemas_and_effects(self):
-        first = describe_capabilities()
-        second = describe_capabilities()
+        first, second = (describe_capabilities(principal=cli_principal()) for _ in range(2))
 
         self.assertEqual(first, second)
         project = next(item for item in first["capabilities"] if item["name"] == "project.create")
@@ -429,7 +428,8 @@ class CapabilityTests(TestCase):
     def test_the_operator_reaches_every_tool_the_cli_uses_without_a_token(self):
         """The CLI's contract is the MCP tool surface, over the host shell."""
 
-        self.assertEqual(self.call_as_operator({"tool": "describe_capabilities"}), describe_capabilities())
+        catalog = describe_capabilities(principal=cli_principal())
+        self.assertEqual(self.call_as_operator({"tool": "describe_capabilities"}), catalog)
         created = self.call_as_operator(
             {
                 "tool": "execute_capability",

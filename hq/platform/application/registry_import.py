@@ -2,18 +2,12 @@
 
 For facts no connection knows. Every record goes through the same upsert use
 cases the single-record capabilities use, so validation, persistence and
-attribution are theirs. The whole document is checked before anything is
-written, and a record refused while writing rolls every record back.
-
-Idempotent by slug. A field a record leaves out keeps its stored value.
-
-Derived fields: a connection can derive ``Project.public_url``. The import sets
-it only where the stored value is blank or equal; a different stored value is
-kept and reported, never overwritten. See docs/Derived-Facts.md.
+attribution are theirs. What it checks, keeps and reports, and why a derived
+value wins over an imported one: docs/Derived-Facts.md#one-time-import.
 """
 
 from dataclasses import asdict, dataclass, field, fields
-from typing import Any
+from typing import Annotated, Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
@@ -25,6 +19,7 @@ from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.models import AuditLog
 
 from .assets import AssetCommand, upsert_asset
+from .command_fields import Describe
 from .domains import records_of
 from .projects import ProjectCommand, upsert_project
 from .record_errors import RecordConflict, RecordNotFound
@@ -45,9 +40,13 @@ REQUIRED_CAPABILITIES = (records_of("projects").write, records_of("assets").writ
 
 @dataclass(frozen=True, slots=True)
 class HQImportCommand:
-    projects: list[dict[str, Any]] = field(default_factory=list)
-    assets: list[dict[str, Any]] = field(default_factory=list)
-    check_only: bool = False
+    projects: Annotated[list[dict[str, Any]], Describe("Projects to import, each as a project record.")] = field(
+        default_factory=list
+    )
+    assets: Annotated[list[dict[str, Any]], Describe("Assets to import, each as an asset record.")] = field(
+        default_factory=list
+    )
+    check_only: Annotated[bool, Describe("Check the import without saving anything.")] = False
 
 
 @dataclass(frozen=True, slots=True)

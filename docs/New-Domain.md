@@ -36,23 +36,23 @@ this page in the same commit as the rule. Extensions take a different path:
 | Do | Enforced by |
 |---|---|
 | Keep views in `<app>/views.py` or `<app>/*_views.py`; a view in any other module escapes the checks below | `DeliveryAdapterArchitectureTests.test_every_module_defining_a_view_is_one_these_checks_read` |
-| Views never call `.save()`, `.delete()` or `objects.create/update_or_create/bulk_*`; writes go through an `hq/platform/application/` service | `DeliveryAdapterArchitectureTests.test_web_views_do_not_mutate_models_directly` |
+| Views never call `.save()`, `.delete()` or `objects.create/update_or_create/bulk_*`; writes go through an `hq/platform/application/` service | `lint:ast-grep` (`tools/lint/ast-grep/rules/views-write-no-model.yml`) |
 | A view with `paginate_by` takes `TableListMixin` | `DeliveryAdapterArchitectureTests.test_paginated_list_views_use_the_shared_table_engine` |
-| `hq/platform/mcp/services.py` stays free of models and `.objects`; expose reads through `hq/platform/application/resources.py` and read models | `DeliveryAdapterArchitectureTests.test_mcp_services_do_not_access_django_models` |
-| Keep the workflow layering: `workflow_contracts.py` has no relative imports, `ui.py` does not import `workflows`, `workflows.py` does not import `action_links` | `DeliveryAdapterArchitectureTests.test_workflow_models_remain_a_dependency_leaf` |
+| `hq/platform/mcp/services.py` stays free of models and `.objects`; expose reads through `hq/platform/application/resources.py` and read models | `lint:ast-grep` (`tools/lint/ast-grep/rules/mcp-services-reach-no-model.yml`) |
+| Keep the workflow layering: `workflow_contracts.py` imports nothing of HQ, `ui.py` never reaches `workflows`, `workflows.py` never reaches `action_links` | `lint:imports`, the contracts in `pyproject.toml`'s `[tool.importlinter]` |
 | Serve static assets from the shared delivery path: the ASGI mount is the only server of `/static/`, before Django; versioned files are immutable and sent as the brotli or gzip copy the image build wrote | `DeliveryAdapterArchitectureTests.test_asgi_routes_static_assets_before_django`, `DeliveryAdapterArchitectureTests.test_static_assets_have_one_server`, `DeliveryAdapterArchitectureTests.test_versioned_static_assets_are_compressed_and_immutable` |
 | Resolve URLs with `hq.platform.application.routes.reverse`, never `django.urls.reverse`, in `hq/platform/application/` and `hq/domains/control_plane/` | `RouteOwnerTests.test_the_application_resolves_routes_through_its_one_owner`, `RouteOwnerTests.test_a_remembered_route_is_djangos_and_follows_the_url_configuration` |
 | Every template sets `{% block title %}` to the page's own name, without the site name | `PageTitleTests.test_every_page_names_itself`, `PageTitleTests.test_no_page_appends_the_site_name_itself`, `PageTitleTests.test_the_layout_is_what_appends_it` |
 | Link a command's form with `command_url`, never `reverse("command")` or `{% url "command" %}` | `OnePrimitiveTests.test_a_command_is_linked_through_command_url` |
 | List what a record is related to through `partials/_related.html`, its groups built by `application.related` | `OnePrimitiveTests.test_a_related_list_is_drawn_by_its_partial` |
 | Name hosts with `normalized_hostname` and zone membership with `in_zone` | `OnePrimitiveTests.test_hostnames_are_spelled_by_normalized_hostname`, `OnePrimitiveTests.test_zone_membership_is_asked_of_in_zone` |
-| Templates show dates with `when` and ages with `ago`, byte counts with `bytes` (`human_bytes` in Python), amounts with `money` (`hq.platform.application.money.money` in Python) and name entities with the entity tag; Python links entities with `entity_link` | `OnePrimitiveTests.test_templates_write_dates_through_the_when_filter`, `OnePrimitiveTests.test_templates_say_ages_through_the_ago_filter`, `OnePrimitiveTests.test_templates_say_byte_counts_through_the_bytes_filter`, `OnePrimitiveTests.test_python_says_byte_counts_through_human_bytes`, `OnePrimitiveTests.test_templates_write_amounts_through_the_money_filter`, `OnePrimitiveTests.test_python_writes_amounts_through_money`, `OnePrimitiveTests.test_templates_name_entities_through_the_entity_tag`, `OnePrimitiveTests.test_entity_pages_are_addressed_by_entity_link` |
+| Templates show dates with `when` (HQ's engine has no other way to write one) and ages with `ago`, byte counts with `bytes` (`human_bytes` in Python), amounts with `money` (`hq.platform.application.money.money` in Python) and name entities with the entity tag; Python links entities with `entity_link` | `OnePrimitiveTests.test_templates_say_byte_counts_through_the_bytes_filter`, `OnePrimitiveTests.test_python_says_byte_counts_through_human_bytes`, `OnePrimitiveTests.test_templates_write_amounts_through_the_money_filter`, `OnePrimitiveTests.test_python_writes_amounts_through_money`, `OnePrimitiveTests.test_templates_name_entities_through_the_entity_tag`, `OnePrimitiveTests.test_entity_pages_are_addressed_by_entity_link` |
 | Write an identifier (an address, a path, a key, an image) through `breakable`, in code or as a link's text, so it wraps only at its seams | `OnePrimitiveTests.test_an_identifier_is_written_as_a_breakable_token` |
 | Declare the domain once in `HOST_DOMAINS` (`hq/platform/application/domains.py`): a unique `hq.<name>` id, nav routes that resolve, grouped nav at order 100 or above (machinery at 900) | `DomainRegistryTests.test_domain_ids_are_unique`, `DomainRegistryTests.test_every_declared_route_resolves`, `DomainRegistryTests.test_host_sections_never_squat_the_extension_order_band`, `DomainRegistryTests.test_machinery_sorts_after_every_section_that_holds_work` |
 | Keep no second roster of sections: no nav list in `hq/platform/core/context_processors.py`, no code-to-URL table in a core view | `DomainRegistryTests.test_the_registry_is_the_only_list_of_sections`, `DomainRegistryTests.test_the_view_keeps_no_code_to_url_table` |
 | List its apps and mounts on the descriptor, never in `hq/config/settings.py` or `hq/config/urls.py` | `DomainRegistryTests.test_apps_and_urls_are_read_off_the_declarations` |
 | Declare a record domain's create, update and delete and its permissions as `records`, never as entries in `core_capabilities.py` or members of `Capability` | `DomainRegistryTests.test_record_commands_and_permissions_are_derived_not_listed` |
-| A part of a page that is fetched, refreshed or polled is a `data-fragment` region answered from a `{% partialdef %}` in the page's own template (`hq.platform.application.fragments`, `static/js/fragment.js`); a script never parses a response or keeps a timer of its own | `FragmentPrimitiveTests.test_only_the_primitive_parses_a_response_or_asks_again_on_a_timer`, `FragmentPrimitiveTests.test_the_primitive_is_one_fetch_one_parser_and_one_timer`, `FragmentPrimitiveTests.test_the_primitive_loads_before_the_scripts_that_use_it`, `FragmentPrimitiveTests.test_every_part_a_template_names_is_one_a_template_defines` |
+| A part of a page that is fetched, refreshed or polled is a `data-fragment` region answered from a `{% partialdef %}` in the page's own template (`hq.platform.application.fragments`, `static/js/fragment.js`); a script never parses a response or keeps a timer of its own | `lint:js` (`tools/lint/eslint.config.mjs`), `FragmentPrimitiveTests.test_the_primitive_loads_before_the_scripts_that_use_it`, `FragmentPrimitiveTests.test_every_part_a_template_names_is_one_a_template_defines` |
 | A GET has no effect. One that must record or reach out is refused to a speculative request by the audit writer and the outbound boundary (`hq.platform.core.speculation`) | `hq/platform/core/tests/test_speculation.py`, which prefetches every page and fails on one that writes |
 | A view answers from what HQ holds and never waits on a network, a process or a timer: it asks the controller for a reading or starts a job, answers at once (`hq.platform.application.asks`), and draws the control with `partials/_ask.html`. A place a request must wait is a named entry in `hq.platform.core.outbound.ALLOWED` with its reason | `RequestNeverWaitsTests.test_every_request_is_served_under_the_rule`, `RequestNeverWaitsTests.test_an_exception_is_declared_with_its_reason_and_entered_only_where_listed`, `RequestNeverWaitsTests.test_only_a_job_leaves_the_request_that_started_it`, `RequestNeverWaitsTests.test_asked_for_work_is_followed_by_one_script_behavior` |
 | The declaration alone installs the app, mounts its URLs, puts it on the bar, registers its resource and commands, grants its permissions, deletes and counts it, and puts it in the API document | `NewDomainDeclarationTests.test_its_app_is_installed_and_its_urls_are_mounted`, `NewDomainDeclarationTests.test_it_is_on_the_bar`, `NewDomainDeclarationTests.test_its_resource_and_commands_are_registered`, `NewDomainDeclarationTests.test_its_permissions_are_granted_where_record_permissions_are`, `NewDomainDeclarationTests.test_it_is_created_counted_and_deleted_through_its_commands`, `NewDomainDeclarationTests.test_its_commands_and_resource_are_in_the_api_document` |
@@ -68,22 +68,21 @@ Rules that hold for every change, not a domain in particular; the class docstrin
 is the rule. `lint:css` (Stylelint under `tools/lint/stylelint.config.mjs`:
 tokens, spacing, color), `StyleContractTests` and `SharedPrimitiveStyleTests`
 (CSS, layers), `TemplateCommentTests` (what a `{# #}` comment left open is),
-`CognitiveComplexityTests` (score 20 per function), `FileSizeTests` (no source
+`lint:complexity` (complexipy's cognitive complexity, 20 per function), `FileSizeTests` (no source
 file past 1,000 lines; a test file over it is listed in a baseline that only shrinks), `OneDefinitionTests` (a module-level name is
 assigned once), `PageTrailTests` (a view declares `page_trail` and `trail_label`, not a
-`get_page_trail` that restates them), `SettingsReadTests` (a setting is read as `settings.NAME`, never with a
-default), `OperationQueueTests` (an operation is queued through
-`resource_operations.enqueue`, whose unique key settles two writers),
-`SignedInTests` (who a request's session signed in is
-`request_identity.signed_in`), `CommentHistoryTests` (comments
-describe the present), `AssertionPrecisionTests` (`assertEqual(a, b)`, not
+`get_page_trail` that restates them), `lint:ast-grep` (ast-grep under
+`tools/lint/ast-grep`: a setting is read as `settings.NAME`, never with a
+default; an operation is queued through `resource_operations.enqueue`, whose
+unique key settles two writers; who a request's session signed in is
+`request_identity.signed_in`; a test writes `assertEqual(a, b)`, not
 `assertTrue(a == b)`), `CellMarkupTests` (a table cell is read by its text,
-never by the tag that closes it), `CountedTests` (plurals), `InterfaceTextTests` (no em dash, hand-built plural,
+never by the tag that closes it), `CountedTests` (plurals), `InterfaceTextTests` (no hand-built plural,
 nested form, `counted` phrase that cannot agree or `{# #}` comment that spans
 lines, in HQ or an extension; no
-system check reads source), `PlainWordsTests` (no word HQ keeps to itself in
-what its owner reads; `hq/platform/core/plain_words.py` holds the words and
-what to say instead), `PostButtonTests` (the shared post button),
+system check reads source), `lint:prose` (Vale under `tools/lint/vale/.vale.ini`: no comment
+narrates history, no em dash or hedged plural, and no word HQ keeps to itself
+in what its owner reads, with what to say instead), `PostButtonTests` (the shared post button),
 `ComposedQueueTests` (a domain's attention items and cards reach the shared queue),
 `TestPlacementTests` (every test module is in its package's `tests/`),
 `RuntimeDependencyTests` (each finding `lint:deptry` ignores is one it

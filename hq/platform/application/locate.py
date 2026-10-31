@@ -1,23 +1,10 @@
 """Which machine an address belongs to, answered in one place.
 
 A proxy's forwarding address, the machine board, a form and the connection
-panel all ask "what is at this address", and there is exactly one true answer
-for a given set of evidence. So the answer is computed once, here, and the surfaces
-differ only in what evidence they hand it.
-
-Two rules make that safe.
-
-**Names and addresses are separate namespaces.** A machine's name and a
-machine's address are different kinds of fact that happen to share a type, and
-kept in one dictionary they overwrite each other: a machine named like an IP
-answers for another machine's address, and a connection whose ref equals some
-machine's address quietly takes ownership of it. Both are recorded, neither can
-shadow the other, and a caller says which kind of thing it is holding.
-
-**One parser.** ``https://host/``, ``host:port``, ``[::1]:8000`` and a bare
-IPv6 address are all endpoints, and reading them with ``rpartition(":")``
-splits ``2001:db8::1`` into ``2001:db8:`` and ``1``. ``core.network`` parses
-them correctly for the trusted-proxy gate; this reads endpoints through it.
+panel all ask "what is at this address", and there is one true answer for a
+given set of evidence, so it is computed here and the surfaces differ only in
+the evidence they hand it. Names and addresses are separate namespaces
+(``Machines``), and every endpoint is read by one parser (``split_endpoint``).
 """
 
 from collections.abc import Iterable, Mapping
@@ -39,12 +26,10 @@ lazy from .infrastructure import declared_machines
 def split_endpoint(value: Any) -> tuple[str, str]:
     """An endpoint as ``(host, port)``, whichever shape it arrived in.
 
-    A URL, a ``host:port``, a bracketed IPv6 endpoint and a bare address are
-    all things HQ is handed as "where this is", by proxies, daemons, container
-    runtimes and people. Either half may be empty: a DNS answer carries no
-    port, and that absence is load-bearing: it is how HQ tells a record
-    pointing somewhere else on the internet from an ingress forwarding inside
-    the network.
+    A URL, a ``host:port``, a bracketed IPv6 endpoint and a bare address all
+    reach HQ as "where this is". Either half may be empty, and a missing port
+    is load-bearing: it is how HQ tells a DNS record pointing elsewhere on the
+    internet from an ingress forwarding inside the network.
     """
 
     text = str(value or "").strip()
@@ -59,6 +44,9 @@ def split_endpoint(value: Any) -> tuple[str, str]:
             # without the port would be inventing half a fact.
             return "", ""
         return parsed.hostname or "", str(port) if port else ""
+    # Never ``rpartition(":")``, which splits ``2001:db8::1`` into
+    # ``2001:db8:`` and ``1``: ``core.network`` parses endpoints correctly for
+    # the trusted-proxy gate, and every endpoint here goes through it.
     return split_host_port(text)
 
 
@@ -101,14 +89,11 @@ def points_at_host(endpoint: Any) -> bool:
 class Machines:
     """Every way HQ has of naming a machine, with the two kinds kept apart.
 
-    ``by_name`` is HQ's own vocabulary: what a declaration called a machine,
-    what a sweep filed containers under, what a credential that opens a shell
-    is called. ``by_address`` is where the network reaches those machines.
-
-    They are separate because they collide. A machine may legitimately be
-    *named* ``10.0.0.5`` while a different machine *answers at* ``10.0.0.5``,
-    and a single dictionary keeps whichever was written last: silently, and
-    differently depending on query order.
+    ``by_name`` is HQ's own vocabulary (what a declaration, a sweep or a shell
+    credential calls a machine); ``by_address`` is where the network reaches
+    them. One dictionary would let a machine *named* ``10.0.0.5`` and another
+    *answering at* it overwrite each other silently, by query order, so a
+    caller says which kind of thing it holds.
     """
 
     by_name: Mapping[str, str]
@@ -138,18 +123,16 @@ class Machines:
         """The machine an origin points at, whether it named one or addressed one.
 
         An origin is genuinely either: a stack declares the machine it runs on
-        by name, and a proxy forwards to an address. So both namespaces are
-        consulted: the name first, because a name is HQ's own vocabulary and
-        an exact hit in it is somebody's deliberate act, while an address hit
-        is an inference from a declaration made elsewhere.
-
-        Empty when neither knows it, which is the honest answer and the one
-        that leaves the raw address on the page.
+        by name, and a proxy forwards to an address. Empty when neither knows
+        it, which is the honest answer and leaves the raw address on the page.
         """
 
         text = str(endpoint or "").strip()
         if not text:
             return ""
+        # The name first: an exact hit in HQ's own vocabulary is somebody's
+        # deliberate act, while an address hit is an inference from a
+        # declaration made elsewhere.
         return self.named(text) or self.named(host_of(text)) or self.at(text)
 
     def address_for(self, name: Any) -> str:
@@ -171,23 +154,20 @@ def index_of(
 ) -> Machines:
     """An index over exactly the evidence handed to it, and no queries.
 
-    Evidence is a parameter because the surfaces genuinely differ in what they
-    are entitled to use. The connection panel renders on every page and has
-    already read the declarations, so it resolves against those and spends
-    nothing. The machine board has read everything and resolves against
-    everything. Passing the evidence in is what lets both use this one
-    implementation without either paying for the other's queries.
-
-    Precedence is declaration, then what a sweep found, then what a credential
-    points at: most deliberate first. A machine HQ was told about owns its
-    address even when a container sweep and an SSH credential also mention it,
-    which is what keeps one machine from becoming three rows.
+    Evidence is a parameter because the surfaces differ in what they are
+    entitled to use: the connection panel, on every page, resolves against the
+    declarations it already read and spends nothing, while the machine board
+    resolves against everything. Precedence is declaration, then what a sweep
+    found, then what a credential points at: most deliberate first.
     """
 
     by_name: dict[str, str] = {}
     by_address: dict[str, str] = {}
     addresses: dict[str, list[str]] = {}
 
+    # The first record of an address keeps it, so a machine HQ was told about
+    # owns its address even when a container sweep and an SSH credential also
+    # mention it, which keeps one machine from becoming three rows.
     def record(name: Any, address: Any = "") -> None:
         label = str(name or "").strip()
         if not label:
@@ -211,8 +191,8 @@ def index_of(
     for host, address in dict(hosts).items():
         record(host, address)
     for connection in connections:
-        ref = str(getattr(connection, "connection_ref", "") or "").strip()
-        endpoint = getattr(connection, "endpoint", "") or ""
+        ref = connection.connection_ref.strip()
+        endpoint = connection.endpoint
         if not ref:
             continue
         if points_at_host(endpoint):
@@ -281,23 +261,20 @@ def _record_observed_answers(found: dict[str, set[str]], names: tuple, addresses
 def observed_answers(snapshots=None) -> dict[str, tuple[str, ...]]:
     """Every address each hostname is *seen* answering at.
 
-    Observed rather than declared, because of what the callers do with it. A
-    record HQ has written down but not yet applied is an intention, and a
-    certificate that counted intentions as evidence would report consumers no
-    request has ever reached: the opposite of the problem this is here to fix.
-
-    Driven by the provider registry rather than by a list of DNS kinds. A
-    provider that can read its own records back and can say what a record
-    answers with is a provider that resolves names, whatever it is called, and
-    the next one joins by declaring the two hooks it needs anyway. Naming the
-    kinds here would mean a DNS provider added later resolved names everywhere
-    in HQ except in the one place that decides who consumes a certificate.
+    Observed rather than declared: a record HQ has written down but not yet
+    applied is an intention, and a certificate that counted intentions as
+    evidence would report consumers no request has ever reached.
     """
 
     found: dict[str, set[str]] = {}
     # ``snapshots`` is every stored reading, from a caller that already holds
     # them; without it they are read here.
     for snapshot in ProviderInventory.objects.all() if snapshots is None else snapshots:
+        # Driven by the provider registry rather than a list of DNS kinds: a
+        # provider that reads its records back and says what a record answers
+        # with resolves names, whatever it is called, so a DNS provider added
+        # later is counted here too, the one place that decides who consumes a
+        # certificate.
         provider = PROVIDERS.get(snapshot.kind)
         if provider is None or provider.from_record is None:
             continue
@@ -312,19 +289,17 @@ def observed_answers(snapshots=None) -> dict[str, tuple[str, ...]]:
 def names_by_connection() -> dict[str, tuple[str, ...]]:
     """The hostnames that land on the machine each connection reaches.
 
-    The join everything below it already had the halves of: a sweep says which
-    names answer at which address, a credential says which address it opens, and
-    this index says which of those addresses are the same machine. Nothing new is
-    recorded: the fact is derived from three things HQ reconciles.
-
-    Both sides are placed through the one index rather than compared as strings,
-    so a machine reached at one of its addresses and named at another is still
-    one machine. Where the index cannot place an address it stands in for
-    itself, which makes the comparison exact rather than absent.
+    Derived, never recorded: a sweep says which names answer at which address,
+    a credential says which address it opens, and the index says which of those
+    addresses are the same machine.
     """
 
     index = machines_index()
     answers = observed_answers()
+    # Both sides are placed through the one index rather than compared as
+    # strings, so a machine reached at one of its addresses and named at
+    # another is still one machine. An address the index cannot place stands in
+    # for itself, which makes the comparison exact rather than absent.
     at_machine: dict[str, set[str]] = {}
     for name, addresses in answers.items():
         for address in addresses:
@@ -333,35 +308,29 @@ def names_by_connection() -> dict[str, tuple[str, ...]]:
                 at_machine.setdefault(placed, set()).add(name)
 
     def place(endpoint: Any) -> str:
-        """Which machine a connection's endpoint opens onto.
-
-        A name has to become an address before it can name a machine, and the
-        hop is one more thing HQ already sweeps. Skipping it places a connection
-        addressed by name at its own credential rather than at the box: the
-        index deliberately files a URL endpoint under the connection's ref, so
-        that a proxy forwarding somewhere HQ holds a credential for stops
-        reading as an unknown host, which is right there and circular here.
-        Resolved that way, a connection reached by name and the names answering
-        at that host's address would be two different machines.
-
-        An address the index cannot name still places: it stands in for itself,
-        the same way it does on the other side of this join. Returning the name
-        instead would compare a name against an address and match nothing.
-        """
+        """Which machine a connection's endpoint opens onto."""
 
         host = host_of(endpoint)
         if not host:
             return ""
+        # A name becomes an address first, through what HQ already sweeps.
+        # Resolved directly, a connection addressed by name lands on its own
+        # credential: the index files a URL endpoint under the connection's ref
+        # (so a proxy forwarding there stops reading as an unknown host), which
+        # is circular here and would make the connection and the names
+        # answering at its host's address two machines.
         for address in answers.get(normalized_hostname(host), ()):
             placed = index.resolve(address) or host_of(address)
             if placed:
                 return placed
+        # An address the index cannot name stands in for itself, as on the
+        # other side of this join; the name would match no address.
         return index.resolve(host) or host
 
     found: dict[str, tuple[str, ...]] = {}
     for connection in ProviderConnection.objects.all():
-        ref = str(getattr(connection, "connection_ref", "") or "").strip()
-        placed = place(getattr(connection, "endpoint", "") or "")
+        ref = connection.connection_ref.strip()
+        placed = place(connection.endpoint)
         if ref and placed:
             found[ref] = tuple(sorted(at_machine.get(placed, ())))
     return found

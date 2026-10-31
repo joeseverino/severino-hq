@@ -1,88 +1,22 @@
-"""The words HQ never shows its owner, read from source.
+"""The words in a template that Vale cannot read, handed to Vale.
 
-The owner runs these machines and knows them. He does not know how HQ is built
-and should never need to, so the names HQ uses for its own parts stay in the
-code and out of the pages. ``NEVER_SHOWN`` is that vocabulary and what to say
-instead; ``RETIRED_NAMES`` is every label that was replaced by one name for
-one thing. ``read`` finds either in the text a person sees:
-
-- in a template: the text between tags, the attributes a browser shows or
-  reads out, and the sentences a tag is handed as a literal;
-- in Python: a string literal with words in it that is not a docstring.
-
-Never a comment, an identifier, a route name, a path or a class name: those
-may keep the internal vocabulary. Like ``interface_text``, a gate reads this
-and a running HQ never does.
+Vale (``mise run lint:prose``) reads a template's text but not its attributes or
+tags. ``shown`` finds the rest of what a person sees as words, and ``main``
+hands each to Vale as a paragraph of its own, reported at the template line it
+came from. Like ``interface_text``, a gate reads this and a running HQ never does.
 """
 
-import ast
+import json
 import re
+import subprocess
+import sys
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import override
 
-from .interface_text import TEMPLATE_COMMENT, docstrings
+from .interface_text import TEMPLATE_COMMENT
 
-# Each word with the forms it takes, and what a page says instead.
-NEVER_SHOWN: tuple[tuple[str, str], ...] = (
-    (r"kinds?", "the thing's own name, or 'type'"),
-    (r"sweeps?|swept|sweeping", "read"),
-    (r"reconcil\w*|converg\w*", "apply, restore"),
-    (r"declarations?|declared?|declares|declaring|desired", "what HQ expects, HQ's copy"),
-    (r"specs?", "settings"),
-    (r"observed|observations?", "live, what was read"),
-    (r"generations?|revisions?", "nothing: never shown"),
-    (r"drift(?:ed|s|ing)?", "changed outside HQ"),
-    (r"providers?", "the service's own name, or 'service'"),
-    (r"(?:managed )?resources?", "the thing's own noun, or 'record'"),
-    (r"(?:an?|the|this|that|each|every|one|no) finding|findings", "problem, or just say the thing"),
-    (r"claim(?:s|ed)?|raise[sd]?", "nothing: never shown"),
-    (r"standing|facets?|projections?|lineage|capabilit(?:y|ies)|abilit(?:y|ies)", "what it means in that place"),
-    (r"consumers?", "what uses it"),
-    (r"render(?:s|ed|ing|er|ers)?", "written, refreshed"),
-    (r"mint(?:s|ed|ing)?", "issue"),
-)
-# Names that were replaced by one name for one thing, matched as written.
-RETIRED_NAMES: tuple[tuple[str, str], ...] = (
-    ("Action items", "Needs you"),
-    ("Command Center", "Search"),
-    ("Command center", "Search"),
-    ("Request fresh sweep", "Check again"),
-    ("Read now and check again", "Check again"),
-    ("Read now", "Refresh"),
-    ("Read them now", "Refresh them"),
-    ("Read all now", "Refresh all"),
-    ("Read everything now", "Refresh all"),
-    ("Refresh now", "Refresh"),
-    ("Reading…", "Refreshing…"),
-    ("Reading failed", "Refresh failed"),
-    ("Refresh controller readings", "Refresh"),
-    ("Run updates now", "Update dependencies"),
-    ("Run dependency updates now", "Update dependencies"),
-    ("Run the controller", "Start the controller"),
-    ("Run a pass now", "Start it"),
-    ("Apply again", "Apply HQ's settings"),
-    ("Restore HQ's version", "Apply HQ's settings"),
-    ("Request renewal", "Renew certificate"),
-    ("Open the deploy", "Open deploy"),
-    ("Sync the vault", "Update docs"),
-    ("Sync documentation", "Update docs"),
-)
-# How HQ is configured, which a page never asks its owner to type: a setting's
-# name, or the value to put in a credential's field. Matched as written, and
-# in code too, where an identifier is otherwise allowed.
-NEVER_ASKED: tuple[tuple[str, str], ...] = (
-    (r"SEVERINO_[A-Z0-9_]+", "what the setting does: 'off in HQ's settings'"),
-    (r"manages to 1", "what it lets HQ do, and where the connection's guide says how"),
-)
-# "Findings" is the name of a page, and stays one.
-_PAGE_NAMES = re.compile(r"\bFindings\b")
-_NEVER = tuple(
-    (re.compile(rf"(?<![\w-])(?:{forms})(?![\w-])", re.IGNORECASE), instead) for forms, instead in NEVER_SHOWN
-)
-_ASKED = tuple((re.compile(rf"(?<![\w-])(?:{forms})(?![\w-])"), instead) for forms, instead in NEVER_ASKED)
 _TEMPLATE_TAG = re.compile(r"\{%.*?%\}|\{\{.*?\}\}", re.DOTALL)
 _TAG_LITERAL = re.compile(r"""(["'])((?:(?!\1).)*)\1""", re.DOTALL)
 # What a browser shows or reads out from an element, besides its text.
@@ -101,46 +35,10 @@ _SHOWN_ATTRIBUTES = frozenset(
 )
 # An identifier, a route, a path or a class list: lower case, no sentence in it.
 _IDENTIFIER = re.compile(r"[a-z0-9_.:/#?&=%\- ]*\Z")
-# A type written as a string, "Name | None": not a sentence.
-_ANNOTATION = re.compile(r"[A-Z]\w*(?: \| [A-Za-z]\w*)+")
-_UNSEEN_ELEMENTS = frozenset({"script", "style"})
-# Shown, but as an identifier, which may keep HQ's own names.
-_IDENTIFIER_ELEMENTS = frozenset({"code", "pre", "kbd"})
-
-
-@dataclass(frozen=True, slots=True)
-class Found:
-    path: Path
-    line: int
-    word: str
-    instead: str
-    text: str
-
-    def __str__(self) -> str:
-        return f'{self.path}:{self.line}: "{self.word}" in "{self.text}" (say: {self.instead})'
-
-
-def words_in(text: str) -> Iterator[tuple[str, str]]:
-    """Each never-shown word or retired name in ``text``, with what to say."""
-
-    for name, instead in RETIRED_NAMES:
-        if name in text:
-            yield name, instead
-    plain = _PAGE_NAMES.sub(" ", text)
-    for pattern, instead in _NEVER:
-        match = pattern.search(plain)
-        if match:
-            yield match.group(), instead
-    yield from asked_in(text)
-
-
-def asked_in(text: str) -> Iterator[tuple[str, str]]:
-    """Each piece of HQ's configuration ``text`` asks its owner to type."""
-
-    for pattern, instead in _ASKED:
-        match = pattern.search(text)
-        if match:
-            yield match.group(), instead
+# The wording rules' config, in the checkout a gate runs from.
+VALE_CONFIG = Path(__file__).resolve().parents[3] / "tools/lint/vale/.vale.ini"
+# The extension Vale reads a piece as, which the config's [formats] names.
+_EXTENSION = ".shown"
 
 
 def _is_prose(text: str) -> bool:
@@ -149,44 +47,21 @@ def _is_prose(text: str) -> bool:
     stripped = text.strip()
     if not stripped or stripped.endswith((".html", ".py", ".js", ".css")):
         return False
-    if _ANNOTATION.fullmatch(stripped):
-        return False
     return not _IDENTIFIER.match(stripped)
 
 
-class _Shown(HTMLParser):
-    """The text and the shown attributes of a template, with their lines, and
-    apart from them the identifiers it shows."""
+class _Attributes(HTMLParser):
+    """The shown attributes of a template, with their lines."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.found: list[tuple[int, str]] = []
-        self.identifiers: list[tuple[int, str]] = []
-        self._unseen = 0
-        self._identifier = 0
 
     @override
     def handle_starttag(self, tag, attrs):
-        if tag in _UNSEEN_ELEMENTS:
-            self._unseen += 1
-        if tag in _IDENTIFIER_ELEMENTS:
-            self._identifier += 1
         for name, value in attrs:
             if name in _SHOWN_ATTRIBUTES and value:
                 self.found.append((self.getpos()[0], value))
-
-    @override
-    def handle_endtag(self, tag):
-        if tag in _UNSEEN_ELEMENTS and self._unseen:
-            self._unseen -= 1
-        if tag in _IDENTIFIER_ELEMENTS and self._identifier:
-            self._identifier -= 1
-
-    @override
-    def handle_data(self, data):
-        if self._unseen or not data.strip():
-            return
-        (self.identifiers if self._identifier else self.found).append((self.getpos()[0], data))
 
 
 def _blank(match: re.Match) -> str:
@@ -195,111 +70,27 @@ def _blank(match: re.Match) -> str:
     return "\n" * match.group().count("\n")
 
 
-def _shown(source: str) -> tuple[list[tuple[int, str]], list[tuple[int, str]]]:
+def shown(source: str) -> list[tuple[int, str]]:
+    """``(line, text)`` for each attribute and tag literal of a template a person reads."""
+
     uncommented = TEMPLATE_COMMENT.sub(_blank, source)
-    shown: list[tuple[int, str]] = []
+    found: list[tuple[int, str]] = []
     for tag in _TEMPLATE_TAG.finditer(uncommented):
         line = uncommented.count("\n", 0, tag.start()) + 1
-        shown.extend(
+        found.extend(
             (line, literal.group(2)) for literal in _TAG_LITERAL.finditer(tag.group()) if _is_prose(literal.group(2))
         )
-    parser = _Shown()
+    parser = _Attributes()
     parser.feed(_TEMPLATE_TAG.sub(_blank, uncommented))
     parser.close()
-    shown.extend(parser.found)
-    return sorted(shown), parser.identifiers
+    found.extend(parser.found)
+    return sorted(found)
 
 
-def template_text(source: str) -> list[tuple[int, str]]:
-    """``(line, text)`` for everything in a template a person sees as words."""
-
-    return _shown(source)[0]
-
-
-def template_identifiers(source: str) -> list[tuple[int, str]]:
-    """``(line, text)`` for what a template shows as an identifier (code, pre, kbd)."""
-
-    return _shown(source)[1]
-
-
-# Calls whose words go to a log or to whoever is writing the code, never to a page.
-_UNSEEN_CALLS = frozenset(
-    {
-        "debug",
-        "info",
-        "warning",
-        "error",
-        "exception",
-        "critical",
-        "log",
-        "getLogger",
-        "ImproperlyConfigured",
-        "RuntimeError",
-        "TypeError",
-        "AssertionError",
-        "NotImplementedError",
-        "KeyError",
-        "LookupError",
-        "compile",
-        "CheckMessage",
-        "Error",
-        "Warning",
-        "add_argument",
-        "CommandError",
-        "SuspiciousOperation",
-        "Http404",
-        # A shared value's description is the controller contract's, read by its author.
-        "SharedValue",
-    }
-)
-
-
-def _unseen_strings(tree: ast.AST) -> set[int]:
-    unseen = docstrings(tree)
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
-        if name in _UNSEEN_CALLS:
-            unseen.update(id(inner) for inner in ast.walk(node))
-    return unseen
-
-
-def python_text(source: str) -> list[tuple[int, str]]:
-    """``(line, text)`` for every string in a module that holds words for a person."""
-
-    try:
-        tree = ast.parse(source)
-    except SyntaxError, ValueError:
-        return []
-    unseen = _unseen_strings(tree)
-    return sorted(
-        (node.lineno, node.value)
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Constant)
-        and isinstance(node.value, str)
-        and id(node) not in unseen
-        and " " in node.value.strip()
-        and _is_prose(node.value)
-    )
-
-
-# This module spells the words out, which is the one place they belong.
-_SELF = Path(__file__).resolve()
-
-
-def _files(paths: Iterable[Path]) -> Iterator[Path]:
+def _templates(paths: Iterable[Path]) -> Iterator[Path]:
     for path in paths:
         if path.is_dir():
-            yield from sorted(
-                found
-                for found in path.rglob("*")
-                if found.suffix in (".html", ".py")
-                and "tests" not in found.parts
-                and "migrations" not in found.parts
-                and not found.name.startswith("test")
-                and found.resolve() != _SELF
-            )
+            yield from sorted(path.rglob("*.html"))
         elif path.exists():
             yield path
         else:
@@ -308,21 +99,45 @@ def _files(paths: Iterable[Path]) -> Iterator[Path]:
             raise FileNotFoundError(f"{path} is listed to be read and is not there.")
 
 
-def read(paths: Iterable[Path], *, root: Path) -> tuple[list[Found], int]:
-    """Every never-shown word in what ``paths`` show a person, and how many
-    files were read. A directory is read whole."""
+def document(paths: Iterable[Path]) -> tuple[str, list[tuple[Path, int]]]:
+    """Every piece under ``paths`` as one document, a paragraph per line, and
+    where each line of it came from."""
 
-    found: list[Found] = []
-    files = 0
-    for path in _files(paths):
-        source = path.read_text(encoding="utf-8", errors="replace")
-        files += 1
-        if path.suffix == ".html":
-            words, identifiers = _shown(source)
-        else:
-            words, identifiers = python_text(source), []
-        for reading, shown in ((words_in, words), (asked_in, identifiers)):
-            for line, text in shown:
-                for word, instead in reading(text):
-                    found.append(Found(path.relative_to(root), line, word, instead, " ".join(text.split())[:90]))
-    return found, files
+    lines: list[str] = []
+    origins: list[tuple[Path, int]] = []
+    for path in _templates(paths):
+        for line, text in shown(path.read_text(encoding="utf-8", errors="replace")):
+            lines.append(" ".join(text.split()))
+            origins.append((path, line))
+    return "\n\n".join(lines) + "\n", origins
+
+
+def findings(alerts: dict, origins: list[tuple[Path, int]]) -> list[str]:
+    """Vale's alerts on the document, each at the template line its piece came from."""
+
+    found = []
+    for alert in next(iter(alerts.values()), []):
+        path, line = origins[(alert["Line"] - 1) // 2]
+        found.append(f"{path}:{line}: {alert['Check']}: {alert['Message']}")
+    return found
+
+
+def main(arguments: list[str]) -> int:
+    text, origins = document(Path(argument) for argument in arguments)
+    vale = subprocess.run(
+        ["vale", f"--config={VALE_CONFIG}", f"--ext={_EXTENSION}", "--output=JSON"],
+        input=text,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if vale.returncode not in (0, 1):
+        sys.stderr.write(vale.stdout + vale.stderr)
+        return vale.returncode
+    found = findings(json.loads(vale.stdout or "{}"), origins)
+    print("\n".join(found) if found else f"{len(origins)} attributes and tag literals read: no finding")
+    return 1 if found else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

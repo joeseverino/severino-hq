@@ -21,7 +21,7 @@ from ..action_links import capability_action_link, command_action, read_now_link
 from ..capabilities import capability_registry
 from ..item_help import remedy_link
 from ..outbound_work import ask, declared_work
-from .source import parsed, source_files
+from .source import parsed, source_files, template_files
 
 ROOT = Path(__file__).resolve().parents[4]
 # The one module allowed to put a capability on a link: it reads the words.
@@ -34,7 +34,8 @@ COMMAND_BUILDERS = {
 }
 # Text a template writes that is a declared word for something no command does.
 TEMPLATE_EXEMPT = {
-    ("templates/core/_dashboard_glance.html", "Refresh"): "fetches the glance panels again; no command runs",
+    ("core/_dashboard_glance.html", "Refresh"): "fetches the glance panels again; no command runs",
+    ("dashboard.html", "Edit"): "opens the chooser of the dashboard's links, whose save is a preference",
 }
 
 
@@ -57,6 +58,38 @@ def _label(node: ast.Call) -> ast.expr | None:
         return None
     named = next((keyword.value for keyword in node.keywords if keyword.arg == "label"), None)
     return named if named is not None else (node.args[position] if len(node.args) > position else None)
+
+
+def _confirm_label(node: ast.Dict) -> ast.expr | None:
+    """The button of a confirmation page (``confirm_page.html``): the
+    ``label`` of a dict that also says where Cancel goes."""
+
+    keys = {
+        key.value: value for key, value in zip(node.keys, node.values, strict=True) if isinstance(key, ast.Constant)
+    }
+    return keys.get("label") if "cancel_url" in keys else None
+
+
+def _labels(node: ast.AST) -> list[ast.expr]:
+    """What a control built at ``node`` says: a constructor's label or intent,
+    or a confirmation's button."""
+
+    if isinstance(node, ast.Dict):
+        return [label] if (label := _confirm_label(node)) is not None else []
+    if not isinstance(node, ast.Call):
+        return []
+    said = [keyword.value for keyword in node.keywords if keyword.arg == "intent"]
+    return [label, *said] if (label := _label(node)) is not None else said
+
+
+def _restated(label: ast.expr, words: set[str]) -> list[str]:
+    """Declared words a label writes out, on either side of a choice included."""
+
+    return [
+        part.value
+        for part in ast.walk(label)
+        if isinstance(part, ast.Constant) and isinstance(part.value, str) and part.value in words
+    ]
 
 
 def _written(node: ast.expr | None) -> bool:
@@ -153,17 +186,30 @@ class CallSiteWordsTests(SimpleTestCase):
     def test_no_control_restates_a_declared_word(self):
         words = _declared_words()
         found = [
-            f"{relative}:{node.lineno}: {label.value!r}"
+            f"{relative}:{node.lineno}: {said!r}"
             for relative, tree in _modules()
             for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            for label in (
-                _label(node),
-                *(keyword.value for keyword in node.keywords if keyword.arg == "intent"),
-            )
-            if isinstance(label, ast.Constant) and label.value in words
+            for label in _labels(node)
+            for said in _restated(label, words)
         ]
         self.assertEqual(found, [], "a declared word is read from its declaration, never written again")
+
+    def test_a_restated_word_is_found_in_each_way_a_control_is_written(self):
+        words = {"Remove", "Stop tracking in HQ"}
+        tree = ast.parse(
+            'PageAction("Remove", url)\n'
+            'ActionLink("x", "Stop tracking in HQ" if forget else words, url)\n'
+            'confirm = {"url": url, "label": "Stop tracking in HQ" if forget else "Remove", "cancel_url": back}\n'
+            'row = {"label": "Remove", "value": 1}\n'
+            'PageAction(capability_words("infrastructure.resource.remove"), url)\n'
+        )
+        found = sorted(
+            (node.lineno, said)
+            for node in ast.walk(tree)
+            for label in _labels(node)
+            for said in _restated(label, words)
+        )
+        self.assertEqual(found, [(1, "Remove"), (2, "Stop tracking in HQ"), (3, "Remove"), (3, "Stop tracking in HQ")])
 
     def test_a_toast_says_requested_in_the_one_form(self):
         """``integration_specs.requested`` is the sentence every press answers with."""
@@ -181,11 +227,11 @@ class CallSiteWordsTests(SimpleTestCase):
     def test_no_template_writes_a_declared_word_as_a_control(self):
         words = _declared_words()
         control = re.compile(r"<(button|a)\b(?![^>]*\btype=\"button\")[^>]*>\s*([^<{]+?)\s*</\1>")
-        templates = source_files(ROOT / "templates", "*.html")
+        templates = template_files()
         self.assertTrue(templates)
         found = sorted(
-            (path.relative_to(ROOT).as_posix(), text)
-            for path in templates
+            (name, text)
+            for name, path in templates
             for _element, text in control.findall(path.read_text(encoding="utf-8"))
             if text in words
         )
@@ -195,10 +241,9 @@ class CallSiteWordsTests(SimpleTestCase):
         """Prose that says which button to press names it with ``{% words %}``,
         so the sentence still matches the button when its words change."""
 
-        templates = source_files(ROOT / "templates", "*.html")
         found = sorted(
-            f"{path.relative_to(ROOT).as_posix()}: {named!r}"
-            for path in templates
+            f"{name}: {named!r}"
+            for name, path in template_files()
             for named in pressed_words(path.read_text(encoding="utf-8"), _declared_words())
         )
         self.assertEqual(found, [], '{% words "name" %} says it')
@@ -207,7 +252,7 @@ class CallSiteWordsTests(SimpleTestCase):
         for (template, text), reason in TEMPLATE_EXEMPT.items():
             with self.subTest(template):
                 self.assertTrue(reason)
-                self.assertIn(f">{text}<", (ROOT / template).read_text(encoding="utf-8"))
+                self.assertIn(f">{text}<", dict(template_files())[template].read_text(encoding="utf-8"))
 
 
 @tag("source", "tree")
@@ -243,11 +288,11 @@ class DeclaredWordsTests(SimpleTestCase):
                 if name and isinstance(variant, str) and variant:
                     asked.add((relative, name, variant))
         tag_use = re.compile(r'\{%\s*words\s+"([^"]+)"(?:\s+"([^"]+)")?\s*%\}')
-        for path in source_files(ROOT / "templates", "*.html"):
+        for template, path in template_files():
             for name, variant in tag_use.findall(path.read_text(encoding="utf-8")):
-                self.assertIn(name, registry, f"{path.name} names a command that is not declared")
+                self.assertIn(name, registry, f"{template} names a command that is not declared")
                 if variant:
-                    asked.add((path.name, name, variant))
+                    asked.add((template, name, variant))
         self.assertTrue(asked)
         missing = [item for item in sorted(asked) if item[2] not in dict(registry[item[1]].variants)]
         self.assertEqual(missing, [])

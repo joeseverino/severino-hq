@@ -1,17 +1,10 @@
 """Readings HQ takes itself from the keyless public registries.
 
-RDAP, an image registry's public tags, labels and attestations, the releases
-and advisories on the GitHub repository an image is built from, and OSV's
-vulnerability database need no credential, so HQ reads them rather than a
-controller. ``refresh`` runs as the scheduled ``registry.refresh`` job, which
-a timer asks for once a day and HQ starts itself when a sweep finds an image
-or digest it has not read. It reads
-only subjects that are due, at most a budget of them, and stores the result
-through the same ingest as a sweep. Pages read the stored reading through
-``application.facts`` and never wait on a registry.
-
-Each reading stands as long as what it reads is slow to change
-(``READ_EVERY``); a digest's attestations never change, so each is read once.
+RDAP, an image registry's tags, labels and attestations, the releases and
+advisories of the GitHub repository an image is built from, and OSV need no
+credential, so HQ reads them rather than a controller. ``refresh`` is the
+scheduled ``registry.refresh`` job; pages read what it stores through
+``application.facts`` and never wait on a registry (docs/Derived-Facts.md#readings-hq-takes-itself).
 """
 
 from collections.abc import Callable, Iterable, Mapping
@@ -185,26 +178,42 @@ def read_domain(domain: str, registrations: Callable[..., dict] = domain_registr
 def wanted_images() -> dict[str, tuple[str, ...]]:
     """``{registry/repository: the references running}`` for every image a container runs."""
 
-    # A reference pinned by digest alone names no tag; the machine's copy says
-    # which tag it was pulled as, so that tag's digest can be read too.
+    pulled_as = _tags_pulled_as()
+    found: dict[str, set[str]] = {}
+    for _snapshot, record in inventory_records(CONTAINER_KIND):
+        reference = str(record.get("image", "") or "")
+        image = ImageRef.parse(reference)
+        if image is None:
+            continue
+        pulled = pulled_as.get((str(record.get("host", "")), str(record.get("name", ""))), ())
+        found.setdefault(image.name, set()).update((reference, *_tags_of_untagged(image, pulled)))
+    return {name: tuple(sorted(references)) for name, references in sorted(found.items())}
+
+
+def _tags_pulled_as() -> dict[tuple[str, str], list[str]]:
+    """The tags each container's image was pulled as, by ``(machine, container)``."""
+
     pulled_as: dict[tuple[str, str], list[str]] = {}
     for _snapshot, pulled in inventory_records(PULLED_KIND):
         for user in pulled.get("containers") or ():
             pulled_as.setdefault((str(pulled.get("host", "")), str(user.get("container", ""))), []).extend(
                 str(tag) for tag in pulled.get("tags") or ()
             )
-    found: dict[str, set[str]] = {}
-    for _snapshot, record in inventory_records(CONTAINER_KIND):
-        image = ImageRef.parse(str(record.get("image", "") or ""))
-        if image is None:
-            continue
-        found.setdefault(image.name, set()).add(str(record.get("image", "")))
-        if not image.tag:
-            for tagged in pulled_as.get((str(record.get("host", "")), str(record.get("name", ""))), ()):
-                named = ImageRef.parse(tagged)
-                if named is not None and named.name == image.name and named.tag:
-                    found[image.name].add(tagged)
-    return {name: tuple(sorted(references)) for name, references in sorted(found.items())}
+    return pulled_as
+
+
+def _tags_of_untagged(image: ImageRef, pulled: Iterable[str]) -> tuple[str, ...]:
+    """The tags of the same image a reference pinned by digest alone was pulled
+    as: it names no tag, so the machine's copy says which, and that tag's
+    digest can be read too."""
+
+    if image.tag:
+        return ()
+    return tuple(
+        tagged
+        for tagged in pulled
+        if (named := ImageRef.parse(tagged)) is not None and named.name == image.name and named.tag
+    )
 
 
 def wanted_upstreams() -> tuple[str, ...]:
@@ -363,6 +372,19 @@ def _github_link(value: Any) -> str:
 
 
 def read_upstream(repository: str) -> dict[str, Any]:
+    releases, advisories = _upstream_pages(repository)
+    return {
+        "repository": repository,
+        "url": f"https://github.com/{repository}",
+        "releases": [_release(item) for item in releases or () if _is_published_release(item)],
+        "advisories": [_advisory(item) for item in advisories or () if isinstance(item, dict)],
+    }
+
+
+def _upstream_pages(repository: str) -> tuple[Any, Any]:
+    """GitHub's releases and published advisories for ``repository``, None for
+    a page it does not have."""
+
     try:
         releases = get(f"/repos/{repository}/releases?per_page={UPSTREAM_RELEASES}", missing_ok=True)
         advisories = get(f"/repos/{repository}/security-advisories?state=published&per_page=100", missing_ok=True)
@@ -370,38 +392,39 @@ def read_upstream(repository: str) -> dict[str, Any]:
         raise LookupUnavailable(str(exc)) from exc
     if releases is None and advisories is None:
         raise LookupNotFound(f"GitHub has no public repository {repository}.")
+    return releases, advisories
+
+
+def _is_published_release(item: Any) -> bool:
+    return (
+        isinstance(item, dict) and bool(item.get("tag_name")) and not item.get("prerelease") and not item.get("draft")
+    )
+
+
+def _release(item: Mapping[str, Any]) -> dict[str, str]:
     return {
-        "repository": repository,
-        "url": f"https://github.com/{repository}",
-        "releases": [
-            {
-                "tag": str(item.get("tag_name") or ""),
-                "url": _github_link(item.get("html_url")),
-                "published_at": str(item.get("published_at") or ""),
-            }
-            for item in releases or ()
-            if isinstance(item, dict) and item.get("tag_name") and not item.get("prerelease") and not item.get("draft")
-        ],
-        "advisories": [
-            {
-                "id": str(item.get("cve_id") or item.get("ghsa_id") or ""),
-                "severity": str(item.get("severity") or ""),
-                "summary": str(item.get("summary") or ""),
-                "url": _github_link(item.get("html_url")),
-                "published_at": str(item.get("published_at") or ""),
-                "vulnerabilities": [
-                    [str(entry.get("vulnerable_version_range") or ""), str(entry.get("patched_versions") or "")]
-                    for entry in item.get("vulnerabilities") or ()
-                    if isinstance(entry, dict)
-                ],
-            }
-            for item in advisories or ()
-            if isinstance(item, dict)
+        "tag": str(item.get("tag_name") or ""),
+        "url": _github_link(item.get("html_url")),
+        "published_at": str(item.get("published_at") or ""),
+    }
+
+
+def _advisory(item: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(item.get("cve_id") or item.get("ghsa_id") or ""),
+        "severity": str(item.get("severity") or ""),
+        "summary": str(item.get("summary") or ""),
+        "url": _github_link(item.get("html_url")),
+        "published_at": str(item.get("published_at") or ""),
+        "vulnerabilities": [
+            [str(entry.get("vulnerable_version_range") or ""), str(entry.get("patched_versions") or "")]
+            for entry in item.get("vulnerabilities") or ()
+            if isinstance(entry, dict)
         ],
     }
 
 
-def _due(record: Mapping[str, Any] | None, every: timedelta | None, now: datetime, force: bool) -> bool:
+def _due(record: Mapping[str, Any] | None, every: timedelta | None, now: datetime, *, force: bool) -> bool:
     """Whether one subject's record is due to be read again."""
 
     if record is None or record.get("unresolved"):
@@ -422,6 +445,7 @@ def _report(
     read: Callable[[str], dict[str, Any]],
     now: datetime,
     budget: int = LOOKUPS_PER_REFRESH,
+    *,
     force: bool = False,
 ) -> dict[str, Any] | None:
     """One kind's payload for the ingest, or None when nothing is due.
@@ -434,7 +458,7 @@ def _report(
     kept = {str(record.get(key, "")): record for record in (stored.records if stored is not None else ())}
     wanted = tuple(dict.fromkeys(subjects))
     every = READ_EVERY.get(kind, REFRESH_AFTER)
-    due = [subject for subject in wanted if _due(kept.get(subject), every, now, force)]
+    due = [subject for subject in wanted if _due(kept.get(subject), every, now, force=force)]
     dropped = set(kept) - set(wanted)
     current = stored is not None and (every is not None or stored.observed_at >= now - read_every(kind))
     if not due and not dropped and stored is not None and stored.reachable and current:
@@ -501,7 +525,7 @@ def _held_findings() -> dict[tuple[str, str, str], Mapping[str, Any]]:
     }
 
 
-def _images(now: datetime, force: bool, principal: Principal) -> list[Any]:
+def _images(now: datetime, *, force: bool, principal: Principal) -> list[Any]:
     """Every image reading, in the order each depends on the one before:
     tags name the digests, a digest's provenance can name the source, and
     its package list is what OSV is asked about. Each is stored before the
@@ -555,7 +579,7 @@ def refresh(
         payload.update(_registries(addresses, domains, allocations, registrations, now, force))
     else:
         payload.update({kind: {"ok": True, "records": [], "connected": False} for kind in kinds})
-    recorded = _images(now, force, principal)
+    recorded = _images(now, force=force, principal=principal)
     if not payload:
         return {"ok": True, "recorded": recorded}
     result = record_inventory(payload, principal=principal)

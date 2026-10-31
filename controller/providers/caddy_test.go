@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 	"encoding/pem"
-	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -22,17 +21,12 @@ type sshHost struct {
 	asked   []string
 }
 
-// sshFleet answers SSH by destination host and operation, the last two argv
-// words, and records every call.
+// sshFleet answers SSH by connection ref and operation, and records every
+// call.
 type sshFleet map[string]*sshHost
 
-func (f sshFleet) exec(_ context.Context, argv []string, stdin []byte, _ []string) ([]byte, []byte, int, error) {
-	if argv[0] != "ssh" {
-		return nil, nil, 0, errors.New("not ssh")
-	}
-	destination, operation := argv[len(argv)-2], argv[len(argv)-1]
-	_, host, _ := strings.Cut(destination, "@")
-	edge := f[host]
+func (f sshFleet) remote(_ context.Context, ref, operation string, stdin []byte) ([]byte, []byte, int, error) {
+	edge := f[ref]
 	if edge == nil {
 		return nil, []byte("no route to host"), 255, nil
 	}
@@ -64,7 +58,7 @@ func sshEnv(roles map[string]string) (runtime.Environment, runtime.Connections) 
 func caddyRegistry(roles map[string]string, fleet sshFleet) *Registry {
 	env, held := sshEnv(roles)
 	r := New(env, held, &fakeHTTP{})
-	r.Commands = &Commands{Env: env, Supplied: held, Exec: fleet.exec}
+	r.Commands = &Commands{Env: env, Supplied: held, Remote: fleet.remote}
 	return r
 }
 
@@ -98,7 +92,7 @@ const caddyNested = `{"apps":{"http":{"servers":{"srv0":{"routes":[
 ]}}}}}`
 
 func TestCaddyRoutesAreOneRecordPerHostname(t *testing.T) {
-	r := caddyRegistry(map[string]string{"edge": "caddy"}, sshFleet{"edge.example.com": {answers: map[string]string{"routes": caddyNested}}})
+	r := caddyRegistry(map[string]string{"edge": "caddy"}, sshFleet{"edge": {answers: map[string]string{"routes": caddyNested}}})
 	routes := routesOf(t, r)
 	for _, test := range []struct {
 		name, domain, upstream string
@@ -140,15 +134,15 @@ func TestCaddyHostsAsked(t *testing.T) {
 	}{
 		{"every declared Caddy host, and nothing declared for something else",
 			map[string]string{"edge": "caddy", "mirror": "caddy", "box": "backup"},
-			sshFleet{"edge.example.com": {answers: map[string]string{"routes": answer}}, "mirror.example.com": {answers: map[string]string{"routes": answer}}, "box.example.com": {}},
+			sshFleet{"edge": {answers: map[string]string{"routes": answer}}, "mirror": {answers: map[string]string{"routes": answer}}, "box": {}},
 			[]string{"edge", "mirror"}, []string{"status.example.com", "status.example.com"}},
 		{"with no role declared anywhere, every SSH host",
 			map[string]string{"edge": "", "box": ""},
-			sshFleet{"edge.example.com": {answers: map[string]string{"routes": answer}}, "box.example.com": {exits: map[string]int{"routes": 1}}},
+			sshFleet{"edge": {answers: map[string]string{"routes": answer}}, "box": {exits: map[string]int{"routes": 1}}},
 			[]string{"box", "edge"}, []string{"status.example.com"}},
 		{"a host that does not answer, or answers with no config, is skipped",
 			map[string]string{"edge": "caddy", "down": "caddy", "odd": "caddy"},
-			sshFleet{"edge.example.com": {answers: map[string]string{"routes": answer}}, "odd.example.com": {answers: map[string]string{"routes": `{"apps":{"http":{"servers":[]}}}`}}},
+			sshFleet{"edge": {answers: map[string]string{"routes": answer}}, "odd": {answers: map[string]string{"routes": `{"apps":{"http":{"servers":[]}}}`}}},
 			[]string{"edge", "odd"}, []string{"status.example.com"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -165,9 +159,9 @@ func TestCaddyHostsAsked(t *testing.T) {
 				t.Errorf("found %v, want %v", domains, test.found)
 			}
 			asked := []string{}
-			for host, edge := range test.fleet {
+			for ref, edge := range test.fleet {
 				if len(edge.asked) > 0 {
-					asked = append(asked, strings.TrimSuffix(host, ".example.com"))
+					asked = append(asked, ref)
 				}
 			}
 			slices.Sort(asked)
@@ -181,8 +175,8 @@ func TestCaddyHostsAsked(t *testing.T) {
 // A host that fails is visible to HQ as a failed step, never silently absent.
 func TestCaddySkippedHostIsAFailedStep(t *testing.T) {
 	r := caddyRegistry(map[string]string{"down": "caddy", "odd": "caddy"}, sshFleet{
-		"down.example.com": {exits: map[string]int{"routes": 255}},
-		"odd.example.com":  {answers: map[string]string{"routes": `[]`}},
+		"down": {exits: map[string]int{"routes": 255}},
+		"odd":  {answers: map[string]string{"routes": `[]`}},
 	})
 	if _, err := r.caddyRoutes(t.Context()); err != nil {
 		t.Fatal(err)
@@ -247,7 +241,7 @@ func TestCaddyRouteCertificates(t *testing.T) {
 			"app.example.com", "", "its certificate did not parse", false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			r := caddyRegistry(map[string]string{"edge": "caddy"}, sshFleet{"edge.example.com": test.edge})
+			r := caddyRegistry(map[string]string{"edge": "caddy"}, sshFleet{"edge": test.edge})
 			route := routesOf(t, r)[test.domain]
 			switch {
 			case test.serial != "":
@@ -317,15 +311,15 @@ func TestRenderCaddyRoutes(t *testing.T) {
 
 func TestCaddyReconcile(t *testing.T) {
 	edge := &sshHost{answers: map[string]string{"routes:write": ""}}
-	r := caddyRegistry(map[string]string{"edge": "caddy"}, sshFleet{"edge.example.com": edge})
+	r := caddyRegistry(map[string]string{"edge": "caddy"}, sshFleet{"edge": edge})
 	spec := Object{"connection_ref": "edge", "domain": "a.example.com", "upstream": "app:80", "certificate_directory": "",
 		"routes": []any{Object{"domain": "a.example.com", "upstream": "app:80"}}}
 
-	plan, err := r.runAction(runtime.ResourceKindCaddyRoute, "reconcile", t.Context(), spec, nil, false)
+	plan, err := r.runAction(t.Context(), runtime.ResourceKindCaddyRoute, "reconcile", spec, nil, false)
 	if err != nil || plan.Changed || plan.Status.(CaddyRouteStatus).Routes != 1 || len(edge.asked) != 0 {
 		t.Fatalf("a plan writes nothing: %v %+v %v", err, plan, edge.asked)
 	}
-	applied, err := r.runAction(runtime.ResourceKindCaddyRoute, "reconcile", t.Context(), spec, nil, true)
+	applied, err := r.runAction(t.Context(), runtime.ResourceKindCaddyRoute, "reconcile", spec, nil, true)
 	if err != nil || !applied.Changed || applied.Conditions[0].Reason != "Written" {
 		t.Fatalf("%v %+v", err, applied)
 	}
@@ -334,11 +328,11 @@ func TestCaddyReconcile(t *testing.T) {
 	}
 
 	bad := Object{"connection_ref": "edge", "routes": []any{Object{"domain": "a.example.com", "upstream": "app:80 {"}}}
-	if _, err := r.runAction(runtime.ResourceKindCaddyRoute, "reconcile", t.Context(), bad, nil, false); err == nil {
+	if _, err := r.runAction(t.Context(), runtime.ResourceKindCaddyRoute, "reconcile", bad, nil, false); err == nil {
 		t.Fatal("a plan renders, and so refuses, what the file writer refuses")
 	}
 	edge.exits = map[string]int{"routes:write": 1}
-	if _, err := r.runAction(runtime.ResourceKindCaddyRoute, "reconcile", t.Context(), spec, nil, true); err == nil {
+	if _, err := r.runAction(t.Context(), runtime.ResourceKindCaddyRoute, "reconcile", spec, nil, true); err == nil {
 		t.Fatal("a write the edge refused reported as written")
 	}
 }

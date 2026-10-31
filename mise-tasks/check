@@ -1,7 +1,7 @@
 #!/bin/sh
 #MISE description="Before handing work back, if the machine can hold it: every gate CI runs, lint, test, browser, build and scan; --release before a release"
+#MISE env={SEVERINO_HEAVY_BOUND="3h"}
 #MISE raw=true
-#MISE timeout="3h"
 #USAGE flag "--release" help="Then the composed suite with the extensions required and the deploy host, read-only, on the committed HEAD: exit 0 means ready to release"
 #USAGE flag "--remote" help="Read every check GitHub ran on this commit instead of running the gates here; the commit must be pushed"
 #USAGE flag "--skip-host" help="A release run without the deploy host, exiting 2: not a verdict on the release"

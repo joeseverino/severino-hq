@@ -16,18 +16,10 @@ lazy from hq.platform.application.toolkit import tab_named, tabs_for
 class ToolsView(PageMixin, TemplateView):
     """The tools, one tab at a time, answering on a plain GET.
 
-    Deliberately thin. Every tool here is backed by registered capabilities,
-    so the generic pages at `/commands/<name>/` already render a form,
-    authorize it, execute it and print the result. This page exists because
-    those are one tool each, and the question an operator actually has is
-    usually several at once.
-
-    So it holds no tool logic: it picks a tab from `application.toolkit`, runs
-    that tab's capabilities through the same authorization every other adapter
-    uses, and hands the results to the tab's own partial.
-
-    A lookup someone typed is a GET, so a result is a URL. Re-reading a stored
-    answer replaces it, so that is a POST, which redirects back to the result.
+    Every tool is a registered capability with its own page at
+    `/commands/<name>/`; this one exists because an operator's question is usually
+    several at once. It holds no tool logic: it runs a tab of `application.toolkit`
+    through the shared authorization and hands the results to the tab's partial.
     """
 
     template_name = "control_plane/tools.html"
@@ -65,7 +57,11 @@ class ToolsView(PageMixin, TemplateView):
         return context
 
     def post(self, request, *args, **kwargs):
-        """Re-read an address's stored answer, then show it."""
+        """Re-read an address's stored answer, then show it.
+
+        Replacing a stored answer is a POST, which redirects back to the result, so a
+        typed lookup stays a GET whose result is a URL.
+        """
 
         address = request.POST.get("address", "").strip()
         if address:

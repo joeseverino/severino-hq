@@ -42,7 +42,9 @@ func TestTheRenderGoesFirstAndHQIsEnabledLast(t *testing.T) {
 func TestAFailedRenderPutsTheRenderersUnitsBack(t *testing.T) {
 	f := newFakeHost(t)
 	previous := filepath.Join(f.machine.Systemd, SecretsUnit)
-	os.WriteFile(previous, []byte("previous\n"), 0o644)
+	if err := os.WriteFile(previous, []byte("previous\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	f.fail = []string{"systemctl start " + SecretsUnit}
 
 	err := f.machine.Install(context.Background(), connected)
@@ -53,7 +55,7 @@ func TestAFailedRenderPutsTheRenderersUnitsBack(t *testing.T) {
 	if data, _ := os.ReadFile(previous); string(data) != "previous\n" {
 		t.Errorf("the renderer's unit was not restored: %q", data)
 	}
-	if _, err := os.Stat(filepath.Join(f.machine.Systemd, "severino-hq-secrets.service.d/10-root-owned-exec.conf")); err == nil {
+	if _, err := os.Stat(filepath.Join(f.machine.Systemd, "severino-hq-secrets.service.d", "10-root-owned-exec.conf")); err == nil {
 		t.Error("a drop-in the previous release did not have was left behind")
 	}
 	if f.called("systemctl enable") {
@@ -138,7 +140,9 @@ func TestPreflightOutputStaysInThePrivateLog(t *testing.T) {
 
 func TestATakeOverRecordsWhatRunsOverARecordLeftBehind(t *testing.T) {
 	f := newFakeHost(t)
-	f.machine.Record(next)
+	if err := f.machine.Record(next); err != nil {
+		t.Fatal(err)
+	}
 	f.running = running
 
 	if err := f.machine.Install(context.Background(), connected); err != nil {
@@ -176,8 +180,12 @@ func TestWhatNoReleaseShipsIsRemoved(t *testing.T) {
 		filepath.Join(f.machine.Sbin, "severino-hq-sync-scripts"),
 	}
 	for _, leftover := range leftovers {
-		os.MkdirAll(filepath.Dir(leftover), 0o755)
-		os.WriteFile(leftover, nil, 0o644)
+		if err := os.MkdirAll(filepath.Dir(leftover), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(leftover, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if err := f.machine.Install(context.Background(), connected); err != nil {

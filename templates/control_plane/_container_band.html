@@ -7,7 +7,7 @@ of its repository instead: the production deploy, and the repository's alerts.
 <div class="fact-band">
   {% band_fact icon="activity" label=running.state|capfirst|default:"Unknown" tone=running.state_tone %}
     <strong>{{ container.item.uptime|default:running.uptime|default:running.status|default:"No status"|breakable }}</strong>
-    <small>{% if running.check %}{{ running.check|capfirst|breakable }} · {% endif %}{% if machine %}on {% entity machine.link %}{% endif %}</small>
+    <small>{% if running.check %}{{ running.check|capfirst|breakable }}{% dot %}{% endif %}{% if machine %}on {% entity machine.link %}{% endif %}</small>
   {% endband_fact %}
   {% band_fact icon="layers" label="Version" %}
     <strong>{% if standing.tag %}<code>{{ standing.tag|breakable }}</code>{% else %}No version tag{% endif %}</strong>
@@ -19,7 +19,7 @@ of its repository instead: the production deploy, and the repository's alerts.
   {% if standing.repository %}{% with deploy=standing.repository.production %}
     {% band_fact icon="deploy" label="Production deploy" tone=standing.repository.verified_tone %}
       <strong>{% if standing.repository.production_verified %}Verified{% elif standing.repository.production_verified is False %}Failed its checks{% elif deploy %}Deployed{% else %}No deploy found{% endif %}</strong>
-      {% if deploy %}<small>{% entity standing.repository.url|add:"/commit/"|add:deploy.sha|outside code=True label=deploy.sha|slice:":7" %}{% if deploy.created_at %} · {{ deploy.created_at|ago_short }}{% endif %}</small>{% endif %}
+      {% if deploy %}<small>{% entity standing.repository.url|add:"/commit/"|add:deploy.sha|outside code=True label=deploy.sha|slice:":7" %}{% if deploy.created_at %}{% dot %}{{ deploy.created_at|ago_short }}{% endif %}</small>{% endif %}
       <small>{% if standing.repository.production_verified %}Passed its checks before deploying.{% else %}From {{ standing.repository.name|breakable:"." }}{% endif %}</small>
     {% endband_fact %}
     {% band_fact icon="shield" label="Security" tone=standing.alerts_tone %}

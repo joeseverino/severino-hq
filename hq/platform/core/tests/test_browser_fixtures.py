@@ -17,6 +17,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.projects.models import Project
+from hq.platform.application.drawings import Dot, Dots
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import cli_principal
 from hq.platform.application.services import CONTAINER_KIND
@@ -282,8 +283,20 @@ def _highlights():
         )
         for i in range(4)
     )
+    # The most dots a figure draws, each a link a target apart, in a card that
+    # shares its row and so sets its six figures three to a row.
+    linked = tuple(
+        Kpi(f"Linked {count}", count, "of them up", "/example/", drawing=_linked_dots(count)) for count in (12, 8)
+    )
+    dense = (*linked, Kpi("Plain", 4, url="/example/"), Kpi("Counted", 7, drawing=Dots.of(5, 7)), *short[:2])
     return {
         "highlights": [
+            {
+                "id": "example.dense",
+                "label": "Example dense",
+                "cards": [],
+                "overview": DomainOverview("Example", "/example/", dense),
+            },
             {
                 "id": "example.first",
                 "label": "Example one",
@@ -301,11 +314,15 @@ def _highlights():
     }
 
 
+def _linked_dots(count):
+    return Dots(tuple(Dot(filled=at % 3 != 0, tip=f"Example {at}", url=f"/example/{at}/") for at in range(count)))
+
+
 _LINKS = [{"href": "https://example.com/", "label": f"Example link {i}", "sub": "example.com"} for i in range(24)]
 
 
 @contextmanager
-def _dashboard(populated):
+def _dashboard(*, populated):
     highlights = _highlights() if populated else {"highlights": [], "compact": []}
     with ExitStack() as stack:
         stack.enter_context(
@@ -483,8 +500,8 @@ def _messages():
 
 
 PAGES = {
-    "dashboard": (lambda: reverse("dashboard"), lambda: _dashboard(True)),
-    "dashboard-bare": (lambda: reverse("dashboard"), lambda: _dashboard(False)),
+    "dashboard": (lambda: reverse("dashboard"), lambda: _dashboard(populated=True)),
+    "dashboard-bare": (lambda: reverse("dashboard"), lambda: _dashboard(populated=False)),
     "service": (
         lambda: reverse("control_plane:service", kwargs={"hostname": SERVICE}),
         ExitStack,

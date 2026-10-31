@@ -24,7 +24,9 @@ func lockOf(ids ...string) string {
 func extensionDeploy(t *testing.T, runs, carries, retired []string) (*fakeHost, *handover, error) {
 	t.Helper()
 	f := newFakeHost(t)
-	f.machine.Record(running)
+	if err := f.machine.Record(running); err != nil {
+		t.Fatal(err)
+	}
 	nextFiles := map[string]string{ExtensionLock: lockOf(carries...)}
 	if retired != nil {
 		data, _ := json.Marshal(retired)
@@ -114,7 +116,9 @@ func TestTheFirstReleaseHasNothingToKeep(t *testing.T) {
 
 func TestAnImageWhoseExtensionsCannotBeReadIsRefused(t *testing.T) {
 	f := newFakeHost(t)
-	f.machine.Record(running)
+	if err := f.machine.Record(running); err != nil {
+		t.Fatal(err)
+	}
 	f.files = map[string]map[string]string{
 		running: {ExtensionLock: lockOf("example.alpha")},
 		next:    {ExtensionLock: `{"plugins": "not a list"}`},
@@ -138,7 +142,9 @@ func TestTheRunningSetIsReadBeforeThePruneAndPulledWhenGone(t *testing.T) {
 
 	// Gone from the host: pulled by its digest, then read.
 	f = newFakeHost(t)
-	f.machine.Record(running)
+	if err := f.machine.Record(running); err != nil {
+		t.Fatal(err)
+	}
 	f.fail = []string{"docker create --pull never " + running}
 	f.files = map[string]map[string]string{next: {ExtensionLock: lockOf()}}
 	d, _ := newDeployer(f)

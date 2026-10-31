@@ -1,8 +1,9 @@
-# The composition copies the extension wheels the workflow staged, and the
-# toolchain its installer's uv comes from, with the go.mod mise.toml reads:
-# nothing else.
+# The composition copies the extension wheels the workflow staged (a
+# candidate's in build/candidate), and the toolchain its installer's uv comes
+# from, with the go.mod mise.toml reads: nothing else.
 *
 !build/composition/
+!build/candidate/
 !controller/go.mod
 !mise.lock
 !mise.toml

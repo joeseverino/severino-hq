@@ -17,6 +17,7 @@ import (
 	"net/netip"
 	"regexp"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -47,10 +48,7 @@ var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
 // NewToken accepts the credential file's bytes: one line, in the JWT alphabet.
 func NewToken(raw []byte) (Token, error) {
-	value := string(raw)
-	for len(value) > 0 && value[len(value)-1] == '\n' {
-		value = value[:len(value)-1]
-	}
+	value := strings.TrimRight(string(raw), "\n")
 	if value == "" {
 		return Token{}, errors.New("empty Connect token")
 	}
@@ -62,20 +60,20 @@ func NewToken(raw []byte) (Token, error) {
 
 func (Token) String() string               { return redacted }
 func (Token) GoString() string             { return redacted }
-func (Token) Format(f fmt.State, _ rune)   { io.WriteString(f, redacted) }
+func (Token) Format(f fmt.State, _ rune)   { _, _ = io.WriteString(f, redacted) }
 func (Token) LogValue() slog.Value         { return slog.StringValue(redacted) }
 func (Token) MarshalText() ([]byte, error) { return []byte(redacted), nil }
 
 // Failure classes; match with errors.Is.
 var (
-	ErrEndpoint    = errors.New("Connect requires an explicit IPv4 loopback endpoint")
+	ErrEndpoint    = errors.New("1Password Connect requires an explicit IPv4 loopback endpoint")
 	ErrNotLoopback = errors.New("refusing to dial an address that is not IPv4 loopback")
-	ErrRedirect    = errors.New("Connect answered with a redirect")
-	ErrUnavailable = errors.New("Connect is unavailable")
-	ErrDenied      = errors.New("Connect refused the token")
-	ErrResponse    = errors.New("Connect returned an unusable response")
+	ErrRedirect    = errors.New("1Password Connect answered with a redirect")
+	ErrUnavailable = errors.New("1Password Connect is unavailable")
+	ErrDenied      = errors.New("1Password Connect refused the token")
+	ErrResponse    = errors.New("1Password Connect returned an unusable response")
 	ErrIdentifier  = errors.New("not a 1Password identifier")
-	ErrPort        = errors.New("Connect must listen on a port below 1024: only root can listen there, so only root's Connect can answer")
+	ErrPort        = errors.New("1Password Connect must listen on a port below 1024: only root can listen there, so only root's Connect can answer")
 )
 
 // Error is one failed exchange: what was asked and the class of failure. It
@@ -100,7 +98,7 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.Class }
 
-var endpointPattern = regexp.MustCompile(`^http://127\.0\.0\.1:([0-9]{1,5})$`)
+var endpointPattern = regexp.MustCompile(`^http://127\.0\.0\.1:(\d{1,5})$`)
 
 // Ports says whether an endpoint's port may be dialed.
 type Ports func(port int) error
@@ -225,7 +223,7 @@ func bearer(token Token) func(*http.Request) {
 // A Client formats and logs as its endpoint and nothing else.
 func (c Client) String() string             { return "connect.Client(" + c.endpoint + ")" }
 func (c Client) GoString() string           { return c.String() }
-func (c Client) Format(f fmt.State, _ rune) { io.WriteString(f, c.String()) }
+func (c Client) Format(f fmt.State, _ rune) { _, _ = io.WriteString(f, c.String()) }
 func (c Client) LogValue() slog.Value       { return slog.StringValue(c.String()) }
 
 func sleep(ctx context.Context, d time.Duration) error {
@@ -241,7 +239,7 @@ func sleep(ctx context.Context, d time.Duration) error {
 
 // get performs one bounded GET and decodes its JSON answer into out.
 func (c *Client) get(ctx context.Context, op, path string, authenticated bool, out any) error {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpoint+path, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpoint+path, http.NoBody)
 	if err != nil {
 		return &Error{Op: op, Class: ErrResponse, Detail: "unbuildable request"}
 	}
@@ -322,15 +320,27 @@ func (c *Client) Vaults(ctx context.Context) ([]connectapi.Vault, error) {
 
 // Vault reads one vault's metadata, its content version among it.
 func (c *Client) Vault(ctx context.Context, vault string) (connectapi.Vault, error) {
-	var found connectapi.Vault
-	if !ValidID(vault) {
-		return found, &Error{Op: "read vault", Class: ErrIdentifier}
+	return readOne(ctx, c, "vault", "/v1/vaults/"+vault, []string{vault}, func(found connectapi.Vault) bool {
+		return found.Id != nil && *found.Id == vault
+	})
+}
+
+// readOne reads the one record of its kind at path, which is requested only
+// when every identifier in ids is valid, and refuses an answer asked does not
+// recognize as the record asked for.
+func readOne[T any](ctx context.Context, c *Client, kind, path string, ids []string, asked func(T) bool) (T, error) {
+	op := "read " + kind
+	var found T
+	for _, id := range ids {
+		if !ValidID(id) {
+			return found, &Error{Op: op, Class: ErrIdentifier}
+		}
 	}
-	if err := c.get(ctx, "read vault", "/v1/vaults/"+vault, true, &found); err != nil {
+	if err := c.get(ctx, op, path, true, &found); err != nil {
 		return found, err
 	}
-	if found.Id == nil || *found.Id != vault {
-		return found, &Error{Op: "read vault", Class: ErrResponse, Detail: "another vault was returned"}
+	if !asked(found) {
+		return found, &Error{Op: op, Class: ErrResponse, Detail: "another " + kind + " was returned"}
 	}
 	return found, nil
 }
@@ -365,17 +375,9 @@ func (c *Client) Items(ctx context.Context, vault string) ([]connectapi.Item, er
 
 // Item reads one item in full. The answer must be the item that was asked for.
 func (c *Client) Item(ctx context.Context, vault, item string) (connectapi.FullItem, error) {
-	var found connectapi.FullItem
-	if !ValidID(vault) || !ValidID(item) {
-		return found, &Error{Op: "read item", Class: ErrIdentifier}
-	}
-	if err := c.get(ctx, "read item", "/v1/vaults/"+vault+"/items/"+item, true, &found); err != nil {
-		return found, err
-	}
-	if found.Id == nil || *found.Id != item || found.Vault.Id != vault {
-		return found, &Error{Op: "read item", Class: ErrResponse, Detail: "another item was returned"}
-	}
-	return found, nil
+	return readOne(ctx, c, "item", "/v1/vaults/"+vault+"/items/"+item, []string{vault, item}, func(found connectapi.FullItem) bool {
+		return found.Id != nil && *found.Id == item && found.Vault.Id == vault
+	})
 }
 
 // WaitReady lists the vaults until Connect answers or ctx ends. Connect stays

@@ -79,5 +79,5 @@ class CreatorTests(SimpleTestCase):
             # A new scratch database is migrated by the seed that fills it.
             "tools/dev/dev.sh",
             r"\s*(\S+=\S+ )?uv run python manage\.py (migrate|seed)\b",
-            r"exec uv run python -m uvicorn\b",
+            r'exec "\$python" -m uvicorn\b',
         )

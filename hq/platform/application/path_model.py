@@ -13,6 +13,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 
 from .entity_links import EntityLink, entity_link, kind_label
 from .labels import lower_first
+lazy from .freshness import Freshness, freshness as reading_freshness
 lazy from .moments import ago
 
 NETWORK_LABELS = {
@@ -43,6 +44,19 @@ class HopSource:
 
         spec = OBSERVATIONS.get(self.kind)
         return spec.short if spec is not None else kind_label(self.kind)
+
+    @property
+    def freshness(self) -> Freshness | None:
+        """How current the reading is, by its kind's line; None for a
+        declaration, which is not read."""
+
+        if self.declared or self.observed_at is None:
+            return None
+        return reading_freshness(self.kind, self.observed_at)
+
+    @property
+    def stale(self) -> bool:
+        return bool(self.freshness and self.freshness.stale)
 
     @property
     def phrase(self) -> str:
@@ -201,13 +215,14 @@ class Route:
         return lower_first(self.via)
 
     @property
-    def line_hops(self) -> tuple[Hop, ...]:
-        """The hops the one-line route shows: each machine once, no forwarding."""
+    def step_hops(self) -> tuple[Hop, ...]:
+        """The hops a reader is shown, step by step: each machine once, where a
+        proxy and what it forwards to share one."""
 
         shown: list[Hop] = []
         machines: set[str] = set()
         for hop in self.hops:
-            if hop.step in _DETAIL_ONLY or (hop.step == "machine" and hop.name in machines):
+            if hop.step == "machine" and hop.name in machines:
                 continue
             if hop.step == "machine":
                 machines.add(hop.name)
@@ -215,8 +230,21 @@ class Route:
         return tuple(shown)
 
     @property
+    def line_hops(self) -> tuple[Hop, ...]:
+        """The hops the one-line route shows: the steps without the forwarding."""
+
+        return tuple(hop for hop in self.step_hops if hop.step not in _DETAIL_ONLY)
+
+    @property
     def line(self) -> str:
-        return " → ".join(hop.short for hop in self.line_hops)
+        return " to ".join(hop.short for hop in self.line_hops)
+
+    @property
+    def stale_reading(self) -> HopSource | None:
+        """The oldest out-of-date reading the route was read from, or None."""
+
+        stale = [hop.source for hop in self.hops if hop.source is not None and hop.source.stale]
+        return min(stale, key=lambda found: found.observed_at, default=None)
 
     @property
     def certificate(self) -> Certificate | None:

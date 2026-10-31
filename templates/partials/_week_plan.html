@@ -6,7 +6,7 @@ Week plan, which days of the week a thing is scheduled for.
 `plan` is application.ui.WeekPlan. The recurring shape of a week, not a record
 of one: use _activity_calendar.html for what actually happened on given dates.
 {% endcomment %}
-<section class="card week-plan-card">
+{% card css="week-plan-card" %}
   {% section_head %}{{ plan.title|breakable }}{% aside %}{% if plan.url %}<a class="subtle-link" href="{{ plan.url }}">Change plan</a>{% endif %}{% endsection_head %}
   <ol class="week-plan">
     {% for day in plan.days %}
@@ -25,4 +25,4 @@ of one: use _activity_calendar.html for what actually happened on given dates.
       {% for note in plan.notes %}<li><span class="muted">{{ note.label|breakable }}</span><strong>{{ note.value|breakable }}</strong></li>{% endfor %}
     </ul>
   {% endif %}
-</section>
+{% endcard %}

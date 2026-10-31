@@ -145,7 +145,7 @@ const hqNoteRow = (text) => {
 
 const hqShowResponseHeaders = (root) => {
   const slot = root.querySelector("[data-response-headers]");
-  if (!slot || !window.fetch) return;
+  if (!slot) return;
   const disclosure = slot.closest("[data-connection-protocol]");
   if (disclosure && !disclosure.open) return;
   if (slot.dataset.loaded === "true") return;

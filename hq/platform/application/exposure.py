@@ -1,26 +1,9 @@
 """What the internet can reach, and how bad that is.
 
-Derived from the service paths HQ already walks (``application.paths``): each
-name's DNS answer, the edge in front of it, the network its answer is on, and
-the machine and container that serve it. Nothing is polled for it.
-
-A route has one of four exposures, worst first:
-
-- **open**: the internet reaches it and nothing in front asks who is asking;
-- **gated**: the internet reaches it, through a reading that admits only whom it
-  allows (a reading kind that ``restricts``: an Access application, an access
-  list);
-- **private**: only the tailnet or the local network reaches it;
-- **unrouted**: nothing HQ reads routes a name to it.
-
-A thing with no route is **unknown** rather than unrouted until HQ has read every
-kind that could route to it: a gap in what HQ knows is not evidence that the
-internet cannot reach something, so it never lowers how urgent a problem is.
-
-A thing's exposure is its worst route's. A problem is as urgent as the worst
-exposure of what it is about: a serious advisory on an open route stays
-serious, the same advisory behind a gate or on the tailnet is attention, and
-one nothing routes to is information.
+Derived from the service paths HQ already walks (``application.paths``), and
+nothing is polled for it, so a problem can be ranked by who can reach what it
+is about. The levels, a thing's exposure and the urgency each sets are
+docs/Derived-Facts.md#exposure.
 """
 
 from collections.abc import Iterable
@@ -315,7 +298,7 @@ def _exposure_of_container(item) -> Exposure:
     }
     named = exposure_of_names(names)
     machine = item.machine
-    answering = publicly_answering((*getattr(machine, "addresses", ()), getattr(machine, "address", "")))
+    answering = publicly_answering((*machine.addresses, machine.address))
     ports = sorted(port for port in item.running.ports if port in answering)
     direct = tuple(
         RouteExposure(
@@ -336,6 +319,6 @@ def _exposure_of_container(item) -> Exposure:
 
 
 def _perimeter_read(machine) -> bool:
-    addresses = (*getattr(machine, "addresses", ()), getattr(machine, "address", ""))
+    addresses = (*machine.addresses, machine.address)
     subject = Subject.of(addresses=tuple(address for address in addresses if address))
     return bool(readings().about(subject, kinds=(PERIMETER_KIND,)))

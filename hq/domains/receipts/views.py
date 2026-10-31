@@ -4,6 +4,7 @@ Receipt files are stored OUTSIDE the app and are never exposed via the public
 media URL. The ``ReceiptFileView`` streams the file only to authenticated users.
 """
 
+from functools import cached_property
 from pathlib import Path
 from typing import override
 from urllib.parse import urlencode
@@ -25,16 +26,12 @@ from django.views.generic import (
 )
 
 from hq.domains.expenses.models import Expense
+from hq.platform.application.capabilities import capability_words, execute_capability
 from hq.platform.application.deletion import DeleteCommand
 from hq.platform.application.moments import when
 from hq.platform.application.money import money
 from hq.platform.application.pages import PageAction, PageMixin
-from hq.platform.application.receipts import (
-    ReceiptMetadataCommand,
-    receipt_command_from_cleaned_data,
-    update_receipt,
-    upload_receipt,
-)
+from hq.platform.application.receipts import REPLACE, UPDATE, UPLOAD, receipt_payload, serialize_receipt
 from hq.platform.application.records import deleter
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import TableColumn, TableListMixin, TableToggle
@@ -48,9 +45,12 @@ from .models import Receipt
 from .validation import (
     ALLOWED_RECEIPT_CONTENT_TYPES,
     INLINE_SAFE_CONTENT_TYPES,
+    is_new_upload,
 )
 
 RECEIPTS_TRAIL = ("Receipts", reverse_lazy("receipts:list"))
+# The details a link keeps as they are, read back as the record's update takes them.
+_DETAILS = ("vendor", "date", "amount", "notes", "related_asset")
 
 
 class ReceiptListView(PageMixin, TableListMixin, ListView):
@@ -90,9 +90,6 @@ class ReceiptPage(PageMixin):
 
     page_trail = RECEIPTS_TRAIL
 
-    def get_receipt(self):
-        return getattr(self, "object", None)
-
     @override
     def trail_label(self, record):
         return str(record)
@@ -127,7 +124,7 @@ class ReceiptDetailView(PageMixin, DetailView):
             )
         actions += [
             PageAction("Download file", reverse("receipts:file", args=[receipt.pk])),
-            PageAction("Edit", reverse("receipts:edit", args=[receipt.pk])),
+            PageAction(capability_words("receipt.update"), reverse("receipts:edit", args=[receipt.pk])),
             PageAction("Delete", reverse("receipts:delete", args=[receipt.pk]), danger=True),
         ]
         return tuple(actions)
@@ -139,19 +136,19 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
     template_name = "receipts/receipt_match.html"
     page_title = "Link receipt to expense"
 
-    @override
-    def get_receipt(self):
-        if not hasattr(self, "receipt"):
-            self.receipt = get_object_or_404(Receipt, pk=self.kwargs["pk"])
-        return self.receipt
+    @cached_property
+    def receipt(self):
+        return get_object_or_404(Receipt, pk=self.kwargs["pk"])
 
-    @property
-    def object(self):
-        return self.get_receipt()
+    @override
+    def get(self, request, *args, **kwargs):
+        # The page's trail reads the record the way a detail view holds it.
+        self.object = self.receipt
+        return super().get(request, *args, **kwargs)
 
     @override
     def get_page_lede(self):
-        receipt = self.get_receipt()
+        receipt = self.receipt
         return format_html(
             "<strong>{}</strong> · {}",
             breakable(receipt.vendor or "(Unknown vendor)"),
@@ -160,12 +157,12 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
 
     @override
     def get_page_actions(self):
-        return (PageAction("Cancel", self.get_receipt().get_absolute_url()),)
+        return (PageAction("Cancel", self.receipt.get_absolute_url()),)
 
     @override
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        receipt = self.get_receipt()
+        receipt = self.receipt
 
         # Only suggest if it's currently unlinked.
         if receipt.related_expense or receipt.related_asset:
@@ -200,19 +197,17 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
 
         if expense_id:
             expense = get_object_or_404(Expense, pk=expense_id)
-            update_receipt(
-                ReceiptMetadataCommand(
-                    vendor=receipt.vendor,
-                    date=receipt.date,
-                    amount=receipt.amount,
-                    notes=receipt.notes,
-                    related_expense=expense.id,
-                    related_asset=(receipt.related_asset.slug if receipt.related_asset else None),
-                ),
+            details = serialize_receipt(receipt)
+            result = execute_capability(
+                UPDATE,
+                {field: details[field] for field in _DETAILS} | {"related_expense": expense.id},
                 principal=web_principal(request.user),
-                current_id=receipt.id,
+                target=receipt.id,
             )
-            messages.success(request, ended(f"Receipt linked to {expense.label}"))
+            if result["ok"]:
+                messages.success(request, ended(f"Receipt linked to {expense.label}"))
+            else:
+                messages.error(request, result["error"]["message"])
 
         return redirect(receipt.get_absolute_url())
 
@@ -235,12 +230,14 @@ class ReceiptCreateView(ReceiptPage, CreateView):
 
     @override
     def form_valid(self, form):
-        upload = form.cleaned_data["file"]
-        result = upload_receipt(
-            receipt_command_from_cleaned_data(form.cleaned_data),
-            upload,
+        result = execute_capability(
+            UPLOAD,
+            receipt_payload(form.cleaned_data, form.cleaned_data["file"]),
             principal=web_principal(self.request.user),
         )
+        if not result["ok"]:
+            form.add_error(None, result["error"]["message"])
+            return self.form_invalid(form)
         self.object = Receipt.objects.get(pk=result["receipt"]["id"])
         messages.success(self.request, "Receipt uploaded.")
         return redirect(self.object.get_absolute_url())
@@ -254,12 +251,18 @@ class ReceiptUpdateView(ReceiptPage, UpdateView):
 
     @override
     def form_valid(self, form):
-        result = update_receipt(
-            receipt_command_from_cleaned_data(form.cleaned_data),
+        upload = form.cleaned_data.get("file")
+        # A new file is the replace capability's; details alone are the record's update.
+        name, upload = (REPLACE, upload) if is_new_upload(upload) else (UPDATE, None)
+        result = execute_capability(
+            name,
+            receipt_payload(form.cleaned_data, upload),
             principal=web_principal(self.request.user),
-            current_id=self.get_object().pk,
-            upload=form.cleaned_data.get("file"),
+            target=self.get_object().pk,
         )
+        if not result["ok"]:
+            form.add_error(None, result["error"]["message"])
+            return self.form_invalid(form)
         self.object = Receipt.objects.get(pk=result["receipt"]["id"])
         messages.success(self.request, "Receipt updated.")
         return redirect(self.object.get_absolute_url())
@@ -287,7 +290,7 @@ class ReceiptDeleteView(ReceiptPage, DeleteView):
 class ReceiptFileView(View):
     """Auth-protected download of a receipt's underlying file."""
 
-    def get(self, request, pk: int):
+    def get(self, _request, pk: int):
         receipt = get_object_or_404(Receipt, pk=pk)
         if not receipt.file:
             raise Http404("This receipt has no file.")

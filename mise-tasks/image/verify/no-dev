@@ -1,8 +1,11 @@
 #!/bin/sh
 #MISE description="It cannot import development layers and ships no development programs"
+#MISE env={SEVERINO_HEAVY_BOUND="30m"}
 #MISE hide=true
 #MISE depends=["image:build"]
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 
 image="${IMAGE:-severino-hq:ci-local}"
 docker run --rm --entrypoint python "$image" -c \

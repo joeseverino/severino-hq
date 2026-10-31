@@ -128,10 +128,8 @@ func retiredIDs(data []byte) ([]string, error) {
 }
 
 func checkedIDs(ids []string) ([]string, error) {
-	for _, id := range ids {
-		if id == "" {
-			return nil, errors.New("an extension has no id")
-		}
+	if slices.Contains(ids, "") {
+		return nil, errors.New("an extension has no id")
 	}
 	slices.Sort(ids)
 	return slices.Compact(ids), nil

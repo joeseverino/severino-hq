@@ -1,11 +1,10 @@
 """Tailnet policy names, as the machines they stand for.
 
-A policy names a device by an alias for one of its addresses (``hosts``), by a
-tag it carries, or by its owner. An alias resolves through the address to the
-machine the catalog says answers there, and links to it; two aliases for
-one machine (its IPv4 and IPv6 addresses) are one link with both names in its
-title. A tag lists the devices carrying it. Users and unresolved names stay as
-the policy writes them.
+A policy names a device by an alias for one of its addresses (``hosts``), a tag
+or its owner. An alias resolves through the address to the machine the catalog
+says answers there; one machine's aliases (its IPv4 and IPv6 addresses) are one
+link with both names in its title. A tag lists its devices; users and
+unresolved names stay as the policy writes them.
 """
 
 from collections.abc import Iterable

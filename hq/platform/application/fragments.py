@@ -1,24 +1,10 @@
 """A page, or one named part of it, from one definition.
 
-A template marks a part with Django's ``{% partialdef name inline %}``. A
-request that names the part in ``X-Fragment`` is answered with the part alone,
-rendered from the same template and the same context as the page, so the two
-cannot drift. A request that names a part the template does not define is
-answered with the page: the browser finds the region in it by its id, which is
-what it would have done with no header at all.
-
-    class CalendarView(PageMixin, TemplateView):   # PageMixin is a FragmentMixin
-        template_name = "calendars/calendar.html"
-
-    return fragments.render(request, "core/_dashboard_glance.html", context)
-
-``static/js/fragment.js`` is the other half: the element that says which part
-it is and where it comes from.
-
-**Answering "unchanged".** A part whose inputs are known by their revisions
-answers a repeated question with 304 and composes nothing. `standing` is the
-validator: what the answer was derived from, then the second it stops holding.
-The header's count and a polled part share it.
+A part (``{% partialdef name inline %}``) is rendered from the same template
+and context as its page, so the two cannot drift, and one whose inputs are
+known by revision answers a repeated question with 304, composing nothing.
+``static/js/fragment.js`` is the other half; the contract is docs/Design.md,
+"A read is a fragment".
 """
 
 import hashlib
@@ -95,7 +81,8 @@ def presented(request: HttpRequest, derived_from: str | None) -> str | None:
 
 
 def standing(derived_from: str | None, until: datetime | None = None, *, longest: int = LONGEST) -> str | None:
-    """The validator for an answer just composed from ``derived_from``."""
+    """The validator for an answer just composed from ``derived_from``, shared
+    by the header's count and a polled part."""
 
     if derived_from is None:
         return None

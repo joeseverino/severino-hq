@@ -28,7 +28,7 @@ class SubstitutionTests(TestCase):
         """A balance that moves on every refresh reads as a broken page rather
         than as a number."""
 
-        with demo_scope(True):
+        with demo_scope(showing=True):
             first = amount(Decimal("110068.00"), key="acct-1")
             second = amount(Decimal("110068.00"), key="acct-1")
             other = amount(Decimal("110068.00"), key="acct-2")
@@ -40,7 +40,7 @@ class SubstitutionTests(TestCase):
         """A coffee replaced by a salary reads as broken, and what is owed goes
         on reading as owed."""
 
-        with demo_scope(True):
+        with demo_scope(showing=True):
             small = amount(Decimal("12.34"), key="coffee")
             owed = amount(Decimal("-817.00"), key="card")
 
@@ -52,7 +52,7 @@ class SubstitutionTests(TestCase):
         """A stand-in the size of the real amount says how large the real one
         is, which for a balance is most of what there is to know."""
 
-        with demo_scope(True):
+        with demo_scope(showing=True):
             shown = [
                 amount(Decimal(real), key=f"account-{index}")
                 for index, real in enumerate(("12345.00", "110068.00", "2500000.00", "-48000.00"))
@@ -66,7 +66,7 @@ class SubstitutionTests(TestCase):
         """Everything but the capped number of figures comes from the key, so
         five figures and seven under one key are the same stand-in."""
 
-        with demo_scope(True):
+        with demo_scope(showing=True):
             self.assertEqual(
                 amount(Decimal("12345.00"), key="k"),
                 amount(Decimal("2500000.00"), key="k"),
@@ -80,7 +80,7 @@ class SubstitutionTests(TestCase):
         """A partially masked name is still a name, and reading half of one is
         how somebody works out the other half."""
 
-        with demo_scope(True):
+        with demo_scope(showing=True):
             stood_in = label("Sam Example", key="person-1")
             from_something_else = label("anything else", key="person-1")
 
@@ -94,7 +94,7 @@ class SubstitutionTests(TestCase):
         by date goes on making sense."""
 
         earlier, later = date(2026, 1, 1), date(2026, 6, 1)
-        with demo_scope(True):
+        with demo_scope(showing=True):
             shifted_earlier = day(earlier, key="one")
             shifted_later = day(later, key="one")
 
@@ -102,7 +102,7 @@ class SubstitutionTests(TestCase):
         self.assertLess(shifted_earlier, shifted_later)
 
     def test_the_scope_is_left_exactly_where_it_was_found(self):
-        with demo_scope(True):
+        with demo_scope(showing=True):
             self.assertTrue(showing_demo())
         self.assertFalse(showing_demo())
 

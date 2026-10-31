@@ -67,10 +67,10 @@ def _groups(*, ability_available=True, status="good", required_scopes=("example:
                     abilities=(
                         ConnectionAbilityState(
                             ability,
-                            ability_available,
-                            () if ability_available is not False else ("example:read",),
-                            None,
-                            (
+                            available=ability_available,
+                            missing_scopes=() if ability_available is not False else ("example:read",),
+                            action=None,
+                            evidence=(
                                 "unknown"
                                 if ability_available is None
                                 else "missing"
@@ -115,6 +115,44 @@ class OneStateModelTests(TestCase):
                 }
                 self.assertEqual(counts[bucket], 1, counts)
                 self.assertEqual(sum(counts.values()), 1, counts)
+
+    def test_the_posture_is_serious_for_a_connection_needing_attention_and_neutral_for_an_unverified_one(self):
+        from dataclasses import replace
+
+        (group,) = _groups()
+        for lifecycle, state in (("ready", "good"), ("configured", "neutral"), ("stale", "serious")):
+            with self.subTest(lifecycle=lifecycle):
+                view = replace(group.connections[0], lifecycle=lifecycle)
+                posture = connection_security_posture((replace(group, connections=(view,)),))
+
+                self.assertEqual(posture.state, state)
+
+    def test_the_posture_is_serious_for_a_revoked_permission_and_neutral_for_one_unchecked(self):
+        from dataclasses import replace
+
+        (group,) = _groups()
+        view = group.connections[0]
+        for evidence, state in (
+            ("not_applicable", "good"),
+            ("coarse", "neutral"),
+            ("unverified", "neutral"),
+            ("revoked", "serious"),
+        ):
+            with self.subTest(evidence=evidence):
+                judged = replace(view, abilities=(replace(view.abilities[0], evidence=evidence),))
+                posture = connection_security_posture((replace(group, connections=(judged,)),))
+
+                self.assertEqual(posture.state, state)
+
+    def test_without_a_request_the_posture_is_the_estate_alone(self):
+        from ..connection_security import REQUEST_CONTROLS
+
+        posture = connection_security_posture(_groups())
+
+        self.assertEqual(posture.headline, "")
+        self.assertEqual(posture.channel_label, "")
+        self.assertFalse(REQUEST_CONTROLS & {control.id for control in posture.controls})
+        self.assertEqual(posture.state, "good")
 
     def test_a_whole_account_credential_is_named_and_still_ready(self):
         from dataclasses import replace

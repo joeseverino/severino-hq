@@ -13,6 +13,7 @@ from django.views.generic import (
 
 from hq.platform.application import related
 from hq.platform.application.assets import managed_domain
+from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.expenses import cost_totals
 from hq.platform.application.pages import PageAction, PageMixin
@@ -133,7 +134,7 @@ class AssetDetailView(PageMixin, DetailView):
     def get_page_actions(self):
         slug = self.object.slug
         return (
-            PageAction("Edit", reverse("assets:edit", args=[slug])),
+            PageAction(capability_words("asset.update"), reverse("assets:edit", args=[slug])),
             PageAction("Delete", reverse("assets:delete", args=[slug]), danger=True),
         )
 

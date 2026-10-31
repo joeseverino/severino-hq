@@ -1,0 +1,16 @@
+id: test-waits-on-an-event
+valid:
+  - time.sleep(0)
+  - await asyncio.sleep(0)
+  - self.assertTrue(done.wait(10))
+  - thread.join()
+  - from time import monotonic
+  - time.sleep(held)
+  - page.sleep(1)
+invalid:
+  - time.sleep(0.02)
+  - time.sleep(1)
+  - time.sleep(delay)
+  - await asyncio.sleep(0.1)
+  - from time import sleep
+  - from time import monotonic, sleep

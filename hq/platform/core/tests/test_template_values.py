@@ -4,9 +4,7 @@ A browser may break a line after any hyphen, so "example-docker-host-01"
 printed bare can split into "example-docker-" and "host-01". `|breakable`
 holds a name's parts and leaves a plain word as it is, so it is safe on any
 value; a value printed as text ends in it, or in a filter that holds its
-names itself. The browser rule `a_token_breaks_only_where_it_may` sees only
-the names its fixtures hold, at the widths it renders; this reads every
-template.
+names itself. This reads every template.
 """
 
 import ast
@@ -25,6 +23,7 @@ from django.utils.html import format_html
 
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.tests.markup import elements, select
+from hq.platform.application.tests.source import template_files
 from hq.platform.core.templatetags.value_tags import breakable, entity, readable, when
 
 # Filters whose output holds every name in it: `breakable` itself, and the
@@ -45,14 +44,8 @@ WORDS_ONLY = {
     "expiry": "a date and a count of days",
     "length": "a number",
     "floatformat": "a number",
-    "intcomma": "a number",
-    "date": "a date",
-    "time": "a time",
     "pluralize": "a suffix",
     "signed_in": "an age in words",
-    "timesince": "a length of time",
-    "timeuntil": "a length of time",
-    "naturaltime": "an age in words",
     "urgency": "one of the words a pill says",
     "json_script": "a script element, read by a script and never shown",
 }
@@ -85,11 +78,14 @@ _TAG = re.compile(r"<(/?)([A-Za-z][\w-]*)")
 # method of the field that returns markup (`as_hidden`, `label_tag`) prints
 # markup. A name used as a field in one place is a field everywhere in that
 # template. A form printed whole renders its fields, so a name read for what
-# only a form answers (`non_field_errors`) is markup printed bare as well.
+# only a form answers (`non_field_errors`) is markup printed bare as well, and
+# so is any name read on it that a form does not answer itself: its field.
 _FIELD_LOOP = re.compile(r"for\s+(\w+)\s+in\s+form(?:\.\w+)?")
 _READ = re.compile(r"\b(\w+)\.(\w+)")
 _INCLUDE = re.compile(r"""include\s+["']([^"']+)["'](?:\s+with\s+(.*?))?(\s+only)?$""")
 _BINDING = re.compile(r"(\w+)=(\w+)(?=\s|$)")
+# Marks a name, among a template's field names, as a form's.
+FORM = "."
 
 
 @cache
@@ -113,6 +109,15 @@ def form_reads() -> frozenset[str]:
     others = {*dir(str), *dir(dict), *dir(form["name"]), *dir(forms.Field), *dir(models.Field)}
     names = {*dir(type(form)), *vars(form)} - others
     return frozenset(name for name in names if not name.startswith("_") and "_" in name)
+
+
+@cache
+def form_and_field_attributes() -> frozenset[str]:
+    """What a form or a bound field answers of its own. Any other name read on
+    a form is one of its fields, whatever the form is called."""
+
+    form = _ExampleForm()
+    return frozenset({*dir(form), *vars(form), *dir(form["name"])})
 
 
 @cache
@@ -220,7 +225,7 @@ def holds_a_literal(contents: str) -> bool:
     hold. Django marks a template's literal safe, and every hold passes safe
     text through as markup, so the hold does nothing to it."""
 
-    printed = contents.split("|")[0].strip()
+    printed = contents.split("|", maxsplit=1)[0].strip()
     literal = printed[:1] in "\"'" or printed.startswith("_(")
     return literal and bool(HOLDING.intersection(filters(contents)))
 
@@ -235,8 +240,9 @@ def _included_fields(contents: str, included: Mapping[str, set[str]]) -> set[str
     theirs = included.get(found[1], set())
     bindings = dict(_BINDING.findall(found[2] or ""))
     names = {value for key, value in bindings.items() if key in theirs}
+    names |= {value + FORM for key, value in bindings.items() if key + FORM in theirs}
     if not found[3]:
-        names |= theirs - bindings.keys()
+        names |= {name for name in theirs if name.removesuffix(FORM) not in bindings}
     return names
 
 
@@ -246,14 +252,34 @@ def form_fields(source: str, included: Mapping[str, set[str]] | None = None) -> 
 
     reads = bound_field_reads() | form_reads()
     names = set()
+    printed = []
     for token in Lexer(source).tokenize():
         if token.token_type == TokenType.BLOCK and (loop := _FIELD_LOOP.fullmatch(token.contents.strip())):
             names.add(loop[1])
         if token.token_type == TokenType.BLOCK:
             names |= _included_fields(token.contents, included or {})
         if token.token_type in (TokenType.BLOCK, TokenType.VAR):
-            names.update(found[1] for found in _READ.finditer(token.contents) if found[2] in reads)
-    return names
+            printed.append(token.contents)
+            for found in _READ.finditer(token.contents):
+                if found[2] in reads:
+                    names.add(found[1])
+                if found[2] in form_reads():
+                    names.add(found[1] + FORM)
+    return names | _form_members(names, printed)
+
+
+def _form_members(names: set[str], printed: list[str]) -> set[str]:
+    """Each name read on a form that the form itself does not answer: one of
+    its fields, whatever the form is called."""
+
+    forms = [name.removesuffix(FORM) for name in names if name.endswith(FORM)]
+    return {
+        f"{form}.{member}"
+        for form in forms
+        for contents in printed
+        for member in re.findall(rf"\b{re.escape(form)}\.(\w+)", contents)
+        if member not in form_and_field_attributes()
+    }
 
 
 def template_fields(sources: Mapping[str, str]) -> dict[str, set[str]]:
@@ -276,7 +302,7 @@ def is_markup(contents: str, fields=frozenset()) -> bool:
     """Whether a printed variable is markup before any filter: a field of
     ``fields`` or what one renders, a block's parent, or a form's error list."""
 
-    printed = contents.split("|")[0].strip()
+    printed = contents.split("|", maxsplit=1)[0].strip()
     base, _, attribute = printed.rpartition(".")
     return (
         printed in MARKUP
@@ -420,9 +446,11 @@ def plain_blocks(sources) -> set[str]:
     return set().union(*(read(source).plain_blocks for source in sources))
 
 
-def template_paths() -> list[Path]:
-    root = Path(settings.BASE_DIR) / "templates"
-    return sorted(root.rglob("*.html"))
+def template_sources() -> dict[str, str]:
+    """Each template Django loads, the host's and each installed extension's,
+    by name."""
+
+    return {name: path.read_text(encoding="utf-8") for name, path in template_files()}
 
 
 class UnheldTests(SimpleTestCase):
@@ -522,13 +550,13 @@ class UnheldTests(SimpleTestCase):
     def test_a_name_an_included_template_uses_as_a_field_is_markup(self):
         included = template_fields(
             {
-                "partials/_form_field.html": '<label for="{{ field.id_for_label }}">x</label>{{ field }}',
+                "example/_field.html": '<label for="{{ field.id_for_label }}">x</label>{{ field }}',
                 "partials/_other.html": '<label for="{{ field.id_for_label }}">x</label>{{ field }}',
             }
         )
         source = (
-            '{% for field in material %}{% include "partials/_form_field.html" %}{{ field }}{% endfor %}'
-            '{% for entry in identity %}{% include "partials/_form_field.html" with field=entry %}'
+            '{% for field in material %}{% include "example/_field.html" %}{{ field }}{% endfor %}'
+            '{% for entry in identity %}{% include "example/_field.html" with field=entry %}'
             "{{ entry }}{% endfor %}"
         )
 
@@ -542,11 +570,24 @@ class UnheldTests(SimpleTestCase):
 
         self.assertEqual([site.value for site in unheld(source)], ["identity"])
 
+    def test_a_field_of_a_form_is_markup_whatever_the_form_is_called(self):
+        included = template_fields({"partials/_form_errors.html": "{{ form.non_field_errors }}"})
+        handed = (
+            '{% include "partials/_form_errors.html" with form=upload %}{{ upload.pace }}'
+            "<p>{{ upload.pace.help_text }}</p><p>{{ upload.prefix }}</p>"
+        )
+        read = "{% if upload.non_field_errors %}x{% endif %}{{ upload.pace }}<p>{{ upload.prefix }}</p>"
+
+        self.assertEqual(
+            [site.value for site in unheld(handed, included=included)], ["upload.pace.help_text", "upload.prefix"]
+        )
+        self.assertEqual(self.values(read), ["upload.prefix"])
+
     def test_an_include_that_hands_on_no_field_names_none(self):
-        included = template_fields({"partials/_form_field.html": "{{ field.id_for_label }}"})
+        included = template_fields({"example/_field.html": "{{ field.id_for_label }}"})
         source = (
-            '{% for field in setup.fields %}{% include "partials/_form_field.html" only %}<code>{{ field }}</code>'
-            '{% include "partials/_form_field.html" with field=other %}{% endfor %}'
+            '{% for field in setup.fields %}{% include "example/_field.html" only %}<code>{{ field }}</code>'
+            '{% include "example/_field.html" with field=other %}{% endfor %}'
         )
 
         self.assertEqual([site.value for site in unheld(source, included=included)], ["field"])
@@ -667,12 +708,9 @@ class HoldingFilterTests(SimpleTestCase):
 @tag("source", "tree")
 class TemplateValueTests(SimpleTestCase):
     def setUp(self):
-        root = Path(settings.BASE_DIR)
-        self.sources = {str(path.relative_to(root)): path.read_text(encoding="utf-8") for path in template_paths()}
+        self.sources = template_sources()
         self.plain = plain_blocks(self.sources.values())
-        self.included = template_fields(
-            {str(Path(path).relative_to("templates")): source for path, source in self.sources.items()}
-        )
+        self.included = template_fields(self.sources)
 
     def test_every_value_printed_as_text_holds_its_names(self):
         found = [

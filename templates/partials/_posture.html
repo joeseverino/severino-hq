@@ -1,11 +1,11 @@
 {% comment %}
-HQ's standard (application.posture). ``card`` frames it on a page. Each check
+HQ's standard (application.posture), in a card. Each check
 is its own statement, so nothing above the list restates it: a met check's
 sentence is its tooltip, and how to enforce the standard is in the docs the
 heading links to. An unread check says what would read it.
 {% endcomment %}
-<section class="posture{% if card %} card{% endif %}" aria-labelledby="posture-heading">
-  {% section_head id="posture-heading" %}{% if posture.advanced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture enabled{% else %}HQ's standard{% endif %}{% aside %}<span class="count">{{ posture.count_line|breakable }}{% if posture.guide %} · {% entity posture.guide|outside label="How the checks work" %}{% endif %}</span>{% endsection_head %}
+{% card css="posture" heading="posture-heading" %}
+  {% section_head id="posture-heading" %}{% if posture.advanced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture enabled{% else %}HQ's standard{% endif %}{% aside %}<span class="count">{{ posture.count_line|breakable }}{% if posture.guide %}{% dot %}{% entity posture.guide|outside label="How the checks work" %}{% endif %}</span>{% endsection_head %}
   <ol class="step-list posture-checks">
     {% for standing in posture.standings %}
       <li class="tone-{{ standing.state }}"{% if standing.met %} title="{{ standing.check.holds }}"{% endif %}>
@@ -14,4 +14,4 @@ heading links to. An unread check says what would read it.
       </li>
     {% endfor %}
   </ol>
-</section>
+{% endcard %}

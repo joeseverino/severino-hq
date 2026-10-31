@@ -4,6 +4,7 @@ from datetime import date
 from typing import override
 from uuid import UUID
 
+from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
@@ -13,19 +14,18 @@ from django.views.generic import CreateView, DeleteView, RedirectView, TemplateV
 
 from hq.platform.application.calendar import calendar_day, calendar_month, month_of, month_url, new_entry_url
 from hq.platform.application.calendar_entries import (
+    CHOOSE_SOURCE,
     calendar_choices,
-    choose_source,
     entry_command,
     repeat_label,
     save_entry,
     upcoming,
     when_label,
 )
-from hq.platform.application.capabilities import capability_words
+from hq.platform.application.capabilities import capability_words, execute_capability
 from hq.platform.application.deletion import delete_calendar_entry
 from hq.platform.application.moments import when_day
 from hq.platform.application.pages import PageAction, PageMixin
-from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.references import ReferencePickerMixin, reference_of
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.ui import ListRow
@@ -105,7 +105,7 @@ class CalendarView(PageMixin, TemplateView):
             if entry.repeat
             else (),
             "actions": (
-                PageAction("Edit", reverse("calendar:entry_edit", args=[entry.uid])),
+                PageAction(capability_words("calendar.entry.update"), reverse("calendar:entry_edit", args=[entry.uid])),
                 PageAction("Delete", reverse("calendar:entry_delete", args=[entry.uid]), danger=True),
             ),
         }
@@ -174,10 +174,15 @@ class CalendarSourceView(View):
     """Check or uncheck one source, then go back to the month it was chosen on."""
 
     def post(self, request, source_id):
-        try:
-            choose_source(request.user, source_id, request.POST.get("shown") == "1")
-        except RecordNotFound as exc:
-            raise Http404(str(exc)) from exc
+        result = execute_capability(
+            CHOOSE_SOURCE,
+            {"source": source_id, "shown": request.POST.get("shown") == "1"},
+            principal=web_principal(request.user),
+        )
+        if not result["ok"]:
+            if result["error"]["code"] == "not_found":
+                raise Http404(result["error"]["message"])
+            raise PermissionDenied(result["error"]["message"])
         return HttpResponseRedirect(safe_next(request, fallback=reverse("calendar:month"), scope="/calendar/"))
 
 

@@ -16,11 +16,13 @@ from .finding_model import (
     FindingEstate,
     FindingRemedy,
     FindingRule,
+    Said,
     cannot_run_commands,
     fact_values,
     is_observable,
     journal_step,
     machine_step,
+    per_connection,
     reconcile_remedy,
 )
 from .freshness import freshness
@@ -131,18 +133,15 @@ def _skipped_remedies(node: TopologyNode) -> tuple[FindingRemedy, ...]:
 
 
 def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
-    """A whole kind that nothing has observed lately.
-
-    The sibling comparison above cannot see this: a kind with one record has
-    nothing to be behind, and a kind where every record is equally stale looks
-    perfectly consistent. Ship the two together or the hole is still open,
-    and this one is deliberately blunt, an absolute clock against the interval
-    HQ itself declares, because that is the only thing left to compare against.
-    Out of date means what it means on every page that shows the reading
-    (``freshness``), so a page and this claim cannot disagree about it.
+    """A whole kind that nothing has observed lately, which the sibling
+    comparison above cannot see: a kind with one record has nothing to be
+    behind, and one where every record is equally stale looks consistent.
     """
 
     found = []
+    # Deliberately blunt, an absolute clock against the interval HQ itself
+    # declares, since that is the only thing left to compare against. Out of
+    # date is ``freshness``'s word, so a page and this claim cannot disagree.
     for kind_key, newest in sorted(estate.latest_by_kind.items()):
         if not freshness(kind_key, newest, estate.now).stale or not is_observable(kind_key):
             continue
@@ -485,54 +484,44 @@ def _settings(node: TopologyNode) -> str:
 def _work_that_keeps_failing(estate: FindingEstate) -> tuple[Finding, ...]:
     """A connection HQ can open and cannot use.
 
-    A probe asks whether the credential still works. It is answered by the
-    door, not by the room: a connection can pass every probe while every piece
-    of work sent through it refuses, and the page will say "reachable" the
-    whole time.
-
-    The failures are caught by the code that sends the work, so they never
-    become an operation anybody sees. They repeat on the next pass, at whatever
-    interval the controller runs, for as long as nobody looks at a log.
+    A connection can pass every probe while all work sent through it refuses,
+    and the page says "reachable" the whole time. The code that sends the work
+    catches the failures, so they never become an operation anybody sees and
+    repeat every pass for as long as nobody reads a log.
     """
 
     machines = _controller_machines(estate)
-    found: list[Finding] = []
-    for node in estate.nodes():
-        if node.kind != "connection":
-            continue
-        unfinished = fact_values(node, "work-unfinished")
-        if not unfinished:
-            continue
-        machine = machines.get(node.id, "")
-        found.append(
-            Finding(
-                rule="work-that-keeps-failing",
-                subject=node.id,
-                title=(
-                    f"{node.label} connects, but "
-                    f"{counted(len(unfinished), 'thing it does keeps failing', 'things it does keep failing')}"
-                ),
-                severity="attention",
-                explanation=ended(
-                    "It retries every few minutes and has not succeeded. The reason is "
-                    f"in the controller's log{f' on {machine}' if machine else ''}"
-                ),
-                evidence=tuple(("Keeps failing", item) for item in unfinished),
-                steps=journal_step("Read the controller's log", machine, CONTROLLER_UNIT),
-            )
-        )
-    return tuple(sorted(found, key=lambda finding: finding.title))
+    return per_connection(
+        estate,
+        "work-unfinished",
+        rule="work-that-keeps-failing",
+        severity="attention",
+        shown_as="Keeps failing",
+        says=lambda node, unfinished: _keeps_failing(node, unfinished, machines.get(node.id, "")),
+    )
+
+
+def _keeps_failing(node: TopologyNode, unfinished: tuple[str, ...], machine: str) -> Said:
+    return {
+        "title": (
+            f"{node.label} connects, but "
+            f"{counted(len(unfinished), 'thing it does keeps failing', 'things it does keep failing')}"
+        ),
+        "explanation": ended(
+            "It retries every few minutes and has not succeeded. The reason is "
+            f"in the controller's log{f' on {machine}' if machine else ''}"
+        ),
+        "steps": journal_step("Read the controller's log", machine, CONTROLLER_UNIT),
+    }
 
 
 def _connections_lost(estate: FindingEstate) -> tuple[Finding, ...]:
     """A controller that reported connections, and now reports none.
 
-    The refresh job keeps installed connections when the vault suddenly
-    resolves none, but a machine whose runtime directory was cleared has
-    nothing to keep, and installs the empty set a new host would. HQ keeps the
-    rows such a report would have removed, marked, so it is the one place that
-    still knows there were connections. A host that never had a connection has
-    no rows, and nothing is raised.
+    A machine whose runtime directory was cleared installs the empty set a new
+    host would, which the refresh job cannot keep from happening. HQ keeps the
+    rows that report would have removed, marked, so it is the one place that
+    still knows there were connections; a host that never had one raises nothing.
     """
 
     by_id = {node.id: node for node in estate.nodes()}

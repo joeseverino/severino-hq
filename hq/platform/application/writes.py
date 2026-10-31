@@ -1,27 +1,10 @@
 """Form views whose write is one application service call.
 
-The read side of a list page is already declarative: a view names its filters
-and sorts and ``TableListMixin`` derives the rest. This does the same for the
-write side: create, update and delete share the same five steps, so they are
-declared once rather than restated per domain, and a plugin adding a domain
-inherits them.
-
-The steps do not vary. Build a command from the cleaned data, call the service
-with a web principal, reload the record the service names, say what happened,
-and go to it. What varies is only which service, which record, and what the
-thing is called, so those are what a view declares here.
-
-A plain record domain (one declared with ``Records`` in
-``application.domains``) needs less: ``RecordFormMixin`` saves its
-``ModelForm`` through ``application.records.save_form`` and
-``RecordDeleteMixin`` deletes through the declared deleter. The view names
-only its form; noun, permission and target come from the declaration.
-
-Reloading is deliberate rather than wasteful. Services return serializable
-results because the API and the MCP share them; a Django view needs a model
-instance for ``get_absolute_url`` and ``__str__``. The alternative is teaching
-the view to rebuild the URL itself, which duplicates knowledge the model
-already owns. One query at the boundary is the cheaper trade.
+The write side of what ``TableListMixin`` is for the read side: create, update
+and delete share the same steps (command, service call, reload, announce,
+redirect), so they are declared once and a plugin adding a domain inherits
+them. A view declares only which service, which record and what it is called;
+a plain ``Records`` domain's view names only its form.
 """
 
 from collections.abc import Mapping
@@ -42,14 +25,6 @@ from .security import web_principal
 from .ui import ended
 lazy from .security import Principal
 
-# What a write says when the view does not say it differently. Constants rather
-# than attributes on the mixins: a default on one base and an override on
-# another are two bases declaring the same name, and which applies depends on
-# the order they were written in.
-CREATED = "{noun} “{target}” created."
-UPDATED = "{noun} “{target}” updated."
-DELETED = "{noun} “{target}” deleted."
-
 
 def announce(request, template: str, noun: str, target: object) -> None:
     """Say a write landed: ``template`` names the record as ``{target}``, closed by ``ended``."""
@@ -57,44 +32,37 @@ def announce(request, template: str, noun: str, target: object) -> None:
     messages.success(request, ended(template.format(noun=noun, target=target)))
 
 
-class ServiceWriteMixin:
-    """Shared spine for a view whose mutation is one service call.
+class WriteMessages:
+    """What a write says when the view does not say it differently.
 
-    Subclasses declare:
-
-    ``service``
-        The application service, wrapped in ``staticmethod`` so attribute
-        access does not bind it as a method.
-    ``result_key``
-        The key the service nests its record under, e.g. ``"asset"``.
-    ``identity_attr``
-        The model attribute carrying identity, e.g. ``"slug"`` or ``"pk"``.
-    ``identity_result_key``
-        That same identity's key inside the result, when it is spelled
-        differently there: ``pk`` on the model is ``id`` in the payload.
-        Defaults to ``identity_attr``.
-    ``identity_kwarg``
-        The keyword naming the record being amended, e.g. ``"current_slug"``.
-        Not used when creating.
-    ``noun``
-        What to call the thing in a message, e.g. ``"Content item"``.
-
-    Declared here as a contract and not as attributes. A placeholder value that
-    is never correct (an empty noun, an empty result key) collides with the
-    real one on whichever base supplies it, so which wins depends on the order
-    the bases were written in and reordering them breaks the view silently. It
-    also turns "forgot to set this" into a message reading "“Ada” created" with
-    the noun missing, rather than into an error.
-
-    That applies to ``identity_attr`` too. A slug is the common case and every
-    value it takes is a working one, which is exactly why a default is wrong
-    here: it does not fail, it wins or loses by base order and sends a doc
-    record's redirect to a slug it does not have.
+    A view rewords one by declaring it. A mixin that rewords one for several
+    views subclasses this root, which then sits after it in any view's order
+    of bases, so the mixin wins whatever order the bases were written in. Each
+    names the record as ``{target}`` and what it is as ``{noun}``.
     """
 
-    #: Read through ``getattr`` so a subclass that omits one is an error naming
-    #: the attribute, rather than a blank in a sentence.
+    created_message = "{noun} “{target}” created."
+    updated_message = "{noun} “{target}” updated."
+    deleted_message = "{noun} “{target}” deleted."
+
+
+class ServiceWriteMixin(WriteMessages):
+    """Shared spine for a view whose mutation is one service call.
+
+    A subclass declares ``service`` (wrapped in ``staticmethod``), ``noun``
+    (``"Content item"``), ``result_key`` (where the service nests its record),
+    ``identity_attr`` (``"slug"`` or ``"pk"``) and, to amend, ``identity_kwarg``;
+    ``identity_result_key`` names the identity in the result when it differs.
+    """
+
+    # No default for any of them: a placeholder collides with the real value on
+    # whichever base supplies it, so base order picks the winner and reordering
+    # breaks the view silently, and a missing noun reads as a blank in a message.
+    # A slug default for identity_attr fails the same way, sending a record's
+    # redirect to a slug it does not have. Read through getattr, so a subclass
+    # that omits one is an error naming the attribute.
     REQUIRED = ("service", "noun", "result_key", "identity_attr")
+    identity_result_key = ""
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         # A plain function assigned to a class attribute becomes a bound method
@@ -121,10 +89,14 @@ class ServiceWriteMixin:
         return getattr(self.get_object(), self.identity_attr)
 
     # The record is the subclass's own model, which this mixin cannot name.
+    # Services return serializable results because the API and the MCP share
+    # them, and a view needs a model instance for ``get_absolute_url`` and
+    # ``__str__``: one query here is cheaper than the view rebuilding a URL the
+    # model already knows.
     def reload(self, result: Mapping[str, Any]) -> Any:
         """The saved record, as a model instance the URL can be taken from."""
 
-        key = getattr(self, "identity_result_key", "") or self.identity_attr
+        key = self.identity_result_key or self.identity_attr
         return self.model._default_manager.get(**{self.identity_attr: result[self.result_key][key]})
 
     def announce(self, template: str, target: object) -> None:
@@ -140,7 +112,7 @@ class ServiceCreateMixin(ServiceWriteMixin):
             principal=self.write_principal(),
         )
         self.object = self.reload(result)
-        self.announce(getattr(self, "created_message", CREATED), self.object)
+        self.announce(self.created_message, self.object)
         return redirect(self.object.get_absolute_url())
 
 
@@ -158,7 +130,7 @@ class ServiceUpdateMixin(ServiceWriteMixin):
             **{self.identity_kwarg: self.current_identity()},
         )
         self.object = self.reload(result)
-        self.announce(getattr(self, "updated_message", UPDATED), self.object)
+        self.announce(self.updated_message, self.object)
         return redirect(self.object.get_absolute_url())
 
 
@@ -173,6 +145,7 @@ class ServiceDeleteMixin(ServiceWriteMixin):
         # What confirm_page.html needs: one button that posts here, and a way
         # back to the record being deleted.
         context = super().get_context_data(**kwargs)
+        # Django leaves get_absolute_url for a model to define or not.
         back = getattr(self.object, "get_absolute_url", None)
         context["confirm"] = {
             "url": self.request.path,
@@ -181,14 +154,14 @@ class ServiceDeleteMixin(ServiceWriteMixin):
         }
         return context
 
-    def form_valid(self, form: BaseForm) -> HttpResponse:
+    def form_valid(self, form: BaseForm) -> HttpResponse:  # noqa: ARG002 - Django's FormMixin calls it with the form
         identity = self.current_identity()
         result = self.service(
             DeleteCommand(confirm=str(identity)),
             principal=self.write_principal(),
             **{self.identity_kwarg: identity},
         )
-        self.announce(getattr(self, "deleted_message", DELETED), result["deleted"]["label"])
+        self.announce(self.deleted_message, result["deleted"]["label"])
         return redirect(self.success_url)
 
 
@@ -199,11 +172,13 @@ def _show_on_form(form, error: ValidationError) -> None:
         form.add_error(field if field in form.fields else None, errors)
 
 
-class RecordFormMixin:
+class RecordFormMixin(WriteMessages):
     """Create or update a plain record domain's record from its ``ModelForm``.
 
-    For ``CreateView`` and ``UpdateView``. ``created_message`` and
-    ``updated_message`` may reword the announcement.
+    For ``CreateView`` and ``UpdateView``; saved through
+    ``application.records.save_form``, so noun, permission and target come
+    from the domain's declaration. ``created_message`` and ``updated_message``
+    may reword the announcement.
     """
 
     def form_valid(self, form: BaseForm) -> HttpResponse:
@@ -213,7 +188,7 @@ class RecordFormMixin:
         except ValidationError as error:
             _show_on_form(form, error)
             return self.form_invalid(form)
-        template = getattr(self, "created_message", CREATED) if adding else getattr(self, "updated_message", UPDATED)
+        template = self.created_message if adding else self.updated_message
         noun = display_noun(records_for(type(self.object)))
         announce(self.request, template, noun, self.object)
         return redirect(self.object.get_absolute_url())
@@ -231,33 +206,23 @@ class RecordDeleteMixin(ServiceDeleteMixin):
     def form_valid(self, form: BaseForm) -> HttpResponse:
         noun = display_noun(records_for(type(self.object)))
         result = delete_instance(self.object, principal=web_principal(self.request.user))
-        template = getattr(self, "deleted_message", DELETED)
+        template = self.deleted_message
         announce(self.request, template, noun, result["deleted"]["label"])
         return redirect(self.success_url)
 
 
 class CommandFormMixin:
-    """A plain form whose submit is one service call.
+    """A plain form whose submit is one service call: a *command* (adjust a
+    threshold, open a period) posted from a page that then shows itself again.
 
-    The three mixins above cover a record with a URL of its own: create it,
-    amend it, delete it, go to it. Plugins mostly do not have that shape. They
-    have a *command* (adjust a threshold, open a period, correct a recorded
-    value) posted from a page that then shows itself again.
-
-    That shape is shared too: build a command, call the service
-    with a web principal, turn the domain's refusal into a form error rather
-    than a traceback, say what happened, redirect somewhere fixed. The fourth
-    step is the one worth sharing. A service that raises ``ValueError`` for
-    "you cannot do that yet" is reporting a domain rule, and a rule belongs on
-    the form beside the field it concerns, not on a 500 page.
-
+    A domain's refusal becomes a form error beside its field rather than a 500.
     Subclasses declare ``service`` (as a ``staticmethod``), ``command`` (the
-    command class, if the cleaned data maps straight onto one), ``success_url_name``
-    and ``success_message``.
+    command class, when the cleaned data maps straight onto one),
+    ``success_url_name`` and ``success_message``.
     """
 
     service = None
-    command = None
+    command: type[Any] | None = None
     success_url_name = ""
     success_message = ""
     # Which exceptions mean "the domain said no" rather than "HQ broke". Kept
@@ -271,7 +236,7 @@ class CommandFormMixin:
     def get_success_url(self) -> str:
         return reverse(self.success_url_name)
 
-    def get_success_message(self, result: Any) -> str:
+    def get_success_message(self, result: Any) -> str:  # noqa: ARG002 - the default; an override is given the result
         return self.success_message
 
     def run(self, command: Any) -> Any:
@@ -297,4 +262,5 @@ __all__ = [
     "ServiceDeleteMixin",
     "ServiceUpdateMixin",
     "ServiceWriteMixin",
+    "WriteMessages",
 ]

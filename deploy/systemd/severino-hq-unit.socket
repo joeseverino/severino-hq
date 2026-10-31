@@ -1,0 +1,19 @@
+[Unit]
+Description=Severino HQ's requests to stop, start or restart a container's unit
+# Each connection starts one severino-hq-unit@.service, which answers one
+# request as root (hq-host unit, whose package doc states what it checks).
+# The directory is the boundary: tmpfiles makes it the controller's account's
+# alone, and only the controller's container mounts it, never the web's, so
+# the socket in it may be open to every account that can reach it.
+
+[Socket]
+ListenStream=/run/severino-hq-unit/unit.sock
+Accept=yes
+SocketMode=0666
+DirectoryMode=0700
+RemoveOnStop=yes
+# A pass asks one at a time; this bounds what root runs at once.
+MaxConnections=4
+
+[Install]
+WantedBy=sockets.target

@@ -47,7 +47,7 @@ func TestTheOutDirectoryIsTheControllersAndMountedWritable(t *testing.T) {
 		mode = info.Mode()
 	}
 
-	l.run(t, true)
+	l.run(t, Apply)
 
 	var mount string
 	for i, arg := range l.args {
@@ -75,10 +75,12 @@ func TestAValidHandoffIsSpooledForRootAlone(t *testing.T) {
 	var original string
 	l.container = func(out string) {
 		original = filepath.Join(out, DependencyHandoff)
-		os.WriteFile(original, handoffDocument(t, nil), 0o600)
+		if err := os.WriteFile(original, handoffDocument(t, nil), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	l.run(t, true)
+	l.run(t, Apply)
 
 	data, err := os.ReadFile(filepath.Join(l.controller.Spool, SpoolName))
 	if err != nil {
@@ -102,15 +104,23 @@ func TestAnInvalidHandoffIsDroppedAndNeverSpooled(t *testing.T) {
 	for name, write := range map[string]func(t *testing.T, out string){
 		"a link to a file it may not read": func(t *testing.T, out string) {
 			target := filepath.Join(filepath.Dir(out), "connections.json")
-			os.Symlink(target, filepath.Join(out, DependencyHandoff))
+			if err := os.Symlink(target, filepath.Join(out, DependencyHandoff)); err != nil {
+				t.Fatal(err)
+			}
 		},
 		"a second name of another file": func(t *testing.T, out string) {
 			other := filepath.Join(out, "other.json")
-			os.WriteFile(other, handoffDocument(t, nil), 0o600)
-			os.Link(other, filepath.Join(out, DependencyHandoff))
+			if err := os.WriteFile(other, handoffDocument(t, nil), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Link(other, filepath.Join(out, DependencyHandoff)); err != nil {
+				t.Fatal(err)
+			}
 		},
 		"a directory": func(t *testing.T, out string) {
-			os.MkdirAll(filepath.Join(out, DependencyHandoff, "inside"), 0o700)
+			if err := os.MkdirAll(filepath.Join(out, DependencyHandoff, "inside"), 0o700); err != nil {
+				t.Fatal(err)
+			}
 		},
 		"a repository of another owner": func(t *testing.T, out string) {
 			writeHandoff(t, out, func(run, _ map[string]any) { run["repositories"] = []string{"example/app", "other/app"} })
@@ -143,7 +153,9 @@ func TestAnInvalidHandoffIsDroppedAndNeverSpooled(t *testing.T) {
 		"more than a handoff can be": func(t *testing.T, out string) {
 			data := handoffDocument(t, nil)
 			padded := append(bytes.TrimSuffix(data, []byte("}")), []byte(`,"pad":"`+strings.Repeat("x", handoffLimit)+`"}`)...)
-			os.WriteFile(filepath.Join(out, DependencyHandoff), padded, 0o600)
+			if err := os.WriteFile(filepath.Join(out, DependencyHandoff), padded, 0o600); err != nil {
+				t.Fatal(err)
+			}
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -153,7 +165,7 @@ func TestAnInvalidHandoffIsDroppedAndNeverSpooled(t *testing.T) {
 			var out string
 			l.container = func(dir string) { out = dir; write(t, dir) }
 
-			l.run(t, true)
+			l.run(t, Apply)
 
 			if _, err := os.Lstat(filepath.Join(l.controller.Spool, SpoolName)); err == nil {
 				t.Error("an invalid handoff was spooled")
@@ -180,7 +192,7 @@ func TestAPassThatLeavesNoHandoffSpoolsNothing(t *testing.T) {
 	var stderr bytes.Buffer
 	l.controller.Stderr = &stderr
 
-	l.run(t, true)
+	l.run(t, Apply)
 
 	if _, err := os.Lstat(l.controller.Spool); err == nil || stderr.Len() != 0 {
 		t.Errorf("spooled or said %q with nothing handed off", stderr.String())
@@ -189,11 +201,15 @@ func TestAPassThatLeavesNoHandoffSpoolsNothing(t *testing.T) {
 
 func TestTheLastOutcomeIsGivenToTheNextPass(t *testing.T) {
 	l := newLaunch(t)
-	os.MkdirAll(filepath.Dir(l.controller.DependencyRun), 0o700)
+	if err := os.MkdirAll(filepath.Dir(l.controller.DependencyRun), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	outcome := []byte(`{"version":1,"runs":[]}`)
-	os.WriteFile(l.controller.DependencyRun, outcome, 0o600)
+	if err := os.WriteFile(l.controller.DependencyRun, outcome, 0o600); err != nil {
+		t.Fatal(err)
+	}
 
-	l.run(t, true)
+	l.run(t, Apply)
 
 	if !bytes.Equal(l.mounted[dependencyRunTarget], outcome) || !slices.Contains(l.envs(), "SEVERINO_DEPENDENCY_RUN="+dependencyRunTarget) {
 		t.Errorf("the outcome was not given: %v", l.envs())

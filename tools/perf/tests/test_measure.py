@@ -3,6 +3,9 @@ page is measured on the browser's first visit. Beside a base, every page is aske
 turn, which goes first alternating round by round, and a difference is told from noise by its own
 spread."""
 
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import override
 from unittest import mock
 
 from django.test import SimpleTestCase
@@ -104,6 +107,13 @@ class AlternationTests(SimpleTestCase):
         timed = asked[2 * measure.WARM :]
         self.assertEqual(timed, ["base", "here", "here", "base", "base", "here", "here", "base"])
 
+    def test_every_server_is_warmed_before_a_round_is_timed_and_no_warm_answer_is_kept(self):
+        warm = [9.0] * measure.WARM
+        found, asked = asked_of([*warm, 1.0], [*warm, 2.0], rounds=1)
+
+        self.assertEqual((found["base"]["/"]["times_ms"], found["here"]["/"]["times_ms"]), ([1.0], [2.0]))
+        self.assertEqual(sorted(asked[: 2 * measure.WARM]), ["base"] * measure.WARM + ["here"] * measure.WARM)
+
     def test_the_time_is_the_server_s_own_and_the_rows_are_counted_from_the_html(self):
         warm = [1.0] * measure.WARM
         found, _ = asked_of([*warm, 4.0, 4.0], [*warm, 6.0, None], rounds=2, here_rows=5)
@@ -132,3 +142,52 @@ class MovedTests(SimpleTestCase):
         self.assertEqual(measure.moved([4.0, None], [6.0, 9.0])["moved_ms"], 2.0)
         self.assertIsNone(measure.moved([None], [6.0]))
         self.assertFalse(measure.past_spread({}))
+
+
+# A list that opens its one record, a record, and a link off the server.
+ROUTES = {
+    "/list/": (302, {"Location": "/one/?tab=a"}),
+    "/one/?tab=a": (200, {}),
+    "/away/": (302, {"Location": "https://example.com/one/"}),
+}
+
+
+def routed() -> ThreadingHTTPServer:
+    """A loopback server answering ROUTES, each response saying it took 5 ms."""
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            status, headers = ROUTES[self.path]
+            body = self.path.encode()
+            self.send_response(status)
+            for name, value in {**headers, "Server-Timing": "app;dur=5", "Content-Length": len(body)}.items():
+                self.send_header(name, str(value))
+            self.end_headers()
+            self.wfile.write(body)
+
+        @override
+        def log_message(self, format, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+class RedirectTests(SimpleTestCase):
+    def answer(self, page: str) -> measure.Answer:
+        server = routed()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        host, port = server.server_address[:2]
+        asked = measure.Server(f"http://{host}:{port}", ("sessionid", "x"))
+        self.addCleanup(asked.close)
+        return asked.get(page)
+
+    def test_a_page_that_sends_the_reader_on_is_measured_where_it_lands(self):
+        landed = self.answer("/list/")
+        self.assertEqual((landed.status, landed.body), (200, b"/one/?tab=a"))
+        self.assertEqual(landed.took_ms, 10.0, "the redirect's own time is part of the page's")
+
+    def test_a_redirect_off_the_server_is_not_followed(self):
+        self.assertEqual(self.answer("/away/").status, 302)

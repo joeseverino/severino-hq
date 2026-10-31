@@ -31,7 +31,7 @@ APP_HOST = {
 }
 
 
-def declare_world(containers: bool = False):
+def declare_world(*, containers: bool = False):
     """The machine these tests forward to, and optionally what answers on it.
 
     A container sharing its machine's network publishes no ports for a sweep to

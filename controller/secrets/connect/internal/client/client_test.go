@@ -144,14 +144,14 @@ func TestAListingLongerThanAVaultIsRefused(t *testing.T) {
 			return false
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("["))
+		_, _ = w.Write([]byte("["))
 		for n := range MaxItems + 1 {
 			if n > 0 {
-				w.Write([]byte(","))
+				_, _ = w.Write([]byte(","))
 			}
 			fmt.Fprintf(w, `{"id":%q,"category":"LOGIN","vault":{"id":%q}}`, connecttest.ID(n), connecttest.VaultID)
 		}
-		w.Write([]byte("]"))
+		_, _ = w.Write([]byte("]"))
 		return true
 	})
 	if _, err := client(t, fake).Items(context.Background(), connecttest.VaultID); !errors.Is(err, ErrResponse) || !strings.Contains(err.Error(), "more items") {
@@ -265,7 +265,7 @@ func TestHostileResponsesAreRefused(t *testing.T) {
 	body := func(contentType, text string) func(http.ResponseWriter, *http.Request) bool {
 		return func(w http.ResponseWriter, _ *http.Request) bool {
 			w.Header().Set("Content-Type", contentType)
-			w.Write([]byte(text))
+			_, _ = w.Write([]byte(text))
 			return true
 		}
 	}
@@ -282,7 +282,7 @@ func TestHostileResponsesAreRefused(t *testing.T) {
 		{"wrong content type", body("text/html", `[]`)},
 		{"no content type", func(w http.ResponseWriter, _ *http.Request) bool {
 			w.Header()["Content-Type"] = nil
-			w.Write([]byte(`[]`))
+			_, _ = w.Write([]byte(`[]`))
 			return true
 		}},
 		{"trailing data", body("application/json", `[] []`)},
@@ -356,7 +356,7 @@ func TestAnItemReadMustReturnTheItemAsked(t *testing.T) {
 			return false
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"name":"No identifier","contentVersion":1}`))
+		_, _ = w.Write([]byte(`{"name":"No identifier","contentVersion":1}`))
 		return true
 	})
 	if _, err := c.Vault(context.Background(), connecttest.VaultID); !errors.Is(err, ErrResponse) {
@@ -367,6 +367,9 @@ func TestAnItemReadMustReturnTheItemAsked(t *testing.T) {
 	for _, bad := range []string{"", "../x", "UPPERCASEUPPERCASEUPPERCAS", "short", connecttest.ID(1) + "/files", "example-item"} {
 		if _, err := c.Item(context.Background(), connecttest.VaultID, bad); !errors.Is(err, ErrIdentifier) {
 			t.Errorf("item id %q reached a path: %v", bad, err)
+		}
+		if _, err := c.Item(context.Background(), bad, connecttest.ID(1)); !errors.Is(err, ErrIdentifier) {
+			t.Errorf("vault id %q reached an item's path: %v", bad, err)
 		}
 		if _, err := c.Items(context.Background(), bad); !errors.Is(err, ErrIdentifier) {
 			t.Errorf("vault id %q reached a path: %v", bad, err)

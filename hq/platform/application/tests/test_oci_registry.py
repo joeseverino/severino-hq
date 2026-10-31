@@ -1,28 +1,17 @@
 import io
-import json
 import urllib.parse
+from contextlib import contextmanager
 from email.message import Message
-from unittest import mock
 from urllib.error import HTTPError
 
 from django.test import SimpleTestCase
 
 from ..images import ImageRef
 from ..oci_registry import MAX_RESPONSE_BYTES, RegistryReadError, _CheckedRedirects, digest_of, labels, tags
+from .network import PUBLIC, Response, answering, resolving
 
-
-class _Response(io.BytesIO):
-    def __init__(self, body, headers=None):
-        super().__init__(json.dumps(body).encode())
-        self.headers = Message()
-        for key, value in (headers or {}).items():
-            self.headers[key] = value
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        self.close()
+# The made-up hosts a registry, its token service and its CDN answer at.
+PUBLIC_NAMES = {"registry.example": PUBLIC, "auth.example": PUBLIC, "cdn.example": PUBLIC}
 
 
 def _challenge(url):
@@ -45,17 +34,17 @@ class FakeRegistry:
         if url.startswith("https://auth.example/token"):
             if self.refuse_token:
                 raise HTTPError(url, 401, "Unauthorized", Message(), io.BytesIO())
-            return _Response({"token": "anonymous"})
+            return Response({"token": "anonymous"})
         if not authorized:
             raise _challenge(url)
         if "/tags/list" in url and "last=" not in url:
-            return _Response(
+            return Response(
                 {"tags": ["1.0.0", "1.1.0"]}, {"Link": '</v2/team/app/tags/list?last=1.1.0&n=1000>; rel="next"'}
             )
         if "/tags/list" in url:
-            return _Response({"tags": ["2.0.0"]})
+            return Response({"tags": ["2.0.0"]})
         if "/manifests/" in url and "sha256:platform" not in url:
-            return _Response(
+            return Response(
                 {
                     "manifests": [
                         {"digest": "sha256:other", "platform": {"os": "linux", "architecture": "arm64"}},
@@ -64,20 +53,18 @@ class FakeRegistry:
                 }
             )
         if "/manifests/sha256:platform" in url:
-            return _Response({"config": {"digest": "sha256:config"}})
+            return Response({"config": {"digest": "sha256:config"}})
         if "/blobs/sha256:config" in url:
-            return _Response({"config": {"Labels": {"org.opencontainers.image.source": "https://github.com/team/app"}}})
+            return Response({"config": {"Labels": {"org.opencontainers.image.source": "https://github.com/team/app"}}})
         raise AssertionError(url)
 
 
+@contextmanager
 def reads(fake):
-    """The fake registry answering, with its made-up hosts treated as public."""
+    """The fake registry answering, at made-up hosts that resolve to the internet."""
 
-    return mock.patch.multiple(
-        "hq.platform.application.oci_registry",
-        _public_host=mock.Mock(return_value=True),
-        _opener=mock.Mock(open=fake),
-    )
+    with resolving(PUBLIC_NAMES), answering(fake):
+        yield
 
 
 class RegistryTests(SimpleTestCase):
@@ -106,9 +93,9 @@ class RegistryTests(SimpleTestCase):
             seen.append(request.get_method())
             if request.headers.get("Authorization") != "Bearer anonymous":
                 if urllib.parse.urlsplit(request.full_url).hostname == "auth.example":
-                    return _Response({"token": "anonymous"})
+                    return Response({"token": "anonymous"})
                 raise _challenge(request.full_url)
-            return _Response({}, {"Docker-Content-Digest": digest})
+            return Response({}, {"Docker-Content-Digest": digest})
 
         with reads(head):
             self.assertEqual(digest_of(self.image, "1.0.0"), digest)
@@ -126,27 +113,23 @@ class BoundaryTests(SimpleTestCase):
     """Every host here is named by someone else, so none is trusted."""
 
     def test_a_registry_on_a_private_address_is_never_asked(self):
-        opened = mock.Mock(side_effect=AssertionError("no request may be made"))
-        with mock.patch("hq.platform.application.oci_registry._opener", mock.Mock(open=opened)):
+        def opened(request, timeout=None):
+            raise AssertionError("no request may be made")
+
+        with resolving({}), answering(opened):
             for reference in ("localhost:5000/team/app:1", "127.0.0.1:5000/team/app:1", "10.0.0.5:5000/team/app:1"):
                 with self.assertRaisesMessage(RegistryReadError, "not a public address"):
                     tags(ImageRef.parse(reference))
 
     def test_a_token_service_the_registry_names_is_checked_too(self):
-        def public(host):
-            return host != "internal.example"
-
         def challenge_to_internal(request, timeout=None):
             headers = Message()
             headers["WWW-Authenticate"] = 'Bearer realm="https://internal.example/token",service="x"'
             raise HTTPError(request.full_url, 401, "Unauthorized", headers, io.BytesIO())
 
         with (
-            mock.patch.multiple(
-                "hq.platform.application.oci_registry",
-                _public_host=mock.Mock(side_effect=public),
-                _opener=mock.Mock(open=challenge_to_internal),
-            ),
+            resolving({"registry.example": PUBLIC, "internal.example": "10.0.0.7"}),
+            answering(challenge_to_internal),
             self.assertRaisesMessage(RegistryReadError, "internal.example is not a public address"),
         ):
             tags(ImageRef.parse("registry.example/team/app:1"))
@@ -158,13 +141,13 @@ class BoundaryTests(SimpleTestCase):
         request = Request(
             "https://registry.example/v2/team/app/blobs/sha256:x", headers={"Authorization": "Bearer anonymous"}
         )
-        with mock.patch("hq.platform.application.oci_registry._public_host", return_value=True):
+        with resolving(PUBLIC_NAMES):
             followed = handler.redirect_request(
                 request, None, 307, "Temporary Redirect", Message(), "https://cdn.example/blob"
             )
         self.assertIsNone(followed.get_header("Authorization"))
         with (
-            mock.patch("hq.platform.application.oci_registry._public_host", return_value=False),
+            resolving(PUBLIC_NAMES),
             self.assertRaises(RegistryReadError),
         ):
             handler.redirect_request(request, None, 307, "Temporary Redirect", Message(), "https://10.0.0.5/blob")
@@ -172,7 +155,7 @@ class BoundaryTests(SimpleTestCase):
             handler.redirect_request(request, None, 307, "Temporary Redirect", Message(), "http://cdn.example/blob")
 
     def test_an_oversized_answer_is_refused(self):
-        class Huge(_Response):
+        class Huge(Response):
             def read(self, size=-1):
                 return b"x" * (MAX_RESPONSE_BYTES + 1)
 
@@ -192,11 +175,11 @@ class AttestationTests(SimpleTestCase):
         def answer(request, timeout=None):
             url = request.full_url
             if url.startswith("https://auth.example/token"):
-                return _Response({"token": "anonymous"})
+                return Response({"token": "anonymous"})
             if request.headers.get("Authorization") != "Bearer anonymous":
                 raise _challenge(url)
             if url.endswith("/manifests/sha256:index"):
-                return _Response(
+                return Response(
                     {
                         "manifests": [
                             {"digest": "sha256:platform", "platform": {"os": "linux", "architecture": "amd64"}},
@@ -212,7 +195,7 @@ class AttestationTests(SimpleTestCase):
                     }
                 )
             if url.endswith("/manifests/sha256:attached"):
-                return _Response(
+                return Response(
                     {
                         "layers": [
                             {
@@ -226,7 +209,7 @@ class AttestationTests(SimpleTestCase):
                 )
             for digest, body in blobs.items():
                 if url.endswith(f"/blobs/{digest}"):
-                    return _Response(body)
+                    return Response(body)
             raise AssertionError(url)
 
         return reads(answer)
@@ -263,10 +246,10 @@ class AttestationTests(SimpleTestCase):
 
         def answer(request, timeout=None):
             if request.full_url.startswith("https://auth.example/token"):
-                return _Response({"token": "anonymous"})
+                return Response({"token": "anonymous"})
             if request.headers.get("Authorization") != "Bearer anonymous":
                 raise _challenge(request.full_url)
-            return _Response(
+            return Response(
                 {"manifests": [{"digest": "sha256:platform", "platform": {"os": "linux", "architecture": "amd64"}}]}
             )
 

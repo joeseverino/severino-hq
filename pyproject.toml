@@ -19,7 +19,7 @@ dependencies = [
     "jsonschema==4.26.0",
     "mcp==2.3.0",
     "mozilla-django-oidc==5.0.2",
-    "pydantic==2.14.1",
+    "pydantic==2.14.2",
     "pyjwt==2.15.1",
     "referencing==0.37.0",
     # Strips comments from collected scripts (hq/platform/core/static.py); a
@@ -64,7 +64,34 @@ DEP004 = [
     # hq/config/urls.py mounts the toolbar only when SEVERINO_DEBUG_TOOLBAR is
     # on, which development alone sets; the image installs no toolbar.
     "debug_toolbar",
+    # hq/platform/api/testing.py holds the clock still for a recording run of
+    # the tests (HQ_API_RECORD_EXAMPLES), which no image runs.
+    "time_machine",
 ]
+
+# Which module may import which, read by lint:imports from every import,
+# lazy or not, however it is spelled. A forbidden list names `hq.**` rather
+# than `hq`: import-linter skips a forbidden module that contains the source.
+[tool.importlinter]
+root_package = "hq"
+
+[[tool.importlinter.contracts]]
+name = "The workflow contracts are a leaf: they import nothing of HQ"
+type = "forbidden"
+source_modules = ["hq.platform.application.workflow_contracts"]
+forbidden_modules = ["hq.**"]
+
+[[tool.importlinter.contracts]]
+name = "The UI primitives never reach the workflow engine"
+type = "forbidden"
+source_modules = ["hq.platform.application.ui"]
+forbidden_modules = ["hq.platform.application.workflows"]
+
+[[tool.importlinter.contracts]]
+name = "The workflow engine never reaches the command links"
+type = "forbidden"
+source_modules = ["hq.platform.application.workflows"]
+forbidden_modules = ["hq.platform.application.action_links"]
 
 [tool.uv]
 package = false
@@ -76,27 +103,29 @@ dev = [
     "watchfiles==1.3.0",
 ]
 tools = [
+    # Holds every function outside tests to cognitive complexity 20 (lint:complexity).
+    "complexipy==8.3.0",
     "coverage==7.17.0",
     # Holds the runtime dependencies to what host code imports (lint:deptry).
     "deptry==0.25.1",
     "django-stubs==6.1.2",
     # Writes the served font from its source (tools/fonts), and the font tests read it.
-    "fonttools==4.67.0",
-    "hypothesis==6.170.9",
-    "mypy==2.4.0",
+    "fonttools==4.68.0",
+    "hypothesis==6.170.14",
+    # Holds the layering contracts in [tool.importlinter] (lint:imports).
+    "import-linter==2.15",
+    "mypy==2.4.1",
     "openapi-spec-validator==0.9.0",
     # The pipeline tests read the workflows through it.
     "pyyaml==6.0.3",
-    "ruff==0.17.2",
-    "schemathesis==4.32.4",
+    "ruff==0.17.3",
+    "schemathesis==4.32.7",
+    # Holds the clock still while the API examples are recorded (fix:api-examples).
+    "time-machine==3.6.0",
     "types-jsonschema==4.26.0.20261006",
 ]
 browser = [
     "playwright==1.64.1",
-]
-# Run by `mise run lint:audit`; never installed into the development environment.
-audit = [
-    "pip-audit==2.10.1",
 ]
 
 [tool.ruff]
@@ -115,17 +144,30 @@ extend-include = ["deploy/targets/severino-hq-cpanel-controller"]
 "tools/pipeline/verify_admissions.py" = "py312"
 # Its shell suite runs it, and the verdict it imports, on that same python3.
 "tools/gate/check.py" = "py312"
+"tools/gate/host.py" = "py312"
 "tools/gate/verdict.py" = "py312"
 "deploy/targets/severino-hq-cpanel-controller" = "py37"
 
 [tool.ruff.lint]
 # Keep the contract explicit and stable across developer machines and CI.
-select = ["E4", "E7", "E9", "W605", "F", "C90", "I", "UP", "B", "SIM", "PTH", "C4", "PERF", "RUF", "FURB", "DJ", "BLE", "TID251", "PLC0415", "ISC004"]
+# Left off as noise:
+# D: a docstring is written where it says what and why, never on every name.
+# PT009: the suite is unittest, so assertEqual is its assertion.
+# COM812: the formatter decides trailing commas.
+# CPY001: the repository's license covers every file without a header.
+# TRY003, EM: an exception's message is written where it is raised.
+# PLR2004: a number named once at its use reads better than a constant for it.
+# TC: lazy imports already keep import cost off the start path, without type-only blocks.
+# T201: commands and tools print to their terminal by design.
+# PLR0913: a keyword-only signature is how a use case states its inputs.
+select = ["E4", "E7", "E9", "W605", "F", "C90", "I", "UP", "B", "SIM", "PTH", "C4", "PERF", "RUF", "FURB", "DJ", "BLE", "TID251", "PLC", "PLE", "PLW", "PLR1714", "DTZ", "A", "TRY", "ARG", "SLF001", "ISC004", "PIE", "RET", "ERA", "FBT"]
 ignore = [
     # En dashes, multiplication signs and curly quotes are deliberate typography in user-facing copy.
     "RUF001",
     "RUF002",
     "RUF003",
+    # The message is written where the exception is raised; a class per message would only move it.
+    "TRY003",
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
@@ -135,12 +177,17 @@ ignore = [
 # Development and CI code imports its own package.
 "tools/**" = ["TID251"]
 # Django's declarative class bodies: Meta options, form fields and migration operations are lists by contract.
-"**/migrations/*.py" = ["RUF012", "PLC0415"]
+# Django's RunPython calls a migration function with (apps, schema_editor).
+"**/migrations/*.py" = ["RUF012", "PLC0415", "ARG001"]
 "**/models.py" = ["RUF012"]
 "**/forms.py" = ["RUF012"]
+# Django's system check framework calls a check with app_configs.
+"**/checks.py" = ["ARG001"]
 # Test classes hold fixtures as plain class attributes. A test imports inside
-# the test; converting the suite to lazy imports is its own pass.
-"**/tests/**" = ["RUF012", "PLC0415"]
+# the test; converting the suite to lazy imports is its own pass. A fake takes
+# the arguments of what it stands in for, whether or not it reads them, and a
+# test reaches into what it tests.
+"**/tests/**" = ["RUF012", "PLC0415", "ARG", "SLF001"]
 "demo/check.py" = ["PLC0415"]
 # Django's AppConfig.create reads every name an apps module binds
 # (inspect.getmembers), which reifies a lazy import before the app registry is
@@ -150,6 +197,45 @@ ignore = [
 "hq/domains/control_plane/observations/*.py" = ["RUF012"]
 # Runs on the 3.6 interpreter shared hosting ships; newer idioms would not run there.
 "deploy/targets/severino-hq-cpanel-controller" = ["UP", "SIM", "PTH", "PERF", "FURB", "B", "RUF", "C4"]
+# Django's execute_wrapper calls a wrapper with (execute, sql, params, many, context), positionally.
+"hq/platform/application/derivations.py" = ["FBT001"]
+"hq/platform/core/ahead.py" = ["FBT001"]
+"hq/platform/core/database.py" = ["FBT001"]
+# Signatures in hq_sdk/contract.json: demo_scope, and the entity and referenced_by tags.
+"hq/platform/application/demo.py" = ["FBT001"]
+"hq/platform/core/templatetags/value_tags.py" = ["FBT002"]
+# It proves a type checker refuses the SDK's flag passed positionally.
+"tests/sdk_consumer/consumer.py" = ["FBT003"]
+# socket.setblocking takes its flag positionally.
+"hq/platform/core/unix_server.py" = ["FBT003"]
+"hq/platform/core/tests/test_unix_server.py" = ["FBT003"]
+# unittest's assertIs takes the expected True or False positionally, to hold a value to the bool and not to 1.
+"hq/domains/projects/tests/test_dependency_updates.py" = ["FBT003"]
+"hq/platform/api/tests/test_openapi.py" = ["FBT003"]
+"hq/platform/application/tests/test_cadence.py" = ["FBT003"]
+"hq/platform/application/tests/test_capability_responses.py" = ["FBT003"]
+"hq/platform/application/tests/test_findings.py" = ["FBT003"]
+"hq/platform/application/tests/test_pipeline.py" = ["FBT003"]
+"hq/platform/core/tests/test_first_paint.py" = ["FBT003"]
+"hq/platform/core/tests/test_web.py" = ["FBT003"]
+# A bool is the value under test, passed where a filter and Django's render take the value they print.
+"hq/platform/application/tests/test_payload_words.py" = ["FBT003"]
+"hq/platform/core/tests/test_print_gate.py" = ["FBT003"]
+# Naive datetimes are the input moment() is tested on.
+"hq/platform/application/tests/test_timestamps.py" = ["DTZ001", "DTZ901"]
+
+[tool.ruff.lint.flake8-unused-arguments]
+# *args and **kwargs take what a caller passes beyond what a function reads, as
+# Django's signals and checks require of a receiver.
+ignore-variadic-names = true
+
+[tool.ruff.lint.flake8-self]
+# Django documents a model's _meta, _default_manager and _state as its API.
+extend-ignore-names = ["_meta", "_default_manager", "_state"]
+
+[tool.ruff.lint.flake8-builtins]
+# A record's id goes by its field's name, and nothing beside one calls the builtin.
+ignorelist = ["id"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
@@ -177,8 +263,41 @@ ignore = [".claude/worktrees"]
 # The interpreter it runs on is the one requires-python admits. Every module
 # below but the browser test package (its override says why) is held to the
 # strict flags; an import they follow is read for its types and never
-# reported, so the flags reach nothing else.
-files = ["hq/platform/application/security.py", "hq/platform/application/integration_specs.py", "hq/platform/application/plugins.py", "hq/platform/application/outbound_work.py", "hq/platform/application/capabilities.py", "hq/platform/application/resources.py", "hq/platform/application/sensitivity.py", "hq/platform/application/domains.py", "hq/platform/application/records.py", "hq/domains/control_plane/bridge_actions.py", "hq/domains/control_plane/bridge_application.py", "hq/domains/control_plane/bridge_contract.py", "hq/domains/control_plane/bridge_registry.py", "hq/domains/control_plane/connection_shapes.py", "hq/platform/core/unix_server.py", "hq/domains/control_plane/connection_kinds.py", "hq/domains/control_plane/credential_reads.py", "hq/domains/control_plane/names.py", "hq/domains/control_plane/provider_adapters/cloudflare.py", "hq/domains/control_plane/provider_adapters/declarations.py", "hq/domains/control_plane/provider_adapters/portainer.py", "hq/domains/control_plane/provider_adapters/tailscale.py", "hq/domains/control_plane/provider_adapters/tls.py", "hq/domains/control_plane/provider_spec.py", "hq/domains/control_plane/providers.py", "hq_sdk", "hq/platform/api", "hq/platform/mcp", "tests/sdk_consumer", "tools/credentials.py", "hq/platform/core/tests/browser"]
+# reported, so the flags reach nothing else. Every other source module is
+# held to its reach alone, by tools/lint/mypy-reach.toml's pass.
+files = [
+    "hq/platform/application/security.py",
+    "hq/platform/application/integration_specs.py",
+    "hq/platform/application/plugins.py",
+    "hq/platform/application/outbound_work.py",
+    "hq/platform/application/capabilities.py",
+    "hq/platform/application/resources.py",
+    "hq/platform/application/sensitivity.py",
+    "hq/platform/application/domains.py",
+    "hq/platform/application/records.py",
+    "hq/domains/control_plane/bridge_actions.py",
+    "hq/domains/control_plane/bridge_application.py",
+    "hq/domains/control_plane/bridge_contract.py",
+    "hq/domains/control_plane/bridge_registry.py",
+    "hq/domains/control_plane/connection_shapes.py",
+    "hq/platform/core/unix_server.py",
+    "hq/domains/control_plane/connection_kinds.py",
+    "hq/domains/control_plane/credential_reads.py",
+    "hq/domains/control_plane/names.py",
+    "hq/domains/control_plane/provider_adapters/cloudflare.py",
+    "hq/domains/control_plane/provider_adapters/declarations.py",
+    "hq/domains/control_plane/provider_adapters/portainer.py",
+    "hq/domains/control_plane/provider_adapters/tailscale.py",
+    "hq/domains/control_plane/provider_adapters/tls.py",
+    "hq/domains/control_plane/provider_spec.py",
+    "hq/domains/control_plane/providers.py",
+    "hq_sdk",
+    "hq/platform/api",
+    "hq/platform/mcp",
+    "tests/sdk_consumer",
+    "tools/credentials.py",
+    "hq/platform/core/tests/browser",
+]
 exclude = "(^|/)(tests\\.py|test_[^/]*\\.py|migrations/)"
 follow_imports = "silent"
 plugins = ["mypy_django_plugin.main"]
@@ -186,6 +305,7 @@ warn_unused_configs = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 strict_equality = true
+warn_unreachable = true
 check_untyped_defs = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool", "explicit-override"]
 disallow_untyped_defs = true

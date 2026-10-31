@@ -34,7 +34,7 @@
   {% endif %}
 {% endif %}
 
-<section class="card mt-2">
+{% card css="mt-2" %}
   {% section_head %}Receipt details{% endsection_head %}
   <dl class="kv">
     <dt>Vendor</dt><dd>{{ receipt.vendor|or_empty }}</dd>
@@ -42,5 +42,5 @@
     <dt>Amount</dt><dd>{{ receipt.amount|money }}</dd>
     <dt>Original file</dt><dd>{{ receipt.original_filename|breakable }}</dd>
   </dl>
-</section>
+{% endcard %}
 {% endblock %}

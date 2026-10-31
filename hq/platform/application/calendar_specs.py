@@ -11,7 +11,7 @@ from pydantic import Field
 from hq.domains.calendars.models import Entry
 
 from . import calendar_entries
-from .calendar_entries import EntryCommand, save_entry
+from .calendar_entries import CHOOSE_SOURCE, EntryCommand, SourceChoiceCommand, choose_source, save_entry
 from .deletion import DeleteCommand, delete_calendar_entry
 from .integration_specs import CapabilitySpec, ResourceSpec
 from .resources import BoundedQuery
@@ -36,6 +36,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             save_entry,
             subject_resource="calendar",
             label="Add event",
+            wants="add an event",
         ),
         CapabilitySpec(
             "calendar.entry.update",
@@ -49,6 +50,8 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             target_label="Event",
             target_help="The event to change.",
             label="Edit event",
+            verb="Edit",
+            wants="edit the event {target}",
         ),
         CapabilitySpec(
             "calendar.entry.delete",
@@ -62,6 +65,18 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             target_label="Event",
             target_help="The event to delete.",
             label="Delete event",
+            wants="delete the event {target}",
+        ),
+        CapabilitySpec(
+            CHOOSE_SOURCE,
+            "Show or hide one calendar source on the signed-in person's month.",
+            "remote_write",
+            Capability.SET_PREFERENCES,
+            SourceChoiceCommand,
+            choose_source,
+            subject_resource="calendar",
+            execution_notes=("Set whether the source shows rather than toggle it, so asking twice changes nothing.",),
+            label="Show or hide a calendar",
         ),
     )
 

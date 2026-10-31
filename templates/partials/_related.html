@@ -11,8 +11,8 @@ related: nothing drawn.
 {% endcomment %}
 {% partialdef items %}<ul class="list-rows">{% for item in group.items %}<li><span class="row-main">{% entity item.link %}</span>{% if item.note %}<span class="row-meta">{{ item.note|breakable }}</span>{% endif %}</li>{% endfor %}</ul>{% endpartialdef %}
 {% for group in groups %}
-  <section class="card">
+  {% card %}
     <h2>{{ group.heading|breakable }} <span class="count">{{ group.items|length }}</span></h2>
     {% partial items %}
-  </section>
+  {% endcard %}
 {% endfor %}

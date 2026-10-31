@@ -11,6 +11,10 @@ const DISMISSIBLE_MENUS = "details[data-menu]";
 // filter in a toolbar) can overflow a phone. Measured when it opens: a panel that
 // would cross the viewport's right edge hangs from its disclosure's right
 // edge instead. One rule for every panel, so a new one needs nothing here.
+// Anchor positioning's `position-try-fallbacks: flip-inline` would flip it, but
+// only into a place that fits the panel's containing block in both axes, and a
+// panel hangs below the short positioned box it sits in (the sticky header, a
+// card), so no place fits and it never flips, in any engine the gate pins.
 const EDGE_MARGIN = 8;
 document.addEventListener(
   "toggle",
@@ -142,28 +146,9 @@ document.addEventListener("change", (event) => {
 });
 
 // Dense pages provide only stable section metadata and ordinary fragment
-// targets. HQ measures its own chrome and marks the section currently being
-// read; links and history still work as plain HTML when this enhancement is
-// unavailable.
-// The height of the chrome is a fact about every page, not only the ones with
-// a section nav. Measured here so `--site-header-height` is true at every
-// breakpoint: the header's padding changes on narrow screens, and the
-// stylesheet's static fallback is only right at one of them. Once per load
-// and per resize; nothing reads layout while scrolling.
-(() => {
-  const header = document.querySelector(".site-header");
-  if (!header) return;
-  const measureHeader = () => {
-    document.documentElement.style.setProperty(
-      "--site-header-height",
-      `${header.getBoundingClientRect().height}px`,
-    );
-  };
-  measureHeader();
-  window.addEventListener("resize", measureHeader);
-  window.addEventListener("load", measureHeader);
-})();
-
+// targets. HQ marks the section currently being read; links and history still
+// work as plain HTML when this enhancement is unavailable. The chrome's heights
+// are the stylesheet's (`--site-header-height`, `--page-nav-height`).
 (() => {
   const navigation = document.querySelector("[data-page-navigation]");
   if (!navigation) return;
@@ -174,23 +159,11 @@ document.addEventListener("change", (event) => {
     .filter(Boolean);
   let frame = null;
 
-  const measure = () => {
-    const header = document.querySelector(".site-header");
-    document.documentElement.style.setProperty(
-      "--site-header-height",
-      `${header?.getBoundingClientRect().height || 0}px`,
-    );
-    document.documentElement.style.setProperty(
-      "--page-nav-height",
-      `${navigation.getBoundingClientRect().height}px`,
-    );
-  };
-
   const update = () => {
     frame = null;
-    measure();
+    // Where the nav sticks is the header's height, resolved by the stylesheet.
     const threshold =
-      parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--site-header-height"))
+      parseFloat(getComputedStyle(navigation).insetBlockStart)
       + navigation.getBoundingClientRect().height + 16;
     let current = sections[0];
     sections.forEach((section) => {
@@ -296,6 +269,17 @@ document.addEventListener("submit", (event) => {
   if (!form) return;
 
   form.setAttribute("aria-busy", "true");
+  // The form's data is gathered after this event, and a disabled button is
+  // left out of it, so the value of the one pressed (a switch's yes or no)
+  // goes along as a hidden field.
+  const pressed = event.submitter;
+  form.querySelectorAll("input[data-pressed]").forEach((earlier) => earlier.remove());
+  if (pressed?.name) {
+    const carried = document.createElement("input");
+    Object.assign(carried, { type: "hidden", name: pressed.name, value: pressed.value });
+    carried.dataset.pressed = "";
+    form.append(carried);
+  }
   form.querySelectorAll("button[type=submit], input[type=submit]").forEach((control) => {
     control.disabled = true;
     if (control instanceof HTMLButtonElement && form.dataset.submitLabel) {
@@ -650,7 +634,7 @@ document.querySelectorAll("form.form").forEach((form) => {
   const initial = new Map();
   const inputs = () =>
     [...effects].flatMap((field) => [...field.querySelectorAll("input, textarea, select")]);
-  inputs().forEach((input, index) => initial.set(input, input.value));
+  inputs().forEach((input) => initial.set(input, input.value));
 
   const review = () => {
     // Rows can be added and removed, so a changed *count* is a change even

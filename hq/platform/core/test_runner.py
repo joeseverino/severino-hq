@@ -1,27 +1,10 @@
 """``--parallel`` on a WAL SQLite database, which Django does not support alone.
 
-The test database is a file in WAL mode deliberately: it gives the suite the
-host's journal mode, locking and timeout, so work on a background thread behaves
-as it will in production. Two of Django's assumptions do not hold under that,
-and both concern when and where the file gets copied.
-
-**Copying skips the sidecar.** Django clones with ``shutil.copy`` of the one
-``.sqlite3`` file, but WAL keeps recent pages in ``-wal`` until a checkpoint,
-after ``migrate``, that is most of the schema. ``setup_databases`` checkpoints
-before cloning.
-
-**Workers do not stay on the file.** Under ``spawn``, Django copies each clone
-into a shared-cache in-memory database, which locks whole tables rather than
-using WAL and so deadlocks a background thread against the test that started it.
-``FileClonedParallelSuite`` keeps workers on the cloned file, as Django does
-under ``fork``.
-
-Anything that changes the test database's journal mode, its path, or how work
-reaches a thread should be checked against both.
-
-Diagnosing a parallel failure needs ``tblib``: without it the worker cannot
-pickle its traceback and the real error is replaced by ``cannot pickle
-'traceback' object``. Use ``--parallel=1`` instead, or install it.
+The test database is a WAL file on purpose, so work on a background thread
+behaves as in production. Two of Django's assumptions about copying it then
+fail, answered by ``_checkpoint`` and ``_use_the_file_clone``: a change to the
+test database's journal mode, its path, or how work reaches a thread is checked
+against both.
 """
 
 import contextlib
@@ -29,7 +12,6 @@ import faulthandler
 import gc
 import io
 import json
-import logging
 import multiprocessing
 import os
 import signal
@@ -92,72 +74,6 @@ class _CompositionIsolation:
         return super().startTest(test)
 
 
-class _HeldLogs(logging.Handler):
-    """One test's log records, kept until the test's outcome is known.
-
-    Many tests exercise a failure on purpose (a refused token, an audit write
-    that raises) and the code under test logs it, correctly. Printed as they
-    happen, those records would fill the suite's output with warnings and
-    tracebacks that are all expected, and a real one could not be told from
-    them. ``--buffer`` would not hold them: it swaps ``sys.stdout`` and
-    ``sys.stderr``, but a logging handler took the real stream when logging
-    was configured. So the root logger writes here for the length of each test, and the
-    records are printed only if that test fails or errors. Nothing is dropped
-    that anyone needs: a passing test's expected noise is the only thing that
-    goes unseen.
-    """
-
-    def __init__(self):
-        super().__init__(logging.NOTSET)
-        self.records: list[logging.LogRecord] = []
-        self.console: list[logging.Handler] = []
-
-    def emit(self, record):
-        self.records.append(record)
-
-    def take_over(self, root: logging.Logger) -> None:
-        # Idempotent, and done at the first test in each process: a parallel
-        # worker is a fresh interpreter whose logging Django configured again.
-        if root.handlers != [self]:
-            self.console = [h for h in root.handlers if h is not self]
-            root.handlers = [self]
-
-    def replay(self, test) -> None:
-        if not self.records:
-            return
-        formatter = next((h.formatter for h in self.console if h.formatter), None)
-        stream = sys.stderr
-        stream.write(f"\n--- log output of {test.id()} ---\n")
-        for record in self.records:
-            stream.write((formatter.format(record) if formatter else record.getMessage()) + "\n")
-        stream.flush()
-
-
-_held_logs = _HeldLogs()
-
-
-class _LogsOnFailure:
-    """Show a test's logs when, and only when, the test fails."""
-
-    def startTest(self, test):
-        _held_logs.take_over(logging.getLogger())
-        _held_logs.records.clear()
-        return super().startTest(test)
-
-    def addError(self, test, err):
-        _held_logs.replay(test)
-        return super().addError(test, err)
-
-    def addFailure(self, test, err):
-        _held_logs.replay(test)
-        return super().addFailure(test, err)
-
-    def addSubTest(self, test, subtest, err):
-        if err is not None:
-            _held_logs.replay(subtest)
-        return super().addSubTest(test, subtest, err)
-
-
 # A gate names a folder here, and the run writes each test that failed into
 # it, for the gate's closing line. tools/gate/verdict.py, which runs without
 # the host, names it too; GateVerdictTests runs this record under a gate.
@@ -211,7 +127,14 @@ def write_failures(result) -> None:
 
 
 class _ClassTimes:
-    """Each test class's wall time, its class fixtures included, by class."""
+    """Each test class's wall time, its class fixtures included, by class.
+
+    Django's ``--durations`` times each test from ``setUp`` to its cleanups
+    (``unittest.TestCase.run``), so it never sees ``setUpClass``, where a
+    browser class renders every page and launches the browser, and it cannot
+    say which class a parallel run waited on, since Django gives each worker
+    whole classes.
+    """
 
     def addClassTime(self, test, seconds):
         vars(self).setdefault("class_times", {})[unittest.util.strclass(type(test))] = seconds
@@ -278,16 +201,10 @@ class StallWatch:
     """Fail the test or class fixture a test process is in once it has made no
     progress for ``seconds``, saying where it is stuck.
 
-    A daemon thread waits for the deadline that each ``mark`` moves. When it
-    passes, the thread writes what was running, whatever the evidence
-    callbacks add (the browser's own log, from ``BrowserGate``), and every
-    thread's stack, then interrupts the thread that runs the tests, whose
-    handler raises ``Stalled`` there. The test fails and the run goes on. If no
-    mark follows within ``grace``, the test could not be stopped, and the
-    process exits; a parallel worker first tells Django's parent, which then
-    stops the run rather than wait for results that will never come.
-    ``faulthandler.dump_traceback_later`` stands behind the thread, for a call
-    that holds the interpreter so the thread cannot run.
+    A daemon thread waits for the deadline each ``mark`` moves, then reports and
+    interrupts the test thread, whose handler raises ``Stalled``. With no mark
+    within ``grace`` the process exits, a parallel worker first telling Django's
+    parent so the run stops (docs/Development.md).
     """
 
     def __init__(self, seconds: float | None, stream=None, grace: float = _FALLBACK_GRACE):
@@ -464,16 +381,14 @@ class _StallMarks:
         return super().addSubTest(test, subtest, err)
 
 
-class CompositionTextResult(
-    FailureRecord, _StallMarks, _LogsOnFailure, _CompositionIsolation, _ClassTimes, unittest.TextTestResult
-):
+class CompositionTextResult(FailureRecord, _StallMarks, _CompositionIsolation, _ClassTimes, unittest.TextTestResult):
     def printErrors(self):
         block_on_output()
         super().printErrors()
 
 
-class CompositionRemoteResult(_StallMarks, _LogsOnFailure, _CompositionIsolation, RemoteTestResult):
-    def addClassTime(self, test, seconds):
+class CompositionRemoteResult(_StallMarks, _CompositionIsolation, RemoteTestResult):
+    def addClassTime(self, _test, seconds):
         # A worker's result keeps nothing: the parent replays this event
         # against the subsuite's test at that index.
         self.events.append(("addClassTime", self.test_index, seconds))
@@ -484,10 +399,8 @@ class ClassTimedSuite(unittest.TestSuite):
     ``setUpClass`` to the end of its ``tearDownClass``, and keeps the stall
     watch on while it runs.
 
-    Under ``--parallel`` each worker's subsuite is this type too, since Django
-    partitions a suite into suites of its own type, so the time is measured
-    where the class ran and reaches the parent as an event, and the watch runs
-    in the process the tests run in. The parent only replays their events.
+    Django partitions a suite into suites of its own type, so under
+    ``--parallel`` both happen in the worker the class ran in.
     """
 
     @override
@@ -540,15 +453,10 @@ class CompositionRemoteRunner(RemoteTestRunner):
 def _use_the_file_clone(creation, worker_id):
     """Point a worker at the database file that was cloned for it.
 
-    Under ``spawn`` (the default start method on macOS) Django copies each
-    worker's clone into a shared-cache *in-memory* database. In-memory SQLite
-    locks whole tables instead of using WAL, which deadlocks any test whose work
-    runs on a background thread against the test that started it, until the
-    busy timeout expires.
-
-    ``clone_test_db`` has already written the file. Using it gives a worker the
-    same journal mode, locking and timeout as a serial run, and as production.
-    It is what Django itself does under ``fork``.
+    Under ``spawn`` (macOS's default) Django copies each clone into a
+    shared-cache in-memory database, which locks whole tables instead of using
+    WAL and so deadlocks a test against work it started on another thread. The
+    file keeps a serial run's journal mode, as Django does under ``fork``.
     """
 
     settings_dict = creation.get_test_db_clone_settings(worker_id)
@@ -576,6 +484,8 @@ def _init_worker_on_file_databases(counter, *args, **kwargs):
 
 
 class FileClonedParallelSuite(ParallelTestSuite):
+    # A worker's traceback reaches the parent through tblib; without it the error
+    # reads "cannot pickle 'traceback' object", so run --parallel=1 or install it.
     # A plain function, not a staticmethod: Django reads `self.init_worker
     # .__func__`, which only exists on a bound method.
     init_worker = _init_worker_on_file_databases
@@ -583,7 +493,11 @@ class FileClonedParallelSuite(ParallelTestSuite):
 
 
 def _checkpoint(alias: str) -> None:
-    """Fold a WAL sidecar back into the database file it belongs to."""
+    """Fold a WAL sidecar back into the database file it belongs to.
+
+    Django clones with ``shutil.copy`` of the one ``.sqlite3`` file, and WAL keeps
+    the newest pages (after ``migrate``, most of the schema) in ``-wal``.
+    """
 
     connection = connections[alias]
     if connection.vendor != "sqlite":

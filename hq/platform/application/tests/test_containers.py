@@ -3,7 +3,7 @@ from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -146,7 +146,7 @@ class StandingTests(TestCase):
         self.assertIn("Fixed in 1.2.1", advisory.body)
         # The body is the images. What to do is a step, and why HQ does not
         # do it is one sentence that names no machine.
-        self.assertEqual(items["container-updates"].body, "example/kuma:1 → 2.")
+        self.assertEqual(items["container-updates"].body, "example/kuma:1 to 2.")
         steps = items["container-updates"].workflow.steps
         self.assertEqual(
             [(step.phase, step.summary) for step in steps],
@@ -386,7 +386,7 @@ class RefreshTests(TestCase):
                 "hq.platform.application.public_registry.read_image", side_effect=lambda name, references: read[name]
             ),
             mock.patch("hq.platform.application.public_registry.read_upstream", side_effect=upstream),
-            mock.patch("hq.platform.application.public_registry._configured", return_value=False),
+            override_settings(SEVERINO_RDAP_ENDPOINT=""),
         ):
             refresh(principal=cli_principal(), force=True)
 
@@ -551,7 +551,7 @@ class RetryTests(TestCase):
                 "hq.platform.application.public_registry.read_image", side_effect=lambda name, references: next(answers)
             ),
             mock.patch("hq.platform.application.public_registry.read_upstream", side_effect=AssertionError),
-            mock.patch("hq.platform.application.public_registry._configured", return_value=False),
+            override_settings(SEVERINO_RDAP_ENDPOINT=""),
         ):
             refresh(principal=cli_principal(), force=True)
             refresh(principal=cli_principal(), force=True)

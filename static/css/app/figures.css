@@ -168,6 +168,14 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 @container style(--box: whole) {
   .data-table td [data-entity]:not(strong > *, .row-gutter > *, .muted *):has(> .token[data-sole]):not(:has(> .token > .cut)) { width: max-content; max-width: var(--name-hold); }
 }
+/* Outside a narrow box an identifier is one line. One that breaks only at its seams holds its whole length, so its table lets a ranked column go before the name would break (tables.js); a name the cell cuts shows one line, cut. A narrow box has no column left to let go, so there it breaks at its seams again. The row's own name, free text, a preview, a context line, an identifier that wraps by design (`cell-whole`) and a phrase's word whose hyphenated parts are each cut at the cell's edge (below) wrap as they always do; `broken identifiers` in the layout survey holds the rest. */
+@container style(--box: whole) {
+  .data-table > tbody > tr:not(.is-expanded, .row-detail) > td :not(.row-gutter *, td > strong:first-child *, td > a:first-child > strong *, .cell-data *, .muted *, .attention-title *, .attention-detail *, .table-clamp *, code.cell-whole *, .btn *) {
+    /* On the name's link too, since there the token is text with no box (base.css), and WebKit breaks at a seam by the box around it. */
+    &:is(.token:not(:has(.whole)), [data-entity]:has(> .token[data-sole]):not(:has(.whole))) { white-space: nowrap; }
+    &:is(:has(> .token[data-sole] > .cut), .token[data-sole]:has(> .cut)) { --cut-lines: 1; }
+  }
+}
 /* A cell that leads with the row's name keeps room to show it, rather than standing several lines tall. */
 /* Never more than its column's share (`--share`, tables.css, plus half for the name), so the columns that keep their line still fit beside it. */
 .data-table td:has(> strong:first-child) { min-width: min(11rem, 40cqi, 1.5 * var(--share)); }
@@ -313,7 +321,17 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 /* Policy names and ports, wrapping between them: in a table a chip is held whole, elsewhere a chip wider than its line breaks at its seams. */
 .code-list { display: inline-flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
 .data-table .code-list code { white-space: nowrap; }
-.external-link::after { content: "\00a0\2197"; font-size: .85em; }
+/* The title says where the link goes, so the arrow is for the eye alone. */
+.external-link::after { content: "\00a0\2197" / ""; font-size: .85em; }
+/* A value and the one it leads to (partials/_change.html). A narrow line
+   breaks only between the two, the arrow going with the second. The parts
+   share their first baseline, whatever face and size a page sets its chips in
+   and whatever wraps after it; beside chips the arrow is set in their face. */
+.change { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) .35em; max-width: 100%; }
+.change-to { display: flex; align-items: baseline; column-gap: .35em; }
+.change > *, .change-to > * { min-width: 0; }
+.change-arrow { flex: none; color: var(--muted-2); font-weight: 400; }
+.change:has(> code) .change-arrow { font-family: var(--font-mono); font-size: .88em; }
 /* A name that is one box leaves a break after it, so its link lays name and arrow out as one row: the name gives way, the arrow stays. In a cell a name's token is text (base.css), whose parts would each be an item of the row, so a table lays out its own names. */
 .external-link:not(td *, th *):has(> .token[data-sole]), td .external-link:has(> code:only-child) { display: inline-flex; align-items: baseline; max-width: 100%; }
 :is(.external-link:not(td *, th *):has(> .token[data-sole]), td .external-link:has(> code:only-child)) > * { min-width: 0; }
@@ -363,8 +381,8 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .band-fact small { color: var(--muted); font-size: var(--text-sm); line-height: 1.4; }
 /* A figure in a cell or a sentence takes its tone as ink, as a band's value does, since a number is never a chip. */
 .figure:is(.tone-good, .tone-attention, .tone-serious) { color: var(--tone-ink); font-weight: 600; }
-/* A fact's link, or a word that opens its tip, is a box a target tall (`--target-min`), however few words share its line. */
-.band-fact :is(strong, small) :is(a, [tabindex]) { display: inline-block; line-height: var(--target-min); }
+/* A fact's link, or a word that opens its tip, is a box a target tall (`--target-min`), however few words share its line. Set by its top: an inline block's baseline is its last line, so one that wraps would rise above its fact, and the label beside it would sit by its last line. */
+.band-fact :is(strong, small) :is(a, [tabindex]) { display: inline-block; vertical-align: top; line-height: var(--target-min); }
 .page-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 .page-title-row > h1 { margin: 0; max-width: 100%; }
 .page-title-meta { margin: 0; color: var(--muted); font-size: var(--text-sm); }

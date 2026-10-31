@@ -47,7 +47,7 @@ func (h *harness) docker(scenario string) func(context.Context, ...string) *exec
 			return h.run
 		case "stop":
 			if h.run != nil && h.run.Process != nil {
-				h.run.Process.Signal(syscall.SIGTERM)
+				_ = h.run.Process.Signal(syscall.SIGTERM)
 			}
 		}
 		return exec.CommandContext(ctx, "/bin/sh", "-c", "exit 0")
@@ -59,10 +59,16 @@ func newHarness(t *testing.T, scenario string) *harness {
 	root := t.TempDir()
 	h := &harness{}
 	release := filepath.Join(root, "release")
-	os.WriteFile(release, []byte("ghcr.io/example/hq@"+digest+"\n"), 0o644)
+	if err := os.WriteFile(release, []byte("ghcr.io/example/hq@"+digest+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	secrets := filepath.Join(root, "web")
-	os.Mkdir(secrets, 0o700)
-	os.WriteFile(filepath.Join(secrets, AppEnvName), []byte("A=1\n"), 0o400)
+	if err := os.Mkdir(secrets, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(secrets, AppEnvName), []byte("A=1\n"), 0o400); err != nil {
+		t.Fatal(err)
+	}
 
 	h.runner = &WebRunner{
 		Release: release, SecretDir: secrets, RootUID: os.Getuid(), WebUID: os.Getuid(),
@@ -170,7 +176,9 @@ func TestTheEnvironmentIsWaitedFor(t *testing.T) {
 	h.runner.Await = 5 * time.Second
 	go func() {
 		time.Sleep(100 * time.Millisecond)
-		os.WriteFile(file, []byte("A=1\n"), 0o400)
+		if err := os.WriteFile(file, []byte("A=1\n"), 0o400); err != nil {
+			t.Error(err)
+		}
 	}()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -181,7 +189,9 @@ func TestTheEnvironmentIsWaitedFor(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	cancel()
-	<-done
+	if err := <-done; err != nil {
+		t.Fatalf("a cancelled run is a clean stop, got %v", err)
+	}
 	if !h.ready() {
 		t.Fatal("HQ did not start once the environment was rendered")
 	}
@@ -189,7 +199,9 @@ func TestTheEnvironmentIsWaitedFor(t *testing.T) {
 
 func TestNoReleaseNoContainer(t *testing.T) {
 	h := newHarness(t, "healthy")
-	os.WriteFile(h.runner.Release, []byte("ghcr.io/example/hq:latest\n"), 0o644)
+	if err := os.WriteFile(h.runner.Release, []byte("ghcr.io/example/hq:latest\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := h.runner.Run(context.Background()); err == nil {
 		t.Fatal("a tag-only release was run")

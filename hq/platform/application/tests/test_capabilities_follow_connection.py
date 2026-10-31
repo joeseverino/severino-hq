@@ -57,7 +57,7 @@ class EveryWritePathFollowsTheConnectionTests(TestCase):
         )
 
     def test_queueing_through_an_observing_connection_is_refused(self):
-        from ..infrastructure import PolicyError
+        from ..record_errors import PolicyError
         from ..resource_operations import OperationCommand, request_reconcile
 
         connection("adguard", manages=False)
@@ -70,7 +70,8 @@ class EveryWritePathFollowsTheConnectionTests(TestCase):
             )
 
     def test_authoring_through_an_observing_connection_is_refused(self):
-        from ..infrastructure import ManagedResourceCommand, PolicyError, save_managed_resource
+        from ..infrastructure import ManagedResourceCommand, save_managed_resource
+        from ..record_errors import PolicyError
 
         connection("adguard", manages=False)
 

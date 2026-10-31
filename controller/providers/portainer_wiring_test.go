@@ -71,7 +71,9 @@ func (h *inspectCounting) Request(ctx context.Context, address, method string, h
 	}
 	now := h.inflight.Add(1)
 	defer h.inflight.Add(-1)
-	for peak := h.peak.Load(); now > peak && !h.peak.CompareAndSwap(peak, now); peak = h.peak.Load() {
+	peak := h.peak.Load()
+	for now > peak && !h.peak.CompareAndSwap(peak, now) {
+		peak = h.peak.Load()
 	}
 	time.Sleep(10 * time.Millisecond)
 	if strings.Contains(address, h.failOn) && h.failOn != "" {

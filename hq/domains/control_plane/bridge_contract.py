@@ -1,21 +1,10 @@
 """The controller bridge's contract: what the bridge alone defines, joined to
 what the registry declares.
 
-``bridge_base.json`` is written by hand and holds only the bridge's own: each
-action's path, parameters and payload, and the messages that are not registry
-facts (claims, reports, sweep verdicts, problems). Everything the registry
-owns (kinds, connection providers, failure classes, reading parts, each
-reading's record, the values both sides check) is built from its declarations
-by ``bridge_registry`` and joined here in memory. ``manage.py bridge_contract``
-writes the joined document to ``controller/api/hq-controller.openapi.json``,
-which the controller embeds and generates its client and types from. HQ never
-reads that file: a fact it declared comes from the declaration.
-
-The bridge application takes its routes, parameters, size limit and the shape
-of every payload from the joined document. A payload is held to the schema its
-operation declares, which is JSON Schema 2020-12 as OpenAPI 3.2 embeds it.
-What an action is handed has the types, the required members and the bounds
-the contract states, so an action reads a member and never coerces one.
+``bridge_base.json`` holds the bridge's own messages, written by hand, and
+``bridge_registry`` builds the rest from the registry's declarations. The join
+is held in memory, where the bridge application takes its routes and payload
+schemas from it: docs/Architecture.md#the-controller.
 """
 
 import json

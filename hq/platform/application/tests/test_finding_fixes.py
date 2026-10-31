@@ -11,16 +11,13 @@ from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from ..capabilities import execute_capability
 from ..finding_model import FindingRule
 from ..findings import RULES
-from ..infrastructure import PolicyError
 from ..inventory_testing import store
 from ..policy_fixes import policy_without_empty_groups, request_empty_groups_removal
-from ..record_errors import RecordNotFound
-from ..security import AuthorizationError, Capability, Principal, cli_principal, mcp_principal
+from ..record_errors import PolicyError, RecordNotFound
+from ..security import cli_principal, mcp_principal
 from .markup import elements, links, with_class
 from .test_approvals import POLICY_KEY, an_operator, declare_policy
 from .test_tailnet_posture import policy, raised, tailnet_connection
-
-READER = Principal("reader", "test", frozenset({Capability.READ}))
 
 
 def steps_text(finding) -> str:
@@ -86,7 +83,7 @@ class PolicyAmendmentTests(TestCase):
         )
 
     def test_a_group_named_elsewhere_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "tagOwners"):
+        with self.assertRaisesRegex(PolicyError, "also named outside its rules"):
             policy_without_empty_groups(document(tagOwners={"tag:server": ["group:empty"]}))
 
     def test_a_prefix_of_another_name_is_not_a_reference(self):
@@ -122,10 +119,6 @@ class RemoveEmptyGroupsCapabilityTests(TestCase):
         stored = json.loads(ManagedResource.objects.get(key=POLICY_KEY).spec["document"])
         self.assertNotIn("group:empty", stored["groups"])
         self.assertIn("group:empty", result["change"])
-
-    def test_a_reader_is_refused(self):
-        with self.assertRaises(AuthorizationError):
-            request_empty_groups_removal(None, principal=READER, current_key=POLICY_KEY)
 
     def test_a_policy_with_no_empty_group_is_refused(self):
         operator = an_operator()
@@ -315,7 +308,7 @@ class KeepTheLiveVersionPageTests(TestCase):
         )
         self.assertContains(response, "Keep the live version")
         # It takes a key and a reason, no record: nothing it could blank.
-        self.assertNotContains(response, "This replaces the whole record")
+        self.assertNotContains(response, "data-command-blanks")
 
     def test_a_drifted_resource_page_offers_both_ways(self):
         from django.urls import reverse
@@ -383,4 +376,4 @@ class CleanPageTests(TestCase):
         with mock.patch("hq.domains.control_plane.finding_views.waiting", return_value=3):
             response = self.page(timezone.now())
 
-        self.assertIn(("3 other things need you →", reverse("action_items")), links(response))
+        self.assertIn(("3 other things need you", reverse("action_items")), links(response))

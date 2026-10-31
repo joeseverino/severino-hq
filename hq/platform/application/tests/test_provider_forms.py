@@ -16,7 +16,7 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
-from hq.platform.application.tests.markup import text
+from hq.platform.application.tests.markup import text, with_class
 
 from ..provider_forms import spec_form_class
 
@@ -321,48 +321,48 @@ class ResourceFormViewTests(TestCase):
         self.assertIn(f"Updated “{key}”", text(updated))
 
     def test_a_refused_save_rerenders_the_form_with_the_reason(self):
-        from unittest import mock
+        from hq.platform.application.adoption import OBSERVES_ONLY
+        from hq.platform.application.adoption_testing import connection
 
-        from hq.platform.application.infrastructure import PolicyError
+        connection("adguard", manages=False)
 
-        with mock.patch(
-            "hq.domains.control_plane.resource_form_views.save_managed_resource",
-            side_effect=PolicyError("Refused for the example."),
-        ):
-            response = self.client.post(
-                reverse("control_plane:create"),
-                {"kind": "adguard.rewrite", **REWRITE},
-            )
+        response = self.client.post(
+            reverse("control_plane:create"),
+            {"kind": "adguard.rewrite", **REWRITE},
+        )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Refused for the example.")
+        self.assertContains(response, OBSERVES_ONLY)
         self.assertFalse(ManagedResource.objects.exists())
 
     def test_material_that_cannot_be_stored_sends_the_operator_to_upload_it(self):
         """The declaration landed and the material did not, so it says which."""
 
-        from unittest import mock
+        from django.test import override_settings
 
-        from django import forms
-
-        from hq.platform.application.certificates import CertificateError
-
-        with (
-            mock.patch("hq.domains.control_plane.resource_form_views._material_form", return_value=forms.Form),
-            mock.patch(
-                "hq.domains.control_plane.resource_form_views._store_material",
-                side_effect=CertificateError("The example material was refused."),
-            ),
-        ):
+        ManagedResource.objects.create(
+            key="example-npm-target",
+            kind="tls.delivery_target",
+            spec={"kind": "npm", "connection_ref": "example-npm", "name": "example-proxy"},
+        )
+        # Pasted into the wrong boxes: no certificate and no key.
+        material = {"fullchain": "not a certificate", "private_key": "not a key"}
+        with override_settings(SEVERINO_SECRET_STORE_KEY="test-only-secret-store-key-long-enough"):
             response = self.client.post(
                 reverse("control_plane:create"),
-                {"kind": "adguard.rewrite", **REWRITE},
+                {
+                    "kind": "tls.uploaded_certificate",
+                    "certificate_name": "app.example.com",
+                    "install_on": ["example-npm"],
+                    **material,
+                },
                 follow=True,
             )
 
-        key = ManagedResource.objects.get().key
+        key = ManagedResource.objects.get(kind="tls.uploaded_certificate").key
         self.assertRedirects(response, reverse("control_plane:upload_certificate", kwargs={"key": key}))
-        self.assertContains(response, "The example material was refused.")
+        (said,) = with_class(response, "msg-error")
+        self.assertIn("fullchain.pem", said.text)
 
 
 class RoutineKnobTests(TestCase):

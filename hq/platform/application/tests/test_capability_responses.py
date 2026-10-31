@@ -46,7 +46,7 @@ class CapabilityCallTests(TestCase):
         )
 
     def test_the_description_is_of_the_current_api(self):
-        described = describe_capabilities()
+        described = describe_capabilities(principal=cli_principal())
 
         self.assertIs(described["ok"], True)
         self.assertEqual(described["schema_version"], CURRENT_API_VERSION)

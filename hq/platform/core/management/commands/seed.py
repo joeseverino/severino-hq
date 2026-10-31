@@ -3,10 +3,7 @@
     python manage.py seed showcase --owner operator [--env-file seed.env]
 
 Migrating, signing up and seeding in one process starts a scratch server on
-one Django boot rather than three. The owner's password is
-``DJANGO_SUPERUSER_PASSWORD``, which ``createsuperuser`` reads, or none.
-Merging example rows into real ones would leave a database that is neither,
-so one that already holds a record is refused and left as it was.
+one Django boot rather than three.
 """
 
 from pathlib import Path
@@ -54,12 +51,16 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         seed, owner = seeds.get(options["name"]), options["owner"]
         call_command("migrate", interactive=False, verbosity=0)
+        # Merging example rows into real ones would leave a database that is
+        # neither, so one that already holds a record is refused and left as it was.
         if held := records_held():
             raise CommandError(
                 f"This database already holds records, so nothing was seeded: {_counted(held)}. "
                 "seed fills an empty database and never merges: point SEVERINO_DATABASE_PATH at a new file."
             )
         with transaction.atomic():
+            # The owner's password is DJANGO_SUPERUSER_PASSWORD, which
+            # createsuperuser reads, or none.
             call_command(
                 "createsuperuser", interactive=False, username=owner, email=f"{owner}@example.invalid", verbosity=0
             )

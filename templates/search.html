@@ -33,7 +33,7 @@
   {% endif %}
 
   {% for group in groups %}{% if group.count %}
-  <section class="card search-group" id="scope-{{ group.scope }}">
+  {% card css="search-group" id="scope-"|add:group.scope %}
     <h2>{{ group.label|breakable }} <span class="count">{{ group.count|breakable }}</span></h2>
     <ul class="search-hits">
       {% for item in group.items %}
@@ -55,27 +55,26 @@
       </li>
       {% endfor %}
     </ul>
-  </section>
+  {% endcard %}
   {% endif %}{% endfor %}
 
   {% if contacts %}
-  <section class="card search-group" id="scope-contacts">
+  {% card css="search-group" id="scope-contacts" %}
     <h2>Messages <span class="count">{{ contacts|length }}</span></h2>
     <ul class="search-hits">
       {% for item in contacts %}
       <li class="search-hit">
         <div class="search-hit-main">
           <p class="search-hit-title">
-            <a href="{% url 'contacts:detail' item.id %}"><strong>{{ item.name|breakable }}</strong></a>
-            {% if item.status %}<span class="muted">· {{ item.status|capfirst|breakable }}</span>{% endif %}
+            <a href="{% url 'contacts:detail' item.id %}"><strong>{{ item.name|breakable }}</strong></a>{% if item.status %}<span class="muted">{% dot %}{{ item.status|capfirst|breakable }}</span>{% endif %}
           </p>
         </div>
         <span class="row-meta">{{ item.created_at|when }}</span>
       </li>
       {% endfor %}
     </ul>
-    <p class="muted"><a class="subtle-link" href="{% url 'contacts:list' %}?q={{ q|urlencode }}">Search inside the messages &rarr;</a></p>
-  </section>
+    <p class="muted"><a class="subtle-link" href="{% url 'contacts:list' %}?q={{ q|urlencode }}">Search inside the messages{% arrow %}</a></p>
+  {% endcard %}
   {% endif %}
 
   {% if not total and not discovery_total %}

@@ -247,11 +247,13 @@
   --bar-control-bg: var(--surface-2);
   --bar-control-bg-hover: var(--bg-tint);
   --bar-control-line: var(--line);
-  /* Measured by the enhancement layer because the global header changes shape
-     with its contents. Dense-page navigation and floating table headings both
-     consume the same inset instead of guessing it independently. */
-  --site-header-height: 55px;
+  /* The chrome a sticky part sits under. The header is one row a control tall
+     at every width (base.css), padded and ruled; a page's section nav adds
+     its own (page.css). Dense-page navigation and floating table headings
+     both consume the same inset instead of guessing it independently. */
+  --site-header-height: calc(var(--control-size) + 2 * var(--space-5) + 1px);
   --page-nav-height: 0px;
+  --page-nav-link-size: 32px;
   --motion-fast: 150ms;
   /* Fluid sizes. These scale with the viewport instead of stepping at a
      breakpoint, so the page has no width at which padding or a heading jumps. */

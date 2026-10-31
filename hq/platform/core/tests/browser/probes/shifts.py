@@ -1,19 +1,24 @@
-"""The probe that reads what moved on a page by itself since it began to load."""
+"""The probe that scores how far a page moved by itself since it began to load."""
 
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 
-# Every layout shift the browser recorded on this page that no input of the
-# reader's explains, each with its score and the boxes it moved: whatever
-# moves a page once it is drawn, read from the browser's own record rather
-# than from a list of what might. What a vendored script moves in the box HQ
-# gave it (`vendored`) is the script's own: a part inside that box, or no
-# longer in the page (the gates stand in for its markup while they read) and
-# moved within the box's bounds, is left out. A page loads at its top, so a
-# shift's rect, taken in the viewport as it happened, is the page's. A browser
-# that keeps no such record (WebKit) has nothing to say; Chromium's leg of
-# the gates reads it.
+# The most a page may shift by itself: Core Web Vitals' line for a good
+# Cumulative Layout Shift.
+CLS_LIMIT = 0.1
+
+# The page's Cumulative Layout Shift as Core Web Vitals scores it, from the
+# browser's own layout-shift entries: shifts no input of the reader's explains,
+# grouped into sessions of shifts each under a second from the last and five
+# seconds from the first, the largest session's sum the score. A score past
+# `limit` is a finding naming every shift in that session. What a vendored
+# script moves in the box HQ gave it (`vendored`) is the script's own: a part
+# inside that box, or no longer in the page (the gates stand in for its markup
+# while they read) and moved within the box's bounds, is left out. A page loads
+# at its top, so a shift's rect, taken in the viewport as it happened, is the
+# page's. A browser that keeps no such record (WebKit) has nothing to say;
+# Chromium's legs of the gates read it.
 LAYOUT_SHIFTS = (
-    "(vendored) => new Promise((done) => {"
+    "([vendored, limit]) => new Promise((done) => {"
     + DESCRIBE
     + """
   if (!PerformanceObserver.supportedEntryTypes.includes('layout-shift')) { done([]); return; }
@@ -32,12 +37,20 @@ LAYOUT_SHIFTS = (
     const words = (node.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 30);
     return `${describe(el)} "${words}"`;
   };
-  const report = (entries) => entries
-    .filter((shift) => !shift.hadRecentInput && !shift.sources.every(theScripts))
-    .map((shift) => {
-      const moved = shift.sources.map((part) => `${named(part.node)} ${at(part.previousRect)} -> ${at(part.currentRect)}`);
-      return `shifted ${shift.value.toFixed(4)} at ${Math.round(shift.startTime)} ms: ${moved.join('; ')}`;
-    });
+  const said = (shift) => `${shift.value.toFixed(4)} at ${Math.round(shift.startTime)} ms: `
+    + shift.sources.map((part) => `${named(part.node)} ${at(part.previousRect)} -> ${at(part.currentRect)}`).join('; ');
+  const sum = (shifts) => shifts.reduce((total, shift) => total + shift.value, 0);
+  const report = (entries) => {
+    let worst = [], session = [];
+    for (const shift of entries.filter((s) => !s.hadRecentInput && !s.sources.every(theScripts))) {
+      const [first, last] = [session[0], session.at(-1)];
+      const joins = first && shift.startTime - last.startTime < 1000 && shift.startTime - first.startTime < 5000;
+      session = joins ? [...session, shift] : [shift];
+      if (sum(session) > sum(worst)) worst = session;
+    }
+    const score = sum(worst);
+    return score > limit ? [`layout shift ${score.toFixed(4)} past ${limit}: ${worst.map(said).join(' | ')}`] : [];
+  };
   const seen = [];
   const observer = new PerformanceObserver((list) => seen.push(...list.getEntries()));
   observer.observe({type: 'layout-shift', buffered: true});

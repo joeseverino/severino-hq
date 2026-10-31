@@ -19,6 +19,30 @@ type Result = runtime.Result
 type Condition = runtime.Condition
 type ProviderError = runtime.ProviderError
 
+// decodeAs decodes one answer into T; an answer of another shape is a
+// ProviderError carrying message, so each provider words its own refusal.
+func decodeAs[T any](raw []byte, message string) (T, error) {
+	var out T
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return out, &ProviderError{Message: message, Err: err}
+	}
+	return out, nil
+}
+
+// recordsOf is each entry of a list as its record, or the first entry's
+// refusal: a list with a malformed entry is not read at all.
+func recordsOf[T, R any](items []T, record func(T) (R, error)) ([]R, error) {
+	out := make([]R, 0, len(items))
+	for _, item := range items {
+		rec, err := record(item)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	return out, nil
+}
+
 // Transport answers with validated, undecoded JSON; each provider decodes it
 // into its own response type. The payload is a provider request struct, url.Values or a string.
 type Transport interface {
@@ -43,7 +67,7 @@ type actOption func(*actConfig)
 
 // invalidSpec words the refusal for a spec that does not decode; without it the
 // decoder's own error is the refusal.
-func invalidSpec(message string) actOption { return func(c *actConfig) { c.invalid = message } }
+func invalidSpec(message string) actOption { return func(c *actConfig) { c.invalid = message } } //nolint:unparam // each kind words its own refusal, though only TLS words one
 
 // ignoresSpecInPlan is for an action whose plan answers without reading the
 // spec: a spec that does not decode is refused only when applying.
@@ -111,6 +135,9 @@ type Registry struct {
 	PublishedContainers func(context.Context) ([]PublishedContainer, error)
 	// Portainer is the Portainer access the dashboard glance reads containers through.
 	Portainer PortainerSource
+	// Units acts on the systemd unit a container's label names; nil reaches
+	// no machine, and a container a unit runs is then left alone.
+	Units UnitControl
 	// TailnetURL is where the tailnet API lives; empty is the public one.
 	TailnetURL string
 	// ControllerID names this installation; empty uses HQ_CONTROLLER_ID or the host name.
@@ -345,6 +372,21 @@ func deref[T any](p *T) T {
 func hostname(value string) string {
 	return strings.TrimRight(strings.ToLower(strings.TrimSpace(value)), ".")
 }
+
+// distinctNames is the name read makes of each value, once each in the order
+// first seen; a value read finds no name in is left out.
+func distinctNames(values []string, read func(string) string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, value := range values {
+		if name := read(value); name != "" && !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 func condition(kind runtime.ConditionType, reason, message string) Condition {
 	return Condition{Type: kind, Status: true, Reason: reason, Message: message}
 }

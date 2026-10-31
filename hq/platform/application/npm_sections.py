@@ -25,7 +25,7 @@ def access(service, project) -> ServiceSection | None:
     """Each access list guarding one of the service's names, and whom it admits."""
 
     del project
-    names = (getattr(service, "hostname", ""), *(getattr(service, "aliases", ()) or ()))
+    names = (service.hostname, *service.aliases)
     subject = Subject.of(hostnames=names)
     if not subject:
         return None

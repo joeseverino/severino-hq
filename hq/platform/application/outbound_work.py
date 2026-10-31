@@ -1,22 +1,10 @@
 """Work that reaches outside the process, declared once.
 
 A request never waits on a network, a process or a timer
-(``hq.platform.core.outbound``), so work that does is not done by the view or
-the capability that asks for it. A domain says what the work is, as an
-``OutboundWork``, and everything about running it is derived from that one
-declaration:
-
-- the job that runs it off the request, one at a time (``hq.domains.jobs``);
-- the capability of the same name, so the API, MCP, the command center and a
-  command line ask for it through the same authorization, consent and denial
-  record as any other command, and are answered at once;
-- the route its button posts to and the status resource the button follows;
-- the control itself (``ask``), standing as the stored job does;
-- the audit entries: who asked, how it ended, how long it took, what changed.
-
-The work is a function. It is called on the job's own thread, never inside a
-request, with a ``Progress`` to say what it is doing, the subject it was asked
-about and the principal that asked.
+(``hq.platform.core.outbound``), so a domain declares such work as an
+``OutboundWork``: a function called on a job's own thread with a ``Progress``,
+the subject and the principal that asked. Its job, capability, route, control
+and audit entries derive from that one declaration (docs/Plugins.md#outbound-work).
 """
 
 import inspect
@@ -29,18 +17,17 @@ from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 from pydantic import BaseModel, ConfigDict
-lazy from django.contrib.auth import get_user_model
 lazy from django.utils import timezone
 
 lazy from hq.domains.jobs.models import Job
-lazy from hq.domains.jobs.runner import ALREADY_RUNNING, JobConflict, Progress, due as is_due, reap, run, start
+lazy from hq.domains.jobs.runner import ALREADY_RUNNING, JobConflict, Progress, due as is_due, run, start
 
 from .asks import FAILED, Ask, Standing, job_standing
 from .contracts import DOTTED_NAME
 from .integration_specs import CapabilitySpec, requested
 from .projection import read_once
 from .record_errors import RecordNotFound
-from .security import Principal
+from .security import Principal, person_of
 lazy from .domains import host_specs
 lazy from .plugins import plugin_outbound_work
 lazy from .routes import reverse
@@ -60,39 +47,35 @@ ANOTHER_RUNNING = "Busy with another one. Try again when it ends."
 class OutboundWork:
     """One piece of work a domain does outside the process.
 
-    ``name`` is the job's kind, the capability's name and the last segment of
-    the route. ``run`` is called as ``run(progress, subject=, principal=)`` and
-    returns what the job stores as its result; it raises ``jobs.Failed`` with a
-    sentence to end failed and say why.
-
-    Work about one record names what that record is in ``subject_label``; its
-    subject is then required, and is the capability's target. ``refuse``
-    answers, from what HQ holds, why the work cannot be asked for a subject
-    right now ("" when it can): the control is drawn unusable with that reason
-    and an ask is refused with it before any job is recorded.
-
-    Work about no one record may declare ``every``: once that long has passed
-    since it last succeeded, the host's ``due`` timer does it, so an
-    extension keeps its data current without shipping a unit of its own.
-
-    ``label`` names the work: the job, the audit entry and the command are
-    called it. ``verb`` is what its button says where that is shorter
-    ("Refresh" beside "Refresh a project"). Every control and answer for the
-    work reads its words from here.
+    Every control and answer for the work reads its words from here. Work about
+    one record names it in ``subject_label``; work about none may declare
+    ``every`` so the host's ``due`` timer keeps an extension's data current.
     """
 
+    # The job's kind, the capability's name and the last segment of the route.
     name: str
+    # What the job, the audit entry and the command are called.
     label: str
     summary: str
     required_capability: str
+    # Called as run(progress, subject=, principal=); returns what the job stores
+    # as its result, or raises jobs.Failed with a sentence saying why it failed.
     run: Callable[..., dict[str, Any] | None]
+    # What the one record is called; set, the subject is required and is the
+    # capability's target.
     subject_label: str = ""
     subject_help: str = ""
     subject_resource: str | None = None
+    # Why the work cannot be asked for a subject now, from what HQ holds ("" when
+    # it can): the control is drawn unusable with it, and an ask is refused with
+    # it before any job is recorded.
     refuse: Callable[[str], str] | None = None
     effect: str = "remote_write"
     execution_notes: tuple[str, ...] = ()
+    # For work about no one record: once this long has passed since it last
+    # succeeded, the host's due timer does it.
     every: timedelta | None = None
+    # What its button says where that is shorter than the label ("Refresh").
     verb: str = ""
 
     @property
@@ -179,10 +162,10 @@ def capability_for(work: OutboundWork) -> CapabilitySpec:
 
     validate(work)
 
-    def about(command: Any, *, principal: Principal, current_key: str = "") -> dict[str, Any]:
+    def about(_command: Any, *, principal: Principal, current_key: str = "") -> dict[str, Any]:
         return request_work(work, current_key, principal=principal)
 
-    def whole(command: Any, *, principal: Principal) -> dict[str, Any]:
+    def whole(_command: Any, *, principal: Principal) -> dict[str, Any]:
         return request_work(work, "", principal=principal)
 
     return CapabilitySpec(
@@ -234,25 +217,15 @@ def refusal(name: str, subject: str = "") -> str:
     return read_once(f"outbound_work.refusal:{name}:{subject}", answer)
 
 
-def _requester(principal: Principal) -> Any:
-    """The signed-in person a web principal stands for, for the job's record."""
-
-    if principal.interface != "web":
-        return None
-
-    users = get_user_model()
-    return users._default_manager.filter(**{users.USERNAME_FIELD: principal.actor}).first()
-
-
 def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> dict[str, Any]:
     """Ask for the work and answer at once, as a capability answers.
 
     A caller with a request to answer gets a job on its own thread. A command
     line has no thread that outlives it, so there the work runs to its end
-    before the answer.
+    before the answer. Reached only as a capability, which has authorized the
+    caller.
     """
 
-    principal.require(work.required_capability)
     reason = _refusal(work, subject)
     if reason:
         return {"ok": False, "error": {"code": "precondition", "message": reason}}
@@ -267,7 +240,7 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> d
             work.label,
             job_work,
             actor=principal.actor,
-            requested_by=_requester(principal),
+            requested_by=person_of(principal),
             request={SUBJECT_FIELD: subject},
         )
     except JobConflict:
@@ -334,11 +307,7 @@ def due(now: datetime | None = None) -> tuple[OutboundWork, ...]:
 def last_job(name: str, subject: str = "") -> Any:
     """The job that last did this work for this subject, or None. One query."""
 
-    job = Job.objects.filter(kind=name, **{f"request__{SUBJECT_FIELD}": subject}).first()
-    if job is not None and job.is_stale:
-        reap(name)
-        job.refresh_from_db()
-    return job
+    return Job.objects.filter(kind=name, **{f"request__{SUBJECT_FIELD}": subject}).first()
 
 
 def ask(

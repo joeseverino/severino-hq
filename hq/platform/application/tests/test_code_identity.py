@@ -58,10 +58,11 @@ class CodeIdentityTests(SimpleTestCase):
             self.assertEqual(len({before, added, identity()}), 3)
 
     def test_an_upgraded_distribution_moves_it(self):
-        with importable({"nodes.py": FIRST}):
+        with importable({"nodes.py": FIRST}) as root:
+            (root.parent / "example-0.1.dist-info").mkdir()
             before = identity()
-            with mock.patch.object(code_identity, "_distributions", return_value=["example-0.2.dist-info"]):
-                self.assertNotEqual(identity(), before)
+            (root.parent / "example-0.1.dist-info").rename(root.parent / "example-0.2.dist-info")
+            self.assertNotEqual(identity(), before)
 
     def test_an_installed_extension_is_part_of_the_running_code(self):
         manifest = PluginManifest(

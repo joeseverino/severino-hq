@@ -45,52 +45,6 @@ def in_the_face(css):
     return _LATE_FACE.sub(b"font-display: block", css)
 
 
-# A loaded machine runs a page's frames late and its idle work later still, and
-# a check that reads a page before a script's frame or idle callback has run
-# fails only there. `HQ_BROWSER_SLOW=<ms>` (dev:look's `--slow`) draws every
-# page that way on an idle machine: each animation frame comes that many
-# milliseconds late, and an idle callback waits three times its timeout (or
-# its frame's delay, given none), so a timing flake reproduces at will.
-_SLOW = """(late) => {
-  const frame = window.requestAnimationFrame.bind(window);
-  const unframe = window.cancelAnimationFrame.bind(window);
-  const pending = new Map();
-  let last = 0;
-  window.requestAnimationFrame = (callback) => {
-    last += 1;
-    const id = last;
-    const timer = setTimeout(() => {
-      pending.set(id, { frame: frame((time) => { pending.delete(id); callback(time); }) });
-    }, late);
-    pending.set(id, { timer });
-    return id;
-  };
-  window.cancelAnimationFrame = (id) => {
-    const waiting = pending.get(id);
-    pending.delete(id);
-    if (waiting?.timer !== undefined) clearTimeout(waiting.timer);
-    if (waiting?.frame !== undefined) unframe(waiting.frame);
-  };
-  if (!window.requestIdleCallback) return;
-  window.requestIdleCallback = (callback, options) => setTimeout(
-    () => callback({ didTimeout: true, timeRemaining: () => 0 }), 3 * (options?.timeout ?? late),
-  );
-  window.cancelIdleCallback = (id) => clearTimeout(id);
-}"""
-
-
-def slow_frames():
-    """The script that slows every page's frames and idle callbacks, when
-    ``HQ_BROWSER_SLOW`` asks for it, else None."""
-
-    late = os.environ.get("HQ_BROWSER_SLOW", "")
-    if not late:
-        return None
-    if not late.isdigit() or int(late) == 0:
-        raise ValueError("HQ_BROWSER_SLOW is how late each frame comes, a positive number of milliseconds.")
-    return f"({_SLOW})({int(late)});"
-
-
 @cache
 def static_file(name):
     """A static file's type and body, read once a process: routing a request

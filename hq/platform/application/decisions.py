@@ -1,20 +1,17 @@
 """The face of a queue card, from what its owner emitted. No reads, no new decisions.
 
-A card says what is wrong, what it means, since when, and what to do. What to
-do is three different things and each is shown as what it is:
-
-- a button: an action its owner offers, or the lone check that reads again;
-- a step: a command to run or an instruction with its own text, numbered only
-  when there is more than one;
-- a sentence: the reason this one cannot be done from here.
-
-Each action renders once; the transport keeps the owner's complete workflow.
+A card says what is wrong, what it means, since when, and what to do, shown as
+what it is: a button for an action its owner offers (or the lone check that
+reads again), a step for a command or instruction (numbered only when there
+are several), a sentence for why it cannot be done from here. Each action
+renders once; the transport keeps the owner's complete workflow.
 """
 
 import hashlib
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
+lazy from .approvals import APPROVE, REJECT
 lazy from .entity_links import web_url
 lazy from .findings import rule_origin
 lazy from .routes import reverse
@@ -41,7 +38,7 @@ def _identity(action: dict[str, Any]) -> tuple[str, str]:
     return (action["method"], action["url"])
 
 
-def _promoted(steps: list[dict[str, Any]], offered: bool) -> list[dict[str, Any]]:
+def _promoted(steps: list[dict[str, Any]], *, offered: bool) -> list[dict[str, Any]]:
     """The actions that stand on the card as buttons.
 
     The first step that can be taken now leads, unless the owner already put
@@ -114,6 +111,14 @@ def _next_step(item: dict[str, Any], taken: set[tuple[str, str]]) -> tuple[list[
     return [link], ""
 
 
+def _decided_here(actions: list[dict[str, Any]]) -> bool:
+    """Whether the card's own buttons decide what its meaning describes, as an
+    approval's do: its meaning is then shown whole, never cut to a line, so
+    nothing is approved on half of what it changes."""
+
+    return any(_plain(action).get("name") in (APPROVE, REJECT) for action in actions)
+
+
 def _one_primary(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The first recommended action leads; every other is a plain button, so a
     card never shows two of equal weight competing to be the fix."""
@@ -160,7 +165,7 @@ def decision(item: dict[str, Any]) -> dict[str, Any]:
     actions = list(item.get("actions", ()))
     workflow = item.get("workflow")
     parts = workflow_parts(workflow)
-    for action in _promoted(parts["steps"], bool(actions)):
+    for action in _promoted(parts["steps"], offered=bool(actions)):
         if _identity(action) not in {_identity(known) for known in actions}:
             actions.append(action)
     identities = {_identity(action) for action in actions}
@@ -179,6 +184,7 @@ def decision(item: dict[str, Any]) -> dict[str, Any]:
         "page": _own_page(subject, anchor),
         "urgency": NOTICE if item.get("notice") else urgency(item.get("status", "")),
         "actions": _one_primary(actions + links),
+        "whole": _decided_here(actions),
         "facts": _facts(item.get("facts", ())),
         "origin": _origin(item),
         "advice": advice,

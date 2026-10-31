@@ -1,4 +1,4 @@
-<figure class="chart-card card">
+{% card element="figure" css="chart-card" %}
   <figcaption>
     <h2>{{ chart.title|breakable }}</h2>
     <p>{{ chart.description|breakable }}</p>
@@ -41,4 +41,4 @@
       {% endtable_region %}
     </details>
   {% endif %}
-</figure>
+{% endcard %}

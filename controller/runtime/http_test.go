@@ -37,7 +37,7 @@ func TestRedirectRefusesDifferentOriginAndAllWrites(t *testing.T) {
 	for _, method := range []string{"GET", "POST", "PUT", "DELETE"} {
 		t.Run(method, func(t *testing.T) {
 			landed := false
-			target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { landed = true }))
+			target := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { landed = true }))
 			defer target.Close()
 			origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
@@ -62,7 +62,7 @@ func TestProviderResponseFailures(t *testing.T) {
 		{"trailing", "{} {}", "", 200},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tc.status)
 				_, _ = w.Write([]byte(tc.body))
 			}))
@@ -82,7 +82,7 @@ func TestRequestHeaderReadsBodyAndHeaderFromOneAnswer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/gone":
-			w.WriteHeader(412)
+			w.WriteHeader(http.StatusPreconditionFailed)
 			return
 		case "/broken":
 			w.Header().Set("ETag", `"v2"`)
@@ -107,7 +107,7 @@ func TestRequestHeaderReadsBodyAndHeaderFromOneAnswer(t *testing.T) {
 	}
 }
 func TestResponseSizeIsBounded(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		chunk := strings.Repeat("x", 1<<20)
 		for range 33 {
 			if _, err := w.Write([]byte(chunk)); err != nil {

@@ -221,21 +221,35 @@ def _registrations(domains: tuple[str, ...]) -> tuple[Expiry, ...]:
 def _certificates(domains: tuple[str, ...], hostnames: set[str]) -> tuple[Expiry, ...]:
     """Edge certificates read under the domains, and certificates HQ manages."""
 
+    found = [*_edge_certificates(domains, hostnames), *_managed_certificates()]
+    return tuple(sorted(found, key=lambda item: item.expires))
+
+
+def _edge_certificates(domains: tuple[str, ...], hostnames: set[str]) -> list[Expiry]:
+    """Each certificate read under the domains that says when it expires,
+    linked to its service when HQ serves the name, else to its zone."""
+
+    if not domains:
+        return []
     found = []
-    if domains:
-        for item in readings().about(Subject.of(zones=domains), facets=("certificate",)):
-            when = moment(item.expires)
-            if when is None:
-                continue
-            name = next(iter(item.hostnames), "") or item.title
-            zone = next((domain for domain in domains if in_zone(name, domain)), "")
-            link = subject_link("service", name) if name in hostnames else subject_link("zone", zone)
-            found.append(Expiry(name, item.spec.short or item.label, when, link))
+    for item in readings().about(Subject.of(zones=domains), facets=("certificate",)):
+        if (when := moment(item.expires)) is None:
+            continue
+        name = next(iter(item.hostnames), "") or item.title
+        zone = next((domain for domain in domains if in_zone(name, domain)), "")
+        link = subject_link("service", name) if name in hostnames else subject_link("zone", zone)
+        found.append(Expiry(name, item.spec.short or item.label, when, link))
+    return found
+
+
+def _managed_certificates() -> list[Expiry]:
+    """Each certificate HQ manages whose status says when it expires."""
+
+    found = []
     for resource in enabled_resources():
         if resource.kind not in MANAGED_CERTIFICATE_KINDS:
             continue
-        when = moment((resource.status or {}).get("not_after"))
-        if when is None:
+        if (when := moment((resource.status or {}).get("not_after"))) is None:
             continue
         spec = resource.spec or {}
         found.append(
@@ -248,7 +262,7 @@ def _certificates(domains: tuple[str, ...], hostnames: set[str]) -> tuple[Expiry
                 renewal_window_days=renewal_window(spec),
             )
         )
-    return tuple(sorted(found, key=lambda item: item.expires))
+    return found
 
 
 # ----- Dashboard ------------------------------------------------------------

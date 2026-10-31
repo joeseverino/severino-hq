@@ -14,6 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory, ReadRequest
+from hq.platform.core.templatetags.value_tags import dot
 
 from ..cadence import ControllerStanding
 from ..controller_page import controller_page
@@ -142,7 +143,7 @@ class ControllerPageTests(TestCase):
         self.assertNotIn("adguard.rewrite", texts(response, "code"))
         # A reading 26 hours old against a five-minute cadence is not "due": it is late, and says which.
         self.assertContains(response, "Overdue")
-        self.assertContains(response, "Internal DNS record · ")
+        self.assertContains(response, f"Internal DNS record{dot()}")
 
     def test_the_page_needs_a_session_and_the_dashboard_links_to_it(self):
         self.assertEqual(self.client.get(reverse("control_plane:controller")).status_code, 302)

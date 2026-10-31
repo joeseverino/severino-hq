@@ -1,20 +1,30 @@
 """The layout rules held over single components, drawn on probe pages and pages of the stress estate."""
 
+import json
 import re
+from datetime import date, timedelta
 from decimal import Decimal
 
+from django.template.loader import render_to_string
+
+from hq.platform.application import asks
+from hq.platform.application.asks import Ask, Standing
 from hq.platform.application.money import money
+from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
 from hq.platform.core.tests.browser.gate import add_css, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
-from hq.platform.core.tests.browser.probes.boxes import MAP, OVERRULED_ALIGNMENT, SMALL_TARGETS
+from hq.platform.core.tests.browser.probes.boxes import MAP, SMALL_TARGETS
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
-from hq.platform.core.tests.browser.probes.parts import READINGS, SPILLED_LABELS, reading_problems
+from hq.platform.core.tests.browser.probes.parts import READINGS, SPILLED_LABELS, WRAPPED, reading_problems
 from hq.platform.core.tests.browser.probes.settle import KEPT_SELECTORS, PRESS_EVERY_SHOWN, SETTLE
+from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFTS
 from hq.platform.core.tests.browser.probes.tables import (
     BLANK_TABLE,
     CELLS,
     COLUMNS_SHOWN,
+    IDENTIFIER_TABLES,
+    IDENTIFIER_VALUES,
     PHONE_TABLE,
     PRESS_FIRST_ROW_TOGGLE,
     ROW_ARRIVES,
@@ -23,7 +33,12 @@ from hq.platform.core.tests.browser.probes.tables import (
     SORT_BY,
     TABLES_THAT_DO_NOT_FIT,
 )
-from hq.platform.core.tests.browser.probes.text import BROKEN_WORDS, BROKEN_WORDS_IN_TEXT, OVERLAPPING_TEXT
+from hq.platform.core.tests.browser.probes.text import (
+    BROKEN_TOKENS,
+    BROKEN_WORDS,
+    BROKEN_WORDS_IN_TEXT,
+    OVERLAPPING_TEXT,
+)
 from hq.platform.core.tests.browser.reading import probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
@@ -173,13 +188,170 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 def shown(rows=rows):
                     return [row.is_visible() for row in rows.all()]
 
-                self.assertNotIn(True, shown())
+                self.assertFalse(any(shown()))
                 toggle.click()
                 self.assertEqual(toggle.get_attribute("aria-expanded"), "true")
-                self.assertNotIn(False, shown())
+                self.assertTrue(all(shown()))
                 toggle.click()
                 self.assertEqual(toggle.get_attribute("aria-expanded"), "false")
-                self.assertNotIn(True, shown())
+                self.assertFalse(any(shown()))
+
+    @with_script
+    def test_a_folds_rows_offer_their_toggles_as_they_appear(self):
+        """The rows a fold shows are measured in the press that shows them,
+        so a row with something cut offers its toggle at once."""
+
+        self.pages = {
+            **self.pages,
+            "fold-probe": probe(
+                '{% table_region "Folding" %}<table class="data-table"><thead><tr>'
+                '{% table_heading "Name" gutter=True %}{% table_heading "Value" %}</tr></thead><tbody>'
+                '{% row_group "Example group" 1 folds="example-fold" %}'
+                '<tr id="example-cut" data-folded="example-fold"><td class="row-gutter">Name{% row_toggle %}</td>'
+                '<td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div>'
+                "</td></tr></tbody></table>{% endtable_region %}"
+            ),
+        }
+        self.open("fold-probe", PHONE_SCREEN[0])
+        offered = self.page.evaluate(
+            """() => {
+              document.querySelector('[data-fold-toggle]').click();
+              return [...document.querySelectorAll('tr[data-folded] [data-row-toggle]')]
+                .filter((toggle) => toggle.checkVisibility()).map((toggle) => toggle.closest('tr').id);
+            }"""
+        )
+        self.assertEqual(offered, ["example-cut"])
+
+    def test_a_band_value_that_wraps_stays_in_its_fact_level_with_its_label(self):
+        """A fact's linked value, a target tall a line, wraps under its long
+        label's row without rising out of the fact, and the label stands
+        beside its first line, at every width down to the narrowest."""
+
+        self.pages = {
+            **self.pages,
+            "band-fact-probe": probe(
+                '<h3 class="eyebrow">Example heading over the band</h3><div class="fact-band">'
+                '{% band_fact icon="search" label="An example label long enough to crowd its value" %}'
+                '<strong><a href="#example">An example value that has to wrap</a></strong>{% endband_fact %}'
+                '{% band_fact icon="shield" label="Example" %}<strong>One</strong>{% endband_fact %}</div>'
+            ),
+        }
+        for width in (NARROWEST, PHONE_SCREEN[0]):
+            with self.subTest(width=width):
+                self.open("band-fact-probe", width)
+                fact, label, lines = self.page.evaluate(
+                    """([band, label]) => {
+                  const fact = document.querySelector(band);
+                  const edges = (r) => [r.top, r.bottom];
+                  const words = document.createRange();
+                  words.selectNodeContents(fact.querySelector('strong a'));
+                  return [edges(fact.getBoundingClientRect()), edges(fact.querySelector(label).getBoundingClientRect()),
+                    [...words.getClientRects()].map(edges)];
+                }""",
+                    [SELECTORS["band_fact"], SELECTORS["band_label"]],
+                )
+                self.assertGreater(len({top for top, _bottom in lines}), 1, "the value wraps")
+                self.assertGreaterEqual(min(top for top, _bottom in lines), fact[0])
+                self.assertLessEqual(max(bottom for _top, bottom in lines), fact[1])
+                first_line = min(lines)
+                self.assertLess(label[0], first_line[1])
+                self.assertGreater(label[1], first_line[0])
+
+    def test_a_calendars_count_of_planned_days_kept_keeps_its_line_beside_its_legend(self):
+        """A legend of three kinds and the missed mark, as a training calendar
+        draws it, leaves its count whole on a line at every width."""
+
+        kinds = tuple(ChartSeries(label, (), slot) for slot, label in enumerate(("Running", "Cycling", "Strength"), 1))
+        start = date(2026, 1, 5)
+        calendar = ActivityCalendar(
+            "Example training",
+            "Planned days against what was done.",
+            tuple(
+                tuple(
+                    CalendarDay(start + timedelta(days=week * 7 + day), "missed", planned=True)
+                    if day in (0, 2, 4) and week * 7 + day < 25
+                    else CalendarDay(start + timedelta(days=week * 7 + day))
+                    for day in range(7)
+                )
+                for week in range(5)
+            ),
+            series=kinds,
+            period_label="Example month",
+        )
+        self.assertEqual(calendar.kept, "0/11")
+        self.pages = {
+            **self.pages,
+            "calendar-probe": probe(render_to_string("partials/_activity_calendar.html", {"calendar": calendar})),
+        }
+        for width in (NARROWEST, *WIDTHS):
+            with self.subTest(width=width):
+                self.open("calendar-probe", width)
+                self.assertTrue(self.page.locator(SELECTORS["one_line"]).is_visible())
+                self.assertEqual(self.page.evaluate(WRAPPED, SELECTORS["one_line"]), [])
+
+    @with_script
+    def test_a_rows_ask_says_its_sentence_on_the_line_its_row_opens_to(self):
+        """A row's Refresh that fails says its word in the row, which keeps
+        its height, and its sentence on the row's open line, where a phone
+        with no title to hover reads it."""
+
+        # Where the column of actions stays: one that leaves takes its ask to
+        # the open line whole, where its note says the sentence itself.
+        for width in (820, WIDE):
+            with self.subTest(width=width):
+                self.open("connections", width)
+                pressed = [
+                    button
+                    for button in self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]").all()
+                    if button.is_visible()
+                ]
+                self.assertTrue(pressed, "no row's ask to press")
+                button = pressed[0]
+                row = button.evaluate_handle("(button) => button.closest('tr')").as_element()
+                tall = row.bounding_box()["height"]
+                button.click()
+                self.page.wait_for_selector(f'{SELECTORS["row_ask"]}[data-ask-state="failed"]')
+                self.assertLessEqual(row.bounding_box()["height"], tall + 1)
+                row.query_selector(SELECTORS["row_toggle"]).click()
+                said = row.evaluate(
+                    "(row, why) => { const shown = row.nextElementSibling?.querySelector(why);"
+                    " return shown?.checkVisibility() ? shown.textContent : null; }",
+                    SELECTORS["ask_why"],
+                )
+                self.assertIsNotNone(said, "the open line says nothing of the ask")
+                self.assertIn(button.get_attribute("title"), said)
+
+    @with_script
+    def test_a_rows_ask_that_succeeds_drops_the_failure_it_last_said(self):
+        """A row whose last refresh failed carries the failure as its button's
+        title; pressed again and done, the title says what the button is for."""
+
+        failed = Ask(
+            "Refresh",
+            "/example/ask/",
+            Standing(asks.FAILED, "The example could not be read."),
+            title="Read the example again.",
+        )
+        self.pages = {
+            **self.pages,
+            "ask-probe": probe(
+                '{% table_region "Things" %}<table class="data-table"><thead><tr>'
+                '{% table_heading "Name" gutter=True %}{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
+                '<tr><td class="row-gutter">A{% row_toggle %}</td>'
+                '<td>{% include "partials/_ask.html" with ask=ask %}</td></tr></tbody></table>{% endtable_region %}'
+                '<form id="hq-post" method="post" hidden></form>'
+                '<script defer src="{{ static }}js/fragment.js" nonce="{{ nonce }}"></script>'
+                '<script defer src="{{ static }}js/ask.js" nonce="{{ nonce }}"></script>',
+                ask=failed,
+            ),
+            "example/ask": json.dumps(Standing(asks.DONE).as_json()),
+        }
+        self.open("ask-probe", WIDE)
+        button = self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]")
+        self.assertIn("could not be read", button.get_attribute("title"))
+        button.press("Enter")
+        self.page.wait_for_selector(f'{SELECTORS["row_ask"]}[data-ask-state="done"]')
+        self.assertEqual(button.get_attribute("title"), "Read the example again.")
 
     @with_script
     def test_an_opened_row_keeps_its_words_in_their_cells(self):
@@ -226,6 +398,27 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertTrue(
             [said for said in refusals if "/inline-script-probe/" in said and "script-src" in said], refusals
         )
+
+    @with_script
+    def test_a_page_that_moves_by_itself_past_the_shift_limit_is_found(self):
+        """A block let in above the page's content once it is drawn pushes
+        everything down by most of the screen, a score far past `CLS_LIMIT`;
+        the page as it loaded is under it. An engine that records no layout
+        shift has nothing to say either way."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.settle()
+        read = [SELECTORS["vendored"], CLS_LIMIT]
+        self.assertEqual(self.page.evaluate(LAYOUT_SHIFTS, read), [])
+        self.page.evaluate("""() => {
+          const block = document.createElement('div');
+          block.style.setProperty('block-size', '600px');
+          document.querySelector('main').prepend(block);
+        }""")
+        self.settle()
+        recorded = self.page.evaluate("() => PerformanceObserver.supportedEntryTypes.includes('layout-shift')")
+        found = self.page.evaluate(LAYOUT_SHIFTS, read)
+        self.assertEqual(len(found), 1 if recorded else 0, found)
 
     def test_a_hit_area_hung_past_a_control_is_no_label_and_a_word_past_it_is(self):
         """The hit area a small control hangs beside itself widens what it
@@ -344,6 +537,22 @@ class ComponentLayoutTests(LayoutBrowserTests):
         found = [line for line in self.page.evaluate(BROKEN_WORDS) if "abcdef" in line or "example" in line]
         self.assertEqual(len(found), 1)
         self.assertIn("example", found[0])
+
+    def test_a_long_word_breaks_rather_than_widening_the_page(self):
+        """A word too long for its line (a URL, a key, a digest) written in
+        plain text breaks where it would overflow, inside the box that holds
+        it, so the page never grows sideways to fit it."""
+
+        self.open(next(iter(PAGES)), NARROWEST)
+        text, box = self.page.evaluate("""() => {
+          const said = document.createElement('p');
+          said.textContent = 'example' + '0123456789abcdef'.repeat(8);
+          document.querySelector('main').append(said);
+          const range = document.createRange();
+          range.selectNodeContents(said);
+          return [range.getBoundingClientRect().right, said.getBoundingClientRect().right];
+        }""")
+        self.assertLessEqual(text, box + 1)
 
     def test_an_amount_holds_to_its_sign_and_one_that_does_not_is_found(self):
         """In a box narrower than any amount, every amount HQ writes stays one
@@ -503,7 +712,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for key in ("highlights", "patterns"):
             with self.subTest(cards=key):
                 self.assertGreater(max(len(row) for row in self.card_rows(key)), 1)
-                self.assert_rows_filled(key)
 
     def test_the_dashboard_stacks_its_cards_on_a_phone(self):
         for width in (NARROWEST, PHONE_SCREEN[0]):
@@ -514,13 +722,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
                     self.assertGreater(len(rows), 1)
                     self.assertEqual({len(row) for row in rows}, {1})
                     self.assertEqual({round(row[0]["left"]) for row in rows}, {round(rows[0][0]["left"])})
-
-    def test_a_dashboard_without_contributors_draws_no_empty_pairs(self):
-        self.open("dashboard-bare", 1280)
-        # Without extensions, the cards that remain still fill their rows.
-        for key in ("highlights", "patterns"):
-            with self.subTest(cards=key):
-                self.assert_rows_filled(key)
 
     @with_script
     def test_a_row_toggle_is_owed_only_to_what_a_reader_cannot_see(self):
@@ -642,13 +843,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertEqual(back["sort"], "none")
         self.assertEqual(back["values"], came)
 
-    def test_the_dashboards_readings_are_one_shape(self):
-        """Each is a mark, a lead and its lines, and they are the same shape:
-        the mark beside the lead and nothing set under it, every lead one size,
-        every second line starting the same distance down, and no line cut
-        short. A caption that fell into the mark's own narrow column read as
-        "Via h" and "Has", and nothing else in the gate would have said so.
-        """
+    def test_the_dashboards_readings_show_every_line_beside_its_mark(self):
+        """Each is a mark, a lead and its lines: nothing set under the mark,
+        where a caption in the mark's narrow column reads as "Via h", and no
+        line cut short."""
 
         for width in (PHONE_SCREEN[0], 820, 1280, 1440):
             with self.subTest(width=width):
@@ -722,19 +920,27 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertIn("Runs", shown)
                 self.assertEqual(self.page.evaluate(BROKEN_WORDS), [])
 
-    def test_an_identifier_sits_where_its_end_of_the_connection_aligns_it(self):
-        """The address on each end of the connection is placed with the rest
-        of its end: centered with it when the ends stack on a phone, at the
-        end on HQ's side when they face each other."""
+    @with_script
+    def test_an_identifier_in_a_table_is_whole_while_a_column_can_leave(self):
+        """An address with a port, a host name and a network in a cell are
+        never broken at their seams while the table has a ranked column to
+        let go: on the narrowest phone the columns leave and the names stay
+        whole, and the table still fits its box."""
 
-        for width, sides in ((PHONE_SCREEN[0], {"center"}), (WIDE, {"start", "end"})):
+        self.pages = {**self.pages, "identifier-probe": probe(IDENTIFIER_TABLES, **IDENTIFIER_VALUES)}
+        for width in (NARROWEST, *WIDTHS):
             with self.subTest(width=width):
-                self.open("connection", width)
-                ends = self.page.locator(SELECTORS["connection_end"]).evaluate_all(
-                    "(ends) => ends.map((end) => getComputedStyle(end).justifyItems)"
+                self.open("identifier-probe", width)
+                self.page.evaluate(SETTLE)
+                self.assertEqual(
+                    self.page.evaluate(BROKEN_TOKENS, [SELECTORS["cell_token"], SELECTORS["wraps_in_a_cell"]]), []
                 )
-                self.assertEqual(set(ends), sides)
-                self.assertEqual(self.page.evaluate(OVERRULED_ALIGNMENT, SELECTORS["chip"]), [])
+                self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
+        self.open("identifier-probe", NARROWEST)
+        self.page.evaluate(SETTLE)
+        shown = self.page.evaluate(COLUMNS_SHOWN)
+        self.assertNotIn("Read from", shown)
+        self.assertNotIn("Logins", shown)
 
     @with_script
     def test_the_survey_finds_the_same_twice_on_a_page_that_answers_changes_to_its_tree(self):

@@ -11,6 +11,7 @@ import sys
 from collections import defaultdict
 from functools import cache, cached_property
 from itertools import combinations
+from operator import eq
 from pathlib import Path
 from typing import NamedTuple
 
@@ -21,60 +22,104 @@ CONSTRUCTORS = {
 
 
 def constructor_bindings(tree, path):
-    bindings = {}
-    for node in tree.body:
-        if isinstance(node, ast.ImportFrom):
-            package = list(Path(path).with_suffix("").parts[:-1])
-            prefix = ".".join(package[: len(package) - node.level + 1]) if node.level else ""
-            imported = ".".join(p for p in (prefix, node.module) if p)
-            for alias in node.names:
-                bindings[alias.asname or alias.name] = f"{imported}.{alias.name}"
+    """Each name the module's own top-level ``from`` imports bind, mapped to
+    the dotted name it imports; nothing when the module binds a constructor's
+    name a second way, since a call of it could then run anything."""
+
+    bindings = imported_names(tree, path)
     constructors_bound = {name for name, target in bindings.items() if target in CONSTRUCTORS}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store) and node.id in constructors_bound:
-            return {}
-        if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name in constructors_bound:
-            return {}
-        if isinstance(node, ast.Import) and any(
-            (alias.asname or alias.name.split(".")[0]) in constructors_bound for alias in node.names
-        ):
-            return {}
+    if any(rebinds(node, constructors_bound) for node in ast.walk(tree)):
+        return {}
     return bindings
 
 
-def metadata(root: Path, path: str, name: str) -> bool:
-    tree = ast.parse((root / path).read_text())
-    bindings = constructor_bindings(tree, path)
-    candidates = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name]
-    if len(candidates) != 1:
-        return False
-    function = candidates[0]
-    args = function.args
-    if args.posonlyargs or args.args or args.kwonlyargs or args.vararg or args.kwarg or function.decorator_list:
-        return False
-    if len(function.body) != 1 or not isinstance(function.body[0], ast.Return):
-        return False
-    constructors = []
+def imported_names(tree, path):
+    """Each name a top-level ``from`` import binds, mapped to the dotted name
+    it imports, a relative one resolved against the module's own package."""
 
-    def literal(node):
+    package = list(Path(path).with_suffix("").parts[:-1])
+    bindings = {}
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            prefix = ".".join(package[: len(package) - node.level + 1]) if node.level else ""
+            imported = ".".join(p for p in (prefix, node.module) if p)
+            bindings |= {alias.asname or alias.name: f"{imported}.{alias.name}" for alias in node.names}
+    return bindings
+
+
+def rebinds(node, names):
+    """Whether ``node`` binds one of ``names`` by assignment, definition or a
+    plain import."""
+
+    if isinstance(node, ast.Name):
+        return isinstance(node.ctx, ast.Store) and node.id in names
+    if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+        return node.name in names
+    if isinstance(node, ast.Import):
+        return any((alias.asname or alias.name.split(".")[0]) in names for alias in node.names)
+    return False
+
+
+def metadata(root: Path, path: str, name: str) -> bool:
+    """Whether the module's one top-level function ``name`` takes nothing,
+    is undecorated, and only returns a literal built through a constructor."""
+
+    tree = ast.parse((root / path).read_text())
+    function = sole_function(tree, name)
+    if function is None or takes_anything(function) or len(function.body) != 1:
+        return False
+    returned = function.body[0]
+    if not isinstance(returned, ast.Return):
+        return False
+    declaration = Declaration(constructor_bindings(tree, path))
+    return declaration.literal(returned.value) and bool(declaration.constructors)
+
+
+def sole_function(tree, name):
+    """The module's top-level function ``name`` when exactly one is defined."""
+
+    candidates = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name]
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def takes_anything(function):
+    """Whether a function has any parameter or decorator, either of which can
+    hand it a value computed at runtime."""
+
+    args = function.args
+    return bool(
+        args.posonlyargs or args.args or args.kwonlyargs or args.vararg or args.kwarg or function.decorator_list
+    )
+
+
+class Declaration:
+    """Reads an expression as a declaration: only constants, names, attributes
+    of names, tuples, and calls of a constructor ``CONSTRUCTORS`` lists with
+    arguments of the same kind, noting each constructor it calls."""
+
+    def __init__(self, bindings):
+        self.bindings = bindings
+        self.constructors = []
+
+    def literal(self, node):
         if isinstance(node, (ast.Constant, ast.Name)):
             return True
         if isinstance(node, ast.Attribute):
-            return literal(node.value) and isinstance(node.value, (ast.Name, ast.Attribute))
+            return isinstance(node.value, (ast.Name, ast.Attribute)) and self.literal(node.value)
         if isinstance(node, ast.Tuple):
-            return all(literal(child) for child in node.elts)
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and bindings.get(node.func.id) in CONSTRUCTORS
-        ):
-            constructors.append(bindings[node.func.id])
-            return all(literal(child) for child in node.args) and all(
-                k.arg is not None and literal(k.value) for k in node.keywords
-            )
+            return all(self.literal(child) for child in node.elts)
+        if isinstance(node, ast.Call):
+            return self.constructor_call(node)
         return False
 
-    return literal(function.body[0].value) and bool(constructors)
+    def constructor_call(self, node):
+        target = self.bindings.get(node.func.id) if isinstance(node.func, ast.Name) else None
+        if target not in CONSTRUCTORS:
+            return False
+        self.constructors.append(target)
+        return all(self.literal(child) for child in node.args) and all(
+            k.arg is not None and self.literal(k.value) for k in node.keywords
+        )
 
 
 class Classifier:
@@ -114,26 +159,39 @@ class Classifier:
         return self.generator_matches(source)
 
     def generator_matches(self, source):
+        """Whether a tracked oapi-codegen directive beside ``source`` declares
+        it as its output, every file that directive names tracked."""
+
+        return any(
+            self.declared_output(adjacent.parent, *words[4:]) == source for adjacent, words in self.codegen(source)
+        )
+
+    def codegen(self, source):
+        """Each oapi-codegen directive in a tracked Go file beside ``source``,
+        split into its words, with the file it is in."""
+
         for adjacent in source.parent.glob("*.go"):
             if adjacent == source:
                 continue
             self.tracked(adjacent)
             for directive in self.go(str(adjacent.relative_to(self.root)))["Directives"] or []:
                 words = shlex.split(directive)
-                if len(words) != 6 or words[:4] != ["go", "tool", "oapi-codegen", "-config"]:
-                    continue
-                config = (adjacent.parent / words[4]).resolve()
-                schema = (adjacent.parent / words[5]).resolve()
-                for item in (config, schema):
-                    if not item.is_relative_to(self.root) or not item.is_file():
-                        raise ValueError("missing/outside generator provenance")
-                    self.tracked(item)
-                # Only the simple YAML scalar output supported by the actual configs;
-                # ambiguous/duplicate/nested declarations fail closed.
-                outputs = re.findall(r"^output: ([^\s#\"']+)$", config.read_text(), re.MULTILINE)
-                if len(outputs) == 1 and (adjacent.parent / outputs[0]).resolve() == source:
-                    return True
-        return False
+                if len(words) == 6 and words[:4] == ["go", "tool", "oapi-codegen", "-config"]:
+                    yield adjacent, words
+
+    def declared_output(self, directory, config_name, schema_name):
+        """The file a generator config declares as its output, or None, once
+        the config and schema are tracked files inside the checkout."""
+
+        config = (directory / config_name).resolve()
+        for item in (config, (directory / schema_name).resolve()):
+            if not item.is_relative_to(self.root) or not item.is_file():
+                raise ValueError("missing/outside generator provenance")
+            self.tracked(item)
+        # Only the simple YAML scalar output supported by the actual configs;
+        # ambiguous/duplicate/nested declarations fail closed.
+        outputs = re.findall(r"^output: ([^\s#\"']+)$", config.read_text(), re.MULTILINE)
+        return (directory / outputs[0]).resolve() if len(outputs) == 1 else None
 
     def pair(self, a, b):
         """Why a near pair of units is no duplicate, or None when it is one."""
@@ -235,38 +293,55 @@ def fingerprints(pages):
     refused unless the pages are whole: a partial answer would read as fewer
     duplicates than there are."""
 
+    units = [unit for row in whole_rows(pages) if (unit := fingerprinted(row))]
+    if not units:
+        raise ValueError("graph holds no fingerprinted function: the index is empty")
+    return units
+
+
+def whole_rows(pages):
+    """Every row of the answer, once its pages agree on one exact total, the
+    last says nothing more follows, and the rows add up to it."""
+
     rows, total = [], None
-    for payload in pages:
-        if payload.get("isError"):
-            raise ValueError("graph query failed")
-        answer = json.loads(payload["content"][0]["text"])
-        if answer.get("columns") != COLUMNS:
-            raise ValueError("unexpected graph columns")
+    for answer in map(page_answer, pages):
         if answer.get("total_relation") != "eq" or total not in (None, answer.get("total")):
             raise ValueError("graph total is not exact")
         total = answer["total"]
         rows += answer["rows"]
-    if total is None or not pages or (pages[-1] and json.loads(pages[-1]["content"][0]["text"]).get("has_more")):
+    if total is None or (pages[-1] and json.loads(pages[-1]["content"][0]["text"]).get("has_more")):
         raise ValueError("graph answer is not whole")
     if len(rows) != total:
         raise ValueError("graph row count mismatch")
-    units = []
-    for row in rows:
-        if len(row) != 4 or not all(isinstance(cell, str) for cell in row) or not row[0] or not row[1]:
-            raise ValueError("malformed function row")
-        path, name, owner, fp = row
-        if not fp:
-            # The graph leaves a body too small to compare without one.
-            continue
-        # 64 slots of 8 hex digits; the query answers all but the last digit,
-        # so the last slot compares on its first seven, as the graph's own
-        # SIMILAR_TO scores agree.
-        if not re.fullmatch(f"[0-9a-f]{{{SLOTS * 8 - 1},{SLOTS * 8}}}", fp):
-            raise ValueError("malformed fingerprint")
-        units.append(Unit(path, name, owner.rsplit(".", 1)[-1], tuple(fp[i : i + 8] for i in range(0, SLOTS * 8, 8))))
-    if not units:
-        raise ValueError("graph holds no fingerprinted function: the index is empty")
-    return units
+    return rows
+
+
+def page_answer(payload):
+    """One page's answer, refused when the query failed or answered other columns."""
+
+    if payload.get("isError"):
+        raise ValueError("graph query failed")
+    answer = json.loads(payload["content"][0]["text"])
+    if answer.get("columns") != COLUMNS:
+        raise ValueError("unexpected graph columns")
+    return answer
+
+
+def fingerprinted(row):
+    """The unit a well-formed row names, or None for a body the graph left
+    too small to compare without a fingerprint."""
+
+    if len(row) != 4 or not all(isinstance(cell, str) for cell in row) or not row[0] or not row[1]:
+        raise ValueError("malformed function row")
+    path, name, owner, fp = row
+    if not fp:
+        return None
+    # 64 slots of 8 hex digits; the query answers all but the last digit,
+    # so the last slot compares on its first seven, as the graph's own
+    # SIMILAR_TO scores agree.
+    if not re.fullmatch(f"[0-9a-f]{{{SLOTS * 8 - 1},{SLOTS * 8}}}", fp):
+        raise ValueError("malformed fingerprint")
+    return Unit(path, name, owner.rsplit(".", 1)[-1], tuple(fp[i : i + 8] for i in range(0, SLOTS * 8, 8)))
 
 
 def near_pairs(units):
@@ -275,20 +350,21 @@ def near_pairs(units):
     at least 23 of the 32 two-slot bands match whole: banding finds every such
     pair, never a sample of them."""
 
+    # Only units of one language pair, so the language is part of the bucket.
     buckets = defaultdict(list)
     for index, unit in enumerate(units):
+        language = Path(unit.path).suffix
         for band in range(BANDS):
-            buckets[(band, unit.slots[2 * band], unit.slots[2 * band + 1])].append(index)
+            buckets[(language, band, unit.slots[2 * band], unit.slots[2 * band + 1])].append(index)
     seen = set()
+    agreeing = THRESHOLD * SLOTS
     for members in buckets.values():
         for i, j in combinations(members, 2):
             if (i, j) in seen:
                 continue
             seen.add((i, j))
             a, b = units[i], units[j]
-            if Path(a.path).suffix != Path(b.path).suffix:
-                continue
-            if sum(x == y for x, y in zip(a.slots, b.slots, strict=True)) >= THRESHOLD * SLOTS:
+            if sum(map(eq, a.slots, b.slots, strict=True)) >= agreeing:
                 yield a, b
 
 

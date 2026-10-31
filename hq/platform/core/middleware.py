@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.auth import middleware as auth_middleware
+from django.template.response import SimpleTemplateResponse
 
 import hq.platform.core.logging as request_logging
 from hq.platform.application import request_context
@@ -36,21 +37,18 @@ _request_logger = logging.getLogger("severino.request")
 class DemoModeMiddleware:
     """Enter the substituting scope for a request whose session asked for it.
 
-    Middleware rather than a context processor, because the substitution has to
-    be in force while the view runs and not merely while the page renders,
-    every number on a page is decided long before a template sees it.
-
-    Session-scoped on purpose. The flag never leaves the browser that set it, so
-    it cannot follow an operator to a second device, cannot reach the API or the
-    MCP, and cannot be left switched on for somebody else. Anonymous requests
-    never carry one: the sign-in page has nothing to substitute, and a flag that
-    survives sign-out belongs to nobody.
+    Middleware, so the substitution is in force while the view decides every
+    number, not only while the page renders. Session-scoped, so the flag never
+    leaves the browser that set it: it cannot follow an operator to a second
+    device, reach the API or the MCP, or be left switched on for somebody else.
     """
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
+        # An anonymous request never carries the flag: the sign-in page has
+        # nothing to substitute, and a flag that survives sign-out belongs to nobody.
         showing = bool(signed_in(request) is not None and request.session.get(DEMO_SESSION_KEY))
         request.showing_demo = showing
         with demo_scope(showing):
@@ -144,10 +142,10 @@ class RequestContextMiddleware:
             request_context.unbind(bound)
             request_logging.reset_request_id(token)
 
-    def process_view(self, request, view_func, view_args, view_kwargs):
+    def process_view(self, request, view_func, _view_args, _view_kwargs):
         return speculation.before_view(request, view_func)
 
-    def process_exception(self, request, exception):
+    def process_exception(self, _request, exception):
         return speculation.on_exception(exception)
 
 
@@ -185,6 +183,6 @@ class ProjectionMiddleware:
         with projection_scope(seed=hq_self.serving(request)):
             response = self.get_response(request)
             # A template response renders after the view returns; inside the scope.
-            if hasattr(response, "render") and not getattr(response, "is_rendered", True):
+            if isinstance(response, SimpleTemplateResponse) and not response.is_rendered:
                 response.render()
             return response

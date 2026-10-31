@@ -13,8 +13,9 @@ each installed extension's, so an extension's plugin check holds it too."""
 
 import re
 
-from django.template.autoreload import get_template_directories
 from django.test import SimpleTestCase
+
+from hq.platform.application.tests.source import template_files
 
 # A heading closed, then (perhaps behind a condition) a span holding one value
 # and nothing else.
@@ -44,7 +45,7 @@ class CountPlacementTests(SimpleTestCase):
     maxDiff = None
 
     def test_every_bare_count_stands_in_its_heading(self):
-        pages = sorted({page for directory in get_template_directories() for page in directory.rglob("*.html")})
+        pages = [page for _name, page in template_files()]
         self.assertTrue(pages, "The count rule found no template to read.")
         found = {str(page): count for page in pages if (count := misplaced_counts(page.read_text(encoding="utf-8")))}
         self.assertEqual(found, {}, 'Write the count in its heading: <h2>Words <span class="count">N</span></h2>.')

@@ -1,0 +1,17 @@
+[Unit]
+Description=Read the Severino HQ dashboard when HQ asks for a refresh
+# HQ creates the glance doorbell, beside the controller's, when someone asks
+# for a dashboard reading. Like the controller's it carries no authority and
+# no data: the pass pulls its plan through the bridge.
+#
+# PathExists rather than PathChanged: the pass deletes the doorbell as it
+# starts, so one rung while it reads is still there when it ends, and systemd
+# starts it again then. A PathChanged event that arrives while the unit runs
+# is not looked at again when it stops.
+
+[Path]
+PathExists=/run/severino-hq/glance-doorbell
+Unit=severino-hq-glance.service
+
+[Install]
+WantedBy=paths.target

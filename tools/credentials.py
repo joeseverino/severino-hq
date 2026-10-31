@@ -1,21 +1,8 @@
 """Mint HQ's read-only observer credentials, and wire its GitHub App, on the operator's machine.
 
-    mise run mint:cloudflare --account ID [--store op://VAULT/ITEM/FIELD]
-    mise run mint:tailscale [--store REF --store-id REF]
-    mise run wire-github-app --vault VAULT --item ITEM --client-id ID [--extension OWNER/REPO ...]
-
-Each task's usage spec parses its flags, which this module reads through
-``hq.platform.core.tests.task.Usage``.
-
-A mint creates nothing unless it can store what it creates: a provider shows a
-secret once, so a credential created without being stored could never be used.
-A plain run states what it would create. ``--store`` checks the 1Password item
-carries each field first, then creates it and writes it there through ``op``.
-
-Secrets travel in memory and on stdin only: a bootstrap credential comes from
-the environment and goes out in a request header, a minted one goes into
-``op item edit``'s stdin. None reaches an argument list, a file, stdout or a
-message.
+The tasks `mint:cloudflare`, `mint:tailscale` and `wire-github-app` run it
+(docs/Secrets.md, Minting observer credentials). A secret travels in memory and
+on stdin only, and never reaches an argument list, a file, stdout or a message.
 """
 
 from __future__ import annotations
@@ -180,8 +167,10 @@ def https(call: Call) -> Any:
             raw = answer.read()
     except urllib.error.HTTPError as error:
         raw = error.read()
-    except (urllib.error.URLError, TimeoutError) as error:
-        raise Refused(f"{call.method} {call.url} failed: {getattr(error, 'reason', error)}") from None
+    except urllib.error.URLError as error:
+        raise Refused(f"{call.method} {call.url} failed: {error.reason}") from None
+    except TimeoutError as error:
+        raise Refused(f"{call.method} {call.url} failed: {error}") from None
     try:
         return json.loads(raw)
     except ValueError:
@@ -258,6 +247,8 @@ def mint(provider: Provider, session: Session, onepassword: OnePassword) -> None
     plan = provider.plan(session)
     if plan is None:
         return
+    # A provider shows a secret once, so nothing is created that cannot be stored:
+    # a run without stores says what it would create.
     if not stores:
         session.say(*plan.summary, provider.next_step)
         return
@@ -543,9 +534,9 @@ def admission_environment(programs: Programs, repository: str) -> None:
 def wire_github_app(usage: Usage, programs: Programs, out: IO[str]) -> None:
     """The host's HQ_APP_KEY and HQ_APP_CLIENT_ID secrets; on each extension, the key in ``admission`` and the ID.
 
-    The client ID is a secret too: not sensitive, but a variable is state
-    outside the repository that changes what a build does, which the posture
-    standard rejects, and a secret stays out of public logs.
+    The client ID is a secret too. A variable is state outside the repository
+    that changes what a build does, which the posture standard rejects, and a
+    secret stays out of public logs.
     """
 
     vault, item, client_id = usage.text("vault"), usage.text("item"), usage.text("client_id")

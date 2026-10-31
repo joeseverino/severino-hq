@@ -83,7 +83,7 @@ def _resource_status(resource: ManagedResource) -> tuple[str, str, str]:
 
 
 def _resource_actions(
-    resource: ManagedResource, principal: Principal, removal_pending: bool, manages
+    resource: ManagedResource, principal: Principal, *, removal_pending: bool, manages
 ) -> tuple[TopologyAction, ...]:
     key = resource.key
     actions = [
@@ -200,29 +200,20 @@ def _ability_actions(ability, ability_id: str, principal: Principal) -> tuple[To
 def _asserts_nothing(value: Any) -> bool:
     """Whether a declared value is the absence of a claim rather than a claim.
 
-    A spec is a full model dump, so every optional field a provider defines is
-    a key whether or not anyone set one. A TXT record carries a ``priority``
-    key because MX records exist; ``None`` there is the schema showing through.
-
-    ``False`` and ``0`` are claims, not absence: a device declaring key expiry
-    *on*, or an MX at priority zero, has said something checkable.
+    A spec is a full model dump, so a TXT record carries a ``priority`` key
+    because MX records exist; ``None`` there is the schema showing through.
+    ``False`` and ``0`` are claims: an MX at priority zero said something.
     """
 
-    return value is None or value == "" or value == [] or value == {}
+    return value is None or value in ("", [], {})
 
 
 def _unconfirmed(resource: ManagedResource, provider) -> tuple[str, ...]:
     """What this declaration asserts that the last reading did not echo back.
 
-    Drift is compared only across fields present in *both*, so a field the
-    reading omits is never judged: it is unverified rather than agreed.
-    Fields the provider declared it cannot report are excluded: those are a
-    known gap rather than a silent one. And a field carrying no value is
-    excluded because there is nothing there to confirm.
-
-    Without that last clause every DNS record that is not an MX would assert
-    an unconfirmed ``priority`` that nothing can clear, since the provider
-    correctly declines to read a priority back for a type that has none.
+    Drift compares only fields present in both, so a field the reading omits is
+    unverified rather than agreed. Fields the provider declared it cannot
+    report, and fields carrying no value, have nothing to confirm.
     """
 
     if not resource.last_observed_at or not isinstance(resource.status, dict):
@@ -235,7 +226,10 @@ def _unconfirmed(resource: ManagedResource, provider) -> tuple[str, ...]:
     # is a list that goes stale.
     if provider is not None and not provider.from_record:
         return ()
-    unobservable = set(getattr(provider, "unobservable_fields", ()) or ())
+    unobservable = set(provider.unobservable_fields if provider is not None else ())
+    # Without the empty-value clause every DNS record but an MX would assert an
+    # unconfirmed ``priority`` nothing can clear, since the provider rightly
+    # reads none back for a type that has none.
     return tuple(
         sorted(
             field
@@ -409,15 +403,13 @@ _HOSTNAME_SHAPE = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63
 def _measure(nodes: dict[str, TopologyNode]) -> None:
     """Give every node named like a host what that host actually served.
 
-    The join is the name, the same one the service page uses: analytics stores
-    a reading against a hostname and these nodes *are* hostnames, so no key
-    ties them and none is stored twice.
-
-    One query for the whole graph, and none at all when nothing in it is named
-    like a host: a deployment measuring nothing pays nothing, which is what
-    lets this sit in the shared projection rather than in one adapter.
+    Joined by name, as the service page joins: analytics stores a reading
+    against a hostname and these nodes *are* hostnames, so no key ties them.
+    It sits in the shared projection because a graph measuring nothing pays
+    nothing.
     """
 
+    # One query for the whole graph, and none when nothing is named like a host.
     candidates = {
         node.id: normalized_hostname(node.label)
         for node in nodes.values()
@@ -507,9 +499,9 @@ def relation_graph(*, principal: Principal) -> RelationGraph:
 @derivation(
     "estate.relations",
     reads=ESTATE_READS,
-    vary=lambda principal, build: estate_variant(principal),
+    vary=lambda principal, _build: estate_variant(principal),
 )
-def _relations(principal: Principal, build: Any) -> RelationGraph:
+def _relations(_principal: Principal, build: Any) -> RelationGraph:
     return build()
 
 
@@ -575,7 +567,9 @@ def _resource_nodes(resources, principal: Principal) -> dict[str, TopologyNode]:
             managed=resource.enabled,
             on_demand=bool((resource.spec or {}).get("on_demand")),
             unconfirmed_fields=_unconfirmed(resource, provider),
-            actions=_resource_actions(resource, principal, resource.key in pending_removal, manages),
+            actions=_resource_actions(
+                resource, principal, removal_pending=resource.key in pending_removal, manages=manages
+            ),
         )
     return nodes
 

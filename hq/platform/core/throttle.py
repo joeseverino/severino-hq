@@ -1,24 +1,10 @@
 """Make guessing a password expensive, using the record HQ already keeps.
 
-Single sign-on through Pocket ID is how a person signs in. The password form
-stays as the break-glass path for the day the identity provider is the thing
-that is broken, which means it is also the one credential in the fleet that
-can be attacked by simply trying, over and over, as fast as the network allows.
-Everything else in HQ verifies a signature; this verifies a guess.
-
-Note what is *not* introduced here: a second place that knows about failed
-logins. `user_login_failed` is already recorded to the audit log, because an
-operator needs to see attempts against their own account. A
-counter table beside it would hold the same fact twice and let the two disagree
-the throttle silent because its rows were pruned, the audit log showing an
-attack the whole time. Deriving the lockout from the audit trail means the
-evidence and the enforcement cannot come apart: whatever the log shows is
-exactly what the gate acted on.
-
-The window slides and nothing is written to lift a lock. A lock is not a state
-that gets set and cleared; it is a reading of recent history, so it expires by
-the passage of time alone. There is no unlock path to get stuck, and a
-restart cannot forget that an attack is in progress.
+The password form is the break-glass path beside single sign-on, and so the one
+credential in the fleet that verifies a guess rather than a signature, open to
+trying as fast as the network allows. A lockout is a reading of the failed
+logins the audit log already holds, so the evidence and the enforcement cannot
+come apart.
 """
 
 from dataclasses import dataclass
@@ -30,7 +16,7 @@ lazy from django.db.models import Q
 from .models import AuditLog
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Lockout:
     """Whether sign-in is barred right now, and for how much longer."""
 
@@ -42,6 +28,10 @@ class Lockout:
         return max(1, -(-self.seconds_remaining // 60))
 
 
+# No second place knows about failed logins: `user_login_failed` is already
+# audited, because an operator needs to see attempts against their own account,
+# and a counter table beside it could disagree, the throttle silent because its
+# rows were pruned while the audit log showed an attack the whole time.
 def _recent_failures(username: str, ip: str):
     window_start = timezone.now() - timezone.timedelta(seconds=settings.SEVERINO_LOGIN_WINDOW_SECONDS)
     failures = AuditLog.objects.filter(action=AuditLog.Action.LOGIN_FAILED, created_at__gte=window_start)
@@ -62,20 +52,23 @@ def _recent_failures(username: str, ip: str):
     return failures
 
 
+# The window slides and nothing is written to lift a lock, so it expires by the
+# passage of time alone: there is no unlock path to get stuck, and a restart
+# cannot forget that an attack is in progress.
 def lockout(username: str, ip: str) -> Lockout:
     """Read recent history and decide whether this attempt is allowed."""
 
     threshold = settings.SEVERINO_LOGIN_MAX_ATTEMPTS
     if threshold <= 0:
-        return Lockout(False)
+        return Lockout(locked=False)
     failures = _recent_failures(username or "", ip or "")
     recent = list(failures.order_by("-created_at").values_list("created_at", flat=True))
     if len(recent) < threshold:
-        return Lockout(False)
+        return Lockout(locked=False)
     # The lock runs from the most recent failure, so continuing to hammer the
     # form extends it rather than waiting it out.
     elapsed = (timezone.now() - recent[0]).total_seconds()
     remaining = settings.SEVERINO_LOGIN_WINDOW_SECONDS - elapsed
     if remaining <= 0:
-        return Lockout(False)
-    return Lockout(True, int(remaining))
+        return Lockout(locked=False)
+    return Lockout(locked=True, seconds_remaining=int(remaining))

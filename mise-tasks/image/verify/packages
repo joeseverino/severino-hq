@@ -1,0 +1,79 @@
+#!/bin/sh
+#MISE description="Its Python packages are the ones HQ loads: HQ imports whole, a password hashes and an HTTPS client starts without what the build deletes, and nothing else ships"
+#MISE env={SEVERINO_HEAVY_BOUND="30m"}
+#MISE hide=true
+#MISE depends=["image:build"]
+set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+
+# The build stage deletes parts of packages HQ never loads (Dockerfile). Every
+# module of hq and hq_sdk is imported, and the paths that load a package only
+# on use are taken, so one that reaches for a deleted part fails here rather
+# than on a request; a top-level module that ships and none of that loads is
+# named, as is a package's own tests or benchmarks.
+docker run --rm -i \
+    --env DJANGO_SECRET_KEY=ci-only-container-key-0123456789abcdef0123456789abcdef \
+    --env DJANGO_ALLOWED_HOSTS=127.0.0.1 \
+    --entrypoint python "${IMAGE:-severino-hq:ci-local}" - <<'PROBE'
+import importlib
+import pkgutil
+import sys
+import sysconfig
+from pathlib import Path
+
+import django
+
+django.setup()
+
+
+def fail(name):
+    raise  # walk_packages calls this inside its except, so this is the import's own error
+
+
+for root in ("hq", "hq_sdk"):
+    package = importlib.import_module(root)
+    for module in pkgutil.walk_packages(package.__path__, root + ".", onerror=fail):
+        if ".tests." not in module.name:
+            importlib.import_module(module.name)
+importlib.import_module("hq.config.asgi")
+
+# Loaded on use: a password hash runs argon2's bindings, which need cffi's
+# compiled backend alone; an HTTPS client loads its transport and trust store.
+import httpx2
+from django.contrib.auth.hashers import check_password, make_password
+
+assert check_password("an example password", make_password("an example password"))
+with httpx2.Client() as client:
+    try:
+        client.get("https://127.0.0.1:1/")
+    except httpx2.TransportError:
+        pass
+
+site = Path(sysconfig.get_path("purelib"))
+problems = []
+# pydantic loads its v1 API for a type defining the v1 hook, so with v1
+# deleted, nothing installed may define it.
+for path in [*site.rglob("*.py"), *Path("/app/hq").rglob("*.py"), *Path("/app/hq_sdk").rglob("*.py")]:
+    if path.is_relative_to(site / "pydantic"):
+        continue
+    if "def __get_validators__" in path.read_text(encoding="utf-8", errors="replace"):
+        problems.append(f"{path} defines __get_validators__, which needs pydantic.v1")
+
+loaded = {name.partition(".")[0] for name in sys.modules}
+for entry in sorted(site.iterdir()):
+    if entry.is_dir():
+        if not (entry / "__init__.py").is_file():
+            continue
+        name = entry.name
+        problems += [f"{child} is {name}'s own" for child in sorted(entry.iterdir()) if child.name in {"tests", "benchmarks"}]
+    elif entry.suffix in {".py", ".so"}:
+        name = entry.name.partition(".")[0]
+    else:
+        continue
+    if name not in loaded:
+        problems.append(f"{entry} ships and HQ never loads it")
+if problems:
+    sys.exit("Python packages the image ships and HQ never loads:\n" + "\n".join(problems))
+print("Python packages: HQ imports whole without what the build deletes, and every module that ships is one it loads")
+PROBE

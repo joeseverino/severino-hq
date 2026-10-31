@@ -8,6 +8,7 @@ from django.test import SimpleTestCase, TestCase
 
 from hq.platform.application import derivations
 from hq.platform.application.demo import demo_scope, showing_demo
+from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.derivations import DERIVATIONS, counting
 from hq.platform.application.plugins import (
     _identity,
@@ -79,7 +80,7 @@ class ProvidedTests(TestCase):
     def test_it_stands_a_minute_because_the_host_cannot_see_its_clock(self):
         items = provided("extension.example.unseen.attention", _counting_items)
 
-        with mock.patch.object(derivations, "_clock", return_value=MOMENT), projection_scope():
+        with frozen(MOMENT), projection_scope():
             items()
             until = derivations.standing(items).until
 
@@ -90,7 +91,7 @@ class ProvidedTests(TestCase):
         items = provided("extension.example.demo.attention", lambda: (showing_demo(), _readings()))
 
         real = _asked(items)
-        with demo_scope(True):
+        with demo_scope(showing=True):
             shown = _asked(items)
             with counting() as (ran, _served):
                 _asked(items)

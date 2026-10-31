@@ -40,7 +40,7 @@ const (
 // renderer holding the lock. Match with errors.Is.
 var (
 	ErrHost = errors.New("the host was refused")
-	ErrBusy = errors.New("Secret refresh is already running.")
+	ErrBusy = errors.New("secret refresh is already running")
 )
 
 type refusal struct{ message string }
@@ -447,10 +447,14 @@ func InPlace(root *os.Root, name string, data []byte, uid, gid int, mode fs.File
 	return true, nil
 }
 
-// Secret, Runtime and Web are the opened directories.
-func (t *Tree) Secret() *os.Root  { return t.secret }
+// Secret is the opened secret directory.
+func (t *Tree) Secret() *os.Root { return t.secret }
+
+// Runtime is the opened runtime directory.
 func (t *Tree) Runtime() *os.Root { return t.runtime }
-func (t *Tree) Web() *os.Root     { return t.web }
+
+// Web is the opened web directory.
+func (t *Tree) Web() *os.Root { return t.web }
 
 // RemoveMCPToken removes the token file earlier releases kept: nothing
 // accepts one, so none is kept.

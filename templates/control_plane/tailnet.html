@@ -46,7 +46,7 @@
           <tr>
             <td class="row-gutter">{% include "control_plane/_policy_names.html" with names=grant.sources %}{% row_toggle %}</td>
             <td>{% include "control_plane/_policy_names.html" with names=grant.destinations %}</td>
-            <td><span class="code-list">{% for ip, name in grant.rule.ports %}<code>{{ ip|breakable }}{% if name %} · {{ name|breakable }}{% endif %}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></td>
+            <td><span class="code-list">{% for ip, name in grant.rule.ports %}<code>{{ ip|breakable }}{% if name %}{% dot %}{{ name|breakable }}{% endif %}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></td>
           </tr>
         {% endfor %}
       </tbody>

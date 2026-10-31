@@ -294,3 +294,51 @@ class InZoneTests(TestCase):
             NameContext(hostname="a.example.com", public_zones=("example.net", "example.com")).public_zone,
             "example.com",
         )
+
+
+class ConnectionFactsTests(TestCase):
+    """What a connection's own readings say about it."""
+
+    def test_a_record_speaks_for_its_own_connection_or_for_every_one(self):
+        from hq.domains.control_plane.observations.adguard import DNS_KIND, FILTERING_OFF, PROTECTION_OFF
+
+        from ..facts import connection_facts
+
+        store(
+            DNS_KIND,
+            {"record": "dns", "connection_ref": "example-dns", "protection_enabled": False},
+            {"record": "dns", "connection_ref": "other-dns", "filtering_enabled": False},
+            {"record": "dns", "protection_enabled": False},
+        )
+
+        self.assertEqual(connection_facts("example-dns", "adguard"), ((PROTECTION_OFF, "Off"),))
+        self.assertEqual(
+            set(connection_facts("other-dns", "adguard")), {(PROTECTION_OFF, "Off"), (FILTERING_OFF, "Off")}
+        )
+        self.assertEqual(connection_facts("example-dns", "elsewhere"), ())
+
+    def test_a_reading_that_failed_says_nothing_about_its_connection(self):
+        from hq.domains.control_plane.observations.adguard import DNS_KIND
+
+        from ..facts import connection_facts
+
+        store(DNS_KIND, {"record": "dns", "protection_enabled": False}, reachable=False, error="refused")
+
+        self.assertEqual(connection_facts("example-dns", "adguard"), ())
+
+
+class InventoryAboutTests(TestCase):
+    def test_a_kind_no_provider_reads_joins_nothing(self):
+        from ..facts import Subject, inventory_about
+
+        self.assertEqual(inventory_about("example.unknown", Subject.of(hostnames=("www.example.com",))), ())
+
+    def test_a_record_its_provider_cannot_read_is_skipped(self):
+        from ..facts import Subject, inventory_about
+
+        kind, _other = dns_kinds()
+        store(kind, {"unexpected": True}, record_for(kind, "www.example.com", "192.0.2.10"))
+
+        joined = inventory_about(kind, Subject.of(hostnames=("www.example.com",)))
+
+        self.assertEqual(len(joined), 1)

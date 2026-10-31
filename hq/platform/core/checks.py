@@ -2,7 +2,7 @@
 
 A system check runs before every management command, so nothing here reads the
 source tree: a rule about source is an architecture test, which a gate runs
-once (``hq.platform.core.interface_text`` holds the ones about wording).
+once (``hq.platform.core.interface_text`` holds the ones about markup).
 """
 
 from django.conf import settings

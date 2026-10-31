@@ -40,11 +40,9 @@ type fakeServe struct {
 func (d *fakeDialer) deployments() int {
 	count := 0
 	for _, request := range d.http.requests {
-		if request.method == "RUN" {
-			if payload, ok := request.payload.(Object); ok {
-				if argv, ok := payload["argv"].([]string); ok && argv[0] == "ssh" && argv[len(argv)-1] == "deploy" {
-					count++
-				}
+		if request.method == "SSH" {
+			if payload, ok := request.payload.(Object); ok && payload["operation"] == "deploy" {
+				count++
 			}
 		}
 		if request.method == "POST" && strings.HasSuffix(request.path, "/upload") {
@@ -87,12 +85,9 @@ type fakeOutcome struct {
 
 var stagedPath = regexp.MustCompile(`/[^\s=]*hq-tls-[^/\s]+`)
 
-// commandKey names a command the way fixtures do.
+// commandKey names a local command the way fixtures do.
 func commandKey(argv []string) string {
-	switch argv[0] {
-	case "ssh":
-		return "ssh " + argv[len(argv)-1]
-	case "op":
+	if argv[0] == "op" {
 		return "op " + argv[1] + " " + argv[2]
 	}
 	return argv[0]
@@ -144,8 +139,19 @@ func (c *fakeCommander) exec(_ context.Context, commandArgv []string, input []by
 	if len(files) > 0 {
 		record["files"] = files
 	}
-	key := commandKey(commandArgv)
 	c.http.requests = append(c.http.requests, request{commandArgv[0], "RUN", record, ""})
+	return c.answer(commandKey(commandArgv))
+}
+
+// remote is the Commands.Remote the fake installs, answering an operation as
+// the fixtures' "ssh <operation>".
+func (c *fakeCommander) remote(_ context.Context, ref, operation string, input []byte) ([]byte, []byte, int, error) {
+	c.http.requests = append(c.http.requests, request{ref, "SSH", Object{"operation": operation, "input": decodeInput(input)}, ""})
+	return c.answer("ssh " + operation)
+}
+
+// answer is the outcome a fixture names for key, as a process would give it.
+func (c *fakeCommander) answer(key string) ([]byte, []byte, int, error) {
 	outcome, ok := c.outcomes[key]
 	if !ok {
 		return nil, nil, 1, nil

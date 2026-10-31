@@ -20,7 +20,7 @@ class HeldJobs:
     def __init__(self) -> None:
         self.waiting: list[tuple[Any, Any]] = []
 
-    def _thread(self, *, target: Any, args: tuple[Any, Any], **_named: Any) -> Any:
+    def thread(self, *, target: Any, args: tuple[Any, Any], **_named: Any) -> Any:  # noqa: ARG002 - threading.Thread's keyword
         self.waiting.append(args)
         return SimpleNamespace(start=lambda: None)
 
@@ -35,7 +35,7 @@ class HeldJobs:
         # The test's connection is the only one that can see the job.
         with mock.patch.object(runner, "close_old_connections"), mock.patch.object(runner, "connection"):
             for job_id, work in waiting:
-                runner._run(job_id, work)
+                runner.run_job(job_id, work)
 
 
 @contextmanager
@@ -44,6 +44,6 @@ def held_jobs() -> Iterator[HeldJobs]:
     # As a request leaves it: committed, so the job's start is held at once.
     with (
         mock.patch.object(runner, "_after_commit", lambda launch: launch()),
-        mock.patch.object(runner.threading, "Thread", held._thread),
+        mock.patch.object(runner.threading, "Thread", held.thread),
     ):
         yield held

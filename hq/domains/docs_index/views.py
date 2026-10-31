@@ -15,9 +15,8 @@ from django.views.generic import (
 )
 
 from hq.platform.application import related
-from hq.platform.application.documentation import (
-    sync_documentation,
-)
+from hq.platform.application.capabilities import capability_words, execute_capability
+from hq.platform.application.documentation import SYNC
 from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import (
@@ -31,7 +30,6 @@ from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from hq.platform.core.templatetags.value_tags import breakable
 
 from .forms import DocumentationRecordForm, ManifestImportForm
-from .importer import ManifestImportError
 from .models import DocumentationRecord
 
 DOCS_TRAIL = ("Docs", reverse_lazy("docs_index:list"))
@@ -176,7 +174,7 @@ class DocsDetailView(PageMixin, DetailView):
     def get_page_actions(self):
         doc_id = self.object.doc_id
         return (
-            PageAction("Edit", reverse("docs_index:edit", args=[doc_id])),
+            PageAction(capability_words("documentation.update"), reverse("docs_index:edit", args=[doc_id])),
             PageAction("Delete", reverse("docs_index:delete", args=[doc_id]), danger=True),
         )
 
@@ -239,14 +237,13 @@ class ManifestImportView(View):
         except json.JSONDecodeError as exc:
             messages.error(request, f"This file is not valid JSON: {exc}")
             return self.render_form(request, form)
-        try:
-            result = sync_documentation(
-                data,
-                principal=web_principal(request.user),
-                update_existing=form.cleaned_data["update_existing"],
-            )
-        except ManifestImportError as exc:
-            messages.error(request, f"Nothing was imported: {exc}")
+        result = execute_capability(
+            SYNC,
+            {"manifest": data, "update_existing": form.cleaned_data["update_existing"]},
+            principal=web_principal(request.user),
+        )
+        if "error" in result:
+            messages.error(request, f"Nothing was imported: {result['error']['message']}")
             return self.render_form(request, form)
         if not result["ok"]:
             messages.error(request, f"Nothing was imported. Fix these entries first: {result['problems']}")

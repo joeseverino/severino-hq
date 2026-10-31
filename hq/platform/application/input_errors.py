@@ -1,24 +1,10 @@
 """The one answer an ``invalid_input`` refusal carries: its message and details.
 
-Every validation failure an adapter answers with (a Pydantic command or query,
-a Django model's ``full_clean``, a field the command does not have) is told
-to the caller the same way: which field, and why, in ``error.message``, with the
-structured list in ``details``. The message is for a caller (often an agent)
-that reads only the sentence.
-
-Neither carries a submitted value. A payload can hold a secret, and an error
-travels further than the request did (into logs, the audit trail, idempotency
-records and agent transcripts) while the caller already has its own input. So
-both are built from field names, error types, expected types and declared
-choices only:
-
-- Pydantic's ``input``, ``url`` and ``ctx`` are dropped (``ctx`` can hold the
-  exception a validator raised, text and all).
-- Pydantic's ``msg`` is kept only for built-in error types, cut before the
-  clause where a few of them quote the input, and never for the types whose
-  text is the caller's or a validator's own.
-- Django's text is never used, because a model's messages interpolate values
-  freely. Its details are field names and error codes.
+Every validation failure an adapter answers with (Pydantic, a model's
+``full_clean``, an unknown field) is told the same way (docs/API.md#errors).
+Neither part carries a submitted value: a payload can hold a secret, and an
+error travels further than the request did (logs, the audit trail, idempotency
+records, agent transcripts) while the caller already has its own input.
 """
 
 import re
@@ -73,6 +59,8 @@ class Refusal:
 def pydantic_refusal(subject: str, errors: Iterable[Mapping[str, Any]]) -> Refusal:
     """A refusal from Pydantic-shaped errors, stripped of what the caller sent."""
 
+    # Pydantic's ``input``, ``url`` and ``ctx`` are dropped: ``ctx`` can hold
+    # the exception a validator raised, text and all.
     details = [
         {
             "type": error.get("type", ""),
@@ -86,8 +74,10 @@ def pydantic_refusal(subject: str, errors: Iterable[Mapping[str, Any]]) -> Refus
 
 
 def django_refusal(subject: str, exc: DjangoValidationError) -> Refusal:
-    """A refusal from a Django error, described by field and code, never text."""
+    """A refusal from a Django error, described by field and code, never text,
+    since a model's messages interpolate values freely."""
 
+    # Django gives an error built from a dict an error_dict, and any other none.
     grouped = exc.error_dict.items() if hasattr(exc, "error_dict") else [(NON_FIELD_ERRORS, exc.error_list)]
     details: dict[str, list[str]] = {}
     problems = []
@@ -138,12 +128,15 @@ def _path(loc: Sequence[Any]) -> str:
 def _safe_msg(error: Mapping[str, Any]) -> str:
     """Pydantic's own text, when it cannot hold the input; otherwise empty."""
 
+    # Only a built-in type's text, never one whose text is the caller's or a
+    # validator's own.
     kind = error.get("type", "")
     if kind not in _PYDANTIC_TYPES or kind in _OPAQUE:
         return ""
     if kind in _CHOICE:
         # Only the declared choices, which may themselves hold ", ".
         return str(error.get("msg", ""))
+    # Cut before the clause where a few built-in types quote the input.
     return _ERROR_CLAUSE.split(str(error.get("msg", "")), maxsplit=1)[0]
 
 

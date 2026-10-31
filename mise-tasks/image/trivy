@@ -1,10 +1,13 @@
 #!/bin/sh
 #MISE description="Trivy over an image, as Compose scans the composed one: fixable HIGH and CRITICAL fail"
+#MISE env={SEVERINO_HEAVY_BOUND="30m"}
 #MISE hide=true
 #USAGE arg "[image]" help="The image to scan; without one, the host image is built and scanned"
 
 # The Trivy mise.toml pins, which Compose scans with too, with its flags.
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 
 image="${usage_image:-}"
 if [ -z "${image}" ]; then

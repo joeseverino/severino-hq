@@ -71,41 +71,72 @@ func TestRuntimePathRefusals(t *testing.T) {
 }
 
 func TestOpenRefusesAnUnsafeRuntimeDirectory(t *testing.T) {
-	cases := map[string]func(*Layout){
-		"open to the group":   func(l *Layout) { os.Chmod(l.RuntimeDir, 0o750) },
-		"open to everyone":    func(l *Layout) { os.Chmod(l.RuntimeDir, 0o755) },
-		"closed to its owner": func(l *Layout) { os.Chmod(l.RuntimeDir, 0o500) },
-		"another owner":       func(l *Layout) { l.RootUID++ },
-		"missing":             func(l *Layout) { os.Remove(l.RuntimeDir) },
-		"a file":              func(l *Layout) { os.Remove(l.RuntimeDir); os.WriteFile(l.RuntimeDir, nil, 0o600) },
-		"a link": func(l *Layout) {
-			real := l.RuntimeDir + "-real"
-			os.Rename(l.RuntimeDir, real)
-			os.Symlink(real, l.RuntimeDir)
+	cases := map[string]func(*testing.T, *Layout){
+		"open to the group": func(t *testing.T, l *Layout) {
+			if err := os.Chmod(l.RuntimeDir, 0o750); err != nil {
+				t.Fatal(err)
+			}
 		},
-		"reached through a link": func(l *Layout) {
+		"open to everyone": func(t *testing.T, l *Layout) {
+			if err := os.Chmod(l.RuntimeDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"closed to its owner": func(t *testing.T, l *Layout) {
+			if err := os.Chmod(l.RuntimeDir, 0o500); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"another owner": func(_ *testing.T, l *Layout) { l.RootUID++ },
+		"missing":       func(_ *testing.T, l *Layout) { os.Remove(l.RuntimeDir) },
+		"a file": func(t *testing.T, l *Layout) {
+			os.Remove(l.RuntimeDir)
+			if err := os.WriteFile(l.RuntimeDir, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"a link": func(t *testing.T, l *Layout) {
+			moved := l.RuntimeDir + "-real"
+			if err := os.Rename(l.RuntimeDir, moved); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(moved, l.RuntimeDir); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"reached through a link": func(t *testing.T, l *Layout) {
 			parent := filepath.Dir(l.RuntimeDir)
-			os.Symlink(parent, parent+"-link")
+			if err := os.Symlink(parent, parent+"-link"); err != nil {
+				t.Fatal(err)
+			}
 			l.RuntimeDir = filepath.Join(parent+"-link", "runtime")
 			l.WebDir = filepath.Join(l.RuntimeDir, "web")
 		},
-		"the doorbell directory": func(l *Layout) { l.RuntimeDir = "/run/severino-hq" },
-		"a web directory that is a link": func(l *Layout) {
+		"the doorbell directory": func(_ *testing.T, l *Layout) { l.RuntimeDir = "/run/severino-hq" },
+		"a web directory that is a link": func(t *testing.T, l *Layout) {
 			elsewhere := l.RuntimeDir + "-elsewhere"
-			os.Mkdir(elsewhere, 0o700)
-			os.Symlink(elsewhere, l.WebDir)
+			if err := os.Mkdir(elsewhere, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(elsewhere, l.WebDir); err != nil {
+				t.Fatal(err)
+			}
 		},
-		"a secret directory that is a link": func(l *Layout) {
+		"a secret directory that is a link": func(t *testing.T, l *Layout) {
 			elsewhere := l.RuntimeDir + "-elsewhere"
-			os.Mkdir(elsewhere, 0o700)
-			os.Symlink(elsewhere, l.SecretDir)
+			if err := os.Mkdir(elsewhere, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(elsewhere, l.SecretDir); err != nil {
+				t.Fatal(err)
+			}
 		},
-		"a relative secret directory": func(l *Layout) { l.SecretDir = "secrets" },
+		"a relative secret directory": func(_ *testing.T, l *Layout) { l.SecretDir = "secrets" },
 	}
 	for name, change := range cases {
 		t.Run(name, func(t *testing.T) {
 			found := layout(t)
-			change(&found)
+			change(t, &found)
 			tree, err := Open(found, tmpfs)
 			if !errors.Is(err, ErrHost) {
 				tree.Close()
@@ -165,7 +196,9 @@ func TestALinkedDirectoryIsNotReownedOrRemoded(t *testing.T) {
 			if err := os.Mkdir(elsewhere, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			os.Chmod(elsewhere, 0o755)
+			if err := os.Chmod(elsewhere, 0o755); err != nil {
+				t.Fatal(err)
+			}
 			if err := os.Symlink(elsewhere, place(&found)); err != nil {
 				t.Fatal(err)
 			}
@@ -239,10 +272,14 @@ func TestInPlaceRefusesWhatIsNotAFileOfItsOwn(t *testing.T) {
 		}
 	}
 	// A link planted at the name: not followed.
-	os.Symlink(system, filepath.Join(dir, "linked"))
+	if err := os.Symlink(system, filepath.Join(dir, "linked")); err != nil {
+		t.Fatal(err)
+	}
 	refused("linked", "a symlink destination")
 	// A link that dangles is still not a file.
-	os.Symlink(filepath.Join(dir, "nowhere"), filepath.Join(dir, "dangling"))
+	if err := os.Symlink(filepath.Join(dir, "nowhere"), filepath.Join(dir, "dangling")); err != nil {
+		t.Fatal(err)
+	}
 	refused("dangling", "a dangling symlink")
 	if _, err := os.Lstat(filepath.Join(dir, "nowhere")); err == nil {
 		t.Fatal("a dangling link was written through")
@@ -253,10 +290,14 @@ func TestInPlaceRefusesWhatIsNotAFileOfItsOwn(t *testing.T) {
 	}
 	refused("hardlinked", "a hard-linked destination")
 	// A directory where a file should be.
-	os.Mkdir(filepath.Join(dir, "dir"), 0o700)
+	if err := os.Mkdir(filepath.Join(dir, "dir"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	refused("dir", "a directory destination")
 	// Another account's file.
-	os.WriteFile(filepath.Join(dir, "foreign"), []byte("theirs"), 0o600)
+	if err := os.WriteFile(filepath.Join(dir, "foreign"), []byte("theirs"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if changed, err := InPlace(tree.Web(), "foreign", []byte("x"), uid+1, gid, 0o400); !errors.Is(err, ErrHost) || changed {
 		t.Fatalf("another account's file was written: %v", err)
 	}
@@ -277,7 +318,9 @@ func TestInPlaceRefusesWhatIsNotAFileOfItsOwn(t *testing.T) {
 func TestReadTrustsOnlyTheRenderersOwnFile(t *testing.T) {
 	tree := open(t)
 	dir, uid := tree.Layout.RuntimeDir, os.Getuid()
-	os.WriteFile(filepath.Join(dir, "own"), []byte("value"), 0o400)
+	if err := os.WriteFile(filepath.Join(dir, "own"), []byte("value"), 0o400); err != nil {
+		t.Fatal(err)
+	}
 	if data, ok := Read(tree.Runtime(), "own", uid, 0o400); !ok || string(data) != "value" {
 		t.Fatal("an own file is not trusted")
 	}
@@ -287,11 +330,15 @@ func TestReadTrustsOnlyTheRenderersOwnFile(t *testing.T) {
 	if _, ok := Read(tree.Runtime(), "own", uid, 0o600); ok {
 		t.Fatal("a file with another mode is trusted")
 	}
-	os.Symlink(filepath.Join(dir, "own"), filepath.Join(dir, "linked"))
+	if err := os.Symlink(filepath.Join(dir, "own"), filepath.Join(dir, "linked")); err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := Read(tree.Runtime(), "linked", uid, 0o400); ok {
 		t.Fatal("a link is trusted")
 	}
-	os.Link(filepath.Join(dir, "own"), filepath.Join(dir, "hard"))
+	if err := os.Link(filepath.Join(dir, "own"), filepath.Join(dir, "hard")); err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := Read(tree.Runtime(), "own", uid, 0o400); ok {
 		t.Fatal("a hard-linked file is trusted")
 	}
@@ -327,7 +374,9 @@ func TestLockRefusesASecondRenderer(t *testing.T) {
 	again()
 	// The lock is a file of its own; a link at its name is not followed.
 	os.Remove(filepath.Join(found.RuntimeDir, lockName))
-	os.Symlink(filepath.Join(found.RuntimeDir, "elsewhere"), filepath.Join(found.RuntimeDir, lockName))
+	if err := os.Symlink(filepath.Join(found.RuntimeDir, "elsewhere"), filepath.Join(found.RuntimeDir, lockName)); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := first.Lock(); !errors.Is(err, ErrHost) {
 		t.Fatalf("a linked lock file was followed: %v", err)
 	}
@@ -349,7 +398,9 @@ func TestSSHLockWaitsForAReaderAndGivesUpWithTheContext(t *testing.T) {
 	if _, err := tree.LockSSH(ctx); !errors.Is(err, ErrHost) {
 		t.Fatalf("the exclusive lock was taken over a reader: %v", err)
 	}
-	syscall.Flock(int(reader.Fd()), syscall.LOCK_UN)
+	if err := syscall.Flock(int(reader.Fd()), syscall.LOCK_UN); err != nil {
+		t.Fatal(err)
+	}
 	unlock, err := tree.LockSSH(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -364,9 +415,15 @@ func TestStagingIsPrivateAndOnlyItsOwnIsRemoved(t *testing.T) {
 	tree := open(t)
 	runtime := tree.Layout.RuntimeDir
 	// A directory a killed run left, and a launcher's run directory beside it.
-	os.MkdirAll(filepath.Join(runtime, ".refresh.abandoned", "ssh"), 0o700)
-	os.WriteFile(filepath.Join(runtime, ".refresh.abandoned", "ssh", "edge"), []byte("old key"), 0o400)
-	os.Mkdir(filepath.Join(runtime, "run.launcher"), 0o700)
+	if err := os.MkdirAll(filepath.Join(runtime, ".refresh.abandoned", "ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runtime, ".refresh.abandoned", "ssh", "edge"), []byte("old key"), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(runtime, "run.launcher"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	stage, err := tree.NewStage()
 	if err != nil {
 		t.Fatal(err)
@@ -458,12 +515,16 @@ func TestRenameInstallReplacesTheInodeOnlyWhenTheFileDiffers(t *testing.T) {
 		t.Fatal("a file its comparison calls the same was replaced")
 	}
 	// A wrong mode, a link and a directory at the name are all replaced by the file.
-	os.Chmod(path, 0o644)
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if !install("two", nil) {
 		t.Fatal("a file with the wrong mode was kept")
 	}
 	os.Remove(path)
-	os.Symlink(filepath.Join(runtime, "elsewhere"), path)
+	if err := os.Symlink(filepath.Join(runtime, "elsewhere"), path); err != nil {
+		t.Fatal(err)
+	}
 	if !install("four", nil) || read(t, path) != "four" {
 		t.Fatal("a link at the name was kept")
 	}
@@ -471,7 +532,9 @@ func TestRenameInstallReplacesTheInodeOnlyWhenTheFileDiffers(t *testing.T) {
 		t.Fatal("the link was written through")
 	}
 	os.Remove(path)
-	os.MkdirAll(filepath.Join(path, "nested"), 0o700)
+	if err := os.MkdirAll(filepath.Join(path, "nested"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	if !install("five", nil) || read(t, path) != "five" {
 		t.Fatal("a directory at the name was kept")
 	}
@@ -484,9 +547,13 @@ func TestPruneDropsEverythingNotWanted(t *testing.T) {
 	}
 	dir := filepath.Join(tree.Layout.RuntimeDir, SSHDirName)
 	for _, name := range []string{"edge", "edge.pub", "retired", ".hidden"} {
-		os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o400)
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o400); err != nil {
+			t.Fatal(err)
+		}
 	}
-	os.MkdirAll(filepath.Join(dir, "stray", "deep"), 0o700)
+	if err := os.MkdirAll(filepath.Join(dir, "stray", "deep"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	changed, err := tree.PruneSSH(map[string]bool{"edge": true, "edge.pub": true})
 	if err != nil || !changed {
 		t.Fatal(err)
@@ -500,7 +567,9 @@ func TestPruneDropsEverythingNotWanted(t *testing.T) {
 	}
 	// A link in place of the directory is refused, not followed.
 	os.RemoveAll(dir)
-	os.Symlink(tree.Layout.SecretDir, dir)
+	if err := os.Symlink(tree.Layout.SecretDir, dir); err != nil {
+		t.Fatal(err)
+	}
 	if err := tree.EnsureSSHDir(); !errors.Is(err, ErrHost) {
 		t.Fatalf("a linked identity directory was accepted: %v", err)
 	}

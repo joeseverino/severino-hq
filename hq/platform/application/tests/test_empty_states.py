@@ -1,7 +1,5 @@
 import re
-from pathlib import Path
 
-from django.conf import settings
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
@@ -17,14 +15,14 @@ from ..entity_links import connection_anchor
 from ..page_reads import Remedy, need, pages_reading, readers, remedy, setup_url
 from ..pages import PageAction, page_context
 from .markup import all_elements, elements, hrefs, text as page_text, texts, with_class
+from .source import template_files
 
 PARTIAL = "partials/_empty_state.html"
-TEMPLATES = Path(settings.BASE_DIR) / "templates"
 
 
 def _templates():
-    for path in sorted(TEMPLATES.rglob("*.html")):
-        yield path.relative_to(TEMPLATES).as_posix(), path.read_text()
+    for name, path in template_files():
+        yield name, path.read_text(encoding="utf-8")
 
 
 class OneEmptyStateTests(SimpleTestCase):

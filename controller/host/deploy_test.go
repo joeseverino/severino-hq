@@ -141,7 +141,9 @@ func TestAFullDiskStopsADeployBeforeThePull(t *testing.T) {
 func TestAHealthyReleaseIsSyncedInstalledAndReleasesTheHold(t *testing.T) {
 	f := newFakeHost(t)
 	f.active = []string{"severino-hq-secrets.timer", "severino-hq-controller.path"}
-	f.machine.Record(running)
+	if err := f.machine.Record(running); err != nil {
+		t.Fatal(err)
+	}
 	d, _ := newDeployer(f)
 
 	if err := d.Release(context.Background(), next); err != nil {
@@ -164,19 +166,70 @@ func TestAHealthyReleaseIsSyncedInstalledAndReleasesTheHold(t *testing.T) {
 	}
 	f.before(t, "systemctl restart "+WebUnit, filepath.Join(f.machine.Lib, "deploy", "bin", "hq-host")+" install")
 	f.before(t, filepath.Join(f.machine.Lib, "deploy", "bin", "hq-host")+" install", "systemctl start severino-hq-controller.path")
+	// The release just installed is verified before the deploy ends.
+	f.before(t, "systemctl start severino-hq-controller.path", "systemctl start "+DriftUnit)
 	if leftovers, _ := filepath.Glob(filepath.Join(f.machine.Sbin, "severino-hq-*")); len(leftovers) != 0 {
 		t.Errorf("a program was installed outside the tree: %v", leftovers)
+	}
+}
+
+// Drift found after a healthy release fails the deploy and leaves the release
+// standing: rolling back would not mend the host.
+// A deploy waits out a glance pass as it does a controller pass: each is a
+// container of the running image that the new one would fail under.
+func TestTheHoldWaitsOutEveryPassUnderWay(t *testing.T) {
+	for _, unit := range []string{ControllerUnit, GlanceUnit, SecretsUnit} {
+		t.Run(unit, func(t *testing.T) {
+			f := newFakeHost(t)
+			f.active = []string{unit}
+			d, _ := newDeployer(f)
+
+			if _, err := d.hold(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+
+			if !strings.Contains(f.out.String(), "still going") {
+				t.Errorf("the hold did not wait for %s", unit)
+			}
+		})
+	}
+}
+
+func TestDriftAfterTheReleaseFailsTheDeployAndKeepsTheRelease(t *testing.T) {
+	f := newFakeHost(t)
+	if err := f.machine.Record(running); err != nil {
+		t.Fatal(err)
+	}
+	f.fail = []string{"systemctl start " + DriftUnit}
+	d, _ := newDeployer(f)
+
+	if err := d.Release(context.Background(), next); err == nil {
+		t.Fatal("a deploy that left the host off its release passed")
+	}
+
+	data, _ := os.ReadFile(f.machine.ReleasePath())
+	if strings.TrimSpace(string(data)) != next {
+		t.Errorf("the release was rolled back to %q", data)
+	}
+	if !strings.Contains(f.out.String(), "journalctl -u "+DriftUnit) {
+		t.Errorf("the deploy does not say where verify's findings are:\n%s", f.out.String())
 	}
 }
 
 func TestAnUnhealthyReleaseIsRolledBack(t *testing.T) {
 	f := newFakeHost(t)
 	f.active = []string{"severino-hq-secrets.timer"}
-	f.machine.Record(running)
+	if err := f.machine.Record(running); err != nil {
+		t.Fatal(err)
+	}
 	marker := filepath.Join(f.machine.Lib, "previous-release")
-	os.WriteFile(marker, []byte("kept"), 0o644)
+	if err := os.WriteFile(marker, []byte("kept"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	previousUnit := filepath.Join(f.machine.Systemd, "severino-hq-controller.service")
-	os.WriteFile(previousUnit, []byte("previous\n"), 0o644)
+	if err := os.WriteFile(previousUnit, []byte("previous\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	f.fail = []string{"systemctl restart " + WebUnit}
 	d, _ := newDeployer(f)
 
@@ -211,9 +264,13 @@ func TestAnUnhealthyReleaseIsRolledBack(t *testing.T) {
 
 func TestAFailedInstallRollsTheTreeAndImageBack(t *testing.T) {
 	f := newFakeHost(t)
-	f.machine.Record(running)
+	if err := f.machine.Record(running); err != nil {
+		t.Fatal(err)
+	}
 	marker := filepath.Join(f.machine.Lib, "previous-release")
-	os.WriteFile(marker, []byte("kept"), 0o644)
+	if err := os.WriteFile(marker, []byte("kept"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	f.fail = []string{filepath.Join(f.machine.Lib, "deploy", "bin", "hq-host") + " install"}
 	d, _ := newDeployer(f)
 
@@ -256,15 +313,21 @@ func TestNoRecordedReleaseNoDeploy(t *testing.T) {
 // data is the fake data volume, where the database and its kept copy live.
 func (f *fakeHost) data() string {
 	dir := filepath.Join(f.root, "volumes", "severino-hq_severino_data")
-	os.MkdirAll(dir, 0o755)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		f.t.Fatal(err)
+	}
 	return dir
 }
 
 func TestAReleaseThatMigratedAndFailedPutsTheDatabaseBack(t *testing.T) {
 	f := newFakeHost(t)
-	f.machine.Record(running)
+	if err := f.machine.Record(running); err != nil {
+		t.Fatal(err)
+	}
 	database := filepath.Join(f.data(), Database)
-	os.WriteFile(database, []byte("previous schema"), 0o600)
+	if err := os.WriteFile(database, []byte("previous schema"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	// The new image's boot keeps the database, migrates it, then never
 	// becomes healthy. The previous image's boot finds nothing to migrate.
 	booted := false
@@ -274,9 +337,15 @@ func TestAReleaseThatMigratedAndFailedPutsTheDatabaseBack(t *testing.T) {
 		}
 		booted = true
 		data, _ := os.ReadFile(database)
-		os.WriteFile(filepath.Join(f.data(), SchemaSnapshot), data, 0o600)
-		os.WriteFile(database, []byte("migrated schema"), 0o600)
-		os.WriteFile(database+"-wal", []byte("migrated log"), 0o600)
+		if err := os.WriteFile(filepath.Join(f.data(), SchemaSnapshot), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(database, []byte("migrated schema"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(database+"-wal", []byte("migrated log"), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	f.fail = []string{"systemctl restart " + WebUnit}
 	d, _ := newDeployer(f)
@@ -304,11 +373,17 @@ func TestAReleaseThatMigratedAndFailedPutsTheDatabaseBack(t *testing.T) {
 
 func TestAReleaseThatFailedWithoutMigratingLeavesTheDatabase(t *testing.T) {
 	f := newFakeHost(t)
-	f.machine.Record(running)
+	if err := f.machine.Record(running); err != nil {
+		t.Fatal(err)
+	}
 	database := filepath.Join(f.data(), Database)
-	os.WriteFile(database, []byte("current"), 0o600)
+	if err := os.WriteFile(database, []byte("current"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	// Kept by an earlier release: not the database this one found.
-	os.WriteFile(filepath.Join(f.data(), SchemaSnapshot), []byte("stale"), 0o600)
+	if err := os.WriteFile(filepath.Join(f.data(), SchemaSnapshot), []byte("stale"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	f.fail = []string{"systemctl restart " + WebUnit}
 	d, _ := newDeployer(f)
 
@@ -326,9 +401,15 @@ func TestAReleaseThatFailedWithoutMigratingLeavesTheDatabase(t *testing.T) {
 
 func TestAReleaseThatStandsDropsTheDatabaseItKept(t *testing.T) {
 	f := newFakeHost(t)
-	f.machine.Record(running)
+	if err := f.machine.Record(running); err != nil {
+		t.Fatal(err)
+	}
 	kept := filepath.Join(f.data(), SchemaSnapshot)
-	f.boot = func() { os.WriteFile(kept, []byte("before"), 0o600) }
+	f.boot = func() {
+		if err := os.WriteFile(kept, []byte("before"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	d, _ := newDeployer(f)
 
 	if err := d.Release(context.Background(), next); err != nil {

@@ -9,11 +9,11 @@ here names one.
 {% endcomment %}
 <header class="page-head dash-head">
   <div class="dash-hello">
-    <p class="dash-date">{{ calendar.today|date:"l" }}, {{ calendar.today|when:"day" }}</p>
+    <p class="dash-date">{{ calendar.today|when:"weekday" }}, {{ calendar.today|when:"day" }}</p>
     <h1>{{ greeting|breakable }}</h1>
     <p class="dash-status">
       {% if action_queue_count %}
-        <a href="{% url 'action_items' %}"><strong>{{ action_queue_count|counted:"thing needs you,things need you" }}</strong></a>{% if notice_count %} <span class="muted">· {{ notice_count|counted:"notice,notices" }}</span>{% endif %}
+        <a href="{% url 'action_items' %}"><strong>{{ action_queue_count|counted:"thing needs you,things need you" }}</strong></a>{% if notice_count %}<span class="muted">{% dot %}{{ notice_count|counted:"notice,notices" }}</span>{% endif %}
       {% elif notice_count %}
         Nothing needs you. <a href="{% url 'action_items' %}">{{ notice_count|counted:"notice,notices" }}</a>
       {% elif aside_count %}
@@ -41,10 +41,11 @@ Anything else, or more than NEEDS_YOU_IN_PLACE, is only the count above and in
 the header.
 {% endcomment %}
 {% if needs_you %}
-<section class="card dash-needs tone-serious" aria-labelledby="dash-needs-title" data-triage-routes data-dismiss="{% url 'action_items_set_aside' %}" data-restore="{% url 'action_items_bring_back' %}">
+{% url 'action_items_set_aside' as set_aside_url %}{% url 'action_items_bring_back' as bring_back_url %}
+{% card css="dash-needs tone-serious" heading="dash-needs-title" data_triage_routes=True data_dismiss=set_aside_url data_restore=bring_back_url %}
   {% section_head id="dash-needs-title" %}Needs you{% endsection_head %}
   {% include "partials/_queue_glance.html" with items=needs_you only %}
-</section>
+{% endcard %}
 {% endif %}
 
 {% comment %}
@@ -52,8 +53,8 @@ A new HQ's first steps (application/getting_started.py). Derived, not stored;
 the row is gone once every step is done.
 {% endcomment %}
 {% if getting_started %}
-<section class="card dash-start" aria-labelledby="dash-start-title">
-  {% section_head id="dash-start-title" %}Get started{% aside %}<span class="count">{{ getting_started_left|breakable }} left{% if install_guide %} · {% entity install_guide|outside label="Install guide" %}{% endif %}</span>{% endsection_head %}
+{% card css="dash-start" heading="dash-start-title" %}
+  {% section_head id="dash-start-title" %}Get started{% aside %}<span class="count">{{ getting_started_left|breakable }} left{% if install_guide %}{% dot %}{% entity install_guide|outside label="Install guide" %}{% endif %}</span>{% endsection_head %}
   <ol class="step-list">
     {% for step in getting_started %}
       <li{% if step.done %} class="is-done"{% endif %}>
@@ -62,7 +63,7 @@ the row is gone once every step is done.
       </li>
     {% endfor %}
   </ol>
-</section>
+{% endcard %}
 {% endif %}
 
 {% include "core/_dashboard_highlights.html" %}
@@ -93,8 +94,8 @@ is said here, over the ones most recently changed, and nowhere else on the page.
 <section class="dashboard-patterns" aria-label="The month and the work">
   {% partialdef calendar inline %}
   {% if not calendar.empty %}
-  <section class="card calendar-month is-compact" id="dashboard-calendar" data-fragment data-fragment-name="calendar" data-fragment-links data-fragment-history="replace" aria-labelledby="dashboard-calendar-title">
-    {% section_head id="dashboard-calendar-title" %}<a href="{% url 'calendar:month' %}?month={{ calendar.month|date:'Y-m' }}">{{ calendar.month|date:"F Y" }}</a>{% aside %}
+  {% card css="calendar-month is-compact" id="dashboard-calendar" heading="dashboard-calendar-title" data_fragment=True data_fragment_name="calendar" data_fragment_links=True data_fragment_history="replace" %}
+    {% section_head id="dashboard-calendar-title" %}<a href="{{ calendar.url }}">{{ calendar.month|when:"month" }}</a>{% aside %}
       <nav class="calendar-nav" aria-label="Change month">
         <a href="{{ calendar_paging.previous }}" rel="prev" aria-label="Previous month">&lsaquo;</a>
         {% if not calendar.is_current %}<a class="calendar-now" href="{{ calendar_paging.today }}">Today</a>{% endif %}
@@ -102,12 +103,12 @@ is said here, over the ones most recently changed, and nowhere else on the page.
       </nav>
     {% endsection_head %}
     {% include "calendars/_month_grid.html" %}
-  </section>
+  {% endcard %}
   {% endif %}
   {% endpartialdef %}
 
-  <section class="card">
-    {% section_head %}Projects{% aside %}{% if active_project_count %}<span class="count">{{ active_project_count|breakable }} active{% if projects_needing_output %} · {{ projects_needing_output|counted:"has no writeup or doc,have no writeup or doc" }}{% endif %}</span>{% endif %}{% endsection_head %}
+  {% card %}
+    {% section_head %}Projects{% aside %}{% if active_project_count %}<span class="count">{{ active_project_count|breakable }} active{% if projects_needing_output %}{% dot %}{{ projects_needing_output|counted:"has no writeup or doc,have no writeup or doc" }}{% endif %}</span>{% endif %}{% endsection_head %}
     {% if active_projects %}
       <ul class="list-rows">
         {% for p in active_projects %}
@@ -121,23 +122,23 @@ is said here, over the ones most recently changed, and nowhere else on the page.
           </li>
         {% endfor %}
       </ul>
-      <p class="section-foot"><a href="{% url 'projects:list' %}">All projects &rarr;</a></p>
+      <p class="section-foot"><a href="{% url 'projects:list' %}">All projects{% arrow %}</a></p>
     {% else %}
-      <p class="dash-empty">No active projects. <a href="{% url 'projects:create' %}">Add one &rarr;</a></p>
+      <p class="dash-empty">No active projects. <a href="{% url 'projects:create' %}">Add one{% arrow %}</a></p>
     {% endif %}
-  </section>
+  {% endcard %}
 
   {% if content_rows or published_rows %}
-  <section class="card">
+  {% card %}
     {% section_head %}Publishing{% aside %}{% if draft_content_count %}<span class="count">{{ draft_content_count|counted:"draft" }}</span>{% endif %}{% endsection_head %}
     {% if content_rows %}
       {% include "partials/_record_list.html" with rows=content_rows %}
-      <p class="section-foot"><a href="{% url 'content:list' %}?status=draft">Drafts &rarr;</a></p>
+      <p class="section-foot"><a href="{% url 'content:list' %}?status=draft">Drafts{% arrow %}</a></p>
     {% else %}
       {% include "partials/_record_list.html" with rows=published_rows %}
-      <p class="section-foot"><a href="{% url 'content:list' %}">All content &rarr;</a></p>
+      <p class="section-foot"><a href="{% url 'content:list' %}">All content{% arrow %}</a></p>
     {% endif %}
-  </section>
+  {% endcard %}
   {% endif %}
 
   {% comment %}

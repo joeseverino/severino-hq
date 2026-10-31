@@ -25,10 +25,6 @@ NARROWEST = 320
 # `max-width: 1280px` rules hold, which WIDE is past.
 SPARSE_WIDTHS = (NARROWEST, PHONE_SCREEN[0], 768, 1280)
 
-# What a pressed control says is read where a head has the least room beside
-# its title, on the phones, and where it has the most.
-SPEAKING_WIDTHS = (NARROWEST, PHONE_SCREEN[0], WIDE)
-
 # The least a control is hit through, either way, in CSS pixels (WCAG 2.5.8),
 # which the stylesheet's `--target-min` is held to.
 TARGET_MIN = 24
@@ -73,9 +69,9 @@ def first_viewports(css, region):
     return first(border), first(padding + border)
 
 
-# A region this wide reads a name as never cut whole, and the laptop windows
-# where a region has only just become so are read besides WIDTHS.
-WIDE_REGION, WIDE_TABLES = wide_tables(stylesheet(), 1000)
+# The laptop windows where a table region has only just become 1000px wide,
+# where a wide table has the least room, are read besides WIDTHS.
+_, WIDE_TABLES = wide_tables(stylesheet(), 1000)
 
 # The stylesheet's phone breakpoint: `@media (max-width: 640px)`.
 PHONE = 640

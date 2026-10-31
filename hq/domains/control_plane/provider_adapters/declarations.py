@@ -166,22 +166,18 @@ class MachineSpec(ProviderModel):
 class TLSDeliveryTargetSpec(ProviderModel):
     """One place a certificate can be installed, and how it arrives there.
 
-    A Caddy host wants its certificate in a particular directory; a cPanel
-    account takes only the names it actually hosts. Those are properties of the
-    target, true of every certificate it will ever serve, so they are stated
+    What a target needs (a Caddy host's directory, the names a cPanel account
+    hosts) is true of every certificate it will ever serve, so it is stated
     once here instead of on each certificate that installs there.
-
-    Flat rather than a union per kind, because the form an operator fills is
-    generated from this model's fields: a union has none, and the four shapes
-    differ by one or two fields each.
-
-    One kind receives no certificate at all. A password manager is where an
-    operator already looks up what a credential is and when it runs out, and a
-    certificate is both of those, so it is a place a certificate can be
-    *recorded*, reached the same way, declared the same way, and listed in the
-    same menu. It carries no material; see ``OnePasswordPublication``.
     """
 
+    # Flat rather than a union per kind, because the form an operator fills is
+    # generated from this model's fields: a union has none, and the four shapes
+    # differ by one or two fields each. A ``onepassword`` target receives no
+    # certificate: a password manager is where an operator already looks up a
+    # credential and when it runs out, so a certificate is *recorded* there,
+    # declared and listed like any target, carrying no material
+    # (``OnePasswordPublication``).
     kind: Literal["npm", "caddy", "cpanel", "onepassword"] = Field(
         title="Type",
         description="Sets how the certificate is delivered and verified.",
@@ -324,7 +320,7 @@ def _machine_key_hint(spec: dict[str, Any]) -> str:
     return str(spec.get("name", ""))
 
 
-def _machine_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
+def _machine_readout(spec: dict[str, Any], _status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     """What was declared. Whether it answers is the machine page's to say."""
 
     return (
@@ -337,7 +333,7 @@ def _delivery_target_key_hint(spec: dict[str, Any]) -> str:
     return str(spec.get("connection_ref", ""))
 
 
-def _delivery_target_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
+def _delivery_target_readout(spec: dict[str, Any], _status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     """What was declared about this target. Nothing here is observed.
 
     A target is a statement about how a place takes a certificate, so there is

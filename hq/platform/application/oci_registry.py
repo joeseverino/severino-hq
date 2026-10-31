@@ -1,16 +1,10 @@
 """Reading an image's tags, labels and attestations from its registry, anonymously.
 
-The OCI distribution API is the same on Docker Hub, GitHub's registry and
-Quay: ask for ``/v2/<repository>/tags/list``, and a public repository answers
-the 401 with where to fetch an anonymous pull token. No credential exists here
-to hold, which is why HQ reads this itself (``application.public_registry``)
-rather than a controller.
-
-Every host here is named by someone else: the registry by whatever image a
-container runs, the token service by the registry's own challenge, a blob's
-CDN by a redirect. So every request is checked before it is made: HTTPS, to a
-name that resolves only to public addresses, never to the machines HQ sits
-among. A token never follows a redirect to another host.
+The OCI distribution API is the same on Docker Hub, GitHub's registry and Quay,
+and a public repository hands out an anonymous pull token, so no credential
+exists to hold and HQ reads it itself (``application.public_registry``) rather
+than a controller. Every host here is named by someone else, so each request is
+checked before it is made (docs/Derived-Facts.md#containers-and-images).
 """
 
 import json
@@ -222,19 +216,20 @@ def _get(
 ) -> tuple[dict[str, Any], Any, str]:
     try:
         body, headers = _request(f"https://{host}{path}", token, accept, method, limit)
-        return body, headers, token
     except urllib.error.HTTPError as exc:
         challenge = exc.headers.get("WWW-Authenticate", "") or ""
         exc.close()
         if exc.code != 401 or token or not challenge.lower().startswith("bearer"):
             raise RegistryReadError(f"{image.name}: the registry returned HTTP {exc.code}.") from exc
+    else:
+        return body, headers, token
     token = _anonymous_token(challenge, image)
     try:
         body, headers = _request(f"https://{host}{path}", token, accept, method, limit)
-        return body, headers, token
     except urllib.error.HTTPError as exc:
         exc.close()
         raise RegistryReadError(f"{image.name}: the registry returned HTTP {exc.code}.") from exc
+    return body, headers, token
 
 
 def _request(

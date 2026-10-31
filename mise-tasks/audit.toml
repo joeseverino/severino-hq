@@ -1,0 +1,18 @@
+# Read-only measurements (`mise run audit:<name>`), safe to hand to a tool or
+# an agent that may only read: each writes nothing, and takes values through
+# `usage` alone, never passed-through arguments, so no flag can turn a read
+# into a write. One whose body is more than a line is a file under
+# mise-tasks/audit/. test_audit_tasks.py holds every audit: task to that.
+
+["audit:imports"]
+description = "The files that import the one given, string imports included, read-only"
+hide = true
+usage = 'arg "<path>" help="A Python file in the repository"'
+run = '''uv run ruff analyze graph --direction dependents --detect-string-imports . | jq --arg path "${usage_path}" '.[$path]' '''
+
+["audit:go"]
+description = "golangci-lint's findings in the Go controller counted per linter, read-only"
+hide = true
+dir = "controller"
+usage = 'arg "[linters]" help="Linters to count, comma-separated, as --enable-only takes them (nilerr,gocritic); the configured set without"'
+run = '''golangci-lint run --issues-exit-code=0 --output.text.path=/dev/null ${usage_linters:+--enable-only="${usage_linters}"} ./...'''

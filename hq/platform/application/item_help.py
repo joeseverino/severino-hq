@@ -1,31 +1,26 @@
 """What an action item gives the operator besides the problem.
 
-Every item HQ raises, a finding or an entry in the action queue, comes with
-help, and never with a problem alone:
-
-- a remedy: a capability HQ runs, offered through its owner's route;
-- a command: the exact command or setting HQ derived, for the operator to run;
-- a place: the page where the work is done, named by the item's own next step;
-- an instruction: what to do, in words, where no command can be named;
-- a reason: why none of those can be offered yet.
-
-``Insight`` is the SDK's shape (``hq_sdk/contract.json``), so help travels in
-fields it already has: a remedy as one of its ``actions``, a place as its
-``action`` and ``url``, a command, an instruction or a reason as a step of its
-``workflow``, told apart by the step's phase. A card shows each as what it is
-(``application.decisions``): a reason is a sentence and never a step. The
-contract test (``application/tests/test_item_help.py``) holds every host provider
-to it.
+Every item HQ raises, a finding or a queue entry, comes with help and never a
+problem alone: a remedy HQ runs through its owner's route, a command HQ derived
+for the operator, the page where the work is done, an instruction in words, or
+the reason none can be offered yet. The contract test
+(``application/tests/test_item_help.py``) holds every host provider to it.
 """
 
 from collections.abc import Iterable
-from typing import Any
 
 from .action_links import command_action, command_url
 from .finding_model import Finding
 from .workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, WorkflowStep
 from .workflows import claim_identity
+lazy from .ui import Insight
 
+# The kinds of help. ``Insight`` is the SDK's shape (``hq_sdk/contract.json``),
+# so help travels in fields it already has: a remedy as one of its ``actions``,
+# a place as its ``action`` and ``url``, a command, an instruction or a reason
+# as a step of its ``workflow``, told apart by the step's phase. A card shows
+# each as what it is (``application.decisions``): a reason is a sentence and
+# never a step.
 REMEDY = "remedy"
 COMMAND = "command"
 PLACE = "place"
@@ -141,7 +136,7 @@ def _plan_help(plan: WorkflowPlan | None) -> str:
     return next((kind for kind in (REMEDY, COMMAND, INSTRUCTION, REASON) if kind in kinds), "")
 
 
-def item_help(item: Any) -> str:
+def item_help(item: Insight) -> str:
     """Which help an action item carries, by the names above; blank for none.
 
     A remedy is an action that names a capability or posts to its owner's
@@ -149,11 +144,11 @@ def item_help(item: Any) -> str:
     the item's own next step with the page it is done on.
     """
 
-    if any(action.capability or action.method == "POST" for action in getattr(item, "actions", ()) or ()):
+    if any(action.capability or action.method == "POST" for action in item.actions):
         return REMEDY
-    planned = _plan_help(getattr(item, "workflow", None))
+    planned = _plan_help(item.workflow)
     if planned in (REMEDY, COMMAND):
         return planned
-    if str(getattr(item, "action", "") or "").strip() and getattr(item, "url", ""):
+    if item.action.strip() and item.url:
         return PLACE
     return planned

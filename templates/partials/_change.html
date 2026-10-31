@@ -1,0 +1,8 @@
+{% comment %}
+A value and the one it leads to, such as a version and the release that
+replaces it: {% include "partials/_change.html" with from=installed to=fixed %},
+with `code=True` to show both as identifiers and `url` to link the new one
+outside HQ. The arrow is drawn for the eye and read as `word`, "to" unless the
+pair says otherwise (a mount's source is "mounted at" its destination), and
+keeps to the line of the value it points at (.change, figures.css).
+{% endcomment %}<span class="change">{% if code %}<code>{{ from|breakable }}</code>{% else %}<span>{{ from|breakable }}</span>{% endif %}<span class="change-to"><span class="change-arrow" aria-hidden="true">→</span><span class="visually-hidden">{% if word %}{{ word|breakable }}{% else %}to{% endif %}</span>{% if url %}{% entity url|outside label=to code=code %}{% elif code %}<code>{{ to|breakable }}</code>{% else %}<span>{{ to|breakable }}</span>{% endif %}</span></span>

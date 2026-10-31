@@ -16,7 +16,8 @@ from .entity_links import EntityLink, entity_link
 from .facts import stored_snapshots
 from .reach import network_of
 lazy from . import connections
-lazy from .locate import host_of, machines_index, observed_answers
+lazy from .locate import Machines, host_of, machines_index, observed_answers
+lazy from .machines import Machine
 
 NETWORK_LABELS = {
     "loopback": "Reached locally",
@@ -108,30 +109,47 @@ def _named_network(host: str) -> str:
 def connection_reach(endpoints: Iterable[tuple[str, str]]) -> dict[str, ConnectionReach]:
     """``connection_ref -> ConnectionReach`` for each ``(ref, endpoint)`` with a host."""
 
-    catalog = connections.machines_once()
-    known = {item.name.lower(): item for item in catalog}
-    for item in catalog:
-        for alias in item.aliases:
-            known.setdefault(alias.lower(), item)
+    known = connections.machines_by_name(connections.machines_once())
     index = machines_index()
     # From the one read of every reading the connections page shares.
     answers = observed_answers(row for rows in stored_snapshots().values() for row in rows)
     found: dict[str, ConnectionReach] = {}
     for ref, endpoint in endpoints:
-        host = host_of(endpoint)
-        if not ref or not host:
-            continue
-        address = host if network_of(host) else next(iter(answers.get(normalized_hostname(host), ())), "")
-        placed = index.resolve(address) if address else index.named(host)
-        machine = known.get(placed.lower()) if placed else None
-        network = network_of(address) if address else _named_network(host)
-        if machine is not None and machine.runs_hq:
-            network = "loopback"
-        found[ref] = ConnectionReach(
-            network=network,
-            host=host,
-            address=address,
-            machine=entity_link("machine", machine.name) if machine else None,
-            presence=machine.presence if machine else None,
-        )
+        if ref and (host := host_of(endpoint)):
+            address = _address_of(host, answers)
+            machine = _machine_at(host, address, index, known)
+            found[ref] = _reach(host, address, machine)
     return found
+
+
+def _address_of(host: str, answers: dict[str, tuple[str, ...]]) -> str:
+    """The address ``host`` is: itself when it is one, else the first HQ's
+    DNS readings saw its name answer at, or "" when none did."""
+
+    if network_of(host):
+        return host
+    return next(iter(answers.get(normalized_hostname(host), ())), "")
+
+
+def _machine_at(host: str, address: str, index: Machines, known: dict[str, Machine]) -> Machine | None:
+    """The catalog's machine at ``address``, or named ``host`` when HQ holds
+    no address for it; None when the catalog has no such machine."""
+
+    placed = index.resolve(address) if address else index.named(host)
+    return known.get(placed.lower()) if placed else None
+
+
+def _reach(host: str, address: str, machine: Machine | None) -> ConnectionReach:
+    """The network ``host`` is reached over, loopback on the machine HQ runs on."""
+
+    if machine is not None and machine.runs_hq:
+        network = "loopback"
+    else:
+        network = network_of(address) if address else _named_network(host)
+    return ConnectionReach(
+        network=network,
+        host=host,
+        address=address,
+        machine=entity_link("machine", machine.name) if machine else None,
+        presence=machine.presence if machine else None,
+    )

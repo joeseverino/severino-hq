@@ -1,24 +1,19 @@
 """Hold every API response a test receives to the OpenAPI document.
 
-``ContractClient`` is a Django test client that validates each /api/ response
-against the operation the document gives its path, method and status, and
-each request a capability accepted against that operation's request body. A
-response the document does not describe fails the test that received it.
-
-With ``HQ_API_RECORD_EXAMPLES=1`` (and ``--parallel 1``) the first small
-response per operation and status, and the first accepted request body per
-operation, are written to ``openapi-examples.json`` when the run ends:
-
-    HQ_API_RECORD_EXAMPLES=1 python manage.py test hq_api --parallel 1
-    python manage.py api_openapi
+``ContractClient`` fails the test that receives an /api/ response, or has a
+capability accept a request body, the document does not describe; the same
+run can record the document's examples (beside ``_record``).
 """
 
 import atexit
 import json
 import os
 import re
+import uuid
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from functools import cached_property
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, override
 from urllib.parse import urlsplit
 
@@ -143,6 +138,41 @@ def _small(value: object) -> bool:
     return len(json.dumps(value)) <= EXAMPLE_LIMIT
 
 
+# With HQ_API_RECORD_EXAMPLES=1 (and --parallel 1, so one process holds them
+# all) the first small response per operation and status, and the first
+# accepted request body per operation, are written to openapi-examples.json
+# (or the path HQ_API_RECORD_EXAMPLES_TO names) when the run ends; `mise run
+# fix:api-examples` runs every module that uses this client so. A recording
+# reads the same every run, so lint:drift-api-examples can hold the file to it:
+# the clock stands still at RECORDED_AT from the moment this module is imported,
+# before any test makes a row, and each UUID is written as the one its place
+# among them derives, since a test's uuid4 reads randomness the clock does not
+# hold. Integer ids already repeat, the tests running in one order in one
+# process.
+RECORDING = os.environ.get("HQ_API_RECORD_EXAMPLES") == "1"
+RECORDED_AT = datetime(2026, 1, 15, 9, 30, tzinfo=UTC)
+_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+
+def _hold_the_clock() -> None:
+    import time_machine  # noqa: PLC0415 - a tools-group dependency, which the image's suite never loads
+
+    time_machine.travel(RECORDED_AT, tick=False).start()
+
+
+if RECORDING:
+    _hold_the_clock()
+
+
+def _fixed_ids(text: str) -> str:
+    """``text`` with each distinct UUID replaced by one derived from the order it first appears in."""
+
+    seen: dict[str, str] = {}
+    return _UUID.sub(
+        lambda found: seen.setdefault(found[0], str(uuid.uuid5(uuid.NAMESPACE_URL, f"example/{len(seen)}"))), text
+    )
+
+
 def _record(operation_id: str, status: int, body: object, request: object) -> None:
     if _small(body):
         entry = _recorded.setdefault(operation_id, {})
@@ -153,6 +183,7 @@ def _record(operation_id: str, status: int, body: object, request: object) -> No
 
 @atexit.register
 def _write_examples() -> None:
-    if os.environ.get("HQ_API_RECORD_EXAMPLES") != "1" or not _recorded:
+    if not RECORDING or not _recorded:
         return
-    EXAMPLES_PATH.write_text(json.dumps(_recorded, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path = os.environ.get("HQ_API_RECORD_EXAMPLES_TO") or EXAMPLES_PATH
+    Path(path).write_text(_fixed_ids(json.dumps(_recorded, indent=2, sort_keys=True)) + "\n", encoding="utf-8")

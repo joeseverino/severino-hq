@@ -5,9 +5,6 @@ while its page rules read. Each part is declared with the permissions it needs.
 A refused part is stored beside the kind's records as structure (which part,
 why, and on what), never as a record or a field of one, so a record count, a
 credential's sight, a subject's facts and a request path all see one refusal.
-
-The whole kind on one scope is the part ``WHOLE``: a zone whose certificate
-packs are refused while other zones read.
 """
 
 import re
@@ -23,8 +20,11 @@ from .provider_adapters.contracts import (
     CREDENTIAL_REFUSAL,
     PERMISSION_REFUSAL,
 )
+lazy from .models import ProviderInventory
 lazy from .providers import PROVIDERS
 
+# The whole kind on one scope: a zone whose certificate packs are refused
+# while other zones read.
 WHOLE = ""
 
 _REASON_LENGTH = 300
@@ -93,7 +93,7 @@ class PartRefusal:
         status = _STATUS.fullmatch(reason)
         if status is None:
             return reason
-        provider = self.part.provider or getattr(OBSERVATIONS.get(self.kind), "provider", "")
+        provider = self.part.provider or (OBSERVATIONS[self.kind].provider if self.kind in OBSERVATIONS else "")
         meaning = _STATUS_MEANS.get(int(status["code"]), _STATUS_MEANS.get(int(status["code"]) // 100 * 100, ""))
         return (status["lead"] or "") + meaning.format(who=f"HQ's {CONNECTION_LABELS.get(provider, 'connection')}")
 
@@ -150,7 +150,7 @@ def _address(value: Any) -> str:
         return ""
 
 
-def refused_parts(snapshot: Any) -> tuple[PartRefusal, ...]:
+def refused_parts(snapshot: ProviderInventory) -> tuple[PartRefusal, ...]:
     """The parts a stored snapshot says were refused.
 
     A credential that read the rest of the kind is valid, so its refusal of a
@@ -160,7 +160,7 @@ def refused_parts(snapshot: Any) -> tuple[PartRefusal, ...]:
 
     parts = parts_of(snapshot.kind)
     found = []
-    for entry in _entries(getattr(snapshot, "refused_parts", None)):
+    for entry in _entries(snapshot.refused_parts):
         part = parts.get(str(entry.get("part", "")))
         if part is None:
             continue

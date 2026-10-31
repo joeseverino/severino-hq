@@ -60,6 +60,11 @@ DAY_YEAR_FORMAT = "M\xa0j,\xa0Y"
 CLOCK_FORMAT = "g:i\xa0A"
 CLOCK_EXACT_FORMAT = "g:i:s\xa0A"
 MOMENT_YEAR_FORMAT = f"{DAY_YEAR_FORMAT}, {CLOCK_FORMAT}"
+WEEKDAY_FORMAT = "l"
+WEEKDAY_SHORT_FORMAT = "D"
+MONTH_FORMAT = "F\xa0Y"
+MONTH_SHORT_FORMAT = "M"
+NUMERAL_FORMAT = "j"
 
 
 def _local(value):
@@ -110,6 +115,61 @@ def when_exact(value: date) -> str:
     exact = _written(value, f"{DAY_YEAR_FORMAT}, {CLOCK_EXACT_FORMAT}")
     zone = value.tzname() or ""
     return f"{exact}\xa0{zone}" if zone else exact
+
+
+def weekday(value: date, *, short: bool = False) -> str:
+    """The day of the week a moment fell on: "Monday", or "Mon" short."""
+
+    return _written(_day_of(value), WEEKDAY_SHORT_FORMAT if short else WEEKDAY_FORMAT)
+
+
+def weekday_initials(value: date) -> str:
+    """A weekday as a narrow column heads it: "Mo". Two letters, since one
+    gives two T's and two S's."""
+
+    return weekday(value, short=True)[:2]
+
+
+def month(value: date, *, short: bool = False) -> str:
+    """The month a moment fell in, as a calendar heads it: "October 2026", or
+    its name alone short ("Oct"), beside a day that already says the rest."""
+
+    return _written(_day_of(value), MONTH_SHORT_FORMAT if short else MONTH_FORMAT)
+
+
+def numeral(value: date) -> str:
+    """The day of the month alone, as a calendar's cell says it: "3"."""
+
+    return _written(_day_of(value), NUMERAL_FORMAT)
+
+
+def _day_of(value: date) -> date:
+    """A datetime as the day it falls on here; a date as it is."""
+
+    return _local(value) if isinstance(value, datetime) else value
+
+
+def length(moment: date, now: datetime | None = None) -> str:
+    """How far ``moment`` lies from now, either way, in ``ago``'s one unit:
+    "5 minutes", and "under a minute" inside the first. A bare date is the day."""
+
+    if not isinstance(moment, datetime):
+        return when_day(moment)
+    # ``since`` holds the wording until the next whole unit, ahead or behind.
+    start = datetime(2000, 1, 1, tzinfo=UTC)
+    said = timesince(start, start + abs(since(moment, now=now)), depth=1)
+    return "under a minute" if said.startswith(("0\xa0minutes", "0 minutes")) else said
+
+
+def ahead(moment: date, now: datetime | None = None) -> str:
+    """A moment to come as how soon it is: "in 3 days"; one already past as
+    ``ago`` says it. A bare date is the day."""
+
+    if not isinstance(moment, datetime):
+        return when_day(moment)
+    if reached(moment, now=now):
+        return ago(moment, now)
+    return f"in {length(moment, now)}"
 
 
 def when_range(start: date, end: date) -> str:

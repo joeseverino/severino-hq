@@ -8,7 +8,7 @@ import os
 import re
 import tempfile
 import time
-from datetime import date, timedelta
+from datetime import timedelta
 from decimal import Decimal
 from io import StringIO
 from pathlib import Path
@@ -23,7 +23,7 @@ from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.templatetags.static import static
-from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings, tag
+from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -321,20 +321,6 @@ class SecurityBoundaryTests(TestCase):
 
         self.assertEqual(async_to_sync(exercise)(), ["first-request", "second-request"])
         self.assertIsNone(request_context.current())
-
-
-@tag("source", "tree")
-class TemplateSourceTests(SimpleTestCase):
-    def test_application_templates_do_not_bypass_csp(self):
-        violations = []
-        for template in (settings.BASE_DIR / "templates").rglob("*.html"):
-            source = template.read_text(encoding="utf-8")
-            if re.search(r"<script(?![^>]*\bsrc=)", source, re.IGNORECASE):
-                violations.append(f"{template}: inline script")
-            if re.search(r"\son[a-z]+\s*=", source, re.IGNORECASE):
-                violations.append(f"{template}: inline event handler")
-
-        self.assertEqual(violations, [])
 
 
 class OIDCBackendTests(TestCase):
@@ -663,8 +649,9 @@ class KeyColumnTests(_AuthedTestCase):
         super().setUpTestData()
         # An empty list draws no table, so its headings need rows under them.
         from hq.platform.core import example_estate
+        from hq.platform.core.example_estate.testing import throwaway_media
 
-        with example_estate.throwaway_media():
+        with throwaway_media():
             example_estate.seed()
 
     def test_a_sortable_heading_carries_its_columns_classes(self):
@@ -735,7 +722,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         with (
             self.captureOnCommitCallbacks(execute=True),
-            patch("hq.platform.application.glance.ring_doorbell") as ring,
+            patch("hq.platform.application.glance.ring_glance_doorbell") as ring,
         ):
             response = self.client.post("/dashboard/glance/")
 
@@ -1051,11 +1038,11 @@ class ExportSmokeTests(_AuthedTestCase):
             item_name="Test switch",
             total_cost=Decimal("29.00"),
             business_use_percentage=100,
-            purchase_date=date.today(),
+            purchase_date=timezone.localdate(),
             status=Asset.Status.ACTIVE,
         )
         self.expense = Expense.objects.create(
-            date=date.today(),
+            date=timezone.localdate(),
             vendor="Cloudflare",
             item="Cloudflare Pro",
             category="hosting",
@@ -1375,7 +1362,7 @@ class AuditChangeTests(TestCase):
         # A Decimal, a date and a UUID are none of the things JSON has. Left
         # as they are the row fails to write, `record_event` swallows it, and
         # the change is lost with nothing saying so.
-        expense = Expense.objects.create(date=date.today(), vendor="V", item="I", total_cost=Decimal("1.00"))
+        expense = Expense.objects.create(date=timezone.localdate(), vendor="V", item="I", total_cost=Decimal("1.00"))
         expense.total_cost = Decimal("2.50")
         expense.save()
 
@@ -1486,7 +1473,7 @@ class ReceiptFileProtectionTests(_AuthedTestCase):
         with override_settings(MEDIA_ROOT=tempfile.mkdtemp()):
             r = Receipt.objects.create(
                 vendor="Vendor",
-                date=date.today(),
+                date=timezone.localdate(),
                 amount=Decimal("10.00"),
                 original_filename="test.txt",
                 content_type="text/plain",

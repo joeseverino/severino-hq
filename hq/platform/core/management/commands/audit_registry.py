@@ -1,12 +1,8 @@
 """Audit the Project/Asset registries against documentation references.
 
-The inverse of ``import_docs_manifest --report-orphans``: that reports vault
-relations pointing at a missing registry slug; this reports registry rows that
-*no* documentation references (zero ``documentation_records``). A zero-doc row
-is not always wrong (a freshly registered project may not have a doc yet) but
-it is the fingerprint of a rename that left a stale slug, or a duplicate row.
-
-Read-only.
+Read-only, and the inverse of ``import_docs_manifest --report-orphans``: it
+reports registry rows no documentation references, the fingerprint of a rename
+that left a stale slug or of a duplicate row (or a project with no doc yet).
 """
 
 import json

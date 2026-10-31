@@ -1,8 +1,8 @@
 #!/bin/sh
 #MISE description="To run tests: some by label as the gates run them, --at <ref> to prove a new one fails on the old code; with none, CI's test job on every Python"
 #MISE extends="django"
+#MISE env={SEVERINO_HEAVY_BOUND="2h"}
 #MISE depends=["setup:lint-tools"]
-#MISE timeout="2h"
 #USAGE flag "--at <ref>" help="Run this tree's test files, uncommitted work included, on the code at <ref> in a throwaway worktree: the way to prove a new test fails without the fix. A support file (a gate, probe or fixture) is laid over too, and the closing line names what was laid over and kept (docs/Development.md)"
 #USAGE flag "--keep <path>" var=#true help="With --at, keep this support file as <ref> has it, when it holds the logic being proven; logic in a test module itself cannot be kept, so move it to a support module beside the test. Repeatable"
 #USAGE flag "--composed" help="When a change reaches the extensions (hq_sdk, shared templates): the suite composed with the set mise.local.toml names, as the image runs it; labels narrow it"
@@ -25,13 +25,17 @@ fi
 # Every gate: one turn covers every interpreter's run. A pipeline leg names
 # its one interpreter in TEST_PYTHONS. Each interpreter's run is a step of one
 # verdict, headed by its Python; the composed suite and the Go tests stay out
-# of the loop, and Go runs once after it.
+# of the loop, and Go runs once after it. The project's own interpreter, the
+# first of PYTHON_VERSIONS, runs in the project's environment; each other has
+# one of its own beside it.
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh
 
 set --
 for version in ${TEST_PYTHONS:-$PYTHON_VERSIONS}; do
+    environment="${UV_PROJECT_ENVIRONMENT:-.venv}"
+    [ "$version" = "${PYTHON_VERSIONS%% *}" ] || environment="$environment-$version"
     set -- "$@" --step "Python $version" env MISE_TASK_SKIP=test:composed,test:controller UV_PYTHON="$version" \
-        UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-.venv}-$version" mise run -c 'test:*'
+        UV_PROJECT_ENVIRONMENT="$environment" mise run -c 'test:*'
 done
 exec uv run python -m tools.gate.verdict test "$@" --step "Go controller" mise run test:controller

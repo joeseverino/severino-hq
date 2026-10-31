@@ -40,7 +40,7 @@ func newTLSHarness(t *testing.T, env runtime.Environment, held ...connections.Co
 	harness := &tlsHarness{r: r, http: h, clock: tlsNow}
 	harness.dialer = &fakeDialer{http: h, certs: map[string][]byte{}}
 	harness.command = &fakeCommander{http: h, outcomes: map[string]fakeOutcome{}}
-	r.TLS, r.Commands = harness.dialer, &Commands{Env: r.Env, Supplied: r.Supplied, Exec: harness.command.exec}
+	r.TLS, r.Commands = harness.dialer, &Commands{Env: r.Env, Supplied: r.Supplied, Exec: harness.command.exec, Remote: harness.command.remote}
 	r.Now = func() time.Time { return tlsNow }
 	r.Monotonic = func() time.Time { return harness.clock }
 	r.Sleep = func(_ context.Context, d time.Duration) error { harness.clock = harness.clock.Add(d); return nil }
@@ -171,7 +171,7 @@ func TestReconcileTLSReadsEveryConsumer(t *testing.T) {
 		Object{"kind": "npm", "name": "proxy", "connection_ref": "npm", "verify_domains": []any{"a.example"}},
 		Object{"kind": "cpanel", "name": "host", "connection_ref": "nope", "verify_domains": []any{}},
 	}}
-	result, err := h.r.runAction(runtime.ResourceKindTLSCertificate, "reconcile", t.Context(), spec, nil, false)
+	result, err := h.r.runAction(t.Context(), runtime.ResourceKindTLSCertificate, "reconcile", spec, nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestRenewalDeploysVerifiesAndRollsBack(t *testing.T) {
 	}}
 
 	h.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}}, {"edge.example|a.example": {Cert: "issued"}}}
-	result, err := h.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(t.Context()), spec, nil, true)
+	result, err := h.r.runAction(verified(t.Context()), runtime.ResourceKindTLSCertificate, "renew", spec, nil, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,12 +221,12 @@ func TestRenewalDeploysVerifiesAndRollsBack(t *testing.T) {
 	h2.dialer.certs, h2.command.outcomes = h.dialer.certs, h.command.outcomes
 	_ = os.RemoveAll(filepath.Join(env.ACMEDir, "config"))
 	h2.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}}}
-	_, err = h2.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(t.Context()), spec, nil, true)
+	_, err = h2.r.runAction(verified(t.Context()), runtime.ResourceKindTLSCertificate, "renew", spec, nil, true)
 	want := "certificate deployment failed, rollback succeeded: 1 of 1 TLS consumers did not activate the certificate within 30s: edge still serves the previous certificate at a.example"
 	if err == nil || err.Error() != want {
 		t.Fatalf("rollback: %v", err)
 	}
-	if _, err := h2.r.runAction(runtime.ResourceKindTLSCertificate, "renew", t.Context(), spec, nil, true); err == nil {
+	if _, err := h2.r.runAction(t.Context(), runtime.ResourceKindTLSCertificate, "renew", spec, nil, true); err == nil {
 		t.Fatal("a renewal without a declared verification policy must refuse")
 	}
 }
@@ -316,7 +316,7 @@ func TestRenewalNotVerifiedWhileAConsumerIsUnreadOrUnchecked(t *testing.T) {
 			}
 			h.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}, "edge.example|b.example": {Cert: "old"}}, c.served}
 			spec := Object{"certificate_name": "a", "domains": []any{"a.example", "b.example"}, "renewal_window_days": 30, "consumers": []any{edge, c.second}}
-			_, err := h.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(t.Context()), spec, nil, true)
+			_, err := h.r.runAction(verified(t.Context()), runtime.ResourceKindTLSCertificate, "renew", spec, nil, true)
 			if err == nil || !strings.Contains(err.Error(), "rollback succeeded") || !strings.Contains(err.Error(), c.reason) {
 				t.Fatalf("%v", err)
 			}

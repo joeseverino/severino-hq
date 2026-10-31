@@ -12,7 +12,7 @@ A horizon with nothing on it draws nothing: an empty card that says so is a
 band of page spent on the absence of news.
 {% endcomment %}
 {% if timeline.items %}
-<section class="timeline{% if not plain %} card{% endif %}" aria-label="{{ timeline.title }}">
+{% card css="timeline" label=timeline.title %}
   {% section_head lede=timeline.description %}{{ timeline.title|breakable }}{% aside %}<span class="count">{{ timeline.items|length|counted:"event" }}</span>{% endsection_head %}
   {% if timeline.items %}
     <ol class="timeline-list">
@@ -28,5 +28,5 @@ band of page spent on the absence of news.
       {% endfor %}
     </ol>
   {% endif %}
-</section>
+{% endcard %}
 {% endif %}

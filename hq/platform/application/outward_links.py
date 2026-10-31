@@ -26,15 +26,11 @@ lazy from .published_sites import public_sites
 def consoles() -> tuple[tuple[str, str, str], ...]:
     """Connections that are a thing you can open, as (label, sub, url).
 
-    A console and an API base are both URLs and only one is worth a link. Told
-    apart by the shape a credential's endpoint already has: an API is reached at
-    a path (a version, a prefix) and a console is reached at the host
-    itself. So a proxy's web interface is offered and a DNS API is not, without
-    a list here naming either.
-
-    Nothing is hand-authored. A URL written into this repository is one
-    deployment's address published to everyone who clones it, and stale for the
-    deployment it belonged to.
+    A console is reached at the host itself and an API at a path, so a proxy's
+    web interface is offered and a DNS API is not, without a list naming either.
+    None is hand-authored: a URL written into this repository is one
+    deployment's address published to everyone who clones it, and stale for
+    the deployment it belonged to.
     """
 
     found = []

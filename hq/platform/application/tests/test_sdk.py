@@ -86,6 +86,26 @@ class SdkContractTests(SimpleTestCase):
         with self.assertRaises(ValidationError):
             ExampleCommand.model_validate({"value": 1, "typo": True})
 
+    def test_a_strict_command_declares_its_fields_with_the_hosts_markers(self):
+        from typing import Annotated
+
+        from hq.domains.calendars.models import Entry
+        from hq.platform.application.integration_specs import command_schema
+        from hq_sdk.capabilities import Choices, Describe, Names, Refers
+
+        class ExampleCommand(StrictCommand):
+            note: Annotated[str, Describe("What to write down.")]
+            project: Annotated[str, Names("example.projects", key="slug")]
+            tone: Annotated[str, Choices((("plain", "Plain"),))]
+            about: Annotated[str, Refers(Entry, "about")]
+
+        fields = command_schema(ExampleCommand)["properties"]
+
+        self.assertEqual(fields["note"]["description"], "What to write down.")
+        self.assertEqual(fields["project"]["x-hq-records"], {"resource": "example.projects", "key": "slug"})
+        self.assertEqual(fields["tone"]["oneOf"], [{"const": "plain", "title": "Plain"}])
+        self.assertEqual(fields["about"]["x-hq-reference"], {"model": "calendars.entry", "field": "about"})
+
     def test_plugin_source_can_use_only_the_sdk(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -323,6 +343,23 @@ class SdkShapeTests(SimpleTestCase):
         self.assertTrue(differences[0].startswith("~ hq_sdk.capabilities.execute_capability: parameters:"))
         self.assertEqual(differences[1], "+ hq_sdk.ui.Brand")
         self.assertEqual(differences[2], "- hq_sdk.web.safe_next")
+
+    def test_a_reshaped_export_names_each_member_gained_lost_and_changed(self):
+        from hq_sdk.contract import drift
+
+        before = {"kind": "class", "bases": ["A"], "members": {"a": 1, "b": 2, "c": 3, "d": 4}}
+        after = {"kind": "class", "bases": ["B"], "members": {"a": 1, "b": 9, "e": 5, "f": 6}}
+
+        self.assertEqual(
+            drift({"modules": {"kept": {"Thing": before}}}, {"modules": {"kept": {"Thing": after}}}),
+            ['~ hq_sdk.kept.Thing: bases: ["A"] -> ["B"]; members: +e,f, -c,d, ~b'],
+        )
+        self.assertEqual(
+            drift(
+                {"modules": {"kept": {"Thing": before}}}, {"modules": {"kept": {"Thing": {**before, "members": {}}}}}
+            ),
+            ["~ hq_sdk.kept.Thing: members: -a,b,c,d"],
+        )
 
     def test_versions_and_whole_modules_are_named_too(self):
         from hq_sdk.contract import drift

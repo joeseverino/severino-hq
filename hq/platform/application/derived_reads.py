@@ -1,13 +1,12 @@
 """What the estate pages derive, as registered read resources.
 
-Each handler asks the function its page asks and projects the answer to JSON.
-Nothing here derives a fact: the estate reading, the machine and service
-catalogs, the relation graph, the join engine, credential sight and the
-action queue do. Readings leave only through their schema
+Each handler asks the function its page asks and projects the answer to JSON,
+so nothing here derives a fact. Readings leave only through their schema
 (``ObservationSpec.admitted``); no provider payload and no secret is stored,
 so none can be returned.
 """
 
+from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from datetime import datetime
 from typing import Any
@@ -19,7 +18,7 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 
 from .labels import human_label
 from .own_addresses import tailnet_sightings
-from .projection import page_size, projection_scope
+from .projection import complete, page_size, projection_scope
 from .record_errors import RecordNotFound
 from .security import Principal
 lazy from . import connections, dashboard, estate, machines, request_context
@@ -58,8 +57,16 @@ def _link(link: Any) -> dict[str, Any] | None:
     }
 
 
-def _collection(items: list[dict[str, Any]]) -> dict[str, Any]:
-    return {"items": items, "count": len(items)}
+def _collection(
+    items: Sequence[Any], limit: int | None = None, serialize: Callable[[Any], Any] = lambda item: item
+) -> dict[str, Any]:
+    """Every match, or the first page of them with how many there were; only
+    the page is serialized."""
+
+    page = [serialize(item) for item in (items if limit is None else items[: page_size(limit)])]
+    if limit is None:
+        return complete(page)
+    return {"items": page, "count": len(page), "total": len(items)}
 
 
 # ----- Estate -----------------------------------------------------------------
@@ -89,7 +96,7 @@ def list_action_items(*, query: str = "", status: str = "", source: str = "", li
 
     with projection_scope():
         items = filter_items(dashboard.work_queue(), query=query, status=status, source=source)
-    return _collection(items[: page_size(limit)])
+    return _collection(items, limit)
 
 
 # ----- Machines ---------------------------------------------------------------
@@ -165,7 +172,7 @@ def list_machines(*, limit: int = 50) -> dict[str, Any]:
     """Every machine anything reported, as the machine list shows them."""
 
     with projection_scope():
-        return _collection([serialize_machine(item) for item in connections.machines_once()[: page_size(limit)]])
+        return _collection(connections.machines_once(), limit, serialize_machine)
 
 
 def get_machine(name: str) -> dict[str, Any]:
@@ -218,7 +225,7 @@ def list_domains(*, limit: int = 50) -> dict[str, Any]:
     """Every domain HQ declares or a sweep has seen, with the services it holds."""
 
     with projection_scope():
-        return _collection(_domains()[: page_size(limit)])
+        return _collection(_domains(), limit)
 
 
 def get_domain(name: str) -> dict[str, Any]:
@@ -470,11 +477,9 @@ def _rows(kinds) -> dict[str, ProviderInventory]:
 def list_readings(*, provider: str | None = None, limit: int = 50) -> dict[str, Any]:
     """Every registered reading kind and whether its last read succeeded."""
 
-    kinds = [kind for kind, spec in OBSERVATIONS.items() if provider is None or spec.provider == provider][
-        : page_size(limit)
-    ]
+    kinds = [kind for kind, spec in OBSERVATIONS.items() if provider is None or spec.provider == provider]
     rows = _rows(kinds)
-    return _collection([_reading(kind, rows.get(kind)) for kind in kinds])
+    return _collection(kinds, limit, lambda kind: _reading(kind, rows.get(kind)))
 
 
 def get_reading(kind: str) -> dict[str, Any]:
@@ -560,4 +565,7 @@ def search(query: str = "", *, limit: int = 20, principal: Principal) -> dict[st
                 }
                 for hit in group["items"]
             )
-    return _collection(items[:bound])
+    # Each scope was cut at the bound before merging, so the merged length is
+    # not how many matched: the total stays unknown and a full page reads as cut.
+    page = items[:bound]
+    return {"items": page, "count": len(page), "total": None}

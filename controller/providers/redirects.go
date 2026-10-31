@@ -56,30 +56,18 @@ func redirectHost(text string) string {
 	return name
 }
 
-func uniqueNames(values []string) []string {
-	out := []string{}
-	seen := map[string]bool{}
-	for _, value := range values {
-		if value != "" && !seen[value] {
-			seen[value] = true
-			out = append(out, value)
-		}
-	}
-	return out
-}
-
 // expressionHosts is the hostnames a rule expression matches, where it names them.
 func expressionHosts(expression string) []string {
 	found := []string{}
 	for _, match := range redirectHostField.FindAllStringSubmatch(expression, -1) {
 		for _, name := range redirectQuoted.FindAllStringSubmatch(match[1], -1) {
-			found = append(found, redirectHost(name[1]))
+			found = append(found, name[1])
 		}
 	}
 	for _, match := range redirectURL.FindAllStringSubmatch(expression, -1) {
-		found = append(found, redirectHost(match[1]))
+		found = append(found, match[1])
 	}
-	return uniqueNames(found)
+	return distinctNames(found, redirectHost)
 }
 
 // targetHost is the host a redirect target names: a URL's, or an expression's
@@ -143,7 +131,7 @@ func pageRuleRecord(rule cfPageRule, zone string) (CloudflareRedirectRecord, boo
 	hosts := []string{}
 	for _, target := range rule.Targets {
 		if target.Target == "url" {
-			hosts = append(hosts, redirectHost(target.Constraint.Value))
+			hosts = append(hosts, target.Constraint.Value)
 		}
 	}
 	status := rule.Status
@@ -151,7 +139,7 @@ func pageRuleRecord(rule cfPageRule, zone string) (CloudflareRedirectRecord, boo
 		status = pageRuleActive
 	}
 	return CloudflareRedirectRecord{
-		Zone: zone, Source: redirectSourcePageRule, ID: rule.ID, Hostnames: uniqueNames(hosts),
+		Zone: zone, Source: redirectSourcePageRule, ID: rule.ID, Hostnames: distinctNames(hosts, redirectHost),
 		Target: forwarding.URL, TargetHost: targetHost(forwarding.URL), StatusCode: forwarding.StatusCode,
 		Enabled: status == pageRuleActive,
 	}, true, nil

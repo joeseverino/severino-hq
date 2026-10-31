@@ -1,17 +1,10 @@
-"""Findings about the systemd units a machine runs for HQ: a unit that failed,
-a unit that is not installed or not enabled, a timer that is not starting its
-unit, and a machine whose units nobody could read.
+"""Findings about the systemd units a machine runs for HQ: failed, not installed
+or not enabled, a timer not starting its unit, or units nobody could read.
 
-The launcher asks systemd about every unit this repository ships and the
-controller reports the answer as the ``host.unit`` reading (``UnitProperties`` in
-``controller/host/layout.go``). A unit that fails stays failed in that
-machine's journal and nothing else notices, so the reading is one fact per unit
-on the node of the controller that took it, and the rules here read those
-facts. They name no unit: one added to ``deploy/systemd`` is covered when it
-is installed.
-
-A unit's state is judged as of when it was read. The age of the reading itself
-is the sweep's to say.
+A unit that fails stays failed in its machine's journal and nothing else
+notices, so these rules read the ``host.unit`` reading's one fact per unit
+(docs/Derived-Facts.md says how it is taken). They name no unit, so one added
+to ``deploy/systemd`` is covered once installed.
 """
 
 import shlex
@@ -111,6 +104,8 @@ class UnitState(FactRow):
     def behind(self, stamp: str, by: timedelta) -> bool:
         """Whether ``stamp`` was more than ``by`` before the unit was read."""
 
+        # Judged as of the reading, never now: the reading's own age is the
+        # sweep's to say.
         then, read = moment(stamp), moment(self.read_at)
         return then is not None and read is not None and read - then > by
 

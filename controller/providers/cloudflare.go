@@ -39,14 +39,9 @@ func (r *Registry) admitCloudflare() {
 // cloudflareAutoTTL is the TTL Cloudflare reads as automatic.
 const cloudflareAutoTTL = 1
 
+// cloudflareZones is every zone the DNS credential can see.
 func (r *Registry) cloudflareZones(ctx context.Context) ([]cfapi.ZonesZone, error) {
-	items, err := r.cloudflareCachedList(ctx, "cloudflare-zones", func() ([]json.RawMessage, error) {
-		return r.cloudflareList(ctx, runtime.ConnectionProviderCloudflareDNS, "/zones", "", cloudflarePerPage)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return cloudflareItems[cfapi.ZonesZone](items, "zone")
+	return r.cloudflareZoneList(ctx, runtime.ConnectionProviderCloudflareDNS, "", cloudflarePerPage)
 }
 
 // cloudflareZoneID resolves a zone name once per controller; ids do not change.
@@ -98,7 +93,7 @@ func caaParts(content string) (int, string, string, bool) {
 // re-emitted with single spaces.
 func normalizedRecordContent(recordType, content string) string {
 	value := strings.TrimSpace(content)
-	if recordType == "TXT" && !(strings.HasPrefix(value, `"`) && strings.HasSuffix(value, `"`)) {
+	if recordType == "TXT" && (!strings.HasPrefix(value, `"`) || !strings.HasSuffix(value, `"`)) {
 		value = `"` + value + `"`
 	}
 	if recordType == "CNAME" || recordType == "MX" {
@@ -106,7 +101,7 @@ func normalizedRecordContent(recordType, content string) string {
 	}
 	if recordType == "CAA" {
 		if flags, tag, target, ok := caaParts(value); ok {
-			value = fmt.Sprintf(`%d %s "%s"`, flags, tag, target)
+			value = fmt.Sprintf(`%d %s %q`, flags, tag, target)
 		}
 	}
 	return value

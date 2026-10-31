@@ -1,14 +1,10 @@
 """The tags a data table is declared through.
 
 ``{% table_region %}`` wraps the table in its labeled region,
-``{% table_heading %}`` draws each column heading with its kind, its drop
-rank and its sort control, and ``{% row_toggle %}`` draws the disclosure of a
-row that holds more than it shows. A column's kind is the heading's, which the
-stylesheet reads down the column; the region marks each cell only with what
-the heading cannot say of it. Which columns show is the browser's to say, the
-only thing that knows how wide a table is: tables.js lets a ranked column go
-while its table is wider than its region, before the frame is painted, and
-the row's toggle shows what left.
+``{% table_heading %}`` draws each column heading with its kind, its drop rank
+and its sort control, and ``{% row_toggle %}`` draws the disclosure of a row
+that holds more than it shows. Which columns show is the browser's to say
+(docs/Design.md, A table fits its box).
 """
 
 import html
@@ -21,6 +17,7 @@ from typing import Any
 
 from django import template
 from django.template.base import token_kwargs
+from django.template.loader import render_to_string
 from django.utils.html import escape, format_html
 from django.utils.safestring import mark_safe
 
@@ -131,6 +128,8 @@ class _Cells(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.tables = 0
+        # How many rows each of the region's own tables holds outside its head.
+        self.bodies: list[int] = []
         self.section = ""
         self.rows: list[_Row] = []
         self.cell: _Cell | None = None
@@ -166,9 +165,12 @@ class _Cells(HTMLParser):
             self.tables += 1
             if self.tables == 1:
                 self.rows, self.section = [], ""
+                self.bodies.append(0)
         elif own and tag in _SECTIONS:
             self.section = tag
         elif own and tag == "tr":
+            if self.section != "thead":
+                self.bodies[-1] += 1
             self.rows.append(_Row(self.section, "row-group" in _classes(dict(attrs))))
         elif own and tag in ("td", "th") and self.rows:
             line, column = self.getpos()
@@ -290,13 +292,18 @@ class _Cells(HTMLParser):
                 self._detail(row, width, names, drops - empty)
 
     def _mark_cells(self, row: _Row, kinds: dict[int, str], named: int, empty: set[int]) -> None:
+        # A column's kind is its heading's, which the stylesheet reads down the
+        # column, so a cell is marked only with what the heading cannot say of it.
         body = row.section == "tbody"
         for index, cell in enumerate(row.cells):
+            # A cell that says nothing is not counted as something its row holds back.
             marks = [" data-blank"] if body and cell.says_nothing else []
             if "colspan" not in cell.attrs:
                 marks += [" data-blank-column"] if index in empty else []
                 long = cell.longest > LONG
                 kept = kinds.get(index) in _KEPT_KINDS
+                # One `.kept-line`, which the stylesheet holds whole up to the
+                # column's share of its region and lets wrap past that.
                 if body and kept and cell.closed and not cell.says_nothing and not long:
                     self.held.append((cell.opened, cell.closed))
                 if body and index != named and kinds.get(index) in ("prose", "status") and long:
@@ -315,26 +322,11 @@ class _Cells(HTMLParser):
         for index, cell in enumerate(row.cells):
             if "colspan" in cell.attrs or not cell.closed:
                 continue
-            name = names[index] if index < len(names) else ""
-            # A column of controls under no heading is still named, for a
-            # screen reader alone.
-            unseen = not name and cell.controls
-            name = name or ("Actions" if unseen else "")
-            below = [part for part in cell.parts if part.end and part.kind == "below"]
-            narrow = [(part.start, part.end) for part in cell.parts if part.end and part.kind == "narrow"]
-            for part in below:
-                assert part.end
-                if part.label:
-                    labeled.append(_Entry(part.label, [(part.start, part.end)], "label"))
-                else:
-                    blocks.append((part.start, part.end))
-            if index in drops:
-                if not cell.says_nothing:
-                    cut = [(part.start, part.end) for part in below if part.end]
-                    data = "cell-data" in _classes(cell.attrs)
-                    entries.append(_Entry(name, [(cell.opened, cell.closed)], "column", cut, index, data, unseen))
-            elif narrow:
-                entries.append(_Entry(name, narrow, "narrow", unseen=unseen))
+            below = _finished(cell, "below")
+            blocks += [span for label, span in below if not label]
+            labeled += [_Entry(label, [span], "label") for label, span in below if label]
+            if entry := _column_entry(index, cell, (cell.opened, cell.closed), names, dropped=index in drops):
+                entries.append(entry)
         if blocks or entries or labeled:
             self.details.append((row.end, width, blocks, entries + labeled))
 
@@ -348,6 +340,39 @@ class _Cells(HTMLParser):
 
 def _classes(attrs: dict[str, str | None]) -> list[str]:
     return (attrs.get("class") or "").split()
+
+
+def _finished(cell: _Cell, kind: str) -> list[tuple[str | None, _Span]]:
+    """Each part of ``kind`` the cell holds back whose end tag was read, by
+    its label and its span."""
+
+    return [(part.label, (part.start, part.end)) for part in cell.parts if part.end and part.kind == kind]
+
+
+def _column_name(names: list[str], index: int, cell: _Cell) -> tuple[str, bool]:
+    """The name a cell's part goes under on the open line, and whether it is
+    for a screen reader alone: a column of controls under no heading is still
+    named."""
+
+    name = names[index] if index < len(names) else ""
+    if not name and cell.controls:
+        return "Actions", True
+    return name, False
+
+
+def _column_entry(index: int, cell: _Cell, content: _Span, names: list[str], *, dropped: bool) -> _Entry | None:
+    """What a cell shows under its column's name on the open line: all a
+    column that may leave holds, its blocks cut out, or the narrow parts of a
+    column that stays; nothing when there is nothing of either."""
+
+    name, unseen = _column_name(names, index, cell)
+    if dropped:
+        if cell.says_nothing:
+            return None
+        cut = [span for _, span in _finished(cell, "below")]
+        return _Entry(name, [content], "column", cut, index, "cell-data" in _classes(cell.attrs), unseen)
+    narrow = [span for _, span in _finished(cell, "narrow")]
+    return _Entry(name, narrow, "narrow", unseen=unseen) if narrow else None
 
 
 def _kinds(heads: list[list[_Cell]]) -> dict[int, str]:
@@ -449,21 +474,22 @@ def _detail_row(markup: _Markup, width: int, blocks: list[_Span], entries: list[
     return f'<tr class="row-detail" data-row-detail><td colspan="{width}">{"".join(drawn)}{columns}</td></tr>'
 
 
-def mark_cells(markup: str) -> str:
-    """The region's tables with each cell marked for what the stylesheet
-    reads: a body cell that says nothing (``data-blank``), so it is not counted
-    as something a row holds back; a cell of a column blank in every row
-    (``data-blank-column``), which is not drawn; a cell of prose or a status
-    longer than its floor (``data-long``); and a group's heading row spanning
-    every column its headings declare (``colspan``). What a cell of a column
-    that keeps its line says is one ``.kept-line``, so the stylesheet can hold
-    the line whole up to the column's share of its region and let it wrap past
-    that. After each row that holds something back is its open line
-    (``_detail_row``), so opening a row moves nothing of the row itself."""
+def mark_cells(markup: str) -> str | None:
+    """The region's tables with each cell marked for what the stylesheet reads.
+
+    A blank body cell is ``data-blank``, a cell of a column blank in every row
+    ``data-blank-column``, prose or a status past its floor ``data-long``, and a
+    group's heading row spans every declared column. What a kept line says is
+    one ``.kept-line``, and after each row that holds something back is its open
+    line (``_detail_row``), so opening a row moves nothing of the row itself.
+    None when the region holds tables and none of them a row beneath its head.
+    """
 
     cells = _Cells()
     cells.feed(markup)
     cells.close()
+    if cells.bodies and not any(cells.bodies):
+        return None
     if not cells.marks and not cells.held and not cells.details:
         return markup
     text = _Markup(markup)
@@ -495,14 +521,12 @@ def _region(
     room: str = "",
 ) -> dict[str, Any]:
     """The labeled region a table sits in: the box it fits.
-    An identifier in it is cut at a share of the region's width; ``room``
-    names a smaller share for a row whose identifier sits beside wide columns
-    (``shared``) or beside other identifiers (``snug``).
 
-    A table fits its region, so the region is no scroll box and its heading
-    pins under the page's chrome. Only a ``pane`` (a box of its own height, or
-    a table sized to its content) and a ``chart``'s table scroll in it, and
-    those are reachable from the keyboard."""
+    An identifier in it is cut at a share of the region's width, and ``room``
+    names a smaller one (docs/Design.md, A table is laid out before any script
+    runs). Only a ``pane`` (a box of its own height, or a table sized to its
+    content) and a ``chart``'s table scroll in it, reachable from the keyboard.
+    """
 
     if room not in _ROOMS:
         raise ValueError(f"A region's room is one of {sorted(_ROOMS)}, not {room!r}.")
@@ -528,7 +552,12 @@ class RegionNode(template.Node):
         region = _region(
             self.label.resolve(context), **{name: value.resolve(context) for name, value in self.options.items()}
         )
-        content = self.nodelist.render(context)
+        content = mark_cells(self.nodelist.render(context))
+        if content is None:
+            # A table with no rows would draw its headings over nothing, so the
+            # region says it has nothing instead (docs/Design.md, Nothing empty
+            # takes space).
+            return render_to_string("partials/_empty_state.html", {"message": f"{region['label']}: none yet."})
         return format_html(
             '<div class="table-scroll{}" role="region" aria-label="{}"{}{}>{}</div>',
             f" {region['css']}" if region["css"] else "",
@@ -537,7 +566,7 @@ class RegionNode(template.Node):
             mark_safe(" data-chart") if region["chart"] else "",
             # The region's own content, rendered and escaped already; the mark
             # adds an attribute and nothing else.
-            mark_safe(mark_cells(content)),
+            mark_safe(content),
         )
 
 
@@ -546,9 +575,9 @@ class RegionNode(template.Node):
 def table_region(parser: Any, token: Any) -> RegionNode:
     bits = token.split_contents()
     options = token_kwargs(bits[2:], parser)
+    if len(bits) < 2 or len(options) != len(bits) - 2:
+        raise template.TemplateSyntaxError(f"table_region takes {inspect.signature(_region)}: a label, then name=value")
     try:
-        if len(bits) < 2 or len(options) != len(bits) - 2:
-            raise TypeError("a label, then name=value")
         inspect.signature(_region).bind(bits[1], **options)
     except TypeError as wrong:
         raise template.TemplateSyntaxError(f"table_region takes {inspect.signature(_region)}: {wrong}") from wrong
@@ -577,31 +606,26 @@ def _server_sort(context: Any, ascending: str, descending: str) -> dict[str, str
 def table_heading(
     context: Any,
     label: str,
-    kind: str = "",
+    kind: str = "",  # one of COLUMN_KINDS, or follows from css when left out
     *,
     css: str = "",
     drop: int = 0,
     sort: str = "",
     descending: str = "",
     local_sort: bool = False,
-    hidden: bool = False,
+    hidden: bool = False,  # the label for assistive technology only
     title: str = "",
-    gutter: bool = False,
-    select_all: bool = False,
-    note: str = "",
+    gutter: bool = False,  # room for the row toggles beneath it
+    select_all: bool = False,  # the tick-box that selects every row
+    note: str = "",  # a word beside the label that qualifies the whole column, set in note_css
     note_css: str = "",
 ) -> dict[str, Any]:
     """One column heading.
 
-    ``kind`` is one of ``COLUMN_KINDS``, or follows from ``css`` when left out.
     ``drop`` is the order a table too wide for its region lets the column go
     in, 1 first, the rightmost of a rank first. ``sort`` names the field a
     server-sorted list orders this column by (``descending`` when its reverse is
     not ``-field``); ``local_sort`` sorts the rows already on the page instead.
-    ``hidden`` keeps the label for assistive technology only, ``gutter`` makes
-    room for the row toggles beneath it, and ``select_all`` draws the tick-box
-    that selects every row. ``note`` is a word beside the label that qualifies
-    the whole column, set in ``note_css``.
     """
 
     if sort and local_sort:

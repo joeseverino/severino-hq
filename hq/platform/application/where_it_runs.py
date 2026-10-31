@@ -1,12 +1,9 @@
 """A project from the side of what serves it, and names in its notes as links.
 
-Nothing points a project at infrastructure. A project that says where it is
-published has said which service it is (``published_sites``), and the service
-knows the machine and the container that answer for it. Read from that side,
-the project's page can say where it runs.
-
-Notes are free text. A machine or a document a note names is a link wherever
-the name is one HQ knows, and plain text everywhere else.
+Nothing points a project at infrastructure: where it is published names its
+service (``published_sites``), which knows the machine and container answering
+for it. A machine or document a free-text note names is a link wherever HQ
+knows the name, and plain text everywhere else.
 """
 
 import re

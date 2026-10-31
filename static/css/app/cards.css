@@ -84,7 +84,9 @@ a.kpi:hover { background: var(--surface-2); }
 @container kpi (min-width: 325px) {
   .kpi-grid.is-featured > :not(:first-child) .label .icon { display: inline; }
 }
-.kpi .value { font-size: var(--text-4xl); font-weight: 650; letter-spacing: -.018em; line-height: 1.1; font-feature-settings: "tnum"; }
+/* Tall enough for the face's ascent and descent, so the lines of a value that
+   wraps (a range beside its unit, a phrase) never draw into each other. */
+.kpi .value { font-size: var(--text-4xl); font-weight: 650; letter-spacing: -.018em; line-height: 1.2; font-feature-settings: "tnum"; }
 .kpi.is-zero .value { color: var(--muted-2); font-weight: 500; }
 .kpi .muted { font-size: var(--text-2xs); }
 /* Nested in a card, the grid's own bottom margin becomes dead space inside the
@@ -214,10 +216,9 @@ a.kpi:hover { background: var(--surface-2); }
 .pill.is-mark { padding: 0 var(--space-3); font-size: var(--text-xs); line-height: 1.5; font-weight: 600; }
 .queue-table .attention-title { font-weight: 600; }
 .queue-table a.attention-title:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
-.queue-table .attention-detail {
-  margin: var(--space-1) 0 0; font-size: var(--text-sm); line-height: 1.5; color: var(--muted);
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; overflow: hidden;
-}
+.queue-table .attention-detail { margin: var(--space-1) 0 0; font-size: var(--text-sm); line-height: 1.5; color: var(--muted); }
+/* What a row's own buttons decide (data-whole, an approval's change) is never cut: it wraps in the row. */
+.queue-table .attention-detail:not([data-whole]) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; overflow: hidden; }
 /* A table with no headings is read as one column, so the queue counts its own two for the share; with no script in a narrow box the title and the buttons share one. */
 .data-table.queue-table { --columns: 2; }
 @media (scripting: none) {
@@ -293,7 +294,7 @@ a.kpi:hover { background: var(--surface-2); }
 .queue-row[data-dismissed] .queue-buttons > :not([data-triage]),
 .queue-row[data-dismissed] :is(.attention-meta, .pill.is-mark) { display: none; }
 .queue-row[data-dismissed] .attention-title { color: var(--muted); font-weight: 400; }
-.queue-row[data-dismissed] .attention-title::before { content: "Dismissed: "; }
+.queue-row[data-dismissed] .attention-title::before { content: "Dismissed: " / "Dismissed: "; }
 .attention-clear { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
 .action-items-card { padding-top: var(--space-5); }
 .action-items-aside[open] > summary { margin-bottom: var(--space-6); }
@@ -309,8 +310,9 @@ a.kpi:hover { background: var(--surface-2); }
 .problem-line > :is(.resolution-workflow, .resolution-fold) { flex-basis: 100%; margin-top: 0; }
 /* The short queue on the dashboard, under the greeting: a card like any other. */
 .dash-needs { margin-bottom: var(--stack-gap); }
-/* At a glance a card's meaning is one line; the rest is on the page its title opens. */
-.attention-glance .attention-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* At a glance a card's meaning is one line; the rest is on the page its title
+   opens. What the card's own buttons decide (data-whole) wraps instead. */
+.attention-glance .attention-detail:not([data-whole]) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Steps or checks side by side, each an icon, a title and a sentence. Read
    down each column, as a list is, so however many there are the columns end
    within a step of each other: never a row of five and a row of two. */

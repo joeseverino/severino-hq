@@ -9,7 +9,9 @@ from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .. import reference_findings as rules
+from ..capabilities import capability_words
 from ..inventory_testing import store
+from ..resource_capabilities import UPDATE_CAPABILITY
 from .test_tailnet_posture import raised, tailnet_connection
 
 ZONE, RECORD, TARGET = "cloudflare.zone", "cloudflare.dns_record", "tls.delivery_target"
@@ -100,14 +102,14 @@ class NamesNoDomainTests(TestCase):
 
         self.assertEqual(finding["subject"], "resource:in-no-domain")
         # The record is called what every page calls it.
-        self.assertEqual(finding["title"], "app.typo.example → 192.0.2.10 is in typo.example, which HQ does not have")
+        self.assertEqual(finding["title"], "app.typo.example at 192.0.2.10 is in typo.example, which HQ does not have")
         self.assertEqual(
             finding["explanation"],
             "HQ expects no domain called typo.example and no connection reads one, so "
-            "app.typo.example → 192.0.2.10 cannot be applied anywhere.",
+            "app.typo.example at 192.0.2.10 cannot be applied anywhere.",
         )
         self.assertEqual(finding["severity"], "attention")
-        self.assertEqual([remedy["label"] for remedy in finding["remedies"]], ["Change what HQ expects"])
+        self.assertEqual([remedy["label"] for remedy in finding["remedies"]], [capability_words(UPDATE_CAPABILITY)])
 
     def test_a_domain_hq_expects_is_there_whether_or_not_it_was_read(self):
         self.read("example.com")
@@ -154,7 +156,7 @@ class NamesNoConnectionTests(TestCase):
             "nothing reads on-nothing and nothing applies HQ's settings to it.",
         )
         self.assertIn({"label": "Connection it names", "value": "example-edge-2"}, finding["evidence"])
-        self.assertEqual([remedy["label"] for remedy in finding["remedies"]], ["Change what HQ expects"])
+        self.assertEqual([remedy["label"] for remedy in finding["remedies"]], [capability_words(UPDATE_CAPABILITY)])
 
     def test_nothing_is_said_before_a_controller_reports_its_connections(self):
         target("on-nothing", "example-edge-2")
@@ -175,8 +177,8 @@ class NamesNoConnectionTests(TestCase):
         self.assertEqual(
             sorted(finding["title"] for finding in raised(rules.RULE)),
             [
-                "app.typo.example → 192.0.2.10 is in typo.example, which HQ does not have",
-                "app.typo.example → 192.0.2.10 uses a connection no controller has",
+                "app.typo.example at 192.0.2.10 is in typo.example, which HQ does not have",
+                "app.typo.example at 192.0.2.10 uses a connection no controller has",
             ],
         )
 

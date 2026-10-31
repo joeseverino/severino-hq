@@ -1,11 +1,9 @@
 """What a new HQ still needs, in the order it is worth doing.
 
-A first project is not one of them: the dashboard's Projects card already asks
-for it, and saying it twice is noise.
-
 Derived, never stored: each step is done when HQ can see it is, so there is
-nothing to tick off and nothing to forget to untick. An HQ with every step done
-shows none of them.
+nothing to tick off or forget to untick, and an HQ with every step done shows
+none. A first project is not a step, since the dashboard's Projects card
+already asks for it.
 """
 
 from dataclasses import dataclass

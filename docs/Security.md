@@ -166,8 +166,9 @@
   narrow the identity provider's grant. An explicit rule beats the default, and
   between a surface and an agent rule the stricter wins. With no rules, gated
   infrastructure changes are held, and anything destructive an agent
-  asks for is held too. A rule that allows a would-be-held call is recorded as
-  its consent.
+  asks for (a deletion, or stopping a container) is held too. A person in the
+  browser is never held. A rule that allows a would-be-held call is recorded
+  as its consent.
 - A held request writes and queues nothing. It is decided on its audit entry
   (`/audit/?awaiting=1`), or from its action item, against a fingerprinted
   field-by-field diff, so a

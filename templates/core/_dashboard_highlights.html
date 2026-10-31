@@ -2,14 +2,14 @@
 {% if dashboard_highlights %}
 <section class="dashboard-highlights" aria-label="Your overview">
   {% for section in dashboard_highlights %}
-    <article class="highlight-card card">
-      {% section_head %}{{ section.label|breakable }}{% if section.overview.period %} <span class="section-period">{{ section.overview.period|breakable }}</span>{% endif %}{% aside %}<a class="subtle-link" href="{% if section.overview.url %}{{ section.overview.url }}{% else %}{{ section.cards.0.url }}{% endif %}">View {{ section.label|breakable }} &rarr;</a>{% endsection_head %}
+    {% card element="article" css="highlight-card" %}
+      {% section_head %}{{ section.label|breakable }}{% if section.overview.period %} <span class="section-period">{{ section.overview.period|breakable }}</span>{% endif %}{% aside %}<a class="subtle-link" href="{% if section.overview.url %}{{ section.overview.url }}{% else %}{{ section.cards.0.url }}{% endif %}">View {{ section.label|breakable }}{% arrow %}</a>{% endsection_head %}
       {% if section.overview.kpis %}
         {% include "partials/_kpi_grid.html" with items=section.overview.kpis label=section.label featured=True %}
       {% else %}
         {% include "partials/_kpi_grid.html" with items=section.cards label=section.label featured=True %}
       {% endif %}
-    </article>
+    {% endcard %}
   {% endfor %}
 </section>
 {% endif %}

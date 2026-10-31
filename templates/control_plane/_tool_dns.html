@@ -1,6 +1,6 @@
 {% load nav_tags %}
 <div class="lookup-grid">
-  <section class="card">
+  {% card %}
     <div class="tool-intro">
       <h2>Name lookup</h2>
       <p class="help">Every public record for a name.</p>
@@ -47,9 +47,9 @@
     </div>
       {% endif %}
     {% endwith %}
-  </section>
+  {% endcard %}
 
-  <section class="card">
+  {% card %}
     <div class="tool-intro">
       <h2>Address lookup</h2>
       <p class="help">The name for an address, and who owns it.</p>
@@ -114,5 +114,5 @@
     </div>
       {% endif %}
     {% endwith %}
-  </section>
+  {% endcard %}
 </div>

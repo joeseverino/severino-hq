@@ -3,6 +3,8 @@ from pathlib import Path
 from django import forms
 from django.urls import reverse
 
+from hq.platform.application.record_errors import InputError
+
 from .models import Receipt
 from .validation import (
     ALLOWED_RECEIPT_CONTENT_TYPES,
@@ -75,5 +77,8 @@ class ReceiptUploadForm(forms.ModelForm):
     def clean_file(self):
         f = self.cleaned_data["file"]
         if is_new_upload(f):
-            validate_receipt_file(f)
+            try:
+                validate_receipt_file(f)
+            except InputError as exc:
+                raise forms.ValidationError(exc.reason) from exc
         return f

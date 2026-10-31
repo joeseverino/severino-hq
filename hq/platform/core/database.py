@@ -12,6 +12,8 @@ from django.db import DEFAULT_DB_ALIAS, connections
 RETRIES_EVERY = 0.1
 # A connection writing transaction after transaction lets go of the lock after
 # this many seconds of it, for longer than a waiting connection sleeps.
+# That costs the writer at most LETS_GO / HOLDS of its time and lets any waiter
+# in within about HOLDS.
 HOLDS = 1.0
 LETS_GO = RETRIES_EVERY * 1.5
 
@@ -78,7 +80,7 @@ class Turns:
         self.began: float | None = None
         self.last = 0.0
 
-    def before(self, takes_lock: bool) -> float:
+    def before(self, *, takes_lock: bool) -> float:
         """Seconds to let go before this statement."""
 
         now = self.clock()
@@ -97,12 +99,10 @@ class Turns:
 def gives_way(using: str = DEFAULT_DB_ALIAS, *, sleep: Callable[[float], None] = time.sleep) -> Iterator[None]:
     """Within the block, writing back to back gives other writers a turn.
 
-    A waiting connection tries again every ``RETRIES_EVERY`` at most, and work
-    that commits one transaction and begins the next within a millisecond wins
-    every time, so an import would hold the controller's report, or a person
-    saving a form, until their busy timeout fails them. Here the work lets go
-    for ``LETS_GO`` after each ``HOLDS`` of writing, which costs it at most
-    that share of its time and lets any waiter in within about ``HOLDS``.
+    Work that commits and begins again within a millisecond always beats a
+    waiter retrying every ``RETRIES_EVERY``, so an import would hold the
+    controller's report, or a person saving a form, until their busy timeout
+    fails them.
     """
 
     connection = connections[using]
@@ -113,7 +113,7 @@ def gives_way(using: str = DEFAULT_DB_ALIAS, *, sleep: Callable[[float], None] =
         takes_lock = head.startswith("BEGIN") or (
             not connection.in_atomic_block and head.startswith(("INSERT", "UPDATE", "DELETE", "REPLACE"))
         )
-        pause = turns.before(takes_lock)
+        pause = turns.before(takes_lock=takes_lock)
         if pause:
             sleep(pause)
         try:

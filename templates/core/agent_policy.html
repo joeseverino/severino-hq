@@ -1,6 +1,6 @@
 {% extends "page.html" %}
 {% block page %}
-<section class="card agent-state{% if agents_paused %} is-paused{% endif %}">
+{% card css="agent-state" data_paused=agents_paused %}
   <div class="agent-state-main">
     <span class="agent-state-dot" aria-hidden="true"></span>
     <div class="agent-state-copy">
@@ -9,9 +9,9 @@
     </div>
     {% url 'agent_access' as agent_access_url %}
     {% if agents_paused %}
-      {% post_button "Allow agents" agent_access_url name="paused" value="0" css="btn primary" %}
+      {% words "agents.access.set" "off" as allow %}{% post_button allow agent_access_url name="paused" value="0" css="btn primary" %}
     {% else %}
-      {% post_button "Block all agents" agent_access_url name="paused" value="1" %}
+      {% words "agents.access.set" "on" as block %}{% post_button block agent_access_url name="paused" value="1" %}
     {% endif %}
   </div>
   <p class="agent-state-facts">
@@ -36,7 +36,7 @@
   {% else %}
     <p class="muted policy-none">No agent has connected yet.</p>
   {% endif %}
-</section>
+{% endcard %}
 
 {% comment %}
 The rules that differ from the default, then every other action folded under

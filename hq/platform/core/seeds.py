@@ -25,10 +25,13 @@ class Seed:
 
 # Each builder is reached through a function, so reading the registry imports none.
 SEEDS: dict[str, Seed] = {
-    "showcase": Seed(lambda owner: example_estate.build(owner), MappingProxyType({"SEVERINO_POSTURE": "advanced"})),
-    "standard": Seed(lambda owner: example_estate.build(owner)),
+    "showcase": Seed(
+        lambda owner: example_estate.build(owner),  # noqa: PLW0108 - a bare reference would reify the lazy import
+        MappingProxyType({"SEVERINO_POSTURE": "advanced"}),
+    ),
+    "standard": Seed(lambda owner: example_estate.build(owner)),  # noqa: PLW0108 - a bare reference would reify the lazy import
     # A fresh install: its one signed-up user, and nothing else.
-    "empty": Seed(lambda owner: None),
+    "empty": Seed(lambda _owner: None),
     # Years of records, to measure pages at the size they grow to.
     "scale": Seed(lambda owner: bench.seed(owner=owner)),
 }

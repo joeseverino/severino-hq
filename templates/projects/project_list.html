@@ -6,5 +6,5 @@
   <td>{% for t in row.tech_list|slice:":3" %}<span class="tag">{{ t|breakable }}</span>{% endfor %}{% if row.tech_list|length > 3 %}<span class="muted row-less">+{{ row.tech_list|length|add:"-3"|breakable }}</span><span class="row-more">{% for t in row.tech_list|slice:"3:" %}<span class="tag">{{ t|breakable }}</span>{% endfor %}</span>{% endif %}</td>
   <td class="muted">{% if row.pushed_at %}Pushed {{ row.pushed_at|when:"ago" }}{% elif row.repository_url %}Not read yet{% endif %}{% if row.repository.failing %}<br><span class="pill pill-serious">Checks failing</span>{% endif %}</td>
   <td class="muted">{{ row.updated_at|when:"ago" }}</td>
-  <td class="row-actions"><a href="{% url 'projects:edit' row.slug %}">Edit</a></td>
+  <td class="row-actions"><a href="{% url 'projects:edit' row.slug %}">{% words "project.update" %}</a></td>
 {% endblock %}

@@ -2,23 +2,27 @@ package host
 
 import (
 	"bytes"
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 )
 
 // Verify reports where the host differs from the release HQ runs: the tree
 // against that image, file for file and byte for byte; the installed units
-// against the tree's; and anything a release no longer installs. It changes
+// against the tree's; anything a release no longer installs; and the Actions
+// runner's sudo rules against the ones HQ renders. It changes
 // nothing. An empty answer is a host that is what its release says.
 func (m *Machine) Verify(ctx context.Context) ([]string, error) {
 	out, err := m.Command(ctx, "docker", "inspect", "--format", "{{.Image}}", Container).Output()
 	if err != nil {
-		return nil, fmt.Errorf("could not read the image HQ runs")
+		return nil, errors.New("could not read the image HQ runs")
 	}
 	running := strings.TrimSpace(string(out))
 	var drift []string
@@ -50,7 +54,7 @@ func (m *Machine) Verify(ctx context.Context) ([]string, error) {
 		want, _ := os.ReadFile(filepath.Join(m.UnitDir(), name))
 		have, err := os.ReadFile(filepath.Join(m.Systemd, name))
 		if err != nil || !bytes.Equal(want, have) {
-			drift = append(drift, fmt.Sprintf("%s is not the release's", filepath.Join(m.Systemd, name)))
+			drift = append(drift, filepath.Join(m.Systemd, name)+" is not the release's")
 		}
 	}
 	retired, err := Retired(shipped, m.Systemd)
@@ -58,13 +62,95 @@ func (m *Machine) Verify(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	for _, name := range retired {
-		drift = append(drift, fmt.Sprintf("%s is not shipped by the release", filepath.Join(m.Systemd, name)))
+		drift = append(drift, filepath.Join(m.Systemd, name)+" is not shipped by the release")
 	}
 	leftovers, _ := filepath.Glob(filepath.Join(m.Sbin, "severino-hq-*"))
 	for _, leftover := range leftovers {
-		drift = append(drift, fmt.Sprintf("%s is installed by no release", leftover))
+		drift = append(drift, leftover+" is installed by no release")
 	}
-	return drift, nil
+	return append(drift, m.runnerRules(ctx)...), nil
+}
+
+var unrestricted = regexp.MustCompile(`(?m)(^|[\s:])ALL\s*$`)
+
+// runnerRules: the Actions runner runs as its own account, which deploys
+// through one sudo rule and may run nothing else through sudo that HQ does
+// not render. Only root can list another account's rules without a password.
+func (m *Machine) runnerRules(ctx context.Context) []string {
+	output := func(name string, args ...string) (string, error) {
+		out, err := m.Command(ctx, name, args...).Output()
+		return strings.TrimSpace(string(out)), err
+	}
+	listed, _ := output("systemctl", "list-units", "--all", "--plain", "--no-legend", "actions.runner.*.service")
+	var units []string
+	for line := range strings.SplitSeq(listed, "\n") {
+		if fields := strings.Fields(line); len(fields) > 0 {
+			units = append(units, fields[0])
+		}
+	}
+	if len(units) != 1 {
+		return []string{"expected one Actions runner unit, found: " + cmp.Or(strings.Join(units, " "), "none")}
+	}
+	user, _ := output("systemctl", "show", "-p", "User", "--value", units[0])
+	if user == "" || user == "root" {
+		return []string{fmt.Sprintf("the Actions runner runs as '%s'; it must run as the deploy account", cmp.Or(user, "root"))}
+	}
+	rules, err := output("sudo", "-n", "-l", "-U", user)
+	if err != nil {
+		return []string{"could not list " + user + "'s sudo rules"}
+	}
+	program := filepath.Join(m.Lib, hostRelative)
+	deploy := program + " deploy *"
+	var drift []string
+	switch {
+	case unrestricted.MatchString(rules):
+		drift = append(drift, user+" may run any command through sudo")
+	case !regexp.MustCompile(`(?m)NOPASSWD:(.*,)?\s*` + regexp.QuoteMeta(deploy) + `\s*(,|$)`).MatchString(rules):
+		drift = append(drift, fmt.Sprintf("%s has no NOPASSWD sudo rule for %s", user, deploy))
+	}
+	return append(drift, onlyRendered(user, rules, program)...)
+}
+
+// onlyRendered: every command sudo lists for the runner is one HQ renders a
+// rule for. sudo-rs resolves the aliases, groups and includes, and names no
+// rule's source, so a failure says how to find it.
+func onlyRendered(user, rules, program string) []string {
+	rendered := []string{program + " deploy *", program + " upgrade *"}
+	commands, found := listedCommands(rules)
+	if !found {
+		return []string{"sudo's listing of " + user + "'s rules has no list of commands"}
+	}
+	var drift []string
+	for _, command := range commands {
+		if !slices.Contains(rendered, command) {
+			drift = append(drift, fmt.Sprintf("%s may run %s through sudo, which HQ does not render; 'sudo grep -rn %s /etc/sudoers /etc/sudoers.d' finds the rule", user, command, user))
+		}
+	}
+	return drift
+}
+
+var sudoTags = regexp.MustCompile(`^(?:[A-Z_]+:\s*|[A-Z_]+=\S+\s+)*`)
+
+// listedCommands are the commands `sudo -l -U` lists, each with its spacing
+// collapsed: an entry is `(runas) TAGS: command, command`, aliases expanded.
+func listedCommands(rules string) (commands []string, found bool) {
+	_, entries, found := strings.Cut(rules, "may run the following commands")
+	if !found {
+		return nil, false
+	}
+	_, entries, _ = strings.Cut(entries, "\n")
+	for line := range strings.SplitSeq(entries, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "(") {
+			_, line, _ = strings.Cut(line, ")")
+		}
+		for command := range strings.SplitSeq(line, ", ") {
+			if command = strings.Join(strings.Fields(sudoTags.ReplaceAllString(strings.TrimSpace(command), "")), " "); command != "" {
+				commands = append(commands, command)
+			}
+		}
+	}
+	return commands, true
 }
 
 // compareTrees names every file that is in one tree and not the other, or

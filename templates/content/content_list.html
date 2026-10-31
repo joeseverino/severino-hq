@@ -10,7 +10,7 @@
   <td class="muted">{{ row.updated_at|when:"ago" }}</td>
   <td class="actions-col">
     {% if row.published_url|web_url %}
-      {% outside_link url=row.published_url css="icon-link" title="Open live page" label="Open live page" %}↗{% endoutside_link %}
+      {% outside_link url=row.published_url css="icon-link" title="Open live page" label="Open live page" %}<span aria-hidden="true">↗</span>{% endoutside_link %}
     {% else %}
       {% empty_value %}
     {% endif %}

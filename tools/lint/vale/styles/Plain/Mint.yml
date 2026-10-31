@@ -1,0 +1,8 @@
+extends: existence
+message: "'%s' is HQ's own word; say 'issue'"
+level: error
+ignorecase: true
+nonword: true
+scope: [shown, ~comment & ~code]
+tokens:
+  - '(?<![\w-])(?:mint(?:s|ed|ing)?)(?![\w-])'

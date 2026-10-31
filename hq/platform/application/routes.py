@@ -1,21 +1,10 @@
 """Where a named route is, worked out once.
 
-HQ composes its pages from derived structures (the topology, the queue, the
-catalogs) whose every node carries the links to its own pages. Composing one
-queue asks for several hundred addresses, most of them the same few dozen, and
-Django works each out afresh: correct, and a measurable share of the request.
-
-The routes are fixed for the life of the process, so an address worked out once
-is the address. ``reverse`` here is Django's, remembered. It is keyed by
-everything Django's answer depends on, including the script prefix and the URL
-configuration in force, and it forgets everything when a setting changes, which
-is how a test that swaps the URL configuration stays correct.
-
-Those two are fixed for one request, and asking Django for them costs more than
-the remembered lookup they key, so a projection asks once.
-
-``routed`` is the one walk of the URL configuration, for whatever lists its
-routes: a page's name and path, its view, the resolvers it is mounted under.
+Every node of the topology, the queue and the catalogs carries links to its own
+pages, so one queue asks for several hundred addresses, most of them the same
+few dozen, and Django works each out afresh. The routes are fixed for the life
+of the process, so ``reverse`` here is Django's, remembered. ``routed`` is the
+one walk of the URL configuration, for whatever lists its routes.
 """
 
 from collections.abc import Iterable, Iterator
@@ -29,13 +18,26 @@ from django.urls import URLPattern, URLResolver, get_resolver, get_script_prefix
 from .projection import read_once
 
 
+# Keyed by everything Django's answer depends on, including the script prefix
+# and the URL configuration in force.
 @lru_cache(maxsize=4096)
-def _resolved(urlconf: Any, prefix: str, current_app: Any, viewname: Any, args: tuple, kwargs: tuple) -> str:
+def _resolved(
+    urlconf: Any,
+    prefix: str,  # noqa: ARG001 - a key of the cache: Django's reverse reads the script prefix itself
+    current_app: Any,
+    viewname: Any,
+    args: tuple,
+    kwargs: tuple,
+) -> str:
     return _reverse(viewname, urlconf=urlconf, args=args or None, kwargs=dict(kwargs) or None, current_app=current_app)
 
 
 def _in_force() -> tuple[Any, str]:
-    """The URL configuration and script prefix this projection is served under."""
+    """The URL configuration and script prefix this projection is served under.
+
+    Fixed for one request, and dearer to ask Django for than the remembered
+    lookup they key, so a projection asks once.
+    """
 
     return read_once("routes.in_force", lambda: (get_urlconf(), get_script_prefix()))
 
@@ -59,6 +61,8 @@ def reverse(viewname, urlconf=None, args=None, kwargs=None, current_app=None) ->
         return _reverse(viewname, urlconf=urlconf, args=args, kwargs=kwargs, current_app=current_app)
 
 
+# Forgets everything when a setting changes, which is how a test that swaps the
+# URL configuration stays correct.
 def _forget(**_kwargs) -> None:
     _resolved.cache_clear()
 

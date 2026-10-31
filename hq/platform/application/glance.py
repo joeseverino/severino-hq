@@ -2,7 +2,7 @@
 
 import re
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Annotated, Any
 
 from django.db import transaction
 from django.db.models import Max
@@ -16,15 +16,21 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
     WeatherObservation,
 )
-from hq.platform.core.audit import operation_context
+from hq.platform.core.audit import record_event
 lazy from hq.platform.application.routes import reverse
+lazy from hq.platform.core.models import AuditLog
 
 from . import readings
-from .cadence import ring_doorbell
+from .cadence import ring_glance_doorbell
+from .command_fields import Describe
 from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
 from .freshness import DASHBOARD_GLANCE, freshness
+from .record_errors import InputError, PolicyError
 from .security import Capability, Principal
+from .timestamps import moment
 lazy from .projection import read_once
+
+AUDIT_LABEL = "Dashboard"
 
 # The National Weather Service API. The connection shows it and the glance plan
 # hands it to the controller, which states no address of its own.
@@ -214,26 +220,40 @@ def dashboard_machine_selected(key: str) -> bool:
     return DashboardMachine.objects.filter(machine__key=key, machine__kind="machine", machine__enabled=True).exists()
 
 
+DASHBOARD_MACHINE = "dashboard.machine.select"
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardMachineCommand:
+    """Whether the machine's telemetry is shown on the dashboard."""
+
+    selected: Annotated[bool, Describe("Whether the dashboard shows this machine's telemetry.")]
+
+
 @transaction.atomic
-def select_dashboard_machine(key: str, *, selected: bool, principal: Principal) -> dict[str, Any]:
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
-    resource = ManagedResource.objects.filter(key=key, kind="machine", enabled=True).first()
+def select_dashboard_machine(
+    command: DashboardMachineCommand, *, principal: Principal, current_key: str
+) -> dict[str, Any]:
+    del principal
+    resource = ManagedResource.objects.filter(key=current_key, kind="machine", enabled=True).first()
     if resource is None:
-        raise ValueError("Dashboard telemetry requires an enabled machine record.")
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="dashboard.machine.select",
-    ):
-        if selected:
-            last = DashboardMachine.objects.aggregate(value=Max("position"))["value"]
-            DashboardMachine.objects.get_or_create(
-                machine=resource,
-                defaults={"position": (last + 1) if last is not None else 0},
-            )
-        else:
-            DashboardMachine.objects.filter(machine=resource).delete()
-    return {"ok": True, "machine": resource.key if selected else ""}
+        raise PolicyError("Dashboard telemetry requires an enabled machine record.")
+    shown = DashboardMachine.objects.filter(machine=resource).exists()
+    if command.selected == shown:
+        return {"ok": True, "machine": resource.key if shown else ""}
+    if command.selected:
+        last = DashboardMachine.objects.aggregate(value=Max("position"))["value"]
+        DashboardMachine.objects.create(machine=resource, position=(last + 1) if last is not None else 0)
+    else:
+        DashboardMachine.objects.filter(machine=resource).delete()
+    record_event(
+        action=AuditLog.Action.UPDATED,
+        obj=resource,
+        type_label=AUDIT_LABEL,
+        message=f"{resource.key} {'shown on' if command.selected else 'taken off'} the dashboard",
+        required=True,
+    )
+    return {"ok": True, "machine": resource.key if command.selected else ""}
 
 
 def _clean_point(value: str) -> str:
@@ -242,42 +262,49 @@ def _clean_point(value: str) -> str:
         return ""
     parts = point.split(",")
     if len(parts) != 2:
-        raise ValueError("Weather location must be latitude, longitude.")
+        raise InputError("Weather location must be latitude, longitude.")
     try:
         latitude, longitude = (float(part.strip()) for part in parts)
     except ValueError as exc:
-        raise ValueError("Weather coordinates must be numbers.") from exc
+        raise InputError("Weather coordinates must be numbers.") from exc
     if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
-        raise ValueError("Weather coordinates are outside the valid range.")
+        raise InputError("Weather coordinates are outside the valid range.")
     return f"{latitude:.4f},{longitude:.4f}"
 
 
+DASHBOARD_SETTINGS = "dashboard.settings.update"
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardSettingsCommand:
+    """Where the weather is read for, and what the glance strip calls its panels."""
+
+    weather_point: Annotated[str, Describe("Where the weather is read for, as latitude,longitude.")] = ""
+    weather_label: Annotated[str, Describe("What the weather panel calls that place.")] = ""
+    infrastructure_label: Annotated[str, Describe("What the infrastructure panel is called.")] = ""
+
+
 @transaction.atomic
-def save_dashboard_settings(
-    *,
-    weather_point: str,
-    weather_label: str,
-    infrastructure_label: str,
-    principal: Principal,
-) -> dict[str, Any]:
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="dashboard.settings.update",
-    ):
-        configuration, _ = DashboardConfiguration.objects.select_for_update().get_or_create(pk=1)
-        configuration.weather_point = _clean_point(weather_point)
-        configuration.weather_label = weather_label.strip()[:40] or "Weather"
-        configuration.infrastructure_label = infrastructure_label.strip()[:40] or "Homelab"
-        configuration.save(
-            update_fields=(
-                "weather_point",
-                "weather_label",
-                "infrastructure_label",
-                "updated_at",
-            )
-        )
+def save_dashboard_settings(command: DashboardSettingsCommand, *, principal: Principal) -> dict[str, Any]:
+    del principal
+    point = _clean_point(command.weather_point)
+    configuration, _ = DashboardConfiguration.objects.select_for_update().get_or_create(pk=1)
+    configuration.weather_point = point
+    configuration.weather_label = command.weather_label.strip()[:40] or "Weather"
+    configuration.infrastructure_label = command.infrastructure_label.strip()[:40] or "Homelab"
+    configuration.save(update_fields=("weather_point", "weather_label", "infrastructure_label", "updated_at"))
+    record_event(
+        action=AuditLog.Action.SETTINGS_CHANGED,
+        obj=configuration,
+        type_label=AUDIT_LABEL,
+        message="Dashboard settings saved",
+        metadata={
+            "weather_point": configuration.weather_point,
+            "weather_label": configuration.weather_label,
+            "infrastructure_label": configuration.infrastructure_label,
+        },
+        required=True,
+    )
     return {"ok": True}
 
 
@@ -376,11 +403,12 @@ def dashboard_panels(
                 else "HQ has no way to read this machine yet."
             ),
         )
+        payload, observed_at = (reading.value or {}, reading.observed_at) if reading is not None else ({}, None)
         panels.append(
             _panel(
                 spec,
-                payload=getattr(reading, "value", None) or {},
-                observed_at=getattr(reading, "observed_at", None),
+                payload=payload,
+                observed_at=observed_at,
                 # A request nothing can answer is not a refresh in progress.
                 refreshing=panel_id in pending and resource.pk in routes,
                 refreshable=resource.pk in routes,
@@ -450,62 +478,68 @@ def _glance_reading(metric: dict[str, str], spec: DashboardPanelSpec) -> dict[st
     }
 
 
-@transaction.atomic
-def request_dashboard_refresh(*, principal: Principal) -> dict[str, Any]:
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
+DASHBOARD_REFRESH = "dashboard.refresh.request"
+DASHBOARD_REFRESH_STALE = "dashboard.refresh.stale"
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardRefreshCommand:
+    """A refresh names nothing: which panels it asks for is HQ's to work out."""
+
+
+def _ask_for(ids: list[str], *, why: str) -> str:
+    """Queue a reading of each panel in ``ids``, recorded once; when it was asked."""
+
     now = timezone.now()
+    for panel_id in ids:
+        DashboardRefreshRequest.objects.update_or_create(
+            panel_id=panel_id,
+            defaults={"requested_at": now, "completed_at": None},
+        )
+    if ids:
+        record_event(
+            action=AuditLog.Action.CREATED,
+            type_label=AUDIT_LABEL,
+            message=f"Asked for {why}: {', '.join(ids)}",
+            metadata={"panels": ids},
+            required=True,
+        )
+        transaction.on_commit(ring_glance_doorbell)
+    return now.isoformat()
+
+
+@transaction.atomic
+def request_dashboard_refresh(_command: DashboardRefreshCommand, *, principal: Principal) -> dict[str, Any]:
+    """Ask for a fresh reading of every panel a controller can read."""
+
+    del principal
     configuration = dashboard_configuration()
     machines = _dashboard_machines()
     routes = _machine_routes(machines) if machines else {}
     ids = [f"machine-{machine.pk}" for machine in machines if machine.pk in routes]
     if ids and configuration.weather_point:
         ids.append("weather")
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="dashboard.refresh.request",
-    ):
-        for panel_id in ids:
-            DashboardRefreshRequest.objects.update_or_create(
-                panel_id=panel_id,
-                defaults={"requested_at": now, "completed_at": None},
-            )
-    if ids:
-        transaction.on_commit(ring_doorbell)
-    return {"ok": True, "requested": ids, "requested_at": now.isoformat()}
+    requested_at = _ask_for(ids, why="a fresh reading of the dashboard")
+    return {"ok": True, "requested": ids, "requested_at": requested_at}
 
 
-def request_stale_panel_refresh(panels: list[dict[str, Any]], *, principal: Principal) -> tuple[str, ...]:
+@transaction.atomic
+def request_stale_panel_refresh(_command: DashboardRefreshCommand, *, principal: Principal) -> dict[str, Any]:
     """Ask for the panels whose reading is due again.
 
     The dashboard posts this when it opens on a due reading. Only panels that
     are due, refreshable and not already waiting on a refresh are asked for,
     so repeat views of one card ask once.
-
-    Silent for a principal who cannot ask: the page still renders.
     """
 
-    wanted = tuple(
+    del principal
+    wanted = [
         str(panel["id"])
-        for panel in panels
+        for panel in dashboard_panels()
         if panel.get("due") and panel.get("refreshable") and not panel.get("refreshing")
-    )
-    if not wanted or not principal.permits(Capability.MANAGE_INFRASTRUCTURE):
-        return ()
-
-    now = timezone.now()
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="dashboard.refresh.stale",
-    ):
-        for panel_id in wanted:
-            DashboardRefreshRequest.objects.update_or_create(
-                panel_id=panel_id,
-                defaults={"requested_at": now, "completed_at": None},
-            )
-    transaction.on_commit(ring_doorbell)
-    return wanted
+    ]
+    requested_at = _ask_for(wanted, why="the dashboard's due readings")
+    return {"ok": True, "requested": wanted, "requested_at": requested_at}
 
 
 def dashboard_refresh_plan(controller_id: str) -> dict[str, Any]:
@@ -551,12 +585,14 @@ def dashboard_refresh_plan(controller_id: str) -> dict[str, Any]:
             "infrastructure": machines,
             "weather": {"point": configuration.weather_point, "endpoint": NWS_API},
         },
+        # Every request made by now is one a reading begun after this answers.
+        "as_of": timezone.now().isoformat(),
     }
 
 
 def _clean_metric(metric: Any) -> dict[str, str]:
     if not isinstance(metric, dict):
-        raise ValueError("Dashboard metrics must be objects.")
+        raise ValueError("Dashboard metrics must be objects.")  # noqa: TRY004 - a payload is refused with ValueError, whatever is wrong with it
     label = str(metric.get("label", "")).strip()[:40]
     value = str(metric.get("value", "")).strip()[:80]
     detail = str(metric.get("detail", "")).strip()[:120]
@@ -582,7 +618,19 @@ def _refresh_is_pending(panel_id: str) -> bool:
     return pending.filter(**lookup).exists()
 
 
-def _record_machine_readings(item: dict[str, Any], *, controller_id: str, observed_at: Any) -> None:
+def _answer(panel_id: str, *, as_of: Any, observed_at: Any) -> None:
+    """Mark answered the request for ``panel_id`` if it was made by ``as_of``.
+
+    A request made while the reading was under way stays pending: the reading
+    began before it, so the next one answers it.
+    """
+
+    DashboardRefreshRequest.objects.filter(
+        panel_id=panel_id, completed_at__isnull=True, requested_at__lte=as_of
+    ).update(completed_at=observed_at)
+
+
+def _record_machine_readings(item: dict[str, Any], *, controller_id: str, as_of: Any, observed_at: Any) -> None:
     expected = {target["key"] for target in dashboard_refresh_plan(controller_id)["targets"]["infrastructure"]}
     matched = False
     for machine_reading in item.get("machines") or []:
@@ -603,12 +651,14 @@ def _record_machine_readings(item: dict[str, Any], *, controller_id: str, observ
         )
         telemetry["controller_id"] = controller_id
         readings.record(reading_key, telemetry, observed_at=since)
-        DashboardRefreshRequest.objects.filter(panel_id=f"machine-{resource.pk}").update(completed_at=observed_at)
+        _answer(f"machine-{resource.pk}", as_of=as_of, observed_at=observed_at)
     if not matched:
         raise ValueError("No machine HQ knows matched the controller's report.")
 
 
-def _record_weather_reading(item: dict[str, Any], *, configuration: DashboardConfiguration, observed_at: Any) -> None:
+def _record_weather_reading(
+    item: dict[str, Any], *, configuration: DashboardConfiguration, as_of: Any, observed_at: Any
+) -> None:
     point = str(item.get("point", "")).strip()
     if not point or point != configuration.weather_point:
         raise ValueError("Weather was reported without a configured point.")
@@ -620,7 +670,7 @@ def _record_weather_reading(item: dict[str, Any], *, configuration: DashboardCon
         now=observed_at,
     )
     WeatherObservation.objects.update_or_create(point=point, defaults={"payload": payload, "observed_at": since})
-    DashboardRefreshRequest.objects.filter(panel_id="weather").update(completed_at=observed_at)
+    _answer("weather", as_of=as_of, observed_at=observed_at)
 
 
 @transaction.atomic
@@ -638,10 +688,14 @@ def record_dashboard_observations(
             raise ValueError(f"Unknown dashboard panel {panel_id!r}.")
         if not _refresh_is_pending(panel_id):
             raise ValueError(f"No refresh is pending for {panel_id!r}.")
+        planned = moment(item.get("as_of"), naive="refuse")
+        if planned is None:
+            raise ValueError(f"The reading of {panel_id!r} does not say when its plan was made.")
+        as_of = min(planned, now)
         if panel_id == "infrastructure":
-            _record_machine_readings(item, controller_id=controller_id, observed_at=now)
+            _record_machine_readings(item, controller_id=controller_id, as_of=as_of, observed_at=now)
         else:
-            _record_weather_reading(item, configuration=configuration, observed_at=now)
+            _record_weather_reading(item, configuration=configuration, as_of=as_of, observed_at=now)
         stored.append(panel_id)
     return {"ok": True, "recorded": stored, "observed_at": now.isoformat()}
 

@@ -21,12 +21,14 @@ from hq.domains.control_plane.models import (
     ProviderInventory,
 )
 
+from ..capabilities import capability_words
 from ..machines import machine, machine_catalog
+from ..resource_capabilities import UPDATE_CAPABILITY
 from ..services import CONTAINER_KIND
 from .markup import all_elements, texts
 
 
-def a_connection(ref, provider, endpoint="", reaches=(), reachable=True):
+def a_connection(ref, provider, endpoint="", reaches=(), *, reachable=True):
     return ProviderConnection.objects.create(
         connection_ref=ref,
         controller_id="a-controller",
@@ -293,6 +295,15 @@ class TailnetPresenceTests(TestCase):
         # In the map, never spoken to.
         self.assertFalse(found["never-spoken"].peered)
         self.assertEqual(found["never-spoken"].peer_path, "")
+
+    def test_a_zero_last_seen_is_unknown_rather_than_a_date(self):
+        """A connected device has no lastSeen, which Go writes as year 1."""
+
+        from ..tailnet_presence import tailnet_presence
+
+        self.sweep({**self.device("a-peer"), "last_seen": "0001-01-01T00:00:00Z"})
+
+        self.assertEqual(tailnet_presence()["a-peer"].last_seen, "")
 
     def test_a_zero_handshake_is_not_a_handshake(self):
         """Tailscale dates a peer it has never spoken to ``0001-01-01``, a
@@ -936,4 +947,4 @@ class DeclareFromWhatHQKnowsTests(TestCase):
         )
         self.assertEqual(machine("example-host").declaration, "example-host")
         labels = [action.label for action in self.page().context["page"].actions]
-        self.assertIn("Edit machine", labels)
+        self.assertIn(capability_words(UPDATE_CAPABILITY), labels)

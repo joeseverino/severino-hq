@@ -1,15 +1,25 @@
 """One way to write a moment, a date and an age, and one filter that shows them."""
 
-import re
 from datetime import date, datetime, timedelta
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from django.template import Context, Template, TemplateSyntaxError
-from django.test import SimpleTestCase, TestCase, override_settings, tag
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import formats, timezone
 
-from ..moments import ago, when, when_day, when_exact, when_range
+from ..moments import (
+    ago,
+    ahead,
+    length,
+    month,
+    numeral,
+    weekday,
+    weekday_initials,
+    when,
+    when_day,
+    when_exact,
+    when_range,
+)
 from ..ui import MISSING
 from .markup import elements, text, with_class
 
@@ -47,7 +57,8 @@ class PhrasingTests(SimpleTestCase):
         self.assertEqual(
             when_exact(this_year(10, 3, 9, 29, 15)), f"Oct\xa03,\xa0{timezone.localdate().year}, 9:29:15\xa0AM\xa0CDT"
         )
-        self.assertEqual(when_exact(datetime(2019, 1, 3, 9, 29, 15)), "Jan\xa03,\xa02019, 9:29:15\xa0AM")
+        naive = datetime(2019, 1, 3, 9, 29, 15)  # noqa: DTZ001 - a naive moment is shown without a zone
+        self.assertEqual(when_exact(naive), "Jan\xa03,\xa02019, 9:29:15\xa0AM")
 
     def test_an_age_is_one_unit(self):
         now = timezone.now()
@@ -70,13 +81,42 @@ class PhrasingTests(SimpleTestCase):
 
         self.assertEqual(when_range(late, datetime(year, 7, 9, 12, 0, tzinfo=UTC)), "Jul\xa03 – Jul\xa09")
 
+    def test_a_calendar_names_its_weekdays_months_and_days(self):
+        late = datetime(2026, 10, 5, 3, 0, tzinfo=UTC)
+
+        self.assertEqual(weekday(date(2026, 10, 5)), "Monday")
+        self.assertEqual(weekday(date(2026, 10, 5), short=True), "Mon")
+        self.assertEqual(weekday_initials(date(2026, 10, 6)), "Tu")
+        self.assertEqual(weekday_initials(date(2026, 10, 8)), "Th")
+        self.assertEqual(month(date(2026, 10, 5)), "October\xa02026")
+        self.assertEqual(month(date(2026, 10, 5), short=True), "Oct")
+        self.assertEqual(numeral(date(2026, 10, 5)), "5")
+        # Each is the day the moment falls on here, a day before it does in UTC.
+        self.assertEqual((weekday(late), numeral(late)), ("Sunday", "4"))
+        self.assertEqual(month(datetime(2026, 11, 1, 3, 0, tzinfo=UTC)), "October\xa02026")
+
+    def test_a_length_is_one_unit_either_way(self):
+        now = timezone.now()
+
+        self.assertEqual(length(now - timedelta(hours=3, minutes=40), now), "3\xa0hours")
+        self.assertEqual(length(now + timedelta(minutes=12, seconds=30), now), "12\xa0minutes")
+        self.assertEqual(length(now + timedelta(seconds=20), now), "under a minute")
+        self.assertEqual(length(date(2019, 10, 3)), "Oct\xa03,\xa02019")
+
+    def test_what_is_ahead_says_how_soon_and_what_has_passed_says_how_long_ago(self):
+        now = timezone.now()
+
+        self.assertEqual(ahead(now + timedelta(days=3, hours=2), now), "in 3\xa0days")
+        self.assertEqual(ahead(now + timedelta(seconds=20), now), "in under a minute")
+        self.assertEqual(ahead(now - timedelta(days=5, hours=2), now), "5\xa0days ago")
+        self.assertEqual(ahead(date(2019, 10, 3)), "Oct\xa03,\xa02019")
+
     def test_a_date_printed_bare_reads_the_same_way(self):
         """Django's own formats are the owner's, so a template that forgot the filter agrees."""
 
         self.assertEqual(formats.date_format(date(2019, 10, 3)), "Oct\xa03,\xa02019")
-        self.assertEqual(
-            formats.date_format(datetime(2019, 10, 3, 9, 29), "DATETIME_FORMAT"), "Oct\xa03,\xa02019, 9:29\xa0AM"
-        )
+        naive = datetime(2019, 10, 3, 9, 29)  # noqa: DTZ001 - the format alone is under test
+        self.assertEqual(formats.date_format(naive, "DATETIME_FORMAT"), "Oct\xa03,\xa02019, 9:29\xa0AM")
 
 
 @override_settings(TIME_ZONE="America/Chicago")
@@ -111,6 +151,20 @@ class WhenFilterTests(SimpleTestCase):
         self.assertEqual(self.moment(moment, "day")[2], "Oct\xa03,\xa02019")
         self.assertEqual(self.moment(moment, "exact")[2], "Oct\xa03,\xa02019, 9:29:15\xa0AM\xa0CDT")
 
+    def test_the_calendar_forms_keep_the_day_behind_their_words(self):
+        day = date(2026, 10, 5)
+
+        self.assertEqual(self.moment(day, "weekday"), ("2026-10-05", "Oct\xa05,\xa02026", "Monday"))
+        self.assertEqual(self.moment(day, "initials")[2], "Mo")
+        self.assertEqual(self.moment(day, "month")[2], "October\xa02026")
+        self.assertEqual(self.moment(day, "numeral")[2], "5")
+
+    def test_the_length_and_ahead_forms_keep_the_exact_moment_behind_them(self):
+        moment = timezone.now() + timedelta(days=3, hours=2)
+
+        self.assertEqual(self.moment(moment, "length"), (moment.isoformat(), when_exact(moment), "3\xa0days"))
+        self.assertEqual(self.moment(moment, "ahead")[2], "in 3\xa0days")
+
     def test_an_iso_stamp_reads_like_the_instant_it_names(self):
         moment = this_year(10, 3, 9, 29, 15)
 
@@ -138,26 +192,7 @@ class OneOwnerTests(SimpleTestCase):
         self.assertEqual(handed.DATE_FORMAT, moments.DAY_YEAR_FORMAT)
         self.assertEqual(handed.DATETIME_FORMAT, moments.MOMENT_YEAR_FORMAT)
         self.assertEqual(handed.TIME_FORMAT, moments.CLOCK_FORMAT)
-
-
-@tag("source", "tree")
-class TimeOfDayTemplateTests(SimpleTestCase):
-    """A page asks ``|when``; it does not spell a clock of its own."""
-
-    root = Path(__file__).resolve().parents[4]
-
-    def test_no_template_formats_a_time_of_day_itself(self):
-        clock = re.compile(r"""\|\s*date:\s*["'][^"']*[gGhHisaA][^"']*["']""")
-        templates = sorted((self.root / "templates").rglob("*.html"))
-        self.assertTrue(templates)
-
-        spelled = [
-            f"{path.relative_to(self.root)}: {found.group(0)}"
-            for path in templates
-            for found in clock.finditer(path.read_text())
-        ]
-
-        self.assertEqual(spelled, [])
+        self.assertEqual(handed.YEAR_MONTH_FORMAT, moments.MONTH_FORMAT)
 
 
 class DaySpanTests(TestCase):

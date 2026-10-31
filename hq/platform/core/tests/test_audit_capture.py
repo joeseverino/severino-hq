@@ -10,10 +10,9 @@ field, with the same number of queries.
 import copy
 import pickle
 import uuid
-from contextlib import ExitStack, contextmanager
+from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from unittest import mock
 
 from django.db import connection, transaction
 from django.db.models.signals import post_delete, post_init, post_save
@@ -28,7 +27,6 @@ from hq.domains.receipts.models import Receipt
 
 from .. import audit
 from ..audit import (
-    AUDIT_DISPATCH_UID,
     REDACTED,
     _capture,
     _changes,
@@ -106,18 +104,9 @@ def register_eager(model, type_label, *, redact=(), observation=(), connection=N
 @contextmanager
 def auditing(register, options: dict):
     """Audit each model in `options` through `register` alone, inside the block."""
-    with ExitStack() as stack:
-        stack.enter_context(mock.patch.dict(audit._AUDITED_MODELS))
-        for signal in SIGNALS:
-            # Registered first so it runs last: the cache is dropped once the
-            # real receivers are back.
-            stack.callback(signal.sender_receivers_cache.clear)
-            stack.enter_context(mock.patch.object(signal, "receivers", list(signal.receivers)))
-            for model in options:
-                if not signal.disconnect(sender=model, dispatch_uid=AUDIT_DISPATCH_UID):
-                    raise AssertionError(f"{model.__name__} has no audit receiver on a signal.")
+    with audit.withdrawn(*options) as labels:
         for model, extra in options.items():
-            register(model, audit._AUDITED_MODELS.pop(model), **extra)
+            register(model, labels[model], **extra)
         yield
 
 
@@ -521,6 +510,21 @@ class SameRecordTests(TestCase):
         expense = an_expense()
         self.assertEqual(AuditLog.objects.filter(object_type="Expense").count(), 1)
         self.assertIn("_audit_snapshot", expense.__dict__)
+
+    def test_a_withdrawn_model_is_not_audited_until_the_block_ends(self):
+        with audit.withdrawn(Expense) as labels:
+            self.assertEqual(labels, {Expense: "Expense"})
+            self.assertNotIn(Expense, audited_labels())
+            an_expense()
+            self.assertFalse(AuditLog.objects.filter(object_type="Expense").exists())
+        an_expense()
+        self.assertEqual(AuditLog.objects.filter(object_type="Expense").count(), 1)
+
+    def test_only_an_audited_model_can_be_withdrawn(self):
+        before = audited_labels()
+        with self.assertRaisesMessage(LookupError, "AuditLog"), audit.withdrawn(Expense, AuditLog):
+            pass
+        self.assertEqual(audited_labels(), before)
 
 
 class RecordedChangeTests(TestCase):

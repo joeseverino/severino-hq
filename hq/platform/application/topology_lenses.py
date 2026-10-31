@@ -190,30 +190,11 @@ def apply_trace(
     standing-lens contract used by every delivery adapter.
     """
 
-    node_ids = {node.id for node in topology.nodes}
-    if focus not in node_ids:
+    if focus not in {node.id for node in topology.nodes}:
         return topology, None
     selected_direction = direction if direction in TRACE_DIRECTIONS else "both"
-    try:
-        selected_depth = int(depth)
-    except TypeError, ValueError:
-        selected_depth = 2
-    selected_depth = min(max(selected_depth, 1), MAX_TRACE_DEPTH)
-
-    adjacent: dict[str, set[str]] = {node_id: set() for node_id in node_ids}
-    for edge in topology.edges:
-        if selected_direction in ("outbound", "both"):
-            adjacent[edge.source].add(edge.target)
-        if selected_direction in ("inbound", "both"):
-            adjacent[edge.target].add(edge.source)
-
-    hops = {focus: 0}
-    frontier = {focus}
-    for hop in range(1, selected_depth + 1):
-        frontier = {neighbor for node_id in frontier for neighbor in adjacent[node_id] if neighbor not in hops}
-        if not frontier:
-            break
-        hops.update(dict.fromkeys(frontier, hop))
+    selected_depth = _trace_depth(depth)
+    hops = _hops_from(focus, _neighbors(topology, selected_direction), selected_depth)
 
     narrowed = Topology(
         tuple(node for node in topology.nodes if node.id in hops),
@@ -226,6 +207,42 @@ def apply_trace(
         hops=tuple(sorted(hops.items(), key=lambda item: (item[1], item[0]))),
     )
     return narrowed, trace
+
+
+def _trace_depth(depth: int | str) -> int:
+    """The hops a trace follows: the asked number held between one and
+    ``MAX_TRACE_DEPTH``, or two when the ask is not a number."""
+
+    try:
+        asked = int(depth)
+    except TypeError, ValueError:
+        asked = 2
+    return min(max(asked, 1), MAX_TRACE_DEPTH)
+
+
+def _neighbors(topology: Topology, direction: str) -> dict[str, set[str]]:
+    """Each node's next step in the direction a trace follows."""
+
+    adjacent: dict[str, set[str]] = {node.id: set() for node in topology.nodes}
+    for edge in topology.edges:
+        if direction in ("outbound", "both"):
+            adjacent[edge.source].add(edge.target)
+        if direction in ("inbound", "both"):
+            adjacent[edge.target].add(edge.source)
+    return adjacent
+
+
+def _hops_from(focus: str, adjacent: dict[str, set[str]], depth: int) -> dict[str, int]:
+    """The shortest hop count to every node within ``depth`` of the focus."""
+
+    hops = {focus: 0}
+    frontier = {focus}
+    for hop in range(1, depth + 1):
+        frontier = {neighbor for node_id in frontier for neighbor in adjacent[node_id] if neighbor not in hops}
+        if not frontier:
+            break
+        hops.update(dict.fromkeys(frontier, hop))
+    return hops
 
 
 # Lanes the whole map leaves out until asked: what a credential could read,

@@ -2,7 +2,7 @@ package runtime
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"go/parser"
 	"go/token"
 	"io"
@@ -52,7 +52,7 @@ func served(t *testing.T, handler http.HandlerFunc) *SocketBridge {
 	t.Helper()
 	path := filepath.Join(socketDir(t), "bridge.sock")
 	server := &http.Server{Handler: handler}
-	go server.Serve(listen(t, path))
+	go func(l net.Listener) { _ = server.Serve(l) }(listen(t, path))
 	t.Cleanup(func() { server.Close() })
 	return bridgeAt(t, path)
 }
@@ -70,13 +70,13 @@ func bridgeAt(t *testing.T, path string) *SocketBridge {
 func answer(body string) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, body)
+		_, _ = io.WriteString(w, body)
 	}
 }
 
 func refusedWith(t *testing.T, err error, want string) {
 	t.Helper()
-	if _, ok := err.(*BridgeError); !ok || !strings.Contains(err.Error(), want) {
+	if _, ok := errors.AsType[*BridgeError](err); !ok || !strings.Contains(err.Error(), want) {
 		t.Fatalf("got %v, want a bridge error containing %q", err, want)
 	}
 }
@@ -95,7 +95,7 @@ func TestEachCallIsTheContractsRequest(t *testing.T) {
 		requests = append(requests, seen{r.Method, r.URL.Path, r.Header.Get("Content-Type"), r.URL.Query(), len(body)})
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"ok": true}`)
+		_, _ = io.WriteString(w, `{"ok": true}`)
 	})
 	ctx := t.Context()
 	if _, err := b.Claim(ctx, "example-controller", []string{"example.kind:reconcile", "example.kind:renew"}); err != nil {
@@ -109,7 +109,7 @@ func TestEachCallIsTheContractsRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	claim, sent, report := requests[0], requests[1], requests[2]
-	if claim.Method != "POST" || claim.Path != "/claim" || claim.Bytes != 0 ||
+	if claim.Method != http.MethodPost || claim.Path != "/claim" || claim.Bytes != 0 ||
 		!slices.Equal(claim.Query["controller-id"], []string{"example-controller"}) ||
 		!slices.Equal(claim.Query["capability"], []string{"example.kind:reconcile", "example.kind:renew"}) ||
 		!slices.Equal(claim.Query["lease-seconds"], []string{"300"}) {
@@ -147,7 +147,7 @@ func TestBridgeRefusesFieldsTheContractDoesNotDeclare(t *testing.T) {
 func TestBridgeRefusesAnAnswerThatIsNotJSON(t *testing.T) {
 	b := served(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		io.WriteString(w, `{"ok": true}`)
+		_, _ = io.WriteString(w, `{"ok": true}`)
 	})
 	refusedWith(t, b.Schedule(t.Context(), "example-controller"), "not JSON")
 }
@@ -157,7 +157,7 @@ func TestBridgeExplainsARefusal(t *testing.T) {
 		return func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/problem+json")
 			w.WriteHeader(status)
-			io.WriteString(w, body)
+			_, _ = io.WriteString(w, body)
 		}
 	}
 	b := served(t, problem(400, `{"title": "Bad Request", "status": 400, "detail": "Unknown kind."}`))
@@ -202,7 +202,7 @@ func TestBridgeBoundsAnAnswerThatStalls(t *testing.T) {
 	release := make(chan struct{})
 	b := served(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"ok": `)
+		_, _ = io.WriteString(w, `{"ok": `)
 		w.(http.Flusher).Flush()
 		select {
 		case <-release:
@@ -227,7 +227,7 @@ func TestBridgeMessagesAreBoundedBothWays(t *testing.T) {
 	b := served(t, func(w http.ResponseWriter, _ *http.Request) {
 		calls++
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(make([]byte, MaxBridgeOutput+1))
+		_, _ = w.Write(make([]byte, MaxBridgeOutput+1))
 	})
 	refusedWith(t, b.Schedule(t.Context(), "example-controller"), "too much data")
 	inventory := Inventory{"adguard.rewrite": KindReport{Error: strings.Repeat("x", MaxBridgeOutput)}}
@@ -275,32 +275,44 @@ func TestASocketThisAccountCannotTrustIsRefused(t *testing.T) {
 		}, "directory is missing"},
 		"a directory others can enter": {func(t *testing.T, dir, path string) string {
 			listen(t, path)
-			os.Chmod(dir, 0o755)
+			if err := os.Chmod(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
 			return ""
 		}, "open to another account"},
 		"a directory the group can write": {func(t *testing.T, dir, path string) string {
 			listen(t, path)
-			os.Chmod(dir, 0o720)
+			if err := os.Chmod(dir, 0o720); err != nil {
+				t.Fatal(err)
+			}
 			return ""
 		}, "open to another account"},
 		"a linked directory": {func(t *testing.T, dir, path string) string {
 			listen(t, path)
 			link := filepath.Join(socketDir(t), "link")
-			os.Symlink(dir, link)
+			if err := os.Symlink(dir, link); err != nil {
+				t.Fatal(err)
+			}
 			return filepath.Join(link, "bridge.sock")
 		}, "not a directory"},
 		"a socket others can use": {func(t *testing.T, _, path string) string {
 			listen(t, path)
-			os.Chmod(path, 0o666)
+			if err := os.Chmod(path, 0o666); err != nil {
+				t.Fatal(err)
+			}
 			return ""
 		}, "mode is not 0600"},
 		"a link to a socket": {func(t *testing.T, dir, path string) string {
 			listen(t, filepath.Join(dir, "real.sock"))
-			os.Symlink(filepath.Join(dir, "real.sock"), path)
+			if err := os.Symlink(filepath.Join(dir, "real.sock"), path); err != nil {
+				t.Fatal(err)
+			}
 			return ""
 		}, "not a socket"},
-		"a file at the path": {func(_ *testing.T, _, path string) string {
-			os.WriteFile(path, nil, 0o600)
+		"a file at the path": {func(t *testing.T, _, path string) string {
+			if err := os.WriteFile(path, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
 			return ""
 		}, "not a socket"},
 		"a path that is not clean": {func(t *testing.T, dir, path string) string {
@@ -344,14 +356,14 @@ func TestASocketNobodyListensOnIsRefused(t *testing.T) {
 func TestThePeerIsThisAccountOrTheCallIsRefused(t *testing.T) {
 	path := filepath.Join(socketDir(t), "bridge.sock")
 	server := &http.Server{Handler: answer(`{"ok": true}`)}
-	go server.Serve(listen(t, path))
+	go func(l net.Listener) { _ = server.Serve(l) }(listen(t, path))
 	t.Cleanup(func() { server.Close() })
 
 	conn, err := DialTrusted(path, os.Geteuid())(t.Context(), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if peer, err := peerUID(conn); err != nil || peer != os.Geteuid() {
+	if peer, err := PeerUID(conn); err != nil || peer != os.Geteuid() {
 		t.Fatalf("peer %d %v", peer, err)
 	}
 	conn.Close()
@@ -360,7 +372,7 @@ func TestThePeerIsThisAccountOrTheCallIsRefused(t *testing.T) {
 	t.Cleanup(func() { readPeerUID = previous })
 	readPeerUID = func(net.Conn) (int, error) { return os.Geteuid() + 1, nil }
 	refusedWith(t, bridgeAt(t, path).Schedule(t.Context(), "example-controller"), "answered by another account")
-	readPeerUID = func(net.Conn) (int, error) { return 0, fmt.Errorf("unreadable") }
+	readPeerUID = func(net.Conn) (int, error) { return 0, errors.New("unreadable") }
 	refusedWith(t, bridgeAt(t, path).Schedule(t.Context(), "example-controller"), "answered by another account")
 }
 
@@ -368,7 +380,7 @@ func TestThePeerIsThisAccountOrTheCallIsRefused(t *testing.T) {
 func TestAReplacedSocketIsCheckedAgainOnEveryCall(t *testing.T) {
 	path := filepath.Join(socketDir(t), "bridge.sock")
 	first := &http.Server{Handler: answer(`{"ok": true}`)}
-	go first.Serve(listen(t, path))
+	go func(l net.Listener) { _ = first.Serve(l) }(listen(t, path))
 	b := bridgeAt(t, path)
 	if err := b.Schedule(t.Context(), "example-controller"); err != nil {
 		t.Fatal(err)
@@ -383,7 +395,7 @@ func TestAReplacedSocketIsCheckedAgainOnEveryCall(t *testing.T) {
 	os.Remove(path)
 
 	second := &http.Server{Handler: answer(`{"ok": true}`)}
-	go second.Serve(listen(t, path))
+	go func(l net.Listener) { _ = second.Serve(l) }(listen(t, path))
 	t.Cleanup(func() { second.Close() })
 	if err := b.Schedule(t.Context(), "example-controller"); err != nil {
 		t.Fatalf("HQ's new socket was refused: %v", err)
@@ -406,7 +418,7 @@ func TestACallCostsARequestNotAProcess(t *testing.T) {
 			opened.Add(1)
 		}
 	}}
-	go server.Serve(listen(t, path))
+	go func(l net.Listener) { _ = server.Serve(l) }(listen(t, path))
 	t.Cleanup(func() { server.Close() })
 	b := bridgeAt(t, path)
 	const calls = 200
@@ -447,9 +459,11 @@ func BenchmarkBridgeCall(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	os.Chmod(path, 0o600)
+	if err := os.Chmod(path, 0o600); err != nil {
+		b.Fatal(err)
+	}
 	server := &http.Server{Handler: answer(`{"ok": true}`)}
-	go server.Serve(listener)
+	go func() { _ = server.Serve(listener) }()
 	defer server.Close()
 	bridge, err := NewSocketBridge(path)
 	if err != nil {

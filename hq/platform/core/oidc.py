@@ -1,7 +1,7 @@
 """Pocket ID / OIDC authentication integration."""
 
 import logging
-from typing import override
+from typing import Any, override
 lazy from urllib.parse import urlsplit
 
 import requests
@@ -50,6 +50,9 @@ def _tailscale_principal(payload) -> str:
 class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
     """Map approved Pocket ID users onto Django users."""
 
+    # The claims get_userinfo read in this sign-in.
+    _userinfo: dict[str, Any] | None = None
+
     @override
     def authenticate(self, request, **kwargs):
         """A provider that refuses the exchange is a failed sign-in, not a crash.
@@ -64,7 +67,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
             with allowed("oidc"):
                 return super().authenticate(request, **kwargs)
         except requests.RequestException as exc:
-            status = getattr(getattr(exc, "response", None), "status_code", None)
+            status = exc.response.status_code if exc.response is not None else None
             reason = (
                 "Pocket ID refused HQ's client credentials: the client secret HQ "
                 "holds is not the one Pocket ID issued for this client."
@@ -74,9 +77,8 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
             logger.warning(reason, extra={"event": "auth.sso.exchange_failed", "status": status})
 
             record_event(action=AuditLog.Action.DENIED, type_label="Sign-in", message=reason)
-            session = getattr(request, "session", None)
-            if session is not None:
-                session[SSO_FAILURE_SESSION_KEY] = reason
+            # The library raises only once it has a request to read the code from.
+            request.session[SSO_FAILURE_SESSION_KEY] = reason
             return None
 
     @override
@@ -118,14 +120,14 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
 
         bind_sign_in(user, self._subject_key(payload))
         record_claimed_accounts(user, payload)
-        session = getattr(getattr(self, "request", None), "session", None)
-        if session is not None:
-            session.setdefault(SIGNED_IN_SESSION_KEY, timezone.now().isoformat())
-            principal = _tailscale_principal(payload)
-            if principal:
-                session[TAILSCALE_PRINCIPAL_SESSION_KEY] = principal
-            else:
-                session.pop(TAILSCALE_PRINCIPAL_SESSION_KEY, None)
+        # authenticate() holds the callback's request, whose session the library reads too.
+        session = self.request.session
+        session.setdefault(SIGNED_IN_SESSION_KEY, timezone.now().isoformat())
+        principal = _tailscale_principal(payload)
+        if principal:
+            session[TAILSCALE_PRINCIPAL_SESSION_KEY] = principal
+        else:
+            session.pop(TAILSCALE_PRINCIPAL_SESSION_KEY, None)
         return user
 
     def _remember_picture(self, user, access_token) -> None:
@@ -135,9 +137,8 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         person is still who the provider said, without a picture.
         """
 
-        session = getattr(getattr(self, "request", None), "session", None)
         try:
-            claims = getattr(self, "_userinfo", None) or {}
+            claims = self._userinfo or {}
             digest = remember_avatar(
                 user,
                 str(claims.get("picture") or "").strip(),
@@ -147,12 +148,10 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         except Exception:  # noqa: BLE001 - a picture must not stop a sign-in
             logger.warning("The picture could not be kept.", extra={"event": "auth.avatar.failed"})
             return
-        if session is None:
-            return
         if digest:
-            session[SESSION_KEY] = digest
+            self.request.session[SESSION_KEY] = digest
         else:
-            session.pop(SESSION_KEY, None)
+            self.request.session.pop(SESSION_KEY, None)
 
     @override
     def verify_claims(self, claims):

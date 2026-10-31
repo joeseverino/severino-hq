@@ -1,12 +1,10 @@
 """Certificates a reading reports, near or past expiry.
 
-Every reading that supplies the certificate facet and states an expiry counts,
-whichever provider holds the certificate, and so does the certificate a proxy
-reports serving a name with: one loaded from a file on the proxy's own host is
-read nowhere else, and HQ neither issued nor manages it. The fact sits on the
-connection that read it, because that is where the certificate lives; the
-names it serves are evidence. Days left come from ``application.expiry``, the one rule every page
-uses.
+Every reading with the certificate facet that states an expiry counts, whichever
+provider holds it, and so does a certificate a proxy serves a name with, which
+may be loaded from a file on the proxy's host and read nowhere else. The fact
+sits on the connection that read it, where the certificate lives; the names it
+serves are evidence. Days left come from ``application.expiry``.
 """
 
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -68,7 +66,7 @@ def _read(readers) -> Found:
                 record,
                 str(record.get("connection_ref", "") or ""),
                 snapshot.observed_at,
-                controller_id=str(getattr(snapshot, "controller_id", "") or ""),
+                controller_id=snapshot.controller_id,
             )
             names = ",".join(spec.hostnames(record))
             yield (
@@ -79,7 +77,8 @@ def _read(readers) -> Found:
 
 def _served(holders) -> Found:
     """Each certificate a proxy serves with, every name it serves with it, and
-    the nodes the proxy was read through."""
+    the nodes the proxy was read through. HQ neither issued nor manages one
+    loaded from a file on the proxy's host, so no other reading lists it."""
 
     found: dict[tuple[str, str, str], tuple[set[str], tuple[str, ...]]] = {}
     for kind, provider in PROVIDERS.items():
@@ -120,47 +119,51 @@ def _stated(node, name: str, expires: str) -> bool:
 def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
     """A certificate a connection reads, inside three weeks of expiry or past it."""
 
-    found = []
-    for node in estate.nodes():
-        for key, value in node.facts:
-            if key != CERTIFICATE_EXPIRES:
-                continue
-            kind, title, stamp, names = _parts(value)
-            when = moment(stamp)
-            if when is None:
-                continue
-            days = days_until(when, estate.now)
-            if days > WARN_DAYS:
-                continue
-            spec = OBSERVATIONS.get(kind)
-            # A served certificate is known only as what a proxy answers with.
-            label = spec.label if spec is not None else "Certificate"
-            found.append(
-                {
-                    "rule": "certificate-expiring",
-                    "subject": node.id,
-                    "title": (
-                        f"{label} {title} has expired" if days < 0 else f"{label} {title} expires in {span(days)}"
-                    ),
-                    # One that serves no name breaks nothing when it lapses: it
-                    # is left over, and the advice is to remove it, not renew it.
-                    "severity": "serious" if names and days <= SERIOUS_DAYS else "attention",
-                    "explanation": (
-                        "Visitors get a certificate error on every name it serves "
-                        "once it expires. Renew it where it is held, or find why "
-                        "the automatic renewal failed."
-                        if names
-                        else "It serves no name, so nothing breaks when it expires. Delete it where it is held."
-                    ),
-                    "evidence": (
-                        ("Certificate", title),
-                        ("Held in", node.label),
-                        ("Expires", expiry_phrase(stamp)),
-                        *((("Serves", names.replace(",", ", ")),) if names else ()),
-                    ),
-                }
-            )
+    found = [_finding(node, value, days) for node in estate.nodes() for value, days in _near_expiry(node, estate.now)]
     return tuple(sorted(found, key=lambda item: item["title"]))
+
+
+def _near_expiry(node, now) -> Iterator[tuple[str, int]]:
+    """Each certificate fact on ``node`` with a readable expiry inside the
+    warning window, and the days it has left."""
+
+    for key, value in node.facts:
+        if key != CERTIFICATE_EXPIRES:
+            continue
+        when = moment(_parts(value)[2])
+        if when is not None and (days := days_until(when, now)) <= WARN_DAYS:
+            yield value, days
+
+
+def _finding(node, value: str, days: int) -> dict[str, Any]:
+    """The finding for one certificate fact with ``days`` left."""
+
+    kind, title, stamp, names = _parts(value)
+    spec = OBSERVATIONS.get(kind)
+    # A served certificate is known only as what a proxy answers with.
+    label = spec.label if spec is not None else "Certificate"
+    return {
+        "rule": "certificate-expiring",
+        "subject": node.id,
+        "title": f"{label} {title} has expired" if days < 0 else f"{label} {title} expires in {span(days)}",
+        # One that serves no name breaks nothing when it lapses: it is left
+        # over, and the advice is to remove it, not renew it.
+        "severity": "serious" if names and days <= SERIOUS_DAYS else "attention",
+        "explanation": _SERVING_EXPLANATION if names else _UNUSED_EXPLANATION,
+        "evidence": (
+            ("Certificate", title),
+            ("Held in", node.label),
+            ("Expires", expiry_phrase(stamp)),
+            *((("Serves", names.replace(",", ", ")),) if names else ()),
+        ),
+    }
+
+
+_SERVING_EXPLANATION = (
+    "Visitors get a certificate error on every name it serves once it expires. "
+    "Renew it where it is held, or find why the automatic renewal failed."
+)
+_UNUSED_EXPLANATION = "It serves no name, so nothing breaks when it expires. Delete it where it is held."
 
 
 # The rules this module raises, beside the detectors that decide them.

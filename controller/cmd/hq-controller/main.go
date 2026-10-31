@@ -2,6 +2,10 @@
 // queued, sweep when HQ says to, and report. HQ stays the owner of every
 // decision and record; this reaches it only through the bridge socket.
 //
+// "hq-controller --glance" is a pass of its own beside that one: it reads
+// only the dashboard panels HQ is waiting on, so a refresh never waits for a
+// sweep.
+//
 // "hq-controller job NAME" is the other thing a timer asks of HQ: one piece of
 // scheduled work, done by the running process. It reads no connection.
 //
@@ -13,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -40,7 +45,7 @@ func main() {
 		code = ready(ctx, os.Args[2:], os.Stdout)
 	default:
 		if env, supplied, err := load(os.Environ()); err != nil {
-			json.NewEncoder(os.Stdout).Encode(failure{Message: err.Error()})
+			_ = json.NewEncoder(os.Stdout).Encode(failure{Message: err.Error()})
 		} else {
 			code = run(ctx, os.Args[1:], env, supplied, os.Stdout, os.Stderr)
 		}
@@ -76,7 +81,7 @@ type failure struct {
 // work already running is not a failure.
 func job(ctx context.Context, args []string, socket string, stdout io.Writer) int {
 	fail := func(message string) int {
-		json.NewEncoder(stdout).Encode(failure{Message: message})
+		_ = json.NewEncoder(stdout).Encode(failure{Message: message})
 		return 1
 	}
 	if len(args) != 1 || args[0] == "" {
@@ -92,7 +97,7 @@ func job(ctx context.Context, args []string, socket string, stdout io.Writer) in
 	if err != nil {
 		return fail(err.Error())
 	}
-	json.NewEncoder(stdout).Encode(outcome)
+	_ = json.NewEncoder(stdout).Encode(outcome)
 	switch outcome.State {
 	case runtime.JobStateSucceeded, runtime.JobStateRunning:
 		return 0
@@ -108,14 +113,14 @@ const readyTimeout = 3 * time.Second
 // followed, no proxy is consulted, and the body is not read.
 func ready(ctx context.Context, args []string, stdout io.Writer) int {
 	if len(args) != 1 || args[0] == "" {
-		json.NewEncoder(stdout).Encode(failure{Message: "usage: hq-controller ready URL"})
+		_ = json.NewEncoder(stdout).Encode(failure{Message: "usage: hq-controller ready URL"})
 		return 2
 	}
 	ctx, cancel := context.WithTimeout(ctx, readyTimeout)
 	defer cancel()
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, args[0], nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, args[0], http.NoBody)
 	if err != nil {
-		json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
+		_ = json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
 		return 2
 	}
 	client := &http.Client{
@@ -124,12 +129,12 @@ func ready(ctx context.Context, args []string, stdout io.Writer) int {
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
+		_ = json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
 		return 1
 	}
 	response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		json.NewEncoder(stdout).Encode(failure{Message: response.Status})
+		_ = json.NewEncoder(stdout).Encode(failure{Message: response.Status})
 		return 1
 	}
 	return 0
@@ -140,14 +145,19 @@ func run(ctx context.Context, args []string, env runtime.Environment, supplied r
 	options.SetOutput(stderr)
 	controllerID := options.String("controller-id", env.ControllerID(), "the controller this pass reports as")
 	apply := options.Bool("apply", false, "claim and execute queued operations; omitted means a preflight-only plan")
+	glance := options.Bool("glance", false, "read only the dashboard panels HQ is waiting on")
 	if err := options.Parse(args); err != nil {
+		return 2
+	}
+	if *apply && *glance {
+		fmt.Fprintln(stderr, "--apply and --glance are separate passes")
 		return 2
 	}
 	log := slog.New(slog.NewTextHandler(stderr, nil))
 	slog.SetDefault(log)
 
 	fail := func(err error) int {
-		json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
+		_ = json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
 		return 1
 	}
 	// The bridge carries no credential in either direction: HQ persists, it
@@ -159,7 +169,7 @@ func run(ctx context.Context, args []string, env runtime.Environment, supplied r
 	declared, err := bridge.Registry(ctx)
 	if err != nil {
 		if *apply {
-			bridge.Steps(ctx, *controllerID, []runtime.StepFailure{})
+			_ = bridge.Steps(ctx, *controllerID, []runtime.StepFailure{})
 		}
 		return fail(err)
 	}
@@ -172,12 +182,17 @@ func run(ctx context.Context, args []string, env runtime.Environment, supplied r
 	registry.Commands.Log = log
 	controller := providers.NewController(registry, declared)
 	controller.Log = log
-	if uncovered := controller.Uncovered(); len(uncovered) > 0 {
+	if uncovered := controller.Uncovered(); len(uncovered) > 0 && !*glance {
 		log.Info("actions left for another controller", slog.String("event", "controller.uncovered"),
 			slog.String("actions", strings.Join(uncovered, ", ")))
 	}
 	worker := runtime.Worker{ID: *controllerID, Bridge: bridge, Providers: controller, Output: stdout, Log: log}
-	code, err := worker.Run(ctx, *apply)
+	var code int
+	if *glance {
+		code, err = worker.Glances(ctx)
+	} else {
+		code, err = worker.Run(ctx, *apply)
+	}
 	if err != nil {
 		return fail(err)
 	}

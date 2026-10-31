@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=5,
+    api_version=6,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -83,7 +83,12 @@ couple a private plugin to public implementation details.
 `python -m hq_sdk.validation src` enforces the boundary. It also refuses a
 test whose `assertContains`, `assertNotContains`, `assertIn` or `assertNotIn`
 looks for text ending on `</td>` or `</th>`: the host may wrap what a cell
-says, so a test reads the cell's text instead.
+says, so a test reads the cell's text instead. And it refuses a page sentence
+that closes on a value with a period written by hand
+(`f"Renews through {registrar}."`): a value HQ did not write can end in its own
+period, so the sentence closes through `hq_sdk.ui.ended(f"... {value}")`, which
+adds the full stop only when the text has none. The host's own code is held to
+the same rule, and an extension to the refusal from `PLUGIN_API_VERSION` 6.
 
 The shape of that surface is committed as `hq_sdk/contract.json`: every
 export's parameters, fields, enum members and public methods, without
@@ -301,7 +306,7 @@ before either merges:
   published, signed or deployed. Extensions without such a branch are reused
   from their verified admissions; the app's Contents read covers reading the
   branches.
-- Before composing, the host pull request runs its own `plugin:check`
+- Beside composing, in a job of its own, the host pull request runs its own `plugin:check`
   against every extension in the set, from its same-named branch or else its
   default branch, so a host change that breaks an extension fails the pull
   request rather than the next admission. Which extension failed is only in
@@ -389,6 +394,38 @@ Fields that shape the Command Center form:
   `updated_at` into the concurrency check; it never contacts the provider.
 - `execution_notes` describe the registered read, queue and provider boundary
   in the zero-network preview.
+- `reached_from` is the route of the page a person starts the command from,
+  for one that needs a value only that page hands out (a held change's id, a
+  token HQ gave a live record). Search links there instead of to the form,
+  and the form says where to start. `ON_ITS_PAGE` marks one that the page of
+  whatever it acts on sends, which search does not offer.
+
+A command's fields say what they are through markers in their `Annotated`
+type, the ones the host's commands use, all from `hq_sdk.capabilities`:
+
+```python
+class NoteCommand(StrictCommand):
+    note: Annotated[str, Describe("What to write down.")]
+    project: Annotated[str, Names("example.projects"), Describe("The project it is for.")]
+    tone: Annotated[str, Choices(Note.Tone.choices)]
+    about: Annotated[str, Refers(Note, "about"), Describe("What it is about, as type:identity.")]
+```
+
+- `Describe(text)` is the field's help on the form and its description in the
+  machine contract.
+- `Names(resource, key="")` makes the field one of that resource's records
+  (several, for a list), offered as a choice from what the caller may list;
+  `key` names the item field the value is, where that is not the identifier.
+- `Choices(options)` offers a fixed set of `(value, words)` pairs. The form
+  offers only these; the command still refuses any other value itself, with a
+  `Literal` type or in its handler.
+- `Refers(model, field)` makes the field a reference the model's
+  `ReferenceField` of that name holds ([References](#references)), offered
+  as the grouped picker the record's own form shows, with what this caller
+  may name.
+
+A marker is a plain value that pydantic leaves alone, so the schema every
+adapter reads carries it.
 
 A command's words are declared on it once. `label` is its name (`Remove a
 note`), `verb` what its button says where that is shorter (`Remove`), and
@@ -401,6 +438,23 @@ for a command takes no `label`, a template says them with
 host's checks instead of the press. The commands one connection's abilities
 run share its row, so no two of them may say the same words: a composition
 where they do fails at startup (`connection.repeated_words`).
+
+A command whose one field is a yes or no is a switch. Declaring its `on` and
+`off` variants, `variants=(("on", "Turn on updates"), ("off", "Turn off
+updates"))`, presses it as those two words, and a page opened for one record
+says where it stands and offers only the word that changes it. Without both,
+it is a checkbox pressed by its name.
+
+When an agent asks for a command a person must approve, the card, the bell
+and the audit say it as one sentence: "example-agent wants to delete the note
+example-note". It is read from the same declaration (`spec.wanted()`): the
+command's `label` mid-sentence with the record after it, its "a" read as
+"the" ("Delete a note" says "delete the note example-note"). A switch reads as the variant it sets ("turn off
+updates for example-project"), and a change of one short value as that change
+("change the status of example-note from draft to done"). Where a name does
+not read that way, `wants` says it, with `{target}` where the record goes:
+`wants="keep the live version of {target}"`. It names `{target}` exactly
+when the command takes one.
 
 HQ gives every capability that writes an `idempotency_key`
 ([API](API.md#safe-retries)); a command type declares the field only when its
@@ -497,7 +551,9 @@ ignored the day the frame stops rendering it.
 A data table is declared through the table tags, so its shape is in the HTML on
 first paint. `{% table_region "Label" %}…{% endtable_region %}` wraps it in
 its labeled region, which derives from what each column holds the width its
-columns leave at, by rank ([Design](Design.md)); each column heading is
+columns leave at, by rank ([Design](Design.md)), and that draws the empty
+state in place of tables with no row beneath their heads (an `{% if %}` around
+the region says what is missing in the page's own words); each column heading is
 `{% table_heading "Name" "identifier" %}`, with its kind (`prose`,
 `identifier`, `numeric`, `status` or `control`, following from `num-col`,
 `date-col` or `actions-col` when left out), `drop=` the order a narrow table
@@ -536,19 +592,19 @@ callout a submission is confirmed in.
 | `partials/_chart_tabs.html` | `charts`, `group` | nothing | Up to four charts of one thing in the space of one. |
 | `partials/_dropzone.html` | `field` | `hint`, `title` | A file field that also accepts a drop. |
 | `partials/_empty_state.html` | `message` | `action_label`, `action_url`, `remedy`, `why` | The one empty state: what is missing, then what would fill it. |
-| `partials/_form_field.html` | `field` | nothing | Label, control, help text and validation errors for one form field. |
+| `partials/_form_errors.html` | nothing | `form` | What was wrong with a submitted form as a whole, above its fields. |
 | `partials/_insight_grid.html` | `items` | `label` | Readings that need interpreting, each with its next step. |
 | `partials/_job_progress.html` | `job` | nothing | A running job and what it is doing. |
 | `partials/_kpi_grid.html` | `items` | `featured`, `label` | Responsive linked or static figures. |
 | `partials/_line_chart.html` | `chart` | nothing | A measure over time on an axis fitted to it. |
 | `partials/_record_list.html` | `rows` | `empty`, `label` | A compact list of records, from `hq_sdk.ui.ListRow`. |
 | `partials/_stacked_bar_chart.html` | `chart` | nothing | Quantities that add up, from `hq_sdk.ui.StackedBarChart`. |
-| `partials/_timeline.html` | nothing | `plain`, `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
+| `partials/_timeline.html` | nothing | `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
 | `partials/_week_plan.html` | `plan` | nothing | Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`. |
 
-Host tags: `{% empty_value %}`, `{% entity %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_toggle %}`, `{% table_heading %}`, `{% table_region %}`. Host filters: `|ago`, `|breakable[:arg]`, `|counted:arg`, `|day`, `|money[:arg]`, `|or_empty`, `|readout`, `|sortable`, `|span`, `|web_url`, `|when[:arg]`. Django's own tags and filters, and `{% load %}` of `humanize`, `static` or the extension's own libraries.
+Host tags: `{% arrow %}`, `{% card %}`, `{% dot %}`, `{% empty_value %}`, `{% entity %}`, `{% outside_link %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section_head %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`. Host filters: `|ago`, `|breakable[:arg]`, `|counted:arg`, `|day`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|sortable`, `|span`, `|web_url`, `|when[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
-Classes: `actions-col`, `allocation`, `allocation-legend`, `btn`, `card`, `card-columns`, `cell-data`, `chart-axis`, `chart-card`, `chart-data`, `chart-legend`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `domain-head`, `domain-head-copy`, `domain-stack`, `errors`, `eyebrow`, `field`, `field-row`, `figure-hero`, `figure-hero-note`, `figure-stats`, `finding`, `finding-evidence`, `form`, `form-actions`, `ghost`, `help`, `inline`, `key-col`, `kv`, `list-rows`, `msg`, `msg-error`, `msg-warning`, `muted`, `narrow-more`, `notice`, `notice-attention`, `num-col`, `optional-col`, `page-lede`, `pie-chart`, `pie-row`, `pill`, `pill-attention`, `pill-good`, `pill-neutral`, `pill-serious`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `section-head`, `section-period`, `split`, `stacked`, `status-tabs`, `subtle-link`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `worth`, `worth-attention`, `worth-good`, `worth-neutral`.
+Classes: `actions-col`, `allocation`, `allocation-legend`, `btn`, `card-columns`, `cell-data`, `chart-axis`, `chart-card`, `chart-data`, `chart-legend`, `compact`, `compact-table`, `count`, `danger`, `danger-link`, `data-table`, `date-col`, `domain-charts`, `domain-head`, `domain-head-copy`, `domain-stack`, `errors`, `eyebrow`, `field`, `field-row`, `figure-hero`, `figure-hero-note`, `figure-stats`, `finding`, `finding-evidence`, `form`, `form-actions`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `kv`, `list-rows`, `msg`, `msg-error`, `msg-warning`, `muted`, `narrow-more`, `notice`, `notice-attention`, `num-col`, `optional-col`, `page-lede`, `pie-chart`, `pie-row`, `pill`, `pill-attention`, `pill-good`, `pill-neutral`, `pill-serious`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `section-period`, `split`, `stacked`, `status-tabs`, `subtle-link`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `worth`, `worth-attention`, `worth-good`, `worth-neutral`.
 
 Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`.
 
@@ -561,9 +617,10 @@ or markup into a plugin is a contract failure. The rules the classes follow are
 in [Design](Design.md).
 
 What the host writes for a value is pinned by example in
-`hq_sdk/text_examples.json`: `span`, `when`, `when_day`, `counted`, `money` and
-`ago`, regenerated and reviewed like the contract. An extension's test asserts
-what it composed from them (`f"Due in {span(days)}"`) or reads a page through
+`hq_sdk/text_examples.json`: `span`, `when`, `when_day`, `counted`, `money`,
+`signed_number`, `ended` and `ago`, regenerated and reviewed like the
+contract. An extension's test asserts what it composed from them
+(`f"Due in {span(days)}"`) or reads a page through
 `hq_sdk.testing.plain`, which reads the host's no-break spaces as spaces; it
 never writes the host's words or markup out itself. Text that names the
 deployment reads `hq_sdk.site.host()`, never a setting.
@@ -573,7 +630,11 @@ An amount is written by `{{ amount|money }}` in a template and
 dollar, `money:"whole"` or `cents=False` for a figure that is scanned, and
 `plus=True` for a change signed either way. A debt is a negative value: no
 extension writes a sign of its own, since the host holds the sign to its
-figure so a line never ends between them. An
+figure so a line never ends between them. Any other figure takes its sign
+through `hq_sdk.money.signed_number(value, figure, plus=...)`: `figure` writes
+the magnitude in its own units (`lambda drop: f"{drop} bpm"`), and the host
+puts the sign before it by the rule an amount follows, so a value that writes
+as zero is never negative. An
 overview says what it is built from with `hq_sdk.pages.built_from(plugin.id)`,
 a link to the project that names the extension's repository. An extension's
 suite checks its templates for a `{# #}` comment left open with

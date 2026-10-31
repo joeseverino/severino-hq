@@ -1,23 +1,10 @@
 """A revision per table, moved by the database on every write.
 
-A derived fact is a function of the rows it reads. To compute it once per
-change rather than once per request, something has to say when the rows
-changed, and say it in the same transaction as the change: a count that
-commits a moment later than its rows lets a reader pair new rows with the old
-count.
-
-The count is therefore kept by SQLite. Each model table carries three
-triggers (insert, update, delete) that move the table's ``Revision`` row inside
-the writing statement. That covers every write path there is: ``save()``,
-``QuerySet.update()``, ``bulk_create()``, ``bulk_update()``, a cascade and raw
-SQL, in an atomic block or in autocommit, from the web process or a command.
-A signal sees only the first of those, and a count written from Python after
-an autocommit statement is a second transaction.
-
-``install`` runs after every migrate, because SQLite drops a table's triggers
-when a migration rebuilds the table. ``revisions`` checks that the triggers are
-there each time it reads, and answers None when they are not: a caller then
-derives rather than trust a count nothing is keeping.
+A derived fact is computed once per change, so a table's count must move in the
+same transaction as its rows. SQLite triggers move it inside the writing
+statement, on every write path, which neither a signal (it sees only ``save()``)
+nor a count written from Python after autocommit does (docs/Architecture.md,
+Derived once per change).
 """
 
 import logging
@@ -141,7 +128,7 @@ def read(connection=default_connection) -> Revisions | None:
     )
 
 
-def after_migrate(sender, using="default", **kwargs) -> None:
+def after_migrate(using="default", **kwargs) -> None:
     """Create the cache table and count every table, once per migrate, after
     the last app. A value older code stored is never read: the cache's key
     carries the code's identity (``code_identity``)."""

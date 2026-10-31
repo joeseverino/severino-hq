@@ -1,13 +1,10 @@
 """Where a service can be reached from, derived rather than declared.
 
-HQ already holds both halves of this sentence. A DNS record answers with an address; an address belongs to a network; and a
-network is either the tailnet, the house, or the internet. So "who can even
-open a socket to this" is a fact about declarations HQ already reconciles, not
-something anybody has to record.
-
-It matters because the answer is otherwise invisible. A rewrite pointing at a LAN address and one pointing at a tailnet address look
-identical (same provider, same health, same green tick) and differ only in
-who is able to reach the thing on the other side.
+A DNS record answers with an address, an address belongs to a network, and a
+network is the tailnet, the house or the internet, so who can open a socket to
+a service follows from declarations HQ already reconciles. Otherwise it is
+invisible: a rewrite to a LAN address and one to a tailnet address look
+identical and differ only in who can reach what is behind them.
 """
 
 import socket
@@ -170,14 +167,11 @@ def on_link_networks(source: Path = IF_INET6) -> tuple[IPv6Network, ...]:
 def network_of(address: str) -> str:
     """Which network an address belongs to, as a bare identifier.
 
-    The ranges live here once and every surface that needs to know reads them
-    through this. Two implementations of "is this address on the tailnet" would
-    be believed equally and disagree eventually, and the surfaces asking are a
-    reachability badge and an access decision.
-
-    Returns "" for anything that is not an address, because the callers differ
-    on what that means: a DNS answer that is a name defers to whatever it
-    resolves to, and a caller's address that will not parse is simply not one.
+    The ranges live here once, since a reachability badge and an access decision
+    both ask, and two answers to "is this on the tailnet" would disagree
+    eventually. "" for anything that is not an address, because callers differ
+    on what that means: a DNS answer that is a name defers to what it resolves
+    to, and a caller's address that will not parse is not one.
     """
 
     try:

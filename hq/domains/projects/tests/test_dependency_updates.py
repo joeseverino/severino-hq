@@ -1,7 +1,6 @@
 """Opting a project in to dependency updates: one audited switch, held to its precondition."""
 
 from datetime import UTC, datetime, timedelta
-from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -14,6 +13,7 @@ from hq.domains.projects.views import run_now_ask
 from hq.platform.application.action_links import command_url
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.dependency_updates import KIND as RUN_KIND, RUN_NOW, asked_at
+from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.domains import records_of
 from hq.platform.application.projects import DEPENDENCY_UPDATES, get_project, list_projects
 from hq.platform.application.security import Capability, Principal, cli_principal
@@ -39,22 +39,22 @@ class DependencyUpdatesTests(TestCase):
         edits = AuditLog.objects.filter(object_id=str(self.project.pk), action=AuditLog.Action.UPDATED)
         before = edits.count()
 
-        result = switch("alpha", {"enabled": True})
+        result = switch("alpha", {"dependency_updates": True})
 
         self.assertTrue(result["ok"], result)
-        self.assertIs(result["project"]["updates"]["enabled"], True)
+        self.assertIs(result["project"]["dependency_updates"], True)
         self.project.refresh_from_db()
         self.assertTrue(self.project.dependency_updates)
         self.assertGreater(edits.count(), before)
 
-        self.assertTrue(switch("alpha", {"enabled": False})["ok"])
+        self.assertTrue(switch("alpha", {"dependency_updates": False})["ok"])
         self.project.refresh_from_db()
         self.assertFalse(self.project.dependency_updates)
 
     def test_alerts_off_refuses_and_names_the_check(self):
         store(access=kept(vulnerability_alerts=False))
 
-        result = switch("alpha", {"enabled": True})
+        result = switch("alpha", {"dependency_updates": True})
 
         self.assertEqual(result["error"]["code"], "precondition")
         self.assertIn("vulnerability-alerts", result["error"]["message"])
@@ -62,7 +62,7 @@ class DependencyUpdatesTests(TestCase):
         self.assertFalse(self.project.dependency_updates)
 
     def test_a_repository_the_app_does_not_read_cannot_be_opted_in(self):
-        result = switch("alpha", {"enabled": True})
+        result = switch("alpha", {"dependency_updates": True})
 
         self.assertEqual(result["error"]["code"], "precondition")
 
@@ -70,21 +70,21 @@ class DependencyUpdatesTests(TestCase):
         Project.objects.create(name="Notes", slug="notes")
 
         for enabled in (True, False):
-            self.assertEqual(switch("notes", {"enabled": enabled})["error"]["code"], "precondition")
+            self.assertEqual(switch("notes", {"dependency_updates": enabled})["error"]["code"], "precondition")
 
     def test_a_principal_without_project_writes_is_denied(self):
         store(access=kept())
         reader = Principal("example-reader", "mcp", frozenset({Capability.READ}))
 
-        result = switch("alpha", {"enabled": True}, principal=reader)
+        result = switch("alpha", {"dependency_updates": True}, principal=reader)
 
         self.assertEqual(result["error"]["code"], "forbidden")
         self.project.refresh_from_db()
         self.assertFalse(self.project.dependency_updates)
 
     def test_an_unknown_project_or_field_is_refused(self):
-        self.assertEqual(switch("example-missing", {"enabled": True})["error"]["code"], "not_found")
-        extra = switch("alpha", {"enabled": True, "repository_url": URL})
+        self.assertEqual(switch("example-missing", {"dependency_updates": True})["error"]["code"], "not_found")
+        extra = switch("alpha", {"dependency_updates": True, "repository_url": URL})
         self.assertEqual(extra["error"]["code"], "invalid_input")
         self.assertEqual(switch("alpha", {})["error"]["code"], "invalid_input")
 
@@ -93,7 +93,7 @@ class DependencyUpdatesTests(TestCase):
 
         result = execute_capability(
             DEPENDENCY_UPDATES,
-            {"enabled": True},
+            {"dependency_updates": True},
             principal=cli_principal(),
             target="alpha",
             expected_updated_at="2000-01-01T00:00:00+00:00",
@@ -181,15 +181,18 @@ class UpdatesSurfaceTests(TestCase):
         store(**OPEN)
         Project.objects.create(name="Notes", slug="notes")
 
-        with mock.patch("hq.platform.application.derivations._clock", return_value=datetime(2030, 1, 10, tzinfo=UTC)):
+        with frozen(datetime(2030, 1, 10, tzinfo=UTC)):
             alpha = get_project("alpha")
         notes = get_project("notes")
 
         self.assertEqual(
             alpha["updates"],
-            {"enabled": True, "open_pulls": 1, "oldest_pull_days": 7, "unmatched_alerts": 1, "last_run": None},
+            {"open_pulls": 1, "oldest_pull_days": 7, "unmatched_alerts": 1, "last_run": None},
         )
         self.assertNotIn("updates", notes)
+        # The switch is the project's own, whether or not it names a repository.
+        self.assertIs(alpha["dependency_updates"], True)
+        self.assertIs(notes["dependency_updates"], False)
 
     def test_a_repository_the_app_does_not_read_or_whose_alerts_were_refused_counts_nothing(self):
         Project.objects.create(name="Beta", slug="beta", repository_url="https://github.com/example/beta")

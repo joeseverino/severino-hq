@@ -10,7 +10,6 @@ second truth, only a second way of slicing the first.
 from dataclasses import replace
 
 from django.contrib import messages
-from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils.html import format_html
@@ -19,14 +18,9 @@ from django.views import View
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import normalized_hostname
-from hq.platform.application.adoption import AdoptCommand, adopt
 from hq.platform.application.asks import APPLIES_SHORTLY
+from hq.platform.application.capabilities import capability_words, execute_capability
 from hq.platform.application.entity_links import entity_link
-from hq.platform.application.infrastructure import (
-    ManagedResourceCommand,
-    PolicyError,
-    save_managed_resource,
-)
 from hq.platform.application.inventory import inventory_state
 from hq.platform.application.mail_policy import (
     DMARC_TAGS,
@@ -39,24 +33,20 @@ from hq.platform.application.mail_policy import (
     parse_spf,
 )
 from hq.platform.application.pages import PageAction, page_context
-from hq.platform.application.pins import DOMAIN, pinned, toggle
-from hq.platform.application.record_errors import RecordNotFound
+from hq.platform.application.pins import DOMAIN, PIN, pinned
 from hq.platform.application.relationships import relationships_for
-from hq.platform.application.resource_capabilities import public_dns_enabled, resource_capabilities
+from hq.platform.application.resource_capabilities import UPDATE_CAPABILITY, public_dns_enabled, resource_capabilities
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.ui import counted
 from hq.platform.application.zones import (
+    ADOPT_ZONE,
     RECORD_KIND,
-    ZONE_KIND,
-    adopt_zone_records,
     domain_context,
     find_zone,
     zone_catalog,
 )
 from hq.platform.core.templatetags.value_tags import breakable
-
-from .resource_form_views import _readable_error
 
 
 def _records_lede(zone) -> str:
@@ -194,19 +184,19 @@ class ZoneMailView(View):
             messages.error(request, f"HQ does not manage a {what} record for this domain.")
             return redirect("zones:mail", zone=zone.zone)
         resource = ManagedResource.objects.get(key=record.resource_key)
-        try:
-            save_managed_resource(
-                ManagedResourceCommand(
-                    key=resource.key,
-                    kind=resource.kind,
-                    spec={**resource.spec, "content": f'"{value}"'},
-                    enabled=resource.enabled,
-                ),
-                principal=web_principal(request.user),
-                current_key=resource.key,
-            )
-        except (DjangoValidationError, PolicyError, RecordNotFound, ValueError) as exc:
-            messages.error(request, _readable_error(exc))
+        result = execute_capability(
+            "infrastructure.resource.update",
+            {
+                "key": resource.key,
+                "kind": resource.kind,
+                "spec": {**resource.spec, "content": f'"{value}"'},
+                "enabled": resource.enabled,
+            },
+            principal=web_principal(request.user),
+            target=resource.key,
+        )
+        if not result["ok"]:
+            messages.error(request, result["error"]["message"])
             return redirect("zones:mail", zone=zone.zone)
         messages.success(request, f"{what} saved. {APPLIES_SHORTLY}")
         return redirect("zones:mail", zone=zone.zone)
@@ -221,8 +211,8 @@ class ZoneMailView(View):
 
         if request.POST.get("section") == "spf":
             terms = []
-            for rule in request.POST.getlist("rule"):
-                rule = rule.strip()
+            for given in request.POST.getlist("rule"):
+                rule = given.strip()
                 if not rule:
                     continue
                 qualifier = rule[0] if rule[:1] in "+-~?" else "+"
@@ -251,7 +241,9 @@ class ZonePinView(View):
         name = normalized_hostname(zone)
         if not name:
             raise Http404("No such domain.")
-        toggle(request.user, DOMAIN, name)
+        result = execute_capability(PIN, {"kind": DOMAIN, "key": name}, principal=web_principal(request.user))
+        if not result["ok"]:
+            messages.error(request, result["error"]["message"])
         # Checked, not trusted: a destination arriving in a form post is a
         # request, and an unchecked one redirects wherever it likes.
         return redirect(safe_next(request) or reverse("zones:index"))
@@ -276,9 +268,6 @@ class ZoneDetailView(View):
     """One domain: every record in it, and what the zone currently says."""
 
     def get(self, request, zone):
-        return self._page(request, zone)
-
-    def _page(self, request, zone):
         context = domain_context(zone, pinned=pinned(request.user, DOMAIN))
         if context is None:
             raise Http404("No such domain.")
@@ -330,7 +319,7 @@ def _declaration_actions(zone) -> tuple[PageAction, ...]:
     capabilities = resource_capabilities(resource)
     if capabilities.removal_pending:
         return ()
-    actions = [PageAction("Edit domain", reverse("control_plane:edit", args=[resource.key]))]
+    actions = [PageAction(capability_words(UPDATE_CAPABILITY), reverse("control_plane:edit", args=[resource.key]))]
     if capabilities.removal != "unavailable":
         actions.append(
             PageAction(
@@ -355,23 +344,15 @@ class ZoneAdoptView(View):
     """
 
     def post(self, request, zone):
-        principal = web_principal(request.user)
-        try:
-            adopt(
-                AdoptCommand(kind=ZONE_KIND, token=request.POST.get("token", "")),
-                principal=principal,
-            )
-        except (RecordNotFound, PolicyError, DjangoValidationError) as exc:
-            messages.error(request, _readable_error(exc))
+        result = execute_capability(
+            ADOPT_ZONE,
+            {"zone": zone, "token": request.POST.get("token", "")},
+            principal=web_principal(request.user),
+        )
+        if not result["ok"]:
+            messages.error(request, result["error"]["message"])
             return redirect("zones:detail", zone=zone)
-
-        try:
-            records = adopt_zone_records(zone, principal=principal)
-            adopted = len(records["adopted"])
-        except RecordNotFound, PolicyError, DjangoValidationError:
-            # The domain is declared either way. A zone with nothing left to
-            # take on is the ordinary case, not a failure worth interrupting.
-            adopted = 0
+        adopted = len(result["adopted"])
 
         messages.success(
             request,

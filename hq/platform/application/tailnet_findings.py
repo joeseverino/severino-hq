@@ -1,5 +1,7 @@
 """Findings about the tailnet's policy and settings."""
 
+from dataclasses import dataclass
+
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
 
 from . import trusted_networks
@@ -10,10 +12,11 @@ from .finding_model import (
     FindingRemedy,
     FindingRule,
     OperatorStep,
+    Said,
     built_findings,
-    fact_values,
+    per_connection,
 )
-from .ui import counted
+from .ui import counted, counted_forms
 
 
 def _devices_join_without_approval(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -33,80 +36,91 @@ def _devices_join_without_approval(estate: FindingEstate) -> tuple[Finding, ...]
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _GrantedToNobody:
+    """A name the policy grants access to that lets nobody in, and how its finding words it.
+
+    ``{names}`` in a template is the names the connection reported, joined. A
+    title for several is their count, said with ``counted_as``, then ``many``.
+    ``because`` explains one name, then several.
+    """
+
+    rule: str
+    shown_as: str
+    # The policy amendment offered.
+    capability: str
+    one: str
+    counted_as: tuple[str, str]
+    many: str
+    because: tuple[str, str]
+    step: str
+
+    def __post_init__(self) -> None:
+        counted_forms(*self.counted_as)
+
+    def findings(self, estate: FindingEstate) -> tuple[Finding, ...]:
+        remedies = _policy_remedy(estate, self.capability)
+        return per_connection(
+            estate,
+            self.rule,
+            rule=self.rule,
+            severity="neutral",
+            shown_as=self.shown_as,
+            says=lambda _node, names: self._said(names, remedies),
+        )
+
+    def _said(self, names: tuple[str, ...], remedies: tuple[FindingRemedy, ...]) -> Said:
+        one = len(names) == 1
+        joined = ", ".join(names)
+        return {
+            "title": self.one.format(names=joined) if one else f"{counted(len(names), *self.counted_as)} {self.many}",
+            "explanation": self.because[0 if one else 1].format(names=joined),
+            "remedies": remedies,
+            "steps": (OperatorStep(label=self.step.format(names=joined)),),
+        }
+
+
+_EMPTY_GROUP = (
+    "A rule for an empty group lets nobody in. Remove the group from the policy, or add the members it was meant for."
+)
+_EMPTY_GROUP_GRANTED = _GrantedToNobody(
+    rule="empty-group-granted",
+    shown_as="Empty group",
+    capability="tailnet.policy.remove_empty_groups",
+    one="{names} has no members but is still granted access",
+    counted_as=("group has", "groups have"),
+    many="no members but are still granted access",
+    because=(_EMPTY_GROUP, _EMPTY_GROUP),
+    step="Remove {names} from the policy's groups and from every rule that names them, or add their members.",
+)
+_TAG_GRANTED_TO_NOBODY = _GrantedToNobody(
+    rule="tag-granted-to-nobody",
+    shown_as="Tag",
+    capability="infrastructure.resource.update",
+    one="{names} is granted access but no device has it",
+    counted_as=("tag is", "tags are"),
+    many="granted access but no device has them",
+    because=(
+        "No device has {names}, so this rule lets nothing in now. Any device given the tag later gets this access.",
+        (
+            "No device has these tags, so their rules let nothing in now. "
+            "Any device given one of them later gets that access."
+        ),
+    ),
+    step="Remove {names} from the rules that name them, or tag the devices they were meant for.",
+)
+
+
 def _empty_group_granted(estate: FindingEstate) -> tuple[Finding, ...]:
     """A group with no members that a grant or shell rule still names."""
 
-    found: list[Finding] = []
-    for node in estate.nodes():
-        if node.kind != "connection":
-            continue
-        empty = fact_values(node, "empty-group-granted")
-        if not empty:
-            continue
-        found.append(
-            Finding(
-                rule="empty-group-granted",
-                subject=node.id,
-                title=(
-                    f"{empty[0]} has no members but is still granted access"
-                    if len(empty) == 1
-                    else f"{counted(len(empty), 'group has', 'groups have')} no members but are still granted access"
-                ),
-                severity="neutral",
-                explanation=(
-                    "A rule for an empty group lets nobody in. Remove the group "
-                    "from the policy, or add the members it was meant for."
-                ),
-                evidence=tuple(("Empty group", name) for name in empty),
-                remedies=_policy_remedy(estate, "tailnet.policy.remove_empty_groups"),
-                steps=(
-                    OperatorStep(
-                        label=f"Remove {', '.join(empty)} from the policy's groups and "
-                        "from every rule that names them, or add their members."
-                    ),
-                ),
-            )
-        )
-    return tuple(sorted(found, key=lambda finding: finding.title))
+    return _EMPTY_GROUP_GRANTED.findings(estate)
 
 
 def _tag_granted_to_nobody(estate: FindingEstate) -> tuple[Finding, ...]:
     """A tag a grant names that no device carries: the policy and the devices disagree."""
 
-    found: list[Finding] = []
-    for node in estate.nodes():
-        if node.kind != "connection":
-            continue
-        tags = fact_values(node, "tag-granted-to-nobody")
-        if not tags:
-            continue
-        found.append(
-            Finding(
-                rule="tag-granted-to-nobody",
-                subject=node.id,
-                title=(
-                    f"{tags[0]} is granted access but no device has it"
-                    if len(tags) == 1
-                    else f"{counted(len(tags), 'tag is', 'tags are')} granted access but no device has them"
-                ),
-                severity="neutral",
-                explanation=(
-                    f"No device has {tags[0]}, so this rule lets nothing in now. "
-                    "Any device given the tag later gets this access."
-                    if len(tags) == 1
-                    else "No device has these tags, so their rules let nothing in now. "
-                    "Any device given one of them later gets that access."
-                ),
-                evidence=tuple(("Tag", tag) for tag in tags),
-                remedies=_policy_remedy(estate, "infrastructure.resource.update"),
-                steps=(
-                    OperatorStep(
-                        label=f"Remove {', '.join(tags)} from the rules that name them, or tag the devices they were meant for."
-                    ),
-                ),
-            )
-        )
-    return tuple(found)
+    return _TAG_GRANTED_TO_NOBODY.findings(estate)
 
 
 def _policy_remedy(estate: FindingEstate, capability: str) -> tuple[FindingRemedy, ...]:
@@ -122,7 +136,7 @@ def _policy_remedy(estate: FindingEstate, capability: str) -> tuple[FindingRemed
     )
     if policy is None:
         return ()
-    url = command_url(capability, policy.label) if policy is not None else ""
+    url = command_url(capability, policy.label)
     if not url:
         return ()
     return (FindingRemedy(capability=capability, target=policy.label, url=url),)
@@ -135,30 +149,22 @@ def _tailnet_dns_off_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
     one source address for all of them rather than each device.
     """
 
-    found: list[Finding] = []
-    for node in estate.nodes():
-        if node.kind != "connection":
-            continue
-        resolvers = tuple(value for key, value in node.facts if key == "tailnet-dns-off-tailnet" and value)
-        if not resolvers:
-            continue
-        found.append(
-            Finding(
-                rule="tailnet-dns-off-tailnet",
-                subject=node.id,
-                title=(
-                    f"Tailnet DNS points at {', '.join(resolvers)}, which "
-                    f"{'is not a tailnet address' if len(resolvers) == 1 else 'are not tailnet addresses'}"
-                ),
-                severity="attention",
-                explanation=(
-                    "Devices reach it through a subnet router or the internet, so "
-                    "the DNS server sees them all as one device."
-                ),
-                evidence=tuple(("DNS server", resolver) for resolver in resolvers),
-            )
-        )
-    return tuple(sorted(found, key=lambda finding: finding.title))
+    return per_connection(
+        estate,
+        "tailnet-dns-off-tailnet",
+        rule="tailnet-dns-off-tailnet",
+        severity="attention",
+        shown_as="DNS server",
+        says=lambda _node, resolvers: {
+            "title": (
+                f"Tailnet DNS points at {', '.join(resolvers)}, which "
+                f"{'is not a tailnet address' if len(resolvers) == 1 else 'are not tailnet addresses'}"
+            ),
+            "explanation": (
+                "Devices reach it through a subnet router or the internet, so the DNS server sees them all as one device."
+            ),
+        },
+    )
 
 
 def _trusted_wider_than_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:

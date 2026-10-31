@@ -8,7 +8,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, NamedTuple
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.domains.control_plane.names import names_a_host, normalized_hostname
+from hq.domains.control_plane.names import LEADS_TO, names_a_host, normalized_hostname
 from hq.domains.control_plane.provider_spec import origin_is_authoritative
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.routes import reverse
@@ -82,7 +82,7 @@ class Claim:
         since the row is already the name it answers for."""
 
         link = self.link
-        _name, arrow, leads_to = link.label.partition(" → ")
+        _name, arrow, leads_to = link.label.partition(LEADS_TO)
         return replace(link, label=leads_to) if arrow else link
 
     @property
@@ -232,15 +232,10 @@ def _read_declarations() -> Declarations:
 def _aliases(declared, origins) -> dict[str, str]:
     """``{alias: target}`` for names that are another service under a second name.
 
-    A CNAME to a name HQ already serves is not a second service. It is the same
-    service reachable another way: ``www.example.com`` pointing at
-    ``example.com`` is one site, and listing it separately puts a second row on
-    the board with its own health, its own certificate and its own "not routed",
-    describing something that is not separate from anything.
-
-    Only within what HQ declares. A CNAME to somewhere outside is a name HQ
-    publishes and does not otherwise know about, which is a service of its own
-    by every definition that matters here.
+    A CNAME to a name HQ already serves is the same service reachable another
+    way, and listing it separately puts a second row on the board with its own
+    health, certificate and "not routed". Only within what HQ declares: a CNAME
+    to somewhere outside is a service of its own by every definition here.
     """
 
     found: dict[str, str] = {}

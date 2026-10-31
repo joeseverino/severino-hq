@@ -21,11 +21,12 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
 
 from ..action_links import command_url
-from ..capabilities import capability_registry
+from ..capabilities import capability_registry, capability_words
 from ..dashboard import work_queue
 from ..findings import derive_findings
 from ..paths import routed_names
 from ..projection import MAX_PAGE_SIZE, projection_scope
+from ..resource_capabilities import UPDATE_CAPABILITY
 from ..security import web_principal
 from ..topology import derive_topology
 from .markup import all_elements, elements, text, texts
@@ -34,7 +35,8 @@ from .test_finding_fixes import document
 from .test_paths import PUBLIC_RANGE, estate, record, store
 from .test_tailnet_posture import policy as tailnet_policy, tailnet_connection
 
-TRAP = "This replaces the whole record"
+# The notice a form draws when a blank field would overwrite the record.
+TRAP = "data-command-blanks"
 UNOFFERED = "cannot be used here"
 
 
@@ -212,7 +214,7 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
         self.assertIn("Put an access list in front of example-shop-proxy", labels)
         self.assertIn("Keep the live version", labels)
         self.assertIn("Remove empty groups", labels)
-        self.assertIn("Change what HQ expects", labels)
+        self.assertIn(capability_words(UPDATE_CAPABILITY), labels)
 
     def test_no_page_offers_a_way_to_itself(self):
         # The fixture is only worth something while a page it draws is one a

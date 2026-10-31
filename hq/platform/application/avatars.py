@@ -1,14 +1,10 @@
 """A person's picture, fetched from their identity provider when they sign in.
 
-Sign-on already says who somebody is; it can also say what they look like, as
-the ``picture`` claim. That is an address, and an address a claim supplies is
-not one HQ fetches on trust: only the provider's own origin is asked, without
-following a redirect off it, for at most a small file that is an image by its own bytes.
-What comes back is kept and served by HQ, so a page needs nothing from another
-origin to draw it.
-
-Nothing here may stop a sign-in. A picture that cannot be fetched is a picture
-that is not shown.
+The ``picture`` claim is an address HQ does not fetch on trust: only the
+provider's own origin is asked (``picture_allowed``, ``fetch_picture``). What
+comes back is kept and served by HQ, so a page needs nothing from another
+origin to draw it. Nothing here may stop a sign-in: a picture that cannot be
+fetched is a picture that is not shown.
 """
 
 import hashlib

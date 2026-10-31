@@ -1,23 +1,10 @@
 """What the site was actually asked for, and how it answered.
 
-Two tables and one rule: Cloudflare is asked once, per day, per breakdown, and
-every surface downstream derives from what that produced. Pages, writeups,
-referrers and the dashboard tile are projections of ``RumDaily``: none of
-them queries Cloudflare, and none of them keeps its own copy.
-
-Why store at all, when the API is right there. Three reasons, and the first is
-the weakest: retention is 184 days on this plan, so history beyond that exists
-only if HQ keeps it. The second is the quota (300 queries per five minutes,
-account-wide) which a page rendering on every operator visit would spend on
-re-asking the same settled question about last month. The third is the one that
-actually decides it: a reading is evidence. A page that fetches live can only
-say what is true now, and cannot say what was true in June, which is the
-question anyone looking at a traffic page is really asking.
-
-Units are normalized at ingest, once. Cloudflare reports timings in
-microseconds and reports "no data" as -1; both of those are provider details
-and neither survives into this table. Timings are milliseconds, absence is
-NULL, and no template has to know that Cloudflare ever said otherwise.
+Cloudflare is asked once, per day, per breakdown, and every surface (pages,
+writeups, referrers, the dashboard tile) is a projection of ``RumDaily``. HQ
+stores it because a reading is evidence: a live fetch cannot say what was true
+in June, the plan keeps 184 days, and its account-wide quota (300 queries per
+five minutes) is no budget for re-asking settled questions on every visit.
 """
 
 from typing import override
@@ -96,17 +83,11 @@ class AnalyticsCoverage(models.Model):
 class RumDaily(models.Model):
     """One day of one breakdown: the single grain everything else derives from.
 
-    A row is (site, date, dimension, value), so ``/contact/`` on 12 August is
-    one row, and so is ``google.com`` on 12 August. Storing breakdowns as rows
-    of one table rather than as columns of several is what lets a new breakdown
-    be a new ``Dimension`` member and a sync loop entry, instead of a migration,
-    a model, a read model and a template each time.
-
-    The cost is honest and worth naming: dimensions cannot be crossed. This
-    answers "which pages" and "which referrers", never "which referrers sent
-    traffic to which page". Cloudflare's own free view does not cross them
-    either, and a table that could would be a different shape than this one,
-    added beside it when something actually needs it, not anticipated here.
+    A row is (site, date, dimension, value), so a new breakdown is a new
+    ``Dimension`` member and a sync loop entry rather than a migration, a model,
+    a read model and a template. The cost: dimensions cannot be crossed ("which
+    referrers sent traffic to which page"), as Cloudflare's free view cannot; a
+    table that could is a different shape, added beside this one when needed.
     """
 
     class Dimension(models.TextChoices):
@@ -164,21 +145,16 @@ class RumDaily(models.Model):
 class VitalsDaily(models.Model):
     """One day of Core Web Vitals for a site.
 
-    Site-wide rather than per-path, deliberately. The vitals dataset is sampled
-    the same way the pageload one is, and splitting a day's handful of beacons
-    across twenty paths produces twenty numbers that each rest on nothing. A
-    path dimension can be added when there is traffic to carry it; until then
-    the honest grain is the whole site.
-
-    Every timing is milliseconds and nullable. A percentile Cloudflare has no
-    data for arrives as -1, which is absence wearing a number's clothes: it is
-    stored as NULL so that averaging a column cannot quietly produce a negative
-    load time.
+    Site-wide until there is traffic to carry a path dimension: the dataset is
+    sampled, and a day's handful of beacons split across twenty paths gives
+    twenty numbers that each rest on nothing.
     """
 
     site = models.ForeignKey(AnalyticsSite, on_delete=models.CASCADE, related_name="vitals")
     date = models.DateField()
 
+    # Nullable: a percentile Cloudflare has no data for arrives as -1, stored as
+    # NULL so that averaging a column cannot quietly produce a negative time.
     largest_contentful_paint_ms = models.PositiveIntegerField(null=True, blank=True)
     interaction_to_next_paint_ms = models.PositiveIntegerField(null=True, blank=True)
     first_contentful_paint_ms = models.PositiveIntegerField(null=True, blank=True)

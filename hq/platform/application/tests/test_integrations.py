@@ -210,6 +210,30 @@ class IntegrationGraphTests(TestCase):
         self.assertIn("exposes no operations", str(raised.exception))
         self.assertIn("invalid documentation URL", str(raised.exception))
 
+    def test_what_a_command_wants_names_its_target_exactly_when_it_takes_one(self):
+        def wanting(name, wants, target_kind=None):
+            handler = execute_targeted if target_kind else execute_synthetic
+            return CapabilitySpec(
+                name, "Example.", "remote_write", Capability.READ, SyntheticCommand, handler, target_kind, wants=wants
+            )
+
+        refused = (
+            wanting("example.untargeted", "keep {target}"),
+            wanting("example.missing", "keep the note", "slug"),
+            wanting("example.twice", "move {target} beside {target}", "slug"),
+            wanting("example.other", "keep {note}", "slug"),
+        )
+        with self.assertRaises(IntegrationGraphError) as raised:
+            compile_integration_graph(
+                capabilities=(wanting("example.keep", "keep the note {target}", "slug"), *refused),
+                resources=(),
+                connections=(),
+            )
+
+        self.assertEqual(
+            [violation.code for violation in raised.exception.violations], ["invalid.capability"] * len(refused)
+        )
+
     def test_non_spec_contributions_are_named_without_aborting_compilation(self):
         with self.assertRaises(IntegrationGraphError) as raised:
             compile_integration_graph(
@@ -339,7 +363,7 @@ class IntegrationGraphTests(TestCase):
             self.assertIn(connection.name, graph.connections)
             self.assertIn(
                 capability.name,
-                {item["name"] for item in describe_capabilities()["capabilities"]},
+                {item["name"] for item in describe_capabilities(principal=principal)["capabilities"]},
             )
             self.assertIn(
                 resource.name,

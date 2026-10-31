@@ -1,20 +1,7 @@
 """The composition set: which extensions Compose builds HQ with, and their names masked in its log.
 
-    COMPOSITION_EXTENSIONS=<json> python3 -m tools.pipeline.composition_set write SET
-    python3 -m tools.pipeline.composition_set mask SET
-
-``write`` checks the secret's shape and writes it to SET. The secret is read
-from the environment and never from an argument or the step's text: Actions
-masks only secret values, so anything private reaches the log through the
-environment or not at all.
-
-``mask`` prints an ``::add-mask::`` for every spelling of every extension. Later
-steps shell out to gh, uv and Django, which echo repository names, wheel
-filenames, app labels and (when a test fails) table and column names, and this
-repository's logs are public. The same extension appears as a repository path,
-a bare name, a Python package, a table prefix and the path it mounts at, each
-in lower, Title and UPPER case, as a page title or constant spells it.
-
+``write SET`` checks the shape of COMPOSITION_EXTENSIONS and writes it to SET;
+``mask SET`` prints an ``::add-mask::`` for every spelling of every extension.
 Stdlib only: the job that runs it sets up no toolchain.
 """
 
@@ -86,7 +73,12 @@ def names(composition: dict) -> Iterator[str]:
     """Every name an extension goes by."""
     for extension in composition["extensions"]:
         plugin_id, repository = str(extension.get("id")), str(extension.get("repository"))
-        yield from (plugin_id, repository, repository.split("/")[-1], plugin_id.split(".")[-1])
+        yield from (
+            plugin_id,
+            repository,
+            repository.rsplit("/", maxsplit=1)[-1],
+            plugin_id.rsplit(".", maxsplit=1)[-1],
+        )
         if (path := str(given(extension.get("path"), ".")).split("/")[-1]) != ".":
             yield path
     for name in given(composition.get("retired"), []):
@@ -94,6 +86,12 @@ def names(composition: dict) -> Iterator[str]:
 
 
 def masks(composition: dict) -> list[str]:
+    """Each name with - or _, in lower, Title and UPPER case, as a title or constant spells it.
+
+    Later steps run gh, uv and Django, which echo repository names, wheel
+    filenames, app labels and (when a test fails) table and column names into a
+    log that is public.
+    """
     spellings = set()
     for name in {name.replace("\r", "") for name in names(composition)} - {""}:
         for spelling in (name, name.replace("-", "_"), name.replace("_", "-")):
@@ -110,6 +108,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         for spelling in masks(json.loads(arguments.set.read_text())):
             print(f"::add-mask::{spelling}")
         return 0
+    # From the environment, never an argument or the step's text: Actions masks only
+    # secret values, so anything private reaches the log that way or not at all.
     text = os.environ.get("COMPOSITION_EXTENSIONS", "")
     try:
         check(text)

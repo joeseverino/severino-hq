@@ -1,19 +1,10 @@
 """What is worth knowing about a domain, contributed one fact at a time.
 
-Restating DNS records back at the operator (MX hosts, SPF string, DMARC policy,
-CAA entries) says nothing Cloudflare's own dashboard does not.
-
-What HQ can say that Cloudflare cannot is how a domain relates to everything
-*else* HQ holds: which services answer inside it, which managed certificate
-covers it and when that expires, and (the one that actually bites) whether
-the domain's own CAA record permits the authority HQ renews with. A zone that
-forbids Let's Encrypt while HQ renews a Let's Encrypt certificate for it is a
-failure scheduled for the day the certificate expires, and nothing else in the
-system is in a position to notice.
-
-Each function here takes a Zone and returns one insight, or None when it has
-nothing to say. They are registered by name in ``zones.ZONE_INSIGHTS`` so a new
-one is an entry rather than an edit to a page.
+Restating DNS records says nothing Cloudflare's own dashboard does not; what HQ
+can say is how a domain relates to everything else it holds (the services in
+it, the certificates covering it, whether its CAA permits HQ's authority). Each
+function takes a Zone and returns one insight or None, registered by name in
+``zones.ZONE_INSIGHTS`` so a new one is an entry rather than an edit to a page.
 """
 
 import re
@@ -484,20 +475,17 @@ def _posture_facts(zone) -> tuple[str, ...]:
 def posture(zone) -> ZoneInsight | None:
     """How this domain answers over TLS, as Cloudflare currently holds it.
 
-    Stated, never flagged. HQ can read this: `cloudflare_api` carries the
-    account surface and the sweep collects it, but it holds no declared
-    posture to compare against, and a control plane that reports drift from a
-    policy nobody wrote is inventing one. The two things here that are wrong by
-    their own definition already have their own insights.
-
-    Absent rather than empty when the account credential could not answer. A
-    domain whose posture HQ could not read is not a domain served over plain
-    HTTP, and a card saying "Off" because a token lacked a permission is worse
-    than no card.
+    Stated, never flagged: HQ holds no declared posture to compare against,
+    and drift from a policy nobody wrote is invented. What is wrong by its own
+    definition has its own insight. A posture HQ could not read is never shown
+    as "Off".
     """
 
     found = _posture_record(zone)
     refused = _zone_part_refused(zone.zone, "posture")
+    # A refused read says so; a domain whose posture HQ could not read is not
+    # one served over plain HTTP, and "Off" because a token lacked a
+    # permission is worse than no card.
     if refused is not None:
         return ZoneInsight(
             label="TLS posture",

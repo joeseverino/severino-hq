@@ -4,8 +4,8 @@
 {% include "partials/approval_card.html" with entry=approval %}
 {% else %}
 
-<section class="card">
-  {% section_head %}{{ event.get_action_display|breakable }}{% if event.object_type %} · {{ event.type_label|breakable }}{% endif %}{% endsection_head %}
+{% card %}
+  {% section_head %}{{ event.get_action_display|breakable }}{% if event.object_type %}{% dot %}{{ event.type_label|breakable }}{% endif %}{% endsection_head %}
   {% table_region "Event" %}
     <table class="data-table compact-table">
       <tbody>
@@ -18,10 +18,10 @@
       </tbody>
     </table>
   {% endtable_region %}
-</section>
+{% endcard %}
 
 {% if changes %}
-<section class="card">
+{% card %}
   <h2>What changed <span class="count">{{ changes|length }}</span></h2>
   {% table_region "What changed" %}
     <table class="data-table compact-table">
@@ -37,11 +37,11 @@
       </tbody>
     </table>
   {% endtable_region %}
-</section>
+{% endcard %}
 {% endif %}
 
 {% if extra %}
-<section class="card">
+{% card %}
   {% section_head %}Recorded with it{% endsection_head %}
   {% table_region "Recorded with it" %}
     <table class="data-table compact-table">
@@ -52,13 +52,13 @@
       </tbody>
     </table>
   {% endtable_region %}
-</section>
+{% endcard %}
 {% endif %}
 
 {% endif %}
 
 {% if other_events %}
-<section class="card">
+{% card %}
   {% section_head %}Other events{% endsection_head %}
   {% table_region "Other events" %}
     <table class="data-table compact-table">
@@ -79,6 +79,6 @@
       {% endfor %}
     </table>
   {% endtable_region %}
-</section>
+{% endcard %}
 {% endif %}
 {% endblock %}

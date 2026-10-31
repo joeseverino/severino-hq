@@ -2,10 +2,11 @@ package project
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"io/fs"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -336,7 +337,7 @@ func connection(input Input, item connectapi.FullItem) (*projected, error) {
 // valid answer here; whether it may be installed is Project's to say.
 func inventory(input Input) (connections.Document, error) {
 	items := append([]connectapi.FullItem{}, input.Items...)
-	sort.Slice(items, func(i, j int) bool { return text(items[i].Id) < text(items[j].Id) })
+	slices.SortFunc(items, func(a, b connectapi.FullItem) int { return cmp.Compare(text(a.Id), text(b.Id)) })
 	refs, prefixes := map[string]bool{}, map[string]bool{}
 	document := connections.Document{SchemaVersion: connections.SchemaVersion, Connections: []connections.Connection{}}
 	for _, item := range items {

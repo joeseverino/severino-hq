@@ -11,7 +11,7 @@ Each thing to try is a fact band's cell that leads to the page it names.
     {% band_fact icon="shield" label="Approval" %}<strong><a href="{% url 'core:audit_list' %}?awaiting=1">An agent's DNS change</a></strong>{% endband_fact %}
     {% band_fact icon="container" label="Containers" %}<strong><a href="{% url 'control_plane:containers' %}">Follow one to its host</a></strong>{% endband_fact %}
     {% band_fact icon="check-circle" label="Needs you" %}<strong><a href="{% url 'action_items' %}">Dismiss what can wait</a></strong>{% endband_fact %}
-    {% band_fact icon="layers" label="Search" %}<strong><a href="{% url 'search' %}" data-command-center-open aria-haspopup="dialog" aria-controls="modal-command-center">Find anything</a></strong>{% endband_fact %}
+    {% band_fact icon="search" label="Search" %}<strong><a href="{% url 'search' %}" data-command-center-open aria-haspopup="dialog" aria-controls="modal-command-center">Find anything</a></strong>{% endband_fact %}
   </div>
 </section>
 <nav class="demo-about-part" aria-labelledby="demo-about-behind">
@@ -24,4 +24,4 @@ Each thing to try is a fact band's cell that leads to the page it names.
     <li>{% outside_link url="https://github.com/joeseverino/severino-hq/blob/main/docs/AI.md" %}AI and HQ<span class="ext-arrow" aria-hidden="true">↗</span>{% endoutside_link %}</li>
   </ul>
 </nav>
-<p class="demo-about-foot">Made by {% entity "https://jseverino.com"|outside label="Joe Severino" %} · saved {{ saved_copy|when:"day" }}</p>
+<p class="demo-about-foot">Made by {% entity "https://jseverino.com"|outside label="Joe Severino" %}{% dot %}saved {{ saved_copy|when:"day" }}</p>

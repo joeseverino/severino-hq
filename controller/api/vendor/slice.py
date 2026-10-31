@@ -1,36 +1,10 @@
 """Cut the schemas a vendor's provider decodes out of its upstream spec.
 
-The operations are the ``include-operation-ids`` in the vendor directory's
-``oapi-codegen.yaml``: the calls the provider makes, so the slice and the
-generator name them once. Each operation keeps its path, method and success
-statuses; its parameters and response bodies go, because only models are
-generated and the provider builds its own requests and reads its own
-envelopes. The spec's ``servers`` stay, so the provider's base URL is the
-vendor's statement rather than a literal. What the provider decodes and sends is named in ``slice.toml``
-beside them, and the slice keeps those schemas and every component they
-reference, transitively. Run from the vendor directory against the pinned
-upstream file recorded in its UPSTREAM:
-
-    python3 ../slice.py /path/to/openapi.json > openapi.slice.json
-
-slice.toml:
-    [decodes]      operation id = the component schemas the provider decodes
-                   from its answer; each must be reachable from the
-                   operation's success response upstream. An operation with
-                   none is decoded into the provider's own type, or not at all.
-    sends          operation ids whose request body the provider sends as the
-                   generated type; every other request body goes.
-    [keep]         component = the properties the provider reads; the rest go,
-                   with what only they referenced. For a oneOf or anyOf, the
-                   components whose variants stay.
-    strip          keywords dropped everywhere they are not an object; ones that
-                   change no decoded shape and that upstream allOf parts
-                   disagree on, which oapi-codegen refuses to merge. Without
-                   format a timestamp stays the exact string the vendor sent.
-    drop-examples  true drops media-type examples and the components only they use.
-    [go-names]     "kind/name" (kind defaults to schemas) = the Go name for a
-                   kept component whose generated name collides with an inline
-                   enum or alias elsewhere in the slice.
+The operations are the ``include-operation-ids`` of the vendor directory's
+``oapi-codegen.yaml``, and what the provider decodes and sends is named in its
+``slice.toml``, each key described where it is read. Run from the vendor
+directory against the pinned upstream file its UPSTREAM records:
+``python3 ../slice.py /path/to/openapi.json > openapi.slice.json``.
 """
 
 import copy
@@ -126,9 +100,8 @@ def path_parameters(spec, item, operation):
     to be declared, and the provider builds the path itself."""
 
     found = []
-    for parameter in (*item.get("parameters", ()), *operation.get("parameters", ())):
-        if "$ref" in parameter:
-            parameter = component(spec, parameter["$ref"])[2]
+    for declared in (*item.get("parameters", ()), *operation.get("parameters", ())):
+        parameter = component(spec, declared["$ref"])[2] if "$ref" in declared else declared
         if parameter.get("in") == "path":
             found.append({"name": parameter["name"], "in": "path", "required": True, "schema": {"type": "string"}})
     return found
@@ -171,6 +144,9 @@ def slice_operation(spec, item, operation, decodes, sends, roots):
         "parameters": path_parameters(spec, item, operation),
         "responses": {code: {"description": answer.get("description", "")} for code, answer in answers.items()},
     }
+    # An operation keeps its path, method and success statuses; its other
+    # parameters and its response bodies go, because only models are generated
+    # and the provider builds its own requests and reads its own envelopes.
     upstream = reachable(spec, answers)
     for name in decodes.get(op_id, ()):
         if SCHEMAS + name not in upstream:
@@ -186,6 +162,11 @@ def slice_operation(spec, item, operation, decodes, sends, roots):
 def slice_paths(spec, wanted, settings):
     """Select declared operations and collect their decoded schema roots."""
 
+    # [decodes]: operation id = the component schemas the provider decodes from
+    # its answer, each reachable from the operation's success response
+    # upstream; an operation with none is decoded into the provider's own type,
+    # or not at all. sends: the operation ids whose request body the provider
+    # sends as the generated type; every other request body goes.
     decodes = settings.get("decodes", {})
     sends = set(settings.get("sends", ()))
     if stray := (decodes.keys() | sends) - wanted:
@@ -200,6 +181,7 @@ def slice_paths(spec, wanted, settings):
             paths.setdefault(route, {})[method] = slice_operation(spec, item, operation, decodes, sends, roots)
     if wanted:
         raise SystemExit(f"operations missing upstream: {sorted(wanted)}")
+    # drop-examples: true drops media-type examples and the components only they use.
     if settings.get("drop-examples"):
         drop_media_examples(paths)
     return paths, roots
@@ -208,6 +190,9 @@ def slice_paths(spec, wanted, settings):
 def slice_components(spec, paths, roots, settings):
     """Follow retained schema references after applying property narrowing."""
 
+    # [keep]: component = the properties the provider reads; the rest go, with
+    # what only they referenced. For a oneOf or anyOf, the components whose
+    # variants stay. Every component the kept ones reference stays, transitively.
     keep = settings.get("keep", {})
     pending, seen = set(roots), set()
     refs(paths, pending)
@@ -233,6 +218,9 @@ def slice_components(spec, paths, roots, settings):
 def name_components(components, names):
     """Apply explicit generated names only to retained components."""
 
+    # [go-names]: "kind/name" (kind defaults to schemas) = the Go name for a kept
+    # component whose generated name collides with an inline enum or alias
+    # elsewhere in the slice.
     for key, go_name in names.items():
         kind, _, name = key.rpartition("/")
         kind = kind or "schemas"
@@ -248,12 +236,18 @@ def main(path):
     settings = tomllib.loads((vendor / "slice.toml").read_text(encoding="utf-8"))
     with Path(path).open(encoding="utf-8") as handle:
         spec = json.load(handle)
+    # The spec's servers stay, so the provider's base URL is the vendor's
+    # statement rather than a literal.
     if not spec.get("servers"):
         raise SystemExit("upstream names no servers")
     wanted = set(operation_ids(vendor / "oapi-codegen.yaml"))
     paths, roots = slice_paths(spec, wanted, settings)
     components = slice_components(spec, paths, roots, settings)
     name_components(components, settings.get("go-names", {}))
+    # strip: keywords dropped everywhere they are not an object; ones that change
+    # no decoded shape and that upstream allOf parts disagree on, which
+    # oapi-codegen refuses to merge. Without format a timestamp stays the exact
+    # string the vendor sent.
     keywords = tuple(settings.get("strip", ()))
     strip_keywords(paths, keywords)
     strip_keywords(components, keywords)

@@ -1,0 +1,45 @@
+# mypy's second pass, over every source module of hq and hq_sdk: code the
+# types already rule out (a branch that never runs, a test that is always true
+# or always false, an isinstance the declaration settles) is an error. Every
+# body is checked, annotated or not, and nothing demands an annotation; the
+# strict seams stay pyproject.toml's.
+[tool.mypy]
+files = ["hq", "hq_sdk"]
+exclude = "(^|/)(tests/|tests\\.py|test_[^/]*\\.py|migrations/)"
+follow_imports = "silent"
+plugins = ["mypy_django_plugin.main"]
+# Its own cache: per-module options differ from the seams pass, and a shared
+# cache would be rebuilt by each pass in turn.
+cache_dir = ".mypy_cache/reach"
+check_untyped_defs = true
+warn_unreachable = true
+strict_equality = true
+enable_error_code = ["redundant-expr", "truthy-bool"]
+# What an unannotated module still fails on its own types. This pass is about
+# reach alone; those codes are the seams pass's, module by module as each is
+# held there.
+disable_error_code = [
+    "arg-type",
+    "assignment",
+    "attr-defined",
+    "call-arg",
+    "call-overload",
+    "dict-item",
+    "func-returns-value",
+    "has-type",
+    "import-untyped",
+    "index",
+    "list-item",
+    "misc",
+    "no-redef",
+    "operator",
+    "override",
+    "return-value",
+    "type-var",
+    "union-attr",
+    "valid-type",
+    "var-annotated",
+]
+
+[tool.django-stubs]
+django_settings_module = "hq.config.settings_typecheck"

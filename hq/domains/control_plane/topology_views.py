@@ -1,5 +1,6 @@
 """The topology workspace and the drill-in for one node."""
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, override
 from urllib.parse import urlencode
@@ -23,7 +24,7 @@ from hq.platform.application.topology_lenses import (
     lens_for,
     topology_lenses,
 )
-from hq.platform.application.topology_model import RELATIONS, observable, relation_rank
+from hq.platform.application.topology_model import RELATIONS, TopologyTrace, observable, relation_rank
 from hq.platform.application.ui import counted
 
 # What a lane of the map is called, and what one card in it is counted as. A
@@ -53,6 +54,46 @@ def _lane_nouns(kind: str) -> tuple[str, str, str]:
     return known.plural.capitalize(), known.noun, known.plural
 
 
+def _lane(kind: str, items: list[dict[str, Any]]) -> dict[str, Any]:
+    """One lane of the map: the heading names it, and a count says one or the
+    other of its nouns."""
+
+    heading, noun, plural = _lane_nouns(kind)
+    return {"kind": kind, "label": heading, "count": counted(len(items), noun, plural), "items": items}
+
+
+@dataclass(frozen=True, slots=True)
+class _Lanes:
+    """The map's cards by lane, how many were left out, and the focused one."""
+
+    groups: tuple[dict[str, Any], ...]
+    shown: int
+    left_out: int
+    # The focused node's body, drawn once in the panel below the lanes rather
+    # than inside its card.
+    detail: dict[str, Any] | None
+
+    @classmethod
+    def of(cls, items: list[dict[str, Any]], *, everything: bool, focus: str) -> _Lanes:
+        drawn = [item for item in items if everything or kept_on_the_map(item["node"].kind, item["degree"])]
+        by_kind: dict[str, list[dict[str, Any]]] = {}
+        for item in drawn:
+            by_kind.setdefault(item["node"].kind, []).append(item)
+        return cls(
+            groups=tuple(_lane(kind, cards) for kind, cards in by_kind.items()),
+            shown=len(drawn),
+            left_out=len(items) - len(drawn),
+            detail=next((item for item in drawn if focus and item["node"].id == focus), None),
+        )
+
+
+def _reset_url(lens_name: str) -> str:
+    """The map with no trace, keeping the view it was seen through."""
+
+    query = f"?{urlencode({'lens': lens_name})}" if lens_name else ""
+    return f"{reverse('control_plane:topology')}{query}#map"
+
+
 class TopologyView(PageMixin, TemplateView):
     """The live, actionable graph derived by the application layer."""
 
@@ -72,118 +113,88 @@ class TopologyView(PageMixin, TemplateView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        asked = self.request.GET
+        active_lens = lens_for(asked.get("lens", "").strip())
+        lens_name = active_lens.name if active_lens else ""
         topology = derive_topology(principal=web_principal(self.request.user), request=self.request)
-        active_lens = lens_for(self.request.GET.get("lens", "").strip())
         if active_lens is not None:
             topology = apply_lens(topology, active_lens)
-        requested_focus = self.request.GET.get("focus", "").strip()
         topology, trace = apply_trace(
             topology,
-            requested_focus,
-            direction=self.request.GET.get("direction", "both").strip(),
-            depth=self.request.GET.get("depth", "2").strip(),
+            asked.get("focus", "").strip(),
+            direction=asked.get("direction", "both").strip(),
+            depth=asked.get("depth", "2").strip(),
         )
-        by_id = {node.id: node for node in topology.nodes}
-        lens_name = active_lens.name if active_lens else ""
-        groups: dict[str, list[dict[str, Any]]] = {}
-        detail = None
         # The whole map leaves its quiet lanes and unlinked cards out until
         # asked. A view or a trace is already a question, and shows its answer.
-        everything = bool(active_lens or trace or self.request.GET.get("all"))
-        left_out = 0
-        for item in self.node_items(topology, lens_name, trace):
-            if not everything and not kept_on_the_map(item["node"].kind, item["degree"]):
-                left_out += 1
-                continue
-            groups.setdefault(item["node"].kind, []).append(item)
-            if trace and item["node"].id == trace.focus:
-                detail = item
-        # One heading, noun and plural per lane: the heading names the lane,
-        # and a count says one or the other.
-        nouns = {kind: _lane_nouns(kind) for kind in groups}
-        trace_directions = _TRACE_DIRECTIONS
+        lanes = _Lanes.of(
+            self.node_items(topology, lens_name, trace),
+            everything=bool(active_lens or trace or asked.get("all")),
+            focus=trace.focus if trace else "",
+        )
         context.update(
-            {
-                "topology": topology,
-                "topology_groups": tuple(
-                    {
-                        "kind": kind,
-                        "label": nouns[kind][0],
-                        "count": counted(len(items), *nouns[kind][1:]),
-                        "items": items,
-                    }
-                    for kind, items in groups.items()
-                ),
-                # The ledger restates every edge the node bodies already state
-                # from both ends, so it is drawn for a bounded trace only.
-                "topology_edges": tuple(
-                    {
-                        "edge": edge,
-                        "source": by_id[edge.source],
-                        "target": by_id[edge.target],
-                        "source_link": node_link(by_id[edge.source]),
-                        "target_link": node_link(by_id[edge.target]),
-                    }
-                    for edge in topology.edges
-                )
-                if trace
-                else (),
-                # Passed rather than written into the template: the window is
-                # one number, and a page that restates it drifts from the query
-                # that produced the figures the moment either changes.
-                "traffic_window_days": HOST_TRAFFIC_DAYS,
-                "focus_node": trace.focus if trace else "",
-                # The focused node's body, drawn once in the panel below the
-                # lanes rather than inside its card.
-                "topology_detail": detail,
-                "topology_left_out": left_out,
-                # "N of M shown": the cards drawn, out of every card, the
-                # left-out ones too.
-                "topology_shown": (shown := sum(len(items) for items in groups.values())),
-                "topology_total": left_out + shown,
-                "topology_everything": bool(self.request.GET.get("all")) and not (active_lens or trace),
-                "topology_lenses": topology_lenses(),
-                "active_lens": active_lens,
-                "topology_trace": trace,
-                "topology_trace_focus": by_id.get(trace.focus) if trace else None,
-                "topology_trace_label": (dict(_TRACE_DIRECTIONS).get(trace.direction, "") if trace else ""),
-                "trace_direction_links": tuple(
-                    {
-                        "name": name,
-                        "label": label,
-                        "url": self._trace_url(
-                            trace.focus,
-                            name,
-                            active_lens.name if active_lens else "",
-                            trace.depth,
-                        ),
-                    }
-                    for name, label in trace_directions
-                )
-                if trace
-                else (),
-                "trace_depth_links": tuple(
-                    {
-                        "depth": depth,
-                        "url": self._trace_url(
-                            trace.focus,
-                            trace.direction,
-                            active_lens.name if active_lens else "",
-                            depth,
-                        ),
-                    }
-                    for depth in range(1, 6)
-                )
-                if trace
-                else (),
-                "trace_reset_url": (
-                    f"{reverse('control_plane:topology')}?{urlencode({'lens': active_lens.name})}#map"
-                    if active_lens
-                    else f"{reverse('control_plane:topology')}#map"
-                ),
-            }
+            topology=topology,
+            topology_groups=lanes.groups,
+            # Passed rather than written into the template: the window is one
+            # number, and a page that restates it drifts from the query that
+            # produced the figures the moment either changes.
+            traffic_window_days=HOST_TRAFFIC_DAYS,
+            topology_detail=lanes.detail,
+            topology_left_out=lanes.left_out,
+            # "N of M shown": the cards drawn, out of every card, the left-out
+            # ones too.
+            topology_shown=lanes.shown,
+            topology_total=lanes.left_out + lanes.shown,
+            topology_everything=bool(asked.get("all")) and not (active_lens or trace),
+            topology_lenses=topology_lenses(),
+            active_lens=active_lens,
+            trace_reset_url=_reset_url(lens_name),
+            **self._trace_context(topology, trace, lens_name),
         )
         return context
+
+    @classmethod
+    def _trace_context(cls, topology, trace: TopologyTrace | None, lens_name: str) -> dict[str, Any]:
+        """What the page says about a trace: its ledger, its focus, and the
+        links that follow it another way or to another depth."""
+
+        if trace is None:
+            return {
+                "topology_trace": None,
+                "topology_edges": (),
+                "focus_node": "",
+                "topology_trace_focus": None,
+                "topology_trace_label": "",
+                "trace_direction_links": (),
+                "trace_depth_links": (),
+            }
+        by_id = {node.id: node for node in topology.nodes}
+        return {
+            "topology_trace": trace,
+            # The ledger restates every edge the node bodies already state
+            # from both ends, so it is drawn for a bounded trace only.
+            "topology_edges": tuple(
+                {
+                    "edge": edge,
+                    "source": by_id[edge.source],
+                    "target": by_id[edge.target],
+                    "source_link": node_link(by_id[edge.source]),
+                    "target_link": node_link(by_id[edge.target]),
+                }
+                for edge in topology.edges
+            ),
+            "focus_node": trace.focus,
+            "topology_trace_focus": by_id.get(trace.focus),
+            "topology_trace_label": dict(_TRACE_DIRECTIONS).get(trace.direction, ""),
+            "trace_direction_links": tuple(
+                {"name": name, "label": label, "url": cls._trace_url(trace.focus, name, lens_name, trace.depth)}
+                for name, label in _TRACE_DIRECTIONS
+            ),
+            "trace_depth_links": tuple(
+                {"depth": depth, "url": cls._trace_url(trace.focus, trace.direction, lens_name, depth)}
+                for depth in range(1, 6)
+            ),
+        }
 
     @classmethod
     def node_items(

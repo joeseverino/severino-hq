@@ -4,8 +4,9 @@
 # turn, a heavy command inside a turn runs, a file task's body runs once, a
 # waiting one names the holder again at its interval, a turn prints the load
 # average as it starts and ends, a run of tests takes it only when it is
-# heavy, CI takes no lock, and every heavy task carries a bound
-# that, run out, stops what it started and frees the turn.
+# heavy, CI takes no lock, every heavy task carries a bound
+# that, run out, stops what it started and frees the turn, and two heavy tasks
+# asked together queue on the turn however long the second waits.
 set -eu
 
 repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
@@ -21,7 +22,8 @@ cleanup() {
 trap cleanup EXIT
 unset CI SEVERINO_HEAVY_HOLDER SEVERINO_HEAVY_TASK SEVERINO_HEAVY_WAIT MISE_TASK_PGID_MANAGED
 XDG_CACHE_HOME="${work}/cache"
-export XDG_CACHE_HOME
+SEVERINO_HEAVY_BOUND=10m
+export XDG_CACHE_HOME SEVERINO_HEAVY_BOUND
 lock="${XDG_CACHE_HOME}/severino/heavy.lock"
 
 fail() {
@@ -52,6 +54,15 @@ names_holder() {
     esac
 }
 
+for unbound in "" 0 soon 2h30m; do
+    status=0
+    SEVERINO_HEAVY_BOUND="${unbound}" "${heavy}" true 2>/dev/null || status=$?
+    [ "${status}" -eq 64 ] || fail "a heavy command bounded by '${unbound}' exited ${status}, not 64"
+    status=0
+    CI=true SEVERINO_HEAVY_BOUND="${unbound}" "${heavy}" true 2>/dev/null || status=$?
+    [ "${status}" -eq 64 ] || fail "under CI a heavy command bounded by '${unbound}' exited ${status}, not 64"
+done
+
 hold
 status=0
 said="$(SEVERINO_HEAVY_WAIT=0 "${heavy}" true 2>&1)" || status=$?
@@ -75,6 +86,10 @@ second=$!
 exec 8<"${work}/waiting"
 read -r said <&8 || fail "the second heavy command did not say it was waiting"
 names_holder "${said}" "the waiting line"
+case "${said}" in
+    *" 600s"*" in the background."*) ;;
+    *) fail "the waiting line does not tell an agent to run a gate that may wait in the background: ${said}" ;;
+esac
 read -r said <&8 || fail "the second heavy command did not say it was still waiting"
 case "${said}" in
     "heavy: still waiting after 0m0"[1-9]"s, held by "*) ;;
@@ -146,26 +161,32 @@ rm -rf "${XDG_CACHE_HOME}"
 CI=true "${heavy}" true
 [ ! -e "${lock}" ] || fail "under CI a lock file was made"
 
-# Every task that takes the turn has a timeout of its own: a TOML task through
-# heavy.sh as its shell, a file task by sourcing heavy-turn.sh.
-mise -C "${repo}" tasks ls --all --json >"${work}/tasks.json"
+# Every task that takes the turn declares its bound and carries no mise
+# timeout, whose clock runs while it waits: a TOML task through heavy.sh as
+# its shell, a file task by sourcing heavy-turn.sh, and fast and test, which
+# take it from inside their run. heavy.sh refuses a turn without a bound, so a
+# missing one fails on its first run; this finds it before.
+mise -C "${repo}" tasks ls --all --hidden --json >"${work}/tasks.json"
 heavies="$(jq '[.[] | select((.shell // "") | startswith("tools/lib/heavy.sh"))] | length' "${work}/tasks.json")"
 [ "${heavies}" -gt 1 ] || fail "found ${heavies} tasks that take the turn through heavy.sh"
-unbounded="$(jq -r '.[] | select(.timeout == null) | select((.shell // "") | startswith("tools/lib/heavy.sh")) | .name' "${work}/tasks.json")"
-[ -z "${unbounded}" ] || fail "a heavy task without a timeout: ${unbounded}"
-jq -e '.[] | select(.name == "test") | .timeout != null' "${work}/tasks.json" >/dev/null ||
-    fail "the test task, which takes the turn from inside its run, has no timeout"
-jq -r '.[] | select(.timeout == null and .file != null) | .file' "${work}/tasks.json" >"${work}/files"
+jq -r '.[] | select(((.shell // "") | startswith("tools/lib/heavy.sh")) or .name == "fast" or .name == "test") | .name' \
+    "${work}/tasks.json" >"${work}/heavy-names"
+jq -r '.[] | select(.file != null) | .file' "${work}/tasks.json" >"${work}/files"
 while IFS= read -r file; do
     if grep -q '^\. .*tools/lib/heavy-turn\.sh' "${file}"; then
-        fail "a heavy file task without #MISE timeout: ${file}"
+        jq -r --arg file "${file}" '.[] | select(.file == $file) | .name' "${work}/tasks.json" >>"${work}/heavy-names"
     fi
 done <"${work}/files"
+while IFS= read -r name; do
+    jq -e --arg name "${name}" '.[] | select(.name == $name) | .timeout == null' "${work}/tasks.json" >/dev/null ||
+        fail "the heavy task ${name} carries a mise timeout, which would stop it while it waits: declare SEVERINO_HEAVY_BOUND instead"
+    jq -e --arg name "${name}" '.[] | select(.name == $name) | [.env[]? | select(startswith("SEVERINO_HEAVY_BOUND=")) | ltrimstr("SEVERINO_HEAVY_BOUND=")] | (last // "") | test("^[0-9]+[smh]?$")' \
+        "${work}/tasks.json" >/dev/null || fail "the heavy task ${name} declares no SEVERINO_HEAVY_BOUND"
+done <"${work}/heavy-names"
 
-# A heavy task that hangs past its timeout is stopped at it, what it started
-# with it, and a waiter takes the turn: run by hand, where mise signals the
-# task's process group, and from inside another task, where it signals only
-# the pid it started. The waiter's own bound is the timeout and a margin.
+# A heavy task that hangs past its bound is stopped at it, what it started
+# with it, and a waiter takes the turn: run by hand, and from inside another
+# task. The waiter's own bound is the hung task's and a margin.
 # heavy.sh runs under the shell this suite runs under, which lint:shell
 # makes dash, Linux's, as well: dash grants no job control without a terminal,
 # and a CI runner has none.
@@ -176,7 +197,7 @@ mkfifo "${bound}/never"
 cat >"${bound}/mise.toml" <<TOML
 [task_templates.heavy]
 shell = "${shell} ${heavy} sh -o errexit -c"
-timeout = "1s"
+env = { SEVERINO_HEAVY_BOUND = "1s" }
 
 [tasks.hang]
 extends = "heavy"
@@ -184,6 +205,14 @@ run = 'echo \$\$ >ready; read -r _ <never'
 
 [tasks.outer]
 run = "mise run hang"
+
+[tasks.first]
+extends = "heavy"
+run = 'echo ran >first'
+
+[tasks.second]
+extends = "heavy"
+run = 'echo ran >second'
 TOML
 for task in hang outer; do
     rm -f "${bound}/ready"
@@ -191,12 +220,41 @@ for task in hang outer; do
     MISE_TRUSTED_CONFIG_PATHS="${bound}" mise -C "${bound}" run "${task}" >/dev/null 2>&1 &
     run=$!
     read -r hung <"${bound}/ready"
-    SEVERINO_HEAVY_WAIT=30 "${heavy}" true 2>/dev/null || fail "run as ${task} under ${shell}, a hung heavy task kept the turn past its timeout"
+    SEVERINO_HEAVY_WAIT=30 "${heavy}" true 2>/dev/null || fail "run as ${task} under ${shell}, a hung heavy task kept the turn past its bound"
     status=0
     wait "${run}" || status=$?
-    [ "${status}" -ne 0 ] || fail "run as ${task} under ${shell}, a heavy task stopped at its timeout passed"
+    [ "${status}" -ne 0 ] || fail "run as ${task} under ${shell}, a heavy task stopped at its bound passed"
     if kill -0 "${hung}" 2>/dev/null; then
-        fail "run as ${task} under ${shell}, the hung command outlived its task's timeout"
+        fail "run as ${task} under ${shell}, the hung command outlived its bound"
     fi
     hung=""
+done
+
+# Two heavy tasks asked together queue on the turn: each, bounded at a
+# second, waits past that while another command holds the turn, then both run,
+# since a bound starts with the turn rather than the task.
+rm -f "${bound}/first" "${bound}/second"
+mkfifo "${bound}/together"
+hold
+MISE_TRUSTED_CONFIG_PATHS="${bound}" SEVERINO_HEAVY_EVERY=1 mise -C "${bound}" run first ::: second \
+    >"${bound}/together" 2>&1 &
+run=$!
+exec 7<"${bound}/together"
+waited=""
+while IFS= read -r said <&7; do
+    case "${said}" in
+        *"still waiting after 0m0"[2-9]"s"*) waited=yes; break ;;
+    esac
+done
+[ -n "${waited}" ] || fail "two heavy tasks asked together did not wait past their bound for the turn"
+echo go >"${work}/release"
+wait "${holder}" || fail "the holder failed"
+holder=""
+cat <&7 >"${bound}/rest"
+exec 7<&-
+status=0
+wait "${run}" || status=$?
+[ "${status}" -eq 0 ] || { cat "${bound}/rest" >&2; fail "two heavy tasks asked together exited ${status}"; }
+for task in first second; do
+    [ "$(cat "${bound}/${task}")" = ran ] || fail "${task} of two heavy tasks asked together did not run"
 done

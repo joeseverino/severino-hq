@@ -9,8 +9,12 @@ plain records, so a declaration costs the declaring module nothing.
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-lazy from .security import Capability
+# Named for annotations alone: a class's annotations can be read as it is made
+# (a dataclass's are), which would load a lazy import at once.
+if TYPE_CHECKING:
+    from .security import Capability
 
 # How authority for an ability is proven, declared once per ability.
 #

@@ -1,0 +1,100 @@
+# A test that patches a private name holds the code to its shape: renaming or
+# inlining the helper breaks the test while every promise still holds, and a
+# patch of a name no longer looked up there patches nothing. A test stands in
+# at a public seam instead.
+#
+# A name is private when it starts with one underscore. The forms are a string
+# target with a private segment in any module, a private attribute named
+# to patch.object or patch.multiple, and something reached through a private
+# name to patch on or to patch.dict. The exceptions are the patches no public seam can
+# replace, each with the reason.
+id: patch-reaches-no-private-name
+language: python
+severity: error
+message: A test patches a private name, so it breaks when the code is reshaped and passes once the name is no longer read.
+note: >-
+  Stand in at a public seam: a test fake (derivation_testing.frozen, the
+  network fakes in hq/platform/application/tests/network.py, plugin_testing),
+  a public name the code reads, or an argument it takes. Where none can be,
+  the site is listed in this rule with the reason.
+utils:
+  hq-private-target:
+    kind: string
+    regex: ^["']\w+\.([\w.]*\.)?_[A-Za-z]
+  private-name:
+    kind: string
+    regex: ^["']_[A-Za-z]
+  through-private:
+    kind: attribute
+    regex: (^|\.)_[A-Za-z]\w*$
+  private-identifier:
+    kind: identifier
+    regex: ^_[A-Za-z]
+rule:
+  kind: call
+  any:
+    # patch("hq.x._y"), patch.multiple("hq.x._Y.z", ...), patch.dict("hq.x._Y"),
+    # as an argument or by keyword.
+    - all:
+        - has: { field: function, regex: '(^|\.)patch(\.multiple|\.dict)?$' }
+        - has:
+            field: arguments
+            any:
+              - has: { matches: hq-private-target }
+              - has: { kind: keyword_argument, has: { field: value, matches: hq-private-target } }
+    # patch.object(module, "_y") and patch.object(module._Y, "y"), by position or keyword.
+    - all:
+        - has: { field: function, regex: '(^|\.)patch\.object$' }
+        - has:
+            field: arguments
+            any:
+              - has: { nthChild: 2, matches: private-name }
+              - has: { nthChild: 1, matches: through-private }
+              - has:
+                  kind: keyword_argument
+                  all:
+                    - has: { field: name, regex: "^(attribute|target)$" }
+                    - has: { field: value, any: [{ matches: private-name }, { matches: through-private }] }
+    # patch.multiple(module, _y=...) and patch.multiple(module._Y, y=...).
+    - all:
+        - has: { field: function, regex: '(^|\.)patch\.multiple$' }
+        - has:
+            field: arguments
+            any:
+              - has: { nthChild: 1, matches: through-private }
+              - has: { kind: keyword_argument, has: { field: name, regex: "^_[A-Za-z]" } }
+    # patch.dict(module._Y) and patch.dict(_Y), by position or keyword.
+    - all:
+        - has: { field: function, regex: '(^|\.)patch\.dict$' }
+        - has:
+            field: arguments
+            any:
+              - has: { nthChild: 1, any: [{ matches: through-private }, { matches: private-identifier }] }
+              - has:
+                  kind: keyword_argument
+                  all:
+                    - has: { field: name, regex: "^in_dict$" }
+                    - has: { field: value, any: [{ matches: through-private }, { matches: private-identifier }] }
+  not:
+    any:
+      # The standard library's exit without cleanup, which os names so.
+      - pattern: $P.object(os, "_exit")
+      - pattern: $P.object(os, "_exit", $$$)
+      # The only sign that a second thread waits on the first's answer, short
+      # of a sleep: the wait itself.
+      - pattern: $P.object(derivations, "_awaited", $$$)
+      # The only sign that the pass gave way to a request, short of a sleep:
+      # the wait it gave way in.
+      - pattern: $P.object(derivations._NO_REQUEST, "wait", $$$)
+      # The FTS probe keeps a positive answer for the life of the process and
+      # every test database has the FTS table, so the fallback a database
+      # without one takes is reached only by answering the probe.
+      - pattern: $P("hq.platform.application.search._fts5_available", $$$)
+      # dev:look's look at a base is a whole browser pass in a worktree of its
+      # own; the relay that runs it is where a test sees the tree and the
+      # environment it was handed without running one.
+      - pattern: $P.object(look, "_relay", $$$)
+      # Where a job's start waits for its row to commit, which a test's
+      # transaction never does; Django's captureOnCommitCallbacks starts it only
+      # as its block ends, after the test has asked what the request answered.
+      - pattern: $P.object(runner, "_after_commit", $$$)

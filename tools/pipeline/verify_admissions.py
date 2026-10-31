@@ -1,20 +1,9 @@
 """Verify every extension's admission against the signer the composition set declares.
 
-    CANDIDATE=true|false BASE_SHA=<sha> python3 -m tools.pipeline.verify_admissions
-
-The host verifies each signature itself (cordon's ``admission/verify.mjs``)
-rather than trusting an entry an extension produced, and the identity checked
-is the one declared in ``composition-set.json``, so an extension cannot widen
-who may sign for it by editing its own repository. Each verified entry is
-written beside its artifact, and ``build/compose-args`` names every entry and
-wheel for ``compose_plugins``.
-
-A candidate (CANDIDATE=true: a pull request with coordinated branches) skips
-the extensions built from a branch, verifies the rest under the base branch's
-policy (BASE_SHA), which is the policy they were signed under, and copies
-their wheels into ``candidate-wheels/``.
-
-Stdlib only: the job that runs it sets up no toolchain.
+The host verifies each signature itself, against the identity
+``composition-set.json`` declares, so an extension cannot widen who may sign for
+it by editing its own repository. ``build/compose-args`` names every verified
+entry and wheel for ``compose_plugins``. Stdlib only: its job sets up no toolchain.
 """
 
 from __future__ import annotations
@@ -141,6 +130,9 @@ def main(argv: Sequence[str] | None = None, run: Run = subprocess.run) -> int:
     parser.add_argument("--out", type=Path, default=Path("build/compose-args"))
     parser.add_argument("--candidate-wheels", type=Path, default=Path("candidate-wheels"))
     arguments = parser.parse_args(argv)
+    # A candidate (a pull request with coordinated branches) skips the extensions
+    # built from a branch and verifies the rest under the base branch's policy
+    # (BASE_SHA), which they were signed under, copying their wheels aside.
     candidate = os.environ.get("CANDIDATE") == "true"
     try:
         policy = arguments.policy

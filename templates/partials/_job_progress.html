@@ -10,10 +10,10 @@ deliberately does not try to render the result itself: what a finished import
 has to say is the extension's business, and a shared partial guessing at it
 would be wrong for every extension after the first.
 {% endcomment %}
-<div class="job-progress card" data-ask data-ask-outcome{% if job.is_live %} data-ask-status="{% url 'jobs:status' job.pk %}" aria-busy="true"{% endif %} data-ask-state="{{ job.state }}" data-state="{{ job.state }}">
+{% partialdef progress %}
   <div class="job-progress-head">
     <strong>{{ job.label|breakable }}</strong>
-    <span class="job-state" data-ask-label>{{ job.get_state_display|breakable }}</span>
+    <span class="job-state" data-ask-label>{{ job.seen_state_display|breakable }}</span>
   </div>
   {% comment %}
   A determinate bar where the work knows how far along it is and an
@@ -27,4 +27,10 @@ would be wrong for every extension after the first.
     <i data-ask-bar {% if job.percent is not None %}style="--at: {{ job.percent }}%"{% endif %}></i>
   </div>
   <p class="job-note" role="status" data-ask-note>{% if job.note %}{{ job.note|breakable }}{% else %}{% waiting %}{% endif %}</p>
-</div>
+{% endpartialdef %}
+{% comment %}The status resource is given only while the work is live, which is when ask.js follows it; a job whose process stopped is not.{% endcomment %}
+{% if job.is_live and not job.is_stale %}{% url 'jobs:status' job.pk as status_url %}
+{% card element="div" css="job-progress" busy=True data_ask=True data_ask_outcome=True data_ask_status=status_url data_ask_state=job.seen_state data_state=job.seen_state %}{% partial progress %}{% endcard %}
+{% else %}
+{% card element="div" css="job-progress" data_ask=True data_ask_outcome=True data_ask_state=job.seen_state data_state=job.seen_state %}{% partial progress %}{% endcard %}
+{% endif %}

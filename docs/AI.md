@@ -66,33 +66,14 @@ the same gates on it, and `ship-hq` takes it to production.
 An agent's report is checked against gates, and the gates are the same mise
 tasks a person runs. Each CI job is named for the task it runs
 ([`ci.yml`](../.github/workflows/ci.yml)'s lint job runs `mise run lint`), so a pass
-on a laptop and a pass in CI mean the same thing. `mise tasks` lists the gates
-to start from and `mise run <task> --help` says what each holds; how they
-relate is in [What `fast` runs](Development.md#what-fast-runs),
-[What `check` runs](Development.md#what-check-runs),
-[Browser layout](Development.md#browser-layout) and
-[Structural Gate](Structural-Gate.md).
-
-Every task that runs gates (`fast`, `check`, `lint`, `test`, `browser`)
-closes on a verdict line naming each failed task and test, and keeps it in
-`var/gate/<name>.txt` with how long each task took, slowest first
-(`tools/gate/verdict.py`). Heavy tasks take turns on one lock
-(`tools/lib/heavy.sh`), so several agents on one machine never run two suites
-at once ([Heavy gates take turns](Development.md#heavy-gates-take-turns)).
-
-Tests hold the architecture:
-
-- `hq/platform/application/tests/test_architecture.py`:
-  `test_web_views_do_not_mutate_models_directly`,
-  `test_mcp_services_do_not_access_django_models`,
-  `test_paginated_list_views_use_the_shared_table_engine`, and the style
-  contract tests for the stylesheet.
-- `hq/platform/application/tests/test_plugins.py`:
-  `test_the_host_source_never_names_an_installed_extension`.
-- `python -m hq_sdk.validation` refuses an extension that imports anything but
-  `hq_sdk`.
-
-The rest of the bar is written down where every agent reads it:
+on a laptop and a pass in CI mean the same thing
+([The gates](Development.md#the-gates)), and heavy tasks take turns on one
+lock, so several agents on one machine never run two suites at once
+([Heavy gates take turns](Development.md#heavy-gates-take-turns)). The
+architecture is held by tests and lint rules, among them
+`test_architecture.py`, `lint:ast-grep` and
+`test_the_host_source_never_names_an_installed_extension`; the rest of the
+bar is written down where every agent reads it:
 [Rules that eliminate bug classes](../AGENTS.md#rules-that-eliminate-bug-classes)
 and the [definition of done](../AGENTS.md#definition-of-done) in `AGENTS.md`,
 and the test rules in `hq-house-rules`.

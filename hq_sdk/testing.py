@@ -22,15 +22,9 @@ from hq_sdk.validation import unsupported_hq_imports
 def audit_writer() -> Manager[AuditLog]:
     """The manager audit rows are written through, for tests that break it.
 
-    ``hq_sdk.audit`` deliberately withholds the host's audit model: an
-    extension records events through ``record_event`` and reads them through
-    ``audit_events``, and neither needs the model itself.
-
-    Simulating the *write* failing is the exception. An extension that must
-    fail closed when its audit row cannot commit has to be able to prove it,
-    and that means patching the thing the host writes with. Exposed here rather
-    than from ``hq_sdk.audit`` so it is unavailable to anything but a test
-    suite, and named for what it is rather than for the model behind it.
+    ``hq_sdk.audit`` withholds the host's audit model, but an extension that
+    fails closed when its audit row cannot commit must be able to prove it by
+    patching what the host writes with; offered here, to test suites alone.
     """
 
     return AuditLog.objects
@@ -39,17 +33,12 @@ def audit_writer() -> Manager[AuditLog]:
 def reaches_out() -> None:
     """What a network call is to HQ's rule, for the double that stands in for one.
 
-    A test replaces an extension's network client with a double, and a double
-    opens no connection, so the rule that refuses a request reaching out has
-    nothing to refuse and the test proves nothing. Called from the double,
-    this raises ``OutboundInRequest`` when a request is being served and does
-    nothing inside a job, exactly as the real call would.
-
-        with held_jobs() as held:
-            response = self.client.post(url)      # answers; the double is untouched
-            held.run()                            # the job runs it
+    A double opens no connection, so without this a test of a view that reaches
+    out proves nothing. Called from the double, it raises ``OutboundInRequest``
+    while a request is served and does nothing inside a job, as the real call.
     """
 
+    # A sleep is what the rule refuses in a request and allows in a job.
     time.sleep(0)
 
 
@@ -61,11 +50,8 @@ def plain(text: str | bytes) -> str:
     """Text with the host's no-break spaces read as spaces, and its word joiners as nothing.
 
     The host keeps a number with its unit ("2\u00a0weeks") or its sign
-    ("\u2212\u2060$5.00") and may change where it does. A test comparing
-    words it chose against what a page or a value says reads both through
-    this, so that choice is never its to pin:
-
-        self.assertIn("Renewed for 2 weeks", plain(response.content))
+    ("\u2212\u2060$5.00") and may change where it does, so a test reads both
+    its own words and the page's through this, and never pins that choice.
     """
 
     if isinstance(text, bytes):

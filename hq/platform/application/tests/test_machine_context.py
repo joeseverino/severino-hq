@@ -32,6 +32,9 @@ def a_machine(*hostnames, resources=(), name="probe", declaration="", device="")
         resources=tuple(resources),
         declaration=declaration,
         route_approval_key=device,
+        aliases=(),
+        addresses=(),
+        runs_hq=False,
     )
 
 
@@ -73,6 +76,13 @@ class NamesTests(TestCase):
 
         self.assertEqual(row[0].text, "site.test")
         self.assertIn("site-dns", row[2].url)  # the DNS record column
+
+    def test_a_part_says_where_it_leads_without_the_name_its_row_already_is(self):
+        declare("site-dns", "adguard.rewrite", domain="site.test", answer="10.9.9.9")
+
+        row = row_for(a_machine("site.test"), "site.test")
+
+        self.assertEqual(row[2].text, "10.9.9.9")
 
     def test_columns_follow_the_facet_registry_by_id(self):
         from unittest import mock
@@ -219,7 +229,14 @@ class ReachedThroughTests(TestCase):
         connection(provider, "box")
         connection(provider, "example-other")
         machine = SimpleNamespace(
-            name="box", aliases=(), reached_by=("box", "example-other"), unanswered=(), other_declarations=()
+            name="box",
+            aliases=(),
+            addresses=(),
+            reached_by=("box", "example-other"),
+            unanswered=(),
+            other_declarations=(),
+            presence=None,
+            roles=(),
         )
 
         with mock.patch("hq.platform.application.machine_context.serves_links", return_value=()):

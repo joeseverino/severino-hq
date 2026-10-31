@@ -6,10 +6,12 @@ from django.test import SimpleTestCase
 
 from hq.platform.core.stylesheets import SHEETS
 from hq.platform.core.tests.browser import (
+    command_forms,
     components,
     estate,
     fragments,
     gate,
+    heads,
     in_flight,
     layout,
     page_errors,
@@ -25,7 +27,6 @@ from hq.platform.core.tests.browser import (
 )
 from hq.platform.core.tests.browser.probes import (
     boxes,
-    cut_names,
     describe,
     palette,
     parts,
@@ -33,7 +34,6 @@ from hq.platform.core.tests.browser.probes import (
     shifts,
     tables,
     text,
-    tokens,
 )
 from hq.platform.core.tests.browser.probes.palette import LINE_CONTRAST, lost_fills
 from hq.platform.core.tests.browser.serving import static_file
@@ -43,10 +43,12 @@ from hq.platform.core.tests.browser_modules import browser_modules
 # Imported by name rather than found, so a change to any of them selects these
 # tests in the fast gate; test_every_browser_module_is_read holds the list whole.
 MODULES = (
+    command_forms,
     components,
     estate,
     fragments,
     gate,
+    heads,
     in_flight,
     layout,
     page_errors,
@@ -60,7 +62,6 @@ MODULES = (
     uncaught,
     widths,
     boxes,
-    cut_names,
     describe,
     palette,
     parts,
@@ -68,7 +69,6 @@ MODULES = (
     shifts,
     tables,
     text,
-    tokens,
 )
 
 _WALK = re.compile(r"\bcreate(?:TreeWalker|NodeIterator)\(")

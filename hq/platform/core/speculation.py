@@ -1,22 +1,9 @@
 """A page the browser fetches before it is asked for, and what such a fetch may not do.
 
-Every page names one set of speculation rules in a ``Speculation-Rules``
-header: prefetch a same-origin link when the pointer goes down on it, so the
-document is already on its way when the click completes. Prefetch only: a
-prefetched document runs no script. A request to prerender is refused whole.
-
-A speculative request is a guess, so it has no effect. That is held where HQ
-already knows an effect happens, not by a list of addresses:
-
-- a route that answers without a session (signing in and out, the identity
-  provider's handshake, probes, token APIs) is refused before its view runs;
-- the audit writer refuses, so anything audited is not done;
-- the outbound boundary refuses, so nothing outside the process is asked;
-- an answer that sends the browser to another origin is withheld.
-
-Each is answered 503, which a browser discards and then navigates normally
-when the link is followed. ``SpeculativeRequestTests`` requests every page
-speculatively and fails on one that writes without being refused.
+Every page names one set of speculation rules, prefetching a same-origin link on
+press. A speculative request is a guess, so it has no effect: that is held where
+HQ already knows an effect happens (docs/Design.md, Moving between pages), and
+``SpeculativeRequestTests`` requests every page speculatively.
 """
 
 import json
@@ -81,6 +68,8 @@ def refuse(reason: str) -> None:
     raise Speculative(f"A speculative request has no effect: {reason}.")
 
 
+# A browser discards a 503 to a speculative request and navigates normally when
+# the link is followed.
 def _withheld(reason: str) -> HttpResponse:
     response = HttpResponse(status=503)
     response.headers["Cache-Control"] = "no-store"
@@ -133,7 +122,7 @@ def rules() -> dict[str, Any]:
 
 @require_safe
 @cache_control(private=True, max_age=3600)
-def rules_document(request: HttpRequest) -> HttpResponse:
+def rules_document(_request: HttpRequest) -> HttpResponse:
     """The rules, as the document the header points at.
 
     Behind the session like any page: it names the routes an installation
@@ -151,6 +140,7 @@ def answer(request: HttpRequest, get_response: Callable[[HttpRequest], HttpRespo
     """
 
     asked = purpose(request)
+    # Prefetch only: a prefetched document runs no script, so a prerender is refused whole.
     if asked == "prerender":
         return _withheld("prerender")
     if not asked:

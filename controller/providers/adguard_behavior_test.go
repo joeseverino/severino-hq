@@ -25,7 +25,7 @@ func adguardServer(t *testing.T, bodies map[string]string, refuse map[string]int
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, body)
+		_, _ = io.WriteString(w, body)
 	}))
 	t.Cleanup(server.Close)
 	client, err := runtime.NewHTTPClient("")
@@ -98,7 +98,7 @@ func TestAdGuardMalformedRewriteListIsAnError(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := adguardServer(t, map[string]string{"/control/rewrite/list": body}, nil)
-			_, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "reconcile", t.Context(), Object{"domain": "a.example", "answer": "192.0.2.1"}, nil, false)
+			_, err := r.runAction(t.Context(), runtime.ResourceKindAdGuardRewrite, "reconcile", Object{"domain": "a.example", "answer": "192.0.2.1"}, nil, false)
 			if err == nil {
 				t.Error("decoded a malformed rewrite list")
 			}

@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -146,45 +150,86 @@ func (r *Registry) controllerID() string {
 	return r.Env.ControllerID()
 }
 
-// Glance reads each panel the plan names. A panel that fails is marked, so HQ
-// keeps its last good reading and shows this one as a note.
-func (r *Registry) Glance(ctx context.Context, plan runtime.GlancePlan) (runtime.GlanceObservations, error) {
-	readings := []any{}
-	for _, panel := range plan.Panels {
-		var reading any
-		var err error
-		switch panel {
-		case runtime.GlancePanelIDInfrastructure:
-			reading, err = r.infrastructureGlance(ctx, plan.Targets.Infrastructure)
-		case runtime.GlancePanelIDWeather:
-			reading, err = r.weatherGlance(ctx, plan.Targets.Weather)
-		default:
-			continue
-		}
-		if err != nil {
-			kind := glanceFailed(err)
-			slog.Warn(fmt.Sprintf("dashboard glance failed: %s (%s): %s", panel, kind, runtime.Clip(err.Error(), runtime.ReasonLimit)),
-				slog.String("event", "controller.glance.failed"), slog.String("panel", string(panel)))
-			summary := "Refresh failed (" + kind + ")."
-			if panel == runtime.GlancePanelIDInfrastructure {
-				reading = infrastructurePanel{PanelID: string(panel), Machines: []GlanceMachine{{
-					Key: r.controllerID(), Status: "serious", Summary: summary, Metrics: []GlanceMetric{}, RefreshFailed: kind,
-				}}}
-			} else {
-				reading = weatherFailure{PanelID: string(panel), Point: plan.Targets.Weather.Point, Status: "serious",
-					Summary: summary, Metrics: []GlanceMetric{}, RefreshFailed: kind}
-			}
-		}
-		readings = append(readings, reading)
+// glanceStatsLimit bounds the container samples in flight against one Docker
+// environment: enough that a machine's containers are measured together, few
+// enough that the glance is a small load on the API its containers share.
+const glanceStatsLimit = 8
+
+// timedStep runs one step of the glance and logs how long it took, so the
+// journal says where a slow refresh spent its time. A call is one request to a
+// provider; a stage is a panel, a machine or an environment.
+func timedStep[T any](kind, step string, read func() (T, error)) (T, error) {
+	start := time.Now()
+	value, err := read()
+	attrs := []any{slog.String("event", "controller.glance."+kind), slog.String("step", step),
+		slog.Int64("duration_ms", time.Since(start).Milliseconds())}
+	if err != nil {
+		attrs = append(attrs, slog.String("failure", glanceFailed(err)))
 	}
+	slog.Info("dashboard glance "+kind, attrs...)
+	return value, err
+}
+
+// Glance reads each panel the plan names, the panels at once. A panel that
+// fails is marked, so HQ keeps its last good reading and shows this one as a
+// note.
+func (r *Registry) Glance(ctx context.Context, plan runtime.GlancePlan) (runtime.GlanceObservations, error) {
+	readings, _ := timedStep("stage", "glance", func() ([]any, error) {
+		readings := make([]any, len(plan.Panels))
+		var group sync.WaitGroup
+		for i, panel := range plan.Panels {
+			group.Go(func() { readings[i] = r.glancePanel(ctx, plan, panel) })
+		}
+		group.Wait()
+		return slices.DeleteFunc(readings, func(reading any) bool { return reading == nil }), nil
+	})
 	data, err := json.Marshal(readings)
 	if err != nil {
 		return nil, err
 	}
 	observations := runtime.GlanceObservations{}
-	return observations, json.Unmarshal(data, &observations)
+	if err := json.Unmarshal(data, &observations); err != nil {
+		return nil, err
+	}
+	return observations, nil
 }
 
+// glancePanel is one panel's reading, or its failure; nil for a panel this
+// controller does not read.
+func (r *Registry) glancePanel(ctx context.Context, plan runtime.GlancePlan, panel runtime.GlancePanelID) any {
+	var reading any
+	var err error
+	switch panel {
+	case runtime.GlancePanelIDInfrastructure:
+		reading, err = timedStep("stage", string(panel), func() (any, error) {
+			return r.infrastructureGlance(ctx, plan.Targets.Infrastructure)
+		})
+	case runtime.GlancePanelIDWeather:
+		reading, err = timedStep("stage", string(panel), func() (any, error) {
+			return r.weatherGlance(ctx, plan.Targets.Weather)
+		})
+	default:
+		return nil
+	}
+	if err == nil {
+		return reading
+	}
+	kind := glanceFailed(err)
+	slog.Warn(fmt.Sprintf("dashboard glance failed: %s (%s): %s", panel, kind, runtime.Clip(err.Error(), runtime.ReasonLimit)),
+		slog.String("event", "controller.glance.failed"), slog.String("panel", string(panel)))
+	summary := "Refresh failed (" + kind + ")."
+	if panel == runtime.GlancePanelIDInfrastructure {
+		return infrastructurePanel{PanelID: string(panel), Machines: []GlanceMachine{{
+			Key: r.controllerID(), Status: "serious", Summary: summary, Metrics: []GlanceMetric{}, RefreshFailed: kind,
+		}}}
+	}
+	return weatherFailure{PanelID: string(panel), Point: plan.Targets.Weather.Point, Status: "serious",
+		Summary: summary, Metrics: []GlanceMetric{}, RefreshFailed: kind}
+}
+
+// infrastructureGlance reads every machine at once: one over its own SSH
+// connection, the rest through Portainer, which reads only the environments
+// that are those machines.
 func (r *Registry) infrastructureGlance(ctx context.Context, targets []runtime.GlanceMachineTarget) (infrastructurePanel, error) {
 	available := map[string]bool{}
 	for _, ref := range r.Supplied.SSHRefs() {
@@ -198,33 +243,48 @@ func (r *Registry) infrastructureGlance(ctx context.Context, targets []runtime.G
 		}
 		return ""
 	}
-	docker := map[string]GlanceMachine{}
+	throughDocker := map[string]bool{}
 	for _, target := range targets {
 		if reachable(target) == "" {
-			machines, err := r.portainerGlance(ctx)
-			if err != nil {
-				return infrastructurePanel{}, err
-			}
+			throughDocker[strings.TrimSpace(target.Key)] = true
+		}
+	}
+	group, groupCtx := errgroup.WithContext(ctx)
+	docker := map[string]GlanceMachine{}
+	if len(throughDocker) > 0 {
+		group.Go(func() error {
+			machines, err := r.portainerGlance(groupCtx, throughDocker)
 			for _, machine := range machines {
 				docker[machine.Key] = machine
 			}
-			break
-		}
+			return err
+		})
 	}
-	machines := []GlanceMachine{}
-	for _, target := range targets {
+	machines := make([]GlanceMachine, len(targets))
+	for i, target := range targets {
 		key := strings.TrimSpace(target.Key)
 		if ref := reachable(target); ref != "" {
-			machine, err := r.hostGlance(ctx, key, ref)
-			if err != nil {
-				return infrastructurePanel{}, err
-			}
-			machines = append(machines, machine)
-		} else if machine, ok := docker[key]; ok {
-			machines = append(machines, machine)
+			group.Go(func() (err error) {
+				machines[i], err = timedStep("stage", "machine "+key, func() (GlanceMachine, error) {
+					return r.hostGlance(groupCtx, key, ref)
+				})
+				return err
+			})
+		}
+	}
+	if err := group.Wait(); err != nil {
+		return infrastructurePanel{}, err
+	}
+	for i, target := range targets {
+		key := strings.TrimSpace(target.Key)
+		if !throughDocker[key] {
+			continue
+		}
+		if machine, ok := docker[key]; ok {
+			machines[i] = machine
 		} else {
-			machines = append(machines, GlanceMachine{Key: key, Status: "attention",
-				Summary: "No host telemetry connection is available.", Metrics: []GlanceMetric{}})
+			machines[i] = GlanceMachine{Key: key, Status: "attention",
+				Summary: "No host telemetry connection is available.", Metrics: []GlanceMetric{}}
 		}
 	}
 	return infrastructurePanel{PanelID: string(runtime.GlancePanelIDInfrastructure), Machines: machines}, nil
@@ -249,7 +309,9 @@ type hostReading struct {
 }
 
 func (r *Registry) hostGlance(ctx context.Context, key, ref string) (GlanceMachine, error) {
-	output, err := r.commands().SSH(ctx, ref, "python3 -", []byte(hostGlanceScript))
+	output, err := timedStep("call", "host reading", func() ([]byte, error) {
+		return r.commands().SSH(ctx, ref, "python3 -", []byte(hostGlanceScript))
+	})
 	if err != nil {
 		return GlanceMachine{}, err
 	}
@@ -287,14 +349,16 @@ func containerCPUPercent(stats dockerStats) float64 {
 	return 0
 }
 
-// getAnswer GETs address and decodes the answer into T.
+// getAnswer GETs address and decodes the answer into T, logging the call's time.
 func getAnswer[T any](ctx context.Context, r *Registry, address string, headers map[string]string, what string) (T, error) {
-	raw, err := r.HTTP.Request(ctx, address, "GET", headers, nil)
-	if err != nil {
-		var zero T
-		return zero, fmt.Errorf("%s: %w", what, err)
-	}
-	return decodeAnswer[T](raw, what)
+	return timedStep("call", what, func() (T, error) {
+		raw, err := r.HTTP.Request(ctx, address, "GET", headers, nil)
+		if err != nil {
+			var zero T
+			return zero, fmt.Errorf("%s: %w", what, err)
+		}
+		return decodeAnswer[T](raw, what)
+	})
 }
 
 // dockerStorage is what Docker holds on disk: layers, volumes and build cache.
@@ -312,9 +376,9 @@ func dockerStorage(disk dockerDiskUsage) int64 {
 	return total
 }
 
-// portainerGlance is each reachable Portainer environment's containers measured
-// against their machine.
-func (r *Registry) portainerGlance(ctx context.Context) ([]GlanceMachine, error) {
+// portainerGlance measures the containers of each reachable Portainer
+// environment that is one of the wanted machines, the environments at once.
+func (r *Registry) portainerGlance(ctx context.Context, wanted map[string]bool) ([]GlanceMachine, error) {
 	refs := r.Supplied.Refs(runtime.ConnectionProviderPortainer)
 	if len(refs) == 0 {
 		return nil, &ProviderError{Message: "no Portainer connection was supplied"}
@@ -322,7 +386,9 @@ func (r *Registry) portainerGlance(ctx context.Context) ([]GlanceMachine, error)
 	if r.Portainer == nil {
 		return nil, &ProviderError{Message: "Portainer is not available to this controller"}
 	}
+	var mu sync.Mutex
 	machines := []GlanceMachine{}
+	group, groupCtx := errgroup.WithContext(ctx)
 	for _, ref := range refs {
 		base, err := r.Portainer.URL(ref)
 		if err != nil {
@@ -332,51 +398,93 @@ func (r *Registry) portainerGlance(ctx context.Context) ([]GlanceMachine, error)
 		if err != nil {
 			return nil, err
 		}
-		environments, err := r.Portainer.Environments(ctx, ref)
-		if err != nil {
-			return nil, err
-		}
-		for _, environment := range environments {
-			if !environment.Reachable {
-				continue
-			}
-			machine, err := r.environmentGlance(ctx, base+"/endpoints/"+itoa(environment.ID)+"/docker", headers)
+		group.Go(func() error {
+			environments, err := timedStep("call", "environment list", func() ([]PortainerEnvironment, error) {
+				return r.Portainer.Environments(groupCtx, ref)
+			})
 			if err != nil {
-				return nil, fmt.Errorf("environment %s: %w", environment.Name, err)
+				return err
 			}
-			machine.Key = machineName(environment, r.controllerID())
-			machines = append(machines, machine)
-		}
+			for _, environment := range environments {
+				key := machineName(environment, r.controllerID())
+				if !environment.Reachable || !wanted[key] {
+					continue
+				}
+				group.Go(func() error {
+					machine, err := timedStep("stage", "environment "+environment.Name, func() (GlanceMachine, error) {
+						return r.environmentGlance(groupCtx, base+"/endpoints/"+itoa(environment.ID)+"/docker", headers)
+					})
+					if err != nil {
+						return fmt.Errorf("environment %s: %w", environment.Name, err)
+					}
+					machine.Key = key
+					mu.Lock()
+					machines = append(machines, machine)
+					mu.Unlock()
+					return nil
+				})
+			}
+			return nil
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return nil, err
 	}
 	return machines, nil
 }
 
-// environmentGlance measures one Docker environment's running containers.
+// glanceDiskUsage asks Docker for the sizes the storage reading adds up and no
+// others: without a type, Docker also measures each container's writable layer.
+const glanceDiskUsage = "/system/df?type=image&type=volume&type=build-cache"
+
+// environmentGlance measures one Docker environment's running containers: the
+// machine, its storage and the container list at once, then each container's
+// sample, glanceStatsLimit at a time.
 func (r *Registry) environmentGlance(ctx context.Context, docker string, headers map[string]string) (GlanceMachine, error) {
-	info, err := getAnswer[dockerInfo](ctx, r, docker+"/info", headers, "docker info")
+	var info dockerInfo
+	var disk dockerDiskUsage
+	var containers []dockerContainer
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.Go(func() (err error) {
+		info, err = getAnswer[dockerInfo](groupCtx, r, docker+"/info", headers, "docker info")
+		return err
+	})
+	group.Go(func() (err error) {
+		disk, err = getAnswer[dockerDiskUsage](groupCtx, r, docker+glanceDiskUsage, headers, "docker disk usage")
+		return err
+	})
+	containers, err := getAnswer[[]dockerContainer](groupCtx, r, docker+"/containers/json?all=false", headers, "running containers")
 	if err != nil {
+		_ = group.Wait()
 		return GlanceMachine{}, err
 	}
-	disk, err := getAnswer[dockerDiskUsage](ctx, r, docker+"/system/df", headers, "docker disk usage")
-	if err != nil {
+	for _, container := range containers {
+		if container.ID == "" {
+			_ = group.Wait()
+			return GlanceMachine{}, &ProviderError{Message: "running containers: a container has no id"}
+		}
+	}
+	samples := make([]dockerStats, len(containers))
+	stats, statsCtx := errgroup.WithContext(groupCtx)
+	stats.SetLimit(glanceStatsLimit)
+	for i, container := range containers {
+		stats.Go(func() (err error) {
+			samples[i], err = getAnswer[dockerStats](statsCtx, r, docker+"/containers/"+container.ID+"/stats?stream=false&one-shot=true", headers, "container stats")
+			return err
+		})
+	}
+	statsErr := stats.Wait()
+	if err := group.Wait(); err != nil {
 		return GlanceMachine{}, err
 	}
-	containers, err := getAnswer[[]dockerContainer](ctx, r, docker+"/containers/json?all=false", headers, "running containers")
-	if err != nil {
-		return GlanceMachine{}, err
+	if statsErr != nil {
+		return GlanceMachine{}, statsErr
 	}
 	var cpu float64
 	var memoryUsed int64
-	for _, container := range containers {
-		if container.ID == "" {
-			return GlanceMachine{}, &ProviderError{Message: "running containers: a container has no id"}
-		}
-		stats, err := getAnswer[dockerStats](ctx, r, docker+"/containers/"+container.ID+"/stats?stream=false&one-shot=true", headers, "container stats")
-		if err != nil {
-			return GlanceMachine{}, err
-		}
-		memoryUsed += max(0, stats.MemoryStats.Usage-stats.MemoryStats.Stats.InactiveFile)
-		cpu += containerCPUPercent(stats)
+	for _, sample := range samples {
+		memoryUsed += max(0, sample.MemoryStats.Usage-sample.MemoryStats.Stats.InactiveFile)
+		cpu += containerCPUPercent(sample)
 	}
 	return GlanceMachine{
 		Status:  "good",
@@ -530,11 +638,22 @@ func (r *Registry) weatherGlance(ctx context.Context, target runtime.GlanceWeath
 		return weatherPanel{}, &ProviderError{Message: "the glance plan names no weather API"}
 	}
 	headers := map[string]string{"Accept": "application/geo+json", "User-Agent": nwsUserAgent}
+	// The alerts need only the point, so they are read while the forecast is.
+	var alerts nwsAlerts
+	alertsRead := make(chan error, 1)
+	go func() {
+		var err error
+		alerts, err = getAnswer[nwsAlerts](ctx, r, api+"/alerts/active?point="+located, headers, "weather alerts")
+		alertsRead <- err
+	}()
 	point, err := getAnswer[nwsPoint](ctx, r, api+"/points/"+located, headers, "weather point")
-	if err != nil {
-		return weatherPanel{}, err
+	var forecast nwsForecast
+	if err == nil {
+		forecast, err = getAnswer[nwsForecast](ctx, r, point.Properties.ForecastHourly, headers, "hourly forecast")
 	}
-	forecast, err := getAnswer[nwsForecast](ctx, r, point.Properties.ForecastHourly, headers, "hourly forecast")
+	if alertsErr := <-alertsRead; err == nil {
+		err = alertsErr
+	}
 	if err != nil {
 		return weatherPanel{}, err
 	}
@@ -545,10 +664,6 @@ func (r *Registry) weatherGlance(ctx context.Context, target runtime.GlanceWeath
 	var current nwsPeriod
 	if len(periods) > 0 {
 		current = periods[0]
-	}
-	alerts, err := getAnswer[nwsAlerts](ctx, r, api+"/alerts/active?point="+located, headers, "weather alerts")
-	if err != nil {
-		return weatherPanel{}, err
 	}
 	place := point.Properties.RelativeLocation.Properties
 	status := "good"

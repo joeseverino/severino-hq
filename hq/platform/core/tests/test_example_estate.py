@@ -15,8 +15,8 @@ from hq.domains.projects.models import Project
 from hq.platform.application import analytics, approvals, github_profile
 from hq.platform.application.linked_accounts import GITHUB, linked_login
 from hq.platform.core import seeds
-from hq.platform.core.example_estate import throwaway_media
 from hq.platform.core.example_estate.agents import AGENT
+from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.models import AuditLog
 
 

@@ -1,18 +1,9 @@
 """Canonical frontmatter schema, shared with severino-vault-mcp.
 
-The MCP's ``schema.py`` is the single source of truth for the vault frontmatter
-contract. It emits that contract as JSON (``severino-vault-mcp schema --json``),
-which is committed here as ``schema.json``. The manifest importer validates
-against these sets, so HQ and the MCP cannot disagree on what ``hq sync``
-accepts.
-
-Do not hand-edit ``schema.json``: regenerate it:
-
-    severino-vault-mcp schema --json > docs_index/schema.json
-
-Two guards keep it honest (see ``docs_index/tests/test_docs_index.py``): one asserts the
-committed JSON still matches the installed MCP, the other asserts the
-``DocumentationRecord`` choice members still cover these sets.
+The MCP's ``schema.py`` is the single source of truth, emitted here as
+``schema.json`` (regenerated, never hand-edited; the docs_index tests that
+guard it name the command). The manifest importer validates against these
+sets, so HQ and the MCP cannot disagree on what ``hq sync`` accepts.
 """
 
 import json

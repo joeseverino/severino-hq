@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 15
     # In Playwright's image, with its browsers, as CI's browser job runs.
     container:
-      image: mcr.microsoft.com/playwright/python:v1.64.1-noble@sha256:330d401ae23c905896a0c26c66c36fc971b621519e7b11b435a8328d7bf6e031
+      image: mcr.microsoft.com/playwright/python:v1.64.1-resolute@sha256:e0006b47eb8c8eb548acebc35ece5968a331051c8f33ae5cd45e9cafd65fdc83
       options: --user 1001 --ipc=host
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -114,30 +114,12 @@ class MCPBoundary:
     async def _observe(self, principal: Principal) -> None:
         """Report an authenticated identity if an observer is wired. Never raises."""
 
-        if self.observer is None:
-            return
-        try:
-            await self.observer(principal)
-        except Exception as exc:  # noqa: BLE001 - observation never blocks
-            logger.warning(
-                "An identity could not be observed: %s",
-                exc,
-                extra={"event": "mcp.identity.unobserved"},
-            )
+        await _reported(self.observer, "An identity could not be observed: %s", "mcp.identity.unobserved", principal)
 
     async def _note_denial(self, **fields: Any) -> None:
         """Record a refusal if a recorder is wired. Never raises."""
 
-        if self.on_denied is None:
-            return
-        try:
-            await self.on_denied(**fields)
-        except Exception as exc:  # noqa: BLE001 - recording never blocks a refusal
-            logger.warning(
-                "A refusal could not be recorded: %s",
-                exc,
-                extra={"event": "mcp.denial.unrecorded"},
-            )
+        await _reported(self.on_denied, "A refusal could not be recorded: %s", "mcp.denial.unrecorded", **fields)
 
     async def _gate_allows(self) -> bool:
         """Whether the operator currently allows agents. Fails closed."""
@@ -207,3 +189,20 @@ class MCPBoundary:
             headers={"Cache-Control": "private, no-store"},
         )
         await response(scope, receive, send)
+
+
+async def _reported(
+    hook: Callable[..., Awaitable[None]] | None, warning: str, event: str, /, *args: Any, **fields: Any
+) -> None:
+    """Hand ``hook`` what the boundary saw, if one is wired; a failure is logged as ``event``.
+
+    Reporting never blocks the boundary: the request is answered the same
+    whether the hook ran, failed or was never wired.
+    """
+
+    if hook is None:
+        return
+    try:
+        await hook(*args, **fields)
+    except Exception as exc:  # noqa: BLE001 - reporting never blocks the boundary
+        logger.warning(warning, exc, extra={"event": event})

@@ -1,0 +1,6 @@
+# ast-grep's project for lint:ast-grep: structural rules over HQ's source,
+# one file each under rules/, and each rule's cases under rule-tests/.
+ruleDirs:
+  - rules
+testConfigs:
+  - testDir: rule-tests

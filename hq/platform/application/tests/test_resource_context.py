@@ -5,7 +5,7 @@ from django.test import SimpleTestCase
 from ..resource_context import controller_summary
 
 
-def allowance(enabled: bool, reason: str = "", automatic: bool = False):
+def allowance(*, enabled: bool, reason: str = "", automatic: bool = False):
     return SimpleNamespace(enabled=enabled, reason=reason, automatic=automatic)
 
 
@@ -18,8 +18,8 @@ class ControllerSummaryTests(SimpleTestCase):
         observes = "Its connection only observes. Set manages on the connection to act."
         found = controller_summary(
             {
-                "reconcile": allowance(False, observes, automatic=True),
-                "renew": allowance(False, observes, automatic=True),
+                "reconcile": allowance(enabled=False, reason=observes, automatic=True),
+                "renew": allowance(enabled=False, reason=observes, automatic=True),
             },
             label,
         )
@@ -30,7 +30,11 @@ class ControllerSummaryTests(SimpleTestCase):
 
     def test_one_that_can_act_says_how(self):
         found = controller_summary(
-            {"reconcile": allowance(True, automatic=True), "renew": allowance(False, "Not due yet.")}, label
+            {
+                "reconcile": allowance(enabled=True, automatic=True),
+                "renew": allowance(enabled=False, reason="Not due yet."),
+            },
+            label,
         )
 
         self.assertEqual((found.headline, found.tone), ("Applied automatically", "good"))

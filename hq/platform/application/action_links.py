@@ -92,19 +92,15 @@ def command_action(
 
     The one place an ``ActionLink`` names a capability (an architecture test
     holds every other module to it), so its label and effect are read from the
-    declaration and cannot drift from it. ``variant`` picks one of the words
-    the command declares for its modes; ``intent`` is a remedy's own declared
-    words for what this particular press does ("Put an access list in front
-    of x"), where the command's name would not say it.
-
-    It also carries why the command would be refused for ``target`` now, from
-    the command's own declaration, so every renderer draws it unusable with
-    that reason instead of offering a press that fails.
+    declaration and cannot drift from it.
     """
 
     spec = capabilities.capability_registry()[capability]
     return ActionLink(
         name,
+        # ``variant`` picks one of the words the command declares for its
+        # modes; ``intent`` is a remedy's own words for what this press does
+        # ("Put an access list in front of x"), where the command's would not.
         intent or spec.words(variant),
         spec.effect,
         url,
@@ -113,6 +109,9 @@ def command_action(
         target=target,
         reason=reason,
         recommended=recommended,
+        # Why the command would be refused for ``target`` now, so every
+        # renderer draws it unusable with that reason instead of offering a
+        # press that fails.
         refusal=outbound_work.refusal(capability, target),
     )
 

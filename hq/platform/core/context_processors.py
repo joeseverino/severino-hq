@@ -8,7 +8,7 @@ lazy from hq.platform.application.request_channel import channel_for_request
 lazy from hq.platform.application.request_identity import signed_in
 
 
-def site(request):
+def site(_request):
     return {
         "SITE_NAME": settings.SEVERINO_SITE_NAME,
         "SITE_HOST": settings.SEVERINO_SITE_HOST,
@@ -18,19 +18,15 @@ def site(request):
 def nav(request):
     """Primary-nav entries, grouped, with the active section flagged.
 
-    Returns a flat ordered sequence of entries. Each is either a link
-    (``kind="item"``) or a dropdown (``kind="group"``) holding links. An item
-    with no group renders inline in the bar; a named group collects its items
-    into one dropdown, so the bar stays a fixed handful of controls no matter
-    how many sections exist.
-
-    The entries themselves are not defined here: they are derived from
-    ``application.domains``, which is where a section declares itself once. This
-    function only decides what is *currently* active.
+    A flat ordered sequence of links (``kind="item"``) and dropdowns
+    (``kind="group"``), so the bar stays a fixed handful of controls however
+    many sections exist. The entries derive from ``application.domains``, where
+    a section declares itself once; this decides only which is active.
     """
     match = request.resolver_match
-    namespace = getattr(match, "namespace", "") or ""
-    url_name = getattr(match, "url_name", "") or ""
+    # None on a page no route answered.
+    namespace = match.namespace if match is not None else ""
+    url_name = (match.url_name if match is not None else "") or ""
     current_route = f"{namespace}:{url_name}" if namespace else url_name
 
     entries: list[dict] = []
@@ -49,6 +45,8 @@ def nav(request):
                 else current_route == nav_item.route
             ),
         }
+        # An item with no group renders inline in the bar; a named group
+        # collects its items into one dropdown.
         if not nav_item.group:
             entries.append({"kind": "item", "order": nav_item.order, **item})
             continue
@@ -76,7 +74,7 @@ def nav(request):
     return {"nav_entries": entries}
 
 
-def auth_config(request):
+def auth_config(_request):
     return {"OIDC_ENABLED": settings.SEVERINO_OIDC_ENABLED}
 
 

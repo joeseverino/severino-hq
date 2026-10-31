@@ -1,17 +1,9 @@
 """Optional, typed things an audit event can carry.
 
-`metadata` is a JSON column with no contract, so every caller invents its own
-shape and "how much did that change?" cannot be asked across them. A schema
-per event kind would be worse: kinds multiply, and most would repeat the same
-few facts.
-
-So the unit is the fact, not the event. Small typed pieces that compose:
-
-    record_event(action=..., facets=[Counts(created=12), Timing(duration_ms=900)])
-
-`counts.created` then means the same thing everywhere, and a surface that can
-render one facet can render all of them. Unset fields are absent from the row
-rather than stored as null.
+The unit is the fact, not the event: small typed pieces that compose
+(``facets=[Counts(created=12), Timing(duration_ms=900)]``), so ``counts.created``
+means the same everywhere, which neither the shapeless ``metadata`` column nor
+a schema per event kind gives. An unset field is absent from the row, not null.
 """
 
 from dataclasses import dataclass, fields

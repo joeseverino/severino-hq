@@ -1,11 +1,9 @@
 """One way to name a thing on a page: its label, and where it goes.
 
-``entity_link(kind, identity)`` answers for three registries. A node kind
-declares its HQ page here. A reading kind (``control_plane.observations``) and
-a resource kind (``control_plane.providers``) declare an optional provider
-console link, built only from ids a record stores; such a link is external.
-Every entity name a page renders comes through here, so a name either links
-the same way everywhere or nowhere.
+Every entity name a page renders comes through ``entity_link(kind, identity)``,
+so a name links the same way everywhere or nowhere. A node kind declares its HQ
+page here; a reading or resource kind may declare an external console link,
+built only from ids a record stores.
 """
 
 from collections.abc import Callable, Mapping
@@ -15,7 +13,7 @@ from urllib.parse import urlsplit
 
 lazy from django.utils.text import slugify
 
-from hq.domains.control_plane.names import names_a_host, normalized_hostname
+from hq.domains.control_plane.names import LEADS_TO, names_a_host, normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS, registry_label
 from hq.platform.application.routes import reverse
@@ -107,13 +105,15 @@ NODE_KINDS: Mapping[str, NodeKind] = {
 }
 
 
-def record_name(kind: str, spec: Mapping[str, Any], key: str = "") -> str:
+def record_name(kind: str, spec: Mapping[str, Any], key: str = "", *, leads: bool = True) -> str:
     """The name a record stands for, from its settings; its key when it has none.
 
     A key is HQ's filing of a record. What a person knows it by is the name it
     answers for and where that leads, or the name the thing itself carries. A
     kind that is called something else says so (``ProviderSpec.name``). A
     certificate keeps its key: it covers many names and is known by its own.
+    ``leads=False`` leaves out where the name leads, for a sentence that
+    says that itself.
     """
 
     provider = PROVIDERS.get(kind)
@@ -124,8 +124,8 @@ def record_name(kind: str, spec: Mapping[str, Any], key: str = "") -> str:
             return str(provider.name(dict(spec)) or key)
         names = provider.hostnames(dict(spec)) if provider.hostnames and not provider.covers else ()
         if names:
-            leads_to = provider.origin(dict(spec)) if provider.origin else ""
-            return f"{names[0]} → {leads_to}" if leads_to else str(names[0])
+            leads_to = provider.origin(dict(spec)) if provider.origin and leads else ""
+            return f"{names[0]}{LEADS_TO}{leads_to}" if leads_to else str(names[0])
     except KeyError, TypeError, ValueError:
         return key
     return key if provider.covers else str(spec.get("name") or key)
@@ -152,7 +152,7 @@ def record_names() -> Mapping[str, str]:
 def node_name(node: Any) -> str:
     """What a page calls a topology node: a record by the name it stands for."""
 
-    return str(getattr(node, "name", "") or node.label)
+    return node.name or node.label
 
 
 def _record_label(key: str) -> str:
@@ -290,11 +290,11 @@ def node_link(node: Any) -> EntityLink:
     """
 
     kind = NODE_KINDS.get(node.kind)
-    url = str(getattr(node, "url", "") or "")
+    url = node.url
     if not url and kind is not None and kind.page is not None and node.label:
         url = kind.page(node.label)
     # A declaration is named by its provider's label, not "Resource".
-    registry_kind = str(getattr(node, "kind_key", "") or "")
+    registry_kind = node.kind_key
     named = registry_kind if registry_kind in PROVIDERS or registry_kind in OBSERVATIONS else node.kind
     # A declaration's node is labeled by its key, which is what a command
     # is addressed by. A page names it by what it stands for.

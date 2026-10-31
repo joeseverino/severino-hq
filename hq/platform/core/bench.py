@@ -1,11 +1,10 @@
 """A few years of one operator's records, for measuring what a page costs.
 
-An empty database hides every cost that grows with data. ``seed`` fills one
-with a deterministic estate: the ledger, the registries, a swept
-infrastructure and its history. ``manage.py bench_pages`` times pages over it
-and the query-budget tests pin counts against it at a smaller ``scale``.
-
-Everything is synthetic: ``example.*`` names and documentation addresses.
+An empty database hides every cost that grows with data, so ``seed`` fills one
+with a deterministic, synthetic estate (``example.*`` names, documentation
+addresses): the ledger, the registries, a swept infrastructure and its history.
+``manage.py bench_pages`` times pages over it and the query-budget tests pin
+counts against it at a smaller ``scale``.
 """
 
 import random
@@ -119,6 +118,29 @@ def _create(model, rows: list[Any]) -> list[Any]:
     return list(model.objects.order_by("pk"))
 
 
+def _link(model, rows: list[Any], **sets: list[Any]) -> None:
+    """Link each row to none, one or two of each named set, the next ones on from its own place.
+
+    Written through each relation's own table in bulk, since a ``set`` per row
+    would cost the seed a query per row.
+    """
+
+    for field, targets in sets.items():
+        relation = getattr(model, field)
+        through = relation.through
+        own, other = (
+            f"{name}_id" for name in (relation.field.m2m_field_name(), relation.field.m2m_reverse_field_name())
+        )
+        through.objects.bulk_create(
+            [
+                through(**{own: row.pk, other: targets[(index + step) % len(targets)].pk})
+                for index, row in enumerate(rows)
+                for step in range(index % 3)
+            ],
+            batch_size=500,
+        )
+
+
 def _spread(model, field: str, rows: list[Any], days: int) -> None:
     """Date rows across ``days``, oldest key first, as years of use would have.
 
@@ -133,7 +155,7 @@ def _spread(model, field: str, rows: list[Any], days: int) -> None:
     model.objects.bulk_update(rows, [field], batch_size=500)
 
 
-def _projects(rng: random.Random, scale: float) -> list[Project]:
+def _projects(scale: float) -> list[Project]:
     categories = _choices(Project, "category")
     statuses = _choices(Project, "status")
     return _create(
@@ -174,15 +196,7 @@ def _assets(rng: random.Random, scale: float, today: date, projects: list[Projec
             for index in range(_count(scale, 300))
         ],
     )
-    through = Asset.related_projects.through
-    through.objects.bulk_create(
-        [
-            through(asset_id=asset.pk, project_id=projects[(index + step) % len(projects)].pk)
-            for index, asset in enumerate(assets)
-            for step in range(index % 3)
-        ],
-        batch_size=500,
-    )
+    _link(Asset, assets, related_projects=projects)
     return assets
 
 
@@ -208,19 +222,7 @@ def _documentation(scale: float, today: date, projects, assets) -> list[Document
             for index in range(_count(scale, 150))
         ],
     )
-    for field, targets, column in (
-        ("related_projects", projects, "project_id"),
-        ("related_assets", assets, "asset_id"),
-    ):
-        through = getattr(DocumentationRecord, field).through
-        through.objects.bulk_create(
-            [
-                through(documentationrecord_id=record.pk, **{column: targets[(index + step) % len(targets)].pk})
-                for index, record in enumerate(records)
-                for step in range(index % 3)
-            ],
-            batch_size=500,
-        )
+    _link(DocumentationRecord, records, related_projects=projects, related_assets=assets)
     return records
 
 
@@ -243,19 +245,7 @@ def _content(scale: float, today: date, projects, records) -> list[ContentItem]:
             for index in range(_count(scale, 80))
         ],
     )
-    for field, targets, column in (
-        ("related_projects", projects, "project_id"),
-        ("related_documentation", records, "documentationrecord_id"),
-    ):
-        through = getattr(ContentItem, field).through
-        through.objects.bulk_create(
-            [
-                through(contentitem_id=item.pk, **{column: targets[(index + step) % len(targets)].pk})
-                for index, item in enumerate(items)
-                for step in range(index % 3)
-            ],
-            batch_size=500,
-        )
+    _link(ContentItem, items, related_projects=projects, related_documentation=records)
     return items
 
 
@@ -338,7 +328,7 @@ def _references(assets, expenses, entries) -> None:
     Entry.objects.filter(pk=entries[1].pk).update(about=machine, about_name="lab-1")
 
 
-def _history(rng, scale, user, expenses, assets) -> list[AuditLog]:
+def _history(scale, user, expenses, assets) -> list[AuditLog]:
     actions = ("created", "updated", "updated", "viewed", "exported", "observed")
     subjects = [("expense", expense.pk, str(expense)) for expense in expenses[:200]]
     subjects += [("asset", asset.pk, str(asset)) for asset in assets[:100]]
@@ -682,14 +672,14 @@ def seed(scale: float = 1.0, owner: Any = None) -> Seeded:
     rng = random.Random(20261004)
     today = timezone.localdate()
     user = owner or get_user_model().objects.create_superuser("bench", "bench@example.com")
-    projects = _projects(rng, scale)
+    projects = _projects(scale)
     assets = _assets(rng, scale, today, projects)
     records = _documentation(scale, today, projects, assets)
     content = _content(scale, today, projects, records)
     expenses = _expenses(rng, scale, today, projects, assets, content, records)
     receipts = _receipts(rng, scale, expenses, assets)
     entries = _entries(scale, today)
-    history = _history(rng, scale, user, expenses, assets)
+    history = _history(scale, user, expenses, assets)
     jobs = _jobs(scale, user)
     _analytics(rng, scale, today)
     resources = _infrastructure(scale)

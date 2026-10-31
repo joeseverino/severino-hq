@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="CodeQL, security-and-quality: no alerts"
+#MISE env={SEVERINO_HEAVY_BOUND="30m"}
 #MISE hide=true
 
 # What CI's scan job runs, before pushing rather than after merging: the
@@ -8,6 +9,8 @@
 # .github/codeql/codeql-config.yml leaves out. It reads an export of the files
 # git would push, so a local .venv or stray build output is not scanned.
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 
 # shellcheck source=tools/lib/export-tree.sh
 . ./tools/lib/export-tree.sh
@@ -39,10 +42,7 @@ codeql database analyze "${work}/codeql-db" \
 
 # The analysis reports what the config's query filters drop; the report drops
 # the same rules.
-excludes=""
-for rule in $(yq '.query-filters[].exclude.id | select(. != null)' .github/codeql/codeql-config.yml); do
-    excludes="${excludes} --exclude ${rule}"
-done
-# shellcheck disable=SC2086  # a rule id is one word
-uv run python -m tools.pipeline.codeql_report "${work}/codeql.sarif" ${excludes}
+# shellcheck disable=SC2046  # a rule id is one word
+jq -r -f tools/pipeline/codeql_report.jq "${work}/codeql.sarif" \
+    --args $(yq '.query-filters[].exclude.id | select(. != null)' .github/codeql/codeql-config.yml)
 echo "[codeql] clean"

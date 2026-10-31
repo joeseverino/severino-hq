@@ -5,7 +5,7 @@ A command is its title, what it will change (the lede), its fields and one
 button named for what it does. How it is built belongs to the API reference.
 {% endcomment %}
 {% if result %}
-<section class="card command-result command-result-good" aria-labelledby="command-result-title">
+{% card css="command-result command-result-good" heading="command-result-title" %}
   {% section_head id="command-result-title" %}Done{% endsection_head %}
   {% if result.replayed %}<p class="muted command-result-note">This was already done earlier. Nothing ran again.</p>{% endif %}
   {% comment %}
@@ -21,7 +21,7 @@ button named for what it does. How it is built belongs to the API reference.
   {% if result_table %}
     {% table_region result_table.label %}
       <table class="data-table command-result-table">
-        <caption>{{ result_table.label|breakable }} · {{ result_table.rows|length }}</caption>
+        <caption>{{ result_table.label|breakable }}{% dot %}{{ result_table.rows|length }}</caption>
         <thead><tr>{% for column in result_table.columns %}{% if forloop.first %}{% table_heading column local_sort=result_table.rows|sortable gutter=True %}{% elif result_table.columns|length > 2 %}{% table_heading column local_sort=result_table.rows|sortable drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=result_table.rows|sortable %}{% endif %}{% endfor %}</tr></thead>
         <tbody>
           {% for row in result_table.rows %}<tr>{% for cell in row %}{% if forloop.first %}<td class="row-gutter">{{ cell|breakable }}{% row_toggle %}</td>{% else %}<td>{{ cell|breakable }}</td>{% endif %}{% endfor %}</tr>{% endfor %}
@@ -37,28 +37,47 @@ button named for what it does. How it is built belongs to the API reference.
     {% if return_url %}<a class="btn" href="{{ return_url }}">Back</a>{% endif %}
     {% if resource_url %}<a class="btn ghost" href="{{ resource_url }}">Open {{ resource_label|breakable }}</a>{% endif %}
   </div>
-</section>
+{% endcard %}
 {% endif %}
 
-<section class="card command-runner">
+{% card css="command-runner" %}
   {% comment %}
-  A command that changes a live system or deletes data says so once, in the
+  A command that changes a live system, stops or deletes says so once, in the
   confirmation beside its button.
   {% endcomment %}
+  {% comment %}
+  What it changes in HQ may be read later by work that reaches further (a
+  switch the next run reads), which the lede says, so this claims no limit.
+  {% endcomment %}
   {% if command.effect == "remote_write" %}
-    <p class="muted command-effect-note">This changes HQ only. It is recorded in the audit log.</p>
+    <p class="muted command-effect-note" data-command-effect>Saved in HQ and recorded in the audit log.</p>
   {% endif %}
 
   {% comment %}
-  A command that acts on an existing record writes every field of it, so a
-  field left blank here is saved blank. That is the right contract for API
-  and MCP callers, which send the whole record; in a browser the form opens
-  empty unless the command declares `target_initial_fields`.
+  A field this command may be sent without is saved as its default, the
+  right contract for API and MCP callers, which send the whole record; a form
+  that does not open holding the record's values says so (`saves_blanks`).
   {% endcomment %}
-  {% if command.target_kind and command.effect == "remote_write" and writes_record and not hydrates_target %}
-    <div class="notice notice-attention">
-      <strong>This replaces the whole record</strong>
-      <p>Every field is saved as you submit it, including blanks. To change one field, use the record's own edit page{% if resource_url %}, from <a href="{{ resource_url }}">{{ resource_label|breakable:"." }}</a>{% else %}.{% endif %}</p>
+  {% if saves_blanks %}
+    <div class="notice notice-attention" data-command-blanks>
+      <strong>A blank field is saved blank</strong>
+      <p>Every field replaces what the record holds, as you submit it. To change one field, use the record's own edit page{% if resource_url %}, from <a href="{{ resource_url }}">{{ resource_label|breakable:"." }}</a>{% else %}.{% endif %}</p>
+    </div>
+  {% endif %}
+
+  {% comment %}
+  A command that needs what only one page hands out (a held change, a token
+  HQ gave a live record) points there; the form stays for API-shaped use.
+  {% endcomment %}
+  {% if starting_page %}
+    <div class="notice" data-command-start>
+      <strong>Start from {{ starting_page.0|breakable }}</strong>
+      <p>That page hands this command what it needs. <a href="{{ starting_page.1 }}">Open {{ starting_page.0|breakable }}</a></p>
+    </div>
+  {% elif starts_on_its_page %}
+    <div class="notice" data-command-start>
+      <strong>Start from the page of what it acts on</strong>
+      <p>That page sends it for you.</p>
     </div>
   {% endif %}
 
@@ -73,6 +92,13 @@ button named for what it does. How it is built belongs to the API reference.
     {% csrf_token %}
     {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
     {% include "partials/_form_errors.html" %}
+    {% comment %}A switch on no record says where it stands first.{% endcomment %}
+    {% if switch.state and not command.target_kind %}
+      <div class="field command-state" data-command-state>
+        <span class="field-label">{{ switch.label|breakable }}</span>
+        <p><strong>{{ switch.state|breakable }}</strong></p>
+      </div>
+    {% endif %}
     {% for field in form.primary_fields %}
       {% if chosen_target and field.name == "__target" %}
         <div class="field command-target">
@@ -84,12 +110,26 @@ button named for what it does. How it is built belongs to the API reference.
       {% else %}
         {{ field.as_field_group }}
       {% endif %}
+      {% comment %}
+      A switch says where it stands for the record chosen, beside it, and is
+      pressed as the words that change it.
+      {% endcomment %}
+      {% if switch.state and field.name == "__target" %}
+        <div class="field command-state" data-command-state>
+          <span class="field-label">{{ switch.label|breakable }}</span>
+          <p><strong>{{ switch.state|breakable }}</strong></p>
+        </div>
+      {% endif %}
     {% endfor %}
     {% for field in form.confirmation_fields %}{{ field.as_field_group }}{% endfor %}
     <div class="form-actions">
-      <button class="btn primary" type="submit">{{ command_label|breakable }}</button>
+      {% if switch %}
+        {% for value, words in switch.choices %}<button class="btn{% if switch.choices|length == 1 %} primary{% endif %}" type="submit" name="{{ switch.field }}" value="{{ value }}">{{ words|breakable }}</button>{% endfor %}
+      {% else %}
+        <button class="btn primary" type="submit">{{ command_label|breakable }}</button>
+      {% endif %}
       <span class="muted" data-submit-status hidden role="status">Working…</span>
     </div>
   </form>
-</section>
+{% endcard %}
 {% endblock %}

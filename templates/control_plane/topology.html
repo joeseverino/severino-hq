@@ -1,4 +1,5 @@
 {% extends "page.html" %}
+{% load static %}
 {% block page %}
 
 {% if active_lens %}<p class="topology-lens-note muted">{{ active_lens.summary|breakable }}</p>{% endif %}
@@ -8,7 +9,7 @@
     <div>
       <span class="eyebrow">Showing</span>
       <strong>{{ topology_trace_focus.label|breakable }}</strong>
-      <span class="muted">{{ topology_trace_label|breakable }} · {{ topology_trace.depth|counted:"step" }}</span>
+      <span class="muted">{{ topology_trace_label|breakable }}{% dot %}{{ topology_trace.depth|counted:"step" }}</span>
     </div>
     <nav class="topology-trace-controls" aria-label="Direction">
       {% for item in trace_direction_links %}<a class="scope-chip{% if topology_trace.direction == item.name %} is-active{% endif %}" href="{{ item.url }}"{% if topology_trace.direction == item.name %} aria-current="page"{% endif %}>{{ item.label|breakable }}</a>{% endfor %}
@@ -105,7 +106,7 @@
 </section>
 
 {% if topology_edges %}
-<section class="card topology-relations" id="topology-relations" aria-labelledby="topology-relations-heading">
+{% card css="topology-relations" id="topology-relations" heading="topology-relations-heading" %}
   <header class="topology-relations-head">
     <h2 id="topology-relations-heading">Links shown</h2>
     <span class="muted">{{ topology_edges|length|counted:"link" }}</span>
@@ -125,6 +126,7 @@
       </tbody>
     </table>
   {% endtable_region %}
-</section>
+{% endcard %}
 {% endif %}
 {% endblock %}
+{% block scripts_extra %}<script src="{% static 'js/topology.js' %}" {% csp_nonce_attr %} defer></script>{% endblock %}

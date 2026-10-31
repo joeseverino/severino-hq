@@ -1,16 +1,10 @@
 """Which repositories HQ's dependency update run covers, and when it is due.
 
-A project is opted in by ``project.dependency_updates``. HQ holds no
-credential, so it only plans: ``plan`` tells the controller each opted-in
-repository, grouped by the account that owns it, and whether a run is due.
-The controller mints one token per account, scoped to exactly those
-repositories and the App's Renovate grant, and hands it to root, which runs
-Renovate (``controller/providers/github_dependency_run.go``). How each run
-ended comes back as the ``github.dependency_run`` reading.
-
-A run is due once a day and when somebody asks (``request_run``). The clock is
-the latest run the reading holds, a hand-off included, so a run that root has
-not finished yet is not handed off again.
+HQ holds no credential, so it only plans: ``plan`` tells the controller each
+repository a project opts in to (``project.dependency_updates``), by owner, and
+whether a run is due, once a day and on ``request_run``. The controller runs
+it (``controller/providers/github_dependency_run.go``), and the hand-off and
+the reading each run comes back as are docs/Derived-Facts.md#dependency-updates.
 """
 
 import re
@@ -28,7 +22,6 @@ from hq.domains.control_plane.observations.github import (
 )
 from hq.domains.projects.models import Project
 
-from .domains import records_of
 from .projection import iso, read_once
 from .security import Principal
 lazy from .cadence import forced_reads, request_reads
@@ -150,12 +143,12 @@ def request_run(_command: DependencyRunCommand, *, principal: Principal) -> dict
     finds the plan due, hands off, and reports the hand-off, which answers it.
     """
 
-    principal.require(records_of("projects").write)
+    del principal
     if not owners():
         return {
             "ok": False,
             "error": {"code": "precondition", "message": "No project is opted in to dependency updates."},
         }
-    request_reads((KIND,), principal=principal)
+    request_reads((KIND,))
     asked = asked_at() or timezone.now()
     return {"ok": True, "requested": True, "asked_at": asked.isoformat()}

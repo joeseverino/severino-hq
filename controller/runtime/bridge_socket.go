@@ -7,7 +7,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"syscall"
+
+	"github.com/joeseverino/severino-hq/controller/host"
 )
 
 // socketMode is the only mode a bridge socket is served with.
@@ -42,17 +43,9 @@ func DialTrusted(path string, uid int) func(context.Context, string, string) (ne
 	}
 }
 
-// readPeerUID is peerUID; a test stands in an answer the kernel would give
+// readPeerUID is PeerUID; a test stands in an answer the kernel would give
 // for another account.
-var readPeerUID = peerUID
-
-func ownerOf(info fs.FileInfo) (int, bool) {
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return 0, false
-	}
-	return int(stat.Uid), true
-}
+var readPeerUID = PeerUID
 
 func trustedSocket(path string, uid int) error {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
@@ -65,7 +58,7 @@ func trustedSocket(path string, uid int) error {
 	if !directory.IsDir() {
 		return &BridgeError{"the bridge socket's directory is not a directory"}
 	}
-	if owner, ok := ownerOf(directory); !ok || owner != uid {
+	if owner, _, ok := host.Ownership(directory); !ok || owner != uid {
 		return &BridgeError{"the bridge socket's directory belongs to another account"}
 	}
 	if directory.Mode().Perm()&0o077 != 0 {
@@ -81,7 +74,7 @@ func trustedSocket(path string, uid int) error {
 	if socket.Mode().Type() != fs.ModeSocket {
 		return &BridgeError{"the bridge socket path is not a socket"}
 	}
-	if owner, ok := ownerOf(socket); !ok || owner != uid {
+	if owner, _, ok := host.Ownership(socket); !ok || owner != uid {
 		return &BridgeError{"the bridge socket belongs to another account"}
 	}
 	if socket.Mode().Perm() != socketMode {
@@ -90,11 +83,16 @@ func trustedSocket(path string, uid int) error {
 	return nil
 }
 
-// rawConn is the connection's descriptor, for the peer-credential read.
-func rawConn(conn net.Conn) (syscall.RawConn, error) {
+// PeerUID is the uid of the process at the other end of a Unix connection
+// (PeerUIDOf).
+func PeerUID(conn net.Conn) (int, error) {
 	unix, ok := conn.(*net.UnixConn)
 	if !ok {
-		return nil, errors.New("not a Unix connection")
+		return 0, errors.New("not a Unix connection")
 	}
-	return unix.SyscallConn()
+	raw, err := unix.SyscallConn()
+	if err != nil {
+		return 0, err
+	}
+	return PeerUIDOf(raw)
 }

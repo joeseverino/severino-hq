@@ -1,4 +1,6 @@
+import inspect
 import re
+from collections.abc import Callable
 from datetime import date, datetime
 from html import unescape
 from numbers import Number
@@ -7,9 +9,10 @@ lazy from dataclasses import replace
 
 from django import template
 from django.template.base import token_kwargs
+from django.template.context import RequestContext
 from django.template.loader import render_to_string
 from django.utils import dateformat, timezone
-from django.utils.html import conditional_escape, format_html
+from django.utils.html import conditional_escape, format_html, format_html_join
 from django.utils.safestring import mark_safe
 lazy from django.conf import settings
 
@@ -23,8 +26,14 @@ from hq.platform.application.entity_links import (
 from hq.platform.application.labels import human_bytes
 from hq.platform.application.moments import (
     ago as _ago,
+    ahead as _ahead,
     elapsed as _elapsed,
+    length as _length,
+    month as _month,
+    numeral as _numeral,
     span as said,
+    weekday as _weekday,
+    weekday_initials as _weekday_initials,
     when as _when,
     when_day as _when_day,
     when_exact as _when_exact,
@@ -69,6 +78,24 @@ def empty_value():
     return format_html('<span class="empty-value" title="None">{}</span>', MISSING)
 
 
+@register.simple_tag
+def dot():
+    """The middle dot between two parts of one line of text, written straight
+    after the first part. A no-break space holds it to that part and the line
+    may break only after it, so no line starts with a dot or holds one alone;
+    a reader hears the two parts. A run of whole parts that is a list of its
+    own is a ``.dot-list``."""
+    return mark_safe('&nbsp;<span aria-hidden="true">·</span> ')
+
+
+@register.simple_tag
+def arrow():
+    """The arrow that ends a link onward, written straight after its last
+    word, held to it by a no-break space and never read: the link's words
+    say where it goes."""
+    return mark_safe('&nbsp;<span aria-hidden="true">&rarr;</span>')
+
+
 @register.filter(name="bytes")
 def bytes_(value):
     """``{{ n|bytes }}``: a byte count as ``human_bytes`` says it, the format the
@@ -105,7 +132,7 @@ def or_empty(value):
     """
     if value is None or value == "":
         return format_html('<span class="empty-value" title="None">{}</span>', MISSING)
-    if isinstance(value, Number) and not isinstance(value, bool):
+    if not isinstance(value, bool) and isinstance(value, Number):
         return value
     return breakable(value)
 
@@ -147,11 +174,17 @@ def _dated_mark(value: date):
 
 # What ``when`` can be asked for, and the words each one shows.
 _WHEN_FORMS = {
-    "": _when,
-    "ago": lambda value: _ago(value) if isinstance(value, datetime) else _when_day(value),
-    "day": _when_day,
-    "exact": _when_exact,
+    "": _when,  # "Oct 3, 9:29 AM"; a date reads "Oct 3"
+    "ago": lambda value: _ago(value) if isinstance(value, datetime) else _when_day(value),  # "5 days ago"
+    "day": _when_day,  # the day a moment fell on
+    "exact": _when_exact,  # "Oct 3, 2026, 9:29:15 AM CDT"
     "mark": _dated_mark,
+    "weekday": _weekday,  # "Monday"
+    "initials": _weekday_initials,  # "Mo", where a column is narrow
+    "month": _month,  # "October 2026", the month a calendar shows
+    "numeral": _numeral,  # "3", the day of the month in a calendar's cell
+    "length": _length,  # "5 minutes", how far it lies from now either way
+    "ahead": _ahead,  # "in 3 days", or "5 days ago" once it has passed
 }
 
 
@@ -159,16 +192,9 @@ _WHEN_FORMS = {
 def when(value, form=""):
     """``{{ moment|when }}``: the one way a page shows a moment, a date or an age.
 
-    A ``<time>`` whose ``datetime`` is the instant as a machine reads it (which
-    is what a table sorts on) and whose ``title`` is the exact moment, around
-    the words ``application.ui`` writes:
-
-    - ``{{ at|when }}``: "Oct 3, 9:29 AM"; a date reads "Oct 3".
-    - ``{{ at|when:"ago" }}``: "5 days ago", the moment itself on hover.
-    - ``{{ at|when:"day" }}``: the day a moment fell on.
-    - ``{{ at|when:"exact" }}``: "Oct 3, 2026, 9:29:15 AM CDT".
-    - ``{{ at|when:"mark" }}``: the day as a dated mark, month over day.
-
+    A ``<time>`` whose ``datetime`` is the instant as a machine reads it (what a
+    table sorts on) and whose ``title`` is the exact moment, around the words
+    ``application.ui`` writes in the form asked (``_WHEN_FORMS``, docs/Design.md).
     Takes a datetime, a date or an ISO stamp. Nothing shows the mark for a
     missing value; text that names no instant is shown as it came, its names held.
     """
@@ -370,7 +396,7 @@ def _joined(text: str) -> str:
     return f'<span class="joined">{text}</span>'
 
 
-def _held(group: list[str], first: bool, last: bool) -> str:
+def _held(group: list[str], *, first: bool, last: bool) -> str:
     """A group at an end of its part, held together. The hold's edges sit
     before a hyphen, where no line may break, never after one: a browser
     decides a break at an element's edge by the box around both sides, and
@@ -387,7 +413,7 @@ def _held(group: list[str], first: bool, last: bool) -> str:
     return group[0][:-1] + _joined("-" + "".join(group[1:]))
 
 
-def _whole(part: str, boxed: bool = False) -> str:
+def _whole(part: str, *, boxed: bool = False) -> str:
     """A part, kept on one line when a hyphen is inside it. Where it must break
     after a hyphen all the same, a scrap at either end stays with its
     neighbor; one inside it has words on both sides to share its line.
@@ -401,13 +427,14 @@ def _whole(part: str, boxed: bool = False) -> str:
     groups = _glued(_AFTER_HYPHEN.split(part))
     last = len(groups) - 1
     held = "".join(
-        _held(group, at == 0, at == last) if at in (0, last) else "".join(group) for at, group in enumerate(groups)
+        _held(group, first=at == 0, last=at == last) if at in (0, last) else "".join(group)
+        for at, group in enumerate(groups)
     )
     inner = f'<span class="part">{held}</span>' if boxed else held
     return f'<span class="whole">{inner}</span>'
 
 
-def _token(word: str, sole: bool) -> str:
+def _token(word: str, *, sole: bool) -> str:
     """A word with a seam or a hyphen inside it, as a token. A word with
     neither reads as a word, and stays plain text. A token that is the whole
     value (a name, never a word of a sentence) is marked ``data-sole``, so a
@@ -464,33 +491,32 @@ _CLOSING = re.compile(r"(?:</span>)*$")
 
 @register.filter(is_safe=True)
 def breakable(value, mark=""):
-    """``value`` as tokens, one per word: escaped, with a line-break
-    opportunity where an address or a path may wrap, and none inside a
-    hyphenated part.
+    """``value`` as tokens, one per word: escaped, with a line-break opportunity
+    where an address or a path may wrap, and none inside a hyphenated part.
 
     The one way a template writes an identifier (``<code>{{ x|breakable }}</code>``,
-    or bare as a link's text). A token that fits on its line moves to the next
-    one whole; one longer than its line wraps at its seams; a part longer than
-    its line alone breaks wherever it must. Markup passes as it is: what built
-    it held the names in it, and a seam inside a tag would break the tag.
-
-    ``mark`` is the punctuation the sentence puts after the value
-    (``{{ x|breakable:"." }}``), written inside the last word's innermost box:
-    a box as wide as its line leaves a mark after it no room there, and the
-    mark would start the next line alone. Given the ``forloop`` of a list
-    (``{{ x|breakable:forloop }}``), the mark is the comma between its items.
+    or bare as a link's text). ``mark`` is the punctuation the sentence puts
+    after the value (``{{ x|breakable:"." }}``), or given a list's ``forloop``,
+    the comma between its items.
     """
 
     mark = _mark(mark)
     value = admitted(value)
     # Markup is whatever renders itself: a form field is not SafeData until
-    # Django renders it.
+    # Django renders it. It passes as it is: what built it held the names in
+    # it, and a seam inside a tag would break the tag.
     if hasattr(value, "__html__"):
         return conditional_escape(value) + conditional_escape(mark)
     # Escaped first, so the only markup in the result is what is added here.
     text = str(conditional_escape(value))
     words = _WORDS.split(text)
+    # A token that fits on its line moves to the next one whole; one longer than
+    # its line wraps at its seams; a part longer than its line alone breaks
+    # wherever it must.
     drawn = [_token(word, sole=len(words) == 1) for word in words]
+    # The mark goes inside the last word's innermost box: a box as wide as its
+    # line leaves a mark after it no room there, and the mark would start the
+    # next line alone.
     if mark:
         last = drawn[-1]
         at = _CLOSING.search(last).start()
@@ -524,7 +550,7 @@ def _request(context):
     """The request being drawn: the context's own, which an ``{% include ...
     only %}`` keeps, or else the variable a plain ``Context`` was given."""
 
-    return getattr(context, "request", None) or context.get("request")
+    return context.request if isinstance(context, RequestContext) else context.get("request")
 
 
 def _is_this_page(context, url: str) -> bool:
@@ -617,7 +643,7 @@ def reference(context, row, field):
 
 
 @register.inclusion_tag("partials/_related.html", takes_context=True)
-def referenced_by(context, thing, identity="", cards=True):
+def referenced_by(context, thing, identity="", cards=True):  # noqa: ARG001 - hq_sdk's contract, which extensions call with cards
     """Everything that names a thing, for that thing's page: a card per kind
     of reference, as every related list is drawn (``partials/_related.html``).
 
@@ -756,15 +782,15 @@ class SlotsNode(template.Node):
     """A block tag drawn by its partial, each part it encloses handed over as
     the variable it is named for (``slotted``)."""
 
-    def __init__(self, partial: str, parts: dict[str, template.NodeList], options: dict) -> None:
-        self.partial = partial
+    def __init__(self, takes: Takes, parts: dict[str, template.NodeList], options: dict) -> None:
+        self.takes = takes
         self.options = options
         self.child_nodelists = tuple(f"nodelist_{name}" for name in parts)
         for name, nodelist in parts.items():
             setattr(self, f"nodelist_{name}", nodelist)
 
     def render(self, context) -> str:
-        values = {name: value.resolve(context) for name, value in self.options.items()}
+        values = self.takes.values({name: value.resolve(context) for name, value in self.options.items()})
         for attribute in self.child_nodelists:
             # Rendered by the page's own template, so escaped already. A part
             # left empty leaves an option of its name as it is.
@@ -772,32 +798,107 @@ class SlotsNode(template.Node):
             name = attribute.removeprefix("nodelist_")
             if part or name not in values:
                 values[name] = part
-        return context.template.engine.get_template(self.partial).render(context.new(values)).strip()
+        return context.template.engine.get_template(self.takes.partial).render(context.new(values)).strip()
 
 
-def slotted(name: str, partial: str, parts: tuple[str, ...], options: frozenset[str]) -> None:
+class Takes:
+    """What a slotted tag takes: its parts, its options, whether a page may
+    give it ``data_*`` options, and how the options become the partial's
+    variables. Its signature and the parts after its first are what the
+    template contract records for the tag."""
+
+    def __init__(
+        self, name: str, partial: str, parts: tuple[str, ...], options: frozenset[str], shape: Shape | None
+    ) -> None:
+        self.name = name
+        self.partial = partial
+        self.parts = parts
+        self.options = options
+        self.shape = shape
+        keyword = inspect.Parameter.KEYWORD_ONLY
+        self.__signature__ = inspect.Signature(
+            [
+                inspect.Parameter("content", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+                *(inspect.Parameter(option, keyword, default="") for option in sorted(options)),
+                *([inspect.Parameter("data", inspect.Parameter.VAR_KEYWORD)] if shape else []),
+            ]
+        )
+
+    def __call__(self, *args, **kwargs) -> None:
+        raise TypeError(f"{self.name} is a template tag, drawn by {self.partial}")
+
+    def admits(self, names: set[str]) -> bool:
+        return all(name in self.options or (self.shape and name.startswith("data_")) for name in names)
+
+    def values(self, given: dict) -> dict:
+        return self.shape(self.name, given) if self.shape else given
+
+
+type Shape = Callable[[str, dict], dict]
+
+
+def slotted(
+    name: str, partial: str, parts: tuple[str, ...], options: frozenset[str], *, shape: Shape | None = None
+) -> None:
     """Register ``{% name option=value %}first{% second %}...{% endname %}``:
     markup a page would otherwise write by hand, drawn by ``partial`` with
     each part as the variable it is named for. The first part follows the
-    opening tag; the others may be left out, and come in ``parts``' order."""
+    opening tag; the others may be left out, and come in ``parts``' order.
+    A tag with a ``shape`` also takes ``data_*`` options, and its shape turns
+    what a page gave into the partial's variables."""
 
     end = f"end{name}"
+    takes = Takes(name, partial, parts, options, shape)
 
     def compile_(parser, token) -> SlotsNode:
         bits = token.split_contents()
         given = token_kwargs(bits[1:], parser)
-        if len(given) != len(bits) - 1 or not set(given) <= options:
-            raise template.TemplateSyntaxError(f"{name} takes {', '.join(sorted(options))} as name=value")
+        if len(given) != len(bits) - 1 or not takes.admits(set(given)):
+            rest = ", data_*" if shape else ""
+            raise template.TemplateSyntaxError(f"{name} takes {', '.join(sorted(options))}{rest} as name=value")
         found = {part: template.NodeList() for part in parts}
         ahead = list(parts)
         while True:
             found[ahead.pop(0)] = parser.parse((*ahead, end))
             marker = parser.next_token().contents
             if marker == end:
-                return SlotsNode(partial, found, given)
+                return SlotsNode(takes, found, given)
             ahead = ahead[ahead.index(marker) :]
 
+    # The template contract reads a tag's parameters from what it wraps.
+    compile_.__wrapped__ = takes  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
     register.tag(name, compile_)
+
+
+CARD_ELEMENTS = frozenset(("section", "article", "figure", "details", "div"))
+
+
+def _drawn(value) -> bool:
+    # By identity, so a count of 0 is still drawn.
+    return value is not None and value is not False and value != ""
+
+
+def _card(name: str, given: dict) -> dict:
+    """A card's opening and closing tags. Built here rather than in its
+    partial, since the element is a choice and every attribute but the class
+    is drawn only when it has a value: True draws a bare attribute."""
+
+    element = given.get("element", "section")
+    if element not in CARD_ELEMENTS:
+        raise template.TemplateSyntaxError(f"{name} element= is one of {', '.join(sorted(CARD_ELEMENTS))}")
+    named = {
+        "class": " ".join(("card", given.get("css") or "")).strip(),
+        "id": given.get("id"),
+        "aria-labelledby": given.get("heading"),
+        "aria-label": given.get("label"),
+        "aria-busy": "true" if given.get("busy") else None,
+    }
+    named |= {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
+    drawn = [(key, value) for key, value in named.items() if _drawn(value)]
+    valued = format_html_join("", ' {}="{}"', ((key, value) for key, value in drawn if value is not True))
+    bare = format_html_join("", " {}", ((key,) for key, value in drawn if value is True))
+    # The element is one of CARD_ELEMENTS and the attributes are escaped above.
+    return {"opening": mark_safe(f"<{element}{valued}{bare}>"), "closing": mark_safe(f"</{element}>")}
 
 
 slotted("section_head", "partials/_section_head.html", ("heading", "aside"), frozenset(("id", "lede")))
@@ -808,3 +909,10 @@ slotted(
     frozenset(("url", "css", "tone", "tip", "title", "label", "modal", "entity")),
 )
 slotted("band_fact", "partials/_band_fact.html", ("value",), frozenset(("icon", "label", "tone")))
+slotted(
+    "card",
+    "partials/_card.html",
+    ("content",),
+    frozenset(("element", "id", "css", "heading", "label", "busy")),
+    shape=_card,
+)

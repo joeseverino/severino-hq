@@ -1,20 +1,9 @@
 """Each host section's own figures, computed once.
 
-A section states its readings in one ``*_reading`` function. Everything that
-needs those numbers derives from it: the dashboard card row, and the snapshot's
-KPI block that the MCP and the section panels read. Nothing recomputes a figure
-a section has already answered, so changing what "needs output" means is one
-edit rather than a hunt for every place that counted it.
-
-Cards are the display projection of a reading: ``{id, label, value, url}``
-plus optional ``detail``, the same shape an extension emits, so the dashboard
-renders host and extension cards through one loop and a new section needs no
-template change to appear.
-
-A section with nothing to report returns no card. That is the whole of the
-"dormant section" behavior: a section carrying no data stops occupying a tile
-on the page checked every day, and lights up on its own the moment it has
-something to say. No flag, no configuration, no decision to revisit.
+A section states its readings in one ``*_reading`` function, and the dashboard
+card row and the snapshot's KPI block the MCP and section panels read derive
+from it, so changing what "needs output" means is one edit rather than a hunt
+for every place that counted it.
 """
 
 from decimal import Decimal
@@ -38,12 +27,20 @@ lazy from .github_estate import repository_for
 lazy from .github_profile import accounts, profile, profiles
 lazy from .timestamps import moment
 
+# The display projection of a reading, in the shape an extension emits, so the
+# dashboard renders host and extension cards through one loop and a new section
+# needs no template change to appear.
 Card = dict[str, Any]
 ZERO_MONEY = Decimal("0.00")
 
 
 def _card(*, id: str, label: str, value: str, url: str, detail: str = "") -> tuple[Card, ...]:
-    """One card, or none at all when the section has nothing to report."""
+    """One card, as the tuple a section answers.
+
+    A section with nothing to report answers ``()`` instead, so it stops
+    occupying a tile on the page checked every day and lights up on its own
+    the moment it has something to say, with no flag to set.
+    """
 
     card: Card = {"id": id, "label": label, "value": value, "url": url}
     if detail:

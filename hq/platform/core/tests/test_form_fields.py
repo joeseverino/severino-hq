@@ -112,10 +112,3 @@ class FormRenderingTests(SimpleTestCase):
 
         (token,) = select(page, "name", "token")
         self.assertFalse([element for element in token.ancestors if "field" in element.classes])
-
-    def test_the_legacy_partial_draws_the_same_group(self):
-        form = _ExampleForm()
-
-        included = self.render('{% include "partials/_form_field.html" with field=form.title %}', form)
-
-        self.assertEqual(group_of(included, "title").classes, {"field", "is-wide"})

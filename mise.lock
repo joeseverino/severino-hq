@@ -2,35 +2,6 @@
 
 lockfile_version = 3
 
-[[tools.actionlint]]
-version = "1.7.12"
-backend = "aqua:rhysd/actionlint"
-specifiers = ["1.7.12"]
-
-[tools.actionlint."platforms.linux-arm64"]
-checksum = "sha256:325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6"
-url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/rhysd/actionlint/releases/assets/384924897"
-provenance = "github-attestations"
-
-[tools.actionlint."platforms.linux-x64"]
-checksum = "sha256:8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
-url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/rhysd/actionlint/releases/assets/384924896"
-provenance = "github-attestations"
-
-[tools.actionlint."platforms.macos-arm64"]
-checksum = "sha256:aba9ced2dee8d27fecca3dc7feb1a7f9a52caefa1eb46f3271ea66b6e0e6953f"
-url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/rhysd/actionlint/releases/assets/384924893"
-provenance = "github-attestations"
-
-[tools.actionlint."platforms.macos-x64"]
-checksum = "sha256:5b44c3bc2255115c9b69e30efc0fecdf498fdb63c5d58e17084fd5f16324c644"
-url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_darwin_amd64.tar.gz"
-url_api = "https://api.github.com/repos/rhysd/actionlint/releases/assets/384924880"
-provenance = "github-attestations"
-
 [[tools.age]]
 version = "1.3.2"
 backend = "aqua:FiloSottile/age"
@@ -54,16 +25,58 @@ url = "https://github.com/FiloSottile/age/releases/download/v1.3.2/age-v1.3.2-da
 url_api = "https://api.github.com/repos/FiloSottile/age/releases/assets/535541897"
 provenance = "github-attestations"
 
-[tools.age."platforms.macos-x64"]
-checksum = "sha256:1d1e4bc66e1427edad7739ae7616157de0e79db8b6d2a1497d7d9925fb06a539"
-url = "https://github.com/FiloSottile/age/releases/download/v1.3.2/age-v1.3.2-darwin-amd64.tar.gz"
-url_api = "https://api.github.com/repos/FiloSottile/age/releases/assets/535541887"
+[[tools."aqua:golangci/golangci-lint"]]
+version = "2.15.0"
+backend = "aqua:golangci/golangci-lint"
+specifiers = ["2.15.0"]
+
+[tools."aqua:golangci/golangci-lint"."platforms.linux-arm64"]
+checksum = "sha256:b4d8f17068b35ee6060cc2f69a16fb48740d706fbba81661c318649c114a6998"
+url = "https://github.com/golangci/golangci-lint/releases/download/v2.15.0/golangci-lint-2.15.0-linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/golangci/golangci-lint/releases/assets/647132775"
 provenance = "github-attestations"
+
+[tools."aqua:golangci/golangci-lint"."platforms.linux-x64"]
+checksum = "sha256:9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea"
+url = "https://github.com/golangci/golangci-lint/releases/download/v2.15.0/golangci-lint-2.15.0-linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/golangci/golangci-lint/releases/assets/647132535"
+provenance = "github-attestations"
+
+[tools."aqua:golangci/golangci-lint"."platforms.macos-arm64"]
+checksum = "sha256:d1e409481a8ca846c4bc97e781eb5cb1bd5c23353a0b3977a1cbda1b1b6447d5"
+url = "https://github.com/golangci/golangci-lint/releases/download/v2.15.0/golangci-lint-2.15.0-darwin-arm64.tar.gz"
+url_api = "https://api.github.com/repos/golangci/golangci-lint/releases/assets/647132534"
+provenance = "github-attestations"
+
+[[tools.ast-grep]]
+version = "0.51.0"
+backend = "aqua:ast-grep/ast-grep"
+specifiers = ["0.51.0"]
+
+[tools.ast-grep."platforms.linux-arm64"]
+checksum = "sha256:73af0ebe5958acee012754a5b2826a186580ef83333092408a7a01096fc30b8b"
+url = "https://github.com/ast-grep/ast-grep/releases/download/0.51.0/app-aarch64-unknown-linux-gnu.zip"
+url_api = "https://api.github.com/repos/ast-grep/ast-grep/releases/assets/644253212"
+
+[tools.ast-grep."platforms.linux-x64"]
+checksum = "sha256:a7eead5552d3a8daad70f5d50d935da44bd0c138e946b5b0a96b1d38169fa639"
+url = "https://github.com/ast-grep/ast-grep/releases/download/0.51.0/app-x86_64-unknown-linux-gnu.zip"
+url_api = "https://api.github.com/repos/ast-grep/ast-grep/releases/assets/644248664"
+
+[tools.ast-grep."platforms.macos-arm64"]
+checksum = "sha256:e18e13c27ed6c4b3ec4de00745b0755dee9dc26c035e226f4dd5d147dca99cc8"
+url = "https://github.com/ast-grep/ast-grep/releases/download/0.51.0/app-aarch64-apple-darwin.zip"
+url_api = "https://api.github.com/repos/ast-grep/ast-grep/releases/assets/644256001"
 
 [[tools.crane]]
 version = "0.22.1"
 backend = "aqua:google/go-containerregistry"
 specifiers = ["0.22.1"]
+
+[tools.crane."platforms.linux-arm64"]
+checksum = "sha256:898c0cff975f898a33e8c4580bdafb0e7c02c7faa33374e946762f97c4ab7110"
+url = "https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/google/go-containerregistry/releases/assets/543544372"
 
 [tools.crane."platforms.linux-x64"]
 checksum = "sha256:0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0"
@@ -74,6 +87,20 @@ url_api = "https://api.github.com/repos/google/go-containerregistry/releases/ass
 checksum = "sha256:2231fc8df8806d20d680ff1225db44e095a55dd6ac1ae8eced4faf4b278b78fb"
 url = "https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Darwin_arm64.tar.gz"
 url_api = "https://api.github.com/repos/google/go-containerregistry/releases/assets/543544436"
+
+[[tools."github:DeusData/codebase-memory-mcp"]]
+version = "0.12.1"
+backend = "github:DeusData/codebase-memory-mcp"
+specifiers = ["0.12.1"]
+
+[tools."github:DeusData/codebase-memory-mcp".options]
+asset_pattern = "codebase-memory-mcp-linux-arm64-portable.tar.gz"
+
+[tools."github:DeusData/codebase-memory-mcp"."platforms.linux-arm64"]
+checksum = "sha256:ed0f1f548cd79b121c401c2e9f7841c189a001af26d3768368088c24f6a53533"
+url = "https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.12.1/codebase-memory-mcp-linux-arm64-portable.tar.gz"
+url_api = "https://api.github.com/repos/DeusData/codebase-memory-mcp/releases/assets/648934891"
+provenance = "github-attestations"
 
 [[tools."github:DeusData/codebase-memory-mcp"]]
 version = "0.12.1"
@@ -101,53 +128,47 @@ url_api = "https://api.github.com/repos/DeusData/codebase-memory-mcp/releases/as
 provenance = "github-attestations"
 
 [[tools."github:github/codeql-action"]]
-version = "2.27.2"
+version = "2.27.3"
 backend = "github:github/codeql-action"
-specifiers = ["2.27.2"]
+specifiers = ["2.27.3"]
+
+[tools."github:github/codeql-action".options]
+version_prefix = "codeql-bundle-v"
+
+[tools."github:github/codeql-action"."platforms.linux-arm64"]
+checksum = "sha256:82a7828e050573e885ba96620c5b72db985ef4a88118dd2baf14ae7b325064d7"
+url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.3/codeql-bundle-linux-arm64.tar.zst"
+url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/648291307"
+provenance = "github-attestations"
+
+[[tools."github:github/codeql-action"]]
+version = "2.27.3"
+backend = "github:github/codeql-action"
+specifiers = ["2.27.3"]
 
 [tools."github:github/codeql-action".options]
 asset_pattern = "codeql-bundle-linux64.tar.zst"
 version_prefix = "codeql-bundle-v"
 
 [tools."github:github/codeql-action"."platforms.linux-x64"]
-checksum = "sha256:f24406b1557c506133db1f972758ee64f14eb3587a53367a1bd737f24495ea97"
-url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.2/codeql-bundle-linux64.tar.zst"
-url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/603160650"
+checksum = "sha256:5e7607e1b721728955e31f5402d460ad227cbd2ffed0d4cc610116755796150e"
+url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.3/codeql-bundle-linux64.tar.zst"
+url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/648290290"
 provenance = "github-attestations"
 
 [[tools."github:github/codeql-action"]]
-version = "2.27.2"
+version = "2.27.3"
 backend = "github:github/codeql-action"
-specifiers = ["2.27.2"]
+specifiers = ["2.27.3"]
 
 [tools."github:github/codeql-action".options]
 asset_pattern = "codeql-bundle-osx64.tar.zst"
 version_prefix = "codeql-bundle-v"
 
 [tools."github:github/codeql-action"."platforms.macos-arm64"]
-checksum = "sha256:6fcb14067caa51ff4dd9a7116955ce14f64027348773dde43a119c0aa618f2ce"
-url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.2/codeql-bundle-osx64.tar.zst"
-url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/603162249"
-provenance = "github-attestations"
-
-[tools."github:github/codeql-action"."platforms.macos-x64"]
-checksum = "sha256:6fcb14067caa51ff4dd9a7116955ce14f64027348773dde43a119c0aa618f2ce"
-url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.2/codeql-bundle-osx64.tar.zst"
-url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/603162249"
-provenance = "github-attestations"
-
-[[tools."github:github/codeql-action"]]
-version = "2.27.2"
-backend = "github:github/codeql-action"
-specifiers = ["2.27.2"]
-
-[tools."github:github/codeql-action".options]
-version_prefix = "codeql-bundle-v"
-
-[tools."github:github/codeql-action"."platforms.linux-arm64"]
-checksum = "sha256:05edcc33992b383aa8daeea1c45e7b3192a95ff4a63883563b41ead6386f7d89"
-url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.2/codeql-bundle-linux-arm64.tar.zst"
-url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/603161381"
+checksum = "sha256:c773b4654a641d02967f40d994bab1850fd8bc3bddb3d20f9af17b0cca3c9a29"
+url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.3/codeql-bundle-osx64.tar.zst"
+url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/648292275"
 provenance = "github-attestations"
 
 [[tools.go]]
@@ -167,9 +188,28 @@ url = "https://dl.google.com/go/go1.27.3.linux-amd64.tar.gz"
 checksum = "sha256:dd3908cf20959d798c1e06ebe5b72213f0505ce01373b40ce3110975a6cd99c2"
 url = "https://dl.google.com/go/go1.27.3.darwin-arm64.tar.gz"
 
-[tools.go."platforms.macos-x64"]
-checksum = "sha256:b6f8e931e4ab497fcde6da8ae4499a58f9d258e55c8a80824a516eae5950a750"
-url = "https://dl.google.com/go/go1.27.3.darwin-amd64.tar.gz"
+[[tools.jactionlint]]
+version = "2.4.0"
+backend = "packslip:github.com/jdx/jactionlint"
+specifiers = ["2.4.0"]
+
+[tools.jactionlint."platforms.linux-arm64"]
+checksum = "sha256:42413391c248f99ff4550d6c866ee717d5ea4ca2b966d9d54ad1503af955e22f"
+url = "https://github.com/jdx/jactionlint/releases/download/v2.4.0/jactionlint_2.4.0_linux_arm64.tar.gz"
+signer = "sigstore-oidc:https://github.com/jdx/jactionlint/.github/workflows/release.yaml"
+repository_ids = { repository = "1404951382" }
+
+[tools.jactionlint."platforms.linux-x64"]
+checksum = "sha256:26ddba81db28fffc51163175c070ee1a9d1150260de4b5232f01d9b749f32d8e"
+url = "https://github.com/jdx/jactionlint/releases/download/v2.4.0/jactionlint_2.4.0_linux_amd64.tar.gz"
+signer = "sigstore-oidc:https://github.com/jdx/jactionlint/.github/workflows/release.yaml"
+repository_ids = { repository = "1404951382" }
+
+[tools.jactionlint."platforms.macos-arm64"]
+checksum = "sha256:349a13dbffdd25376898a256d195806afda08ba97ccc6378cbf2dd11a77ef8e7"
+url = "https://github.com/jdx/jactionlint/releases/download/v2.4.0/jactionlint_2.4.0_darwin_arm64.tar.gz"
+signer = "sigstore-oidc:https://github.com/jdx/jactionlint/.github/workflows/release.yaml"
+repository_ids = { repository = "1404951382" }
 
 [[tools.jq]]
 version = "1.8.2"
@@ -194,24 +234,22 @@ url = "https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-macos-arm64"
 url_api = "https://api.github.com/repos/jqlang/jq/releases/assets/453012783"
 provenance = "github-attestations"
 
-[tools.jq."platforms.macos-x64"]
-checksum = "sha256:e94b266e3c26690550006abe63152b782280f4e14374accdf04cbde844f00bc0"
-url = "https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-macos-amd64"
-url_api = "https://api.github.com/repos/jqlang/jq/releases/assets/453012782"
-provenance = "github-attestations"
-
 [[tools.node]]
-version = "26.12.1"
+version = "26.13.0"
 backend = "core:node"
-specifiers = ["26.12.1"]
+specifiers = ["26.13.0"]
+
+[tools.node."platforms.linux-arm64"]
+checksum = "sha256:439e9c438acdf6a6ffe47418da709153d66c4bed812e30a473faacb107dd2791"
+url = "https://nodejs.org/dist/v26.13.0/node-v26.13.0-linux-arm64.tar.gz"
 
 [tools.node."platforms.linux-x64"]
-checksum = "sha256:0fd1eb7770598f52a21995edf6ed35fc690400fa437c2386af329519e9143132"
-url = "https://nodejs.org/dist/v26.12.1/node-v26.12.1-linux-x64.tar.gz"
+checksum = "sha256:5848553868b402d3fabb5b09270649977780a390f832155721025a08b5104455"
+url = "https://nodejs.org/dist/v26.13.0/node-v26.13.0-linux-x64.tar.gz"
 
 [tools.node."platforms.macos-arm64"]
-checksum = "sha256:1901d539912c02afa10d1cc126943a8855a7eedebe830119463470db5e6c59e8"
-url = "https://nodejs.org/dist/v26.12.1/node-v26.12.1-darwin-arm64.tar.gz"
+checksum = "sha256:d38bd5e5a2ddce6bbb5ce45e46e208337da4d51fffe611e567fd32073d6439f6"
+url = "https://nodejs.org/dist/v26.13.0/node-v26.13.0-darwin-arm64.tar.gz"
 
 [[tools.scorecard]]
 version = "5.6.0"
@@ -233,11 +271,6 @@ checksum = "sha256:1537183c0fcc6d8d1572aabc7a949091a36a2ee6be5bcb65f487cbb0a7b40
 url = "https://github.com/ossf/scorecard/releases/download/v5.6.0/scorecard_5.6.0_darwin_arm64.tar.gz"
 url_api = "https://api.github.com/repos/ossf/scorecard/releases/assets/632187121"
 
-[tools.scorecard."platforms.macos-x64"]
-checksum = "sha256:6eb92048bc537810d383d7e28233b2f118e78b6fef9e47b2c427c4d01fc096ad"
-url = "https://github.com/ossf/scorecard/releases/download/v5.6.0/scorecard_5.6.0_darwin_amd64.tar.gz"
-url_api = "https://api.github.com/repos/ossf/scorecard/releases/assets/632187117"
-
 [[tools.shellcheck]]
 version = "0.11.0"
 backend = "aqua:koalaman/shellcheck"
@@ -258,44 +291,74 @@ checksum = "sha256:56affdd8de5527894dca6dc3d7e0a99a873b0f004d7aabc30ae407d3f48b0
 url = "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.darwin.aarch64.tar.xz"
 url_api = "https://api.github.com/repos/koalaman/shellcheck/releases/assets/279056932"
 
-[tools.shellcheck."platforms.macos-x64"]
-checksum = "sha256:3c89db4edcab7cf1c27bff178882e0f6f27f7afdf54e859fa041fca10febe4c6"
-url = "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.darwin.x86_64.tar.xz"
-url_api = "https://api.github.com/repos/koalaman/shellcheck/releases/assets/279056930"
-
 [[tools.trivy]]
-version = "0.76.0"
+version = "0.76.1"
 backend = "aqua:aquasecurity/trivy"
-specifiers = ["0.76.0"]
+specifiers = ["0.76.1"]
+
+[tools.trivy."platforms.linux-arm64"]
+checksum = "sha256:e174dff2a6dba5e3ae41f8d0537a6324405bd08132497340304c6b20e0f16a1f"
+url = "https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-ARM64.tar.gz"
+url_api = "https://api.github.com/repos/aquasecurity/trivy/releases/assets/662254480"
+provenance = "cosign"
 
 [tools.trivy."platforms.linux-x64"]
-checksum = "sha256:e24b1c51293c1b15e4ba8d45bbc7891ba053f90278ec2698f3562c993e145fe7"
-url = "https://github.com/aquasecurity/trivy/releases/download/v0.76.0/trivy_0.76.0_Linux-64bit.tar.gz"
-url_api = "https://api.github.com/repos/aquasecurity/trivy/releases/assets/640213415"
+checksum = "sha256:c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0"
+url = "https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz"
+url_api = "https://api.github.com/repos/aquasecurity/trivy/releases/assets/662254617"
 provenance = "cosign"
 
 [tools.trivy."platforms.macos-arm64"]
-checksum = "sha256:e7ec0d21fe842553f59af99aba2efbcc822369fbaed27019c575408b6d135fce"
-url = "https://github.com/aquasecurity/trivy/releases/download/v0.76.0/trivy_0.76.0_macOS-ARM64.tar.gz"
-url_api = "https://api.github.com/repos/aquasecurity/trivy/releases/assets/640213409"
+checksum = "sha256:11a9b6cd2752011b54f01ea4bd0dbfa9f0c41dc6538d5a3f9d23955f471bf4e5"
+url = "https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_macOS-ARM64.tar.gz"
+url_api = "https://api.github.com/repos/aquasecurity/trivy/releases/assets/662254764"
 provenance = "cosign"
 
 [[tools.uv]]
-version = "0.13.5"
+version = "0.13.6"
 backend = "aqua:astral-sh/uv"
-specifiers = ["0.13.5"]
+specifiers = ["0.13.6"]
+
+[tools.uv."platforms.linux-arm64"]
+checksum = "sha256:229e194255c7958d86d56e8790d969a6f74736592133f0dfd0076f754c642c1d"
+url = "https://github.com/astral-sh/uv/releases/download/0.13.6/uv-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/679980412"
+provenance = "github-attestations"
 
 [tools.uv."platforms.linux-x64"]
-checksum = "sha256:f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
-url = "https://github.com/astral-sh/uv/releases/download/0.13.5/uv-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/664336023"
+checksum = "sha256:f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645"
+url = "https://github.com/astral-sh/uv/releases/download/0.13.6/uv-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/679980644"
 provenance = "github-attestations"
 
 [tools.uv."platforms.macos-arm64"]
-checksum = "sha256:743f85035a1996ecb350659e01cd9faea9709829be09b1b4b03c73eaf3c9cd73"
-url = "https://github.com/astral-sh/uv/releases/download/0.13.5/uv-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/664335803"
+checksum = "sha256:60fbd5c8a1ed681845eea28d9d622fcde03c51e91a43465b64a1e17db1ed3472"
+url = "https://github.com/astral-sh/uv/releases/download/0.13.6/uv-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/679980393"
 provenance = "github-attestations"
+
+[[tools.vale]]
+version = "3.24.0"
+backend = "aqua:vale-cli/vale"
+specifiers = ["3.24.0"]
+
+[tools.vale."platforms.linux-arm64"]
+checksum = "sha256:104cbd349279e50c4cb40adb70adf345d93cc4a3a0191f9e68bdccb97086b582"
+checksum_source = "mise-versions"
+url = "https://github.com/vale-cli/vale/releases/download/v3.24.0/vale_3.24.0_Linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/vale-cli/vale/releases/assets/603879360"
+
+[tools.vale."platforms.linux-x64"]
+checksum = "sha256:867534ddb678abca7f214bc4706ead0922bd5252ffe8035fc227013f66c8b214"
+checksum_source = "mise-versions"
+url = "https://github.com/vale-cli/vale/releases/download/v3.24.0/vale_3.24.0_Linux_64-bit.tar.gz"
+url_api = "https://api.github.com/repos/vale-cli/vale/releases/assets/603879404"
+
+[tools.vale."platforms.macos-arm64"]
+checksum = "sha256:87b513f26499f6657c15cf7175ba5b058a7c1ff2bb2d4e07265db2dd43451e44"
+checksum_source = "mise-versions"
+url = "https://github.com/vale-cli/vale/releases/download/v3.24.0/vale_3.24.0_macOS_arm64.tar.gz"
+url_api = "https://api.github.com/repos/vale-cli/vale/releases/assets/603879362"
 
 [[tools.yq]]
 version = "4.54.1"
@@ -320,16 +383,16 @@ url = "https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_darwin_arm64
 url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/597222609"
 provenance = "cosign"
 
-[tools.yq."platforms.macos-x64"]
-checksum = "sha256:3a812fce205a4d67014fb71b7fa297092210e580df3d8f52dddc2cf3a599c22b"
-url = "https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_darwin_amd64"
-url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/597222619"
-provenance = "cosign"
-
 [[tools.zizmor]]
 version = "1.31.1"
 backend = "aqua:zizmorcore/zizmor"
 specifiers = ["1.31.1"]
+
+[tools.zizmor."platforms.linux-arm64"]
+checksum = "sha256:37eebbd5762a44f262d94875431b14a6d2402991e90a685113ea97b8b41be833"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.31.1/zizmor-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/645467282"
+provenance = "github-attestations"
 
 [tools.zizmor."platforms.linux-x64"]
 checksum = "sha256:d185f726bdaf92df78273217dfdd24ebcd6b0ef48cf3ce776ff5762b6e138c99"

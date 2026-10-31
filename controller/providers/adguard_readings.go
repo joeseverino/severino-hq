@@ -43,19 +43,14 @@ func clientRecords(payload adguardapi.Clients, ref string) []any {
 	claimed := map[string]bool{}
 	for _, client := range deref(payload.Clients) {
 		ids := []string{}
-		addresses := []string{}
-		seen := map[string]bool{}
 		for _, value := range deref(client.Ids) {
-			id := strings.TrimSpace(value)
-			if id == "" {
-				continue
+			if id := strings.TrimSpace(value); id != "" {
+				ids = append(ids, id)
 			}
-			ids = append(ids, id)
-			if ip := address(id); ip != "" && !seen[ip] {
-				addresses = append(addresses, ip)
-				seen[ip] = true
-				claimed[ip] = true
-			}
+		}
+		addresses := distinctNames(ids, address)
+		for _, ip := range addresses {
+			claimed[ip] = true
 		}
 		found = append(found, AdGuardPersistentClient{ConnectionRef: ref, Name: deref(client.Name), Source: "persistent", IDs: ids, Addresses: addresses, UseGlobalSettings: client.UseGlobalSettings, FilteringEnabled: client.FilteringEnabled})
 	}
@@ -125,8 +120,9 @@ func upstream(value string) (AdGuardUpstream, bool) {
 	return AdGuardUpstream{Host: host, Transport: transport, Domains: domains}, true
 }
 
-// The parts of an adguard.dns record, each read from its own endpoint. A part
-// whose read is refused is left out of the record, not nulled.
+// AdGuardUpstreamsPart and the parts after it make an adguard.dns record, each
+// read from its own endpoint. A part whose read is refused is left out of the
+// record, not nulled.
 type AdGuardUpstreamsPart struct {
 	Upstreams     []AdGuardUpstream `json:"upstreams"`
 	UpstreamMode  string            `json:"upstream_mode"`

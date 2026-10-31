@@ -429,7 +429,7 @@ func (r *Registry) inspectContainers(ctx context.Context, at portainerSite, ids 
 			return nil
 		})
 	}
-	group.Wait()
+	_ = group.Wait() // each call returns nil and keeps its error in out
 	return out
 }
 

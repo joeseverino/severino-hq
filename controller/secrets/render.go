@@ -54,7 +54,7 @@ type Config struct {
 // under the read.
 var (
 	ErrConfig    = errors.New("the configuration was refused")
-	ErrUnhealthy = errors.New("Severino HQ did not become healthy after secret rotation.")
+	ErrUnhealthy = errors.New("the web container did not become healthy after secret rotation")
 	ErrChanging  = errors.New("the vault kept changing while it was read")
 )
 

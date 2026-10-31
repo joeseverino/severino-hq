@@ -10,7 +10,9 @@ import (
 
 func TestTheTreeIsTheImagesSealed(t *testing.T) {
 	f := newFakeHost(t)
-	os.WriteFile(filepath.Join(f.machine.Lib, "previous-release"), nil, 0o644)
+	if err := os.WriteFile(filepath.Join(f.machine.Lib, "previous-release"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := f.machine.Sync(context.Background(), next); err != nil {
 		t.Fatal(err)
@@ -40,7 +42,9 @@ func TestTheTreeIsTheImagesSealed(t *testing.T) {
 
 func TestATreeWithALinkIsRefused(t *testing.T) {
 	f := newFakeHost(t)
-	os.Symlink("/etc/shadow", filepath.Join(f.image, "deploy", "bin", "planted"))
+	if err := os.Symlink("/etc/shadow", filepath.Join(f.image, "deploy", "bin", "planted")); err != nil {
+		t.Fatal(err)
+	}
 
 	err := f.machine.Sync(context.Background(), next)
 
@@ -54,8 +58,10 @@ func TestATreeWithALinkIsRefused(t *testing.T) {
 
 func TestAUnitNamingWhatTheTreeLacksIsRefused(t *testing.T) {
 	f := newFakeHost(t)
-	os.WriteFile(filepath.Join(f.image, "deploy", "systemd", "severino-hq-orphan.service"),
-		[]byte("[Service]\nExecStart=/usr/local/lib/severino-hq/deploy/bin/absent\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(f.image, "deploy", "systemd", "severino-hq-orphan.service"),
+		[]byte("[Service]\nExecStart=/usr/local/lib/severino-hq/deploy/bin/absent\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	err := f.machine.Sync(context.Background(), next)
 

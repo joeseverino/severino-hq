@@ -20,8 +20,10 @@ const (
 	JobTimeout = 30 * time.Minute
 	// CommandTimeout bounds one local tool or SSH call.
 	CommandTimeout = 180 * time.Second
-	// SSHConnectTimeoutSeconds is ssh's ConnectTimeout, in the seconds ssh takes.
-	SSHConnectTimeoutSeconds = 10
+	// SSHConnectTimeout bounds an SSH call's dial, handshake and
+	// authentication, so a host that never answers fails well inside
+	// CommandTimeout.
+	SSHConnectTimeout = 10 * time.Second
 	// SlowSweep is how long a sweep runs before it is worth a line naming the
 	// slowest readers.
 	SlowSweep = 60 * time.Second

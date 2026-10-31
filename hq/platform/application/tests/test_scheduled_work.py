@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.domains.jobs import runner
-from hq.domains.jobs.models import Job
+from hq.domains.jobs.models import HEARTBEAT_GRACE, Job
 from hq.domains.jobs.runner import Failed
 
 from .. import scheduled_work
@@ -165,8 +165,23 @@ class DueTests(TestCase):
             answer = scheduled_work.run("due")
 
         run.assert_called_once()
-        self.assertEqual(Job.objects.get(kind="due").result, {"due": 1, "ended": {"example.work": "succeeded"}})
+        self.assertEqual(
+            Job.objects.get(kind="due").result,
+            {"due": 1, "ended": {"example.work": "succeeded"}, "lost": 0, "lapsed": 0},
+        )
         self.assertEqual(answer["state"], "succeeded")
+
+    def test_a_job_whose_process_stopped_is_marked_lost(self):
+        stale = timezone.now() - HEARTBEAT_GRACE - timedelta(minutes=1)
+        gone = Job.objects.create(
+            kind="example.gone", label="Gone", state=Job.State.RUNNING, started_at=stale, heartbeat_at=stale
+        )
+        with self.schedule(mock.Mock()), mock.patch("hq.platform.application.outbound_work.due", return_value=()):
+            scheduled_work.run("due")
+
+        gone.refresh_from_db()
+        self.assertEqual(gone.state, Job.State.LOST)
+        self.assertEqual(Job.objects.get(kind="due").result["lost"], 1)
 
     def test_work_done_within_its_cadence_is_left_alone(self):
         self.done("example.work", timedelta(hours=3))

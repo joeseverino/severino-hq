@@ -5,11 +5,19 @@ where things are listed. It never reaches a spec, a generation or the
 controller: the world does not change because somebody starred a domain.
 """
 
+from dataclasses import dataclass, field
+from typing import Annotated, Any
+
+from django.core.exceptions import ValidationError
+from django.db import transaction
 lazy from django.db.models import Max
 
-from hq.platform.core.models import Pin
+from hq.platform.core.audit import record_event
+from hq.platform.core.models import AuditLog, Pin
 
+from .command_fields import Describe
 from .projection import read_once
+from .security import Principal, person
 
 DOMAIN = "domain"
 # A service, kept at the top of the list that shows every hostname HQ knows.
@@ -21,6 +29,32 @@ SERVICE = "service"
 # there and most of it is not what an operator wants a shortcut to, so the panel
 # shows what has been chosen and falls back to everything when nothing has.
 DASHBOARD_LINK = "dashboard_link"
+KINDS = (DOMAIN, SERVICE, DASHBOARD_LINK)
+
+# The capabilities a person keeps their pins through.
+PIN = "pin.toggle"
+MOVE = "pin.move"
+CHOOSE = "pin.choose"
+AUDIT_LABEL = "Pin"
+
+
+@dataclass(frozen=True, slots=True)
+class PinCommand:
+    kind: Annotated[str, Describe("What type of thing to pin.")]
+    key: Annotated[str, Describe("Which one.")]
+
+
+@dataclass(frozen=True, slots=True)
+class MoveCommand:
+    kind: Annotated[str, Describe("What type of pin to move.")]
+    key: Annotated[str, Describe("Which pin.")]
+    up: Annotated[bool, Describe("Move it up; otherwise down.")] = False
+
+
+@dataclass(frozen=True, slots=True)
+class ChooseCommand:
+    kind: Annotated[str, Describe("What type of pins to set.")]
+    keys: Annotated[list[str], Describe("Every pin of that type, in order.")] = field(default_factory=list)
 
 
 def ordered(user, target_kind: str) -> tuple[str, ...]:
@@ -30,7 +64,7 @@ def ordered(user, target_kind: str) -> tuple[str, ...]:
     a set for the far more common question of whether one key is in there.
     """
 
-    if not getattr(user, "is_authenticated", False):
+    if user is None or not user.is_authenticated:
         return ()
     return read_once(
         f"pins:{user.pk}:{target_kind}",
@@ -83,7 +117,7 @@ def move(user, target_kind: str, target_key: str, delta: int) -> None:
     other's work.
     """
 
-    if not getattr(user, "is_authenticated", False) or delta not in (-1, 1):
+    if user is None or not user.is_authenticated or delta not in (-1, 1):
         return
     keys = list(ordered(user, target_kind))
     key = str(target_key).strip().lower()
@@ -105,7 +139,7 @@ def reorder(user, target_kind: str, keys) -> None:
     things without meaning to.
     """
 
-    if not getattr(user, "is_authenticated", False):
+    if user is None or not user.is_authenticated:
         return
     known = set(ordered(user, target_kind))
     wanted = [key for key in (str(item).strip().lower() for item in keys) if key in known]
@@ -127,7 +161,7 @@ def replace(user, target_kind: str, keys) -> None:
     on what was already stored and drift the moment two tabs disagree.
     """
 
-    if not getattr(user, "is_authenticated", False):
+    if user is None or not user.is_authenticated:
         return
     wanted = {str(key).strip().lower() for key in keys if str(key).strip()}
     Pin.objects.filter(user=user, target_kind=target_kind).exclude(target_key__in=wanted).delete()
@@ -137,3 +171,59 @@ def replace(user, target_kind: str, keys) -> None:
         Pin(user=user, target_kind=target_kind, target_key=key, position=start + offset)
         for offset, key in enumerate(sorted(wanted - existing))
     )
+
+
+def _kind(kind: str) -> str:
+    if kind not in KINDS:
+        raise ValidationError({"kind": ValidationError("Not a type of pin.", code="invalid_choice")})
+    return kind
+
+
+def _key(key: str) -> str:
+    if not key.strip():
+        raise ValidationError({"key": ValidationError("Name what to pin.", code="required")})
+    return key
+
+
+def _audit(user, message: str, **metadata: Any) -> None:
+    record_event(
+        action=AuditLog.Action.UPDATED,
+        type_label=AUDIT_LABEL,
+        message=message,
+        metadata=metadata,
+        user=user,
+        required=True,
+    )
+
+
+@transaction.atomic
+def pin(command: PinCommand, *, principal: Principal) -> dict[str, Any]:
+    """Pin or unpin one thing for the person asking: the ``pin.toggle`` capability."""
+
+    kind, key = _kind(command.kind), _key(command.key)
+    user = person(principal)
+    pinned_now = toggle(user, kind, key)
+    _audit(user, "Pinned." if pinned_now else "Unpinned.", kind=kind, key=key, pinned=pinned_now)
+    return {"ok": True, "kind": kind, "key": key, "pinned": pinned_now}
+
+
+@transaction.atomic
+def move_pin(command: MoveCommand, *, principal: Principal) -> dict[str, Any]:
+    """Move one of the person's pins past its neighbor: the ``pin.move`` capability."""
+
+    kind, key = _kind(command.kind), _key(command.key)
+    user = person(principal)
+    move(user, kind, key, -1 if command.up else 1)
+    _audit(user, "Moved a pin.", kind=kind, key=key, up=command.up)
+    return {"ok": True, "kind": kind}
+
+
+@transaction.atomic
+def choose(command: ChooseCommand, *, principal: Principal) -> dict[str, Any]:
+    """Set exactly which things of a kind the person pins: the ``pin.choose`` capability."""
+
+    kind = _kind(command.kind)
+    user = person(principal)
+    replace(user, kind, command.keys)
+    _audit(user, "Chose what to pin.", kind=kind, count=len(command.keys))
+    return {"ok": True, "kind": kind}

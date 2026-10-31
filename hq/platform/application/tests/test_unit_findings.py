@@ -121,7 +121,7 @@ class RecordTests(SimpleTestCase):
             with self.subTest(field=name):
                 self.assertTrue(schema["type"] == "integer" or schema.get("pattern"), "free text")
                 self.assertNotRegex(name, r"exec|environment|credential|path|command")
-        for sentinel in (
+        for refused in (
             "EXAMPLE_TOKEN=sentinel-value",
             "/run/example/token",
             "two words",
@@ -129,7 +129,7 @@ class RecordTests(SimpleTestCase):
         ):
             for name, schema in declared["properties"].items():
                 if "pattern" in schema:
-                    self.assertIsNone(re.search(schema["pattern"], sentinel), (name, sentinel))
+                    self.assertIsNone(re.search(schema["pattern"], refused), (name, refused))
 
 
 @tag("source")

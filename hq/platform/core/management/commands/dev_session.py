@@ -3,10 +3,7 @@
     python manage.py dev_session <username>
 
 Prints ``<cookie name>=<session key>``, for a browser or ``curl --cookie`` to
-send. The session is signed with this process's key and the account's stored
-password hash, so it only works against a server that shares this database and
-``DJANGO_SECRET_KEY``. It creates no account, and it refuses unless DEBUG is
-on, so it cannot mint a session for a server anyone else reaches.
+send to a server that shares this database and ``DJANGO_SECRET_KEY``.
 """
 
 from importlib import import_module
@@ -27,6 +24,7 @@ class Command(BaseCommand):
 
     @override
     def handle(self, *args, **options):
+        # So it cannot mint a session for a server anyone else reaches.
         if not settings.DEBUG:
             raise CommandError("dev_session runs only with DEBUG on: it is for a development server.")
         try:
@@ -39,5 +37,6 @@ class Command(BaseCommand):
         # With single sign-on on, an ID token with no expiry counts as expired
         # and the next page asks the provider again; this session has none.
         request.session["oidc_id_token_expiration"] = request.session.get_expiry_date().timestamp()
+        # Signed with this process's key and the account's stored password hash.
         request.session.save()
         self.stdout.write(f"{settings.SESSION_COOKIE_NAME}={request.session.session_key}")

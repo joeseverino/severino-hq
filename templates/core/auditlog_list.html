@@ -35,7 +35,7 @@ says it.
     {% endwith %}
   {% else %}
     {% with event=row.event %}
-    <td class="row-gutter"><a href="{% url 'core:audit_detail' event.pk %}"><strong>{{ event.object_repr|default:event.type_label|readout }}</strong></a>{% row_toggle %}{% if event.object_type and event.object_repr %}<br><span class="muted">{{ event.type_label|breakable }}<span class="narrow-only"> · {{ event.get_action_display|breakable }}</span></span>{% else %}<span class="narrow-only"><br><span class="muted">{{ event.get_action_display|breakable }}</span></span>{% endif %}</td>
+    <td class="row-gutter"><a href="{% url 'core:audit_detail' event.pk %}"><strong>{{ event.object_repr|default:event.type_label|readout }}</strong></a>{% row_toggle %}{% if event.object_type and event.object_repr %}<br><span class="muted">{{ event.type_label|breakable }}<span class="narrow-only">{% dot %}{{ event.get_action_display|breakable }}</span></span>{% else %}<span class="narrow-only"><br><span class="muted">{{ event.get_action_display|breakable }}</span></span>{% endif %}</td>
     <td class="muted date-col">{{ event.created_at|when }}</td>
     <td>{{ event.actor_label|breakable }}</td>
     <td><span class="pill pill-{{ event.action }}">{{ event.get_action_display|breakable }}</span></td>

@@ -7,11 +7,11 @@ button, naming the thing) and `cancel_url`. It works with scripting off and is
 the same two clicks either way.
 {% endcomment %}
 {% block page %}
-<section class="card confirm">
+{% card css="confirm" %}
   {% block consequences %}{% endblock %}
   <p class="form-actions">
     {% post_button confirm.label confirm.url css="btn danger" %}
     <a class="btn ghost" href="{{ confirm.cancel_url }}">Cancel</a>
   </p>
-</section>
+{% endcard %}
 {% endblock %}

@@ -8,9 +8,13 @@ import (
 
 // The client's types, as the renderer names them.
 type (
+	// Client reads one Connect server.
 	Client = client.Client
-	Token  = client.Token
-	Error  = client.Error
+	// Token is a Connect bearer token that never prints.
+	Token = client.Token
+	// Error is one failed exchange.
+	Error = client.Error
+	// Health is Connect's own account of itself.
 	Health = client.Health
 )
 

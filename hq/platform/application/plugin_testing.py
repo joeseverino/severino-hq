@@ -1,30 +1,19 @@
 """Boot an extension the way production does: alongside a sibling.
 
-A plugin's own suite loads that plugin and nothing else, so a surface that
-composes across extensions is only ever tested in a world where it is alone.
-Every assertion that reads "nothing else is installed" then passes locally and
-is wrong in production, and no per-repo CI can see it: the sibling lives in a
-different repository.
-
-A composing page that asserts an empty state or an empty cross-extension queue
-must hold that assertion with a sibling installed, because production always
-has one.
-
-    class HomeTests(ComposedPluginTestCase, TestCase):
-        siblings = (sibling(cards=({"id": "a", "label": "Open", "value": 3,
-                                    "url": "/a/"},)),)
-
-        def test_a_sibling_panel_appears(self):
-            ...
-
-Siblings are synthetic: no import, no database, no second repository checked
-out. They exist to make "something else is installed" true.
+A plugin's own suite loads that plugin alone, so an assertion that nothing else
+is installed (an empty state, an empty cross-extension queue) passes there and
+is wrong in production, where a sibling always is, and no per-repo CI can see
+it. ``ComposedPluginTestCase`` installs synthetic siblings (``sibling``): no
+import, no database, no second repository, only "something else is installed".
 """
 
 import os
 import re
-from collections.abc import Iterable
-from contextlib import ExitStack
+import sys
+import types
+from collections.abc import Iterable, Iterator, Mapping
+from contextlib import AbstractContextManager, ExitStack, contextmanager
+from dataclasses import replace
 from datetime import date, timedelta
 from functools import partial
 from pathlib import Path
@@ -32,8 +21,9 @@ from typing import Any
 from unittest import mock
 
 lazy from django.template import engines
-lazy from django.template.base import TextNode
+lazy from django.template.base import TextNode, Variable
 lazy from django.template.defaulttags import IfNode
+lazy from django.template.library import TagHelperNode
 lazy from django.utils import timezone
 
 lazy from hq.platform.core.stylesheets import stylesheet
@@ -48,6 +38,7 @@ from .plugins import (
 )
 from .ui import DomainOverview, Insight
 lazy from . import plugins
+lazy from .connection_contracts import ConnectionSpec
 lazy from .derivation_testing import frozen
 lazy from .derivations import counting
 lazy from .projection import projection_scope
@@ -81,18 +72,11 @@ def selector_classes(selector: str) -> list[str]:
 def undefined_style_classes(template_root: str | Path) -> list[str]:
     """Class names an extension's templates use that the host does not define.
 
-    An extension that invents a class gets no error and no styling: the page
-    renders, slightly wrong, and stays that way. The host has this check for
-    its own partials, but it cannot see an extension's templates: they live in
-    another repository and are not installed when the host's suite runs. So the
-    check has to run from the extension's side, against the host's real bundle.
-
-        class StyleTests(SimpleTestCase):
-            def test_templates_only_use_defined_classes(self):
-                root = Path(__file__).resolve().parent / "templates"
-                self.assertEqual(undefined_style_classes(root), [])
-
-    Returns sorted "template.html: .name" strings so a failure names the file.
+    An invented class renders unstyled with no error, and the host's own check
+    cannot see templates in another repository, so this runs from the
+    extension's suite against the host's real bundle, as
+    ``assertEqual(undefined_style_classes(templates), [])``. Returns sorted
+    "template.html: .name" strings so a failure names the file.
     """
     defined = {name for selector in stylesheet_selectors(stylesheet()) for name in selector_classes(selector)}
     offenders = set()
@@ -120,7 +104,7 @@ def _heading_marker(node) -> str:
     """A heading, marked when it is given a literal drop rank."""
 
     drop = node.kwargs.get("drop")
-    literal = getattr(getattr(drop, "var", None), "literal", None)
+    literal = drop.var.literal if drop is not None and isinstance(drop.var, Variable) else None
     return _DROPPED_HEADING if literal else _HEADING
 
 
@@ -135,7 +119,7 @@ def _flatten(nodelist, out: list[str]) -> list[str]:
             out.append(_OPEN)
             _flatten(node.nodelist, out)
             out.append(_CLOSE)
-        elif getattr(node, "func", None) is table_tags.table_heading:
+        elif isinstance(node, TagHelperNode) and node.func is table_tags.table_heading:
             out.append(_HEADING if "select_all" in node.kwargs else _heading_marker(node))
         elif isinstance(node, IfNode):
             for _condition, branch in node.conditions_nodelists:
@@ -225,19 +209,11 @@ def sibling(
 def providers_derived_again(plugin_id: str, *, window: tuple[date, date] | None = None) -> list[str]:
     """Each provider of ``plugin_id`` that is not answered from what is stored.
 
-    HQ asks a plugin's attention, dashboard, overview and calendar providers
-    through a derivation, and answers a second question from the first's
-    stored answer until a table the provider read is written. A provider is
-    named here when that does not hold: what it returned could not be kept (it
-    does not pickle), it comes back unequal to what was stored, or it is
-    built anew on every call around something that cannot be compared.
-
-        def test_every_provider_is_answered_from_what_is_stored(self):
-            self.assertEqual(providers_derived_again("example.notes"), [])
-
-    Call it with the extension's records in place, so the providers have
-    something to say. ``window`` is the days the calendar sources are asked
-    for; the year around today when left out.
+    Named when what it returned does not pickle, comes back unequal to what was
+    stored, or is built anew around something that cannot be compared
+    (docs/Plugins.md#derived-reads). Call it with the extension's records in
+    place; ``window`` is the days calendar sources are asked for, the year
+    around today when left out.
     """
 
     first, last = window or (
@@ -274,6 +250,78 @@ def providers_derived_again(plugin_id: str, *, window: tuple[date, date] | None 
     return again
 
 
+@contextmanager
+def importable(modules: Mapping[str, Mapping[str, Any]]) -> Iterator[None]:
+    """Each module named in ``modules`` importable for the block, holding the
+    attributes given for it.
+
+    A synthetic extension is then reached the way production reaches a real
+    one, by the ``module:attribute`` references the host imports, and a name
+    no module here holds imports as it always would.
+    """
+
+    made = {}
+    for name, attributes in modules.items():
+        module = types.ModuleType(name)
+        vars(module).update(attributes)
+        made[name] = module
+    # Only these names are put back: a module first imported inside the block
+    # stays imported, as it would after any other import.
+    held = {name: sys.modules[name] for name in made if name in sys.modules}
+    sys.modules.update(made)
+    try:
+        yield
+    finally:
+        for name, module in made.items():
+            if sys.modules.get(name) is module:
+                del sys.modules[name]
+        sys.modules.update(held)
+
+
+@contextmanager
+def installed(*siblings: tuple[PluginManifest, PluginIntegration], alone: bool = False) -> Iterator[None]:
+    """``siblings`` installed beside whatever the suite already loads, for the
+    block: each the result of a ``sibling(...)`` call. With ``alone`` they are
+    the whole installed set, so ``installed(alone=True)`` is the host as it runs
+    with no extension."""
+
+    real = "" if alone else os.environ.get("SEVERINO_HQ_PLUGINS", "")
+    references = [f"{manifest.id}:manifest" for manifest, _ in siblings]
+    environment = {
+        "SEVERINO_HQ_PLUGINS": ",".join(part for part in (real, *references) if part),
+        # A sibling built here exists for the length of one test. It has no
+        # wheel, no artifact digest and no signed approval, so it can never
+        # appear in the admission lock, and admission requires the lock to
+        # match the enabled set exactly. Left on, the kit's own siblings are
+        # read as an unsigned plugin and every suite using it fails.
+        #
+        # Stated rather than inherited, because admission defaults to off
+        # under DEBUG and on otherwise, and the composed image runs this suite
+        # with DEBUG off. A test kit must behave the same in both.
+        "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION": "0",
+    }
+    modules = {
+        manifest.id: {"manifest": manifest, "integration": lambda found=integration: found}
+        for manifest, integration in siblings
+    }
+    # The registry is cached for the process; a sibling appearing or leaving
+    # mid-suite would otherwise be invisible or permanent.
+    clear_plugin_composition_cache()
+    try:
+        with importable(modules), mock.patch.dict(os.environ, environment, clear=False):
+            yield
+    finally:
+        clear_plugin_composition_cache()
+
+
+def offering(*specs: ConnectionSpec, alone: bool = False) -> AbstractContextManager[None]:
+    """An example extension installed for the block, offering ``specs`` as its
+    connection families; with ``alone``, the only extension installed."""
+
+    manifest, contribution = sibling(identifier="example.connections", name="Connections")
+    return installed((manifest, replace(contribution, connections=lambda: specs)), alone=alone)
+
+
 class ComposedPluginTestCase:
     """Mixin: installs `siblings` beside whatever the suite already loads.
 
@@ -287,51 +335,4 @@ class ComposedPluginTestCase:
         super().setUp()
         self._composition = ExitStack()
         self.addCleanup(self._composition.close)
-        # The registry is cached for the process; a sibling appearing or leaving
-        # mid-suite would otherwise be invisible or permanent.
-        clear_plugin_composition_cache()
-        self.addCleanup(clear_plugin_composition_cache)
-
-        real = os.environ.get("SEVERINO_HQ_PLUGINS", "")
-        manifests = [manifest for manifest, _ in self.siblings]
-        contributions = {manifest.id: integration for manifest, integration in self.siblings}
-        references = [f"{manifest.id}:manifest" for manifest in manifests]
-        self._composition.enter_context(
-            mock.patch.dict(
-                os.environ,
-                {
-                    "SEVERINO_HQ_PLUGINS": ",".join(part for part in (real, *references) if part),
-                    # A sibling built here exists for the length of one test.
-                    # It has no wheel, no artifact digest and no signed
-                    # approval, so it can never appear in the admission lock,
-                    # and admission requires the lock to match the enabled set
-                    # exactly. Left on, the kit's own siblings are read as an
-                    # unsigned plugin and every suite using it fails.
-                    #
-                    # Stated rather than inherited, because admission defaults
-                    # to off under DEBUG and on otherwise, and the composed
-                    # image runs this suite with DEBUG off. A test kit must
-                    # behave the same in both.
-                    "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION": "0",
-                },
-                clear=False,
-            )
-        )
-
-        original = __import__("hq.platform.application.plugins", fromlist=["_import"])._import
-
-        def _import(spec: str):
-            """Resolve a synthetic reference; defer to the real one otherwise.
-
-            Deferring matters: the plugin under test is loaded by its real
-            module path, and replacing the importer outright would unload it.
-            """
-            module, _, attribute = spec.partition(":")
-            if module in contributions:
-                if attribute == "manifest":
-                    return next(m for m in manifests if m.id == module)
-                if attribute == "integration":
-                    return lambda: contributions[module]
-            return original(spec)
-
-        self._composition.enter_context(mock.patch("hq.platform.application.plugins._import", side_effect=_import))
+        self._composition.enter_context(installed(*self.siblings))

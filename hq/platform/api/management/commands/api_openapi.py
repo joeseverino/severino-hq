@@ -4,7 +4,7 @@ from typing import Any, override
 
 from django.core.management.base import BaseCommand, CommandError
 
-lazy from hq.platform.api.openapi import DOCUMENT_PATH, document, render
+lazy from hq.platform.api.openapi import DOCUMENT_PATH, EXAMPLES_PATH, document, render
 
 
 class Command(BaseCommand):
@@ -35,7 +35,11 @@ class Command(BaseCommand):
                     ),
                     ending="",
                 )
-                raise CommandError(f"{DOCUMENT_PATH.name} is behind the API; run `mise run fix` and commit the result.")
+                raise CommandError(
+                    f"{DOCUMENT_PATH.name} is behind the API; run `mise run fix` and commit the result, "
+                    f"or `mise run fix:api-examples` first when a response's shape changed, to record "
+                    f"{EXAMPLES_PATH.name} again."
+                )
             self.stdout.write(f"{DOCUMENT_PATH.name} is current.")
             return
         DOCUMENT_PATH.write_text(current, encoding="utf-8")

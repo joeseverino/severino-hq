@@ -1,29 +1,10 @@
-"""Showing the shape of the data without showing the data.
+"""Showing the shape of the data without showing the data, as a viewing mode.
 
-A viewing mode, and deliberately nothing more than that. It lives in the session
-of the one browser that turned it on, so it cannot follow an operator to another
-device, cannot reach the API or the MCP, and cannot be left switched on for
-somebody else. Nothing is written, so leaving it on costs a page refresh rather
-than a restore.
-
-Two rules decide what it may touch, and both exist because a demo that lies
-about the wrong thing is worse than no demo at all.
-
-It substitutes *values*, never *facts*. Whether a credential is connected,
-whether a sweep is failing, whether something needs attention: those stay
-true. An operator showing HQ to somebody should still be looking at their own
-system, and a screenshot of a green board that was actually red is the one
-outcome this must never produce.
-
-And a substitution is stable. The same record shows the same stand-in every
-time, because a balance that changes on every refresh reads as a bug in the
-page rather than as a number. Derived from the record's own key and a fixed
-salt: no state to store, and nothing that has to survive a restart.
-
-The host owns the mechanism and knows nothing about who uses it. What a
-"financial number" or a "personal record" is belongs to whichever domain holds
-one; this module only offers the substitutions and the switch, and every domain
-reaches them through ``hq_sdk.demo``.
+It substitutes *values*, never *facts*: whether a credential is connected or
+something needs attention stays true, since a screenshot of a green board that
+was really red is the one outcome this must never produce. The host owns the
+switch and the substitutions; what a "financial number" or a "personal record"
+is belongs to each domain, which reaches them through ``hq_sdk.demo``.
 """
 
 import hashlib
@@ -35,8 +16,14 @@ from decimal import Decimal
 
 from .money import quantize_money, to_money
 
+# Set per request from the session of the one browser that turned the mode on,
+# so it cannot follow an operator to another device, reach the API or the MCP,
+# or be left on for somebody else. Nothing is written, so leaving it on costs a
+# page refresh rather than a restore.
 _SHOWING: ContextVar[bool] = ContextVar("hq_demo_showing", default=False)
 
+# The same record shows the same stand-in every time, since a balance that
+# changes on every refresh reads as a bug in the page rather than as a number.
 # Fixed, and not a secret. It exists to keep a stand-in stable across restarts,
 # not to keep the real value hidden: the real value never reaches these
 # functions in a form the stand-in is derived from.
@@ -168,13 +155,9 @@ _DAY_OFFSET = timedelta(days=int(_fraction("calendar", "day") * 90) - 45)
 def day[T](value: T, *, key: str = "") -> T:
     """The date, moved with every other date, or the real one.
 
-    Shifted rather than invented so the shape survives: what falls due before
-    something else still does, and what is close is still close. Under two
-    months, so urgency reads the same: a renewal that needed acting on this
-    week must not become one that can wait.
-
-    ``key`` is accepted and unused, so a caller reads the same as every other
-    substitution and nothing has to remember which of the three is different.
+    Shifted rather than invented, by under two months, so what falls due first
+    still does and urgency reads the same. ``key`` is unused, so a caller reads
+    the same as every other substitution.
     """
 
     del key

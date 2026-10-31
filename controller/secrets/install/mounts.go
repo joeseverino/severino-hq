@@ -3,6 +3,7 @@ package install
 import (
 	"bufio"
 	"bytes"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -77,10 +78,8 @@ func CheckMountInfo(mountinfo []byte, dir string) error {
 			return hostError("Controller secret directory must be on tmpfs.")
 		}
 	}
-	for _, option := range innermost[len(innermost)-1].options {
-		if option == "noswap" {
-			return nil
-		}
+	if slices.Contains(innermost[len(innermost)-1].options, "noswap") {
+		return nil
 	}
 	return hostError("Controller secret directory must be a tmpfs mounted with noswap.")
 }

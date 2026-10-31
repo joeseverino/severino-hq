@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="To check the production image: build it as CI builds it, then every image:verify:* check; with IMAGE set, check that image without a build"
+#MISE env={SEVERINO_HEAVY_BOUND="1h"}
 #USAGE flag "--tag <tag>" help="The name to build it as; severino-hq:ci-local by default"
 #USAGE flag "--revision <commit>" help="The commit it is built for, HEAD by default; a pull request builds its head, not the merge it checks out"
 #USAGE flag "--no-verify" help="Build only, as CI does before it publishes a pull request's image"
@@ -8,6 +9,8 @@
 # the checks read. Each check runs to the end, and the last lines name every
 # one that failed.
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 
 mise run image:build ${usage_tag:+--tag "${usage_tag}"} ${usage_revision:+--revision "${usage_revision}"}
 [ "${usage_no_verify:-}" != true ] || exit 0

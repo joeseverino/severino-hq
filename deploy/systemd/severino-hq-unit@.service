@@ -1,0 +1,38 @@
+[Unit]
+Description=Severino HQ request to a container's unit
+Requires=docker.service
+After=docker.service
+
+[Service]
+# One request on the accepted connection and one answer on it. A refusal is
+# an answer too, so the service fails only when hq-host itself does.
+User=root
+ExecStart=/usr/local/lib/severino-hq/deploy/bin/hq-host unit --serve
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+# Past the controller's own wait for an answer, so a hung stop ends here.
+RuntimeMaxSec=5min
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=tmpfs
+ProtectSystem=strict
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+# It talks to docker and to systemd over their sockets, and to nothing else.
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service

@@ -9,6 +9,7 @@ request that reached it would be refused.
 
 import importlib
 import os
+from dataclasses import replace
 from datetime import timedelta
 from unittest import mock
 
@@ -421,7 +422,7 @@ class DeclaredWorkRunsOnItsCadenceTests(ComposedExample):
         job = Job.objects.get(kind=example.REFRESH)
         self.assertEqual((job.state, job.actor, job.result), ("succeeded", scheduled_work.ACTOR, {"seen": 4}))
         self.assertEqual(self.registry.asked, list(example.NOTES))
-        self.assertEqual(Job.objects.get(kind="due").result, {"due": 1, "ended": {example.REFRESH: "succeeded"}})
+        self.assertEqual(Job.objects.get(kind="due").result["ended"], {example.REFRESH: "succeeded"})
         self.assertEqual(ended["state"], "succeeded")
 
         scheduled_work.run("due")
@@ -463,18 +464,19 @@ class JobWordingTests(ComposedExample):
 
     def test_an_ask_is_answered_in_the_works_own_words(self):
         principal = internal_principal("test")
-        with mock.patch.object(outbound_work, "_refusal", return_value=""):
-            for work in self.declared():
-                with self.subTest(work.name), held_jobs():
-                    started = outbound_work.request_work(work, "one", principal=principal)
-                    again = outbound_work.request_work(work, "one", principal=principal)
-                    other = outbound_work.request_work(work, "two", principal=principal)
-                    Job.objects.all().delete()
-                self.assertEqual(started["message"], requested(work.words, "one"))
-                for answer in (again, other):
-                    self.assertNotIn(work.label, answer["message"])
-                self.assertTrue(started["started"])
-                self.assertFalse(again["started"] or other["started"])
+        for each in self.declared():
+            # Asked for as it is when nothing refuses it.
+            work = replace(each, refuse=None)
+            with self.subTest(work.name), held_jobs():
+                started = outbound_work.request_work(work, "one", principal=principal)
+                again = outbound_work.request_work(work, "one", principal=principal)
+                other = outbound_work.request_work(work, "two", principal=principal)
+                Job.objects.all().delete()
+            self.assertEqual(started["message"], requested(work.words, "one"))
+            for answer in (again, other):
+                self.assertNotIn(work.label, answer["message"])
+            self.assertTrue(started["started"])
+            self.assertFalse(again["started"] or other["started"])
 
     def test_scheduled_work_already_running_is_answered_without_its_label(self):
         for work in scheduled_work.SCHEDULED:

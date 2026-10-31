@@ -358,7 +358,7 @@ def _load() -> dict[str, Repository]:
     found: dict[str, Repository] = {}
     for snapshot in snapshots_of(REPOSITORY_KIND):
         refused_by_repo: dict[str, list[str]] = {}
-        for item in getattr(snapshot, "refused_parts", None) or ():
+        for item in snapshot.refused_parts:
             if isinstance(item, Mapping):
                 refused_by_repo.setdefault(str(item.get("scope", "")), []).append(str(item.get("part", "")))
         for record in snapshot.records or ():

@@ -1,12 +1,10 @@
 """What needs doing about the containers, each item with the help HQ derived.
 
-A version with a known advisory is one item per image and version, saying what
-upgrade clears it and, when nothing can apply that upgrade yet, exactly why.
-Every image with a newer release is one item, because updates are a chore to
-schedule rather than a fire. Each serious check a container fails is one item,
-offering per container the compose change HQ wrote for it
+One item per image version with a known advisory, one for every image with a
+newer release (updates are a chore to schedule, not a fire), and one per
+serious check a container fails, offering each container its compose change
 (``application.container_hardening``) or, for the Docker socket, the
-declaration that says holding it is the container's job.
+declaration that holding it is the container's job.
 """
 
 import shlex
@@ -47,7 +45,7 @@ def attention() -> tuple[Insight, ...]:
             if needs_you(standing, running):
                 items.append(_advisory(label, standing, running))
         elif standing.newer:
-            behind.append(f"{label} → {standing.latest}")
+            behind.append(f"{label} to {standing.latest}")
             behind_running.extend(running)
     items.extend(_reach_attention())
     if behind:

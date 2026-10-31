@@ -1,4 +1,4 @@
-"""Probes of running text: broken words, wrapped phrases, asides, squeezed titles and text that overlaps."""
+"""Probes of running text: broken words, text that overlaps and text past its clamp."""
 
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE, LINES, PAINTED_PART
 
@@ -44,103 +44,6 @@ BROKEN_WORDS = (
 }"""
 )
 
-WRAPPED_PHRASES = (
-    "(selector) => {"
-    + DESCRIBE
-    + """
-  // A pill or a time is one phrase: no taller than the same element holding one letter.
-  const found = [];
-  for (const pill of document.querySelectorAll(selector)) {
-    if (!pill.getClientRects().length) continue;
-    const probe = pill.cloneNode(false);
-    probe.textContent = 'X';
-    // Drawn as the phrase is, wherever it lands: a rule that hides whatever
-    // follows a row's lead control would otherwise measure nothing.
-    probe.style.display = getComputedStyle(pill).display;
-    pill.after(probe);
-    const one = probe.getBoundingClientRect().height;
-    probe.remove();
-    if (box(pill).height > one + 1) found.push(describe(pill) + ': ' + pill.textContent.trim() + ' (' + Math.round(box(pill).height) + 'px, one line ' + Math.round(one) + 'px, parent ' + getComputedStyle(pill.parentElement).display + ')');
-  }
-  return found;
-}"""
-)
-
-LONE_ASIDE_WORDS = (
-    "(aside) => {"
-    + DESCRIBE
-    + LINES
-    + r"""
-  const found = [];
-  for (const el of document.querySelectorAll(aside)) {
-    if (!el.closest('main') || !el.checkVisibility()) continue;
-    const own = chars(el).filter((c) => c.top !== null);
-    const last = Math.max(...own.map((c) => c.top));
-    if (!own.some((c) => c.top < last)) continue;
-    const words = own.filter((c) => c.top === last).map((c) => c.ch).join('').trim();
-    if (words && !/\s/.test(words)) found.push(`${describe(el)} "${el.textContent.trim().slice(0, 40)}" leaves "${words}" alone on its last line`);
-  }
-  return found;
-}"""
-)
-
-ASIDE_BESIDE_ITS_HEADING = (
-    "(aside) => {"
-    + DESCRIBE
-    + LINES
-    + r"""
-  const found = [];
-  for (const el of document.querySelectorAll('main ' + aside)) {
-    const heading = el.closest('h1, h2, h3, h4');
-    if (!heading || !el.checkVisibility()) continue;
-    const own = chars(el).filter((c) => c.top !== null);
-    if (new Set(own.map((c) => c.top)).size < 2) continue;
-    const first = own[0];
-    const words = [];
-    const walker = document.createTreeWalker(heading, NodeFilter.SHOW_TEXT);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      if (el.contains(node) || !node.data.trim()) continue;
-      range.selectNodeContents(node);
-      words.push(...[...range.getClientRects()].filter((r) => r.width));
-    }
-    if (words.some((r) => r.top < first.bottom - 1 && r.bottom > first.top + 1)) {
-      found.push(`${describe(el)} wraps beside its heading "${heading.textContent.trim().slice(0, 30)}"`);
-    }
-  }
-  return found;
-}"""
-)
-
-# A page's title breaks at its spaces, or inside a word only when its
-# controls have already taken a row of their own and the word alone is
-# longer than the line: squeezed beside them, a name splits at a hyphen.
-SQUEEZED_TITLES = (
-    "([title, actions, pageHead]) => {"
-    + DESCRIBE
-    + LINES
-    + r"""
-  const found = [];
-  for (const el of document.querySelectorAll('main ' + title)) {
-    if (!el.checkVisibility()) continue;
-    const list = chars(el);
-    const breaks = list.map((c, i) => i > 0 && broke(list, i) && /\S/.test(list[i - 1].ch) && /\S/.test(c.ch));
-    const at = breaks.indexOf(true);
-    if (at < 0) continue;
-    const head = el.closest(pageHead) || el.parentElement;
-    const controls = head.querySelector(actions);
-    const t = el.getBoundingClientRect();
-    const beside = controls && controls.checkVisibility() && (() => {
-      const c = controls.getBoundingClientRect();
-      return c.top < t.bottom && c.bottom > t.top;
-    })();
-    if (beside) {
-      const text = list.map((c) => c.ch).join('');
-      found.push(`${describe(el)} breaks "${text.slice(0, at)}|${text.slice(at)}" beside its controls`.slice(0, 140));
-    }
-  }
-  return found;
-}"""
-)
 
 # A word or a number of running text broken across lines: neither ever
 # breaks. A number is a figure with its sign and currency mark ("\u2212$1,243.52",
@@ -207,6 +110,192 @@ OVERLAPPING_TEXT = (
         found.push(`"${one.data.trim().slice(0, 30)}" (${describe(one.parentElement)}) over "${other.data.trim().slice(0, 30)}" (${describe(other.parentElement)})`);
       }
     }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
+# A box the stylesheet clamps to some lines shows those lines and no more: a
+# line past its clamp that is still drawn (a box of its own on it, which a
+# browser may leave out of the clamp) reads as a row that grew.
+PAST_THE_CLAMP = (
+    "() => {"
+    + DESCRIBE
+    + LINES
+    + r"""
+  const found = [];
+  for (const el of document.querySelectorAll('main *')) {
+    const clamp = parseInt(getComputedStyle(el).webkitLineClamp, 10);
+    if (!clamp || !el.checkVisibility()) continue;
+    const box = el.getBoundingClientRect();
+    const shown = chars(el).filter((c) => c.top !== null && c.ch.trim() && c.top >= box.top - 1 && c.bottom <= box.bottom + 1)
+      .sort((a, b) => a.top - b.top);
+    let lines = 0, bottom = -Infinity;
+    for (const c of shown) {
+      if (c.top >= bottom - 1) { lines += 1; bottom = c.bottom; } else bottom = Math.max(bottom, c.bottom);
+    }
+    if (lines > clamp) found.push(`${describe(el)} "${el.textContent.trim().slice(0, 40)}" shows ${lines} lines, clamped to ${clamp}`);
+  }
+  return found;
+}"""
+)
+
+
+# What a card's own buttons decide, cut short anywhere: wider or taller than
+# its box shows. Approving on half of what a change does is not deciding it.
+CUT_DECISIONS = (
+    "(selector) => {"
+    + DESCRIBE
+    + r"""
+  const found = [];
+  for (const el of document.querySelectorAll(`main ${selector}`)) {
+    if (!el.checkVisibility()) continue;
+    if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1)
+      found.push(`${describe(el)} "${el.textContent.trim().slice(0, 40)}" is cut short`);
+  }
+  return found;
+}"""
+)
+
+
+# How a probe reads where text sits on its line: the text a reader is shown
+# under a root (never what matches the probe's `unseen`), the line a run of it
+# is drawn on, the box its line is laid out in, and its baseline, read where a
+# box of no size lands, put beside the text or the box. `before` is the
+# running words just before an element in its own block, when there are any:
+# a chip or a pill there is a box with a baseline of its own.
+BASELINES = r"""
+const range = document.createRange();
+const rects = (node) => { range.selectNodeContents(node); return [...range.getClientRects()].filter((r) => r.width); };
+const drawn = (root) => {
+  const found = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node.data.trim() && !node.parentElement.closest(unseen) && rects(node).length) found.push(node);
+  }
+  return found;
+};
+const baseline = (node, after) => {
+  const mark = document.createElement('span');
+  mark.style.cssText = 'display:inline-block;inline-size:0;block-size:0;margin:0;padding:0;border:0';
+  if (after) node.after(mark); else node.before(mark);
+  const at = mark.getBoundingClientRect().top;
+  mark.remove();
+  return at;
+};
+const sameLine = (a, b) => Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > Math.min(a.height, b.height) / 2;
+const blockOf = (el) => {
+  while (['inline', 'contents'].includes(getComputedStyle(el).display)) el = el.parentElement;
+  return el;
+};
+const before = (el) => {
+  const block = blockOf(el.parentElement);
+  return drawn(block)
+    .filter((node) => el.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_PRECEDING)
+    .filter((node) => blockOf(node.parentElement) === block)
+    .at(-1);
+};
+"""
+
+
+# A value and the one it leads to (`partials/_change.html`): what shares a
+# line shares a baseline, the first value, the arrow, the second and the words
+# before them, and the arrow is on the line of the value it points at.
+CHANGES_OFF_THEIR_LINE = (
+    "([selector, arrowSelector, toSelector, unseen]) => {"
+    + DESCRIBE
+    + BASELINES
+    + r"""
+  const found = [];
+  for (const change of document.querySelectorAll(selector)) {
+    if (!change.checkVisibility()) continue;
+    const arrow = change.querySelector(arrowSelector);
+    const to = change.querySelector(toSelector);
+    const from = drawn(change).filter((node) => !to.contains(node));
+    const into = drawn(to).filter((node) => !arrow.contains(node));
+    const name = `${describe(change.parentElement)} "${change.textContent.trim().slice(0, 40)}"`;
+    if (!from.length || !into.length || !rects(arrow.firstChild).length) {
+      found.push(`${name} shows no old value, arrow or new value`);
+      continue;
+    }
+    const arrowLine = rects(arrow.firstChild)[0];
+    if (!sameLine(arrowLine, rects(into[0])[0])) found.push(`${name} leaves its arrow on a line apart from the new value`);
+    const parts = [['the arrow', arrowLine, baseline(arrow.firstChild, true)], ['the new value', rects(into[0])[0], baseline(into[0], false)]];
+    const last = from.at(-1);
+    parts.push(['the old value', rects(last).at(-1), baseline(last, true)]);
+    const words = before(change);
+    if (words) parts.push(['the words before it', rects(words).at(-1), baseline(words, true)]);
+    const firstLine = rects(from[0])[0];
+    const fromFirst = ['the old value', firstLine, baseline(from[0], false)];
+    for (const [what, line, at] of parts.slice(1)) {
+      const against = what === 'the words before it' ? fromFirst : parts[0];
+      if (sameLine(line, against[1]) && Math.abs(at - against[2]) > 0.5) {
+        found.push(`${name}: ${what} sits ${(at - against[2]).toFixed(1)}px off the baseline of ${against[0]}`);
+      }
+    }
+  }
+  return found;
+}"""
+)
+
+
+# A chip (an identifier, a tag) set in a line sits on that line's baseline: its
+# first line on the baseline of the line it starts on, its last on the one it
+# ends on. The line's baseline is read where a box of no size lands beside the
+# chip, so a line of pills and links and no plain words is held too. A chip
+# that is an item of a flex or grid box is that box's to place.
+CHIPS_OFF_THEIR_LINE = (
+    "([selector, unseen]) => {"
+    + DESCRIBE
+    + BASELINES
+    + r"""
+  const found = [];
+  for (const chip of document.querySelectorAll(selector)) {
+    if (!chip.checkVisibility() || !getComputedStyle(chip).display.startsWith('inline')) continue;
+    const text = drawn(chip);
+    if (!text.length) continue;
+    const block = blockOf(chip.parentElement);
+    const others = drawn(block).filter((node) => !chip.contains(node)).flatMap(rects);
+    const name = `${describe(chip.parentElement)} "${chip.textContent.trim().slice(0, 40)}"`;
+    const ends = [[rects(text[0])[0], baseline(text[0], false), baseline(chip, false), 'starts'], [rects(text.at(-1)).at(-1), baseline(text.at(-1), true), baseline(chip, true), 'ends']];
+    for (const [line, at, its, where] of ends) {
+      if (its < line.top - 0.5 || its > line.bottom + 0.5 || !others.some((other) => sameLine(other, line))) continue;
+      if (Math.abs(at - its) > 0.5) found.push(`${name} sits ${(at - its).toFixed(1)}px off the baseline of the line it ${where} on`);
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
+# An identifier (`|breakable`'s token) drawn on more than one line in a table
+# that still has a column to let go: the table should have let it go
+# (tables.js) rather than break the name. A table in a narrow box has none
+# left, a line past a clamp is not drawn, and what wraps by design (`wraps`,
+# figures.css: a row's own name, free text, a context line) and an opened row
+# are not counted.
+BROKEN_TOKENS = (
+    "([tokens, wraps]) => {"
+    + DESCRIBE
+    + PAINTED_PART
+    + r"""
+  const found = [];
+  const range = document.createRange();
+  for (const token of document.querySelectorAll(tokens)) {
+    if (token.closest(wraps) || token.closest('[data-narrow], tr:has(> * > [aria-expanded="true"])')) continue;
+    const lines = [];
+    const walker = document.createTreeWalker(token, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      for (let at = 0; at < node.length; at++) {
+        if (!node.data[at].trim()) continue;
+        range.setStart(node, at);
+        range.setEnd(node, at + 1);
+        const rect = [...range.getClientRects()].find((r) => r.width);
+        if (rect && painted(node.parentElement, rect) && !lines.some((top) => Math.abs(top - rect.top) < rect.height / 2)) lines.push(rect.top);
+      }
+    }
+    if (lines.length > 1) found.push(`${describe(token.closest('td'))} breaks "${token.textContent.trim().slice(0, 40)}"`);
   }
   return [...new Set(found)];
 }"""

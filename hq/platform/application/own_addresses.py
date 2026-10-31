@@ -2,15 +2,7 @@
 
 A tailnet client reports every address it could be reached at: its LAN
 address, container bridges, and the public address it is seen from. Which of
-those belong to the device is read off the whole tailnet, not configured:
-
-- A LAN address sits inside a subnet route some device advertises, or shares
-  a network with another device's different address. A container bridge
-  (the same gateway address on every Docker host) shares neither.
-- A public address is the device's own when no other device is seen from it
-  and the device is on no LAN. One several devices report is the NAT gateway
-  in front of them; one a device on a LAN reports alone is a network it
-  roamed through (a phone's carrier).
+those belong to the device is read off the whole tailnet, not configured.
 """
 
 from collections import Counter
@@ -47,6 +39,9 @@ class Sightings:
     public: Counter = field(default_factory=Counter)
 
     def lan_address(self, presence) -> str:
+        # A LAN address sits inside a subnet route some device advertises, or
+        # shares a network with another device's different address. A container
+        # bridge (the same gateway address on every Docker host) shares neither.
         hosts = _private_hosts(presence)
         routed = next(
             (host for host in hosts if any(ip_address(host) in route for route in self.routes)),
@@ -57,6 +52,10 @@ class Sightings:
         return next((host for host in hosts if len(self.networks.get(_network(host), ())) > 1), "")
 
     def public_addresses(self, presence) -> tuple[str, ...]:
+        # A public address is the device's own when no other device is seen
+        # from it and the device is on no LAN. One several devices report is the
+        # NAT gateway in front of them; one a device on a LAN reports alone is a
+        # network it roamed through (a phone's carrier).
         if self.lan_address(presence):
             return ()
         return tuple(host for host in presence.public_addresses if self.public[public_label(host)] <= 1)

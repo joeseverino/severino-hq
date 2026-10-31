@@ -2,11 +2,11 @@
 so every group row spans its table, keeps the rows' edge and can fold alike."""
 
 import re
-from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
-TEMPLATES = Path(__file__).resolve().parents[4] / "templates"
+from hq.platform.application.tests.source import template_files
+
 PRIMITIVE = "partials/_row_group.html"
 
 # A group row is known by its class or by its heading's scope.
@@ -22,9 +22,8 @@ class RowGroupTests(SimpleTestCase):
     def test_every_group_row_is_drawn_by_the_tag(self):
         found = {
             name: count
-            for path in sorted(TEMPLATES.rglob("*.html"))
-            if (name := path.relative_to(TEMPLATES).as_posix()) != PRIMITIVE
-            and (count := hand_drawn_groups(path.read_text(encoding="utf-8")))
+            for name, path in template_files()
+            if name != PRIMITIVE and (count := hand_drawn_groups(path.read_text(encoding="utf-8")))
         }
         self.assertEqual(found, {}, "Head these groups with {% row_group label count %}.")
 

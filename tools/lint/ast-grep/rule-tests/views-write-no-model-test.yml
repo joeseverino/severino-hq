@@ -1,0 +1,16 @@
+id: views-write-no-model
+valid:
+  - 'Job.objects.filter(state="open")'
+  - 'form.is_valid()'
+  - 'jobs.close(job)'
+  - 'Job.objects.get(pk=1)'
+invalid:
+  - 'job.save()'
+  - 'form.instance.save(update_fields=["state"])'
+  - 'job.delete()'
+  - 'Job.objects.create(name="x")'
+  - 'Job.objects.get_or_create(name="x")'
+  - 'Job.objects.update_or_create(name="x")'
+  - 'Job.objects.bulk_create(jobs)'
+  - 'Job.objects.bulk_update(jobs, ["state"])'
+  - 'self.model.objects.create()'

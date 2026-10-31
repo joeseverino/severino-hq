@@ -9,6 +9,7 @@ tools/gate/turn.py finds it narrow; a run at a ref builds a worktree, so it alwa
 
 import fnmatch
 import os
+import shlex
 import signal
 import sys
 import time
@@ -17,9 +18,9 @@ from pathlib import Path
 from typing import Self
 
 from hq.platform.application.ui import counted
-from hq.platform.core.tests.task import RefError, Usage, changed_tests, commit_of, overlay, usage, worktree
+from hq.platform.core.tests.task import RefError, Usage, changed_tests, commit_of, git, overlay, usage, worktree
 from tools.gate.turn import narrow
-from tools.gate.verdict import Step, close, run
+from tools.gate.verdict import FailedTest, Step, close, run
 
 ROOT = Path(__file__).resolve().parents[2]
 # Everything after it is the developer's, so a later --parallel or -k wins.
@@ -96,28 +97,38 @@ def run_at(ref: str, keep: list[str], args: list[str]) -> int:
     started = time.monotonic()
     commit = commit_of(ref, ROOT)
     name = f"test at {ref} ({commit[:12]})"
-    laid = layout(*changed_tests(commit, ROOT), keep, [arg for arg in args if not arg.startswith("-")])
+    labels = [arg for arg in args if not arg.startswith("-")]
+    laid = layout(*changed_tests(commit, ROOT), keep, labels)
     with worktree(commit, ROOT) as tree:
         overlay(tree, laid.present, laid.deleted, ROOT)
         # The ref's own environment: uv refuses this one's, and says so, once it is outside it.
         os.environ.pop("VIRTUAL_ENV", None)
         step = run(name, [*UV_RUN, *TEST, *args], cwd=tree)
     said = laid.summary()
+    at_ref = ["mise", "run", "test", "--at", ref, *(word for path in keep for word in ("--keep", path))]
+    again = shlex.join(at_ref)
+    # A run that names no test reruns as typed.
+    step.command = [*at_ref, *args]
     if unimported(step):
+        newer = "".join(f"; {each}" for each in newer_packages(commit, labels))
         close(
             name,
             started,
             [step],
-            failed=f"; with {said}",
+            failed=f"{newer}; with {said}",
             outcome="DOES NOT IMPORT at the ref, so no test ran on its code",
+            tests=again,
         )
         return UNIMPORTED
-    close(name, started, [step], passed=f", with {said}", failed=f"; with {said}")
+    close(name, started, [step], passed=f", with {said}", failed=f"; with {said}", tests=again)
     return step.code
 
 
 def unimported(step: Step) -> bool:
-    """Whether a label's module raised on import at the ref; its name then stands for the module the loader tried."""
+    """Whether a label's module raised on import at the ref; its name then stands for the module the loader tried.
+
+    A ref whose runner writes no failure record still prints the loader's
+    line, so the module is named from that."""
 
     failed = [
         each for each in step.tests if each.test.startswith(FAILED_IMPORT) and each.exception.startswith(IMPORT_ERROR)
@@ -125,7 +136,42 @@ def unimported(step: Step) -> bool:
     step.tests = [
         replace(each, test=each.test.removeprefix(FAILED_IMPORT)) if each in failed else each for each in step.tests
     ]
+    if not step.tests and step.unimported:
+        step.tests = [FailedTest(module, f"{IMPORT_ERROR} {module}") for module in step.unimported]
+        return True
     return bool(failed)
+
+
+def newer_packages(commit: str, labels: list[str]) -> list[str]:
+    """For each label in a package of this tree the ref does not have, the
+    package and the commit that adds it: the oldest ref the label runs at, since
+    before it the label names a layout the ref's code does not share."""
+
+    said = []
+    for package in sorted({path for label in labels if (path := missing_package(commit, label))}):
+        added = git("log", "-1", "--format=%h %s", "--diff-filter=A", "HEAD", "--", f"{package}/__init__.py", root=ROOT)
+        dotted = package.replace("/", ".")
+        if added:
+            sha, _, subject = added[0].partition(" ")
+            said.append(f"{dotted} is not at the ref; the oldest ref it runs at is {sha} ({subject[:60]})")
+        else:
+            said.append(f"{dotted} is not at the ref, and no commit adds it yet, so no ref before this tree runs it")
+    return said
+
+
+def missing_package(commit: str, label: str) -> str | None:
+    """The outermost package of this tree on the label's path that the ref does not have, as a path."""
+
+    parts = label.split(".")
+    for end in range(1, len(parts) + 1):
+        package = "/".join(parts[:end])
+        if not (ROOT / package / "__init__.py").is_file():
+            return None
+        try:
+            git("cat-file", "-e", f"{commit}:{package}/__init__.py", root=ROOT)
+        except RefError:
+            return package
+    return None
 
 
 @dataclass(frozen=True)
@@ -172,6 +218,7 @@ def run_here(argv: list[str]) -> int:
         step = run("test", [sys.executable, *TEST, *argv])
     except KeyboardInterrupt:
         return 130
+    step.command = ["mise", "run", "test", *argv]
     close("test", started, [step])
     return step.code
 

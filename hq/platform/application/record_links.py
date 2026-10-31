@@ -8,9 +8,8 @@ fields, in one shape, so a client reads either the same way.
 
 from typing import Any
 
-from django.db.models import Model, QuerySet
+from django.db.models import QuerySet
 
-from .record_errors import RecordNotFound
 from .sensitivity import safe_doc_ids
 
 
@@ -40,12 +39,3 @@ def linked(fields: dict[str, Any], row: Any, *, relationships: bool, **slug_sets
     if relationships:
         fields["relationships"] = record_links(row, **slug_sets)
     return fields
-
-
-def linked_records(model: type[Model], field: str, values: tuple) -> list[Any]:
-    """The records a write links to by ``field``: every one named, or a refusal."""
-
-    records = list(model._default_manager.filter(**{f"{field}__in": values}))
-    if set(values) - {getattr(record, field) for record in records}:
-        raise RecordNotFound("A related record was not found.")
-    return records

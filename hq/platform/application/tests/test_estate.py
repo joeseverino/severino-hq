@@ -391,6 +391,68 @@ class EdgeCertificateExpiryTests(TestCase):
         self.assertEqual(item.subject.url, reverse("zones:detail", args=["example.com"]))
 
 
+def in_days(days):
+    return (timezone.now() + timedelta(days=days, hours=1)).isoformat()
+
+
+class CertificateListTests(TestCase):
+    """Every certificate that says when it runs out, edge and managed, soonest first."""
+
+    def setUp(self):
+        store("cloudflare.zone", {"zone": "example.com", "connection_ref": "example-dns"})
+
+    def edge(self, *certificates):
+        store(
+            "cloudflare.edge_certificate",
+            *(
+                {
+                    "connection_ref": "example-dns",
+                    "zone": "example.com",
+                    "id": f"e{index}",
+                    "hosts": [host],
+                    "status": "active",
+                    **({"expires_on": expires} if expires else {}),
+                }
+                for index, (host, expires) in enumerate(certificates)
+            ),
+        )
+
+    def certificates(self):
+        with projection_scope():
+            return estate_reading().certificates
+
+    def test_only_a_certificate_that_says_when_it_expires_is_listed_soonest_first(self):
+        self.edge(("example.com", in_days(40)), ("www.example.com", None))
+        declared(
+            "example-cert",
+            "tls.certificate",
+            {"certificate_name": "example-cert", "domains": ["app.example.com"]},
+            status={"not_after": in_days(50)},
+        )
+        declared("unnamed-cert", "tls.certificate", {"domains": ["api.example.com"]}, status={"not_after": in_days(20)})
+        declared("pending-cert", "tls.certificate", {"certificate_name": "pending", "domains": ["new.example.com"]})
+        declare_record("app-record", "app.example.com", "100.64.0.5")
+
+        found = self.certificates()
+
+        self.assertEqual([item.subject for item in found], ["unnamed-cert", "example.com", "example-cert"])
+        self.assertEqual([item.resource_key for item in found], ["unnamed-cert", "", "example-cert"])
+
+    def test_an_edge_certificate_links_to_the_service_hq_serves_at_its_name_else_to_its_zone(self):
+        declare_record("app-record", "app.example.com", "100.64.0.5")
+        self.edge(("app.example.com", in_days(40)), ("old.example.com", in_days(60)))
+
+        links = {item.subject: item.url for item in self.certificates()}
+
+        self.assertEqual(
+            links,
+            {
+                "app.example.com": reverse("control_plane:service", args=["app.example.com"]),
+                "old.example.com": reverse("zones:detail", args=["example.com"]),
+            },
+        )
+
+
 class StaleGlanceTests(TestCase):
     def test_a_reading_older_than_its_cadence_is_shown_as_of_its_age_and_steps_aside(self):
         DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")

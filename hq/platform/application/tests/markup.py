@@ -47,7 +47,7 @@ class _Page(HTMLParser):
     @override
     def handle_starttag(self, tag, attrs):
         element = Element(tag, {name: value or "" for name, value in attrs}, ancestors=tuple(self._open))
-        element.beneath = "data-row-detail" in element.attrs or any(open.beneath for open in self._open)
+        element.beneath = "data-row-detail" in element.attrs or any(opened.beneath for opened in self._open)
         self.elements.append(element)
         self._edge = self._edge or not _TOKEN_PARTS & element.classes
         if tag not in _VOID:

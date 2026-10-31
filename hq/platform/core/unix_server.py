@@ -1,15 +1,10 @@
 """An ASGI application served on a Unix socket only this account can reach.
 
-The socket is the authorization. It lives in a directory this account owns and
-nobody else can enter, it is this account's own with mode 0600, and every
-connection is asked who made it: the kernel answers with the peer's uid
-(``SO_PEERCRED``), and a peer that is not this account is dropped before a
-byte of its request is read. Nothing here listens on a network address, and
-the application it serves is given to no other listener.
-
-Each rule fails closed. A directory another account can enter, a path that is
-not this account's socket, or a platform that cannot name a peer stops the
-listener; it never serves with less.
+The socket is the authorization: this account's own, mode 0600, in a directory
+nobody else can enter, and a peer the kernel does not name as this account is
+dropped before a byte of its request is read. Each rule fails closed. Nothing
+here listens on a network address, and the application is given to no other
+listener.
 """
 
 import asyncio
@@ -55,16 +50,17 @@ def peer_uid(connection: Any) -> int | None:
     None when it cannot be read, which a caller treats as a stranger.
     """
 
+    # One branch per platform, so the type checker reads the one it runs on.
+    if sys.platform == "linux":
+        level, option, credentials = socket.SOL_SOCKET, socket.SO_PEERCRED, _LINUX_UCRED
+    elif sys.platform == "darwin":
+        level, option, credentials = _DARWIN_SOL_LOCAL, _DARWIN_LOCAL_PEERCRED, _DARWIN_XUCRED
+    else:
+        return None
     try:
-        if sys.platform == "linux":
-            raw = connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, _LINUX_UCRED.size)
-            return int(_LINUX_UCRED.unpack(raw)[1])
-        if sys.platform == "darwin":
-            raw = connection.getsockopt(_DARWIN_SOL_LOCAL, _DARWIN_LOCAL_PEERCRED, _DARWIN_XUCRED.size)
-            return int(_DARWIN_XUCRED.unpack(raw)[1])
+        return int(credentials.unpack(connection.getsockopt(level, option, credentials.size))[1])
     except OSError, struct.error:
         return None
-    return None
 
 
 def private_listener(path: str, *, backlog: int = 64) -> socket.socket:

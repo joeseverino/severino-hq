@@ -26,6 +26,15 @@ cd "$plugin_root"
 identity=$(PYTHONPATH="$hq_root" python3 -P -m tools.pipeline.plugin_identity . ${PLUGIN_REPOSITORY:+--repository "$PLUGIN_REPOSITORY"})
 plugin_reference=$(printf '%s\n' "$identity" | sed -n 's/^plugin-reference=//p')
 django_app=$(printf '%s\n' "$identity" | sed -n 's/^django-app=//p')
+
+# The check runs again under the host's gate verdict (tools/gate/verdict.py),
+# whose last line names each failed test and the file under the host's
+# var/gate that keeps them whole, with their tracebacks. Run as a script, it
+# imports nothing from the host.
+if [ -z "${HQ_PLUGIN_CHECK_VERDICT:-}" ]; then
+    exec env HQ_PLUGIN_CHECK_VERDICT=1 python3 -P "$hq_root/tools/gate/verdict.py" "plugin-check:$django_app" \
+        "$hq_root/tools/pipeline/check-plugin.sh" --plugin-root "$(pwd)"
+fi
 if ! grep -q '^\[tool\.mypy\]' pyproject.toml; then
     echo "pyproject.toml declares no [tool.mypy]: every extension declares its type check there (docs/Plugins.md)." >&2
     exit 1
@@ -37,9 +46,9 @@ host_requirements=$work/host-requirements.txt
 uv export --project "$hq_root" --locked --no-default-groups --no-emit-project \
     --output-file "$host_requirements" > /dev/null
 
-uv sync --locked --group dev
+uv sync --quiet --locked --group dev
 python=$(uv run --no-sync python -c 'import sys; print(sys.executable)')
-uv pip install --python "$python" --require-hashes -r "$host_requirements"
+uv pip install --quiet --python "$python" --require-hashes -r "$host_requirements"
 "$python" -m ruff check src
 "$python" -m ruff format --check src
 PYTHONPATH="$hq_root" "$python" -m hq_sdk.validation src
@@ -59,17 +68,27 @@ export SEVERINO_HQ_PLUGINS="$plugin_reference"
 MYPYPATH="$hq_root" "$python" -m mypy
 "$python" "$hq_root/manage.py" check
 "$python" "$hq_root/manage.py" makemigrations --check --dry-run "$django_app"
-# InterfaceTextTests and CountPlacementTests read the plugin's wording and
-# markup with the host's.
+# The template checks read every template Django loads, so they hold the
+# plugin's wording and markup as they hold the host's.
 "$python" "$hq_root/manage.py" test "$django_app" hq.platform.application.tests.test_plugins hq.platform.application.tests.test_rendered \
-    hq.platform.application.tests.test_architecture.InterfaceTextTests hq.platform.core.tests.test_counts.CountPlacementTests
+    hq.platform.application.tests.test_architecture.InterfaceTextTests hq.platform.core.tests.test_counts.CountPlacementTests \
+    hq.platform.core.tests.test_template_chips.TemplateChipTests hq.platform.core.tests.test_table_contract.TableContractTests \
+    hq.platform.application.tests.test_reading_age.OneWordingTests \
+    hq.platform.application.tests.test_script_loading hq.platform.application.tests.test_action_words.DeclaredWordsTests \
+    hq.platform.application.tests.test_architecture.PageTitleTests hq.platform.application.tests.test_architecture.OnePrimitiveTests \
+    hq.platform.application.tests.test_architecture.FragmentPrimitiveTests \
+    hq.platform.application.tests.test_shared_markup.SharedMarkupTemplateTests \
+    hq.platform.core.tests.test_template_values.TemplateValueTests hq.platform.core.tests.test_row_groups.RowGroupTests \
+    hq.platform.core.tests.test_template_separators.TemplateSeparatorTests \
+    hq.platform.application.tests.test_action_words.CallSiteWordsTests \
+    hq.platform.application.tests.test_architecture.StyleContractTests.test_a_rows_block_detail_opens_beneath_the_row
 
 # Production installs admitted wheels with --no-deps. Recreate that exact
 # dependency boundary in an isolated environment so an undeclared host pin
 # fails here instead of after composition. Installing the package directory
 # builds and installs its wheel, as `uv build` would.
 uv venv --python "$python" "$work/venv"
-uv pip install --python "$work/venv/bin/python" --require-hashes -r "$host_requirements"
-uv pip install --python "$work/venv/bin/python" --no-deps .
+uv pip install --quiet --python "$work/venv/bin/python" --require-hashes -r "$host_requirements"
+uv pip install --quiet --python "$work/venv/bin/python" --no-deps .
 uv pip check --python "$work/venv/bin/python"
 "$work/venv/bin/python" "$hq_root/manage.py" check

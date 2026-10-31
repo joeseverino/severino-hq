@@ -1,13 +1,9 @@
 """What the registry states, as the schemas the controller is generated from.
 
-The registry declares each fact once: the kinds, the connection providers, why
-a read fails, the parts a reading is read in, each reading's record, the values
-both sides check (``SHARED`` on the module that owns them) and the shapes a
-connection arrives in. This module turns those declarations into component
-schemas. ``bridge_contract`` joins them to the bridge's own messages, and
-``manage.py bridge_contract`` writes the result for the controller's generator.
-
-Nothing here is read back: a schema is built from the declaration every time.
+Each fact the registry declares once (a value both sides check is ``SHARED`` on
+the module that owns it) becomes component schemas here, built from the
+declaration every time and never read back; ``bridge_contract`` joins them to
+the bridge's own messages.
 """
 
 import re

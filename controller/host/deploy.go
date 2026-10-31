@@ -185,8 +185,9 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 		d.restart(held)
 		return err
 	}
+	stands := false
 	defer func() {
-		if err != nil {
+		if err != nil && !stands {
 			err = errors.Join(err, d.rollBack(strings.TrimSpace(string(previous)), tree, units, kept, held))
 		}
 	}()
@@ -217,6 +218,22 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 		fmt.Fprintf(d.Out, "The database kept before migrating is still at %s: %v\n", kept, err)
 	}
 	fmt.Fprintf(d.Out, "Deployed %s.\n", image)
+	stands = true
+	return d.verifyRelease(ctx)
+}
+
+// verifyRelease runs the drift unit on the release just installed, so a check
+// of the host has its verdict at once rather than at the next timer. Drift
+// fails the deploy without rolling it back: HQ is healthy on the release, and
+// what verify finds (a planted file, a sudo rule) is the host's, which the
+// previous release would stand on too. Verify's findings go to the journal,
+// never the public log.
+func (d *Deployer) verifyRelease(ctx context.Context) error {
+	if err := d.Command(ctx, "systemctl", "start", DriftUnit).Run(); err != nil {
+		fmt.Fprintf(d.Out, "The host is not its release; 'journalctl -u %s' there says why.\n", DriftUnit)
+		return fmt.Errorf("%s failed after the deploy: %w", DriftUnit, err)
+	}
+	fmt.Fprintln(d.Out, "The host is its release.")
 	return nil
 }
 
@@ -295,7 +312,7 @@ func (d *Deployer) hold(ctx context.Context) ([]string, error) {
 	}
 	deadline := time.Now().Add(d.Drain)
 	for time.Now().Before(deadline) {
-		if !d.active(ctx, ControllerUnit) && !d.active(ctx, SecretsUnit) {
+		if !d.active(ctx, ControllerUnit) && !d.active(ctx, GlanceUnit) && !d.active(ctx, SecretsUnit) {
 			return held, nil
 		}
 		select {
@@ -351,7 +368,7 @@ func (d *Deployer) copyOut(ctx context.Context, image, from, to string) error {
 		return fmt.Errorf("could not read %s from the image: %w", from, err)
 	}
 	container := strings.TrimSpace(string(out))
-	defer d.run(context.WithoutCancel(ctx), "docker", "rm", "--force", container)
+	defer func() { _ = d.run(context.WithoutCancel(ctx), "docker", "rm", "--force", container) }()
 	if err := d.run(ctx, "docker", "cp", container+":"+from, to); err != nil {
 		return fmt.Errorf("the image ships no %s: %w", from, err)
 	}

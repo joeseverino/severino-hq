@@ -37,6 +37,13 @@ query-filters:
   # on every file in the gates a change runs before it is pushed.
   - exclude:
       id: py/implicit-string-concatenation-in-list
+  # py/unnecessary-lambda reads `lambda owner: example_estate.build(owner)` as
+  # `example_estate.build`, which is not the same under a `lazy` import (PEP
+  # 810): naming the attribute imports the module where the lambda waits for
+  # the call. Every lambda it reports here defers a lookup on purpose, a lazy
+  # module or a new callable a test registers, as Ruff's PLW0108 finds too.
+  - exclude:
+      id: py/unnecessary-lambda
 
 # The type checker's settings shim, for the host's mypy and each extension's.
 # django-stubs reads a settings module's names statically, so it re-exports

@@ -27,6 +27,7 @@ from ..request_path import (
     serialize_request_path,
 )
 from .markup import elements
+from .people import someone
 
 HQ = "hq.example.test"
 LAPTOP = "100.64.0.20"
@@ -85,7 +86,7 @@ def an_estate():
 def a_request(*, peer=PROXY, forwarded=LAPTOP, **headers):
     extra = {"HTTP_X_FORWARDED_FOR": forwarded} if forwarded else {}
     request = RequestFactory().get("/connection/", secure=True, HTTP_HOST=HQ, REMOTE_ADDR=peer, **extra, **headers)
-    request.user = get_user_model()(username="someone", email="someone@example.test")
+    request.user = someone()
     return request
 
 

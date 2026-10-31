@@ -2,16 +2,9 @@
 
 A unit asks for one of these by name over the bridge socket and the running
 process does it as a job (``hq.domains.jobs``): one at a time, with a row that
-says how it ended and an audit entry. Work that declares ``every`` is done on
-that cadence: the one hourly timer asks for ``due``, which does each piece of
-the host's and the extensions' work whose cadence has come round. Work without
-one is asked for by a unit of its own (``units.read``, through ``OnFailure=``).
-What the work is, and how often, is declared here and nowhere else. A unit
-naming anything else is refused, and a test holds the shipped units to this
-list.
-
-HQ starts the same work itself when it learns something is due sooner than the
-timer would find it (``start``).
+says how it ended and an audit entry. What the work is, and how often, is
+declared here and nowhere else: a unit naming anything else is refused, and a
+test holds the shipped units to this list.
 """
 
 from collections.abc import Callable
@@ -33,7 +26,7 @@ lazy from hq.platform.core.database import optimize
 lazy from hq.platform.core.models import AuditLog
 
 from .ui import counted
-lazy from . import outbound_work
+lazy from . import approvals, outbound_work
 lazy from .asks import job_standing
 lazy from .cadence import request_reading
 lazy from .outbound_work import run_now
@@ -53,7 +46,7 @@ class ScheduledWork:
     every: timedelta | None = None
 
 
-def prune_audit(progress: Any = None) -> dict[str, Any]:
+def prune_audit(_progress: Any = None) -> dict[str, Any]:
     """Delete routine audit events past their window, on the record."""
 
     days = int(settings.SEVERINO_AUDIT_ROUTINE_DAYS)
@@ -71,7 +64,7 @@ def prune_audit(progress: Any = None) -> dict[str, Any]:
     return {"deleted": deleted, "days": days}
 
 
-def _clear_sessions(progress: Any) -> dict[str, Any]:
+def _clear_sessions(_progress: Any) -> dict[str, Any]:
     """A session row outlives its expiry until something deletes it."""
 
     before = Session.objects.count()
@@ -79,18 +72,18 @@ def _clear_sessions(progress: Any) -> dict[str, Any]:
     return {"deleted": before - Session.objects.count()}
 
 
-def _content_index(progress: Any) -> dict[str, Any]:
+def _content_index(_progress: Any) -> dict[str, Any]:
     try:
         return sync_content_index()
     except ContentSyncError as exc:
         raise Failed(str(exc)) from exc
 
 
-def _public_registry(progress: Any) -> dict[str, Any]:
+def _public_registry(_progress: Any) -> dict[str, Any]:
     return refresh(principal=cli_principal())
 
 
-def _unit_state(progress: Any) -> dict[str, Any]:
+def _unit_state(_progress: Any) -> dict[str, Any]:
     """Have the controller read the machine's units now: a unit there failed.
 
     The failed unit is not named and need not be. The reading says which.
@@ -99,10 +92,18 @@ def _unit_state(progress: Any) -> dict[str, Any]:
     return {"asked": UNIT_KIND, "rung": request_reading(UNIT_KIND)}
 
 
-def _due(progress: Any = None) -> dict[str, Any]:
-    """Do the host's and the extensions' work whose cadence has come round,
-    each as its own job, so each says how it ended."""
+def _due(_progress: Any = None) -> dict[str, Any]:
+    """Settle what ran out unanswered, then do the host's and the extensions'
+    work whose cadence has come round, each as its own job, so each says how
+    it ended.
 
+    Settling is here rather than on a page, since a GET has no effect: a job
+    whose process stopped is marked lost, and an approval nobody answered in
+    time is marked lapsed. A page already shows each as it stands.
+    """
+
+    lost = runner.reap()
+    lapsed = approvals.lapse_expired()
     now = timezone.now()
     ended: dict[str, str] = {
         work.name: run(work.name)["state"]
@@ -117,11 +118,16 @@ def _due(progress: Any = None) -> dict[str, Any]:
             ended[work.name] = "running"
         except ValueError as refused:
             ended[work.name] = f"refused: {refused}"
-    return {"due": len(ended), "ended": ended}
+    return {"due": len(ended), "ended": ended, "lost": lost, "lapsed": lapsed}
 
 
 DAILY = timedelta(days=1)
 
+# Work with ``every`` is done on that cadence: the one hourly timer asks for
+# ``due``, which does each piece of the host's and the extensions' work whose
+# cadence has come round. Work without one is asked for by a unit of its own
+# (``units.read``, through ``OnFailure=``), or by HQ through ``start`` when it
+# learns something is due sooner than the timer would find it.
 SCHEDULED: tuple[ScheduledWork, ...] = (
     ScheduledWork("audit.prune", "Delete old routine log entries", prune_audit, every=DAILY),
     ScheduledWork("content.sync", "Fetch the site's content list", _content_index, every=DAILY),

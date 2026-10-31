@@ -1,5 +1,4 @@
 import json
-import uuid
 from functools import cached_property
 from typing import Any, override
 
@@ -10,10 +9,10 @@ from django.views import View
 from django.views.generic import DetailView, ListView
 
 from hq.platform.application.action_links import READ_NOW_CAPABILITY, command_url
-from hq.platform.application.capabilities import capability_words
+from hq.platform.application.approvals import DESTRUCTIVE_EFFECT
+from hq.platform.application.capabilities import capability_registry, capability_words, execute_capability
 from hq.platform.application.entity_links import kind_label, record_name, web_url
 from hq.platform.application.infrastructure import (
-    PolicyError,
     declared_machines,
     delivery_targets,
     is_drifted,
@@ -27,8 +26,8 @@ from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.payload_words import value_words
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_capabilities import (
-    DESTRUCTIVE_VERBS,
     Allowed,
+    channels_inside,
     resource_capabilities,
     verb_words,
 )
@@ -42,16 +41,13 @@ from hq.platform.application.resource_context import (
     resource_context,
 )
 from hq.platform.application.resource_operations import (
+    ACTION_CAPABILITY,
     HISTORY_WINDOW,
-    OperationCommand,
     changes,
     operation_summary,
-    request_certificate_renewal,
-    request_lifecycle,
-    request_reconcile,
-    request_removal,
     requested_by,
     resource_history,
+    supervision,
 )
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
@@ -68,28 +64,16 @@ from .provider_adapters.tls import CERTIFICATE_KIND
 from .providers import PROVIDERS, describe_providers, readout_rows, shown_spec
 lazy from .container_views import container_detail
 
-# Which use case serves which verb. A table rather than a fall-through, so a
-# lifecycle verb such as Restart never reaches reconciliation, which is locked
-# for a container.
-_OPERATION_USE_CASE = {
-    OperationRequest.Action.RECONCILE: request_reconcile,
-    OperationRequest.Action.RENEW: request_certificate_renewal,
-}
 
+def _web_operation(request, resource, action) -> dict[str, Any]:
+    """Ask for ``action`` on ``resource`` through its capability, as the operator."""
 
-def _web_operation(request, resource, action):
-    command = OperationCommand(
-        idempotency_key=f"web:{request.user.pk}:{uuid.uuid4()}",
-        reason=request.POST.get("reason", "").strip(),
+    return execute_capability(
+        ACTION_CAPABILITY[action],
+        {"reason": request.POST.get("reason", "").strip()},
+        principal=web_principal(request.user),
+        target=resource.key,
     )
-    principal = web_principal(request.user)
-    use_case = _OPERATION_USE_CASE.get(action)
-    if use_case is not None:
-        return use_case(command, principal=principal, current_key=resource.key)
-    # Everything else is a lifecycle verb: asked for once, about something
-    # already as declared. One entry point rather than one function per verb,
-    # because they differ only in the word.
-    return request_lifecycle(command, principal=principal, current_key=resource.key, action=action)
 
 
 def _json(value: Any) -> str:
@@ -99,17 +83,12 @@ def _json(value: Any) -> str:
 
 
 def _spec_rows(resource, *, beside_readout: bool = False) -> dict[str, tuple[tuple[str, str], ...]]:
-    """A spec as an operator reads it, split the way the form splits it.
+    """A spec as an operator reads it before a destructive action, split the way
+    the form splits it: fields by their model titles, an unset optional left out
+    rather than shown as "None", and fields the provider declares routine folded.
 
-    Shown before a destructive action, so:
-
-    - Fields by their titles from the model, never their names.
-    - An unset optional is left out rather than shown as "None".
-    - Fields the provider declares routine fold away, the same split the form
-      makes.
-
-    ``beside_readout`` is the record's own page, where the readout and the
-    page's name stand above this: a value they already show is not repeated.
+    ``beside_readout`` is the record's own page, where the readout and the page's
+    name stand above this: a value they already show is not repeated.
     """
 
     provider = PROVIDERS[resource.kind]
@@ -222,11 +201,11 @@ class ResourceRemoveView(View):
                 "holds_records": bool(PROVIDERS[resource.kind].contains),
                 "confirm": {
                     "url": reverse("control_plane:remove", args=[resource.key]),
-                    "label": "Stop tracking in HQ" if forget else "Remove",
+                    "label": capabilities.removal_words,
                     "cancel_url": resource.get_absolute_url(),
                 },
                 **page_context(
-                    f"Remove {record_name(resource.kind, resource.spec, resource.key)}?",
+                    f"{capabilities.removal_words}: {record_name(resource.kind, resource.spec, resource.key)}?",
                     kind_label(resource.kind),
                 ),
             },
@@ -234,17 +213,9 @@ class ResourceRemoveView(View):
 
     def post(self, request, key):
         resource = get_object_or_404(ManagedResource, key=key)
-        try:
-            result = request_removal(
-                OperationCommand(
-                    idempotency_key=f"web:{request.user.pk}:{uuid.uuid4()}",
-                    reason=request.POST.get("reason", "").strip(),
-                ),
-                principal=web_principal(request.user),
-                current_key=resource.key,
-            )
-        except PolicyError as exc:
-            messages.error(request, str(exc))
+        result = _web_operation(request, resource, OperationRequest.Action.DELETE)
+        if not result["ok"]:
+            messages.error(request, result["error"]["message"])
             return redirect("control_plane:detail", key=key)
         if "forgotten" in result:
             # Nothing was queued because nothing exists at the provider that HQ
@@ -326,12 +297,14 @@ class InfrastructureDetailView(PageMixin, DetailView):
     template_name = "control_plane/resource_detail.html"
     context_object_name = "resource"
 
+    @cached_property
+    def _record(self):
+        return super().get_object()
+
     @override
     def get_object(self, queryset=None):
         # Read once: ``get`` asks before deciding where the record lives, and
         # the detail view asks again to draw it.
-        if not hasattr(self, "_record"):
-            self._record = super().get_object(queryset)
         return self._record
 
     @override
@@ -545,6 +518,14 @@ def requested(action: str, key: str, *, queued: bool) -> str:
     return requested_note(verb_words(action), key, again=not queued)
 
 
+def is_destructive(verb: str) -> bool:
+    """Whether a resource's verb takes something away from whoever is using it,
+    as its capability declares: asked for by name on a page of its own, never
+    pressed straight from a head."""
+
+    return capability_registry()[ACTION_CAPABILITY[verb]].effect == DESTRUCTIVE_EFFECT
+
+
 def verb_action(
     verb: str, key: str, allowed: Allowed, *, label: str, title: str, origin: str, primary: bool = False
 ) -> PageAction:
@@ -552,7 +533,7 @@ def verb_action(
     confirmation, named, and comes back to ``origin``; the rest post at once."""
 
     url = reverse(f"control_plane:{verb}", args=[key])
-    if verb in DESTRUCTIVE_VERBS:
+    if is_destructive(verb):
         return PageAction(label, returning_to(url, origin), danger=True, disabled=not allowed.enabled, title=title)
     return PageAction(label, url, method="post", primary=primary, disabled=not allowed.enabled, title=title)
 
@@ -570,7 +551,7 @@ class OperationView(View):
     def get(self, request, key):
         """A destructive verb's confirmation, naming what stops; any other verb only posts."""
 
-        if self.action not in DESTRUCTIVE_VERBS:
+        if not is_destructive(self.action):
             return HttpResponseNotAllowed(["POST"])
         resource = get_object_or_404(ManagedResource, key=key)
         name = record_name(resource.kind, resource.spec, resource.key)
@@ -580,6 +561,12 @@ class OperationView(View):
             "control_plane/resource_confirm_verb.html",
             {
                 "name": name,
+                # What else stops with it: HQ's own way of reaching a machine,
+                # said before the press, since HQ cannot undo it from here.
+                "host": resource.spec.get("host", ""),
+                "channels": channels_inside(resource),
+                # The unit that runs it, which the verb goes through.
+                "supervision": supervision(resource),
                 "confirm": {
                     "url": request.get_full_path(),
                     "label": label,
@@ -596,17 +583,16 @@ class OperationView(View):
         # container) and send `next`. Validated through the shared helper, so
         # the field cannot become an open redirect.
         destination = safe_next(request, fallback=reverse("control_plane:detail", kwargs={"key": key}))
-        try:
-            result = _web_operation(request, resource, self.action)
-        except PolicyError as exc:
-            messages.error(request, str(exc))
+        result = _web_operation(request, resource, self.action)
+        if not result["ok"]:
+            messages.error(request, result["error"]["message"])
             return redirect(destination)
         messages.success(request, requested(self.action, resource.key, queued=result["queued"]))
         return redirect(destination)
 
 
 class CertificateDownloadView(View):
-    def get(self, request, key):
+    def get(self, _request, key):
         resource = get_object_or_404(ManagedResource, key=key)
         certificate_pem = resource.status.get("certificate_pem", "")
         if resource.kind != CERTIFICATE_KIND or not certificate_pem:
@@ -625,7 +611,7 @@ class CertificateDownloadView(View):
 
 
 class ResourceReportDownloadView(View):
-    def get(self, request, key):
+    def get(self, _request, key):
         resource = get_object_or_404(ManagedResource, key=key)
         payload = {
             "schema_version": 1,
@@ -647,5 +633,5 @@ class ResourceReportDownloadView(View):
 
 
 class ProviderSchemaView(View):
-    def get(self, request):
+    def get(self, _request):
         return JsonResponse(describe_providers(), json_dumps_params={"indent": 2})

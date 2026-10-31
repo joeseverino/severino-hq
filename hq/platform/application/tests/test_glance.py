@@ -1,9 +1,13 @@
+import tempfile
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -19,18 +23,41 @@ from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_grow
 
 from .. import readings
+from ..capabilities import execute_capability
 from ..glance import (
+    DASHBOARD_MACHINE,
+    DASHBOARD_REFRESH,
+    DASHBOARD_SETTINGS,
+    DashboardMachineCommand,
     _glance_reading,
     dashboard_panels,
     dashboard_refresh_plan,
     panel_specs,
     record_dashboard_observations,
-    request_dashboard_refresh,
-    save_dashboard_settings,
     select_dashboard_machine,
 )
-from ..security import cli_principal
+from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
 from .markup import hrefs, select, text, with_class
+
+AN_OPERATOR = Principal("operator", "web", OPERATOR_CAPABILITIES)
+
+
+def _now() -> str:
+    """The as_of of a plan made just now."""
+
+    return timezone.now().isoformat()
+
+
+@contextmanager
+def doorbells() -> Iterator[Callable[[], list[str]]]:
+    """The host's doorbells in a directory of their own, and a way to ask
+    which of them have been rung."""
+
+    with (
+        tempfile.TemporaryDirectory() as directory,
+        override_settings(SEVERINO_CONTROLLER_DOORBELL=str(Path(directory) / "controller-doorbell")),
+    ):
+        yield lambda: sorted(path.name for path in Path(directory).iterdir())
 
 
 class DashboardGlanceTests(TestCase):
@@ -145,6 +172,7 @@ class DashboardGlanceTests(TestCase):
             [
                 {
                     "panel_id": "infrastructure",
+                    "as_of": _now(),
                     "machines": [
                         {
                             "key": "app-server",
@@ -181,7 +209,7 @@ class DashboardGlanceTests(TestCase):
     def _weather(self, **reading):
         DashboardRefreshRequest.objects.update_or_create(panel_id="weather", defaults={"completed_at": None})
         record_dashboard_observations(
-            [{"panel_id": "weather", "point": "41.0000,-87.0000", **reading}],
+            [{"panel_id": "weather", "as_of": _now(), "point": "41.0000,-87.0000", **reading}],
             principal=cli_principal(),
             controller_id="app-server",
         )
@@ -230,7 +258,7 @@ class DashboardGlanceTests(TestCase):
                 panel_id=self.machine_request_id, defaults={"completed_at": None}
             )
             record_dashboard_observations(
-                [{"panel_id": "infrastructure", "machines": [{"key": "app-server", **reading}]}],
+                [{"panel_id": "infrastructure", "as_of": _now(), "machines": [{"key": "app-server", **reading}]}],
                 principal=cli_principal(),
                 controller_id="app-server",
             )
@@ -362,6 +390,7 @@ class DashboardGlanceTests(TestCase):
                 [
                     {
                         "panel_id": "infrastructure",
+                        "as_of": _now(),
                         "machines": [
                             {
                                 "key": "not-declared",
@@ -392,19 +421,70 @@ class DashboardGlanceTests(TestCase):
             spec={"name": "other-machine"},
         )
 
-        select_dashboard_machine(other.key, selected=True, principal=cli_principal())
+        select_dashboard_machine(DashboardMachineCommand(selected=True), principal=AN_OPERATOR, current_key=other.key)
 
         self.assertEqual(
             list(DashboardMachine.objects.values_list("machine__key", flat=True)),
             ["app-server", "other-machine"],
         )
 
+    def test_the_machine_form_chooses_it_audited_under_the_operator(self):
+        user = get_user_model().objects.create_user(username="operator", password="test-only-password")
+        self.client.force_login(user)
+        other = ManagedResource.objects.create(key="other-machine", kind="machine", spec={"name": "other-machine"})
+
+        response = self.client.post(
+            reverse("control_plane:edit", kwargs={"key": other.key}),
+            {"name": "other-machine", "enabled": "on", "show_on_dashboard": "on"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(DashboardMachine.objects.filter(machine=other).exists())
+        shown = AuditLog.objects.get(object_type="Dashboard", object_id=str(other.pk))
+        self.assertEqual((shown.metadata["actor"], shown.metadata["operation"]), ("operator", DASHBOARD_MACHINE))
+
+    def test_only_a_person_in_the_browser_chooses_the_dashboard_machines(self):
+        other = ManagedResource.objects.create(key="other-machine", kind="machine", spec={"name": "other-machine"})
+        granted = frozenset(Capability)
+        for principal in (
+            Principal("example-agent", "mcp", granted, granted=granted),
+            Principal("example-client", "api", granted, granted=granted),
+            cli_principal(),
+        ):
+            with self.subTest(interface=principal.interface):
+                result = execute_capability(
+                    DASHBOARD_MACHINE, {"selected": True}, principal=principal, target=other.key
+                )
+
+                self.assertEqual(result["error"]["code"], "forbidden")
+        self.assertFalse(DashboardMachine.objects.filter(machine=other).exists())
+        self.assertEqual(AuditLog.objects.filter(action=AuditLog.Action.DENIED).count(), 3)
+
+    def test_a_record_that_is_not_an_enabled_machine_is_refused_with_its_reason(self):
+        ManagedResource.objects.create(key="off-machine", kind="machine", spec={"name": "off"}, enabled=False)
+        for key in ("off-machine", "nothing-by-this-name"):
+            with self.subTest(key=key):
+                result = execute_capability(DASHBOARD_MACHINE, {"selected": True}, principal=AN_OPERATOR, target=key)
+
+                self.assertEqual(
+                    result["error"],
+                    {"code": "precondition", "message": "Dashboard telemetry requires an enabled machine record."},
+                )
+        self.assertEqual(DashboardMachine.objects.count(), 1)
+
+    def test_a_selection_that_is_not_a_yes_or_no_is_invalid(self):
+        for payload in ({}, {"selected": "sometimes"}):
+            with self.subTest(payload=payload):
+                result = execute_capability(DASHBOARD_MACHINE, payload, principal=AN_OPERATOR, target="app-server")
+
+                self.assertEqual(result["error"]["code"], "invalid_input")
+        self.assertEqual(DashboardMachine.objects.count(), 1)
+
     def test_weather_settings_validate_and_normalize_coordinates(self):
-        save_dashboard_settings(
-            weather_point=" 41.1, -87.2 ",
-            weather_label="Outside",
-            infrastructure_label="Lab",
-            principal=cli_principal(),
+        execute_capability(
+            DASHBOARD_SETTINGS,
+            {"weather_point": " 41.1, -87.2 ", "weather_label": "Outside", "infrastructure_label": "Lab"},
+            principal=AN_OPERATOR,
         )
 
         configuration = DashboardConfiguration.objects.get()
@@ -419,6 +499,7 @@ class DashboardGlanceTests(TestCase):
                 [
                     {
                         "panel_id": "infrastructure",
+                        "as_of": _now(),
                         "machines": [
                             {
                                 "key": "app-server",
@@ -438,6 +519,7 @@ class DashboardGlanceTests(TestCase):
                 [
                     {
                         "panel_id": "infrastructure",
+                        "as_of": _now(),
                         "machines": [
                             {
                                 "key": "app-server",
@@ -451,18 +533,62 @@ class DashboardGlanceTests(TestCase):
                 controller_id="app-server",
             )
 
-    def test_refresh_is_explicit_and_rings_the_existing_doorbell(self):
+    def _report_machine(self, as_of):
+        return record_dashboard_observations(
+            [
+                {
+                    "panel_id": "infrastructure",
+                    "as_of": as_of,
+                    "machines": [{"key": "app-server", "status": "good", "metrics": [{"label": "CPU", "value": "5%"}]}],
+                }
+            ],
+            principal=cli_principal(),
+            controller_id="app-server",
+        )
+
+    def test_a_request_made_while_a_reading_was_under_way_waits_for_the_next(self):
+        now = timezone.now()
+        DashboardRefreshRequest.objects.create(
+            panel_id=self.machine_request_id, requested_at=now - timedelta(minutes=2)
+        )
+        # The controller took its plan a minute ago, and the panel was asked
+        # for again while it read.
+        planned = (now - timedelta(minutes=1)).isoformat()
+        DashboardRefreshRequest.objects.filter(panel_id=self.machine_request_id).update(
+            requested_at=now - timedelta(seconds=30)
+        )
+
+        self._report_machine(planned)
+
+        # The reading is kept, but it began before the second request.
+        self.assertIsNotNone(readings.stored(readings.machine_telemetry(self.machine.key)))
+        self.assertIsNone(DashboardRefreshRequest.objects.get(panel_id=self.machine_request_id).completed_at)
+
+        self._report_machine(dashboard_refresh_plan("app-server")["as_of"])
+
+        self.assertIsNotNone(DashboardRefreshRequest.objects.get(panel_id=self.machine_request_id).completed_at)
+
+    def test_an_observation_that_does_not_say_when_its_plan_was_made_is_refused(self):
+        DashboardRefreshRequest.objects.create(panel_id=self.machine_request_id)
+
+        for as_of in (None, "", "yesterday", "2026-01-01T00:00:00"):
+            with self.subTest(as_of=as_of), self.assertRaisesMessage(ValueError, "does not say when its plan was made"):
+                self._report_machine(as_of)
+
+        self.assertIsNone(DashboardRefreshRequest.objects.get(panel_id=self.machine_request_id).completed_at)
+
+    def test_a_refresh_rings_the_glance_doorbell(self):
         configuration = DashboardConfiguration.objects.get()
         configuration.weather_point = ""
         configuration.save(update_fields=("weather_point", "updated_at"))
-        with (
-            self.captureOnCommitCallbacks(execute=True),
-            patch("hq.platform.application.glance.ring_doorbell") as ring,
-        ):
-            result = request_dashboard_refresh(principal=cli_principal())
+        with doorbells() as rung:
+            with self.captureOnCommitCallbacks(execute=True):
+                result = execute_capability(DASHBOARD_REFRESH, {}, principal=cli_principal())
 
+            # One rung on the controller's doorbell during a sweep waits for
+            # that sweep to end; the glance's starts a pass of its own.
+            self.assertIn("glance-doorbell", rung())
         self.assertEqual(result["requested"], [self.machine_request_id])
-        ring.assert_called_once_with()
 
 
 class GlanceRenderingTests(TestCase):
@@ -590,9 +716,10 @@ class GlanceRenderingTests(TestCase):
         self.assertTrue(select(response, "name", "infrastructure_label"))
 
     def test_weather_waits_on_a_machine_a_controller_reaches(self):
+        # The machine here is one no connection opens and no controller runs on.
+        self.assertFalse(ProviderConnection.objects.exists())
         DashboardRefreshRequest.objects.create(panel_id="weather", requested_at=timezone.now())
-        with patch("hq.platform.application.glance._machine_routes", return_value={}):
-            weather = next(p for p in dashboard_panels() if p["id"] == "weather")
+        weather = next(p for p in dashboard_panels() if p["id"] == "weather")
         self.assertEqual((weather["refreshable"], weather["refreshing"]), (False, False))
 
     def test_the_strip_has_no_controls_of_its_own(self):
@@ -641,7 +768,7 @@ class GlanceEndpointTests(TestCase):
         )
 
     def test_a_get_on_a_stale_glance_requests_nothing(self):
-        with patch("hq.platform.application.glance.ring_doorbell") as doorbell:
+        with patch("hq.platform.application.glance.ring_glance_doorbell") as doorbell:
             response = self.client.get(reverse("dashboard_glance"))
 
         self.assertEqual(response.status_code, 200)
@@ -650,7 +777,7 @@ class GlanceEndpointTests(TestCase):
         doorbell.assert_not_called()
 
     def test_the_dashboard_page_requests_nothing(self):
-        with patch("hq.platform.application.glance.ring_doorbell"):
+        with patch("hq.platform.application.glance.ring_glance_doorbell"):
             self.client.get(reverse("dashboard"))
 
         self.assertFalse(DashboardRefreshRequest.objects.exists())
@@ -664,12 +791,11 @@ class GlanceEndpointTests(TestCase):
         self.assertEqual(catalog.call_count, 1)
 
     def test_a_stale_post_requests_the_stale_panels_and_shows_them_refreshing(self):
-        with (
-            self.captureOnCommitCallbacks(execute=True),
-            patch("hq.platform.application.glance.ring_doorbell") as doorbell,
-        ):
-            response = self.client.post(reverse("dashboard_glance"), {"scope": "stale"})
+        with doorbells() as rung:
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.post(reverse("dashboard_glance"), {"scope": "stale"})
 
+            self.assertIn("glance-doorbell", rung())
         self.assertEqual(response.status_code, 202)
         self.assertEqual(
             list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)),
@@ -677,7 +803,6 @@ class GlanceEndpointTests(TestCase):
         )
         (part,) = select(response, "data-fragment-part", f"machine-{self.machine.pk}")
         self.assertIn("data-refreshing", part.attrs)
-        doorbell.assert_called_once()
 
     def test_a_stale_post_with_nothing_stale_requests_nothing(self):
         readings.record(

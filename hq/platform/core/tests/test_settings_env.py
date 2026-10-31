@@ -81,6 +81,7 @@ class MountedAppEnvTests(SimpleTestCase):
             capture_output=True,
             text=True,
             env=env,
+            check=False,
             cwd=REPO_ROOT,
         )
         self.assertEqual(result.returncode, 0, msg=result.stderr)
@@ -104,6 +105,7 @@ class MountedAppEnvTests(SimpleTestCase):
             capture_output=True,
             text=True,
             env=env,
+            check=False,
             cwd=REPO_ROOT,
         )
         self.assertEqual(result.returncode, 0, msg=result.stderr)

@@ -2,16 +2,18 @@
 
 from typing import override
 
+from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import TemplateView, View
 
 from hq.platform.application import action_items as queue_state, fragments
+from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.dashboard import waiting, work_queue
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import projection_scope
-from hq.platform.application.security import safe_next
+from hq.platform.application.security import safe_next, web_principal
 
 ACTION_ITEM_FILTERS = ("q", "status", "source", "about")
 
@@ -95,12 +97,8 @@ class ActionItemAsideView(View):
     """Dismiss items, or restore them, for the signed-in person.
 
     Each route names the state in ``aside``. A row's button posts the row
-    itself (its revision and key), and that is all a dismissal or a restore
-    needs: the queue is not composed to handle it. Only "all of these" has to
-    know what "these" are: everything the page's filters (in the query string)
-    show of the part of the queue it names, or of one family in it.
-    A page that asked with a script is answered with nothing; a plain form is
-    sent back to the queue.
+    itself (its revision and key), which is all a dismissal or a restore needs;
+    only "all of these" composes the queue, to know what "these" are.
     """
 
     aside = False
@@ -108,19 +106,27 @@ class ActionItemAsideView(View):
     def post(self, request):
         rows = queue_state.named_rows(request.POST.getlist("key"))
         if rows and self.aside:
-            queue_state.dismiss_rows(request.user, rows)
+            self._keep(queue_state.SET_ASIDE, {"rows": rows})
         elif rows:
-            queue_state.restore_rows(request.user, rows)
+            self._keep(queue_state.RESTORE, {"keys": list(rows)})
         elif self.aside:
-            with projection_scope():
-                current = work_queue()
-            _, items = _action_items(request, current)
-            doing, told = queue_state.split_waiting(items)
-            part = {"doing": doing, "told": told}.get(request.GET.get("part", ""), [])
-            family = request.GET.get("family", "")
-            if family:
-                part = queue_state.of_family(part, family)
-            queue_state.set_aside(request.user, [item["key"] for item in part], aside=True, current=current)
+            self._keep(queue_state.SET_ASIDE, {"keys": self._shown_keys()})
         if request.headers.get("x-requested-with") == "XMLHttpRequest":
             return HttpResponse(status=204)
         return redirect(safe_next(request, scope=reverse("action_items"), fallback=reverse("action_items")))
+
+    def _shown_keys(self) -> list[str]:
+        """Every item the page's filters show of the part of the queue it names, or of one family in it."""
+
+        _, items = _action_items(self.request)
+        doing, told = queue_state.split_waiting(items)
+        part = {"doing": doing, "told": told}.get(self.request.GET.get("part", ""), [])
+        family = self.request.GET.get("family", "")
+        if family:
+            part = queue_state.of_family(part, family)
+        return [item["key"] for item in part]
+
+    def _keep(self, capability: str, payload: dict) -> None:
+        result = execute_capability(capability, payload, principal=web_principal(self.request.user))
+        if not result["ok"]:
+            messages.error(self.request, result["error"]["message"])

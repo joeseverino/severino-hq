@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/joeseverino/severino-hq/controller/host/unit"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -66,7 +68,7 @@ func (a *portainerAPI) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	io.WriteString(w, answer)
+	_, _ = io.WriteString(w, answer)
 }
 
 func (a *portainerAPI) written() []portainerWrite {
@@ -389,7 +391,7 @@ func TestPortainerEachRefusesPerMachine(t *testing.T) {
 	}
 }
 
-func stackRoutes(stackFile string, stacks string, containers string) map[string]string {
+func stackRoutes(stackFile, stacks, containers string) map[string]string {
 	return map[string]string{
 		"/api/endpoints":      oneLocalEndpoint,
 		"/api/stacks":         stacks,
@@ -510,6 +512,86 @@ func TestPortainerCyclerReadsBackTheState(t *testing.T) {
 	}
 }
 
+// units stands in for hq-host unit on the machines it is given.
+type units struct {
+	on   []string
+	acts []string
+}
+
+func (u *units) Reaches(host string) bool { return slices.Contains(u.on, host) }
+
+func (u *units) Act(_ context.Context, host, verb, name string) error {
+	u.acts = append(u.acts, host+" "+verb+" "+name)
+	return nil
+}
+
+// supervisedList is Docker's container list with web started by its unit.
+const supervisedList = `[{"Id":"def","Names":["/web"],"State":"exited","Labels":{"com.docker.compose.project":"web","severino-hq.unit":"web.service"}}]`
+
+func TestPortainerCyclerActsThroughTheUnitALabelNames(t *testing.T) {
+	for _, verb := range []string{"stop", "start", "restart"} {
+		api, server := newPortainerAPI(t, map[string]string{"/api/endpoints": oneLocalEndpoint, containersPath: supervisedList})
+		r := portainerRegistry(t, server.URL, runtime.Environment{})
+		control := &units{on: []string{"hq-node"}}
+		r.Units = control
+		res, err := r.portainerCycler(verb)(t.Context(), PortainerContainerSpec{ConnectionRef: "portainer-example", Host: "hq-node", Name: "web"}, struct{}{}, true)
+		if err != nil || res.Message != "web is exited." {
+			t.Fatalf("%s: %+v %v", verb, res, err)
+		}
+		if !slices.Equal(control.acts, []string{"hq-node " + verb + " web.service"}) {
+			t.Errorf("%s: asked the unit %v", verb, control.acts)
+		}
+		if writes := api.written(); len(writes) != 0 {
+			t.Errorf("%s: asked Docker too: %+v", verb, writes)
+		}
+	}
+}
+
+func TestPortainerCyclerLeavesAUnitsContainerAloneWhereNoUnitIsReached(t *testing.T) {
+	for _, control := range []UnitControl{nil, &units{on: []string{"elsewhere"}}} {
+		for _, apply := range []bool{true, false} {
+			api, server := newPortainerAPI(t, map[string]string{"/api/endpoints": oneLocalEndpoint, containersPath: supervisedList})
+			r := portainerRegistry(t, server.URL, runtime.Environment{})
+			r.Units = control
+			_, err := r.portainerCycler("stop")(t.Context(), PortainerContainerSpec{ConnectionRef: "portainer-example", Host: "hq-node", Name: "web"}, struct{}{}, apply)
+			if err == nil || err.Error() != "web is run by web.service, and HQ cannot act on units on hq-node yet" {
+				t.Fatalf("apply %v: got %v", apply, err)
+			}
+			if writes := api.written(); len(writes) != 0 {
+				t.Errorf("Docker was asked: %+v", writes)
+			}
+		}
+	}
+}
+
+func TestPortainerCyclerRefusesALabelNamingNoPlainUnit(t *testing.T) {
+	list := strings.Replace(supervisedList, `"web.service"`, `"../../bin/sh"`, 1)
+	api, server := newPortainerAPI(t, map[string]string{"/api/endpoints": oneLocalEndpoint, containersPath: list})
+	r := portainerRegistry(t, server.URL, runtime.Environment{})
+	control := &units{on: []string{"hq-node"}}
+	r.Units = control
+	if _, err := r.portainerCycler("stop")(t.Context(), PortainerContainerSpec{ConnectionRef: "portainer-example", Host: "hq-node", Name: "web"}, struct{}{}, true); err == nil {
+		t.Fatal("a label naming no unit was acted on")
+	}
+	if len(control.acts) != 0 || len(api.written()) != 0 {
+		t.Errorf("acted: %v %+v", control.acts, api.written())
+	}
+}
+
+func TestAContainerRecordNamesTheUnitItsLabelNames(t *testing.T) {
+	var listed []dockerContainer
+	if err := json.Unmarshal([]byte(supervisedList), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if got := containerRecord(listed[0], "hq-node", "portainer-example", nil, "").Unit; got != "web.service" {
+		t.Errorf("unit %q", got)
+	}
+	listed[0].Labels[unit.Label] = "web"
+	if got := containerRecord(listed[0], "hq-node", "portainer-example", nil, "").Unit; got != "" {
+		t.Errorf("a label naming no plain unit is recorded as %q", got)
+	}
+}
+
 func TestPortainerProbe(t *testing.T) {
 	_, server := newPortainerAPI(t, map[string]string{"/api/endpoints": `[{"Id":1,"Name":"local","URL":"unix:///x","Status":1},{"Id":2,"Name":"edge","URL":"tcp://192.0.2.20:9001","Status":1},{"Id":3,"Name":"down","URL":"tcp://192.0.2.30:9001","Status":2}]`})
 	probe, err := portainerRegistry(t, server.URL, runtime.Environment{}).portainerProbe(t.Context(), "portainer-example")
@@ -521,7 +603,7 @@ func TestPortainerProbe(t *testing.T) {
 // A stack spec field of the wrong type refuses the action at the boundary.
 func TestPortainerStackSpecDecodesStrictly(t *testing.T) {
 	r := New(runtime.Environment{}, supplied(), &fakeHTTP{})
-	_, err := r.runAction(runtime.ResourceKindPortainerStack, "reconcile", t.Context(), Object{"name": "web", "port": "8080"}, nil, false)
+	_, err := r.runAction(t.Context(), runtime.ResourceKindPortainerStack, "reconcile", Object{"name": "web", "port": "8080"}, nil, false)
 	if err == nil {
 		t.Fatal("a port given as text is refused")
 	}

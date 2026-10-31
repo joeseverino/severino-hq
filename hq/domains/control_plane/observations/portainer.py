@@ -1,12 +1,10 @@
 """Readings from the Portainer credential: each Docker environment and what it holds.
 
-Every record names the machine it was read on twice: ``host`` as the sweep
-files containers, and ``host_address`` as every other source knows it. Both
-are join keys, so a record reaches the machine page whichever one the machine
-catalog holds.
-
-Environment variables, labels other than compose's own, and registry
-credentials are never named, so the schema drops them.
+Every record names its machine twice, ``host`` as the sweep files containers
+and ``host_address`` as every other source knows it, so it reaches the machine
+page whichever the catalog holds. Environment variables, labels other than
+compose's own, and registry credentials are never named, so the schema drops
+them.
 """
 
 from collections.abc import Mapping

@@ -142,6 +142,193 @@ def _pinned_cells(source_root: Path) -> list[str]:
     return found
 
 
+# Sentence checks ------------------------------------------------------------
+
+# A value HQ did not write (a registrar's name, a provider's phrase, a label
+# someone typed) can carry its own period: "Example, Inc." closed with
+# ``f"... {registrar}."`` reads "Example, Inc..". ``ui.ended`` adds the full
+# stop only when the text has none, so no f-string that builds page text closes
+# ``{value}.`` by hand. A value is left bare only where the source shows it is
+# the host's own words: a ``!r`` or a format spec, an UPPER_CASE constant, one
+# of the host's phrase functions, or a choice between two literals. The
+# argument of a ``raise`` is left out: it reaches a log, not a page.
+
+# HQ's own phrase functions: their words end on a literal HQ wrote.
+_OWN_PHRASES = frozenset(
+    {"counted", "ago", "duration", "span", "when", "when_day", "when_exact", "expiry_phrase", "human_bytes"}
+)
+# Builders whose template is markup, where ``ended`` cannot reach the text.
+_MARKUP = frozenset({"format_html"})
+# The helper itself, which is where the full stop is written.
+_CLOSERS = frozenset({"ended"})
+# String methods whose argument is a name's prefix or suffix ("noun."), never a sentence.
+_AFFIXES = frozenset({"removeprefix", "removesuffix", "startswith", "endswith"})
+
+
+def _node_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    return node.attr if isinstance(node, ast.Attribute) else ""
+
+
+def _constant(node: ast.AST) -> bool:
+    name = _node_name(node)
+    return bool(name) and name.isupper()
+
+
+def _hq_words(value: ast.AST) -> bool:
+    """Whether the source shows the value is HQ's own words."""
+
+    if isinstance(value, ast.FormattedValue):
+        if value.conversion == ord("r") or value.format_spec is not None:
+            return True
+        value = value.value
+    if isinstance(value, ast.Constant) or _constant(value):
+        return True
+    if isinstance(value, ast.Call):
+        return _node_name(value.func) in _OWN_PHRASES or (
+            isinstance(value.func, ast.Attribute) and _constant(value.func.value)
+        )
+    if isinstance(value, ast.IfExp):
+        return all(isinstance(branch, ast.Constant) for branch in (value.body, value.orelse))
+    return False
+
+
+def _ends_on(node: ast.AST) -> list[ast.AST]:
+    """The values text ends on: none when it ends on a literal HQ wrote."""
+
+    if isinstance(node, ast.Constant):
+        return []
+    if isinstance(node, ast.JoinedStr):
+        return _ends_on(node.values[-1]) if node.values else []
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _ends_on(node.right)
+    if isinstance(node, ast.IfExp):
+        return _ends_on(node.body) + _ends_on(node.orelse)
+    return [node]
+
+
+def _openings(node: ast.AST) -> set[str]:
+    """The characters text can open with; "" where the source cannot say."""
+
+    if isinstance(node, ast.Constant):
+        return {str(node.value)[:1]}
+    if isinstance(node, ast.JoinedStr):
+        return _openings(node.values[0]) if node.values else {""}
+    if isinstance(node, ast.FormattedValue):
+        return _openings(node.value)
+    if isinstance(node, ast.IfExp):
+        return _openings(node.body) | _openings(node.orelse)
+    return {""}
+
+
+def _closes_sentence(text: str, after: ast.AST | None) -> bool:
+    """Whether literal text right after a value ends a sentence there.
+
+    "." at the end, or before a space or a value that opens with one; ".json"
+    or the dot between two values of a hostname is no sentence end.
+    """
+
+    if not text.startswith("."):
+        return False
+    rest = text[1:]
+    if rest:
+        return rest[0].isspace() or (after is None and not rest.strip())
+    return after is None or any(opening.isspace() for opening in _openings(after) if opening)
+
+
+def _opens_on_a_close(node: ast.AST) -> bool:
+    """Whether text opens by ending the sentence before it: ". Next", "."; ".part" does not."""
+
+    if isinstance(node, ast.Constant):
+        return _closes_sentence(str(node.value), None)
+    if isinstance(node, ast.JoinedStr) and node.values:
+        first, *rest = node.values
+        if isinstance(first, ast.Constant):
+            return _closes_sentence(str(first.value), rest[0] if rest else None)
+        return isinstance(first, ast.FormattedValue) and _opens_on_a_close(first.value)
+    if isinstance(node, ast.IfExp):
+        return _opens_on_a_close(node.body) or _opens_on_a_close(node.orelse)
+    return False
+
+
+def _bare_closes(node: ast.AST) -> list[ast.AST]:
+    """Each value a sentence closes on with a period written by hand."""
+
+    if isinstance(node, ast.JoinedStr):
+        parts = node.values
+        afters: list[ast.expr | None] = [*parts[2:], None]
+        return [
+            value
+            for value, following, after in zip(parts, parts[1:], afters, strict=False)
+            if isinstance(value, ast.FormattedValue)
+            and isinstance(following, ast.Constant)
+            and _closes_sentence(str(following.value), after)
+        ]
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add) and _opens_on_a_close(node.right):
+        return _ends_on(node.left)
+    return []
+
+
+def _template_close(node: ast.AST) -> bool:
+    """A ``str.format`` template that closes a sentence on a field: "Saved: {target}."."""
+
+    return isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value.rstrip().endswith("}.")
+
+
+def _left_out(tree: ast.AST) -> set[int]:
+    """The nodes under a ``raise``, in a markup builder's or affix test's call, or in ``ended`` itself."""
+
+    skipped: set[int] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Raise)
+            or (isinstance(node, ast.Call) and _node_name(node.func) in _MARKUP | _AFFIXES)
+            or (isinstance(node, ast.FunctionDef) and node.name in _CLOSERS)
+        ):
+            skipped.update(id(inner) for inner in ast.walk(node))
+    return skipped
+
+
+def _shown(value: ast.AST) -> str:
+    return ast.unparse(value.value if isinstance(value, ast.FormattedValue) else value)
+
+
+def _closes_by_hand(tree: ast.AST) -> list[tuple[int, str]]:
+    """``(line, value)`` for each page sentence that closes on a value with a hand-written period."""
+
+    skipped = _left_out(tree)
+    found: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if id(node) in skipped or not isinstance(node, ast.expr):
+            continue
+        found.extend((node.lineno, _shown(value)) for value in _bare_closes(node) if not _hq_words(value))
+        if isinstance(node, ast.Constant) and _template_close(node):
+            found.append((node.lineno, str(node.value)))
+    return found
+
+
+# Where page text is not built: a test, a migration, a management command's output.
+_SENTENCE_LEFT_OUT = frozenset({"tests", "migrations", "management"})
+
+
+def sentence_closes(source_root: str | Path) -> list[str]:
+    """Return stable ``path:line: value`` lines for each page sentence closed on a value by hand."""
+
+    root = Path(source_root).resolve()
+    found: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        relative = path.relative_to(root)
+        if _SENTENCE_LEFT_OUT & set(relative.parts):
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except OSError, SyntaxError:
+            continue  # unsupported_hq_imports reports a file that does not parse
+        found.extend(f"{relative}:{line}: {value}" for line, value in sorted(_closes_by_hand(tree)))
+    return found
+
+
 # Template checks -----------------------------------------------------------
 
 _CONTRACT = Path(__file__).with_name("contract.json")
@@ -152,6 +339,7 @@ _QUOTED = re.compile(r"\"[^\"]*\"|'[^']*'")
 _FILTER = re.compile(r"\|\s*(\w+)(\s*:)?")
 _TEMPLATE_TAG = re.compile(r"\{[{%#].*?[}%#]\}", re.DOTALL)
 _CLASS = re.compile(r"\bclass=\"([^\"]*)\"")
+_LITERAL = re.compile(r"([\"'])(.*)\1")
 _HOOK = re.compile(r"\s(data-[a-z][a-z0-9-]*)")
 
 
@@ -254,6 +442,8 @@ class _Template:
     frame: str | None = None
     depth: int = 0
     loaded: set[str] = field(default_factory=set)
+    # The open host tags that have later parts, innermost last.
+    enclosing: list[str] = field(default_factory=list)
 
     def problem(self, line: int, message: str) -> None:
         self.problems.append((line, message))
@@ -290,14 +480,37 @@ class _Template:
             handler(bits, line)
             return
         if tag.startswith("end") or tag in _CONTINUATIONS:
+            if self.enclosing and tag == f"end{self.enclosing[-1]}":
+                self.enclosing.pop()
             return
-        django = self.contract["django"]["tags"]
-        if tag in self.contract["tags"]:
-            problem = _signature_problem(self.contract["tags"][tag]["parameters"], bits[1:])
-            if problem:
-                self.problem(line, f"{{% {tag} %}} {problem}")
-        elif tag not in django and tag not in self.loaded:
+        host = self.contract["tags"].get(tag)
+        if host is not None:
+            self._host_tag(tag, host, bits[1:], line)
+        elif self.enclosing and tag in self.contract["tags"][self.enclosing[-1]]["parts"]:
+            return
+        elif tag not in self.contract["django"]["tags"] and tag not in self.loaded:
             self.problem(line, f"{{% {tag} %}} is not a public tag")
+
+    def _host_tag(self, tag: str, host: dict[str, Any], bits: list[str], line: int) -> None:
+        problem = _signature_problem(host["parameters"], bits)
+        if problem:
+            self.problem(line, f"{{% {tag} %}} {problem}")
+        # A class handed over as an option is held as a class attribute is; one
+        # given as a variable is decided when it renders.
+        for bit in bits:
+            option, _, value = bit.partition("=")
+            literal = _LITERAL.fullmatch(value)
+            if option in host["classes"] and literal:
+                self._classes(literal.group(2).split(), line)
+        # A later part ({% aside %}) is written only inside its own tag.
+        if host["parts"]:
+            self.enclosing.append(tag)
+
+    def _classes(self, words: list[str], line: int) -> None:
+        public = self.contract["classes"]
+        for word in words:
+            if word not in public:
+                self.problem(line, f"class {word} is not public")
 
     def _extends(self, bits: list[str], line: int) -> None:
         parent = bits[1].strip("\"'") if len(bits) > 1 else ""
@@ -315,7 +528,7 @@ class _Template:
             self.problem(line, f"overrides {{% block {name} %}} of {self.frame}, whose public blocks are {public}")
         self.depth += 1
 
-    def _endblock(self, bits: list[str], line: int) -> None:
+    def _endblock(self, _bits: list[str], _line: int) -> None:
         self.depth -= 1
 
     def _include(self, bits: list[str], line: int) -> None:
@@ -398,11 +611,21 @@ def template_violations(source_root: str | Path, contract: dict[str, Any] | None
     return [f"{path}:{line}: {message}" for path, line, message in sorted(found)]
 
 
+def _report(heading: str, violations: list[str]) -> bool:
+    """Print one check's violations under its heading; whether there were any."""
+
+    if violations:
+        print(heading)
+        for violation in violations:
+            print(f"- {violation}")
+    return bool(violations)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Reject plugin imports outside hq_sdk, templates outside the public template contract,"
-            " and tests that pin a table cell's closing tag."
+            " tests that pin a table cell's closing tag, and page sentences closed on a value by hand."
         )
     )
     parser.add_argument("source_root", type=Path)
@@ -411,31 +634,26 @@ def main() -> int:
         # A root that holds no package would pass every check by checking nothing.
         print(f"{args.source_root} holds no Python package to check.")
         return 2
-    failed = False
-    imports = unsupported_hq_imports(args.source_root)
-    if imports:
-        failed = True
-        print("Unsupported HQ implementation imports; use hq_sdk instead:")
-        for violation in imports:
-            print(f"- {violation}")
-    templates = template_violations(args.source_root)
-    if templates:
-        failed = True
-        print("Templates outside HQ's public template contract (docs/Plugins.md, Shared UI contract):")
-        for violation in templates:
-            print(f"- {violation}")
-    pinned = _pinned_cells(args.source_root)
-    if pinned:
-        failed = True
-        print(
+    refused = [
+        _report("Unsupported HQ implementation imports; use hq_sdk instead:", unsupported_hq_imports(args.source_root)),
+        _report(
+            "Templates outside HQ's public template contract (docs/Plugins.md, Shared UI contract):",
+            template_violations(args.source_root),
+        ),
+        _report(
             "Tests that look for a table cell's closing tag, which breaks when the host wraps what the cell says;"
-            " read the cell's text instead (its td or th parsed, whitespace collapsed):"
-        )
-        for violation in pinned:
-            print(f"- {violation}")
-    if failed:
+            " read the cell's text instead (its td or th parsed, whitespace collapsed):",
+            _pinned_cells(args.source_root),
+        ),
+        _report(
+            'Page sentences closed on a value with a hand-written period; write ended(f"... {value}")'
+            " from hq_sdk.ui, which keeps a value's own period:",
+            sentence_closes(args.source_root),
+        ),
+    ]
+    if any(refused):
         return 1
-    print("HQ SDK import, template and table cell boundaries passed.")
+    print("HQ SDK import, template, table cell and sentence boundaries passed.")
     return 0
 
 

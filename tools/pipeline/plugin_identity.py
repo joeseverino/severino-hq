@@ -1,20 +1,9 @@
 """Read an extension's identity from the package, where it is declared once.
 
-    python3 -m tools.pipeline.plugin_identity [ROOT] [--repository OWNER/NAME]   # key=value lines for GITHUB_OUTPUT
-
-The distribution is ``[project].name`` in ROOT/pyproject.toml; its package is
-that name with underscores, at ``src/<package>``; the manifest is the
-``plugin = PluginManifest(...)`` in that package's ``plugin.py``. Read without
-importing, so it imports neither Django nor the host. The manifest's ``id``,
-``distribution`` and ``django_apps`` must be literals, and its distribution
-must be the project's: any mismatch fails here, before a build or a signature.
-Given the repository it is checked or admitted in, the manifest's
-``source_repository`` must name it, or the host refuses the admitted wheel
-only once it is composed.
-
-It also prints ``plugin-api-version``: the plugin API of the host checkout this
-module is read from, which an admission records, since the host refuses a
-wheel whose approval names another version than its manifest declares.
+`python3 -m tools.pipeline.plugin_identity [ROOT] [--repository OWNER/NAME]`
+prints key=value lines for GITHUB_OUTPUT. It reads without importing, so neither
+Django nor the host loads, and fails on any disagreement before a build or a
+signature (docs/Plugins.md, The golden path).
 """
 
 from __future__ import annotations
@@ -44,9 +33,10 @@ def manifest(source: str) -> ast.Call:
     for node in ast.parse(source).body:
         if (
             isinstance(node, ast.Assign)
-            and [getattr(target, "id", None) for target in node.targets] == ["plugin"]
+            and [target.id if isinstance(target, ast.Name) else None for target in node.targets] == ["plugin"]
             and isinstance(node.value, ast.Call)
-            and getattr(node.value.func, "id", None) == MANIFEST
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == MANIFEST
         ):
             return node.value
     raise SystemExit(f"plugin.py: no module-level `plugin = {MANIFEST}(...)`")
@@ -65,6 +55,8 @@ def identity(root: Path, repository: str | None = None) -> dict[str, str]:
     apps = literal(call, "django_apps")
     if not isinstance(apps, tuple) or package not in apps:
         raise SystemExit(f"plugin.py: django_apps must include the package, {package!r}")
+    # Checked here, since the host refuses a wheel from another repository only
+    # once it is composed.
     if repository is not None and (named := literal(call, "source_repository")) != repository:
         raise SystemExit(f"plugin.py: source_repository is {named!r}; this package is admitted from {repository!r}")
     return {
@@ -90,4 +82,6 @@ if __name__ == "__main__":
     arguments = parser.parse_args()
     for key, value in identity(arguments.root, arguments.repository).items():
         print(f"{key}={value}")
+    # An admission records it: the host refuses a wheel whose approval names
+    # another version than its manifest declares.
     print(f"plugin-api-version={plugin_api_version()}")

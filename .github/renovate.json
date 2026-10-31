@@ -27,6 +27,12 @@
   "postUpdateOptions": ["gomodTidy"],
   "packageRules": [
     {
+      "description": "Vale 3.25 no longer masks a template's {% comment %} block, so lint:prose reads comments as shown text; a later release comes in the weekly pull request, where lint:prose decides it.",
+      "matchManagers": ["mise"],
+      "matchDepNames": ["vale"],
+      "allowedVersions": "!/^3\\.25\\./"
+    },
+    {
       "description": "Stable libraries release slowly, so only two years without a release reads as abandoned.",
       "matchPackageNames": ["*"],
       "abandonmentThreshold": "2 years"
@@ -64,6 +70,12 @@
         "fileFilters": ["mise.lock"],
         "executionMode": "branch"
       }
+    },
+    {
+      "description": "mise.toml's go is a template that reads go.mod's toolchain line, which the rule above moves; mise reads go.mod only from controller/ and below, so the template stays, and Renovate would read its text as a version.",
+      "matchManagers": ["mise"],
+      "matchDepNames": ["go"],
+      "enabled": false
     },
     {
       "description": "requires-python and the go directive say what the project supports, not what it runs, so they stay ranges.",

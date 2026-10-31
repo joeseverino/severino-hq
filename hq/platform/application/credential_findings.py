@@ -19,7 +19,7 @@ lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 
 from .connection_lifecycle import UNREPORTED_FACT
 from .derivations import reached
-from .finding_model import THEN_REFRESH, FindingRule, OperatorStep, built_findings, fact_values
+from .finding_model import THEN_REFRESH, FindingRule, OperatorStep, built_findings, connections_carrying, fact_values
 from .timestamps import moment
 from .ui import counted, ended
 lazy from .credential_mint import address_fields
@@ -159,12 +159,7 @@ def missing_permissions(estate: Any) -> tuple[dict[str, Any], ...]:
     """A valid credential the provider refuses some readings, named by permission."""
 
     found = []
-    for node in estate.nodes():
-        if node.kind != "connection":
-            continue
-        missing = fact_values(node, MISSING)
-        if not missing:
-            continue
+    for node, missing in connections_carrying(estate, MISSING):
         unseen = fact_values(node, UNSEEN)
         found.append(
             {

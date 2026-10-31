@@ -48,9 +48,13 @@ from hq.platform.core.tests.look_report import (
 from hq.platform.core.tests.look_tables import COLUMNS, TABLES, columns_line
 from hq.platform.core.tests.task import PREFIX, Usage, estate_name, estate_path, is_estate, usage
 from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
-lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production
+lazy from hq.platform.core.example_estate import REQUEST, SSO
+lazy from hq.platform.core.example_estate.testing import as_production
 
 OUT = Path(settings.BASE_DIR) / "var" / "look"
+# The base's shots, kept from its worktree before the worktree goes, so the
+# two sides of a change can be read together.
+BASE_OUT = "base"
 # What a look against a base runs at the base as this checkout has it beside
 # this tree's test files, so a finding is new for what the change drew rather
 # than for how it was judged: the probes the survey runs.
@@ -117,10 +121,6 @@ _ANSWERED = "(busy) => [...document.querySelectorAll(busy)].every((region) => re
 _FOLD_TOGGLES = "main button[data-fold-toggle]"
 ROW_TOGGLES = "main button[data-row-toggle]:not([data-fold-toggle])"
 _PRESS_SHOWN = "(toggles) => document.querySelectorAll(toggles).forEach((t) => t.checkVisibility() && t.click())"
-# A fold's rows are marked as cut, which shows their toggles, on tables.js's
-# debounce (`markTablesSoon`), a timer the press sets. A timer set after it
-# with no shorter delay fires after it, so this resolves once it has run.
-_AFTER_THE_PAGES_TIMERS = "() => new Promise((done) => setTimeout(done, 250))"
 # Rounds of opening, each after what the last one brought in has arrived.
 _OPEN_ROUNDS = 10
 _EXTENT = "() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]"
@@ -337,6 +337,10 @@ def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Fou
         if not found.is_file():
             said = log.read_text(encoding="utf-8").splitlines()[-40:]
             raise AssertionError(f"The look at {ref} did not finish:\n" + "\n".join(said))
+        kept = OUT / BASE_OUT
+        shutil.rmtree(kept, ignore_errors=True)
+        if (shots := tree / "var" / "look").is_dir():
+            shutil.copytree(shots, kept)
         return _read_found(found)
 
 
@@ -345,6 +349,19 @@ def _address(url: str) -> str:
 
     parts = urlsplit(url)
     return parts.path + (f"?{parts.query}" if parts.query else "")
+
+
+def _empty(folder: Path, *, keep: str = "") -> None:
+    """Make ``folder`` an empty folder but for its entry named ``keep``."""
+
+    folder.mkdir(parents=True, exist_ok=True)
+    for entry in folder.iterdir():
+        if keep and entry.name == keep:
+            continue
+        if entry.is_dir() and not entry.is_symlink():
+            shutil.rmtree(entry)
+        else:
+            entry.unlink()
 
 
 def _slug(name: str) -> str:
@@ -527,14 +544,15 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.start(java_script_enabled=not _asked().switch("no_script"), bypass_csp=bool(self.css))
         if _asked().switch("dark"):
             self.page.emulate_media(color_scheme="dark")
-        # One run's shots alone, so none left by an earlier run is read as this one's.
-        shutil.rmtree(OUT, ignore_errors=True)
-        OUT.mkdir(parents=True)
+        # One run's shots alone, so none left by an earlier run is read as this
+        # one's; the base's, taken by this run, stay.
+        _empty(OUT, keep=BASE_OUT if self.base is not None else "")
         self.errors: Found = {}
         self.unanswered: dict[str, int | None] = {}
         if _asked().switch("deep"):
             self.follow(widths[0])
-        print(f"Screenshots in {OUT}", flush=True)
+        said = f", the base's in {OUT / BASE_OUT}" if self.base is not None else ""
+        print(f"Screenshots in {OUT}{said}", flush=True)
         self.measured: Measured = {}
         found = self.look_at_every_page(widths, rule)
         if into := _asked().text(_FINDINGS):
@@ -623,7 +641,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if refused := self.refused(name, width):
             return self.shoot_failure(name, width, refused)
         self.draw_as_asked(name, width)
-        # Before the shot, so what a script changes is seen.
+        # After --open and --expand, so it reads the page the shot shows, and
+        # before the shot, so what a script changes is seen.
         if self.script:
             self.evaluate_script(name, width)
         self.screenshot(name, width)
@@ -792,12 +811,13 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         """Every row a reader can open, opened: only the toggles a reader can
         press, since one a row does not offer is drawn but not shown. A fold
         first, and once the page has marked the rows it shows, so each of them
-        shows its own toggle before those are pressed."""
+        shows its own toggle before those are pressed. Settled last, so
+        ``--eval`` reads the rows as the screenshot shows them."""
 
         self.page.evaluate(_PRESS_SHOWN, _FOLD_TOGGLES)
-        self.page.evaluate(_AFTER_THE_PAGES_TIMERS)
         self.settle()
         self.page.evaluate(_PRESS_SHOWN, ROW_TOGGLES)
+        self.settle()
 
     def open_everything(self, name, width):
         """Every disclosure open, round after round until none is

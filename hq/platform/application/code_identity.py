@@ -1,13 +1,10 @@
 """The identity of the code a process runs, for a store that outlives it.
 
 A value pickled by one shape of a class and loaded into another can come back
-with its fields misaligned instead of failing, so whatever a process keeps
-past its own life is keyed on the code that kept it. The identity is a digest
-of the interpreter's version, every installed distribution's name and
-version, and the Python source of the host and of every installed extension.
-Processes running the same files agree on it; an edit a development server
-reloads on, an extension rebuilt into a composed image or an upgraded
-dependency moves it.
+with its fields misaligned instead of failing, so whatever a process keeps past
+its own life is keyed on the code that kept it (``code_identity``). Processes
+running the same files agree on it; an edit a development server reloads on, an
+extension rebuilt into a composed image or an upgraded dependency moves it.
 """
 
 import hashlib

@@ -11,7 +11,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
@@ -145,8 +145,8 @@ func (r *Runner) intact(tree *install.Tree, last state) bool {
 	if err != nil || len(present) != len(identities) {
 		return false
 	}
-	sort.Strings(present)
-	sort.Strings(identities)
+	slices.Sort(present)
+	slices.Sort(identities)
 	for index := range present {
 		if present[index] != identities[index] {
 			return false

@@ -1,21 +1,10 @@
 """A request never waits on anything outside the process.
 
-A page or a button answers from what HQ holds. Work that reaches a network, a
-subprocess or a timer happens where waiting costs nobody: the controller reads
-the outside world and reports it, and a job (``hq.domains.jobs``) does long
-work on its own thread. A request stores the ask and answers at once
-(``hq.platform.application.asks``).
-
-That is held by the interpreter, not by a list of names. Python raises an audit
-event (PEP 578) whenever any library opens a connection, resolves a name,
-starts a process or sleeps, whichever library it is. While a request is being
-served, one of those events is refused: the call raises ``OutboundInRequest``
-before it leaves. So a view cannot come to wait on the network by importing
-something new.
-
-``ALLOWED`` is every exception, each with why a request must wait there. Code
-enters one by name with ``allowed``; an architecture test holds the uses to
-this table.
+Held by the interpreter rather than a list of names: while a request is served,
+the audit event (PEP 578) of any connection, name lookup, process or sleep
+raises ``OutboundInRequest`` before the call leaves, so a view cannot come to
+wait by importing something new. ``ALLOWED`` is every exception, with why
+(docs/Architecture.md, What a request waits on).
 """
 
 import functools
@@ -135,7 +124,8 @@ def _sends_nothing(event: str, args: tuple[Any, ...]) -> bool:
     """A datagram socket's connect only records where it would send: no packet
     leaves and nothing is waited for (how HQ learns its own addresses)."""
 
-    return event == "socket.connect" and getattr(args[0], "type", None) == socket.SOCK_DGRAM
+    # socket.connect is raised with the socket itself first.
+    return event == "socket.connect" and args[0].type == socket.SOCK_DGRAM
 
 
 def _hook(event: str, args: tuple[Any, ...]) -> None:

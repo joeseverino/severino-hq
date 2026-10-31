@@ -1,0 +1,57 @@
+#!/bin/sh
+#MISE description="Its Django is the parts HQ loads: they import whole, pass the system checks, and nothing else of Django's apps, backends or catalogs ships"
+#MISE env={SEVERINO_HEAVY_BOUND="30m"}
+#MISE hide=true
+#MISE depends=["image:build"]
+set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+
+# The build stage deletes what HQ never loads (Dockerfile). Every module of
+# what stays is imported, so one that reaches for a deleted part fails here
+# rather than on a request, and whatever stays without being loaded is named.
+docker run --rm -i \
+    --env DJANGO_SECRET_KEY=ci-only-container-key-0123456789abcdef0123456789abcdef \
+    --env DJANGO_ALLOWED_HOSTS=127.0.0.1 \
+    --entrypoint python "${IMAGE:-severino-hq:ci-local}" - <<'PROBE'
+import importlib
+import pkgutil
+import sys
+from pathlib import Path
+
+import django
+from django.conf import settings
+from django.core.management import call_command
+from django.db import connections
+from django.utils.translation import to_locale
+
+django.setup()
+call_command("check", "--deploy", "--fail-level", "ERROR", verbosity=0)
+
+
+def import_whole(name):
+    package = importlib.import_module(name)
+    for module in pkgutil.walk_packages(package.__path__, name + "."):
+        importlib.import_module(module.name)
+
+
+for app in settings.INSTALLED_APPS:
+    if app.startswith("django.contrib."):
+        import_whole(app)
+for alias in connections:
+    import_whole(settings.DATABASES[alias]["ENGINE"])
+
+root = Path(django.__file__).parent
+unused = [
+    package
+    for parent in (root / "contrib", root / "db" / "backends")
+    for package in sorted(path.parent for path in parent.glob("*/__init__.py"))
+    if ".".join(package.relative_to(root.parent).parts) not in sys.modules
+]
+language = to_locale(settings.LANGUAGE_CODE)
+catalogs = {language, language.split("_")[0]}
+unused += [path.parent for path in root.rglob("LC_MESSAGES") if path.parent.name not in catalogs]
+if unused:
+    sys.exit("Django parts the image ships and HQ never loads:\n" + "\n".join(map(str, unused)))
+print("Django: the parts HQ loads import whole and pass the system checks; nothing else ships")
+PROBE

@@ -1,16 +1,12 @@
 """One rounding rule for every amount HQ stores.
 
-Rounding is not a formatting preference; it is arithmetic that has to be
-identical everywhere or two surfaces holding the same money disagree by a cent
-and neither is obviously wrong. Python's default is banker's rounding
-(``ROUND_HALF_EVEN``); HQ rounds half-up.
-
-So the rule lives here rather than in any one domain's models, where another
-domain could reach it only by importing those models and an extension (which
-imports ``hq_sdk`` and nothing else) could not reach it at all. A caller that
-re-derives the quantize with ``Decimal("0.01")`` gets the other rounding mode.
+Rounding is arithmetic that has to be identical everywhere, or two surfaces
+holding the same money disagree by a cent and neither is obviously wrong. It
+lives here rather than in one domain's models, so every domain reaches it, and
+an extension (which imports ``hq_sdk`` and nothing else) through the SDK.
 """
 
+from collections.abc import Callable
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import overload
 
@@ -21,6 +17,8 @@ CENTS = Decimal("0.01")
 
 def quantize_money(value: Decimal) -> Decimal:
     """Round to cents, half away from zero."""
+    # Python's default is banker's rounding (``ROUND_HALF_EVEN``), so a caller
+    # that re-derives the quantize with ``Decimal("0.01")`` gets the other mode.
     return value.quantize(CENTS, rounding=ROUND_HALF_UP)
 
 
@@ -70,20 +68,32 @@ def signed(figure: str, *, negative: bool, plus: bool = False) -> str:
     return f"{sign}{WORD_JOINER}{figure}" if sign else figure
 
 
+def signed_number[N: (Decimal, float, int)](value: N | None, figure: Callable[[N], str], *, plus: bool = False) -> str:
+    """``value`` written by ``figure`` and signed by the rule every amount is.
+
+    ``figure`` writes a magnitude in its own units ("1:15/mi", "29 bpm"), never
+    a sign. ``plus`` writes "+" before a figure that is not negative, for a
+    change. A value whose figure writes as zero's is not negative, so nothing
+    reads "−0:00". Nothing shows the mark for a missing value.
+    """
+
+    if value is None:
+        return MISSING
+    written = figure(abs(value))
+    return signed(written, negative=value < 0 and written != figure(value - value), plus=plus)
+
+
 def money(value: Decimal | int | float | None, *, cents: bool = True, plus: bool = False) -> str:
     """An amount as every page writes one: "$1,234.50", and "\u2212$5.00" when negative.
 
     ``cents=False`` is for a figure that is scanned, never reconciled: a
     balance, a total over a year. ``plus`` signs a change that is not
-    negative, "+$5.00". A debt is a negative value. Nothing shows the mark for
-    a missing value.
+    negative, "+$5.00". A debt is a negative value. Nothing shows the mark for a missing
+    value.
     """
 
-    amount = to_money(value)
-    if amount is None:
-        return MISSING
-    figure = f"${abs(amount):,.2f}" if cents else f"${abs(amount):,.0f}"
-    return signed(figure, negative=amount < 0, plus=plus)
+    places = 2 if cents else 0
+    return signed_number(to_money(value), lambda amount: f"${amount:,.{places}f}", plus=plus)
 
 
-__all__ = ["CENTS", "MINUS", "money", "quantize_money", "signed", "to_money"]
+__all__ = ["CENTS", "money", "quantize_money", "signed", "signed_number", "to_money"]

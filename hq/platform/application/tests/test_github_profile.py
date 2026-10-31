@@ -1,17 +1,17 @@
 import json
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.core.models import LinkedAccount
+from hq.platform.core.models import AuditLog, LinkedAccount
 
 from .. import github_profile
-from ..action_links import READ_NOW_CAPABILITY
 from ..asks import READ_WAITING
-from ..capabilities import capability_registry
-from ..security import AuthorizationError, Principal
+from ..capabilities import capability_registry, execute_capability
+from ..security import Principal
 from .markup import hrefs, select, text
 from .sentinel import SENTINEL
 
@@ -107,10 +107,10 @@ class PlanTests(TestCase):
     def test_asking_makes_it_due_whatever_its_age(self):
         hold()
 
-        asked = github_profile.request_read("example-user", principal=operator())
+        asked = github_profile.request_read(github_profile.ProfileReadCommand("example-user"), principal=operator())
 
         self.assertTrue(github_profile.plan()["due"])
-        self.assertEqual(github_profile.asked_at(), asked)
+        self.assertEqual(github_profile.asked_at().isoformat(), asked["asked_at"])
         self.assertEqual(github_profile.standing().state, "queued")
 
     def test_the_controller_registry_carries_the_plan(self):
@@ -118,14 +118,16 @@ class PlanTests(TestCase):
 
         self.assertEqual(controller_registry()["github_profiles"], {"accounts": ["example-user"], "due": True})
 
-    def test_asking_needs_leave_to_read_public_records(self):
-        reader = Principal(actor="reader", interface="web", capabilities=frozenset())
-        with self.assertRaises(AuthorizationError):
-            github_profile.request_read("example-user", principal=reader)
-
     def test_only_an_account_a_sign_in_names_is_asked_for(self):
-        with self.assertRaises(ValueError):
-            github_profile.request_read("someone-else", principal=operator())
+        result = execute_capability(github_profile.READ_NOW, {"login": "someone-else"}, principal=operator())
+
+        self.assertEqual(result["error"], {"code": "not_found", "message": "No sign-in names that GitHub account."})
+        for payload in ({}, {"login": ["example-user"]}):
+            with self.subTest(payload=payload):
+                refused = execute_capability(github_profile.READ_NOW, payload, principal=operator())
+
+                self.assertEqual(refused["error"]["code"], "invalid_input")
+        self.assertIsNone(github_profile.asked_at())
 
     def test_the_profiles_own_age_never_makes_a_sweep_due(self):
         from hq.domains.control_plane.models import ProviderInventory
@@ -227,6 +229,37 @@ class PageTests(TestCase):
         # The reading is as it was: nothing was read in the request.
         self.assertEqual(github_profile.profile("example-user")["followers"], 3)
 
+    def test_refresh_is_audited_as_the_operator(self):
+        LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")
+        hold()
+
+        self.client.post(reverse("watching_refresh"))
+
+        self.assertTrue(
+            AuditLog.objects.filter(
+                metadata__operation=github_profile.READ_NOW,
+                metadata__interface="web",
+                metadata__actor="operator",
+                metadata__login="example-user",
+            ).exists()
+        )
+
+    def test_a_principal_that_may_not_read_github_is_refused_and_recorded(self):
+        LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")
+        hold()
+        lacking = Principal(actor="operator", interface="web", capabilities=frozenset({"manage_infrastructure"}))
+
+        with patch("hq.domains.projects.views.web_principal", return_value=lacking):
+            response = self.client.post(reverse("watching_refresh"), follow=True)
+
+        self.assertIn("You may not read from GitHub.", text(response))
+        self.assertIsNone(github_profile.asked_at())
+        self.assertTrue(
+            AuditLog.objects.filter(
+                action=AuditLog.Action.DENIED, metadata__capability=github_profile.READ_NOW
+            ).exists()
+        )
+
     def test_without_script_refresh_returns_to_a_page_that_says_it_is_in_hand(self):
         LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")
         hold()
@@ -234,7 +267,7 @@ class PageTests(TestCase):
         response = self.client.post(reverse("watching_refresh"), follow=True)
 
         self.assertRedirects(response, reverse("watching"))
-        self.assertIn(capability_registry()[READ_NOW_CAPABILITY].requested("@example-user"), text(response))
+        self.assertIn(capability_registry()[github_profile.READ_NOW].requested("@example-user"), text(response))
         self.assertContains(response, "data-ask-status=")
         self.assertTrue(select(response, "aria-disabled", "true"))
         self.assertContains(response, READ_WAITING)

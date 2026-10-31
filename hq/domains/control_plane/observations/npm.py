@@ -4,8 +4,6 @@ A certificate joins the names NPM serves with it, not every name it covers: a
 wildcard NPM holds says nothing about a name another ingress answers. Key
 material (a certificate's ``meta``) and access list passwords are never
 named, so the schema drops them.
-
-``requires`` names NPM's own permission areas at the ``view`` level.
 """
 
 from collections.abc import Mapping

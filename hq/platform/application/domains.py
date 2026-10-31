@@ -1,20 +1,9 @@
 """One registry of every domain HQ composes: host sections and extensions alike.
 
-This module is the single declaration, for HQ's own sections as an extension's
-manifest is for an extension. A domain states what it is once; nav,
-and in turn every surface that composes domains, is derived from that. Nothing
-downstream keeps its own list of what exists.
-
-One thing is deliberately not unified. A ``PluginManifest`` also carries
-*distribution* facts: wheel, admission policy, source workflow, URL mount,
-because it crosses a trust boundary. A host section crosses none and is never
-admitted. Runtime behavior is unified: host sections and extensions both carry
-one typed, lazy ``PluginIntegration``. The registry normalizes both into one
-``Domain`` view so composing surfaces cannot tell, or care, which is which.
-
-This repo is public. Host descriptors therefore never name an extension: group
-labels arrive from installed manifests at runtime, and ``test_domains``
-enforces that nothing here hardcodes one.
+A host section is declared here as an extension is by its manifest, and nav and
+every surface that composes domains derive from it; nothing downstream keeps a
+list of its own. Group labels arrive from installed manifests at runtime, so
+nothing here names an extension (``test_domains`` holds it).
 """
 
 from collections.abc import Callable
@@ -61,13 +50,11 @@ class Mount(NamedTuple):
 class Records:
     """A plain record domain: one model created, changed and deleted by command.
 
-    Declared once, it yields the domain's create, update and delete
-    capabilities, its write and delete permissions, deletion itself and its
-    count on the health reading. Anything else the domain can be asked to do is
-    a command declared through ``integration.capabilities``.
-
-    References are ``module:attribute`` strings so the declaration stays
-    importable from settings, before any model is.
+    Declared once, it yields the create, update and delete capabilities, the
+    write and delete permissions, deletion itself and the count on the health
+    reading; anything else is a command through ``integration.capabilities``.
+    References are ``module:attribute`` strings so it stays importable from
+    settings, before any model is.
     """
 
     # Names the commands: "expense" gives expense.create, expense.delete.
@@ -122,6 +109,10 @@ class DomainDescriptor:
     records: Records | None = None
 
 
+# Runtime behavior is one typed, lazy ``PluginIntegration`` for both. The
+# distribution facts (wheel, admission policy, source workflow, URL mount) stay
+# the ``PluginManifest``'s alone, since an extension crosses a trust boundary
+# and a host section crosses none and is never admitted.
 @dataclass(frozen=True, slots=True)
 class Domain:
     """A descriptor or a manifest, seen through one lens.
@@ -762,14 +753,10 @@ def domain_navigation() -> tuple[NavigationItem, ...]:
 def domain_attention_items() -> tuple[dict[str, Any], ...]:
     """Everything, anywhere in HQ, that needs a decision: most urgent first.
 
-    The composed queue, host sections and extensions alike. Each entry carries
-    its source so a surface can attribute the item without the domain restating
-    its own name, and each Insight carries its own url.
-
-    A domain reports only what is actually outstanding: an item with nothing to
-    do is simply not emitted, rather than emitted as a zero for a reader to
-    filter. ``neutral`` and ``good`` are context, not a call to action, and are
-    excluded here the same way they are for extensions.
+    The composed queue, host sections and extensions alike, each entry
+    attributed to its source and carrying its own url (``gather_attention``).
+    A domain emits only what is outstanding, never a zero for a reader to
+    filter.
     """
 
     # Each extension's provider is a derivation of its own (``plugins``), so
@@ -778,11 +765,11 @@ def domain_attention_items() -> tuple[dict[str, Any], ...]:
         (domain.id, domain.label, domain.integration.attention) for domain in all_domains() if domain.origin != "host"
     )
     # One order for both: an extension's entries are merged in by the same key.
-    return ordered_attention((*_host_attention(), *extensions))
+    return ordered_attention((*host_attention(), *extensions))
 
 
 @derivation("attention.queue", reads=QUEUE_READS, vary=estate_variant)
-def _host_attention() -> tuple[dict[str, Any], ...]:
+def host_attention() -> tuple[dict[str, Any], ...]:
     """What the host's own sections report, derived once per change of the estate."""
 
     return gather_attention(
@@ -791,14 +778,10 @@ def _host_attention() -> tuple[dict[str, Any], ...]:
 
 
 def domain_dashboard_cards() -> tuple[dict[str, Any], ...]:
-    """Every domain's headline reading, in the order the nav presents them.
-
-    One row of cards, host sections and extensions alike, in nav order.
-
-    Ordered by nav position so the row reads in the same sequence as the
-    sections above it. A domain reporting nothing contributes nothing, which is
-    what keeps a section with no data from taking a tile on the page an
-    operator reads every day.
+    """Every domain's headline reading, host sections and extensions alike, in
+    nav order so the row reads in the same sequence as the sections above it.
+    A domain reporting nothing takes no tile on the page an operator reads
+    every day.
     """
 
     return tuple(card for section in domain_dashboard_sections() for card in section["cards"])

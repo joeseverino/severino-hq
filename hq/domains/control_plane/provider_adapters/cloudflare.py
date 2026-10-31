@@ -1,7 +1,7 @@
 """Public DNS: the record-type registry, Cloudflare records and the zones they live in."""
 
 import re
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass
 from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field, model_validator
@@ -11,7 +11,7 @@ from hq.platform.application.routes import reverse
 from ..connection_shapes import API_TOKEN
 from ..consoles import cloudflare_dashboard
 from ..credential_reads import REGISTRAR_READ
-from ..names import normalized_hostname
+from ..names import LEADS_TO, normalized_hostname
 from ..observations.contract import ReadingPart
 from ..provider_spec import (
     ConnectionKind,
@@ -41,6 +41,7 @@ class DNSRecordType:
 
     id: str
     label: str
+    _: KW_ONLY
     # Whether a record of this type brings a service into existence. An address
     # record answers "where does this name point"; every other type states a
     # fact *about* a name without promising that anything serves it. Listing a
@@ -70,36 +71,36 @@ DNS_RECORD_TYPES: tuple[DNSRecordType, ...] = (
     DNSRecordType(
         "A",
         "A: IPv4 address",
-        True,
-        "IPv4 address",
-        "For example 203.0.113.10.",
+        declares_service=True,
+        value_label="IPv4 address",
+        value_help="For example 203.0.113.10.",
         proxyable=True,
         removal_impact="This name stops resolving. Anything served at it goes offline.",
     ),
     DNSRecordType(
         "AAAA",
         "AAAA: IPv6 address",
-        True,
-        "IPv6 address",
-        "For example 2001:db8::10.",
+        declares_service=True,
+        value_label="IPv6 address",
+        value_help="For example 2001:db8::10.",
         proxyable=True,
         removal_impact="This name stops resolving over IPv6.",
     ),
     DNSRecordType(
         "CNAME",
         "CNAME: alias to another name",
-        True,
-        "Target hostname",
-        "The name this one is an alias for.",
+        declares_service=True,
+        value_label="Target hostname",
+        value_help="The name this one is an alias for.",
         proxyable=True,
         removal_impact="This name stops resolving. Anything served at it goes offline.",
     ),
     DNSRecordType(
         "TXT",
         "TXT: text record",
-        False,
-        "Text value",
-        "Quoted text, such as SPF policy or a verification challenge.",
+        declares_service=False,
+        value_label="Text value",
+        value_help="Quoted text, such as SPF policy or a verification challenge.",
         removal_impact=(
             "If this is SPF, DMARC or a domain verification, mail "
             "authentication weakens or the domain loses verification."
@@ -109,17 +110,17 @@ DNS_RECORD_TYPES: tuple[DNSRecordType, ...] = (
     DNSRecordType(
         "MX",
         "MX: mail exchanger",
-        False,
-        "Mail server hostname",
-        "The host that accepts mail for this domain.",
+        declares_service=False,
+        value_label="Mail server hostname",
+        value_help="The host that accepts mail for this domain.",
         removal_impact="Mail for this domain stops being delivered.",
     ),
     DNSRecordType(
         "CAA",
         "CAA: permitted certificate authority",
-        False,
-        "CAA value",
-        'Flags, tag and value, e.g. 0 issue "letsencrypt.org".',
+        declares_service=False,
+        value_label="CAA value",
+        value_help='Flags, tag and value, e.g. 0 issue "letsencrypt.org".',
         removal_impact=("If this is the last CAA record, any certificate authority can issue for this domain."),
         secondary=True,
     ),
@@ -219,14 +220,11 @@ class CloudflareDNSRecordSpec(ProviderModel):
 class CloudflareZoneSpec(ProviderModel):
     """A domain HQ is responsible for, and the connection that serves it.
 
-    Declaring one is what makes a zone HQ's business. The credential can see
-    every zone on the account, which is not the same as HQ having been asked to
-    manage them: a parked domain and a live one look identical to a token, and
-    only an operator knows which is which.
-
-    It carries no settings yet. Zone posture (TLS mode, minimum version, HSTS)
-    is read through `cloudflare_api`; declaring and reconciling it is the next
-    field set here.
+    The credential sees every zone on the account, and a parked domain looks
+    like a live one to a token, so declaring a zone is how an operator makes it
+    HQ's business. No settings yet: zone posture (TLS mode, minimum version,
+    HSTS) is read through `cloudflare_api`, and declaring it is the next field
+    set here.
     """
 
     zone: str = Field(
@@ -367,24 +365,20 @@ def caa_parts(content: str) -> tuple[int, str, str] | None:
 def normalized_record_content(record_type: str, content: str) -> str:
     """One spelling of a value, so desired and observed can be compared.
 
-    Declared here, beside the record-type registry, and imported by the
-    controller. Identity uses it to decide whether a live record is one HQ
-    already declares, and the reconciler uses it to decide whether that record
-    needs changing, so the two must be one function.
-
-    Every rule is one Cloudflare imposes, and each is a way for a record to
-    report as drifted against itself:
-
-    - a TXT value comes back quoted whether or not it was sent that way;
-    - a hostname is case-insensitive and comes back lowercased;
-    - a CAA value is re-emitted with single spaces.
+    Identity (is a live record one HQ declares) and the reconciler (does it need
+    changing) both import it from here, so the two cannot disagree. Each rule is
+    one Cloudflare imposes, a way for a record to report as drifted against
+    itself.
     """
 
     value = str(content).strip()
+    # A TXT value comes back quoted whether or not it was sent that way.
     if record_type == "TXT" and not (value.startswith('"') and value.endswith('"')):
         value = f'"{value}"'
+    # A hostname is case-insensitive and comes back lowercased.
     if record_type in {"CNAME", "MX"}:
         value = normalized_hostname(value)
+    # A CAA value is re-emitted with single spaces.
     if record_type == "CAA":
         parts = caa_parts(value)
         if parts:
@@ -416,13 +410,13 @@ def _zone_identity(spec: dict[str, Any]) -> tuple[str, ...]:
 
 
 def _dns_record_name(spec: dict[str, Any]) -> str:
-    """A record as a zone file would say it: the name, its type, and for an
-    address or an alias where it points."""
+    """A record by its name and, for an address or an alias, where it
+    points; any other by its name and type."""
 
     name = normalized_hostname(spec.get("name", ""))
     record_type = str(spec.get("record_type", "")).strip().upper()
     if record_type in ("A", "AAAA", "CNAME") and spec.get("content"):
-        return f"{name} → {spec['content']}"
+        return f"{name}{LEADS_TO}{spec['content']}"
     return f"{name} {record_type}".strip()
 
 
@@ -451,13 +445,10 @@ def _zone_from_record(record: dict[str, Any]) -> dict[str, Any]:
 def _public_dns_applies(context: NameContext) -> str:
     """Whether any connected account holds a zone this name could live in.
 
-    A `.home.arpa` name has no public zone and never will, so offering to publish
-    a record for it proposes a call Cloudflare will refuse. The credential
-    already reported which zones it may edit; this is that answer, used.
-
-    Silent until something has swept. An empty report means nobody has looked,
-    and refusing every name on that basis would make one missed sweep look like
-    a deliberate restriction.
+    A `.home.arpa` name has no public zone, so offering to publish it proposes a
+    call Cloudflare will refuse; the credential already reported the zones it
+    may edit. Silent until something has swept, or one missed sweep would look
+    like a deliberate restriction on every name.
     """
 
     if not context.swept or context.public_zone:
@@ -593,12 +584,12 @@ CONTACT_INBOX = ProviderSpec(
     ContactInboxSpec,
     actions={"reconcile": applies(automatic=True)},
     label="Contact inbox",
-    home=lambda resource: reverse("contacts:list"),
+    home=lambda _resource: reverse("contacts:list"),
     connection_providers=("cloudflare_api",),
     hostnames=None,
     readout=_contact_inbox_readout,
-    name=lambda spec: "Contact inbox",
-    key_hint=lambda spec: "contact-inbox",
+    name=lambda _spec: "Contact inbox",
+    key_hint=lambda _spec: "contact-inbox",
     created_from="contacts",
     unobserved_reason="The messages are read on Messages. This holds only your changes to them.",
     removal_gap="Changes to messages are made on Messages.",

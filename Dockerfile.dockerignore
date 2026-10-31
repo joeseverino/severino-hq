@@ -3,11 +3,7 @@
 # cannot reach the image because nobody thought to exclude it. These are the
 # tracked paths the image needs; a new top-level path is added here on purpose.
 *
-!.editorconfig
-!.gitattributes
 !.github/
-!AGENTS.md
-!CLAUDE.md
 !LICENSE
 !composition/
 !controller/

@@ -9,12 +9,17 @@ from django.urls import reverse
 
 from hq.platform.core.models import AgentAccess, AuditLog
 
-from ..agent_access import agents_paused, set_agents_paused
-from ..security import AuthorizationError, Capability, Principal
+from ..agent_access import SET_AGENT_ACCESS, AgentAccessCommand, agents_paused, set_agents_paused
+from ..capabilities import execute_capability
+from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, web_principal
 
 
 def _said():
     return [event.message for event in AuditLog.objects.filter(object_type="Agent access").order_by("id")]
+
+
+def _denials() -> int:
+    return AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=SET_AGENT_ACCESS).count()
 
 
 class StateTests(TestCase):
@@ -32,21 +37,35 @@ class WhoMayPullItTests(TestCase):
         self.user = get_user_model().objects.create_user("op", password="x" * 20)
 
     def test_no_credential_can_change_it(self):
-        for interface in ("mcp", "api", "cli"):
-            credential = Principal("example-agent", interface, frozenset({Capability.READ}))
-            with self.subTest(interface=interface), self.assertRaises(AuthorizationError):
-                set_agents_paused(True, principal=credential, user=self.user)
+        granted = frozenset(Capability)
+        for credential in (
+            Principal("example-agent", "mcp", granted, granted=granted),
+            Principal("example-client", "api", granted, granted=granted),
+            cli_principal(),
+        ):
+            with self.subTest(interface=credential.interface):
+                result = execute_capability(SET_AGENT_ACCESS, {"paused": True}, principal=credential)
+
+                self.assertEqual(result["error"]["code"], "forbidden")
 
         self.assertFalse(agents_paused())
         self.assertEqual(_said(), [])
+        self.assertEqual(_denials(), 3)
+
+    def test_a_state_that_is_not_a_yes_or_no_is_invalid(self):
+        for payload in ({}, {"paused": "sometimes"}):
+            with self.subTest(payload=payload):
+                result = execute_capability(SET_AGENT_ACCESS, payload, principal=web_principal(self.user))
+
+                self.assertEqual(result["error"]["code"], "invalid_input")
+        self.assertFalse(agents_paused())
 
     def test_the_change_does_not_happen_without_its_record(self):
-        person = Principal("op", "web", frozenset())
         with (
             mock.patch("hq.platform.application.agent_access.record_event", side_effect=RuntimeError("audit down")),
             self.assertRaises(RuntimeError),
         ):
-            set_agents_paused(True, principal=person, user=self.user)
+            set_agents_paused(AgentAccessCommand(paused=True), principal=web_principal(self.user))
 
         self.assertFalse(agents_paused())
 
@@ -66,6 +85,17 @@ class SwitchTests(TestCase):
         event = AuditLog.objects.get(object_type="Agent access")
         self.assertEqual(event.message, "Agents paused")
         self.assertEqual(event.user, self.user)
+        self.assertEqual(event.metadata["operation"], SET_AGENT_ACCESS)
+
+    def test_an_operator_without_the_grant_is_refused_with_the_reason(self):
+        lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.GOVERN_AGENTS})
+        with mock.patch("hq.platform.core.views.web_principal", return_value=lacking):
+            refused = self._set("1")
+
+        self.assertEqual(refused.status_code, 403)
+        self.assertIn(b"govern_agents", refused.content)
+        self.assertFalse(agents_paused())
+        self.assertEqual(_denials(), 1)
 
     def test_a_double_click_on_pause_stays_paused(self):
         self._set("1")

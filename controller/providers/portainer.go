@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/host/unit"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -78,6 +79,9 @@ type PortainerContainerRecord struct {
 	Host             string `json:"host"`
 	HostAddress      string `json:"host_address"`
 	ConnectionRef    string `json:"connection_ref"`
+	// Unit is the systemd unit its label names (unit.Label), when that is a
+	// plain service name: the unit that starts it and would undo a stop.
+	Unit string `json:"unit,omitempty"`
 }
 
 type PortainerStackSpec struct {
@@ -144,6 +148,9 @@ func (r *Registry) admitPortainer() {
 	}
 	if r.PublishedContainers == nil {
 		r.PublishedContainers = r.portainerPublished
+	}
+	if r.Units == nil {
+		r.Units = r.unitControl()
 	}
 }
 
@@ -478,7 +485,17 @@ func containerRecord(container dockerContainer, host, ref string, createdHere ma
 		Host:             host,
 		HostAddress:      hostAddress,
 		ConnectionRef:    ref,
+		Unit:             supervisor(container),
 	}
+}
+
+// supervisor is the unit a container's label names, or "" when it names
+// none a unit could be.
+func supervisor(container dockerContainer) string {
+	if name := container.Labels[unit.Label]; unit.Name.MatchString(name) {
+		return name
+	}
+	return ""
 }
 
 func stackPayload(spec PortainerStackSpec) portainerStackPayload {
@@ -646,35 +663,68 @@ func (r *Registry) portainerInventory(ctx context.Context) ([]any, error) {
 	return found, nil
 }
 
-// portainerContainerID is the Docker id of a declared container, looked up by
-// name on each pass: a recreated container gets a new id.
-func (r *Registry) portainerContainerID(ctx context.Context, spec PortainerContainerSpec) (string, PortainerEnvironment, error) {
+// portainerContainer is a declared container as Docker lists it, looked up by
+// name on each pass: a recreated container gets a new id, and its labels are
+// read as they are now.
+func (r *Registry) portainerContainer(ctx context.Context, spec PortainerContainerSpec) (dockerContainer, PortainerEnvironment, error) {
 	environment, err := r.portainerEnvironmentFor(ctx, spec.Host, spec.ConnectionRef)
 	if err != nil {
-		return "", PortainerEnvironment{}, err
+		return dockerContainer{}, PortainerEnvironment{}, err
 	}
 	containers, err := r.portainerContainers(ctx, spec.ConnectionRef, environment.ID)
 	if err != nil {
-		return "", PortainerEnvironment{}, err
+		return dockerContainer{}, PortainerEnvironment{}, err
 	}
 	for _, container := range containers {
 		if container.named(spec.Name) {
-			return container.ID, environment, nil
+			return container, environment, nil
 		}
 	}
-	return "", PortainerEnvironment{}, &ProviderError{Message: fmt.Sprintf("no container named %q on %s", spec.Name, spec.Host)}
+	return dockerContainer{}, PortainerEnvironment{}, &ProviderError{Message: fmt.Sprintf("no container named %q on %s", spec.Name, spec.Host)}
+}
+
+// UnitControl stops, starts or restarts a systemd unit on one machine through
+// `hq-host unit`, which checks the unit against that machine as root.
+type UnitControl interface {
+	// Reaches is whether this run can act on units on the machine.
+	Reaches(host string) bool
+	Act(ctx context.Context, host, verb, unit string) error
+}
+
+// cycleUnit acts through the unit a container's label names: that unit
+// starts the container again when Docker alone stops it, and brings what the
+// container needs when it starts it. Where no unit can be reached, nothing is
+// asked of Docker either, in a plan as in a run.
+func (r *Registry) cycleUnit(ctx context.Context, spec PortainerContainerSpec, verb, named string, apply bool) error {
+	if !unit.Name.MatchString(named) {
+		return &ProviderError{Message: fmt.Sprintf("%s names %q in %s, which is not a unit HQ can act on", spec.Name, named, unit.Label)}
+	}
+	if r.Units == nil || !r.Units.Reaches(spec.Host) {
+		return &ProviderError{Message: fmt.Sprintf("%s is run by %s, and HQ cannot act on units on %s yet", spec.Name, named, spec.Host)}
+	}
+	if !apply {
+		return nil
+	}
+	if err := r.Units.Act(ctx, spec.Host, verb, named); err != nil {
+		return fmt.Errorf("%s %s: %w", verb, named, err)
+	}
+	return nil
 }
 
 // portainerCycler starts, stops or restarts one container and reports what it
 // did. Docker answers 304 for a container already in the state asked for.
 func (r *Registry) portainerCycler(verb string) func(context.Context, PortainerContainerSpec, struct{}, bool) (Result, error) {
 	return func(ctx context.Context, spec PortainerContainerSpec, _ struct{}, apply bool) (Result, error) {
-		containerID, environment, err := r.portainerContainerID(ctx, spec)
+		container, environment, err := r.portainerContainer(ctx, spec)
 		if err != nil {
 			return Result{}, err
 		}
-		if apply {
-			path := "/endpoints/" + itoa(environment.ID) + "/docker/containers/" + containerID + "/" + verb
+		if named, supervised := container.Labels[unit.Label]; supervised {
+			if err := r.cycleUnit(ctx, spec, verb, named, apply); err != nil {
+				return Result{}, err
+			}
+		} else if apply {
+			path := "/endpoints/" + itoa(environment.ID) + "/docker/containers/" + container.ID + "/" + verb
 			if _, err := r.portainerCall(ctx, spec.ConnectionRef, path, "POST", struct{}{}); err != nil {
 				return Result{}, fmt.Errorf("%s %s: %w", verb, spec.Name, err)
 			}

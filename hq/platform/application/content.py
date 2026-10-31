@@ -1,25 +1,17 @@
 """Content commands shared by the web, MCP, and CLI adapters."""
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import date
-from typing import Any
+from functools import partial
+from typing import Annotated, Any
 lazy from urllib.parse import urlsplit
 
-from django.db import transaction
-
-from hq.domains.assets.models import Asset
 from hq.domains.content.models import ContentItem
-from hq.domains.docs_index.models import DocumentationRecord
-from hq.domains.expenses.models import Expense
-from hq.domains.projects.models import Project
-from hq.platform.core.audit import operation_context
 
-from .domains import records_of
+from .command_fields import Describe, Names
 from .entity_links import EntityLink, entity_link, web_url
-from .projection import iso
-from .record_errors import RecordConflict, RecordNotFound
-from .record_links import linked_records
-from .security import Principal
+from .projection import iso, listing
+from .record_saves import Held, Link, linked_saver
 from .sensitivity import safe_doc_ids
 lazy from .published_sites import projects_by_hostname
 
@@ -44,23 +36,27 @@ def published_on(urls) -> EntityLink | None:
 
 @dataclass(frozen=True, slots=True)
 class ContentCommand:
-    title: str
-    slug: str = ""
-    content_type: str = ContentItem.Type.ARTICLE
-    status: str = ContentItem.Status.DRAFT
-    topic: str = ""
-    tags: str = ""
-    published_url: str = ""
-    published_at: date | None = None
-    notes: str = ""
-    related_projects: tuple[str, ...] = ()
-    related_assets: tuple[str, ...] = ()
-    related_expenses: tuple[int, ...] = ()
-    related_documentation: tuple[str, ...] = ()
+    title: Annotated[str, Describe("What it is called.")]
+    slug: Annotated[str, Describe("Its address in HQ; blank derives one from the title.")] = ""
+    content_type: Annotated[str, Describe("What type of writing it is.")] = ContentItem.Type.ARTICLE
+    status: Annotated[str, Describe("Where it stands, from draft to published.")] = ContentItem.Status.DRAFT
+    topic: Annotated[str, Describe("What it is about, in a few words.")] = ""
+    tags: Annotated[str, Describe("Tags, separated by commas.")] = ""
+    published_url: Annotated[str, Describe("Where it is published.")] = ""
+    published_at: Annotated[date | None, Describe("When it was published.")] = None
+    notes: Annotated[str, Describe("Anything else worth keeping.")] = ""
+    related_projects: Annotated[tuple[str, ...], Names("projects"), Describe("The projects it is about.")] = ()
+    related_assets: Annotated[tuple[str, ...], Names("assets"), Describe("The assets it is about.")] = ()
+    related_expenses: Annotated[
+        tuple[int, ...], Names("expenses", key="id"), Describe("The expenses it accounts for.")
+    ] = ()
+    related_documentation: Annotated[
+        tuple[str, ...], Names("documentation", key="doc_id"), Describe("The docs it draws on.")
+    ] = ()
 
 
-def serialize_content(item: ContentItem) -> dict[str, Any]:
-    return {
+def serialize_content(item: ContentItem, *, relationships: bool = True) -> dict[str, Any]:
+    fields = {
         "slug": item.slug,
         "title": item.title,
         "content_type": item.content_type,
@@ -71,50 +67,36 @@ def serialize_content(item: ContentItem) -> dict[str, Any]:
         "published_at": iso(item.published_at),
         "notes": item.notes,
         "updated_at": iso(item.updated_at),
-        "relationships": {
+    }
+    if relationships:
+        fields["relationships"] = {
             "projects": list(item.related_projects.order_by("slug").values_list("slug", flat=True)),
             "assets": list(item.related_assets.order_by("slug").values_list("slug", flat=True)),
             "expense_ids": list(item.related_expenses.order_by("id").values_list("id", flat=True)),
             "documentation": safe_doc_ids(item.related_documentation),
-        },
-    }
+        }
+    return fields
 
 
-@transaction.atomic
-def save_content(
-    command: ContentCommand,
-    *,
-    principal: Principal,
-    current_slug: str | None = None,
-    expected_updated_at: str | None = None,
-) -> dict[str, Any]:
-    principal.require(records_of("content").write)
-    operation = "content.create" if current_slug is None else "content.update"
-    with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
-        if current_slug is None:
-            item = ContentItem()
-            created = True
-        else:
-            try:
-                item = ContentItem.objects.select_for_update().get(slug=current_slug)
-            except ContentItem.DoesNotExist as exc:
-                raise RecordNotFound("That writeup or page was not found.") from exc
-            created = False
-            if expected_updated_at and item.updated_at.isoformat() != expected_updated_at:
-                raise RecordConflict("That writeup or page changed after it was read.")
+def list_content(*, status: str | None = None, query: str | None = None, limit: int = 50) -> dict[str, Any]:
+    return listing(
+        ContentItem,
+        partial(serialize_content, relationships=False),
+        search=("title", "slug", "topic"),
+        status=status,
+        query=query,
+        limit=limit,
+    )
 
-        values = asdict(command)
-        projects = linked_records(Project, "slug", values.pop("related_projects"))
-        assets = linked_records(Asset, "slug", values.pop("related_assets"))
-        expenses = linked_records(Expense, "id", values.pop("related_expenses"))
-        docs = linked_records(DocumentationRecord, "doc_id", values.pop("related_documentation"))
-        for field, value in values.items():
-            setattr(item, field, value)
-        item.full_clean()
-        item.save()
-        item.related_projects.set(projects)
-        item.related_assets.set(assets)
-        item.related_expenses.set(expenses)
-        item.related_documentation.set(docs)
 
-    return {"ok": True, "created": created, "content": serialize_content(item)}
+save_content = linked_saver(
+    "content",
+    serialize_content,
+    refusals=Held("That writeup or page was not found.", "That writeup or page changed after it was read."),
+    links={
+        "related_projects": Link("slug", "A related project was not found."),
+        "related_assets": Link("slug", "A related asset was not found."),
+        "related_expenses": Link("id", "A related expense was not found."),
+        "related_documentation": Link("doc_id", "A related documentation record was not found."),
+    },
+)
