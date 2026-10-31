@@ -20,14 +20,16 @@ type fakeHost struct {
 	t    *testing.T
 	root string
 	// image is /app in the image being deployed.
-	image   string
-	mu      sync.Mutex
-	log     []string
-	fail    []string
-	active  []string
-	running string
-	out     bytes.Buffer
-	machine *Machine
+	image string
+	mu    sync.Mutex
+	log   []string
+	fail  []string
+	// failSays is what each failing command writes to stderr.
+	failSays string
+	active   []string
+	running  string
+	out      bytes.Buffer
+	machine  *Machine
 	// boot is what starting the web unit does to the host, as an image's
 	// entrypoint would.
 	boot func()
@@ -60,7 +62,7 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 	}
 	for _, prefix := range f.fail {
 		if strings.HasPrefix(call, prefix) {
-			return answer("", 1)
+			return exec.CommandContext(ctx, "/bin/sh", "-c", `printf '%s' "$1" >&2; exit 1`, "sh", f.failSays)
 		}
 	}
 	switch {
