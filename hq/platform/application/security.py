@@ -222,8 +222,9 @@ class Principal:
 
     def require(self, capability: Capability | str) -> None:
         name = capability.value if isinstance(capability, Capability) else capability
-        available = {item.value if isinstance(item, Capability) else item for item in self.capabilities}
-        if name not in available:
+        # A Capability is a StrEnum, equal to and hashed as its value, so the
+        # held set answers for a name as it stands.
+        if name not in self.capabilities:
             raise AuthorizationError(f"{self.interface} principal {self.actor!r} lacks {name!r}.")
         if not could_hold(self.interface, (name,)):
             where = " or ".join(sorted(HELD_ONLY_AT[name]))
