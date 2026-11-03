@@ -1,5 +1,6 @@
 """The API reference: a vendored viewer, held to the rules its frame and palette must keep."""
 
+import contextlib
 import difflib
 import hashlib
 import json
@@ -116,12 +117,7 @@ def _schema_key(document, part):
     or a digest of the schema written in place; a response named by
     reference is first resolved."""
 
-    while "$ref" in part:
-        node = document
-        for step in part["$ref"].removeprefix("#/").split("/"):
-            node = node[step]
-        part = node
-    schema = part.get("content", {}).get(_JSON, {}).get("schema")
+    schema = _resolved(document, part).get("content", {}).get(_JSON, {}).get("schema")
     if schema is None:
         return ""
     if "$ref" in schema:
@@ -137,19 +133,26 @@ class OpenedTag:
     the slugs whose "Show More" a reader presses to reach its operations
     (its group's, then its own), and ``parts`` the bodies and responses
     opened, each as the end of the id the viewer gives it
-    (``/<METHOD><path>.body``, ``/<METHOD><path>.responses.<status>``)."""
+    (``/<METHOD><path>.body``, ``/<METHOD><path>.responses.<status>``).
+    ``shared`` are the properties inside those parts left closed, since the
+    schema each shows is opened where the walk first met it, each as its
+    part's top property's id end and the names of the rows below it
+    (``/<METHOD><path>.responses.200.data :: items/subject``)."""
 
     name: str
     label: str
     tags: tuple[str, ...]
     parts: tuple[str, ...]
+    shared: tuple[str, ...] = ()
 
 
 def opened_walk(document):
     """Each tag of ``document`` that holds operations, in the reference's
     order, with every body and response whose schema no earlier one in the
     walk drew: a schema the tags share is opened once, where it is first
-    met, and judged there."""
+    met, and judged there. So is a schema a property refers to, at any
+    depth: the viewer draws it again at every use, and the whole reference
+    opened at each would be many times the page."""
 
     operations: dict[str, list[tuple[str, str, dict[str, Any]]]] = {}
     for path, item in document["paths"].items():
@@ -160,15 +163,77 @@ def opened_walk(document):
     for tag in document["tags"]:
         if tag["name"] not in operations:
             continue
-        parts = []
+        parts: list[str] = []
+        shared: list[str] = []
         for method, path, operation in operations[tag["name"]]:
             for where, part in _drawn(operation):
                 key = _schema_key(document, part)
                 if key and key not in seen:
                     seen.add(key)
                     parts.append(f"/{method}{path}{where}")
-        walk.append(_opened(document, tag["name"], tag["name"], "", parts))
+                    schema = _resolved(document, part).get("content", {}).get(_JSON, {}).get("schema", {})
+                    shared += _shared_inside(document, f"/{method}{path}{where}", schema, seen)
+        walk.append(_opened(document, tag["name"], tag["name"], "", parts, shared))
     return walk
+
+
+def _resolved(document, node):
+    """``node``, its reference followed until it is the thing itself."""
+
+    while isinstance(node, dict) and "$ref" in node:
+        found = document
+        for step in node["$ref"].removeprefix("#/").split("/"):
+            found = found[step]
+        node = found
+    return node
+
+
+def _rows_of(document, schema):
+    """The schema whose properties the viewer draws under ``schema``'s row,
+    through a reference, an array's items and a choice's first variant (the
+    one it shows), with the last reference it went through, or ``None``."""
+
+    reference = None
+    for _depth in range(32):
+        if "$ref" in schema:
+            reference = schema["$ref"]
+            schema = _resolved(document, schema)
+        elif "properties" in schema:
+            break
+        elif isinstance(schema.get("items"), dict):
+            schema = schema["items"]
+        elif variants := [each for each in schema.get("anyOf", schema.get("oneOf", [])) if each.get("type") != "null"]:
+            schema = variants[0]
+        else:
+            break
+    return reference, schema
+
+
+def _shared_inside(document, part, schema, seen):
+    """The rows inside ``part`` (its ``schema``) that show a schema ``seen``
+    already holds, each as ``OpenedTag.shared`` writes it; every other
+    schema met is added to ``seen`` as it is first met."""
+
+    reference, top = _rows_of(document, schema)
+    if reference:
+        seen.add(reference)
+    shared: list[str] = []
+
+    def visit(row, place, names):
+        reference, below = _rows_of(document, row)
+        if not below.get("properties"):
+            return
+        if reference in seen:
+            shared.append(f"{place} :: {'/'.join(names)}")
+            return
+        if reference:
+            seen.add(reference)
+        for name, child in below["properties"].items():
+            visit(child, place, [*names, name])
+
+    for name, row in top.get("properties", {}).items():
+        visit(row, f"{part}.{name}", [])
+    return shared
 
 
 def _drawn(operation):
@@ -179,9 +244,10 @@ def _drawn(operation):
     return drawn + [(f".responses.{status}", response) for status, response in operation["responses"].items()]
 
 
-def _opened(document, tag_name, name, label, parts):
-    """``parts`` of the tag ``tag_name`` opened, under ``name``, labeled as
-    the sidebar names the tag (its group first), after ``label`` if given."""
+def _opened(document, tag_name, name, label, parts, shared=()):
+    """``parts`` of the tag ``tag_name`` opened, but for the rows ``shared``
+    names, under ``name``, labeled as the sidebar names the tag (its group
+    first), after ``label`` if given."""
 
     summary = {tag["name"]: tag for tag in document["tags"]}
     tag = summary[tag_name]
@@ -192,6 +258,7 @@ def _opened(document, tag_name, name, label, parts):
         label=f"{label} in {sidebar}" if label else sidebar,
         tags=tuple(scalar_slug(each) for each in ([group["name"]] if group else []) + [tag_name]),
         parts=tuple(parts),
+        shared=tuple(shared),
     )
 
 
@@ -219,9 +286,12 @@ def opened_operation(document, asked):
 # id met going out from it: its own, else the first inside the nearest box
 # around it that holds one. A popup names what it opens (`aria-haspopup`,
 # `aria-controls`: an operation's auth badge, a property's default and
-# example lists) and closes on a press elsewhere, so it is left closed. How
-# many were pressed is the answer.
-_OPEN_ROUND = """([root, more, tags, parts]) => {
+# example lists) and closes on a press elsewhere, so it is left closed, and so
+# is a row ``shared`` names: its place, then the names of the rows from there
+# down to it. What a press opens the viewer draws once its own queue has run,
+# so the presses go on level by level, until a level draws nothing more to
+# press, before the page is next laid out. How many were pressed is the answer.
+_OPEN_ROUND = """async ([root, more, tags, parts, shared]) => {
   const viewer = document.querySelector(root);
   const pressed = (window.lookPressed ??= new WeakSet());
   const within = (id, part) => {
@@ -231,21 +301,44 @@ _OPEN_ROUND = """([root, more, tags, parts]) => {
   const placeOf = (entry) => {
     for (let box = entry; box && box !== viewer; box = box.parentElement) {
       const id = box.id.includes('/tag/') ? box.id : box.querySelector('[id*="/tag/"]')?.id;
-      if (id) return id;
+      if (id) return [id, box];
     }
-    return '';
+    return ['', null];
+  };
+  // A row's name is what labels its toggle.
+  const named = (row) => {
+    const toggle = row.querySelector(':scope > button[aria-labelledby]');
+    return toggle ? document.getElementById(toggle.getAttribute('aria-labelledby'))?.textContent.trim() : '';
+  };
+  const rowPath = (button, place, box) => {
+    const names = [];
+    for (let row = button.closest('li'); row && row !== box && box.contains(row); row = row.parentElement.closest('li')) {
+      names.unshift(named(row));
+    }
+    return `${place} :: ${names.join('/')}`;
   };
   const wanted = (button) => {
     if (!button.hasAttribute('aria-expanded')) {
       return button.textContent.trim() === more && tags.some((slug) => button.id.endsWith(`/tag/${slug}`));
     }
-    const place = placeOf(button);
-    return button.getAttribute('aria-expanded') === 'false' && parts.some((part) => within(place, part));
+    const [place, box] = placeOf(button);
+    if (button.getAttribute('aria-expanded') !== 'false' || !parts.some((part) => within(place, part))) return false;
+    const row = shared.length && button.hasAttribute('aria-labelledby') ? rowPath(button, place, box) : '';
+    return !shared.some((closed) => row.endsWith(closed));
   };
-  const shut = [...viewer.querySelectorAll('button')].filter((button) => !pressed.has(button)
-    && !button.matches('[aria-haspopup], [aria-controls]') && button.checkVisibility() && wanted(button));
-  shut.forEach((button) => { pressed.add(button); button.click(); });
-  return shut.length;
+  const level = () => {
+    const shut = [...viewer.querySelectorAll('button')].filter((button) => !pressed.has(button)
+      && !button.matches('[aria-haspopup], [aria-controls]') && button.checkVisibility() && wanted(button));
+    shut.forEach((button) => { pressed.add(button); button.click(); });
+    return shut.length;
+  };
+  let count = 0;
+  for (let found = level(); found; found = level()) {
+    count += found;
+    // The viewer's queue runs as microtasks, some queueing more.
+    for (let tick = 0; tick < 10; tick += 1) await null;
+  }
+  return count;
 }"""
 
 # Which of a tag's slugs and parts the viewer drew nothing for: none, unless
@@ -268,18 +361,25 @@ def every_tag(document):
         label="every tag",
         tags=tuple(dict.fromkeys(slug for opened in walk for slug in opened.tags)),
         parts=tuple(part for opened in walk for part in opened.parts),
+        shared=tuple(row for opened in walk for row in opened.shared),
     )
 
 
-def open_tag(page, opened):
+def open_tag(page, opened, step=None):
     """``opened`` opened as a reader opens it, round after round as each
     press draws what it shows, every entry drawn; the slugs and parts the
-    viewer drew nothing for, none when the look reached all of it."""
+    viewer drew nothing for, none when the look reached all of it. Each
+    round runs inside ``step(round)``, a context a test makes a subtest of,
+    so the stall watch sees each one end."""
 
-    arg = [SELECTORS["reference"], SHOW_MORE, list(opened.tags), list(opened.parts)]
-    for _round in range(20):
-        draw_whole_reference(page)
-        if not page.evaluate(_OPEN_ROUND, arg):
+    arg = [SELECTORS["reference"], SHOW_MORE, list(opened.tags), list(opened.parts), list(opened.shared)]
+    for each in range(20):
+        # A subtest records a round that fails and goes on: then it has ended.
+        pressed = 0
+        with step(each) if step else contextlib.nullcontext():
+            draw_whole_reference(page)
+            pressed = page.evaluate(_OPEN_ROUND, arg)
+        if not pressed:
             break
     draw_whole_reference(page)
     return page.evaluate(_UNDRAWN, [SELECTORS["reference"], list(opened.tags), list(opened.parts)])
@@ -833,7 +933,8 @@ class ReferenceBrowserTests(BrowserGate):
                 self.page.set_viewport_size({"width": width, "height": 900})
                 # What a width draws that the last did not is opened too; what
                 # is open already stays open.
-                self.assertEqual(open_tag(self.page, opened), [])
+                undrawn = open_tag(self.page, opened, step=lambda each: self.subTest(opening=each))
+                self.assertEqual(undrawn, [])
                 self.assert_read_whole()
                 if width == WIDE:
                     with self.subTest(check="a field reads by its type"):

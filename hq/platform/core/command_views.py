@@ -259,7 +259,7 @@ class CommandView(View):
         return capability_target_initial(self.spec, target, principal=self.principal)
 
     def post(self, request, name: str):  # noqa: ARG002 - Django passes the URL's name; dispatch read it into spec
-        form = self.form_class(request.POST, initial=self._held(request.POST.get("__target", "")))
+        form = self.form_class(request.POST, request.FILES, initial=self._held(request.POST.get("__target", "")))
         if not form.is_valid():
             return TemplateResponse(request, self.template_name, self._context(form), status=400)
 

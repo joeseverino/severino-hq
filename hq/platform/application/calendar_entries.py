@@ -23,9 +23,8 @@ from hq.platform.application.routes import reverse
 from hq.platform.core.audit import audit_operation
 
 from .calendar import CalendarEvent, CalendarSource, gather
-from .command_fields import Describe, Refers
+from .command_fields import Choices, Describe, Refers
 from .derivations import derivation
-from .describe import listed
 from .integration_specs import Kept, keeps
 from .moments import when_day
 from .projection import window
@@ -195,30 +194,29 @@ def repeat_label(entry: Entry) -> str:
 
 # An entry's fields as its command writes them and its record reads them back, each said once.
 type CalendarEntryTitle = Annotated[str, Describe("What the entry is.")]
-type CalendarEntryStartsOn = Annotated[date, Describe("The day it starts, an ISO 8601 date.")]
+type CalendarEntryStartsOn = Annotated[date, Describe("The day it starts.")]
 type CalendarEntryEndsOn = Annotated[
-    date | None, Describe("The day it ends, an ISO 8601 date; null for one that ends the day it starts.")
+    date | None, Describe("The day it ends, for one that spans days.", api="Null for one that ends the day it starts.")
 ]
-type CalendarEntryLocation = Annotated[str, Describe("Where it happens; empty when not recorded.")]
+type CalendarEntryLocation = Annotated[str, Describe("Where it happens.", api="Empty when not recorded.")]
 Repeat = Literal["", "daily", "weekly", "monthly", "yearly"]
 type CalendarEntryRepeat = Annotated[
-    Repeat,
-    Describe(f"How often it repeats: {listed(Entry.Repeat.values)}; empty for once."),
+    Repeat, Choices(Entry.Repeat.choices), Describe("How often it repeats.", api="Empty for once.")
 ]
 type CalendarEntryInterval = Annotated[
     int,
     Field(ge=INTERVAL_MINIMUM, le=INTERVAL_MAXIMUM),
-    Describe("How far apart its times are, in what `repeat` names: 2 with `weekly` is every other week."),
+    Describe("How far apart its times are, in what it repeats by: 2 with weekly is every other week."),
 ]
 type CalendarEntryWeekdays = Annotated[
     Sequence[int],
-    Describe("For one that repeats weekly, the days of the week it falls on, Monday as 0; else empty."),
+    Describe("For one that repeats weekly, the days of the week it falls on, Monday as 0.", api="Empty otherwise."),
 ]
 type CalendarEntryRepeatUntil = Annotated[
-    date | None, Describe("The last day it repeats, an ISO 8601 date; null for no last day.")
+    date | None, Describe("The last day it repeats.", api="Null for no last day.")
 ]
 type CalendarEntryAbout = Annotated[
-    str, Refers(Entry, "about"), Describe("What it is about, as `type:key`; empty for nothing.")
+    str, Refers(Entry, "about"), Describe("What it is about.", api="A `type:key` reference; empty for nothing.")
 ]
 
 

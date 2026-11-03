@@ -354,7 +354,8 @@
       "Describe": {
         "bases": [],
         "constructor": [
-          "text"
+          "text",
+          "api="
         ],
         "fields": [],
         "kind": "dataclass",

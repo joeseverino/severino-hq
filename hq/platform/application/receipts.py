@@ -19,7 +19,8 @@ from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.receipts.specs import ReceiptRow
 
-from .command_fields import Describe, Names
+from .command_fields import Describe, Names, Upload
+from .forms import file_as_sent
 from .integration_specs import Kept, keeps
 from .projection import iso
 from .record_errors import InputError, RecordNotFound
@@ -38,10 +39,12 @@ _RECEIPT = Held("That receipt was not found.", "That receipt changed after it wa
 
 # The records a receipt is matched to, as its command writes them and its row reads them back.
 type ReceiptExpense = Annotated[
-    int | None, Names("expenses", key="id"), Describe("The id of the expense this receipt proves; null for none.")
+    int | None,
+    Names("expenses", key="id"),
+    Describe("The expense this receipt proves.", api="Its id; null for none."),
 ]
 type ReceiptAsset = Annotated[
-    str | None, Names("assets"), Describe("The slug of the asset this receipt is for; null for none.")
+    str | None, Names("assets"), Describe("The asset this receipt is for.", api="Its slug; null for none.")
 ]
 
 
@@ -70,7 +73,7 @@ class ReceiptFile:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ReceiptUploadCommand(ReceiptMetadataCommand):
-    file: Annotated[ReceiptFile, Describe("The receipt's file.")]
+    file: Annotated[ReceiptFile, Upload(), Describe("The receipt's file.")]
 
 
 def _stored(current_id: int) -> dict[str, Any]:
@@ -252,10 +255,5 @@ def receipt_payload(data: dict[str, Any], upload: UploadedFile | None = None) ->
         "related_asset": data["related_asset"].slug if data["related_asset"] else None,
     }
     if upload is not None:
-        upload.seek(0)
-        payload["file"] = {
-            "name": upload.name or "",
-            "content_type": upload.content_type or "",
-            "content": base64.b64encode(upload.read()).decode("ascii"),
-        }
+        payload["file"] = file_as_sent(upload)
     return payload

@@ -8,20 +8,20 @@ lazy from urllib.parse import urlsplit
 from hq.domains.content.models import ContentItem
 
 from .command_fields import Describe, Names
-from .describe import listed
 from .entity_links import EntityLink, entity_link, web_url
 from .projection import iso, listing
-from .record_fields import Notes, PublishedAt, PublishedUrl
+from .record_fields import Notes, PublishedAt, PublishedUrl, one_of
 from .record_saves import Held, Link, linked_saver
 from .sensitivity import safe_doc_ids
-from .ui import ended
 lazy from .published_sites import projects_by_hostname
 
 # A writeup's fields as its command writes them and its row reads them back, each said once.
+_TYPE = one_of(ContentItem.Type.values)
+_STATUS = one_of(ContentItem.Status.values)
 type ContentTitle = Annotated[str, Describe("What it is called.")]
-type ContentType = Annotated[str, Describe(ended(f"What form it takes: {listed(ContentItem.Type.values)}"))]
-type ContentStatus = Annotated[str, Describe(ended(f"How far along it is: {listed(ContentItem.Status.values)}"))]
-type ContentTopic = Annotated[str, Describe("What it is about, in a few words; empty when not recorded.")]
+type ContentType = Annotated[_TYPE, Describe("What form it takes.")]
+type ContentStatus = Annotated[_STATUS, Describe("How far along it is.")]
+type ContentTopic = Annotated[str, Describe("What it is about, in a few words.", api="Empty when not recorded.")]
 
 
 def published_on(urls) -> EntityLink | None:

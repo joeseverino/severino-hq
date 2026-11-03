@@ -12,45 +12,53 @@ from hq.domains.expenses.models import DEFAULT_CATEGORY, EXPENSE_CATEGORY_CHOICE
 from .answer_fields import BusinessUseShare
 from .assets import PaymentMethod
 from .command_fields import Describe, Names, Refers
-from .describe import listed
 from .money import money
 from .projection import iso
-from .record_fields import Notes, TotalCost
+from .record_fields import Notes, TotalCost, one_of
 from .record_saves import Held, Link, linked_saver
 from .sensitivity import SAFE_SENSITIVITIES
-from .ui import Kpi, ended
+from .ui import Kpi
 
 # An expense's fields as its command writes them and its row reads them back, each said once.
-type ExpenseDate = Annotated[date, Describe("When it was spent, an ISO 8601 date.")]
+_CATEGORY = one_of(EXPENSE_CATEGORY_CHOICES)
+type ExpenseDate = Annotated[date, Describe("When it was spent.")]
 type ExpenseVendor = Annotated[str, Describe("Who was paid.")]
 type ExpenseItem = Annotated[str, Describe("What was bought.")]
-type ExpenseCategory = Annotated[
-    str, Describe(ended(f"What type of expense it is: {listed(value for value, _ in EXPENSE_CATEGORY_CHOICES)}"))
-]
-type BusinessPurpose = Annotated[str, Describe("Why the business needed it; empty when not recorded.")]
+type ExpenseCategory = Annotated[_CATEGORY, Describe("What type of expense it is.")]
+type BusinessPurpose = Annotated[str, Describe("Why the business needed it.", api="Empty when not recorded.")]
 type ExpenseProject = Annotated[
-    str | None, Names("projects"), Describe("The slug of the project this was spent on; null for none.")
+    str | None, Names("projects"), Describe("The project this was spent on.", api="Its slug; null for none.")
 ]
 type ExpenseAsset = Annotated[
-    str | None, Names("assets"), Describe("The slug of the asset this bought or kept running; null for none.")
+    str | None,
+    Names("assets"),
+    Describe("The asset this bought or kept running.", api="Its slug; null for none."),
 ]
 type ExpenseContent = Annotated[
     str | None,
     Names("content", key="slug"),
-    Describe("The slug of the writeup or page this paid for; null for none."),
+    Describe("The writeup or page this paid for.", api="Its slug; null for none."),
 ]
 type ExpenseDoc = Annotated[
     str | None,
     Names("documentation", key="doc_id"),
-    Describe("The vault doc ID of the doc that records it; null for none, or for one too sensitive to share."),
+    Describe(
+        "The doc that records this expense.",
+        api="Its vault doc ID; null for none, or for one too sensitive to share.",
+    ),
 ]
 type PaidFrom = Annotated[
-    str, Refers(Expense, "paid_from"), Describe("The account that paid, as `type:key`; empty when not recorded.")
+    str,
+    Refers(Expense, "paid_from"),
+    Describe("The account that paid.", api="A `type:key` reference; empty when not recorded."),
 ]
 type ExpenseAbout = Annotated[
     str,
     Refers(Expense, "about"),
-    Describe("What it was for, as `type:key`, where none of the related records says it; empty for none."),
+    Describe(
+        "What it was for, where none of the related records says it.",
+        api="A `type:key` reference; empty for none.",
+    ),
 ]
 
 

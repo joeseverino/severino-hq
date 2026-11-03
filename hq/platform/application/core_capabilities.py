@@ -376,7 +376,7 @@ CORE_CAPABILITY_SPECS = (
     ),
     CapabilitySpec(
         ACTION_CAPABILITY[OperationRequest.Action.DELETE],
-        "Remove the live thing this record describes, then remove the record from HQ.",
+        "Remove what this record describes from where it runs, then the record from HQ.",
         DESTRUCTIVE_EFFECT,
         Capability.MANAGE_INFRASTRUCTURE,
         OperationCommand,
@@ -414,19 +414,24 @@ CORE_CAPABILITY_SPECS = (
             (
                 OperationRequest.Action.RESTART,
                 request_restart,
-                "Restart the live thing a record names.",
+                "Restart the container through Portainer.",
                 "infrastructure_change",
             ),
             (
                 OperationRequest.Action.START,
                 request_start,
-                "Start the live thing a record names.",
+                "Start the container through Portainer.",
                 "infrastructure_change",
             ),
             # A stop takes the thing away from whoever uses it until someone
             # starts it again: an agent's waits for a person by default, and a
             # person's is confirmed on a page of its own.
-            (OperationRequest.Action.STOP, request_stop, "Stop the live thing a record names.", DESTRUCTIVE_EFFECT),
+            (
+                OperationRequest.Action.STOP,
+                request_stop,
+                "Stop the container through Portainer; it stays down until it is started.",
+                DESTRUCTIVE_EFFECT,
+            ),
         )
     ),
     CapabilitySpec(

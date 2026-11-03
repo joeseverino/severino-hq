@@ -15,6 +15,7 @@ from django.db import transaction
 from pydantic import Field
 
 from hq.domains.contacts import inbox
+from hq.domains.contacts.forms import STATUS_CHOICES
 from hq.domains.control_plane.desired_state import desired_fingerprint
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.cloudflare import CONTACT_CHANGES_LIMIT, ContactStatus
@@ -24,15 +25,13 @@ from hq.platform.core.models import AuditLog
 
 from .adoption import OBSERVES_ONLY, observes_only
 from .cadence import request_reading
-from .command_fields import Describe
-from .describe import listed
+from .command_fields import Choices, Describe
 from .integration_specs import Kept, keeps
 from .projection import window
 from .record_errors import PolicyError, RecordNotFound
 from .record_saves import written
 from .resource_operations import queue_reconcile
 from .security import Principal
-from .ui import ended
 lazy from .record_answers import ContactSubmissionPage
 
 CONTACT_STATUSES = frozenset(get_args(ContactStatus))
@@ -44,9 +43,11 @@ DELETE = "contact.submission.delete"
 
 
 # A submission's review fields as its command writes them and its row reads them back, each said once.
-type ReviewStatus = Annotated[str, Describe(ended(f"Where its review stands: {listed(get_args(ContactStatus))}"))]
-type Assignee = Annotated[str, Field(max_length=ASSIGNEE_LENGTH), Describe("Who is handling it; empty for nobody.")]
-type AdminNotes = Annotated[str, Describe("The notes kept on it, for HQ only; empty for none.")]
+type ReviewStatus = Annotated[ContactStatus, Choices(STATUS_CHOICES), Describe("Where its review stands.")]
+type Assignee = Annotated[
+    str, Field(max_length=ASSIGNEE_LENGTH), Describe("Who is handling it.", api="Empty for nobody.")
+]
+type AdminNotes = Annotated[str, Describe("The notes kept on it, for HQ only.", api="Empty for none.")]
 
 
 @dataclass(frozen=True, slots=True)

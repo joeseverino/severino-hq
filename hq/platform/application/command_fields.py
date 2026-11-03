@@ -30,6 +30,8 @@ if TYPE_CHECKING:
 NAMES_RECORDS = "x-hq-records"
 # The JSON Schema extension a field holding a model's reference carries.
 REFERS = "x-hq-reference"
+# The JSON Schema extension a field holding a file carries.
+UPLOAD = "x-hq-upload"
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +93,22 @@ class Refers:
         return {**handler(schema), REFERS: {"model": self.model, "field": self.field}}
 
 
+@dataclass(frozen=True, slots=True)
+class Upload:
+    """A field that is a file, sent in JSON as its ``name``, ``content_type``
+    and base64 ``content``: the form offers a file to pick and sends it so
+    (``forms.file_as_sent``)."""
+
+    def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
+        return {**handler(schema), UPLOAD: True}
+
+
+def is_upload(schema: dict[str, Any]) -> bool:
+    """Whether one field's schema is a file a person picks."""
+
+    return schema.get(UPLOAD) is True
+
+
 def named_records(schema: dict[str, Any]) -> dict[str, Any] | None:
     """The records one field's schema names, or ``None``."""
 
@@ -106,4 +124,16 @@ def referred(schema: dict[str, Any]) -> tuple[str, str] | None:
 
 
 # Every marker is imported from here, Describe too, though it lives in a leaf of its own.
-__all__ = ["NAMES_RECORDS", "REFERS", "Choices", "Describe", "Names", "Refers", "named_records", "referred"]
+__all__ = [
+    "NAMES_RECORDS",
+    "REFERS",
+    "UPLOAD",
+    "Choices",
+    "Describe",
+    "Names",
+    "Refers",
+    "Upload",
+    "is_upload",
+    "named_records",
+    "referred",
+]

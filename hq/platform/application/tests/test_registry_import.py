@@ -131,15 +131,15 @@ class ValidationTests(TestCase):
         self.assertEqual([problem["loc"] for problem in result["error"]["details"]], [["projects", 0, "hostname"]])
 
     def test_a_bad_choice_is_refused_before_anything_is_written(self):
-        self.assert_refused(
+        result = self.assert_refused(
             {
                 "projects": [
                     {"slug": "good", "name": "Good"},
                     {"slug": "bad", "name": "Bad", "status": "not-a-status"},
                 ]
             },
-            "not-a-status",
         )
+        self.assertEqual([problem["loc"] for problem in result["error"]["details"]], [["projects", 1, "status"]])
 
     def test_an_asset_naming_an_unknown_project_is_refused(self):
         self.assert_refused(

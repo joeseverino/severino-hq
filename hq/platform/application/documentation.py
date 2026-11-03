@@ -18,18 +18,17 @@ from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
 
 from .command_fields import Describe, Names
-from .describe import listed
 from .entity_links import EntityLink, entity_link
 from .labels import plural
 from .projection import listing
 from .record_errors import PolicyError
-from .record_fields import Notes, PublishedAt
+from .record_fields import Notes, PublishedAt, one_of
 from .record_saves import Held, Link, linked_saver
 from .references import Mention, Mentions
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Capability, Principal
 from .sensitivity import safe_records
-from .ui import counted, ended
+from .ui import counted
 
 MAX_MANIFEST_ITEMS = 2000
 SYNC = "documentation.sync"
@@ -126,40 +125,37 @@ class DocumentationSyncCommand:
 # A doc's fields as its command writes them and its row reads them back, each said once.
 type DocId = Annotated[str, Describe("The doc's ID in the vault.")]
 type DocumentationTitle = Annotated[str, Describe("The doc's title.")]
-type DocType = Annotated[str, Describe(ended(f"What type of doc it is: {listed(DocumentationRecord.DocType.values)}"))]
-type DocEnvironment = Annotated[
-    str, Describe(ended(f"Where that system runs: {listed(DocumentationRecord.Environment.values)}"))
-]
-type DocStatus = Annotated[str, Describe(ended(f"Where the doc stands: {listed(DocumentationRecord.Status.values)}"))]
-type DocSensitivity = Annotated[
-    str,
-    Describe(
-        f"Who may read it, {listed(DocumentationRecord.Sensitivity.values)}; a restricted doc never reaches an agent."
-    ),
-]
-type ObsidianPath = Annotated[str, Describe("Its path in the vault; empty for none.")]
-type GithubPath = Annotated[str, Describe("Its path in a repository; empty for none.")]
-type ExternalUrl = Annotated[str, Describe("Where it is published outside HQ; empty for none.")]
+_DOC_TYPE = one_of(DocumentationRecord.DocType.values)
+_ENVIRONMENT = one_of(DocumentationRecord.Environment.values)
+_STATUS = one_of(DocumentationRecord.Status.values)
+_SENSITIVITY = one_of(DocumentationRecord.Sensitivity.values)
+type DocType = Annotated[_DOC_TYPE, Describe("What type of doc it is.")]
+type DocEnvironment = Annotated[_ENVIRONMENT, Describe("Where that system runs.")]
+type DocStatus = Annotated[_STATUS, Describe("Where the doc stands.")]
+type DocSensitivity = Annotated[_SENSITIVITY, Describe("Who may read it; a restricted doc never reaches an agent.")]
+type ObsidianPath = Annotated[str, Describe("Its path in the vault.", api="Empty for none.")]
+type GithubPath = Annotated[str, Describe("Its path in a repository.", api="Empty for none.")]
+type ExternalUrl = Annotated[str, Describe("Where it is published outside HQ.", api="Empty for none.")]
 type LastReviewed = Annotated[
-    date | None, Describe("When it was last checked against what it describes, an ISO 8601 date; null for never.")
+    date | None, Describe("When it was last checked against what it describes.", api="Null for never.")
 ]
 
 
 # The vault's manifest copies a doc's frontmatter as it is written, so any
 # field may be absent or null, and a key HQ does not read is passed over; the
-# importer holds each entry to the frontmatter schema.
+# importer holds each entry to the frontmatter schema, so a choice takes any text.
 @with_config(ConfigDict(extra="allow"))
 class ManifestEntry(TypedDict, total=False):
     """One doc of the vault's manifest: its frontmatter, its path, and what it relates to."""
 
     doc_id: DocId | None
     title: DocumentationTitle | None
-    doc_type: DocType | None
+    doc_type: Annotated[str | None, Describe("What type of doc it is, as its frontmatter writes it.")]
     system: Annotated[str | None, Describe("The system or service the doc is about.")]
     system_service: Annotated[str | None, Describe("The same as `system`, under the name HQ stores it by.")]
-    environment: DocEnvironment | None
-    status: DocStatus | None
-    sensitivity: DocSensitivity | None
+    environment: Annotated[str | None, Describe("Where that system runs, as its frontmatter writes it.")]
+    status: Annotated[str | None, Describe("Where the doc stands, as its frontmatter writes it.")]
+    sensitivity: Annotated[str | None, Describe("Who may read it, as its frontmatter writes it.")]
     path: Annotated[str | None, Describe("Where the doc is in the vault, which `obsidian_path` stands in for.")]
     obsidian_path: ObsidianPath | None
     github_path: GithubPath | None

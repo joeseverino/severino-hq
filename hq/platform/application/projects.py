@@ -25,19 +25,18 @@ lazy from hq.domains.projects.specs import ProjectRecord
 lazy from hq.platform.application.routes import reverse
 
 from .command_fields import Describe
-from .describe import listed
 from .domains import records_of
 from .github_public import github_repository
 from .outbound_work import OutboundWork
 from .projection import addressable, iso, listing, projection_scope, read_once
 from .record_errors import RecordConflict, RecordNotFound
-from .record_fields import Notes, PublishedUrl, Slug
+from .record_fields import Notes, PublishedUrl, Slug, one_of
 from .record_links import linked
 from .record_saves import Held, held, linked_saver, saved_type
 from .refusal_status import RefusalEnvelope, refusal_of, refuse
 from .security import Principal
 from .standards import MET
-from .ui import counted, ended
+from .ui import counted
 from .upserts import upsert_by_slug
 lazy from . import capabilities
 lazy from .action_links import READ_NOW_CAPABILITY
@@ -51,13 +50,15 @@ lazy from .timestamps import moment
 
 # A project's fields as its command writes them and its row reads them back, each said once.
 type ProjectName = Annotated[str, Describe("What the project is called.")]
-type ProjectCategory = Annotated[
-    str, Describe(ended(f"What type of project it is: {listed(v for v, _ in PROJECT_CATEGORY_CHOICES)}"))
+_CATEGORY = one_of(PROJECT_CATEGORY_CHOICES)
+_STATUS = one_of(Project.Status.values)
+type ProjectCategory = Annotated[_CATEGORY, Describe("What type of project it is.")]
+type ProjectStatus = Annotated[_STATUS, Describe("Where it stands.")]
+type ProjectDescription = Annotated[
+    str, Describe("What it is, in a sentence or two.", api="Empty when none was written.")
 ]
-type ProjectStatus = Annotated[str, Describe(ended(f"Where it stands: {listed(Project.Status.values)}"))]
-type ProjectDescription = Annotated[str, Describe("What it is, in a sentence or two; empty when none was written.")]
 type TechnologiesUsed = Annotated[str, Describe("What it is built with.")]
-type RepositoryUrl = Annotated[str, Describe("The address of its code repository; empty for none.")]
+type RepositoryUrl = Annotated[str, Describe("Where its code lives.", api="Empty for none.")]
 type DeploymentNotes = Annotated[str, Describe("How it is deployed.")]
 type SecurityNotes = Annotated[str, Describe("What protects it, and what to watch.")]
 type DependencyUpdates = Annotated[

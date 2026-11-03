@@ -44,365 +44,30 @@
         "data": {
           "capabilities": [
             {
-              "effect": "remote_write",
-              "execution_notes": [],
-              "idempotency_key_required": true,
+              "effect": "read",
+              "execution_notes": [
+                "Validate the hostname before anything leaves this machine."
+              ],
+              "idempotency_key_required": false,
               "input_schema": {
-                "$defs": {
-                  "ConfirmPrune": {
-                    "description": "Confirms the delete that prune_orphans asks for.",
-                    "type": "boolean"
-                  },
-                  "DocEnvironment": {
-                    "description": "Where that system runs: `homelab`, `vps`, `wordpress`, `cloudflare`, `tailscale`, `adguard`, `unifi`, `local_mac` or `other`.",
-                    "type": "string"
-                  },
-                  "DocId": {
-                    "description": "The doc's ID in the vault.",
-                    "type": "string"
-                  },
-                  "DocSensitivity": {
-                    "description": "Who may read it, `public`, `internal`, `sensitive` or `restricted`; a restricted doc never reaches an agent.",
-                    "type": "string"
-                  },
-                  "DocStatus": {
-                    "description": "Where the doc stands: `draft`, `active`, `deprecated` or `archived`.",
-                    "type": "string"
-                  },
-                  "DocType": {
-                    "description": "What type of doc it is: `runbook`, `architecture_note`, `deployment_guide`, `troubleshooting_guide`, `recovery_procedure`, `public_article_draft`, `decision_record`, `report` or `queue`.",
-                    "type": "string"
-                  },
-                  "DocumentationTitle": {
-                    "description": "The doc's title.",
-                    "type": "string"
-                  },
-                  "ExternalUrl": {
-                    "description": "Where it is published outside HQ; empty for none.",
-                    "type": "string"
-                  },
-                  "GithubPath": {
-                    "description": "Its path in a repository; empty for none.",
-                    "type": "string"
-                  },
-                  "LastReviewed": {
-                    "anyOf": [
-                      {
-                        "format": "date",
-                        "type": "string"
-                      }
-                    ],
-                    "description": "When it was last checked against what it describes, an ISO 8601 date; null for never.",
-                    "title": "Last reviewed"
-                  },
-                  "ManifestEntry": {
-                    "description": "One doc of the vault's manifest: its frontmatter, its path, and what it relates to.",
-                    "properties": {
-                      "content_type": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "For site content, what it is on the site, such as `portfolio_article` or `page`."
-                      },
-                      "description": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "For site content, its description, which `topic` stands in for."
-                      },
-                      "doc_id": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/DocId"
-                          }
-                        ]
-                      },
-                      "doc_type": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/DocType"
-                          }
-                        ]
-                      },
-                      "environment": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/DocEnvironment"
-                          }
-                        ]
-                      },
-                      "excerpt": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "For site content, its excerpt, read where it has no description."
-                      },
-                      "external_url": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/ExternalUrl"
-                          }
-                        ]
-                      },
-                      "github_path": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/GithubPath"
-                          }
-                        ]
-                      },
-                      "last_reviewed": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/LastReviewed"
-                          }
-                        ]
-                      },
-                      "notes": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/Notes"
-                          }
-                        ]
-                      },
-                      "obsidian_path": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/ObsidianPath"
-                          }
-                        ]
-                      },
-                      "path": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "Where the doc is in the vault, which `obsidian_path` stands in for."
-                      },
-                      "published": {
-                        "anyOf": [
-                          {
-                            "type": "boolean"
-                          }
-                        ],
-                        "description": "For site content, whether it is live on the site."
-                      },
-                      "published_at": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/PublishedAt"
-                          }
-                        ]
-                      },
-                      "related_assets": {
-                        "anyOf": [
-                          {
-                            "items": {
-                              "type": "string"
-                            },
-                            "type": "array"
-                          }
-                        ],
-                        "description": "The slugs of the assets the doc is about."
-                      },
-                      "related_projects": {
-                        "anyOf": [
-                          {
-                            "items": {
-                              "type": "string"
-                            },
-                            "type": "array"
-                          }
-                        ],
-                        "description": "The slugs of the projects the doc is about."
-                      },
-                      "sensitivity": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/DocSensitivity"
-                          }
-                        ]
-                      },
-                      "slug": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "For site content, the slug of the item it mirrors to."
-                      },
-                      "status": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/DocStatus"
-                          }
-                        ]
-                      },
-                      "system": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "The system or service the doc is about."
-                      },
-                      "system_service": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "The same as `system`, under the name HQ stores it by."
-                      },
-                      "tags": {
-                        "anyOf": [
-                          {
-                            "items": {
-                              "type": "string"
-                            },
-                            "type": "array"
-                          }
-                        ],
-                        "description": "The doc's tags."
-                      },
-                      "technologies": {
-                        "anyOf": [
-                          {
-                            "items": {
-                              "type": "string"
-                            },
-                            "type": "array"
-                          }
-                        ],
-                        "description": "For site content, what it was built with, read as its tags."
-                      },
-                      "title": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/DocumentationTitle"
-                          }
-                        ]
-                      },
-                      "topic": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "For site content, what it is about, in a line."
-                      }
-                    },
-                    "type": "object"
-                  },
-                  "Notes": {
-                    "description": "Anything else worth keeping.",
-                    "type": "string"
-                  },
-                  "ObsidianPath": {
-                    "description": "Its path in the vault; empty for none.",
-                    "type": "string"
-                  },
-                  "PruneOrphans": {
-                    "description": "Delete records the manifest no longer lists.",
-                    "type": "boolean"
-                  },
-                  "PublishedAt": {
-                    "anyOf": [
-                      {
-                        "format": "date",
-                        "type": "string"
-                      }
-                    ],
-                    "description": "When it was published, an ISO 8601 date; null when it is not.",
-                    "title": "Published at"
-                  },
-                  "UpdateExisting": {
-                    "description": "Update records HQ already holds.",
-                    "type": "boolean"
-                  }
-                },
                 "additionalProperties": false,
+                "description": "A name to ask a public resolver about.",
                 "properties": {
-                  "confirm_prune": {
-                    "$ref": "#/$defs/ConfirmPrune",
-                    "default": false
-                  },
-                  "idempotency_key": {
-                    "description": "One key per logical change, kept when it is retried: a repeat returns the first result instead of acting again. It is sent as the payload's `idempotency_key` or the `Idempotency-Key` header; a change needs one of the two, and is refused `idempotency_key_required` with neither. Only the host's shell is not asked.",
-                    "examples": [
-                      "5da6c038-f78f-583a-b073-5da59683c5b1"
-                    ],
-                    "maxLength": 128,
-                    "minLength": 1,
-                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                  "name": {
+                    "description": "The hostname to resolve.",
                     "type": "string"
-                  },
-                  "manifest": {
-                    "description": "The records to sync, one per entry.",
-                    "items": {
-                      "$ref": "#/$defs/ManifestEntry"
-                    },
-                    "type": "array"
-                  },
-                  "prune_orphans": {
-                    "$ref": "#/$defs/PruneOrphans",
-                    "default": false
-                  },
-                  "report_orphans": {
-                    "default": true,
-                    "description": "Report records the manifest no longer lists.",
-                    "type": "boolean"
-                  },
-                  "update_existing": {
-                    "$ref": "#/$defs/UpdateExisting",
-                    "default": true
                   }
                 },
                 "required": [
-                  "manifest"
+                  "name"
                 ],
                 "type": "object"
               },
-              "label": "Update docs from the vault",
-              "name": "hq.sync",
+              "label": "Look up a name",
+              "name": "lookup.name.read",
               "permitted": false,
               "request_schema": {
                 "$defs": {
-                  "ConfirmPrune": {
-                    "description": "Confirms the delete that prune_orphans asks for.",
-                    "type": "boolean"
-                  },
-                  "DocEnvironment": {
-                    "description": "Where that system runs: `homelab`, `vps`, `wordpress`, `cloudflare`, `tailscale`, `adguard`, `unifi`, `local_mac` or `other`.",
-                    "type": "string"
-                  },
-                  "DocId": {
-                    "description": "The doc's ID in the vault.",
-                    "type": "string"
-                  },
-                  "DocSensitivity": {
-                    "description": "Who may read it, `public`, `internal`, `sensitive` or `restricted`; a restricted doc never reaches an agent.",
-                    "type": "string"
-                  },
-                  "DocStatus": {
-                    "description": "Where the doc stands: `draft`, `active`, `deprecated` or `archived`.",
-                    "type": "string"
-                  },
-                  "DocType": {
-                    "description": "What type of doc it is: `runbook`, `architecture_note`, `deployment_guide`, `troubleshooting_guide`, `recovery_procedure`, `public_article_draft`, `decision_record`, `report` or `queue`.",
-                    "type": "string"
-                  },
-                  "DocumentationTitle": {
-                    "description": "The doc's title.",
-                    "type": "string"
-                  },
                   "ExpectedUpdatedAt": {
                     "description": "The target's `updated_at`, copied as it was last read. Where the command checks it, a record changed since is refused `conflict`; without it the record is taken as it is now.",
                     "examples": [
@@ -410,256 +75,6 @@
                     ],
                     "format": "date-time",
                     "type": "string"
-                  },
-                  "ExternalUrl": {
-                    "description": "Where it is published outside HQ; empty for none.",
-                    "type": "string"
-                  },
-                  "GithubPath": {
-                    "description": "Its path in a repository; empty for none.",
-                    "type": "string"
-                  },
-                  "LastReviewed": {
-                    "anyOf": [
-                      {
-                        "format": "date",
-                        "type": "string"
-                      }
-                    ],
-                    "description": "When it was last checked against what it describes, an ISO 8601 date; null for never.",
-                    "title": "Last reviewed"
-                  },
-                  "ManifestEntry": {
-                    "description": "One doc of the vault's manifest: its frontmatter, its path, and what it relates to.",
-                    "properties": {
-                      "content_type": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "For site content, what it is on the site, such as `portfolio_article` or `page`."
-                      },
-                      "description": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "For site content, its description, which `topic` stands in for."
-                      },
-                      "doc_id": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/DocId"
-                          }
-                        ]
-                      },
-                      "doc_type": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/DocType"
-                          }
-                        ]
-                      },
-                      "environment": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/DocEnvironment"
-                          }
-                        ]
-                      },
-                      "excerpt": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "For site content, its excerpt, read where it has no description."
-                      },
-                      "external_url": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/ExternalUrl"
-                          }
-                        ]
-                      },
-                      "github_path": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/GithubPath"
-                          }
-                        ]
-                      },
-                      "last_reviewed": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/LastReviewed"
-                          }
-                        ]
-                      },
-                      "notes": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/Notes"
-                          }
-                        ]
-                      },
-                      "obsidian_path": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/ObsidianPath"
-                          }
-                        ]
-                      },
-                      "path": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "Where the doc is in the vault, which `obsidian_path` stands in for."
-                      },
-                      "published": {
-                        "anyOf": [
-                          {
-                            "type": "boolean"
-                          }
-                        ],
-                        "description": "For site content, whether it is live on the site."
-                      },
-                      "published_at": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/PublishedAt"
-                          }
-                        ]
-                      },
-                      "related_assets": {
-                        "anyOf": [
-                          {
-                            "items": {
-                              "type": "string"
-                            },
-                            "type": "array"
-                          }
-                        ],
-                        "description": "The slugs of the assets the doc is about."
-                      },
-                      "related_projects": {
-                        "anyOf": [
-                          {
-                            "items": {
-                              "type": "string"
-                            },
-                            "type": "array"
-                          }
-                        ],
-                        "description": "The slugs of the projects the doc is about."
-                      },
-                      "sensitivity": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/DocSensitivity"
-                          }
-                        ]
-                      },
-                      "slug": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "For site content, the slug of the item it mirrors to."
-                      },
-                      "status": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/DocStatus"
-                          }
-                        ]
-                      },
-                      "system": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "The system or service the doc is about."
-                      },
-                      "system_service": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "The same as `system`, under the name HQ stores it by."
-                      },
-                      "tags": {
-                        "anyOf": [
-                          {
-                            "items": {
-                              "type": "string"
-                            },
-                            "type": "array"
-                          }
-                        ],
-                        "description": "The doc's tags."
-                      },
-                      "technologies": {
-                        "anyOf": [
-                          {
-                            "items": {
-                              "type": "string"
-                            },
-                            "type": "array"
-                          }
-                        ],
-                        "description": "For site content, what it was built with, read as its tags."
-                      },
-                      "title": {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/DocumentationTitle"
-                          }
-                        ]
-                      },
-                      "topic": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "For site content, what it is about, in a line."
-                      }
-                    },
-                    "type": "object"
-                  },
-                  "Notes": {
-                    "description": "Anything else worth keeping.",
-                    "type": "string"
-                  },
-                  "ObsidianPath": {
-                    "description": "Its path in the vault; empty for none.",
-                    "type": "string"
-                  },
-                  "PruneOrphans": {
-                    "description": "Delete records the manifest no longer lists.",
-                    "type": "boolean"
-                  },
-                  "PublishedAt": {
-                    "anyOf": [
-                      {
-                        "format": "date",
-                        "type": "string"
-                      }
-                    ],
-                    "description": "When it was published, an ISO 8601 date; null when it is not.",
-                    "title": "Published at"
-                  },
-                  "UpdateExisting": {
-                    "description": "Update records HQ already holds.",
-                    "type": "boolean"
                   }
                 },
                 "additionalProperties": false,
@@ -670,45 +85,15 @@
                   },
                   "payload": {
                     "additionalProperties": false,
-                    "description": "The command: the fields its input schema names.",
+                    "description": "A name to ask a public resolver about.",
                     "properties": {
-                      "confirm_prune": {
-                        "$ref": "#/$defs/ConfirmPrune",
-                        "default": false
-                      },
-                      "idempotency_key": {
-                        "description": "One key per logical change, kept when it is retried: a repeat returns the first result instead of acting again. It is sent as the payload's `idempotency_key` or the `Idempotency-Key` header; a change needs one of the two, and is refused `idempotency_key_required` with neither. Only the host's shell is not asked.",
-                        "examples": [
-                          "5da6c038-f78f-583a-b073-5da59683c5b1"
-                        ],
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                      "name": {
+                        "description": "The hostname to resolve.",
                         "type": "string"
-                      },
-                      "manifest": {
-                        "description": "The records to sync, one per entry.",
-                        "items": {
-                          "$ref": "#/$defs/ManifestEntry"
-                        },
-                        "type": "array"
-                      },
-                      "prune_orphans": {
-                        "$ref": "#/$defs/PruneOrphans",
-                        "default": false
-                      },
-                      "report_orphans": {
-                        "default": true,
-                        "description": "Report records the manifest no longer lists.",
-                        "type": "boolean"
-                      },
-                      "update_existing": {
-                        "$ref": "#/$defs/UpdateExisting",
-                        "default": true
                       }
                     },
                     "required": [
-                      "manifest"
+                      "name"
                     ],
                     "type": "object"
                   }
@@ -719,17 +104,17 @@
                 "type": "object"
               },
               "required_capabilities": [
-                "sync_documentation"
+                "look_up_public_records"
               ],
-              "resource": "documentation",
-              "summary": "Bring HQ's list of docs up to date from the vault.",
+              "resource": null,
+              "summary": "Ask a public resolver what the internet returns for a hostname.",
               "target": null,
               "target_help": "",
               "target_initial_fields": [],
               "target_label": "",
               "target_query": {},
               "variants": {},
-              "verb": "Update docs from the vault"
+              "verb": "Look up a name"
             }
           ],
           "schema_version": 2
@@ -756,26 +141,26 @@
                   "capability": null,
                   "effect": "read",
                   "governs_kinds": [],
-                  "grant": "none",
-                  "label": "Hourly forecast",
-                  "name": "nws.hourly_forecast",
+                  "grant": null,
+                  "label": "DNS server",
+                  "name": "adguard.dns",
                   "required_scopes": [],
                   "subject_resource": null,
-                  "summary": "Current conditions and the hourly forecast for the point."
+                  "summary": "Reads DNS server."
                 }
               ],
-              "documentation_url": "https://www.weather.gov/documentation/services-web-api",
-              "label": "National Weather Service",
-              "management_route": "dashboard_glance_settings",
-              "name": "hq.nws",
+              "documentation_url": null,
+              "label": "Infrastructure",
+              "management_route": null,
+              "name": "infrastructure.controllers",
               "permitted": true,
               "required_capabilities": [
                 "read"
               ],
-              "secret_store": null,
+              "secret_store": "1Password",
               "setup_route": null,
-              "summary": "Hourly forecast and weather alerts for the dashboard. Public, no key needed.",
-              "web_route": "dashboard"
+              "summary": "What the controller connects to.",
+              "web_route": "control_plane:connections"
             }
           ],
           "schema_version": 1
@@ -907,8 +292,8 @@
               ],
               "operator_steps": [
                 {
-                  "command": "",
-                  "label": "In the compose file that runs nginx-proxy-manager, set its image to jc21/nginx-proxy-manager:2.12.1@sha256:42b9bcb04f38045ac70f3241f5b7cba3d8aa51d9319dfb457fcdd0ed9b039d08",
+                  "command": "docker compose up -d --force-recreate nginx-proxy-manager",
+                  "label": "On docker-host-01, in the compose project that runs nginx-proxy-manager, recreate it",
                   "notes": []
                 }
               ],
@@ -1011,9 +396,9 @@
               "effect": "infrastructure_change",
               "evidence": "unverified",
               "grant": null,
-              "label": "Public DNS record",
+              "label": "Domain",
               "missing_scopes": [],
-              "name": "cloudflare.dns_record",
+              "name": "cloudflare.zone",
               "required_scopes": [],
               "subject_resource": "infrastructure"
             }
@@ -1171,7 +556,7 @@
               "reason": "Observed",
               "state": "healthy"
             },
-            "id": "43708c02-7e78-5196-bc3a-45ca0445f068",
+            "id": "5da6c038-f78f-583a-b073-5da59683c5b1",
             "in_sync": true,
             "key": "sentinel-rewrite",
             "kind": "adguard.rewrite",
@@ -1502,12 +887,12 @@
           "hq_path": null,
           "items": [
             {
-              "connection_ref": "adguard",
-              "detail": "5 rewrites.",
+              "connection_ref": "npm",
+              "detail": "5 proxy hosts.",
               "family": "infrastructure.controllers",
-              "id": "example-controller:adguard",
-              "kind": "adguard",
-              "label": "adguard",
+              "id": "example-controller:npm",
+              "kind": "npm",
+              "label": "npm",
               "observed_at": "2026-01-15T09:30:00+00:00",
               "open_problems": 0,
               "status": "good",
@@ -1528,11 +913,11 @@
             "abilities": 48,
             "controls": [
               {
-                "detail": "HQ read the policy that is active on the tailnet.",
-                "evidence": "1 grant\u00a0\u00b7 1 test",
-                "id": "tailnet-policy",
-                "label": "HQ has read the tailnet policy",
-                "state": "good"
+                "detail": "HQ has no reading of an access list for this name.",
+                "evidence": "Not read",
+                "id": "edge",
+                "label": "The proxy lets in tailnet addresses only",
+                "state": "neutral"
               }
             ],
             "dependencies": 33,
@@ -1547,14 +932,14 @@
             "advanced": false,
             "checks": [
               {
-                "evidence": "Not read yet",
-                "id": "edge",
-                "label": "The proxy lets in tailnet addresses only",
-                "met": null,
+                "evidence": "2 signing keys",
+                "id": "tailnet-lock",
+                "label": "Tailnet lock is on",
+                "met": true,
                 "qualified": false,
                 "remedy": null,
                 "remedy_url": null,
-                "stops": "the proxy exposing HQ beyond the tailnet"
+                "stops": "a device added to your tailnet without your key"
               }
             ],
             "met": 4,
@@ -1606,16 +991,14 @@
           "count": 9,
           "items": [
             {
-              "address": "docker-host-01:home-automation",
-              "compose_project": "home-automation",
+              "address": "docker-host-01:adguard",
+              "compose_project": "adguard",
               "machine": "docker-host-01",
-              "name": "home-automation",
-              "serves": [
-                "home-automation-dashboard.example.com"
-              ],
+              "name": "adguard",
+              "serves": [],
               "state": "running",
               "status": "Up 12 days (healthy)",
-              "url": "/infrastructure/home-automation-container/"
+              "url": "/infrastructure/adguard-container/"
             }
           ],
           "next": null,
@@ -1979,22 +1362,22 @@
             {
               "about": "",
               "business_purpose": "",
-              "business_use_percentage": 50,
-              "category": "hosting",
-              "date": "2026-01-13",
-              "estimated_deductible_amount": "3.00",
-              "id": 4,
-              "item": "Offsite backup storage",
+              "business_use_percentage": 100,
+              "category": "domains",
+              "date": "2025-08-03",
+              "estimated_deductible_amount": "10.44",
+              "id": 3,
+              "item": "example.com renewal",
               "notes": "",
               "paid_from": "",
               "payment_method": "credit",
               "related_asset": null,
               "related_content": null,
               "related_documentation": null,
-              "related_project": "offsite-backups",
-              "total_cost": "6.00",
-              "updated_at": "2026-01-13T22:55:00+00:00",
-              "vendor": "Backblaze"
+              "related_project": null,
+              "total_cost": "10.44",
+              "updated_at": "2025-08-03T23:51:00+00:00",
+              "vendor": "Cloudflare"
             }
           ],
           "next": null,
@@ -2062,12 +1445,12 @@
             "readings": [
               {
                 "error": "",
-                "kind": "adguard.client",
-                "label": "DNS client",
+                "kind": "host.perimeter",
+                "label": "Open-port test",
                 "observed_at": "2026-01-15T09:30:00+00:00",
                 "out_of_date": false,
-                "provider": "AdGuard Home",
-                "records": 2,
+                "provider": "SSH",
+                "records": 1,
                 "remedy": "",
                 "state": "readable"
               }
@@ -2096,12 +1479,12 @@
               {
                 "last_run": "2026-01-03T09:30:00+00:00",
                 "next_run": null,
-                "result": "Mounted",
-                "runs": "Severino HQ credential tmpfs, kept out of swap",
+                "result": "Running",
+                "runs": "Severino HQ",
                 "runs_unit": false,
-                "title": "Severino HQ credential tmpfs, kept out of swap",
+                "title": "Severino HQ",
                 "tone": "good",
-                "unit": "run-severino\\x2dhq\\x2dsecrets.mount"
+                "unit": "severino-hq-web.service"
               }
             ],
             "read_at": "2026-01-15T09:30:00+00:00",
@@ -2140,7 +1523,7 @@
                 "state": "healthy"
               },
               "in_sync": true,
-              "key": "forgejo-dns",
+              "key": "hq-dns",
               "kind": "adguard.rewrite",
               "last_observed_at": "2026-01-15T09:30:00+00:00",
               "public_effect": false
@@ -2309,11 +1692,11 @@
           "items": [
             {
               "error": "",
-              "kind": "adguard.client",
-              "label": "DNS client",
+              "kind": "npm.stream",
+              "label": "NPM stream",
               "observed_at": "2026-01-15T09:30:00+00:00",
-              "provider": "adguard",
-              "records": 2,
+              "provider": "npm",
+              "records": 0,
               "state": "readable"
             }
           ],
@@ -2332,18 +1715,18 @@
           "count": 9,
           "items": [
             {
-              "amount": "-79.99",
+              "amount": "389.00",
               "content_type": "application/pdf",
-              "date": "2025-10-07",
-              "id": 9,
+              "date": "2024-11-11",
+              "id": 1,
               "notes": "",
-              "original_filename": "Newegg receipt.pdf",
+              "original_filename": "eBay receipt.pdf",
               "related_asset": null,
-              "related_expense": 9,
+              "related_expense": 1,
               "size_bytes": 0,
-              "updated_at": "2025-10-07T20:18:00+00:00",
+              "updated_at": "2024-11-11T17:33:00+00:00",
               "uploaded_at": "2026-01-15T09:30:00+00:00",
-              "vendor": "Newegg"
+              "vendor": "eBay"
             }
           ],
           "next": null,
@@ -2397,38 +1780,38 @@
             {
               "certificate": null,
               "check": {
-                "detail": "127.0.0.1 is on the local network, and HQ has no reading that names the device at it.",
-                "label": "This request cannot show it",
-                "state": "unproven",
+                "detail": "This request reached HQ at testserver.",
+                "label": "Confirmed by this request",
+                "state": "proven",
                 "step": ""
               },
-              "detail": "127.0.0.1",
+              "detail": "",
               "evidence": [
                 {
-                  "detail": "Your address, as HQ sees it.",
-                  "label": "Address",
-                  "role": "judged",
-                  "value": "127.0.0.1"
+                  "detail": "Whether this request arrived encrypted.",
+                  "label": "Scheme",
+                  "role": "",
+                  "value": "http"
                 }
               ],
-              "label": "Device",
+              "label": "HQ",
               "layers": [
                 {
-                  "boundary": "Device identity",
-                  "detail": "No device on the tailnet has this address.",
-                  "evidence": "",
-                  "id": "device",
-                  "label": "The tailnet knows this device",
-                  "mechanism": "The tailnet device list",
+                  "boundary": "Network",
+                  "detail": "This request never left the machine HQ runs on.",
+                  "evidence": "127.0.0.1",
+                  "id": "channel",
+                  "label": "The address is on the tailnet",
+                  "mechanism": "The tailnet address range",
                   "rules": [],
                   "state": "does-not"
                 }
               ],
               "link": null,
-              "name": "",
+              "name": "Severino HQ",
               "overlays": [],
               "source": null,
-              "step": "device",
+              "step": "hq",
               "unread": ""
             }
           ],
@@ -2716,23 +2099,9 @@
               "services": [],
               "settings": [
                 {
-                  "label": "Resolves through",
-                  "machines": [
-                    {
-                      "link": {
-                        "detail": "",
-                        "external": false,
-                        "identity": "docker-host-01",
-                        "kind": "machine",
-                        "kind_label": "Machine",
-                        "label": "docker-host-01 (100.101.102.103)",
-                        "title": "",
-                        "url": "/infrastructure/machines/docker-host-01/"
-                      },
-                      "text": "100.101.102.103"
-                    }
-                  ],
-                  "value": "100.101.102.103"
+                  "label": "MagicDNS",
+                  "machines": null,
+                  "value": "On"
                 }
               ],
               "ssh_rules": [],

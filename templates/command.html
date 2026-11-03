@@ -89,7 +89,7 @@ button named for what it does. How it is built belongs to the API reference.
     </div>
   {% endif %}
 
-  <form method="post" class="form command-form" data-command-form{% if hydrates_target %} data-command-hydrate-target{% endif %} data-submit-busy data-submit-label="Working…">
+  <form method="post"{% if form.is_multipart %} enctype="multipart/form-data"{% endif %} class="form command-form" data-command-form{% if hydrates_target %} data-command-hydrate-target{% endif %} data-submit-busy data-submit-label="Working…">
     {% write_token %}
     {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
     {% include "partials/_form_errors.html" %}

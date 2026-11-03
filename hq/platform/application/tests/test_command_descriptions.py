@@ -13,14 +13,17 @@ def host_specs():
 
 
 class CommandDescriptionTests(SimpleTestCase):
-    def test_a_form_shows_each_description_as_its_help(self):
+    def test_a_form_shows_each_description_s_meaning_as_its_help(self):
+        # The schema says the meaning first, then what only a client reads.
         for spec in host_specs():
             properties = fields(capability_schema(spec))
             form = command_form_class(spec)()
             for name, field in properties.items():
                 if name in form.fields and name != IDEMPOTENCY_FIELD:
                     with self.subTest(command=spec.name, field=name):
-                        self.assertEqual(form.fields[name].help_text, field.get("description", ""))
+                        help_text = str(form.fields[name].help_text)
+                        self.assertTrue(help_text)
+                        self.assertTrue(field.get("description", "").startswith(help_text))
 
     def test_every_host_command_field_is_described(self):
         missing = sorted(

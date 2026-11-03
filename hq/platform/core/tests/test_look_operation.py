@@ -23,6 +23,7 @@ _DOCUMENT = {
             "post": {"tags": ["example.things"], "requestBody": _RECORD, "responses": {"200": _RECORD}},
         },
     },
+    "components": {"schemas": {"Example": {"type": "object"}, "Problem": {"type": "object"}}},
 }
 
 

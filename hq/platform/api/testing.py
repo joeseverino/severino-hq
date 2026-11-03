@@ -143,7 +143,7 @@ def _small(value: object) -> bool:
 
 # With HQ_API_RECORD_EXAMPLES=1 (and --parallel 1, so one process holds them
 # all) the first response per operation and status (a success the showcase
-# estate answered first, and a large one with each list cut to its first
+# estate answered first, and a large one with each list cut to its smallest
 # item, so a viewer never draws an empty record from the schema), and the first
 # accepted request body per operation, are written to openapi-examples.json
 # (or the path HQ_API_RECORD_EXAMPLES_TO names) when the run ends; `mise run
@@ -178,13 +178,21 @@ def _fixed_ids(text: str) -> str:
     )
 
 
-def _first_items(value: object) -> object:
-    """``value`` with each list cut to its first item: one real record standing for the rest."""
+def _drawn_size(value: object) -> int:
+    """How long ``value`` is as a viewer prints it: JSON indented by two."""
+
+    return len(json.dumps(value, indent=2, ensure_ascii=False))
+
+
+def _one_item(value: object) -> object:
+    """``value`` with each list cut to its smallest item, printed: one real
+    record standing for the rest, and the one least likely to bury the shape
+    it shows."""
 
     if isinstance(value, list):
-        return [_first_items(item) for item in value[:1]]
+        return [min((_one_item(item) for item in value), key=_drawn_size)] if value else []
     if isinstance(value, dict):
-        return {key: _first_items(inner) for key, inner in value.items()}
+        return {key: _one_item(inner) for key, inner in value.items()}
     return value
 
 
@@ -194,7 +202,7 @@ _showcase: dict[str, dict[str, Any]] = {}
 
 
 def _record(operation_id: str, status: int, body: object, request: object, *, showcase: bool = False) -> None:
-    example = body if _small(body) else _first_items(body)
+    example = body if _small(body) else _one_item(body)
     # A cut answer is recorded whatever its size, one record standing for the
     # rest; the document, which answers in no envelope, is its own example.
     if _small(example) or (isinstance(body, dict) and "ok" in body):
