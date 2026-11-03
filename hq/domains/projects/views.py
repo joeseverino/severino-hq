@@ -18,7 +18,7 @@ lazy from django.utils import timezone
 from hq.domains.projects.github import github_repository
 from hq.platform.application import related
 from hq.platform.application.action_links import capability_action_link, command_url
-from hq.platform.application.capabilities import capability_registry, capability_words, execute_capability
+from hq.platform.application.capabilities import capability_registry, capability_words
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import web_url
 from hq.platform.application.pages import PageAction, PageBadge, PageMixin
@@ -29,6 +29,7 @@ from hq.platform.application.projects import (
     projects_by_repository,
     repository_key,
 )
+from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.security import web_principal
 from hq.platform.application.services import service_url_for
 from hq.platform.application.tables import (
@@ -39,6 +40,7 @@ from hq.platform.application.tables import (
     TableToggle,
 )
 from hq.platform.application.timestamps import moment
+from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 lazy from hq.platform.application.asks import (
     FAILED,
@@ -61,7 +63,7 @@ lazy from hq.platform.application.standards import MET, UNMET
 from .forms import ProjectForm
 from .models import PROJECT_CATEGORY_CHOICES, Project
 
-PROJECTS_TRAIL = ("Projects", reverse_lazy("projects:list"))
+PROJECTS_TRAIL = (("Projects", reverse_lazy("projects:list")),)
 
 
 class ProjectListView(PageMixin, TableListMixin, ListView):
@@ -169,9 +171,9 @@ class ProjectUpdatesRunView(View):
     def post(self, request, slug: str):
         back = reverse("projects:detail", args=[slug])
         asked = timezone.now()
-        result = execute_capability(RUN_NOW, {}, principal=web_principal(request.user))
+        result = execute_posted(request, RUN_NOW, {})
         if not result.get("ok"):
-            return answer(request, Standing(FAILED, result["error"]["message"]), fallback=back)
+            return answer(request, Standing(FAILED, refusal_of(result).message), fallback=back)
         return answer(
             request,
             read_standing((RUN_KIND,), asked),
@@ -380,11 +382,9 @@ class WatchingRefreshView(View):
         back = reverse("watching")
         if not login:
             return answer(request, Standing(FAILED, "Your sign-in names no GitHub account."), fallback=back)
-        result = execute_capability(READ_NOW, {"login": login}, principal=web_principal(request.user))
+        result = execute_posted(request, READ_NOW, {"login": login})
         if not result["ok"]:
-            refused = result["error"]
-            reason = "You may not read from GitHub." if refused["code"] == "forbidden" else refused["message"]
-            return answer(request, Standing(FAILED, reason), fallback=back)
+            return answer(request, Standing(FAILED, refusal_of(result).message), fallback=back)
         asked = moment(result["asked_at"])
         return answer(
             request,

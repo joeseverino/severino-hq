@@ -1,0 +1,9 @@
+{% extends "page.html" %}
+{% block page %}
+{% card id="example-items" heading="example-items-heading" %}
+  {% section_head id="example-items-heading" %}Items{% aside %}<span class="count">{{ items|length }}</span>{% endsection_head %}
+  <ul>
+    {% for item in items %}<li>{{ item|breakable }}</li>{% endfor %}
+  </ul>
+{% endcard %}
+{% endblock %}

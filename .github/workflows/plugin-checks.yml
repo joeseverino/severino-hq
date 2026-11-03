@@ -110,9 +110,15 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Set up the host's uv
-        uses: ./host/.github/actions/uv
+        uses: ./host/.github/actions/host-tool
         with:
           host: host
+          tool: uv
+      - name: Set up the host's ast-grep
+        uses: ./host/.github/actions/host-tool
+        with:
+          host: host
+          tool: ast-grep
       # uv verifies every artifact against the locks; the cache only saves the download.
       - id: uv-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -120,6 +126,7 @@ jobs:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ matrix.python }}-${{ hashFiles(format('{0}/uv.lock', inputs.package-dir), 'host/uv.lock') }}
       - name: Verify package and host contract
+        id: plugin-checks
         # The identity comes from the package itself (tools/pipeline/plugin_identity.py).
         env:
           HQ_ROOT: host

@@ -60,8 +60,8 @@ def emit(out: Path, references: str, digests: list[str], policy_sha256: str | No
     policy = out / "policy-sha256"
     if policy_sha256:
         policy.write_text(policy_sha256 + "\n")
-    elif policy.exists():
-        policy.unlink()
+    else:
+        policy.unlink(missing_ok=True)
 
 
 def compose_none(out: Path, policy_sha256: str) -> int:
@@ -133,8 +133,7 @@ def compose_candidate(wheels: list[Path], out: Path) -> int:
     if len(set(distributions)) != len(distributions):
         print("a distribution appears more than once in the candidate", file=sys.stderr)
         return 1
-    if (out / "plugin-lock.json").exists():
-        (out / "plugin-lock.json").unlink()
+    (out / "plugin-lock.json").unlink(missing_ok=True)
     digests = stage(wheels, out)
     references = ",".join(reference_of(distribution) for distribution in distributions)
     emit(out, references, digests)

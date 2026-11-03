@@ -10,14 +10,13 @@ import re
 import time
 import weakref
 from collections.abc import Callable, Iterable
-from dataclasses import asdict, dataclass, is_dataclass, replace
+from dataclasses import asdict, dataclass, fields, is_dataclass, replace
 from functools import cache, lru_cache, partial
 from importlib import import_module
 from types import CodeType
-from typing import Any
+from typing import Any, get_args, get_origin
 
 from django.core.exceptions import ImproperlyConfigured
-from django.urls import URLResolver, include, path
 
 from hq.platform.application.routes import reverse
 
@@ -29,7 +28,7 @@ lazy from .outbound_work import clear_outbound_work_cache
 lazy from .plugin_admission import enforce_plugin_admission
 lazy from .security import host_capabilities
 
-PLUGIN_API_VERSION = 6
+PLUGIN_API_VERSION = 8
 
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
 PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -41,16 +40,92 @@ PYTHON_REFERENCE = re.compile(r"^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*:[A-Za-z_]\w*$")
 URL_PREFIX = re.compile(r"^(?:[A-Za-z0-9_-]+/)+$")
 
 
+Check = tuple[str, Callable[[Any, Any], bool], str]
+
+
+class DeclarationRefused(ImproperlyConfigured):
+    """Every field one declaration gets wrong, each with what is wrong there."""
+
+    def __init__(self, subject: str, violations: list[tuple[str, str]]) -> None:
+        self.violations = tuple(violations)
+        lines = "".join(f"\n  {field}: {message}" for field, message in self.violations)
+        super().__init__(f"{subject} is refused, field by field:{lines}")
+
+
+def _declared_as(value: object, kind: Any) -> bool:
+    """Whether ``value`` has a field's declared type as written: a list is no tuple, a bool no int."""
+
+    if get_origin(kind) is tuple:
+        item = get_args(kind)[0]
+        return type(value) is tuple and all(_declared_as(part, item) for part in value)
+    return isinstance(value, kind) and not (kind is int and isinstance(value, bool))
+
+
+def _declared_types(cls: Any) -> dict[str, Any]:
+    return {field.name: field.type for field in fields(cls)}
+
+
+def _violations(declaration: object, checks: tuple[Check, ...]) -> list[tuple[str, str]]:
+    """Every field of ``declaration`` of the wrong type, then every check it fails on a field typed right.
+
+    A check is ``(field, holds, message)``: ``holds`` is given the field's
+    value and the whole declaration, and ``message`` is formatted with the value.
+    """
+
+    declared = _declared_types(type(declaration))
+    wrong = [name for name, kind in declared.items() if not _declared_as(getattr(declaration, name), kind)]
+    found = [(name, f"is not {_type_name(declared[name])}: {getattr(declaration, name)!r}") for name in wrong]
+    for name, holds, message in checks:
+        value = getattr(declaration, name)
+        if name not in wrong and not holds(value, declaration):
+            found.append((name, message.format(value=value)))
+    return found
+
+
+def _type_name(kind: Any) -> str:
+    if get_origin(kind) is tuple:
+        return f"a tuple, each item {_type_name(get_args(kind)[0])}"
+    return {str: "a string", int: "an integer"}.get(kind, f"a {kind.__name__}")
+
+
+def _matches(pattern: re.Pattern[str]) -> Callable[[str, Any], bool]:
+    return lambda value, _: pattern.fullmatch(value) is not None
+
+
+def _each_matches(pattern: re.Pattern[str]) -> Callable[[tuple[str, ...], Any], bool]:
+    return lambda values, _: all(pattern.fullmatch(value) for value in values)
+
+
+def _filled(value: str, _: Any) -> bool:
+    return bool(value.strip())
+
+
+def _distinct(values: tuple[str, ...], _: Any) -> bool:
+    return len(values) == len(set(values))
+
+
 @dataclass(frozen=True, slots=True)
 class NavigationItem:
     label: str
     route: str
+    # Empty only for a host page outside any URL namespace; a plugin's item
+    # names its own (``PluginManifest.navigation``).
     namespace: str
     order: int = 500
     # Empty renders inline in the primary nav; a name collects this item into
     # the matching dropdown. Defaults to inline so a surface stays reachable in
     # one click, and so existing manifests keep their current placement.
     group: str = ""
+
+    def __post_init__(self) -> None:
+        if violations := _violations(self, NAVIGATION_CHECKS):
+            raise DeclarationRefused(f"Navigation item {self.label!r}", violations)
+
+
+NAVIGATION_CHECKS: tuple[Check, ...] = (
+    ("label", _filled, "is blank"),
+    ("route", lambda route, _: bool(route), "is empty"),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +138,9 @@ class PluginIntegration:
     dashboard: Callable[[], Iterable[dict[str, Any]]] | None = None
     overview: Callable[[], DomainOverview] | None = None
     attention: Callable[[], Iterable[Any]] | None = None
+    # The page where ``attention``'s items are decided together, when there
+    # is one: the queue's heading for the domain links there.
+    attention_url: Callable[[], str] | None = None
     search: Callable[[], Iterable[Any]] | None = None
     health: Callable[[], bool] | None = None
     # Calendar sources: each a ``CalendarSource`` naming what the domain
@@ -75,6 +153,14 @@ class PluginIntegration:
 
 @dataclass(frozen=True, slots=True)
 class PluginManifest:
+    """Who an extension is and what it mounts, checked whole where it is built.
+
+    The extension's import builds it, so one ``DeclarationRefused`` there names
+    every field ``MANIFEST_CHECKS`` refuses. What needs the running host (its
+    own capabilities, the rest of the installed set) is checked at boot, in
+    ``_installed_plugins``.
+    """
+
     id: str
     name: str
     version: str
@@ -87,19 +173,61 @@ class PluginManifest:
     url_prefix: str = ""
     urlconf: str = ""
     navigation: tuple[NavigationItem, ...] = ()
-    # Optional. Routes under this plugin's own url_prefix that carry their own
-    # request authentication (a bearer token, a signed body) instead of the
-    # session cookie. They are exempted from the session login *redirect*, not
-    # from authentication: a 302 to an HTML login page is the wrong answer for
-    # a native or machine client, which needs a 401 it can act on.
-    #
-    # Deliberately relative. The host joins each one to url_prefix, so a plugin
-    # can only ever say "these paths of mine": never the host's, never another
-    # plugin's mount.
-    token_authenticated_routes: tuple[str, ...] = ()
     operator_capabilities: tuple[str, ...] = ()
     mcp_read_capabilities: tuple[str, ...] = ()
     mcp_write_capabilities: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if violations := _violations(self, MANIFEST_CHECKS):
+            raise DeclarationRefused(f"Plugin {self.id!r}", violations)
+
+
+def _held_by_its_operator(granted: tuple[str, ...], manifest: PluginManifest) -> bool:
+    operator = manifest.operator_capabilities
+    return not _declared_as(operator, tuple[str, ...]) or set(granted) <= set(operator)
+
+
+MANIFEST_CHECKS: tuple[Check, ...] = (
+    ("id", _matches(PLUGIN_ID), "is not a plugin id such as example.notes"),
+    ("name", _filled, "is blank"),
+    ("version", _filled, "is blank"),
+    ("distribution", _matches(PLUGIN_DISTRIBUTION), "is not a distribution name: {value!r}"),
+    ("source_repository", _matches(PLUGIN_REPOSITORY), "is not an owner/name repository: {value!r}"),
+    ("source_workflow", _matches(PLUGIN_WORKFLOW), "is not a workflow under .github/workflows: {value!r}"),
+    (
+        "api_version",
+        lambda version, _: version == PLUGIN_API_VERSION,
+        f"requires API {{value}}; HQ supports {PLUGIN_API_VERSION}",
+    ),
+    ("integration_provider", _matches(PYTHON_REFERENCE), "is not a module:attribute reference: {value!r}"),
+    ("django_apps", _each_matches(PYTHON_PATH), "names an app that is not a module path: {value!r}"),
+    (
+        "url_prefix",
+        lambda prefix, _: not prefix or URL_PREFIX.fullmatch(prefix) is not None,
+        "is not a relative path ending in /: {value!r}",
+    ),
+    (
+        "urlconf",
+        lambda urlconf, _: not urlconf or PYTHON_PATH.fullmatch(urlconf) is not None,
+        "is not a module path: {value!r}",
+    ),
+    (
+        "urlconf",
+        lambda urlconf, manifest: bool(urlconf) == bool(manifest.url_prefix),
+        "is set with url_prefix, or neither is",
+    ),
+    ("navigation", lambda items, _: all(item.namespace for item in items), "has an item that names no namespace"),
+    *(
+        check
+        for name in ("operator_capabilities", "mcp_read_capabilities", "mcp_write_capabilities")
+        for check in (
+            (name, _each_matches(CAPABILITY_NAME), "names one that is not a dotted lowercase name: {value!r}"),
+            (name, _distinct, "repeats one: {value!r}"),
+        )
+    ),
+    ("mcp_read_capabilities", _held_by_its_operator, "grants MCP what its operator does not hold: {value!r}"),
+    ("mcp_write_capabilities", _held_by_its_operator, "grants MCP what its operator does not hold: {value!r}"),
+)
 
 
 def import_reference(spec: str) -> Any:
@@ -124,121 +252,16 @@ def _references() -> tuple[str, ...]:
     return tuple(part.strip() for part in raw.split(",") if part.strip())
 
 
-def _validate_identity(manifest: PluginManifest) -> None:
-    """Who the plugin says it is, and whether HQ can run it at all."""
+def _claims_no_host_capability(manifest: PluginManifest) -> None:
+    """A plugin grants only capabilities of its own, which needs the host's to tell."""
 
-    if not PLUGIN_ID.fullmatch(manifest.id):
-        raise ImproperlyConfigured(f"Invalid HQ plugin id {manifest.id!r}.")
-    if not manifest.name.strip() or not manifest.version.strip():
-        raise ImproperlyConfigured(f"Plugin {manifest.id!r} must declare a name and version.")
-    if not PLUGIN_DISTRIBUTION.fullmatch(manifest.distribution):
-        raise ImproperlyConfigured(f"Invalid HQ plugin distribution {manifest.distribution!r}.")
-    if not PLUGIN_REPOSITORY.fullmatch(manifest.source_repository):
-        raise ImproperlyConfigured(f"Invalid HQ plugin repository {manifest.source_repository!r}.")
-    if not PLUGIN_WORKFLOW.fullmatch(manifest.source_workflow):
-        raise ImproperlyConfigured(f"Invalid HQ plugin workflow {manifest.source_workflow!r}.")
-    if manifest.api_version != PLUGIN_API_VERSION:
-        raise ImproperlyConfigured(
-            f"Plugin {manifest.id!r} requires API {manifest.api_version}; HQ supports {PLUGIN_API_VERSION}."
-        )
-
-
-def _validate_mount(manifest: PluginManifest) -> None:
-    """Where the plugin attaches to the URL tree, and its Django apps."""
-
-    if bool(manifest.url_prefix) != bool(manifest.urlconf):
-        raise ImproperlyConfigured(f"Plugin {manifest.id!r} must declare url_prefix and urlconf together.")
-    if manifest.url_prefix and not URL_PREFIX.fullmatch(manifest.url_prefix):
-        raise ImproperlyConfigured(f"Plugin {manifest.id!r} has invalid url_prefix {manifest.url_prefix!r}.")
-    if manifest.urlconf and not PYTHON_PATH.fullmatch(manifest.urlconf):
-        raise ImproperlyConfigured(f"Plugin {manifest.id!r} has invalid urlconf {manifest.urlconf!r}.")
-    for app in manifest.django_apps:
-        if not PYTHON_PATH.fullmatch(app):
-            raise ImproperlyConfigured(f"Plugin {manifest.id!r} has invalid Django app {app!r}.")
-
-
-def _validate_providers(manifest: PluginManifest) -> None:
-    """The one executable entry point every extension must declare."""
-
-    if not PYTHON_REFERENCE.fullmatch(manifest.integration_provider):
-        raise ImproperlyConfigured(
-            f"Plugin {manifest.id!r} has invalid integration_provider {manifest.integration_provider!r}."
-        )
-
-
-def _validate_token_routes(manifest: PluginManifest) -> None:
-    """Routes exempt from the session login redirect, and only those."""
-
-    if len(manifest.token_authenticated_routes) != len(set(manifest.token_authenticated_routes)):
-        raise ImproperlyConfigured(f"Plugin {manifest.id!r} repeats a token-authenticated route.")
-    for route in manifest.token_authenticated_routes:
-        if not manifest.url_prefix:
-            raise ImproperlyConfigured(
-                f"Plugin {manifest.id!r} declares token-authenticated routes without a url_prefix to anchor them to."
-            )
-        # An absolute or traversing route would reach outside the plugin's own
-        # mount, which is the one thing this field must never be able to do.
-        if not route or route.startswith("/") or ".." in route:
-            raise ImproperlyConfigured(
-                f"Plugin {manifest.id!r} token-authenticated route {route!r} "
-                "must be a non-empty path relative to its url_prefix."
-            )
-
-
-def _validate_navigation(manifest: PluginManifest) -> None:
-    for item in manifest.navigation:
-        if not item.label.strip() or not item.namespace or not item.route or not isinstance(item.order, int):
-            raise ImproperlyConfigured(f"Plugin {manifest.id!r} has an incomplete navigation item.")
-
-
-def _validate_capabilities(manifest: PluginManifest) -> None:
-    """Names, uniqueness, and the rule that MCP can never exceed the operator."""
-
-    declared_capabilities = (
-        *manifest.operator_capabilities,
-        *manifest.mcp_read_capabilities,
-        *manifest.mcp_write_capabilities,
-    )
-    for capability in declared_capabilities:
-        if not CAPABILITY_NAME.fullmatch(capability):
-            raise ImproperlyConfigured(f"Plugin {manifest.id!r} declares invalid capability {capability!r}.")
-
-    host = {str(capability) for capability in host_capabilities()}
-    claimed = sorted(set(declared_capabilities) & host)
+    declared = {*manifest.operator_capabilities, *manifest.mcp_read_capabilities, *manifest.mcp_write_capabilities}
+    claimed = sorted(declared & {str(capability) for capability in host_capabilities()})
     if claimed:
         raise ImproperlyConfigured(
             f"Plugin {manifest.id!r} declares the host capability "
             f"{', '.join(claimed)}. A plugin grants only capabilities of its own."
         )
-    for label, capabilities in (
-        ("operator", manifest.operator_capabilities),
-        ("mcp_read", manifest.mcp_read_capabilities),
-        ("mcp_write", manifest.mcp_write_capabilities),
-    ):
-        if len(capabilities) != len(set(capabilities)):
-            raise ImproperlyConfigured(f"Plugin {manifest.id!r} repeats a capability in {label}.")
-    operator = set(manifest.operator_capabilities)
-    mcp_only = (set(manifest.mcp_read_capabilities) | set(manifest.mcp_write_capabilities)) - operator
-    if mcp_only:
-        raise ImproperlyConfigured(
-            f"Plugin {manifest.id!r} grants MCP capabilities its operator does not hold: {', '.join(sorted(mcp_only))}."
-        )
-
-
-def _validate(manifest: PluginManifest) -> None:
-    """Everything a manifest must satisfy before HQ will boot with it.
-
-    Fail-closed startup validation, grouped rather than tabulated so an auditor
-    reads the requirements in order. Identity comes first: every later message
-    names the plugin by the id validated there.
-    """
-
-    _validate_identity(manifest)
-    _validate_mount(manifest)
-    _validate_providers(manifest)
-    _validate_token_routes(manifest)
-    _validate_navigation(manifest)
-    _validate_capabilities(manifest)
 
 
 def _validate_composition(plugins: tuple[PluginManifest, ...]) -> None:
@@ -272,7 +295,7 @@ def _installed_plugins() -> tuple[PluginManifest, ...]:
     ids = set()
     for reference in _references():
         manifest = _load_manifest(reference)
-        _validate(manifest)
+        _claims_no_host_capability(manifest)
         if manifest.id in ids:
             raise ImproperlyConfigured(f"Duplicate HQ plugin id {manifest.id!r}.")
         ids.add(manifest.id)
@@ -303,23 +326,6 @@ def clear_plugin_composition_cache() -> None:
 
 def installed_plugin_apps() -> list[str]:
     return [app for plugin in installed_plugins() for app in plugin.django_apps]
-
-
-def plugin_urlpatterns() -> list[URLResolver]:
-    mounted = [plugin for plugin in installed_plugins() if plugin.urlconf]
-    return [path(plugin.url_prefix, include(plugin.urlconf)) for plugin in mounted]
-
-
-def plugin_token_authenticated_prefixes() -> tuple[str, ...]:
-    """Absolute path prefixes that authenticate themselves, not via the session.
-
-    Built here rather than declared, so what a plugin asked for is always
-    re-anchored to the mount the host gave it.
-    """
-
-    return tuple(
-        f"/{plugin.url_prefix}{route}" for plugin in installed_plugins() for route in plugin.token_authenticated_routes
-    )
 
 
 def installed_integrations() -> tuple[tuple[PluginManifest, PluginIntegration], ...]:

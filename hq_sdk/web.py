@@ -1,61 +1,43 @@
 """Authorization and navigation helpers for plugin-owned Django views."""
 
 from collections.abc import Callable
-from functools import wraps
-from typing import Any, Concatenate, override
+from typing import Concatenate
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 from django.http import HttpRequest, HttpResponseBase
-lazy from django.contrib.auth.base_user import AbstractBaseUser
-lazy from django.contrib.auth.models import AnonymousUser
 
-from hq.platform.application.security import AuthorizationError, safe_next, web_principal
+from hq.platform.application.security import safe_next
 
 View = Callable[Concatenate[HttpRequest, ...], HttpResponseBase]
 
 
-def _require(user: AbstractBaseUser | AnonymousUser, capability: str) -> None:
-    try:
-        web_principal(user).require(capability)
-    except AuthorizationError as exc:
-        raise PermissionDenied(str(exc)) from exc
-
-
 def capability_required(capability: str) -> Callable[[View], View]:
-    """Authenticate a function view and require one named capability."""
+    """Authenticate a function view and name the one capability its page reads under.
+
+    The page gate refuses a person who does not hold it before the view runs
+    (``hq.platform.application.pages.page_capability``).
+    """
 
     if not capability:
         raise ValueError("capability_required needs a capability name.")
 
     def decorate(view: View) -> View:
-        @login_required
-        @wraps(view)
-        def guarded(request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponseBase:
-            _require(request.user, capability)
-            return view(request, *args, **kwargs)
-
+        guarded = login_required(view)
+        guarded.__dict__["required_capability"] = capability
         return guarded
 
     return decorate
 
 
 class CapabilityRequiredMixin(LoginRequiredMixin):
-    """Authenticate a class-based view and require ``required_capability``."""
+    """Authenticate a class-based view that names ``required_capability``, the one its page reads under.
+
+    Left empty, the page gate refuses to serve the view rather than read it
+    under READ.
+    """
 
     required_capability = ""
-
-    def get_required_capability(self) -> str:
-        if not self.required_capability:
-            raise ImproperlyConfigured(f"{type(self).__name__} must define required_capability.")
-        return self.required_capability
-
-    @override
-    def dispatch(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponseBase:
-        if request.user.is_authenticated:
-            _require(request.user, self.get_required_capability())
-        return super().dispatch(request, *args, **kwargs)
 
 
 __all__ = ["CapabilityRequiredMixin", "capability_required", "safe_next"]

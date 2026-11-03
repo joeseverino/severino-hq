@@ -40,6 +40,16 @@ if ! grep -q '^\[tool\.mypy\]' pyproject.toml; then
     exit 1
 fi
 
+# The host's structural rule on text a person reads holds the package's
+# source as it holds the host's: the rule's scope names src/, read from the
+# package root. The ast-grep is the host's pin, mise's install of it beside a
+# host checkout, or the one on the PATH where there is no mise.
+ast_grep=$(mise -C "$hq_root" which ast-grep 2>/dev/null) || ast_grep=$(command -v ast-grep) || {
+    echo "ast-grep is not installed: \`mise -C $hq_root install ast-grep\` installs the host's pin." >&2
+    exit 1
+}
+"$ast_grep" scan -c "$hq_root/tools/lint/ast-grep/sgconfig.yml" --filter '^dot-typed-in-text$' --report-style medium src
+
 work=$(mktemp -d "${TMPDIR:-/tmp}/hq-plugin-check.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT HUP INT TERM
 host_requirements=$work/host-requirements.txt
@@ -65,11 +75,15 @@ export PYTHONPATH="$hq_root"
 export SEVERINO_HQ_PLUGINS="$plugin_reference"
 # The package's own mypy against the host's typed hq_sdk; its django-stubs
 # settings are hq.config.settings_typecheck, with this package installed.
-MYPYPATH="$hq_root" "$python" -m mypy
+# django-stubs keys mypy's cache on INSTALLED_APPS alone, so a cache kept
+# beside the package still names a host model module that has since moved;
+# a cache of this run's own costs what a warm one does.
+MYPYPATH="$hq_root" "$python" -m mypy --cache-dir "$work/mypy"
 "$python" "$hq_root/manage.py" check
 "$python" "$hq_root/manage.py" makemigrations --check --dry-run "$django_app"
 # The template checks read every template Django loads, so they hold the
-# plugin's wording and markup as they hold the host's.
+# plugin's wording and markup as they hold the host's; the view checks read
+# every routed view's source, the plugin's included.
 "$python" "$hq_root/manage.py" test "$django_app" hq.platform.application.tests.test_plugins hq.platform.application.tests.test_rendered \
     hq.platform.application.tests.test_architecture.InterfaceTextTests hq.platform.core.tests.test_counts.CountPlacementTests \
     hq.platform.core.tests.test_template_chips.TemplateChipTests hq.platform.core.tests.test_table_contract.TableContractTests \
@@ -81,7 +95,10 @@ MYPYPATH="$hq_root" "$python" -m mypy
     hq.platform.core.tests.test_template_values.TemplateValueTests hq.platform.core.tests.test_row_groups.RowGroupTests \
     hq.platform.core.tests.test_template_separators.TemplateSeparatorTests \
     hq.platform.application.tests.test_action_words.CallSiteWordsTests \
-    hq.platform.application.tests.test_architecture.StyleContractTests.test_a_rows_block_detail_opens_beneath_the_row
+    hq.platform.application.tests.test_architecture.StyleContractTests.test_a_rows_block_detail_opens_beneath_the_row \
+    hq.platform.application.tests.test_view_writes.ViewWriteTests.test_no_view_writes_outside_the_chokepoint \
+    hq.platform.application.tests.test_architecture.DeliveryAdapterArchitectureTests.test_paginated_list_views_use_the_shared_table_engine \
+    hq.platform.application.tests.test_architecture.PageTrailTests
 
 # Production installs admitted wheels with --no-deps. Recreate that exact
 # dependency boundary in an isolated environment so an undeclared host pin
