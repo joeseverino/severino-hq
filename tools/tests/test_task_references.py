@@ -17,7 +17,22 @@ from tests.mise_tasks import mise_tasks
 MISE_RUN = re.compile(r"\bmise(?:\s+-C\s+\S+)?\s+run(?=[ \t])([^\n`]*)")
 MISE_RUN_LIST = re.compile(r'"mise",\s*"run"((?:,\s*"[^"\n]*")*)')
 # mise run's options that take a value, which is no task.
-OPTION_VALUES = {"-j", "--jobs", "-C", "--cd", "-o", "--output", "-s", "--shell", "-t", "--tool", "-E", "--env"}
+OPTION_VALUES = {
+    "-j",
+    "--jobs",
+    "-C",
+    "--cd",
+    "-o",
+    "--output",
+    "-s",
+    "--shell",
+    "-t",
+    "--tool",
+    "-E",
+    "--env",
+    "--lock-timeout",
+    "--timeout",
+}
 # A word that stands for a task rather than naming one: a variable, a
 # placeholder, a template.
 STAND_IN = re.compile(r"[$%<>{}\[\]]|^$")
@@ -25,12 +40,12 @@ STAND_IN = re.compile(r"[$%<>{}\[\]]|^$")
 FIXTURE_TASKS = {
     # The dead reference this file's own test shows on its line.
     ("tools/tests/test_task_references.py", "of"),
-    # The throwaway configs the heavy turn's suite builds: a holder, and a
-    # heavy task run from inside another, and two heavy tasks asked together.
-    ("tests/shell/test-heavy.sh", "example-holder"),
-    ("tests/shell/test-heavy.sh", "hang"),
-    ("tests/shell/test-heavy.sh", "first"),
-    ("tests/shell/test-heavy.sh", "second"),
+    # The throwaway repository the heavy turn's suite builds: a holder, a quick
+    # heavy task, one that runs it from inside, and one that weighs its run.
+    ("tests/shell/test-heavy.sh", "hold"),
+    ("tests/shell/test-heavy.sh", "quick"),
+    ("tests/shell/test-heavy.sh", "outer"),
+    ("tests/shell/test-heavy.sh", "weighed"),
     # The fixture config fast's tests run their gates from.
     ("tools/gate/tests/test_fast.py", "gate:*"),
 }

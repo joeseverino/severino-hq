@@ -13,7 +13,7 @@ from django.db import connection, transaction
 from django.test import SimpleTestCase
 from django.test.utils import CaptureQueriesContext
 
-from hq.platform.application.derivations import uncached
+from hq.platform.application.derivation_testing import uncached
 from hq.platform.core.bench import Seeded, seed
 
 # Two sizes of the same estate: a cost that grows with rows differs between them.

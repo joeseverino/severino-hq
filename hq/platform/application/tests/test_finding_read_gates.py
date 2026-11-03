@@ -20,7 +20,7 @@ from ..attention import finding_insight, readable_by
 from ..connection_setup import setups
 from ..connections import ConnectionInstance, ConnectionLink, ConnectionSpec
 from ..dashboard import queue_item
-from ..derivations import uncached
+from ..derivation_testing import uncached
 from ..finding_model import Finding
 from ..inventory_testing import store
 from ..plugin_testing import offering

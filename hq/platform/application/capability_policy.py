@@ -311,13 +311,14 @@ def columns() -> tuple[Column, ...]:
     return surfaces + agents
 
 
-def matrix() -> tuple[tuple[Column, ...], tuple[Group, ...]]:
-    """Every capability against every column, grouped by what it acts on."""
+def matrix(current: dict[tuple[str, str, str], str] | None = None) -> tuple[tuple[Column, ...], tuple[Group, ...]]:
+    """Every capability against every column, grouped by what it acts on; ``current`` is
+    ``rules()`` when the caller has read them already."""
 
     cols = columns()
-    grants = dict(AgentIdentity.objects.values_list("client_id", "granted"))
+    grants = {column.subject: column.identity.granted for column in cols if column.identity is not None}
     ceiling = mcp_principal()
-    current = rules()
+    current = rules() if current is None else current
     grouped: dict[str, list] = {}
     for spec in capabilities.capability_registry().values():
         if spec.effect in EFFECTS and agents_may_hold(spec):

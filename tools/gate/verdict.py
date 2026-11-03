@@ -35,9 +35,29 @@ REPORTS = "HQ_TEST_REPORTS"
 # A line of mise's `-c` summary, and the line a task that failed alone ends on,
 # under the name of each task it runs inside. Anchored, so a tool that quotes
 # such a line from a file (a formatter's diff of a test) names nothing.
-TASK = re.compile(r"^(?:\[[^\]\s]+\] )*\[([^\]\s]+)\] (?:exited with status \d+|ERROR task failed)\s*$")
-# The line tools/lib/heavy.sh prints when a heavy command waited for the turn.
-WAITED = re.compile(r"^(?:\[[^\]\s]+\] )*heavy: waited (\d+)s for the turn\s*$")
+TASK = re.compile(r"^((?:\[[^\]\s]+\] )*)\[([^\]\s]+)\] (?:exited with status \d+|ERROR task failed)\s*$")
+# The task that runs a command in the heavy turn for the task that asked
+# (mise-tasks/turn): its failure is that task's, named by the prefix it is
+# printed under, or by the step when nothing asked.
+TURN = "turn"
+
+
+def failed_task(line: str) -> str | None:
+    """The task a line of mise's says failed, as the gate names it."""
+
+    if not (task := TASK.match(line)):
+        return None
+    if task[2] != TURN:
+        return task[2]
+    under = re.findall(r"\[([^\]\s]+)\] ", task[1])
+    return under[-1] if under else None
+
+
+# The line mise prints once a task that waited for the heavy turn's lock holds
+# it, the wait as mise writes one: 4.2s, 3m02s, 2h01m.
+WAITED = re.compile(r"^(?:\[[^\]\s]+\] )*got lock heavy after ((?:\d+(?:\.\d+)?[hms])+)\s*$")
+PART = re.compile(r"(\d+(?:\.\d+)?)([hms])")
+SPAN = {"h": 3600.0, "m": 60.0, "s": 1.0}
 # The runner's heading over a failed test's traceback, under the task whose
 # run printed it: the test's id is in the parentheses.
 FAILED_UNDER = re.compile(r"^(?:\[[^\]\s]+\] )*\[([^\]\s]+)\] (?:FAIL|ERROR): \S+ \(([^)\s]+)\)")
@@ -134,7 +154,7 @@ class Step:
     seconds: float = 0.0
     took: dict[str, float] = field(default_factory=dict)
     # Seconds the step's heavy commands waited for the heavy turn.
-    waited: int = 0
+    waited: float = 0.0
     unimported: list[str] = field(default_factory=list)
     # The command the step ran, which reruns a failure it names nothing in.
     command: list[str] = field(default_factory=list)
@@ -148,12 +168,12 @@ class Step:
         self.hear(line)
         if (module := UNIMPORTED.match(line)) and module[1] not in self.unimported:
             self.unimported.append(module[1])
-        if (task := TASK.match(line)) and task[1] not in self.tasks:
-            self.tasks.append(task[1])
+        if (task := failed_task(line)) and task not in self.tasks:
+            self.tasks.append(task)
         if failed := FAILED_UNDER.match(line):
             self.under.setdefault(test_label(failed[2]), failed[1])
         if waiting := WAITED.match(line):
-            self.waited += int(waiting[1])
+            self.waited += sum(float(amount) * SPAN[unit] for amount, unit in PART.findall(waiting[1]))
         for task, amount, unit in TIMED.findall(line):
             self.took[task] = float(amount) * UNITS[unit]
 
@@ -274,7 +294,7 @@ def run(label: str, cmd: list[str], cwd: Path = ROOT, to: BinaryIO | None = None
 def verdict(name: str, started: float, steps: list[Step], passed: str = "", outcome: str = "FAILED") -> str:
     elapsed = f"{time.monotonic() - started:.1f}s"
     if waited := sum(step.waited for step in steps):
-        elapsed += f", {waited}s of it waiting for the turn"
+        elapsed += f", {waited:.0f}s of it waiting for the turn"
     aggregates = leaves(steps)
     failed = [failure for step in steps for failure in step.failures(aggregates)]
     if failed:

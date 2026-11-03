@@ -9,12 +9,12 @@ from hq_sdk.capabilities import StrictCommand
 from ..capabilities import CapabilitySpec, describe_capabilities
 from ..command_center import command_center
 from ..connections import ConnectionAbility, ConnectionSpec, describe_connections
+from ..integration_testing import override_integration_graph
 from ..integrations import (
     IntegrationGraphError,
     clear_integration_graph_cache,
     compile_integration_graph,
     integration_graph,
-    override_integration_graph,
 )
 from ..plugins import clear_plugin_composition_cache
 from ..resources import EmptyQuery, ResourceSpec, describe_resources

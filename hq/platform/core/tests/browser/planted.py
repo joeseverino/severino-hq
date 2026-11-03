@@ -150,6 +150,14 @@ PLANTS = {
         '<div><p style="margin: 0">Example</p><div class="section-head" style="margin-block-start: 0">'
         "<h2>Example</h2></div><p>Example</p></div>"
     ),
+    # A select left to the browser's own arrow.
+    "select arrows": Plant(
+        '<select aria-label="Example" style="appearance: auto; background-image: none"><option>Example</option></select>'
+    ),
+    # A link among words whose name is set in a box of its own.
+    "link underlines": Plant(
+        '<p>Example <a href="#"><span style="display: inline-block; text-decoration: none">example-name</span></a></p>'
+    ),
     "dialogs": Plant('{% include "partials/_modal.html" with id="orphan" title="Orphan" %}'),
     # A list of names wrapping beside another pair of a four-column list.
     "lists of facts": Plant(

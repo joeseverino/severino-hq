@@ -5,6 +5,7 @@ import json
 import re
 import subprocess
 import tomllib
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -77,10 +78,37 @@ def run_files() -> frozenset[str]:
     return frozenset(path.relative_to(ROOT).as_posix() for task in mise_tasks().values() for path in runs(task))
 
 
-def takes_the_turn(task: dict[str, Any]) -> bool:
-    """Whether every run of the task holds the machine's heavy turn (tools/lib/heavy.sh):
-    its shell is the wrapper, or its file sources the line that runs it again under it."""
+def _locks_of(name: str) -> list[str]:
+    info = subprocess.run(
+        ["mise", "tasks", "info", name, "--json"], cwd=ROOT, check=True, capture_output=True, text=True
+    ).stdout
+    # Absent, false or true (the task's own name in its repository), or a list of names.
+    lock = json.loads(info).get("lock")
+    return lock if isinstance(lock, list) else []
 
-    return (task["shell"] or "").startswith("tools/lib/heavy.sh ") or bool(
-        task["file"] and re.search(r"(?m)^\. .*tools/lib/heavy-turn\.sh\"?$", body(task))
-    )
+
+@functools.cache
+def _all_locks() -> dict[str, list[str]]:
+    # Only `mise tasks info` reports a lock, one task a call, so the calls run side by side.
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return dict(zip(mise_tasks(), pool.map(_locks_of, mise_tasks()), strict=True))
+
+
+def locks(name: str) -> list[str]:
+    """The locks the task takes, as mise resolves them, templates applied; its task list leaves them out."""
+
+    return _all_locks()[name]
+
+
+# The machine's heavy turn, the lock tools/gate/turn.py names; hq's tests read
+# this module and may not import tools/.
+HEAVY_LOCK = "heavy"
+# The line a file task sources to run itself again in the turn when its run is heavy.
+SOURCES_THE_TURN = re.compile(r'(?m)^\s*\. .*tools/lib/heavy-turn\.sh"?$')
+
+
+def takes_the_turn(task: dict[str, Any]) -> bool:
+    """Whether the task holds the machine's heavy turn: it takes the lock, or its
+    file sources the line that runs it again in the turn when its run is heavy."""
+
+    return HEAVY_LOCK in locks(task["name"]) or bool(task["file"] and SOURCES_THE_TURN.search(body(task)))

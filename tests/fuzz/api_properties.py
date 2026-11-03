@@ -19,9 +19,9 @@ from schemathesis.specs.openapi.checks import (
 from werkzeug.test import Client
 
 from hq.platform.application.capabilities import CapabilitySpec
+from hq.platform.application.integration_testing import override_integration_graph
 from hq.platform.application.integrations import (
     compile_integration_graph,
-    override_integration_graph,
 )
 from hq_sdk.capabilities import StrictCommand
 

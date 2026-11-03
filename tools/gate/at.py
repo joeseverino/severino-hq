@@ -3,7 +3,7 @@ closing on the line tools/gate/verdict.py prints.
 
 mise parses the task's arguments (its usage in mise-tasks/test.toml) and this
 reads what it parsed. What `--at` and `--keep` do is the task's help
-(`mise run test --help`). A run takes the heavy turn (tools/lib/heavy.sh) unless
+(`mise run test --help`). A run takes the heavy turn (mise-tasks/turn) unless
 tools/gate/turn.py finds it narrow; a run at a ref builds a worktree, so it always takes it.
 """
 
@@ -31,7 +31,7 @@ from hq.platform.core.tests.task import (
     usage,
     worktree,
 )
-from tools.gate.turn import narrow
+from tools.gate.turn import in_turn, inside, narrow
 from tools.gate.verdict import FailedTest, Gate, Step, run
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -56,11 +56,6 @@ SHELL_SUITES = "tests/shell"
 SHELL_SUITE = "test-*.sh"
 SHELL_TASK = "lint:shell:suites"
 MISE = ["mise"]
-HEAVY = ROOT / "tools" / "lib" / "heavy.sh"
-# heavy.sh runs its command as a process of its own; this front marks that
-# process as the run that goes ahead, as tools/lib/heavy-turn.sh does a file
-# task's, and execs this module in it, keeping the pid.
-IN_TURN = 'SEVERINO_HEAVY_TASK=$$; export SEVERINO_HEAVY_TASK; exec "$@"'
 
 
 class KeepRefused(Exception):
@@ -434,13 +429,15 @@ def stop(signum: int, _frame: object) -> None:
 
 
 def take_the_turn(typed: Typed) -> None:
-    """Run again inside the heavy turn, unless this is that run or a narrow one.
+    """Run again inside the heavy turn, unless this run is in it or narrow.
     The run in the turn inherits mise's parse through the environment."""
 
-    if os.environ.get("SEVERINO_HEAVY_TASK") == str(os.getpid()):
+    if inside():
         return
     if typed.at is not None or typed.go or not narrow(typed.args):
-        os.execv(HEAVY, [str(HEAVY), "sh", "-c", IN_TURN, "sh", sys.executable, "-m", "tools.gate.at"])
+        # A run at a ref builds a worktree and may run the suite there twice.
+        command = [*in_turn("2h"), sys.executable, "-m", "tools.gate.at"]
+        os.execvp(command[0], command)
 
 
 def run_here(argv: list[str], *, go: bool = False, shell: bool = False) -> int:

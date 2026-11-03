@@ -11,7 +11,8 @@ from hq.platform.application import integration_specs
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.command_fields import Describe
 from hq.platform.application.integration_specs import CapabilitySpec
-from hq.platform.application.integrations import compile_integration_graph, override_integration_graph
+from hq.platform.application.integration_testing import override_integration_graph
+from hq.platform.application.integrations import compile_integration_graph
 from hq_sdk.capabilities import StrictCommand
 
 from .. import openapi

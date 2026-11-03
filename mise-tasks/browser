@@ -1,6 +1,5 @@
 #!/bin/sh
 #MISE description="After a template or CSS change: every browser gate in WebKit, layout, navigation and the demo, one at a time, or the legs named"
-#MISE env={SEVERINO_HEAVY_BOUND="2h"}
 #MISE depends_post=["image:docker stop"]
 #USAGE arg "[target]..." var=#true double_dash="automatic" help="Legs by name (layout-1, navigation, demo), each the gate browser:<leg>; every leg but the Chromium ones by default. With --linux, a leg or test labels then any options for Django's test command, as mise run test takes them"
 #USAGE flag "--linux" help="In the Playwright image CI's browser job runs, on this checkout: a layout only CI's Linux shows, reproduced here"
@@ -50,6 +49,7 @@ fi
 # severino-hq-browser-linux, so the next run starts at the gate.
 [ "$#" -gt 0 ] || { echo "mise run browser --linux: name a leg or test labels" >&2; exit 64; }
 # The VM and the browsers in it are one heavy run, taken before the VM boots.
+turn_bound=2h
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh
 mise run image:docker start

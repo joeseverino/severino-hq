@@ -69,9 +69,9 @@ class AgentStanding:
 
 
 def standings() -> list[AgentStanding]:
-    """Every agent HQ has seen, in client order, with its person and their role read in the same query."""
+    """Every agent HQ has seen, in client order, with its person, their role and who blocked it read in the same query."""
 
-    identities = list(AgentIdentity.objects.select_related("person__person_role"))
+    identities = list(AgentIdentity.objects.select_related("person__person_role", "blocked_by"))
     ceiling = agent_ceiling()
     activity = recent_activity([identity.client_id for identity in identities])
     return [_standing(identity, ceiling, activity.get(identity.client_id, Activity())) for identity in identities]

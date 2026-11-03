@@ -253,6 +253,13 @@
   --target-min: 24px;
   /* How far a select's chevron sits in from its edge; a borderless select sets 0. */
   --chevron-inset: var(--space-5);
+  /* The open chevron the header's menus draw, worn by every select and by a
+     filter that opens to its choices. It is two squares of --chevron-size side
+     by side, each crossed by one diagonal stroke in the muted ink. */
+  --chevron-size: 6px;
+  --chevron-image:
+    linear-gradient(to top right, transparent calc(50% - .75px), var(--muted) calc(50% - .75px) calc(50% + .75px), transparent calc(50% + .75px)),
+    linear-gradient(to top left, transparent calc(50% - .75px), var(--muted) calc(50% - .75px) calc(50% + .75px), transparent calc(50% + .75px));
   /* Every control in the header bar reads these, so none can be drawn as a
      different kind of thing from the ones beside it. */
   --bar-control-bg: var(--surface-2);

@@ -87,7 +87,7 @@ class BrowserGateTaskTests(SimpleTestCase):
 
     def test_a_browser_gate_s_template_restates_django_s_env(self):
         """A template extends none, so the browser gate template carries the
-        env of ``django`` itself, beside its heavy turn's bound: a gate never
+        env of ``django`` itself: a gate never
         opens the developer's database."""
 
         templates = tomllib.loads((ROOT / "mise.toml").read_text())["task_templates"]

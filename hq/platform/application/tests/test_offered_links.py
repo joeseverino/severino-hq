@@ -10,14 +10,15 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase, modify_settings, override_settings
-from django.urls import include, path, resolve, reverse
+from django.urls import clear_url_caches, include, path, resolve, reverse, set_script_prefix
 
 from hq.config.urls import urlpatterns as root_urlpatterns
-from hq.platform.application import roles
+from hq.platform.application import request_context, roles, routes
 from hq.platform.application.domains import domain_navigation
-from hq.platform.application.pages import authorizes_itself, page_refusal
+from hq.platform.application.pages import Page, PageAction, authorizes_itself, page_refusal
 from hq.platform.application.plugins import clear_plugin_composition_cache
 from hq.platform.application.routes import routed
+from hq.platform.application.security import web_principal
 from hq.platform.core.context_processors import nav
 from hq.platform.core.test_runner import no_default_role
 
@@ -135,3 +136,77 @@ class AuditLogLinkTests(TestCase):
 
         self.assertIn(reverse("core:audit_list"), [action.url for action in jobs.context["page"].actions])
         self.assertIn("core:audit_list", _offered_routes(jobs.wsgi_request))
+
+
+def _first(_request):
+    """The page the first URLconf routes ``example`` to."""
+
+
+def _second(_request):
+    """The page the second URLconf routes ``example`` to."""
+
+
+class FirstURLconf:
+    urlpatterns = [path("example/", _first, name="example")]
+
+
+class SecondURLconf:
+    urlpatterns = [path("example/", _second, name="example")]
+
+
+class UnroutedSectionTests(TestCase):
+    """A section whose address HQ routes nothing at is not HQ's to withhold, so the nav draws it."""
+
+    def setUp(self):
+        # A resolver of its own, so no lookup an earlier test kept answers this one.
+        clear_url_caches()
+        routes.forget()
+        self.addCleanup(routes.forget)
+        self.addCleanup(clear_url_caches)
+
+    def test_the_nav_draws_under_a_script_prefix_the_resolver_does_not_answer(self):
+        request = RequestFactory().get("/")
+        request.resolver_match = None
+        request.user = _person("viewer", roles.Role.VIEWER)
+        set_script_prefix("/under/")
+        self.addCleanup(set_script_prefix, "/")
+
+        offered_routes = _offered_routes(request)
+
+        self.assertEqual(offered_routes, {item.route for item in domain_navigation()})
+
+
+class ChangedURLconfTests(TestCase):
+    """A route is answered by the URLconf in force, never one a lookup kept from before."""
+
+    def test_a_replaced_urlconf_is_answered_with_its_own_view(self):
+        from hq.platform.application.pages import route_view
+
+        with override_settings(ROOT_URLCONF=FirstURLconf):
+            self.assertIs(route_view("example"), _first)
+        with override_settings(ROOT_URLCONF=SecondURLconf):
+            self.assertIs(route_view("example"), _second)
+
+
+class OnePrincipalPerRequestTests(TestCase):
+    """A page asks of every link it draws, and its reader's principal is built once for all of them."""
+
+    def _principals_built(self, user, links: int) -> int:
+        request = RequestFactory().get("/")
+        request.resolver_match = None
+        request.user = user
+        audit = reverse("core:audit_list")
+        actions = tuple(PageAction(f"Audit {n}", audit) for n in range(links))
+        with (
+            request_context.bind(request),
+            mock.patch("hq.platform.application.pages.web_principal", wraps=web_principal) as built,
+        ):
+            page = Page("Example", actions=actions, trail=(("Audit", audit),) * links)
+            nav(request)
+        self.assertEqual((page.actions, page.trail), ((), ()), "a viewer is offered no link to the audit log")
+        return built.call_count
+
+    def test_the_principals_built_do_not_grow_with_the_links_a_page_draws(self):
+        viewer = _person("viewer", roles.Role.VIEWER)
+
+        self.assertEqual(self._principals_built(viewer, 20), self._principals_built(viewer, 1))

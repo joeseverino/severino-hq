@@ -110,6 +110,59 @@ HIDDEN_IN_SUMMARIES = (
 }"""
 )
 
+# Every select that opens to its choices wears HQ's chevron and no arrow of
+# the browser's own, whichever way the engine draws it (base-select or
+# native), so no two forms read as two kinds of control. The chevron is
+# compared with the token painted where the select sits, since its ink is
+# light-dark(). A vendored widget draws its own.
+SELECT_ARROWS = """([dropdowns, vendored]) => {
+  const named = (el) => el.name || el.getAttribute('aria-label') || el.id || 'unnamed';
+  return [...document.querySelectorAll(dropdowns)]
+    .filter((el) => !el.multiple && el.size <= 1 && !(vendored && el.closest(vendored)))
+    .flatMap((el) => {
+      const style = getComputedStyle(el);
+      const own = style.appearance === 'base-select'
+        ? getComputedStyle(el, '::picker-icon').display !== 'none'
+        : style.appearance !== 'none';
+      const mark = document.createElement('span');
+      mark.style.setProperty('background-image', 'var(--chevron-image)');
+      el.parentElement.append(mark);
+      const chevron = getComputedStyle(mark).backgroundImage;
+      mark.remove();
+      return [
+        own && `select ${named(el)} draws the browser's own arrow`,
+        style.backgroundImage !== chevron && `select ${named(el)} does not wear HQ's chevron`,
+      ].filter(Boolean);
+    });
+}"""
+
+# A link that draws an underline draws it under all of its words. A line a
+# link draws never reaches into a box of its own inside it (an inline-block
+# part of a name), so each word set in one is read from the nearest such box
+# between it and the link.
+PARTS_NOT_UNDERLINED = """([links, vendored]) => {
+  const atomic = (el) => !['inline', 'contents'].includes(getComputedStyle(el).display);
+  const underlined = (el) => getComputedStyle(el).textDecorationLine.includes('underline');
+  const found = [];
+  for (const link of document.querySelectorAll(links)) {
+    if ((vendored && link.closest(vendored)) || !underlined(link)) continue;
+    const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent.trim()) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      if (![...range.getClientRects()].some((r) => r.width && r.height)) continue;
+      let box = node.parentElement;
+      while (box !== link && !atomic(box)) box = box.parentElement;
+      if (box !== link && !underlined(box)) {
+        found.push(`link ${link.textContent.trim().slice(0, 60)} leaves ${node.textContent.trim().slice(0, 40)} without its underline`);
+        break;
+      }
+    }
+  }
+  return found;
+}"""
+
 # A dialog a page declares is one a reader can open: some control on the page
 # names it, so drawing a dialog without its control is a finding.
 DIALOGS_WITHOUT_OPENERS = """([dialogs, openers]) => {

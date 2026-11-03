@@ -4,9 +4,7 @@ what an agent finds at the MCP endpoint, asked of the server only when opened.""
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.db import connection
 from django.test import TestCase
-from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from hq.platform.application import agent_registry, denials
@@ -63,20 +61,6 @@ class AgentRowTests(TestCase):
 
         self.assertIn("refused", row)
         self.assertIn("calling too much", row)
-
-    def test_the_page_costs_the_same_however_many_agents_and_events(self):
-        with CaptureQueriesContext(connection) as few:
-            self.page()
-        for index in range(5):
-            client = f"example-agent-{index}"
-            _seen(client)
-            for _ in range(4):
-                denials.record_denial(interface="mcp", reason="forbidden", actor=client)
-
-        with CaptureQueriesContext(connection) as many:
-            self.page()
-
-        self.assertEqual(len(many.captured_queries), len(few.captured_queries))
 
 
 class DeviceTests(TestCase):

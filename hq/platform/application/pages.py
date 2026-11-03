@@ -16,9 +16,10 @@ from copy import copy
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit
+from weakref import WeakKeyDictionary
 
 from django.core.exceptions import ImproperlyConfigured
-from django.urls import Resolver404, resolve
+from django.urls import Resolver404, get_resolver, get_script_prefix, get_urlconf, resolve
 from django.utils.functional import Promise
 
 from .asks import Ask
@@ -28,6 +29,7 @@ lazy from .page_reads import remedy
 lazy from .refusal_status import Refusal, refusal_of
 lazy from .request_context import current as current_request
 lazy from .request_identity import signed_in
+lazy from .routes import reverse
 lazy from .security import AuthorizationError, Capability, web_principal
 
 PAGE_DIALOG_ID = re.compile(r"[a-z][a-z0-9-]*\Z")
@@ -313,7 +315,13 @@ def authorizes_itself(view: Callable[..., Any]) -> bool:
 def page_opens(user: Any, view: Callable[..., Any]) -> bool:
     """Whether the signed-in ``user`` may open the page ``view`` draws: the rule ``page_refusal`` serves by."""
 
-    return web_principal(user).permits(page_capability(view))
+    return principal_opens(web_principal(user), view)
+
+
+def principal_opens(principal: Any, view: Callable[..., Any]) -> bool:
+    """Whether ``principal`` may open the page ``view`` draws: the one place the page rule is written."""
+
+    return principal.permits(page_capability(view))
 
 
 def page_refusal(user: Any, view: Callable[..., Any]) -> Refusal | None:
@@ -322,9 +330,9 @@ def page_refusal(user: Any, view: Callable[..., Any]) -> Refusal | None:
     Asked before the view runs, so a refused page has read nothing.
     """
 
-    if page_opens(user, view):
-        return None
     principal = web_principal(user)
+    if principal_opens(principal, view):
+        return None
     capability = page_capability(view)
     refused = AuthorizationError(f"{principal.actor!r} holds no {capability!r}, which this page reads under.")
     return refusal_of(refused, name=capability, principal=principal)
@@ -339,16 +347,69 @@ def offered(user: Any | None, url: str | Promise) -> bool:
     authorizes itself, is not HQ's to withhold.
     """
 
-    parts = urlsplit(str(url))
-    if parts.scheme or parts.netloc:
-        return True
+    return Offering(user)(url)
+
+
+class Offering:
+    """Which links HQ offers one ``user``, by address or by route name, under ``offered``'s rule.
+
+    Their principal is built once, at the first page link it is asked of,
+    since a page asks of every section, action and crumb it draws.
+    """
+
+    def __init__(self, user: Any | None) -> None:
+        self.user = user
+        self._principal: Any = None
+
+    def __call__(self, url: str | Promise) -> bool:
+        parts = urlsplit(str(url))
+        if parts.scheme or parts.netloc:
+            return True
+        view = _routed(parts.path)
+        return view is None or self.opens(view)
+
+    def route(self, name: str) -> bool:
+        view = route_view(name)
+        return view is None or self.opens(view)
+
+    def opens(self, view: Callable[..., Any]) -> bool:
+        if authorizes_itself(view):
+            return True
+        if self.user is None:
+            return False
+        if self._principal is None:
+            self._principal = web_principal(self.user)
+        return principal_opens(self._principal, view)
+
+
+def _routed(path: str) -> Callable[..., Any] | None:
+    """The view HQ answers ``path`` with, or None where HQ routes nothing, which is not HQ's to withhold."""
+
     try:
-        view = resolve(parts.path).func
+        return resolve(path).func
     except Resolver404:
-        return True
-    if authorizes_itself(view):
-        return True
-    return user is not None and page_opens(user, view)
+        return None
+
+
+# The view each route name resolves to, by the resolver that holds it and the
+# script prefix its address is reversed under: Django makes a new resolver
+# whenever its URL caches are cleared, so a stale entry is never read, and route
+# names are a fixed set, so this holds a URLconf's worth.
+_ROUTE_VIEWS: WeakKeyDictionary[Any, dict[tuple[str, str], Callable[..., Any] | None]] = WeakKeyDictionary()
+
+
+def route_view(name: str) -> Callable[..., Any] | None:
+    """The view the route ``name`` answers with, or None where its address is no route of HQ's.
+
+    Kept, since the nav asks it of every section on every page, and each answer
+    is a reverse and a resolve.
+    """
+
+    views = _ROUTE_VIEWS.setdefault(get_resolver(get_urlconf()), {})
+    key = (get_script_prefix(), name)
+    if key not in views:
+        views[key] = _routed(urlsplit(str(reverse(name))).path)
+    return views[key]
 
 
 def offered_now(url: str | Promise) -> bool:
@@ -359,4 +420,19 @@ def offered_now(url: str | Promise) -> bool:
     """
 
     request = current_request()
-    return request is None or offered(signed_in(request), url)
+    return request is None or offering_for(request)(url)
+
+
+# One Offering for each request, so its reader's principal is built once for
+# the nav, the head and every remedy the page draws, however many links each asks of.
+_OFFERINGS: WeakKeyDictionary[Any, Offering] = WeakKeyDictionary()
+
+
+def offering_for(request: Any) -> Offering:
+    """The links HQ offers the person ``request`` is for, built again if a sign-in changed who that is."""
+
+    user = signed_in(request)
+    kept = _OFFERINGS.get(request)
+    if kept is None or kept.user is not user:
+        kept = _OFFERINGS[request] = Offering(user)
+    return kept

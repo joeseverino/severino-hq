@@ -154,40 +154,17 @@ async def bridge_serving():
 
 
 @contextlib.asynccontextmanager
-async def deriving_ahead():
-    """Derived answers asked again as their inputs change, for as long as the
-    web application runs, so a request finds its answer stored."""
-
-    with keeping():
-        yield
-
-
-@contextlib.asynccontextmanager
-async def ringing_when_due():
-    """Run the doorbell (hq.platform.core.doorbell) for the application's lifetime."""
-
-    with doorbell.ringing_when_due():
-        yield
-
-
-@contextlib.asynccontextmanager
-async def keeping_signing_keys():
-    """Hold the identity provider's signing keys, read outside every request."""
-
-    with tokens.keeping_keys():
-        yield
-
-
-@contextlib.asynccontextmanager
 async def lifespan(_app):
-    async with (
-        mcp_on_demand.running(),
-        bridge_serving(),
-        deriving_ahead(),
-        ringing_when_due(),
-        keeping_signing_keys(),
-    ):
-        yield
+    async with mcp_on_demand.running(), bridge_serving():
+        with (
+            # Derived answers asked again as their inputs change, so a
+            # request finds its answer stored.
+            keeping(),
+            doorbell.ringing_when_due(),
+            # The identity provider's signing keys, read outside every request.
+            tokens.keeping_keys(),
+        ):
+            yield
 
 
 application = Starlette(

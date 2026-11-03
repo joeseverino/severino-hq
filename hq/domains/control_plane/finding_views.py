@@ -58,9 +58,7 @@ class FindingsView(PageMixin, TemplateView):
                 "finding_coverage": coverage() if not raised and not active_rule else None,
                 # The checks are one source of the queue; what else waits is
                 # named beside their verdict, so the two pages never disagree.
-                "waiting_elsewhere": waiting(web_principal(self.request.user), self.request.user.pk)
-                if not raised and not active_rule
-                else 0,
+                "waiting_elsewhere": waiting(principal, self.request.user.pk) if not raised and not active_rule else 0,
             }
         )
         return context

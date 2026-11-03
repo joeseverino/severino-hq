@@ -1769,9 +1769,9 @@
           "findings": [],
           "headers": [
             {
-              "name": "Cookie",
-              "state": "read",
-              "value": "present, 0 characters"
+              "name": "Authorization",
+              "state": "ignored",
+              "value": "present, 657 characters"
             }
           ],
           "hostname": "testserver",

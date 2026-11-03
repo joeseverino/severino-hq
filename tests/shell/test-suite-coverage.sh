@@ -12,7 +12,6 @@ trap 'rm -rf "${work}"' EXIT
 fixture="${work}/checkout"
 mkdir -p "${fixture}/mise-tasks/test" "${fixture}/tools/lib" "${work}/bin"
 cp "${repo}/${task}" "${fixture}/${task}"
-cp "${repo}/tools/lib/heavy.sh" "${repo}/tools/lib/heavy-turn.sh" "${fixture}/tools/lib/"
 
 # uv: the suite passes, and coverage's total is TEST_TOTAL. Every coverage
 # report is logged and ends as TEST_VERDICT says its configured floor did.
@@ -43,12 +42,11 @@ judge() { # judge <total> <verdict>; prints the task's exit status
     : >"${work}/reports"
     : >"${work}/summary"
     status=0
-    # CI: one runner, one job, so the task takes no machine-wide turn. Run as
-    # mise runs a file task: in its config root, named by MISE_CONFIG_ROOT, with
-    # the bound its env declares.
+    # Run as
+    # mise runs a file task: in its config root, named by MISE_CONFIG_ROOT.
     rm -rf "${fixture:?}/var"
     (cd "${fixture}" && CI=1 UV_PYTHON=3.99 PATH="${work}/bin:${PATH}" TEST_TOTAL="$1" TEST_VERDICT="$2" \
-        TEST_REPORTS="${work}/reports" GITHUB_STEP_SUMMARY="${work}/summary" MISE_CONFIG_ROOT="${fixture}" SEVERINO_HEAVY_BOUND=1m \
+        TEST_REPORTS="${work}/reports" GITHUB_STEP_SUMMARY="${work}/summary" MISE_CONFIG_ROOT="${fixture}" \
         "./${task}") >"${work}/out" 2>&1 || status=$?
     echo "${status}"
 }

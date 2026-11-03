@@ -38,7 +38,7 @@ class NextPage(TypedDict):
     ]
 
 
-_MISSING = object()
+_MISSING = sentinel("_MISSING")
 _READ_SCOPE: ContextVar[dict[str, Any] | None] = ContextVar("hq_projection_read_scope", default=None)
 # Where a scope keeps what it was seeded with, apart from what it read since.
 _SEED = "projection.seed"

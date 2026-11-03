@@ -226,46 +226,62 @@ class AgentPolicyView(PageMixin, TemplateView):
     # server takes its SDK into the process, so it is read only when somebody
     # opens it, or asks for it by address without script.
     ENDPOINT_PART = "mcp_endpoint"
+    # The rules left at the default: one select per action and column, most of
+    # the page, so drawn only when somebody opens them. The form posts only the
+    # rules drawn, and a rule not posted is left as it holds.
+    EVERY_PART = "every_rule"
 
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        if fragments.requested(self.request) == self.ENDPOINT_PART or "endpoint" in self.request.GET:
+        part = fragments.requested(self.request)
+        if part == self.ENDPOINT_PART or "endpoint" in self.request.GET:
             context["endpoint"] = listing.endpoint()
             context["endpoint_read"] = True
-            if fragments.requested(self.request):
+            if part:
                 return context
+        context.update(self._rules())
+        context["every_read"] = part == self.EVERY_PART or "all" in self.request.GET
+        if part == self.EVERY_PART:
+            return context
         context["standings"] = agent_activity.standings()
         context["recent_days"] = agent_activity.RECENT.days
         context["devices"] = devices_of(self.request.user)
-        context["columns"], context["groups"] = capability_policy.matrix()
+        context["awaiting_count"] = len(awaiting_ids())
+        context["refused_count"] = agent_activity.refused_since(timezone.now() - timedelta(hours=24))
+        return context
+
+    @staticmethod
+    def _rules() -> dict:
+        """The policy form's tables and what their headings say."""
+
+        current = capability_policy.rules()
+        policy = {"rule_count": len(current)}
+        policy["columns"], policy["groups"] = capability_policy.matrix(current)
         # Nearly every rule is at its default, so the page opens on the ones
         # that are not, and the rest fold under their own heading.
-        context["changed_groups"], context["default_groups"] = capability_policy.split_by_default(context["groups"])
-        context["default_count"] = sum(len(group.rows) for group in context["default_groups"])
+        policy["changed_groups"], policy["default_groups"] = capability_policy.split_by_default(policy["groups"])
+        policy["default_count"] = sum(len(group.rows) for group in policy["default_groups"])
         # A column whose every settable rule is dormant is off as a whole, and
         # says so once in its header rather than graying each cell unexplained.
         # A row's cells are in column order, so a cell's column is its position.
         settable = [
             (index, cell)
-            for group in context["groups"]
+            for group in policy["groups"]
             for row in group.rows
             for index, cell in enumerate(row.cells)
             if not cell.unavailable
         ]
-        context["any_dormant"] = any(cell.dormant for _index, cell in settable)
-        context["column_heads"] = [
+        policy["any_dormant"] = any(cell.dormant for _index, cell in settable)
+        policy["column_heads"] = [
             {
                 "column": column,
                 "dormant": any(index == position for index, _cell in settable)
                 and all(cell.dormant for index, cell in settable if index == position),
             }
-            for position, column in enumerate(context["columns"])
+            for position, column in enumerate(policy["columns"])
         ]
-        context["rule_count"] = len(capability_policy.rules())
-        context["awaiting_count"] = len(awaiting_ids())
-        context["refused_count"] = agent_activity.refused_since(timezone.now() - timedelta(hours=24))
-        return context
+        return policy
 
     def post(self, request):
         result = execute_posted(

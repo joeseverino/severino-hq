@@ -225,7 +225,8 @@ class MachineDetailView(PageMixin, TemplateView):
         # what HQ learns next reaches the page without either being edited.
         sections = machine_sections(found)
 
-        whole, context["relationships"] = for_machine(found, sections, principal=web_principal(self.request.user))
+        principal = web_principal(self.request.user)
+        whole, context["relationships"] = for_machine(found, sections, principal=principal)
         # One Docker environment is a line under the containers heading. Its
         # table is left for a machine that has several.
         context["docker"] = docker_line(found) if found.containers else None
@@ -259,7 +260,7 @@ class MachineDetailView(PageMixin, TemplateView):
         context.update(on_machine(found))
         context["header_addresses"] = header_addresses(found)
         # Each line under the part it is about, as HQ's own page draws them.
-        context["problems_in"] = problems_by_part(found, web_principal(self.request.user))
+        context["problems_in"] = problems_by_part(found, principal)
         # The same panel as the tailnet page, started on this machine. Asked
         # here it is nearly always about this one, so both ends default to it
         # and changing either is one dropdown rather than three.

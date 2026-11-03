@@ -28,6 +28,7 @@ from hq.platform.core.tests.task import RefError, Usage, names, trusted_mise
 from tests.mise_tasks import mise_tasks, takes_the_turn
 from tools.gate import fast as fast_gate, verdict as gate_verdict
 from tools.gate.tests.base import UNITTEST, GateTestCase
+from tools.gate.turn import IN_TURN
 from tools.gate.verdict import FailedTest
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -225,7 +226,7 @@ class FastGateTaskSelectionTests(GateTestCase):
         for changed in (
             ".github/workflows/deploy.yml",
             ".github/actions/admit-plugin/action.yml",
-            "tools/lib/heavy.sh",
+            "tools/lib/heavy-turn.sh",
             "tests/shell/test-heavy.sh",
             "mise-tasks/lint/shell/_default",
         ):
@@ -621,10 +622,9 @@ class FastGateTurnTests(GateTestCase):
         self.assertFalse(before & taking)
         self.assertLessEqual(taking, after)
         self.assertLessEqual(set(quick), before | after)
-        heavy = str(fast_gate.HEAVY)
         for label, cmd in recorder.calls:
             with self.subTest(step=label):
-                self.assertEqual(heavy in cmd, label == "tests")
+                self.assertEqual(" ".join(IN_TURN) in " ".join(cmd), label == "tests")
         self.assertFalse(takes_the_turn(mise_tasks()["fast"]))
 
 

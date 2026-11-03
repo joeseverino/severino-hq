@@ -147,6 +147,9 @@ def scratch_env(tree: Path, *, trusted: bool, alone: bool) -> dict[str, str]:
     extension set it names is not inherited either, so the server composes the host alone."""
 
     env = clean_env(**(trusted_mise(tree, tree.parent / MISE_STATE) if trusted else {}))
+    # dev:scratch runs with DEBUG on, which compiles every template on every request; perf measures
+    # what production serves, so its servers cache templates as production does.
+    env["DJANGO_TEMPLATE_CACHE"] = "1"
     if alone:
         env = {name: value for name, value in env.items() if name not in _LOCAL_SET}
         env["MISE_IGNORED_CONFIG_PATHS"] = str(tree / LOCAL)

@@ -12,15 +12,15 @@ import os
 import re
 import subprocess
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import IO, Any, override
+from typing import IO, Any
 
+import httpx2
+
+from hq.platform.application.http_read import UNREACHABLE
 from hq.platform.core.tests.task import Usage
 
 HERE = Path(__file__).resolve().parent
@@ -139,40 +139,23 @@ class Call:
 Send = Callable[[Call], Any]
 
 
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    """A redirect is an answer, not a second request carrying the header elsewhere."""
-
-    @override
-    def redirect_request(self, *_args: Any, **_kwargs: Any) -> None:
-        return None
-
-
-_OPENER = urllib.request.build_opener(_NoRedirect)
-
-
 def https(call: Call) -> Any:
-    """The answer's JSON, whatever the status: each API says in it why it refused. None when it is not JSON."""
+    """The answer's JSON, whatever the status: each API says in it why it refused. None when it is not JSON.
+
+    A redirect is an answer too, never a second request carrying the header
+    elsewhere: httpx2 follows one only when asked.
+    """
 
     if not call.url.startswith("https://"):
         raise UsageError("The API base must be an https:// address.")
     headers = {"Authorization": f"Bearer {call.token}"} if call.token else {}
-    data = None
-    if call.json is not None:
-        data, headers["Content-Type"] = json.dumps(call.json).encode(), "application/json"
-    elif call.form is not None:
-        data, headers["Content-Type"] = urllib.parse.urlencode(call.form).encode(), "application/x-www-form-urlencoded"
-    request = urllib.request.Request(call.url, data=data, headers=headers, method=call.method)
     try:
-        with _OPENER.open(request, timeout=30) as answer:
-            raw = answer.read()
-    except urllib.error.HTTPError as error:
-        raw = error.read()
-    except urllib.error.URLError as error:
-        raise Refused(f"{call.method} {call.url} failed: {error.reason}") from None
-    except TimeoutError as error:
+        answer = httpx2.request(call.method, call.url, headers=headers, json=call.json, data=call.form, timeout=30)
+    except UNREACHABLE as error:
+        # The socket's own words; the request the error carries holds the token.
         raise Refused(f"{call.method} {call.url} failed: {error}") from None
     try:
-        return json.loads(raw)
+        return json.loads(answer.content)
     except ValueError:
         return None
 

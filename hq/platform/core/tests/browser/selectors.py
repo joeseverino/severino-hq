@@ -63,6 +63,11 @@ SELECTORS = {
     "patterns": ".dashboard-patterns > .card",
     # A control a reader fills in or picks from, whose edge is what shows it.
     "fillable": "input:not([type=checkbox], [type=radio], [type=hidden], [type=range], [type=color], [type=submit], [type=button], [type=reset], [type=image]), select, textarea",
+    # A link that goes somewhere.
+    "link": "a[href]",
+    # A select; the probes that judge one that opens to its choices leave out a
+    # list box (multiple or sized), which Django's widgets mark, not a template.
+    "dropdown": "select",
     # A control pressed or picked from rather than typed into: a button, a
     # disclosure's handle, a label drawn around a select or a checkbox.
     "pressed": (

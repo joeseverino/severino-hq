@@ -11,7 +11,8 @@ from hq_sdk.capabilities import StrictCommand
 
 from ..capabilities import CapabilitySpec, describe_capabilities, execute_capability
 from ..connections import ConnectionSpec, describe_connections
-from ..integrations import compile_integration_graph, override_integration_graph
+from ..integration_testing import override_integration_graph
+from ..integrations import compile_integration_graph
 from ..resources import EmptyQuery, ResourceSpec, describe_resources, list_resource
 from ..security import (
     DEVICE_INTERFACE,

@@ -378,6 +378,15 @@ class HostAloneTests(Measured):
         self.assertNotIn("HQ_LOCAL_PYTHONPATH", alone)
         self.assertEqual(alone["MISE_IGNORED_CONFIG_PATHS"], str(tree / "mise.local.toml"))
 
+    def test_a_scratch_server_caches_templates_as_production_does(self):
+        tree = Path("/tmp/checkout")
+        with mock.patch.dict("os.environ", {"DJANGO_TEMPLATE_CACHE": "0"}):
+            for alone in (False, True):
+                with self.subTest(alone=alone):
+                    self.assertEqual(
+                        targets.scratch_env(tree, trusted=False, alone=alone)["DJANGO_TEMPLATE_CACHE"], "1"
+                    )
+
 
 class KeptTests(SimpleTestCase):
     def setUp(self):

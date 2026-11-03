@@ -32,7 +32,7 @@
 # command to; nothing here needs a virtualenv made by hand. uv itself is one of
 # the tools below.
 
-min_version = "2026.10.25"
+min_version = "2026.11.0"
 
 [settings]
 # The runners, which build the images, the machines gates run on by hand, and
@@ -156,21 +156,22 @@ linux-x64 = { asset_pattern = "codeql-bundle-linux64.tar.zst" }
 env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 
 # ------------------------------------------------------------------ heavy
-# A task that loads the machine runs under tools/lib/heavy.sh, which says how
-# the turn is taken: its shell is mise's default behind the wrapper. Its
-# SEVERINO_HEAVY_BOUND stops a hung holder once its turn has started: well
-# above the slowest gate (the suite, a browser gate). It carries no mise timeout, whose clock would run
-# while the task waits for its turn.
+# A task that loads the machine takes the heavy turn: mise's task lock
+# `heavy`, one name every checkout and worktree on the machine shares, so two
+# such tasks never share its memory (docs/Development.md, Heavy gates take
+# turns). Its timeout starts once it holds the lock and stops a hung holder:
+# well above the slowest gate (the suite, a browser gate).
 [task_templates.heavy]
-env = { SEVERINO_HEAVY_BOUND = "30m" }
-shell = "tools/lib/heavy.sh sh -o errexit -c"
+lock = "heavy"
+timeout = "30m"
 
 # A browser gate: django's env inside a heavy turn, WebKit and the lint tools
 # (axe-core, which the survey runs) installed first, and the test classes its
 # task names in `vars.classes`, which mise renders from the extending task's own vars.
 [task_templates.django-browser]
-env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false, SEVERINO_HEAVY_BOUND = "30m" }
-shell = "tools/lib/heavy.sh sh -o errexit -c"
+env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
+lock = "heavy"
+timeout = "30m"
 depends = [{ task = "setup:browser", args = ["webkit"] }, "setup:lint-tools"]
 usage = 'flag "--fallback-face" help="Draw every page in the system face, as a reader sees it before Inter loads"'
 run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test {{ vars.classes }} --noinput --parallel auto"
@@ -283,9 +284,8 @@ run = "uv run python manage.py"
 [tasks.fast]
 description = "While editing: the tests the change reaches, and the quick gates that read the paths it touched"
 # Its test run alone takes the heavy turn (tools/gate/fast.py), so the quick
-# gates of one worktree never wait on another's suite; the bound is that run's.
+# gates of one worktree never wait on another's suite.
 extends = "django"
-env = { SEVERINO_HEAVY_BOUND = "30m" }
 # The lint tools the quick gates and the stylesheet tests run.
 depends = ["setup:lint-tools"]
 usage = '''

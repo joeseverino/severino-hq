@@ -720,18 +720,6 @@ def next_due() -> datetime | None:
 
 
 @contextmanager
-def uncached() -> Iterator[None]:
-    """Derive inside the block, reading and storing nothing.
-
-    For measuring what a derivation itself costs: a budget on its queries, a
-    profile of its work.
-    """
-
-    with _UNCACHED.set(True):
-        yield
-
-
-@contextmanager
 def counting() -> Iterator[tuple[Counter[str], Counter[str]]]:
     """What ran and what was served from the cache inside the block."""
 

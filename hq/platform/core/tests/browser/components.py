@@ -318,6 +318,26 @@ class ComponentLayoutTests(LayoutBrowserTests):
         )
         self.assertEqual(offered, ["example-cut"])
 
+    def test_an_events_days_read_as_one_row_and_its_times_as_the_next(self):
+        """The day it starts and the day it ends share a row, and the time it
+        starts and ends share the one under it, so a range reads across; on a
+        phone they stack in the same order."""
+
+        for width in (PHONE_SCREEN[0], WIDE):
+            with self.subTest(width=width):
+                self.open("event-form", width)
+                day, until, start, end = (
+                    self.page.get_by_label(re.compile(label)).bounding_box()["y"]
+                    for label in (r"^Day\b", r"^Until day\b", r"^From\b", r"^To\b")
+                )
+                self.assertLess(day, start)
+                if width == WIDE:
+                    self.assertEqual((until, end), (day, start))
+                else:
+                    self.assertLess(day, until)
+                    self.assertLess(until, start)
+                    self.assertLess(start, end)
+
     def test_a_band_value_that_wraps_stays_in_its_fact_level_with_its_label(self):
         """A fact's linked value, a target tall a line, wraps under its long
         label's row without rising out of the fact, and the label stands

@@ -25,7 +25,8 @@ from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.capability_policy import agents_may_hold
 from hq.platform.application.glance import DASHBOARD_MACHINE
 from hq.platform.application.integration_specs import CapabilitySpec, command_schema, kept_by
-from hq.platform.application.integrations import integration_graph, override_integration_graph
+from hq.platform.application.integration_testing import override_integration_graph
+from hq.platform.application.integrations import integration_graph
 from hq.platform.application.plugins import plugin_capability_specs
 from hq.platform.application.projects import DEPENDENCY_UPDATES
 from hq.platform.application.security import Capability, could_hold

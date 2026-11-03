@@ -69,12 +69,10 @@ def headers_of(request) -> tuple[Header, ...]:
     """
 
     found: list[Header] = []
-    for key, value in sorted(request.META.items()):
-        if key == "HTTP_HOST":
-            name = "Host"
-        elif key.startswith("HTTP_"):
-            name = key[5:].replace("_", "-").title()
-        else:
+    for name, value in sorted(request.headers.items()):
+        # A server sets Content-Type and Content-Length on every request, empty
+        # when the request sent none, so an empty value is a header never carried.
+        if value == "":
             continue
         redacted = is_redacted(name)
         found.append(

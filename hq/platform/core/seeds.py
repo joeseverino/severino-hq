@@ -5,7 +5,6 @@ their builders in the test tree, which nothing here imports."""
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from types import MappingProxyType
 from typing import Any
 
 lazy from django.test import override_settings
@@ -20,14 +19,14 @@ class Seed:
     so a server takes them as its environment and a test as settings."""
 
     plant: Callable[[Any], object]
-    settings: Mapping[str, str] = MappingProxyType({})
+    settings: Mapping[str, str] = frozendict()
 
 
 # Each builder is reached through a function, so reading the registry imports none.
 SEEDS: dict[str, Seed] = {
     "showcase": Seed(
         lambda owner: example_estate.build(owner),  # noqa: PLW0108 - a bare reference would reify the lazy import
-        MappingProxyType({"SEVERINO_POSTURE": "advanced"}),
+        frozendict({"SEVERINO_POSTURE": "advanced"}),
     ),
     "standard": Seed(lambda owner: example_estate.build(owner)),  # noqa: PLW0108 - a bare reference would reify the lazy import
     # A fresh install: its one signed-up user, and nothing else.

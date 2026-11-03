@@ -186,6 +186,20 @@ class HeaderTests(TestCase):
 
         self.assertTrue(found[0].used)
 
+    def test_a_body_s_type_and_length_are_headers_the_request_carried(self):
+        request = RequestFactory().post("/connection/", {"a": "b"}, HTTP_HOST="hq.example.test")
+
+        found = {header.name: header.value for header in headers_of(request)}
+
+        self.assertEqual(found["Content-Type"], request.META["CONTENT_TYPE"])
+        self.assertEqual(found["Content-Length"], request.META["CONTENT_LENGTH"])
+
+    def test_a_type_and_length_the_server_set_empty_are_not_listed(self):
+        found = self.headers(CONTENT_TYPE="", CONTENT_LENGTH="")
+
+        self.assertNotIn("Content-Length", found)
+        self.assertNotIn("Content-Type", found)
+
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
 class CostTests(TestCase):

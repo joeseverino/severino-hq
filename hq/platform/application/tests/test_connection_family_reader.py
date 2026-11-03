@@ -15,7 +15,7 @@ from .. import problems, roles
 from ..connection_catalog import connection_catalog
 from ..connections import ConnectionInstance, ConnectionSpec
 from ..dashboard import dashboard_highlights, operating_snapshot
-from ..derivations import uncached
+from ..derivation_testing import uncached
 from ..domains import domain_dashboard_sections
 from ..estate import cards, overview
 from ..inventory_testing import store

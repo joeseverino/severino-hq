@@ -14,7 +14,7 @@ trap 'rm -rf "${work}"' EXIT
 fixture="${work}/checkout"
 mkdir -p "${fixture}/$(dirname "${task}")" "${fixture}/tools/lib" "${fixture}/tools/gate" "${fixture}/notes" "${fixture}/built" "${fixture}/deploy" "${work}/bin" "${work}/tmp"
 cp "${repo}/${task}" "${fixture}/${task}"
-cp "${repo}/tools/lib/heavy.sh" "${repo}/tools/lib/heavy-turn.sh" "${fixture}/tools/lib/"
+cp "${repo}/tools/lib/heavy-turn.sh" "${fixture}/tools/lib/"
 cp "${repo}/tools/lib/export-tree.sh" "${repo}/tools/lib/image-tree.sh" "${repo}/tools/lib/source-url.sh" "${repo}/tools/lib/extension-set.sh" "${fixture}/tools/lib/"
 cp "${repo}/tools/__init__.py" "${fixture}/tools/"
 cp "${repo}/tools/gate/__init__.py" "${repo}/tools/gate/verdict.py" "${fixture}/tools/gate/"
@@ -62,13 +62,12 @@ run() { # run <uv behavior> [NAME=value...]; prints the task's exit status
     behavior="$1"
     shift
     status=0
-    # Its own heavy turn, so a heavy command elsewhere on the machine cannot
-    # refuse it. Run as mise runs a file task: in its config root, named by
-    # MISE_CONFIG_ROOT, with the bound its env declares. No extension set unless
-    # a case names one.
-    (cd "${fixture}" && env PATH="${work}/bin:${PATH}" TMPDIR="${work}/tmp" XDG_CACHE_HOME="${work}/cache" \
+    # Inside a heavy turn, as a heavy run goes ahead, so it waits on no other
+    # holder. Run as mise runs a file task: in its config root, named by
+    # MISE_CONFIG_ROOT. No extension set unless a case names one.
+    (cd "${fixture}" && env PATH="${work}/bin:${PATH}" TMPDIR="${work}/tmp" \
         TEST_UV="${behavior}" TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" \
-        SEVERINO_HEAVY_BOUND=1m HQ_LOCAL_PLUGINS= REQUIRE_COMPOSED= HQ_EXTENSIONS_SAID= "$@" "./${task}") >/dev/null 2>&1 || status=$?
+        MISE_TASK_LOCKS=heavy HQ_LOCAL_PLUGINS= REQUIRE_COMPOSED= HQ_EXTENSIONS_SAID= "$@" "./${task}") >/dev/null 2>&1 || status=$?
     echo "${status}"
 }
 
@@ -88,8 +87,8 @@ done
 
 # The run's verdict is its closing line, kept whole where the line above names.
 rm -f "${fixture}/var/gate/test-composed.txt"
-(cd "${fixture}" && env PATH="${work}/bin:${PATH}" TMPDIR="${work}/tmp" XDG_CACHE_HOME="${work}/cache" \
-    TEST_UV=3 TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" SEVERINO_HEAVY_BOUND=1m HQ_LOCAL_PLUGINS= REQUIRE_COMPOSED= \
+(cd "${fixture}" && env PATH="${work}/bin:${PATH}" TMPDIR="${work}/tmp" \
+    TEST_UV=3 TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" MISE_TASK_LOCKS=heavy HQ_LOCAL_PLUGINS= REQUIRE_COMPOSED= \
     "./${task}") >"${work}/out" 2>&1 || true
 kept="$(cd "${fixture}" && pwd -P)/var/gate/test-composed.txt"
 [ -f "${kept}" ] || fail "the run kept no verdict in var/gate"
@@ -112,8 +111,8 @@ cat >>"${work}/bin/uv" <<'STUB'
 echo "${SEVERINO_HQ_PLUGINS}|${PYTHONPATH}" >"${TEST_SEEN}.set"
 STUB
 sources="${work}/alpha/src:${work}/beta-worktree/src"
-(cd "${fixture}" && env PATH="${work}/bin:${PATH}" TMPDIR="${work}/tmp" XDG_CACHE_HOME="${work}/cache" \
-    TEST_UV=0 TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" SEVERINO_HEAVY_BOUND=1m REQUIRE_COMPOSED= HQ_EXTENSIONS_SAID= \
+(cd "${fixture}" && env PATH="${work}/bin:${PATH}" TMPDIR="${work}/tmp" \
+    TEST_UV=0 TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" MISE_TASK_LOCKS=heavy REQUIRE_COMPOSED= HQ_EXTENSIONS_SAID= \
     HQ_LOCAL_PLUGINS=example_alpha.plugin:plugin,example_beta.plugin:plugin HQ_LOCAL_PYTHONPATH="${sources}" \
     "./${task}") >"${work}/out" 2>&1 || fail "a composed run failed"
 first="$(head -n 1 "${work}/out")"

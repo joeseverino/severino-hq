@@ -1,0 +1,19 @@
+#!/bin/sh
+#MISE description="A command in the machine's heavy turn, for a task that weighs its run before it starts: mise run turn -- <command>"
+#MISE hide=true
+#MISE lock="heavy"
+#MISE timeout="{{ env.HQ_TURN_BOUND | default(value='30m') }}"
+#MISE output="interleave"
+#MISE quiet=true
+#USAGE arg "<command>..." var=#true double_dash="required" help="The command and its arguments"
+
+# A task whose weight is fixed takes the lock itself (the heavy template in
+# mise.toml); one whose run decides runs its heavy runs through this
+# (tools/lib/heavy-turn.sh, tools/gate/turn.py). Its output is the command's,
+# unprefixed, under the task that asked for it. Its timeout, which starts once
+# it holds the lock, is the asking gate's own bound, HQ_TURN_BOUND: mise run's
+# --timeout would count the wait.
+set -eu
+# mise hands the words over shell-quoted, one word each.
+eval "set -- ${usage_command:?}"
+exec "$@"

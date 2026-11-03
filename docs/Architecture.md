@@ -444,7 +444,7 @@ The declared derivations:
 | Calendar | one per calendar source the host owns (`calendar.*`) |
 
 A new one is a decorator and a line in `SAMPLES` in `test_derivations`.
-`derivations.uncached()` bypasses the store. It is for budgets on what a
+`derivation_testing.uncached()` bypasses the store. It is for budgets on what a
 derivation itself costs, and for tests that replace an input no stored answer
 varies by.
 

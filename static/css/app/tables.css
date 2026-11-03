@@ -197,14 +197,12 @@
 .table-filter-menu > button {
   anchor-name: --filter;
   font-family: inherit;
-  padding-inline-end: calc(var(--chevron-inset) + 14px);
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
-    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  padding-inline-end: calc(var(--chevron-inset) + 2 * var(--chevron-size) + var(--space-3));
+  background-image: var(--chevron-image);
   background-position:
-    calc(100% - var(--chevron-inset) - 5px) 50%,
+    calc(100% - var(--chevron-inset) - var(--chevron-size)) 50%,
     calc(100% - var(--chevron-inset)) 50%;
-  background-size: 5px 5px;
+  background-size: var(--chevron-size) var(--chevron-size);
   background-repeat: no-repeat;
 }
 /* Hung below its button from the button's left edge; one that would cross the screen's right edge hangs from the button's right edge instead, which the browser decides against the viewport the top layer places it in. */

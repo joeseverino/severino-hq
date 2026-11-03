@@ -3,6 +3,11 @@
 # DO NOT EDIT." line, which exclusions.generated leaves out.
 version: "2"
 
+# Every checkout on a machine shares golangci-lint's lock, so a run that
+# finds another checkout's holding it waits its turn instead of failing.
+run:
+  allow-serial-runners: true
+
 linters:
   # errcheck, govet, ineffassign, staticcheck and unused.
   default: standard

@@ -337,33 +337,35 @@ steps, which share the VM it boots. A one-off command in the built image
 (`mise run image:run -- python -V`) holds the turn and the VM while it runs,
 so another checkout's stop leaves the VM up under it.
 
-`tools/lib/heavy.sh` says where the line falls and how the turn is held,
-waited for and bounded. `HeavyTaskTests` (`tools/gate/tests/test_turn.py`)
-holds every task to its side of it. A TOML task takes the turn by extending
-the `heavy` template in `mise.toml` (`django-browser`), a file task by sourcing
-`tools/lib/heavy-turn.sh`.
+The turn is mise's task lock `heavy`, a name every checkout and worktree on
+the machine shares. A TOML task takes it by extending the `heavy` template in
+`mise.toml` (`django-browser`), a file task with `#MISE lock="heavy"` in its
+header; either declares a `timeout`, which mise starts once the task holds the
+lock, so heavy tasks asked together (`mise run browser:layout-1 :::
+browser:layout-2`) queue on the turn and each runs in full, and a hung holder
+is stopped. A heavy task started inside a turn runs at once, since mise hands
+the lock down (`MISE_TASK_LOCKS`), and a holder killed outright frees it.
+`HeavyTaskTests` (`tools/gate/tests/test_turn.py`) holds every task to its
+side of the line, and `tests/shell/test-heavy.sh` the turn's promises.
 
 A run of tests is narrow, and goes ahead outside the turn, when it is serial
 (`--parallel 1`) or each label names a module or something in one, and no
 test it loads drives a browser (`tools/gate/turn.py`). So
-`mise run test <module>` starts at once.
+`mise run test <module>` starts at once. A task whose weight depends on what
+it is given (`test`, `fast`'s tests, `lint:source`, the composed suite,
+`dev:look`, `browser --linux`) runs its heavy runs through the hidden task
+`turn`, which holds the lock (`tools/lib/heavy-turn.sh` for a file task)
+under the gate's own bound, `HQ_TURN_BOUND`: `mise run --timeout` would count
+the wait too.
 
-A turn's last line names the load average and the peak memory the command's
-whole process tree held at once (`footprint` on macOS, the proportional set
-size on Linux, sampled every two seconds or more). So every heavy run, here
-and in CI, measures the line `heavy.sh` draws; a narrow run prints nothing.
+A waiting task names the holder, its checkout, how long it has held the turn
+and its pid, again every 30 seconds:
 
-A heavy task declares `SEVERINO_HEAVY_BOUND` in its env, how long it may run
-once its turn starts, and carries no mise `timeout`, whose clock runs while
-the task waits. So heavy tasks asked together
-(`mise run browser:layout-1 ::: browser:layout-2`) queue on the turn and each
-runs in full.
-
-To see who holds it without starting anything:
-
-```sh
-lsof ~/.cache/severino/heavy.lock
+```text
+[lint:shell] waiting for lock heavy, held by test:suite in ~/Code/Projects/severino-hq (pid 4121, for 3m02s)
 ```
+
+`mise run --lock-timeout 5m` gives up after that long, naming the holder.
 
 ### What the gates need
 

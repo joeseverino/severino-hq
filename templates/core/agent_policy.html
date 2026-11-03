@@ -187,7 +187,14 @@ change. Asked for when opened: asking takes the server's SDK into the process.
 {% comment %}
 The rules that differ from the default, then every other action folded under
 its own heading. Each row is in one table only, so the form posts each rule once.
+The folded table is drawn when opened, inside the form: a save before then
+posts only the changed rules, and a rule not posted is left as it holds.
 {% endcomment %}
+{% partialdef every_rule %}
+<div id="every-rule">
+  {% include "core/_policy_table.html" with groups=default_groups label="Rules left at the default" %}
+</div>
+{% endpartialdef %}
 <form method="post" class="policy">
   {% write_token %}
   {% if changed_groups %}
@@ -195,9 +202,15 @@ its own heading. Each row is in one table only, so the form posts each rule once
     {% include "core/_policy_table.html" with groups=changed_groups label="Rules changed from the default" %}
   {% endif %}
   {% if default_groups %}
-    <details class="section-fold" open>
+    <details class="section-fold" id="every-action"{% if every_read %} open{% endif %}>
       <summary><h2>{% if changed_groups %}Every other action{% else %}Every action{% endif %} <span class="heading-aside">{{ default_count|breakable }}</span></h2></summary>
-      {% include "core/_policy_table.html" with groups=default_groups label="Rules left at the default" %}
+      {% if every_read %}
+        {% partial every_rule %}
+      {% else %}
+        <div id="every-rule" data-fragment="" data-fragment-name="every_rule" data-fragment-load data-fragment-failure="HQ could not draw these rules." data-fragment-fallback="?all=1#every-action">
+          <p class="muted">Drawn when you open this. <a href="?all=1#every-action">Show them</a></p>
+        </div>
+      {% endif %}
     </details>
   {% endif %}
   <div class="save-bar"><button type="submit" class="btn primary">Save changes</button></div>

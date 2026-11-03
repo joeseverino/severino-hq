@@ -22,7 +22,8 @@ from pydantic import Field, WithJsonSchema
 
 from hq.platform.application.command_fields import Describe
 from hq.platform.application.integration_specs import CapabilitySpec, ResourceSpec
-from hq.platform.application.integrations import compile_integration_graph, override_integration_graph
+from hq.platform.application.integration_testing import override_integration_graph
+from hq.platform.application.integrations import compile_integration_graph
 from hq.platform.application.json_schemas import json_schemas
 from hq.platform.application.resources import TopQuery
 from hq_sdk.capabilities import StrictCommand

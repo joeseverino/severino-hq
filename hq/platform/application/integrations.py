@@ -1,8 +1,7 @@
 """Compile HQ's independently emitted contracts into one immutable graph."""
 
 from collections import Counter
-from collections.abc import Callable, Iterable, Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Callable, Iterable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from functools import cache
@@ -332,11 +331,3 @@ def integration_graph() -> IntegrationGraph:
 
 def clear_integration_graph_cache() -> None:
     _compiled_integration_graph.cache_clear()
-
-
-@contextmanager
-def override_integration_graph(graph: IntegrationGraph) -> Iterator[None]:
-    """Install an explicit graph for one test or isolated composition proof."""
-
-    with _GRAPH_OVERRIDE.set(graph):
-        yield

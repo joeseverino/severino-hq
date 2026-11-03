@@ -1,13 +1,11 @@
 #!/bin/sh
 #MISE description="Run one command in a built image, holding the Docker VM until it ends"
-#MISE env={SEVERINO_HEAVY_BOUND="30m"}
+#MISE lock="heavy"
+#MISE timeout="30m"
 #MISE depends_post=["image:docker stop"]
 #USAGE arg "<command>..." var=#true double_dash="automatic" help="The command and its arguments, run as the image's entrypoint"
 #USAGE flag "--image <image>" help="The image to run; severino-hq:ci-local by default"
 set -eu
-# shellcheck source=tools/lib/heavy-turn.sh
-. ./tools/lib/heavy-turn.sh
-
 # The VM is started here, so the depends_post stop is this run's own and
 # another worktree's stop leaves the VM up while this command runs.
 mise run image:docker start

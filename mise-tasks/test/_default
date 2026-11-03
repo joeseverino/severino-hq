@@ -1,7 +1,6 @@
 #!/bin/sh
 #MISE description="To run tests: some by label as the gates run them, --at <ref> to prove a new one fails on the old code; with none, CI's test job on every Python"
 #MISE extends="django"
-#MISE env={SEVERINO_HEAVY_BOUND="2h"}
 #MISE depends=["setup:lint-tools"]
 #USAGE flag "--at <ref>" help="Run this tree's test files, uncommitted work included, on the code at <ref> in a throwaway worktree: the way to prove a new test fails without the fix. A support file (a gate, probe or fixture) is laid over too, and the closing line names what was laid over and kept, each support file that replaced the ref's own copy apart from one the ref lacks. A Python or Go pass with such a file laid over runs again with each kept at <ref>, and the line gives both outcomes, that second run's as the verdict (docs/Development.md)"
 #USAGE flag "--keep <path>" var=#true help="With --at, keep this changed test file as <ref> has it: a support file that holds the logic being proven, or a test module (test_*.py, _test.go) whose fakes or helpers the fix changed, so a new test in a file of its own runs beside the ref's. A file new in this tree has nothing at <ref> to keep. Repeatable"

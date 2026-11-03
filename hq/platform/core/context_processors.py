@@ -4,10 +4,9 @@ lazy from django.utils.functional import SimpleLazyObject
 from hq.platform.application.domains import domain_navigation
 lazy from hq.platform.application.agent_access import agents_paused
 lazy from hq.platform.application.appearance import Theme, theme_for
-lazy from hq.platform.application.pages import offered
+lazy from hq.platform.application.pages import offering_for
 lazy from hq.platform.application.request_channel import channel_for_request
 lazy from hq.platform.application.request_identity import signed_in
-lazy from hq.platform.application.routes import reverse
 
 
 def site(_request):
@@ -24,7 +23,7 @@ def nav(request):
     (``kind="group"``), so the bar stays a fixed handful of controls however
     many sections exist. The entries derive from ``application.domains``, where
     a section declares itself once; this decides only which is active, and
-    leaves out a section its reader may not open (``pages.offered``).
+    leaves out a section its reader may not open (``pages.offering_for``).
     """
     match = request.resolver_match
     # None on a page no route answered.
@@ -34,9 +33,9 @@ def nav(request):
 
     entries: list[dict] = []
     groups: dict[str, dict] = {}
-    user = signed_in(request)
+    offers = offering_for(request)
     for nav_item in domain_navigation():
-        if not offered(user, reverse(nav_item.route)):
+        if not offers.route(nav_item.route):
             continue
         item = {
             "label": nav_item.label,

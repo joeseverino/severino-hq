@@ -36,18 +36,17 @@ a:hover { color: var(--accent); text-decoration: underline; }
    (WCAG 1.4.1), which beside muted text is barely a step: a quiet underline,
    full on hover. A span is a run of words, whatever color a page sets it
    in. A link with a class of its own is a control, and a row's name stands
-   alone in its cell. In a cell a name's parts are boxes of their own
-   (`.whole`), which a line the link draws never crosses, so among words
-   each part draws it. */
-:where(p, li, dd, td, span, .muted) a:where(:not([class], td > strong > a, td > a:has(> strong))),
-:where(p, li, dd, span, .muted) a:where(:not([class])) .whole:is(td *, th *) {
+   alone in its cell. */
+:where(p, li, dd, td, span, .muted) a:where(:not([class], td > strong > a, td > a:has(> strong))) {
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
   text-decoration-thickness: 1px;
   text-underline-offset: .18em;
 }
-:where(p, li, dd, td, span, .muted) a:where(:not([class])):hover,
-:where(p, li, dd, span, .muted) a:where(:not([class])):hover .whole:is(td *, th *) { text-decoration-color: currentColor; }
+:where(p, li, dd, td, span, .muted) a:where(:not([class])):hover { text-decoration-color: currentColor; }
+/* A line a link draws never reaches a box of its own inside it, so whatever
+   is inside a link draws the line its link draws. */
+a * { text-decoration: inherit; }
 code { font-family: var(--font-mono); font-size: .88em; background: var(--bg-tint); padding: 1px var(--space-2); border-radius: 4px; color: var(--ink-2); }
 pre code { background: transparent; padding: 0; color: inherit; }
 /* An identifier (`|breakable`, or code): an address, a path, a key, an image.
@@ -339,16 +338,28 @@ select:not([multiple], [size]) {
   block-size: var(--control-size);
   padding-block: 0;
 }
-/* Where the browser lets a page style its select (`base-select`), it wears
-   the field's square edge, the browser's own chevron in the muted ink a
-   chevron inset from its end, and a list of choices framed as HQ's other
-   panels. A browser without it draws its native select. A list box stays
-   native everywhere. */
+/* A select wears HQ's chevron, set in from its end by --chevron-inset, in
+   every browser and however it is drawn. The browser's own arrow is a filled
+   triangle where the page styles the select and the platform's glyph where it
+   does not, so two forms would read as two kinds of control. A list box stays
+   native. */
+select:not([multiple], [size]) {
+  appearance: none;
+  padding-inline-end: calc(var(--chevron-inset) + 2 * var(--chevron-size) + var(--space-3));
+  background-image: var(--chevron-image);
+  background-position:
+    calc(100% - var(--chevron-inset) - var(--chevron-size)) 50%,
+    calc(100% - var(--chevron-inset)) 50%;
+  background-size: var(--chevron-size) var(--chevron-size);
+  background-repeat: no-repeat;
+}
+/* Where the browser lets a page style its select (`base-select`), its list of
+   choices is framed as HQ's other panels. */
 @supports (appearance: base-select) {
   select:not([multiple], [size]),
   select:not([multiple], [size])::picker(select) { appearance: base-select; }
-  select:not([multiple], [size]) { align-items: center; gap: var(--space-3); padding-inline-end: var(--chevron-inset); }
-  select:not([multiple], [size])::picker-icon { margin-inline-start: auto; color: var(--muted); }
+  select:not([multiple], [size]) { align-items: center; gap: var(--space-3); }
+  select:not([multiple], [size])::picker-icon { display: none; }
   select:not([multiple], [size])::picker(select) {
     margin-block: var(--space-1); padding: var(--space-2);
     border: 1px solid var(--line); border-radius: var(--radius-sm);

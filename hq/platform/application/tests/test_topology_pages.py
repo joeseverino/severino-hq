@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 from hq.domains.control_plane.topology_views import TopologyView
-from hq.platform.application.derivations import uncached
+from hq.platform.application.derivation_testing import uncached
 
 from ..action_links import topology_investigation_links, topology_url
 from ..command_center import command_center

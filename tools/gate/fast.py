@@ -23,16 +23,16 @@ from typing import BinaryIO
 from hq.platform.application.tests.tree import tagged
 from hq.platform.core.tests.task import RefError, Usage, changed_paths, git, names, usage
 from tests.mise_tasks import mise_tasks, run_files, takes_the_turn
+from tools.gate.turn import in_turn
 from tools.gate.verdict import Gate, Step, run
 from tools.structural.classify import TEST
 
 ROOT = Path(__file__).resolve().parents[2]
-# The test run waits for the machine's heavy turn: its parallel workers hold a
-# suite's memory for most of fast's time. A quick gate that takes the turn of
-# its own (the shell gate's suites) runs after the tests; the rest are one
-# short process each and run beside them, and the composed suites take the
-# turn as their own task decides.
-HEAVY = ROOT / "tools" / "lib" / "heavy.sh"
+# The test run waits for the machine's heavy turn (tools.gate.turn.in_turn):
+# its parallel workers hold a suite's memory for most of fast's time. A quick
+# gate that takes the turn of its own (the shell gate's suites) runs after the
+# tests; the rest are one short process each and run beside them, and the
+# composed suites take the turn as their own task decides.
 # The quick gates, each with the paths a change must touch for it to run, as
 # fnmatch patterns, where `*` crosses directories. Those selected run side by
 # side; each Django gate opens a database of its own (the django task
@@ -432,7 +432,7 @@ def test_command(labels: list[str], parallel: str) -> list[str]:
     selected and tagged tree runs once, since Django's runner drops a
     repeated test."""
 
-    return [str(HEAVY), sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel, *labels]
+    return [*in_turn("30m"), sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel, *labels]
 
 
 # Each step running beside the main thread, by the thread it runs on.

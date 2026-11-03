@@ -16,7 +16,7 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
     WeatherObservation,
 )
-from hq.platform.application.derivations import uncached
+from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.security import cli_principal
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog

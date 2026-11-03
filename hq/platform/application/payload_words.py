@@ -125,7 +125,7 @@ class ChangeRow:
 # Between the names of a value inside a document, outermost first.
 STEP = " › "
 
-_ABSENT = object()
+_ABSENT = sentinel("_ABSENT")
 
 
 def document(value: Any) -> Any:

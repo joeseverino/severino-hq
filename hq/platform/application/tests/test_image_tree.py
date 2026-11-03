@@ -10,7 +10,7 @@ from django.test import SimpleTestCase, tag
 
 ROOT = Path(__file__).resolve().parents[4]
 CHECK = "mise-tasks/image/verify/tree"
-LIBRARIES = ("export-tree.sh", "image-tree.sh", "heavy-turn.sh")
+LIBRARIES = ("export-tree.sh", "image-tree.sh")
 
 # A checkout's files, and what the image built from it holds in /app with
 # this repository's Dockerfile and Dockerfile.dockerignore: docs/ is not
@@ -56,8 +56,6 @@ class ImageTreeTests(SimpleTestCase):
                 "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
                 "FAKE_APP_LISTING": str(Path(folder) / "listing"),
                 "TMPDIR": folder,
-                # The turn is the gate's to take, not this test's.
-                "light_run": "1",
             }
             return subprocess.run(
                 ["/bin/sh", str(ROOT / CHECK)],

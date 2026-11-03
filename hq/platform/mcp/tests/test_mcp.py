@@ -403,7 +403,7 @@ class ServiceTests(SentinelMixin, TestCase):
         self.assertNotIn(instance.id, [item["id"] for item in listed["items"]])
 
 
-_NO_VERIFIER = object()
+_NO_VERIFIER = sentinel("_NO_VERIFIER")
 RESOURCE = "https://hq.example.test/api"
 
 
