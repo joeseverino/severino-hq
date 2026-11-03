@@ -12,10 +12,10 @@ from unittest import mock
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import escape
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_grow
+from hq.platform.core.tests.forwarding import arrived
 
 from ..moments import when
 from ..request_addresses import addresses_of, addresses_of_hq
@@ -25,7 +25,7 @@ from ..request_headers import headers_of
 from ..request_path import address_chain
 from ..ui import MISSING
 from .host_only import host_only
-from .markup import select, texts, within
+from .markup import select, text, texts, within
 from .people import someone
 
 A_TAILNET_ADDRESS = "100.64.0.5"
@@ -70,8 +70,12 @@ def a_device(name, address, *, user="", tags=(), observer=False, reach=(), **ext
     }
 
 
-def a_request(address=A_TAILNET_ADDRESS, *, host="hq.example.test", secure=True):
-    request = RequestFactory().get("/connection/", secure=secure, HTTP_HOST=host, REMOTE_ADDR=address)
+def a_request(address=A_TAILNET_ADDRESS, *, host="hq.example.test", secure=True, **forwarded):
+    """A request from ``address``, as the forwarded-header middleware hands it on."""
+
+    request = RequestFactory().get(
+        "/connection/", secure=secure, HTTP_HOST=host, **arrived(REMOTE_ADDR=address, **forwarded)
+    )
     request.user = someone()
     return request
 
@@ -100,7 +104,7 @@ class ChannelTests(TestCase):
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=["10.0.0.0/8"])
     def test_deciding_the_request_channel_also_costs_no_queries(self):
-        request = RequestFactory().get("/", REMOTE_ADDR="10.0.0.9", HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS)
+        request = RequestFactory().get("/", **arrived(REMOTE_ADDR="10.0.0.9", HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS))
 
         with self.assertNumQueries(0):
             self.assertEqual(channel_for_request(request).id, "tailnet")
@@ -155,8 +159,7 @@ class LayerTests(TestCase):
         self.assertFalse(self.layer(found, "channel").holds)
 
     def test_an_undeclared_forwarding_peer_is_not_labeled_as_the_caller(self):
-        request = a_request(A_LAN_ADDRESS)
-        request.META["HTTP_X_FORWARDED_FOR"] = A_TAILNET_ADDRESS
+        request = a_request(A_LAN_ADDRESS, HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS)
 
         with override_settings(SEVERINO_TRUSTED_PROXIES=[]):
             found = connection(request)
@@ -178,8 +181,7 @@ class LayerTests(TestCase):
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
     def test_a_trusted_forwarder_remains_a_hop_not_the_caller(self):
-        request = a_request(A_LAN_ADDRESS)
-        request.META["HTTP_X_FORWARDED_FOR"] = A_TAILNET_ADDRESS
+        request = a_request(A_LAN_ADDRESS, HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS)
 
         found = connection(request)
 
@@ -194,8 +196,8 @@ class LayerTests(TestCase):
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
     def test_npm_redundant_headers_corroborate_the_canonical_inputs(self):
-        request = a_request(A_LAN_ADDRESS)
-        request.META.update(
+        request = a_request(
+            A_LAN_ADDRESS,
             HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS,
             HTTP_X_REAL_IP=A_TAILNET_ADDRESS,
             HTTP_X_FORWARDED_SCHEME="https",
@@ -208,8 +210,8 @@ class LayerTests(TestCase):
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
     def test_disagreeing_npm_headers_are_a_visible_proxy_failure(self):
-        request = a_request(A_LAN_ADDRESS)
-        request.META.update(
+        request = a_request(
+            A_LAN_ADDRESS,
             HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS,
             HTTP_X_REAL_IP="100.64.0.77",
             HTTP_X_FORWARDED_SCHEME="https",
@@ -226,8 +228,8 @@ class LayerTests(TestCase):
 
         from hq.domains.control_plane.providers import PROVIDERS
 
-        request = a_request(A_LAN_ADDRESS)
-        request.META.update(
+        request = a_request(
+            A_LAN_ADDRESS,
             HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS,
             HTTP_X_CLIENT=A_TAILNET_ADDRESS,
             HTTP_X_SCHEME="https",
@@ -259,8 +261,7 @@ class LayerTests(TestCase):
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
     def test_a_proxied_tailnet_request_names_each_encrypted_segment(self):
-        request = a_request(A_LAN_ADDRESS)
-        request.META["HTTP_X_FORWARDED_FOR"] = A_TAILNET_ADDRESS
+        request = a_request(A_LAN_ADDRESS, HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS)
 
         path = connection(request).transport_path
 
@@ -610,7 +611,7 @@ class ConnectionPageTests(TestCase):
         edge = next(layer for layer in response.context["connection"].layers if layer.id == "edge")
         self.assertTrue(edge.holds)
         self.assertTrue(edge.evidence)
-        self.assertContains(response, escape(edge.evidence))
+        self.assertIn(" ".join(edge.evidence.split()), text(response))
 
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
@@ -684,8 +685,7 @@ class HopTests(TestCase):
         request = RequestFactory().get(
             "/connection/",
             HTTP_HOST="hq.example.test",
-            REMOTE_ADDR=peer,
-            **({"HTTP_X_FORWARDED_FOR": forwarded} if forwarded else {}),
+            **arrived(REMOTE_ADDR=peer, **({"HTTP_X_FORWARDED_FOR": forwarded} if forwarded else {})),
         )
         return address_chain(request)
 
@@ -710,8 +710,9 @@ class HopTests(TestCase):
         named = self.hops(peer="10.0.0.9", forwarded="100.64.0.5")
 
         judged = next(hop for hop in found if hop.role == "judged")
-        # HQ falls back to the proxy's address and says that is what it did.
-        self.assertEqual(judged.value, "10.0.0.9")
+        # HQ falls back to the first proxy's address, as the forwarded-header
+        # middleware does, and says that is what it did.
+        self.assertEqual(judged.value, "172.18.0.1")
         self.assertNotEqual(judged.detail, next(hop for hop in named if hop.role == "judged").detail)
 
     def test_a_forwarded_header_from_an_unknown_peer_is_not_believed(self):
@@ -850,8 +851,7 @@ class ProxyThatDropsTheCallerTests(TestCase):
             "/connection/",
             secure=True,
             HTTP_HOST="hq.example.test",
-            REMOTE_ADDR="10.0.0.9",
-            HTTP_X_FORWARDED_FOR="172.18.0.1",
+            **arrived(REMOTE_ADDR="10.0.0.9", HTTP_X_FORWARDED_FOR="172.18.0.1"),
         )
         request.user = someone()
         return connection(request)
@@ -1164,8 +1164,7 @@ class LocalProxyPolicyTests(TestCase):
             "/connection/",
             secure=True,
             HTTP_HOST="hq.example.test",
-            REMOTE_ADDR="127.0.0.1",
-            HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS,
+            **arrived(REMOTE_ADDR="127.0.0.1", HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS),
         )
         request.user = someone()
         return connection(request)

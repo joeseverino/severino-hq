@@ -12,12 +12,12 @@ from datetime import datetime
 from ipaddress import ip_address
 from typing import Any
 
-from hq.platform.core.network import client_ip, is_trusted_proxy, split_host_port
+from hq.platform.core.network import client_ip, is_trusted_proxy, socket_peer, split_host_port
 
 from . import tailnet
-from .labels import human_bytes
+from .labels import dotted, human_bytes
 from .reach import network_of, on_link_networks
-from .request_channel import Channel, channel_for_request, displayed_client_ip, forwarded_chain, socket_peer
+from .request_channel import Channel, channel_for_request, displayed_client_ip, forwarded_chain
 from .request_identity import Identity, identity_of
 from .request_layers import Layer, ServingDeviceResolution, admission_layers
 from .ui import MISSING, counted
@@ -194,7 +194,7 @@ class Connection:
             parts.append(f"{len(self.failing)} failed")
         if self.unverified:
             parts.append(f"{len(self.unverified)} not confirmed")
-        return " · ".join(parts)
+        return dotted(*parts)
 
     @property
     def tally(self) -> str:
@@ -221,7 +221,7 @@ class Connection:
         if self.forwarded and self.channel.id == "tailnet" and self.secure_transport:
             if self.local_forwarder:
                 return "WireGuard + TLS to HQ's machine"
-            return f"TLS to {self.forwarder_name or 'proxy'} · WireGuard to HQ"
+            return dotted(f"TLS to {self.forwarder_name or 'proxy'}", "WireGuard to HQ")
         if self.channel.id == "tailnet" and self.secure_transport:
             return "WireGuard + TLS end to end"
         return self.transport
@@ -305,7 +305,7 @@ class Connection:
     def carried(self) -> str:
         if self.presence is None:
             return ""
-        return f"{human_bytes(self.presence.rx_bytes)} in · {human_bytes(self.presence.tx_bytes)} out"
+        return dotted(f"{human_bytes(self.presence.rx_bytes)} in", f"{human_bytes(self.presence.tx_bytes)} out")
 
     @property
     def peer_keys(self) -> tuple[tuple[str, str], ...]:

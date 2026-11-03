@@ -15,11 +15,12 @@ from contextlib import contextmanager
 from time import monotonic
 from typing import Any
 
-from django.db import close_old_connections, connections, transaction
+from django.db import connections, transaction
 from django.db.backends.signals import connection_created
 from django.utils import timezone
 
 from hq.platform.application import derivations
+from hq.platform.core.outside_requests import connections_of_its_own
 
 logger = logging.getLogger("severino.ahead")
 
@@ -78,15 +79,11 @@ class _Keeper:
             if self._stopping.is_set():
                 return
             self._settle()
-            # Outside Django's request cycle, so the connection is checked
-            # before the pass and released after it, as the request signals would.
-            close_old_connections()
-            try:
-                derivations.derive_ahead()
-            except Exception:  # the next pass tries again
-                logger.exception("ahead.pass_failed")
-            finally:
-                close_old_connections()
+            with connections_of_its_own():
+                try:
+                    derivations.derive_ahead()
+                except Exception:  # the next pass tries again
+                    logger.exception("ahead.pass_failed")
             self.interrupted(written=self._woken.is_set())
 
     def interrupted(self, *, written: bool) -> None:

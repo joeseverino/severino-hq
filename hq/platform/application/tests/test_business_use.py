@@ -3,6 +3,7 @@
 import json
 from datetime import date
 from decimal import Decimal
+from uuid import uuid4
 
 from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
@@ -13,8 +14,8 @@ from django.urls import reverse
 
 from hq.domains.assets.models import Asset
 from hq.domains.expenses.models import Expense
-from hq.platform.api.tests.test_api import ISSUER, RESOURCE, _serving, _token
-from hq.platform.mcp.identity import reset_principal, set_principal
+from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
+from hq.platform.mcp.identity import set_principal
 from hq.platform.mcp.server import mcp
 
 from ..assets import AssetCommand, save_asset
@@ -172,18 +173,15 @@ class ServiceTests(TestCase):
                 self.assertEqual(expense["business_use_percentage"], value)
 
 
-@override_settings(SEVERINO_MCP_ENABLE_WRITES=True)
+@override_settings(SEVERINO_AGENT_ENABLE_WRITES=True)
 class MCPTests(TestCase):
     def _call(self, name: str, payload: dict) -> dict:
         async def call():
             tool = mcp.tools.get("execute_capability")
-            return await tool.call({"name": name, "payload": payload})
+            return await tool.call({"name": name, "payload": payload | {"idempotency_key": uuid4().hex}})
 
-        bound = set_principal(mcp_principal())
-        try:
+        with set_principal(mcp_principal()):
             return async_to_sync(call)()
-        finally:
-            reset_principal(bound)
 
     def test_out_of_range_is_invalid_input(self):
         for value in OUT_OF_RANGE:
@@ -216,6 +214,7 @@ class MCPTests(TestCase):
     SEVERINO_API_RESOURCE=RESOURCE,
     SEVERINO_API_LEEWAY_SECONDS=30,
     OIDC_RP_SIGN_ALGO="RS256",
+    SEVERINO_AGENT_ENABLE_WRITES=True,
 )
 class APITests(TestCase):
     TOKEN_SCOPE = "write_assets write_expenses"

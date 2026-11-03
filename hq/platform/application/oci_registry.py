@@ -9,11 +9,12 @@ checked before it is made (docs/Derived-Facts.md#containers-and-images).
 
 import json
 import re
-import urllib.error
 import urllib.parse
-import urllib.request
-from typing import Any, override
+from typing import Any
 
+import httpx2
+
+from .http_read import UNREACHABLE, fetch
 from .images import DOCKER_HUB, ImageRef
 from .reach import public_host
 
@@ -45,29 +46,15 @@ class RegistryPrivate(RegistryReadError):
 _public_host = public_host
 
 
-def _checked(url: str) -> str:
-    parts = urllib.parse.urlsplit(url)
-    if parts.scheme != "https" or not parts.hostname:
+def _checked(request: httpx2.Request) -> None:
+    """Every request, the first and each redirect to a registry's CDN, checked
+    before it is made. httpx2 leaves the registry's token behind once a
+    redirect changes origin."""
+
+    if request.url.scheme != "https" or not request.url.host:
         raise RegistryReadError("A registry pointed somewhere other than an HTTPS address.")
-    if not _public_host(parts.hostname):
-        raise RegistryReadError(f"{parts.hostname} is not a public address, so HQ does not read it.")
-    return url
-
-
-class _CheckedRedirects(urllib.request.HTTPRedirectHandler):
-    """Follow a registry to its CDN, checked like the first request, and
-    without the registry's token."""
-
-    @override
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        _checked(newurl)
-        found = super().redirect_request(req, fp, code, msg, headers, newurl)
-        if found is not None and urllib.parse.urlsplit(newurl).hostname != urllib.parse.urlsplit(req.full_url).hostname:
-            found.remove_header("Authorization")
-        return found
-
-
-_opener = urllib.request.build_opener(_CheckedRedirects)
+    if not _public_host(request.url.host):
+        raise RegistryReadError(f"{request.url.host} is not a public address, so HQ does not read it.")
 
 
 def tags(image: ImageRef) -> list[str]:
@@ -213,44 +200,47 @@ def _get(
     accept: str = "application/json",
     method: str = "GET",
     limit: int = MAX_RESPONSE_BYTES,
-) -> tuple[dict[str, Any], Any, str]:
-    try:
-        body, headers = _request(f"https://{host}{path}", token, accept, method, limit)
-    except urllib.error.HTTPError as exc:
-        challenge = exc.headers.get("WWW-Authenticate", "") or ""
-        exc.close()
-        if exc.code != 401 or token or not challenge.lower().startswith("bearer"):
-            raise RegistryReadError(f"{image.name}: the registry returned HTTP {exc.code}.") from exc
-    else:
-        return body, headers, token
-    token = _anonymous_token(challenge, image)
-    try:
-        body, headers = _request(f"https://{host}{path}", token, accept, method, limit)
-    except urllib.error.HTTPError as exc:
-        exc.close()
-        raise RegistryReadError(f"{image.name}: the registry returned HTTP {exc.code}.") from exc
-    return body, headers, token
+) -> tuple[dict[str, Any], httpx2.Headers, str]:
+    response, body = _request(f"https://{host}{path}", token, accept, method, limit)
+    challenge = response.headers.get("WWW-Authenticate", "") or ""
+    if response.status_code == 401 and not token and challenge.lower().startswith("bearer"):
+        token = _anonymous_token(challenge, image)
+        response, body = _request(f"https://{host}{path}", token, accept, method, limit)
+    if not response.is_success:
+        raise RegistryReadError(f"{image.name}: the registry returned HTTP {response.status_code}.")
+    return ({} if method == "HEAD" else _json(body, limit)), response.headers, token
 
 
 def _request(
     url: str, token: str, accept: str = "application/json", method: str = "GET", limit: int = MAX_RESPONSE_BYTES
-) -> tuple[dict[str, Any], Any]:
+) -> tuple[httpx2.Response, bytes]:
     headers = {"Accept": accept, "User-Agent": "Severino-HQ"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    request = urllib.request.Request(_checked(url), headers=headers, method=method)
     try:
-        with _opener.open(request, timeout=TIMEOUT_SECONDS) as response:  # checked https, public host
-            if method == "HEAD":
-                return {}, response.headers
-            body = response.read(limit + 1)
-            if len(body) > limit:
-                raise RegistryReadError("The registry answered with more than HQ reads for this.")
-            return json.loads(body), response.headers
-    except urllib.error.HTTPError:
-        raise
-    except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
+        return fetch(
+            method,
+            url,
+            headers=headers,
+            timeout=TIMEOUT_SECONDS,
+            limit=limit,
+            follow_redirects=True,
+            on_request=(_checked,),
+        )
+    except UNREACHABLE as exc:
         raise RegistryReadError(f"Could not reach the registry: {exc}") from exc
+
+
+def _json(body: bytes, limit: int) -> dict[str, Any]:
+    if len(body) > limit:
+        raise RegistryReadError("The registry answered with more than HQ reads for this.")
+    try:
+        found = json.loads(body)
+    except ValueError as exc:
+        raise RegistryReadError("The registry answered with something other than JSON.") from exc
+    if not isinstance(found, dict):
+        raise RegistryReadError("The registry answered with something other than an object.")
+    return found
 
 
 def _anonymous_token(challenge: str, image: ImageRef) -> str:
@@ -260,13 +250,13 @@ def _anonymous_token(challenge: str, image: ImageRef) -> str:
         raise RegistryReadError(f"{image.name}: the registry offers no anonymous access.")
     query = {"service": fields.get("service", ""), "scope": f"repository:{image.repository}:pull"}
     url = f"{realm}?{urllib.parse.urlencode({key: value for key, value in query.items() if value})}"
-    try:
-        body, _headers = _request(url, "")
-    except urllib.error.HTTPError as exc:
-        exc.close()
+    response, raw = _request(url, "")
+    if not response.is_success:
         raise RegistryPrivate(
-            f"{image.name}: the registry refused an anonymous read (HTTP {exc.code}); the image may be private."
-        ) from exc
+            f"{image.name}: the registry refused an anonymous read (HTTP {response.status_code}); "
+            "the image may be private."
+        )
+    body = _json(raw, MAX_RESPONSE_BYTES)
     token = str(body.get("token") or body.get("access_token") or "")
     if not token:
         raise RegistryReadError(f"{image.name}: the registry gave no anonymous token.")

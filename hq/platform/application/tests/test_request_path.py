@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.platform.core.tests.forwarding import arrived
 
 from ..path_model import Hop
 from ..paths import hq_path
@@ -85,7 +86,9 @@ def an_estate():
 
 def a_request(*, peer=PROXY, forwarded=LAPTOP, **headers):
     extra = {"HTTP_X_FORWARDED_FOR": forwarded} if forwarded else {}
-    request = RequestFactory().get("/connection/", secure=True, HTTP_HOST=HQ, REMOTE_ADDR=peer, **extra, **headers)
+    request = RequestFactory().get(
+        "/connection/", secure=True, HTTP_HOST=HQ, **arrived(REMOTE_ADDR=peer, **extra, **headers)
+    )
     request.user = someone()
     return request
 
@@ -301,11 +304,8 @@ class ReadParityTests(TestCase):
 
         reader = Principal("reader", "test", frozenset({Capability.READ}))
         request = a_request(**NPM_HEADERS)
-        bound = request_context.bind(request)
-        try:
+        with request_context.bind(request):
             served = list_resource("request.path", {}, principal=reader)
-        finally:
-            request_context.unbind(bound)
         from ..hq_self import serving
 
         with projection_scope(seed=serving(request)):
@@ -313,21 +313,35 @@ class ReadParityTests(TestCase):
 
         self.assertEqual(served, page)
 
+    def test_each_layer_is_sent_once_on_the_hop_it_was_decided_at(self):
+        from .. import request_context
+        from ..resources import list_resource
+        from ..security import Capability, Principal
+
+        reader = Principal("reader", "test", frozenset({Capability.READ}))
+        request = a_request(**NPM_HEADERS)
+        with request_context.bind(request):
+            served = list_resource("request.path", {}, principal=reader)
+        from ..hq_self import serving
+
+        with projection_scope(seed=serving(request)):
+            decided = [layer.id for layer in request_path(request).connection.layers]
+        sent = [layer["id"] for hop in served["items"] for layer in hop.get("layers", ())]
+
+        self.assertTrue(decided)
+        self.assertEqual(sorted(sent), sorted(decided))
+        self.assertNotIn("layers", served["connection"])
+
     def test_mcp_serves_the_same_read(self):
         from hq.platform.mcp import services as mcp_services
-        from hq.platform.mcp.identity import reset_principal, set_principal
+        from hq.platform.mcp.identity import set_principal
 
         from .. import request_context
         from ..security import mcp_principal
 
         request = a_request(**NPM_HEADERS)
-        principal = set_principal(mcp_principal())
-        bound = request_context.bind(request)
-        try:
+        with set_principal(mcp_principal()), request_context.bind(request):
             served = mcp_services.list_resource("request.path", {})
-        finally:
-            request_context.unbind(bound)
-            reset_principal(principal)
 
         self.assertEqual(served["items"][0]["step"], "device")
         self.assertEqual(served["items"][-1]["step"], "hq")
@@ -350,8 +364,7 @@ class ReadParityTests(TestCase):
             reverse("connection"),
             secure=True,
             HTTP_HOST=HQ,
-            REMOTE_ADDR=PROXY,
-            HTTP_X_FORWARDED_FOR=LAPTOP,
+            **arrived(REMOTE_ADDR=PROXY, HTTP_X_FORWARDED_FOR=LAPTOP),
         )
 
         found = response.context["request_path"]

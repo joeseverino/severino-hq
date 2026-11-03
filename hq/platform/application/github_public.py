@@ -6,46 +6,55 @@ controller's (``control_plane.provider_adapters.github_app``), never this.
 """
 
 import json
-import urllib.error
-import urllib.request
 from typing import Annotated, Any
 from urllib.parse import urlparse
 
 from pydantic import AfterValidator
 
+from .http_read import UNREACHABLE, fetch
+
 API = "https://api.github.com"
 TIMEOUT_SECONDS = 10
 JSON = "application/vnd.github+json"
+# A release list or an advisory page is well under this.
+MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 
 
 class GitHubReadError(Exception):
     """GitHub could not be read, in words a person can act on."""
 
 
-def get(path: str, *, accept: str = JSON, missing_ok: bool = False, token: str = "") -> Any:
-    """``path`` from GitHub's API. ``token`` only where a deployment gives one
-    to raise the rate limit on public data; nothing here needs it."""
+def get(path: str, *, accept: str = JSON, missing_ok: bool = False) -> Any:
+    """``path`` from GitHub's API. A redirect is followed, as GitHub answers
+    for a renamed repository."""
 
     headers = {"Accept": accept, "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "Severino-HQ"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    request = urllib.request.Request(f"{API}{path}", headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # fixed https host
-            return json.load(response)
-    except urllib.error.HTTPError as exc:
-        # An HTTPError is the error response itself, socket included. Chained
-        # below the error raised here it would stay open until that was collected.
-        exc.close()
-        if missing_ok and exc.code == 404:
-            return None
-        if exc.code in (403, 429) and exc.headers.get("X-RateLimit-Remaining") == "0":
-            raise GitHubReadError(
-                "GitHub's hourly limit for anonymous reads is spent. The last read stays until it resets."
-            ) from exc
-        raise GitHubReadError(f"GitHub API returned HTTP {exc.code}.") from exc
-    except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
+        response, body = fetch(
+            "GET",
+            f"{API}{path}",
+            headers=headers,
+            timeout=TIMEOUT_SECONDS,
+            limit=MAX_RESPONSE_BYTES,
+            follow_redirects=True,
+        )
+    except UNREACHABLE as exc:
         raise GitHubReadError(f"Could not reach GitHub: {exc}") from exc
+    status = response.status_code
+    if missing_ok and status == 404:
+        return None
+    if status in (403, 429) and response.headers.get("X-RateLimit-Remaining") == "0":
+        raise GitHubReadError(
+            "GitHub's hourly limit for anonymous reads is spent. The last read stays until it resets."
+        )
+    if not response.is_success:
+        raise GitHubReadError(f"GitHub API returned HTTP {status}.")
+    if len(body) > MAX_RESPONSE_BYTES:
+        raise GitHubReadError("GitHub answered with more than HQ reads.")
+    try:
+        return json.loads(body)
+    except ValueError as exc:
+        raise GitHubReadError("GitHub answered with something other than JSON.") from exc
 
 
 def github_repository(repository_url: str) -> tuple[str, str] | None:

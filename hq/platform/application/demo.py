@@ -78,11 +78,8 @@ _SECOND = (
 def demo_scope(showing: bool) -> Iterator[None]:
     """Show substituted values for the duration of one request or call."""
 
-    token = _SHOWING.set(bool(showing))
-    try:
+    with _SHOWING.set(bool(showing)):
         yield
-    finally:
-        _SHOWING.reset(token)
 
 
 def showing_demo() -> bool:

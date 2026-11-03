@@ -24,10 +24,14 @@ class Release:
     digest: str = ""
     built: datetime | None = None
     # Whether the GitHub App reads a signature on the digest that runs; None
-    # where nothing was read about the digest.
+    # where nothing was read about the digest, and ``signed_unread`` says why.
     signed: bool | None = None
+    signed_unread: str = ""
     vulnerabilities: str = ""
     vulnerabilities_note: str = ""
+    # Why nothing is known against the image, where nothing was read: "none
+    # known" is said only of an image whose advisories or packages were read.
+    vulnerabilities_unread: str = ""
     repository: Any = None
     # ``(name, version)`` of each extension composed into this build, as the
     # running process admitted them.
@@ -98,9 +102,27 @@ def _source() -> str:
     return web_url(settings.SEVERINO_HQ_SOURCE)
 
 
+NOT_READ = "not read"
+
+
+def _unread(standing: Any) -> str:
+    """Why HQ read nothing about the image that runs, in the reading's own words."""
+
+    if standing is None:
+        return "HQ has read no container running it."
+    return standing.unread or "Its image has not been read yet."
+
+
+def _vulnerabilities_read(standing: Any) -> bool:
+    """Whether anything was read against the image: its source's advisories or its packages."""
+
+    return standing is not None and (standing.checked is not None or standing.upstream_read_at is not None)
+
+
 def release(container: Any) -> Release:
     standing = container.standing if container is not None else None
     build = standing.build if standing is not None else None
+    read = _vulnerabilities_read(standing)
     return Release(
         revision=settings.SEVERINO_HQ_REVISION,
         source=_source(),
@@ -108,8 +130,10 @@ def release(container: Any) -> Release:
         digest=standing.digest if standing is not None else "",
         built=standing.built if standing is not None else None,
         signed=bool(build.get("signed")) if build is not None else None,
-        vulnerabilities=standing.vulnerabilities if standing is not None else "",
-        vulnerabilities_note=standing.vulnerabilities_note if standing is not None else "",
+        signed_unread="" if build is not None else _unread(standing),
+        vulnerabilities=standing.vulnerabilities if read else NOT_READ,
+        vulnerabilities_note=standing.vulnerabilities_note if read else _unread(standing),
+        vulnerabilities_unread="" if read else _unread(standing),
         repository=repository(container),
         extensions=tuple((plugin.name, plugin.version) for plugin in installed_plugins()),
     )
@@ -136,7 +160,9 @@ def release_json(release: Release) -> dict[str, Any]:
         "digest": release.digest,
         "built": iso(release.built),
         "signed": release.signed,
+        "signed_unread": release.signed_unread or None,
         "vulnerabilities": release.vulnerabilities,
+        "vulnerabilities_unread": release.vulnerabilities_unread or None,
         "repository": repository.name if repository is not None else None,
         "default_branch": repository.default_branch if repository is not None else None,
         "head": release.head,

@@ -8,6 +8,7 @@ from typing import Any
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 
+from ..labels import dotted
 from ..projection import read_once
 from ..ui import counted
 from .tones import ATTENTION, GOOD, Tile, iso
@@ -130,14 +131,10 @@ def _sees(kind: str, spec: Any, row: Any) -> Sees:
 
 
 def sight_tile(seen: HqSight) -> Tile:
-    detail = " · ".join(
-        part
-        for part in (
-            f"{seen.stale} out of date" if seen.stale else "",
-            f"{seen.failing} could not be read" if seen.failing else "",
-            f"{seen.never} never read" if seen.never else "",
-        )
-        if part
+    detail = dotted(
+        f"{seen.stale} out of date" if seen.stale else "",
+        f"{seen.failing} could not be read" if seen.failing else "",
+        f"{seen.never} never read" if seen.never else "",
     )
     return Tile(
         "Sees",

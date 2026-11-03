@@ -198,9 +198,9 @@ class ReadCapabilityTests(TestCase):
 
         from ..security import mcp_principal
 
-        with override_settings(SEVERINO_MCP_ENABLE_LOOKUP=False):
+        with override_settings(SEVERINO_AGENT_ENABLE_LOOKUP=False):
             self.assertFalse(mcp_principal().permits(Capability.LOOK_UP_PUBLIC_RECORDS))
-        with override_settings(SEVERINO_MCP_ENABLE_LOOKUP=True):
+        with override_settings(SEVERINO_AGENT_ENABLE_LOOKUP=True):
             self.assertTrue(mcp_principal().permits(Capability.LOOK_UP_PUBLIC_RECORDS))
 
 
@@ -262,27 +262,43 @@ class AddressCacheTests(TestCase):
         self.assertEqual(again["allocation"], {})
 
 
+@override_settings(SEVERINO_RDAP_ENDPOINT="https://rdap.example.test")
 class RegistryRedirectTests(SimpleTestCase):
     """A registry's redirect is followed only to HTTPS on the public internet."""
 
-    def follow(self, url):
-        import urllib.request
-        from unittest import mock
+    def follow(self, location):
+        from hq.domains.control_plane.dns_lookup import registry
 
-        from hq.domains.control_plane.dns_lookup import _HTTPSOnlyRedirects
+        from .network import PUBLIC, Response, answering, moved, resolving
 
-        request = urllib.request.Request("https://rdap.example.test/ip/192.0.2.1")
-        with mock.patch(
-            "hq.domains.control_plane.dns_lookup.public_host", side_effect=lambda host: host == "rdap.example.org"
-        ):
-            return _HTTPSOnlyRedirects().redirect_request(request, None, 302, "Found", {}, url)
+        asked = []
+
+        def rdap(request):
+            asked.append(str(request.url))
+            if request.url.host == "rdap.example.test":
+                return moved(location)
+            return Response({"objectClassName": "ip network", "handle": "EXAMPLE-NET"})
+
+        with resolving({"rdap.example.test": PUBLIC, "rdap.example.org": PUBLIC}), answering(rdap):
+            try:
+                return registry("192.0.2.1"), asked
+            except LookupUnavailable as exc:
+                return exc, asked
 
     def test_a_public_registry_is_followed(self):
-        self.assertEqual(
-            self.follow("https://rdap.example.org/ip/192.0.2.1").full_url, "https://rdap.example.org/ip/192.0.2.1"
-        )
+        found, asked = self.follow("https://rdap.example.org/ip/192.0.2.1")
 
-    def test_an_inside_address_is_not(self):
-        for url in ("https://10.0.0.1/admin", "https://inside.example.test/latest"):
-            with self.subTest(url=url), self.assertRaisesMessage(LookupUnavailable, "not public"):
-                self.follow(url)
+        self.assertEqual(found["handle"], "EXAMPLE-NET")
+        self.assertEqual(asked[-1], "https://rdap.example.org/ip/192.0.2.1")
+
+    def test_plain_http_or_an_inside_address_is_never_asked(self):
+        for location, said in (
+            ("http://rdap.example.org/ip/192.0.2.1", "away from HTTPS"),
+            ("https://10.0.0.1/admin", "not public"),
+            ("https://inside.example.test/latest", "not public"),
+        ):
+            with self.subTest(location=location):
+                found, asked = self.follow(location)
+
+                self.assertIn(said, str(found))
+                self.assertEqual(asked, ["https://rdap.example.test/ip/192.0.2.1"])

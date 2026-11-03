@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
-from django.core.signals import setting_changed
 from django.urls import URLPattern, URLResolver, get_resolver, get_script_prefix, get_urlconf, reverse as _reverse
 
 from .projection import read_once
@@ -61,13 +60,11 @@ def reverse(viewname, urlconf=None, args=None, kwargs=None, current_app=None) ->
         return _reverse(viewname, urlconf=urlconf, args=args, kwargs=kwargs, current_app=current_app)
 
 
-# Forgets everything when a setting changes, which is how a test that swaps the
-# URL configuration stays correct.
-def _forget(**_kwargs) -> None:
+def forget() -> None:
+    """Forget every route worked out: a test that swaps the URL configuration
+    asks this whenever a setting changes (hq.platform.core.signals)."""
+
     _resolved.cache_clear()
-
-
-setting_changed.connect(_forget)
 
 
 @dataclass(frozen=True, slots=True)

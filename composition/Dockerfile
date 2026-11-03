@@ -10,22 +10,27 @@
 # The host image, by digest: compose.yml passes it after verifying its
 # signature. The default has no shell or users, so a build without it fails.
 ARG HQ_IMAGE=scratch
-# uv at the release mise.toml pins, installed by mise from mise.lock, which
-# refuses a download whose checksum differs from it (as the host image's
-# tools stage does, with the same mise). mise.toml reads Go's release from
-# go.mod, so mise cannot load it without that file.
+# uv and ast-grep at the releases mise.toml pins, installed by mise from
+# mise.lock, which refuses a download whose checksum differs from it (as the
+# host image's tools stage does, with the same mise). mise.toml reads Go's
+# release from go.mod, so mise cannot load it without that file.
 FROM python:3.15-slim-trixie@sha256:f786b2e19cf9bb54e96bfcd4c1b40c4c56336c22e60607ffd4b080ae5b5dee83 AS tools
-COPY --from=ghcr.io/jdx/mise:2026.10.21@sha256:a9a1654a19d150535bcaede142ff69368f18ec11f32986f6ed944d1c811702af /usr/local/bin/mise /usr/local/bin/mise
+COPY --from=ghcr.io/jdx/mise:2026.10.25@sha256:91417f41840316b7c5da6854bef393eccea4546ae70f8baf0803e0e94287b68d /usr/local/bin/mise /usr/local/bin/mise
 ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
 COPY mise.toml mise.lock ./
 COPY controller/go.mod controller/
-RUN mise install uv \
-    && install -D "$(mise which uv)" /opt/bin/uv
+RUN mise install uv ast-grep \
+    && install -D "$(mise which uv)" /opt/bin/uv \
+    && install -D "$(mise which ast-grep)" /opt/bin/ast-grep
 
 # The installer uses the same Python ABI as HQ.
 FROM python:3.15-slim-trixie@sha256:f786b2e19cf9bb54e96bfcd4c1b40c4c56336c22e60607ffd4b080ae5b5dee83 AS installer-base
 COPY --from=tools /opt/bin/uv /usr/local/bin/uv
+# The extension check's scan of a package's source (tools/pipeline/check-plugin.sh),
+# which Compose runs in this base. The installer stage after it ships only
+# /install, so the runtime never holds it.
+COPY --from=tools /opt/bin/ast-grep /usr/local/bin/ast-grep
 # Every wheel an installer of this base installs carries its bytecode, as the
 # host's own packages do: the image is read-only to the account HQ runs as.
 ENV UV_COMPILE_BYTECODE=1
@@ -70,11 +75,10 @@ ENV SEVERINO_HQ_PLUGINS=${SEVERINO_HQ_PLUGIN_REFERENCES}
 # wheels are unsigned branch builds, so admission is off and no lock ships.
 FROM extended AS candidate
 ENV SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION=0
-# The extensions bring assets of their own, so the tree the host image
-# collected is collected again with them, under the settings set above. The
-# key exists for this step alone: collecting signs nothing.
-RUN DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
-    python manage.py collectstatic --noinput --clear --verbosity 0
+# The extensions may bring assets of their own, so the host image's are
+# collected again with them, under the settings set above, and written over
+# the host's tree only where they differ.
+RUN sh composition/collectstatic.sh
 USER severino
 
 # The release, the default target.
@@ -100,6 +104,5 @@ ENV SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION=1 \
     SEVERINO_HQ_PLUGIN_POLICY_SHA256=${PLUGIN_POLICY_SHA256} \
     SEVERINO_HQ_REVISION=${HQ_REVISION}
 # Collected again under the release's settings, as the candidate's is.
-RUN DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
-    python manage.py collectstatic --noinput --clear --verbosity 0
+RUN sh composition/collectstatic.sh
 USER severino

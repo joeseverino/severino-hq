@@ -264,8 +264,13 @@ jobs:
       # Installed once for the whole job: the host image is verified with it
       # below, every extension admission is verified with it before install,
       # and the published composition is signed and attested with it at the end.
-      - name: Install Cosign
-        uses: ./.github/actions/cosign
+      # The release mise.lock records, which the host verifies with too.
+      - name: Install the pinned cosign
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          version: ${{ steps.pins.outputs.mise }}
+          install_args: cosign
+          cache: false
 
       - name: Verify the host image was built by this repository
         # Every extension wheel is verified against a declared signer before it

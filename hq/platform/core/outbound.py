@@ -27,7 +27,7 @@ ALLOWED = frozendict(
     {
         "oidc": (
             "Signing in is an exchange with the sign-in service: the token, "
-            "its signing keys and the person's picture are asked for while the "
+            "the person's claims and picture are asked for while the "
             "browser waits, with the service's own short-lived token, and "
             "each call is bounded by OIDC_TIMEOUT or the picture's timeout."
         ),
@@ -75,22 +75,16 @@ class OutboundInRequest(RuntimeError):
 def serving(request: Any) -> Iterator[None]:
     """Mark everything inside as part of serving ``request``."""
 
-    token = _serving.set(f"{request.method} {request.path}")
-    try:
+    with _serving.set(f"{request.method} {request.path}"):
         yield
-    finally:
-        _serving.reset(token)
 
 
 @contextmanager
 def off_request() -> Iterator[None]:
     """Mark everything inside as no request's work: a job's own thread."""
 
-    token = _serving.set("")
-    try:
+    with _serving.set(""):
         yield
-    finally:
-        _serving.reset(token)
 
 
 def serving_request() -> str:
@@ -107,11 +101,8 @@ def allowed(name: str) -> Iterator[None]:
         raise ValueError(f"{name!r} is not an outbound exception HQ allows.")
     # A page fetched on a guess asks nothing outside the process.
     speculation.refuse(f"it reaches outside the process ({name})")
-    token = _allowed.set(name)
-    try:
+    with _allowed.set(name):
         yield
-    finally:
-        _allowed.reset(token)
 
 
 def mode() -> str:
@@ -140,11 +131,8 @@ def _hook(event: str, args: tuple[Any, ...]) -> None:
     )
     if mode() == REFUSE:
         raise OutboundInRequest(said)
-    token = _reporting.set(True)
-    try:
+    with _reporting.set(True):
         logger.warning(said, extra={"event": "outbound.in_request", "audit_event": event})
-    finally:
-        _reporting.reset(token)
 
 
 @functools.cache

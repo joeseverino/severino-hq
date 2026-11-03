@@ -5,9 +5,10 @@
 #MISE env={DJANGO_DEBUG=false, SEVERINO_HEAVY_BOUND="30m"}
 #USAGE arg "[arguments]..." var=#true help="Passed on to manage.py test: test labels, --tag, --parallel"
 
-# The suite runs in a copy of only what the image is built from (the paths
-# Dockerfile.dockerignore admits, tracked or new), so a test that reads docs/,
-# .git or anything else the image leaves out fails here rather than in Compose.
+# The suite runs in a copy of only what the image's /app holds
+# (tools/lib/image-tree.sh, which image:verify:tree holds to the image), so a
+# test that reads docs/, .git or anything else the image leaves out fails here
+# rather than in Compose.
 # It runs as the image configures it: DEBUG off, the extension set
 # mise.local.toml names (tools/lib/extension-set.sh, whose first line names
 # each package's tree), with SEVERINO_HQ_SOURCE and SEVERINO_HQ_REVISION
@@ -29,8 +30,8 @@ test_arguments="${usage_arguments:-}"
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh
 
-# shellcheck source=tools/lib/export-tree.sh
-. ./tools/lib/export-tree.sh
+# shellcheck source=tools/lib/image-tree.sh
+. ./tools/lib/image-tree.sh
 # shellcheck source=tools/lib/source-url.sh
 . ./tools/lib/source-url.sh
 
@@ -46,16 +47,7 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-admitted="$(sed -n 's|^!\([^*]*[^/]\)/*$|\1|p' Dockerfile.dockerignore)"
-[ -n "${admitted}" ] || { echo "Dockerfile.dockerignore admits nothing." >&2; exit 1; }
-# shellcheck disable=SC2086  # one pathspec per admitted path
-export_tree "${tree}" ${admitted}
-# What the image's copy of the checkout leaves out of /app, another stage's
-# input only, the suite's copy leaves out too.
-excluded="$(sed -nE 's|^COPY ((--exclude=[^ ]+ )+)\. /app$|\1|p' Dockerfile | tr ' ' '\n' | sed -n 's|^--exclude=||p')"
-for path in ${excluded}; do
-    rm -rf "${tree:?}/${path}"
-done
+image_tree "${tree}"
 
 # The image installs the runtime dependencies alone, so the suite runs in an
 # environment of the checkout's that holds only those: a test module that loads

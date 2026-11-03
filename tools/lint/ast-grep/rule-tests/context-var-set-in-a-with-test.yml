@@ -1,0 +1,23 @@
+id: context-var-set-in-a-with
+valid:
+  - |
+    with _current.set(request):
+        answer()
+  - |
+    with set_principal(principal), request_context.bind(request):
+        await app(scope, receive, send)
+  - |
+    def bind(request):
+        return _current.set(request)
+  - context.run(_FRAME.set, None)
+  - item.related_projects.set(ids)
+  - stopping.set()
+  - form.reset()
+invalid:
+  - token = _request_id.set(value)
+  - self.token = _current.set(request)
+  - _current.reset(token)
+  - |
+    def unbind(token):
+        _current.reset(token)
+  - self.addCleanup(_current.reset, token)

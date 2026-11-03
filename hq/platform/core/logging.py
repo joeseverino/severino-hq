@@ -2,7 +2,7 @@
 
 import json
 import logging
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from datetime import UTC, datetime
 from typing import override
 
@@ -13,18 +13,16 @@ def get_request_id() -> str:
     return _request_id.get()
 
 
-def set_request_id(value: str):
+def set_request_id(value: str) -> Token[str]:
+    """Carry ``value`` as the request id for the length of a ``with`` block."""
+
     return _request_id.set(value)
-
-
-def reset_request_id(token) -> None:
-    _request_id.reset(token)
 
 
 class JsonFormatter(logging.Formatter):
     """Emit stable JSON records that remain useful in plain container logs."""
 
-    fields = ("event", "method", "path", "status", "duration_ms")
+    fields = ("event", "method", "path", "status", "duration_ms", "audit")
 
     @override
     def format(self, record: logging.LogRecord) -> str:

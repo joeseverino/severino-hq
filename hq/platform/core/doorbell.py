@@ -12,9 +12,8 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from django.db import close_old_connections
-
 from hq.platform.application import cadence
+from hq.platform.core.outside_requests import connections_of_its_own
 
 logger = logging.getLogger("severino.doorbell")
 
@@ -60,14 +59,11 @@ def ringing_when_due() -> Iterator[None]:
             if stopping.is_set():
                 return
             _woken.clear()
-            # Not a request, so do what Django's request signals do: drop stale connections.
-            close_old_connections()
-            try:
-                ask()
-            except Exception:  # the next minute asks again
-                logger.exception("doorbell.ask_failed")
-            finally:
-                close_old_connections()
+            with connections_of_its_own():
+                try:
+                    ask()
+                except Exception:  # the next minute asks again
+                    logger.exception("doorbell.ask_failed")
 
     _woken.clear()
     thread = threading.Thread(target=run, name="hq-doorbell", daemon=True)

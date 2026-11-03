@@ -12,8 +12,7 @@ from collections.abc import Awaitable, Callable
 from http import HTTPStatus
 from typing import Any
 
-from asgiref.sync import ThreadSensitiveContext, sync_to_async
-from django.db import close_old_connections
+from asgiref.sync import sync_to_async
 from starlette.applications import Starlette
 from starlette.exceptions import HTTPException
 from starlette.requests import ClientDisconnect, Request
@@ -21,8 +20,11 @@ from starlette.responses import Response
 from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from hq.domains.control_plane.bridge_actions import ACTIONS, Action
+from hq.domains.control_plane.bridge_actions import ACTIONS, CONTROLLER, Action
 from hq.domains.control_plane.bridge_contract import Operation, Parameter, max_body_bytes, operations
+from hq.platform.application.security import CONTROLLER_INTERFACE
+from hq.platform.core.attribution import operation_context
+from hq.platform.core.outside_requests import thread_of_its_own
 
 logger = logging.getLogger("severino.bridge")
 
@@ -114,17 +116,9 @@ async def payload_of(operation: Operation, request: Request) -> Any:
 
 
 def _run(action: Action, parameters: dict[str, Any], payload: Any) -> bytes:
-    """One action, with a database connection that is its thread's own.
-
-    The work is outside Django's request cycle, so the connection is checked
-    before it and released after it, as the request signals would.
-    """
-
-    close_old_connections()
-    try:
+    # The bridge's door: whatever an action writes is the controller's.
+    with operation_context(interface=CONTROLLER_INTERFACE, actor=CONTROLLER, operation=f"bridge.{action.name}"):
         return json.dumps(action.run(parameters, payload), sort_keys=True).encode()
-    finally:
-        close_old_connections()
 
 
 def endpoint(action: Action, operation: Operation) -> Callable[[Request], Awaitable[Response]]:
@@ -132,11 +126,10 @@ def endpoint(action: Action, operation: Operation) -> Callable[[Request], Awaita
         try:
             parameters = parameters_of(operation, request)
             payload = await payload_of(operation, request)
-            # A thread per call, as Django's own handler runs a view: calls in
-            # flight together each hold their own connection, and SQLite
-            # orders their writes.
-            async with ThreadSensitiveContext():
-                answer = await sync_to_async(_run, thread_sensitive=True)(action, parameters, payload)
+            # Calls in flight together each hold their own connection, and
+            # SQLite orders their writes.
+            async with thread_of_its_own():
+                answer = await sync_to_async(_run)(action, parameters, payload)
         except Refused as refusal:
             return problem(refusal.status, refusal.detail)
         except ClientDisconnect:

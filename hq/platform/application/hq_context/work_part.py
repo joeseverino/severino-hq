@@ -36,6 +36,8 @@ class WorkUnit:
     next_run: datetime | None = None
     # Whether ``runs`` is a unit's name, an identifier, rather than words.
     runs_unit: bool = False
+    # What the unit is, in its unit file's words; "" when systemd gave none.
+    title: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,29 +132,38 @@ def _jobs(snapshot: Any) -> tuple[tuple[WorkUnit, ...], str]:
         return (), unread
     units = [unit_state(record) for record in snapshot.records or () if isinstance(record, dict)]
     by_name = {unit.unit: unit for unit in units}
-    started = {unit.activates for unit in units if unit.starter}
-    jobs = [_scheduled(unit, by_name.get(unit.activates)) for unit in units if unit.starter]
-    jobs.extend(_standing(unit) for unit in units if not unit.starter and unit.unit not in started)
+    # A socket that starts a new instance per connection names no one unit it
+    # starts, so it stands as itself.
+    starters = [unit for unit in units if unit.starter and unit.activates]
+    started = {unit.activates for unit in starters}
+    jobs = [_scheduled(unit, by_name.get(unit.activates)) for unit in starters]
+    jobs.extend(_standing(unit) for unit in units if unit not in starters and unit.unit not in started)
     return tuple(sorted(jobs, key=lambda job: job.unit)), ""
 
 
-def _runs(unit: str) -> tuple[str, bool]:
+def _runs(unit: str, title: str = "") -> tuple[str, bool]:
     """What a unit runs, in the words HQ has for it: the scheduled work an
-    instance of the job template names, else the unit's own name; and whether
-    it is that name."""
+    instance of the job template names, else its unit file's title, else the
+    unit's own name; and whether it is that name."""
 
     instance = unit.partition("@")[2].rpartition(".")[0]
     label = next((work.label for work in scheduled_work.SCHEDULED if instance and work.name == instance), "")
+    label = label or title
     return (label, False) if label else (unit, True)
 
 
 def _scheduled(starter: Any, target: Any) -> WorkUnit:
-    """A timer or path, as the work it starts."""
+    """A timer, path or socket, as the work it starts."""
 
     result, tone = _result(starter) if target is None or starter.absent else _result(target)
-    runs, runs_unit = _runs(starter.activates) if starter.activates else ("Nothing", False)
+    runs, runs_unit = (
+        _runs(starter.activates, target.title if target is not None else "")
+        if starter.activates
+        else ("Nothing", False)
+    )
     return WorkUnit(
         unit=starter.unit,
+        title=starter.title,
         runs=runs,
         runs_unit=runs_unit,
         last_run=moment(starter.last_trigger_at) or (moment(target.started_at) if target is not None else None),
@@ -164,9 +175,15 @@ def _scheduled(starter: Any, target: Any) -> WorkUnit:
 
 def _standing(unit: Any) -> WorkUnit:
     result, tone = _result(unit)
-    runs, runs_unit = _runs(unit.unit)
+    runs, runs_unit = _runs(unit.unit, unit.title)
     return WorkUnit(
-        unit=unit.unit, runs=runs, runs_unit=runs_unit, last_run=moment(unit.started_at), result=result, tone=tone
+        unit=unit.unit,
+        title=unit.title,
+        runs=runs,
+        runs_unit=runs_unit,
+        last_run=moment(unit.started_at),
+        result=result,
+        tone=tone,
     )
 
 
@@ -181,6 +198,9 @@ def _result(unit: Any) -> tuple[str, str]:
         return JobRow.State.RUNNING.label, NEUTRAL
     if unit.active == "active" and unit.sub == "running":
         return JobRow.State.RUNNING.label, GOOD
+    if unit.active == "active" and unit.sub in ("listening", "mounted"):
+        # A socket or a mount doing its work, in systemd's word for it.
+        return unit.sub.capitalize(), GOOD
     if unit.condition == "no":
         return "Skipped", NEUTRAL
     if unit.result == "success":

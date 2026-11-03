@@ -14,6 +14,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
+from hq.platform.core.tests.forwarding import arrived
 
 from .. import arrivals
 
@@ -41,12 +42,14 @@ def a_tailnet():
 def a_request(address=LAPTOP, method="post", **extra):
     return getattr(RequestFactory(), method)(
         "/private/path/?query=planted-query",
-        REMOTE_ADDR=PROXY,
-        HTTP_X_FORWARDED_FOR=address,
-        HTTP_USER_AGENT="planted-agent/1.0",
-        HTTP_COOKIE="sessionid=planted-cookie",
-        HTTP_REFERER="https://example.test/planted-referer",
-        **extra,
+        **arrived(
+            REMOTE_ADDR=PROXY,
+            HTTP_X_FORWARDED_FOR=address,
+            HTTP_USER_AGENT="planted-agent/1.0",
+            HTTP_COOKIE="sessionid=planted-cookie",
+            HTTP_REFERER="https://example.test/planted-referer",
+            **extra,
+        ),
     )
 
 
@@ -196,9 +199,9 @@ class ArrivalTests(TestCase):
         user = get_user_model().objects.create_user("someone", password="not-used-here")
         self.client.force_login(user)
 
-        self.client.get(reverse("dashboard"), REMOTE_ADDR=PROXY, HTTP_X_FORWARDED_FOR=LAPTOP)
+        self.client.get(reverse("dashboard"), **arrived(REMOTE_ADDR=PROXY, HTTP_X_FORWARDED_FOR=LAPTOP))
         self.assertEqual(stored(), [])
-        self.client.post(reverse("dashboard_glance"), REMOTE_ADDR=PROXY, HTTP_X_FORWARDED_FOR=LAPTOP)
+        self.client.post(reverse("dashboard_glance"), **arrived(REMOTE_ADDR=PROXY, HTTP_X_FORWARDED_FOR=LAPTOP))
 
         self.assertEqual(stored()[0]["device"], "a-laptop")
         self.assertEqual(stored()[0]["count"], 2)

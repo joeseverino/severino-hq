@@ -1,9 +1,9 @@
 """The access boundary, asserted rather than assumed.
 
 Every test here fails closed. The properties they pin: every route
-authenticates, sign-in is rate limited, a forwarded header is believed only
-from a declared proxy, an upload cannot choose its response type, are ones
-whose loss is invisible in review of the change that causes it.
+authenticates, sign-in is rate limited, an upload cannot choose its response
+type, are ones whose loss is invisible in review of the change that causes it.
+Whose forwarded header is believed: test_forwarded_caller.
 """
 
 import json
@@ -22,59 +22,14 @@ from django.urls.resolvers import RoutePattern
 from django.utils import timezone
 
 from hq.platform.application.routes import routed
+from hq.platform.core.audit import stamped
 from hq.platform.core.models import AuditLog
-from hq.platform.core.network import client_ip, parse_ip
+from hq.platform.core.network import parse_ip
 from hq.platform.core.tests.test_settings_env import REPO_ROOT, subprocess_env
 
-PROXY = "10.0.0.5"
 
-
-class _FakeRequest:
-    def __init__(self, peer, forwarded=None):
-        self.META = {"REMOTE_ADDR": peer}
-        if forwarded is not None:
-            self.META["HTTP_X_FORWARDED_FOR"] = forwarded
-
-
-@override_settings(SEVERINO_TRUSTED_PROXIES=[PROXY])
-class ClientAddressTests(SimpleTestCase):
-    """Who HQ believes the caller is."""
-
-    @override_settings(SEVERINO_TRUSTED_PROXIES=["127.0.0.0/8", "::1/128"])
-    def test_the_shipped_default_does_not_believe_the_lan(self):
-        """The default trusts only loopback, never a whole range.
-
-        HQ binds the host network namespace, so a LAN or tailnet peer can reach
-        the port without passing the proxy. Trusting the range let any of them
-        name the address written into the audit log as the source of a failed
-        sign-in: the same rows the throttle reads back.
-        """
-
-        request = _FakeRequest("10.9.9.9", forwarded="203.0.113.9")
-        self.assertEqual(client_ip(request), "10.9.9.9")
-
-    def test_peer_is_used_when_there_is_no_proxy(self):
-        self.assertEqual(client_ip(_FakeRequest("100.101.102.103")), "100.101.102.103")
-
-    def test_forwarded_header_from_a_stranger_is_ignored(self):
-        """The whole point. Otherwise the gate is opened by asking politely."""
-
-        request = _FakeRequest("203.0.113.9", forwarded="100.64.0.1")
-        self.assertEqual(client_ip(request), "203.0.113.9")
-
-    def test_forwarded_header_from_the_proxy_is_believed(self):
-        request = _FakeRequest(PROXY, forwarded="100.64.0.1")
-        self.assertEqual(client_ip(request), "100.64.0.1")
-
-    def test_the_chain_is_read_from_the_right(self):
-        """Everything left of the last untrusted hop is attacker-written text."""
-
-        request = _FakeRequest(PROXY, forwarded="100.64.0.1, 203.0.113.9")
-        self.assertEqual(client_ip(request), "203.0.113.9")
-
-    def test_a_spoofed_prefix_cannot_hide_the_real_caller(self):
-        request = _FakeRequest(PROXY, forwarded="10.0.0.9, 203.0.113.9")
-        self.assertEqual(client_ip(request), "203.0.113.9")
+class AddressParsingTests(SimpleTestCase):
+    """What HQ reads as an address."""
 
     def test_ports_and_brackets_are_stripped(self):
         self.assertEqual(str(parse_ip("10.0.0.4:53812")), "10.0.0.4")
@@ -86,7 +41,7 @@ class ClientAddressTests(SimpleTestCase):
         self.assertIsNone(parse_ip(""))
 
 
-@override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=True, SEVERINO_TRUSTED_PROXIES=[PROXY])
+@override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=True)
 class TrustedNetworkTests(TestCase):
     """Who may reach HQ at all."""
 
@@ -104,16 +59,6 @@ class TrustedNetworkTests(TestCase):
 
     def test_refused_before_the_login_form_is_reachable(self):
         response = self.client.get("/accounts/login/", REMOTE_ADDR="203.0.113.9")
-        self.assertEqual(response.status_code, 403)
-
-    def test_a_public_client_behind_the_proxy_is_still_refused(self):
-        """The realistic exposure: the proxy is trusted, the caller is not."""
-
-        response = self.client.get("/health/live/", REMOTE_ADDR=PROXY, HTTP_X_FORWARDED_FOR="203.0.113.9")
-        self.assertEqual(response.status_code, 403)
-
-    def test_a_stranger_cannot_forge_a_tailnet_address(self):
-        response = self.client.get("/health/live/", REMOTE_ADDR="203.0.113.9", HTTP_X_FORWARDED_FOR="100.64.0.1")
         self.assertEqual(response.status_code, 403)
 
     def test_the_refusal_describes_nothing(self):
@@ -192,11 +137,9 @@ class LoginThrottleTests(TestCase):
         self.assertEqual(response.status_code, 429)
 
     def test_the_lock_lifts_with_time_and_nothing_else(self):
-        for _ in range(5):
-            self._attempt()
-        AuditLog.objects.filter(action=AuditLog.Action.LOGIN_FAILED).update(
-            created_at=timezone.now() - timezone.timedelta(hours=2)
-        )
+        with stamped(lambda *_: {"created_at": timezone.now() - timezone.timedelta(hours=2)}):
+            for _ in range(5):
+                self._attempt()
         response = self._attempt(password="correct-horse")
         self.assertEqual(response.status_code, 302)
         self.assertIn("_auth_user_id", self.client.session)
@@ -447,15 +390,11 @@ class AnonymousSweepTests(TestCase):
         """Every route in the composed URLconf, asked for without a session.
 
         A change detector, on purpose: a route is public exactly when its path
-        falls under PUBLIC_SURFACE (or a route an extension declared as
-        carrying its own token), and every other route sends a stranger to
+        falls under PUBLIC_SURFACE, and every other route sends a stranger to
         sign in. Widening what the public may reach should be a deliberate
         edit to that list with a reason attached, not a side effect.
         """
 
-        from hq.platform.application.plugins import plugin_token_authenticated_prefixes
-
-        public = PUBLIC_SURFACE + plugin_token_authenticated_prefixes()
         client = Client(raise_request_exception=False)
         wrong, asked = [], 0
         for path, view in _sampled_routes():
@@ -467,7 +406,7 @@ class AnonymousSweepTests(TestCase):
                 continue
             asked += 1
             response = client.get(path, REMOTE_ADDR="127.0.0.1")
-            if _sent_to_sign_in(response, view) == path.startswith(public):
+            if _sent_to_sign_in(response, view) == path.startswith(PUBLIC_SURFACE):
                 wrong.append(f"{path}: {response.status_code} {response.get('Location', '')}")
         self.assertEqual(wrong, [])
         self.assertGreater(asked, 100)
@@ -623,9 +562,9 @@ class PrecompressedStaticTests(SimpleTestCase):
 
     BODY = "body { color: red }\n" * 200
     # Not BODY compressed: what arrives shows which file was read.
-    COPY = {"br": "the brotli copy", "gzip": "the gzip copy"}
+    COPY = {"br": "the brotli copy", "gzip": "a gzip copy collectstatic no longer writes"}
 
-    def _get(self, path, *, live=False, copies=("br", "gzip"), **headers):
+    def _get(self, path, *, live=False, copies=("br",), **headers):
         import gzip
         import os
         import tempfile
@@ -678,24 +617,29 @@ class PrecompressedStaticTests(SimpleTestCase):
         self.assertEqual(response.headers["cross-origin-resource-policy"], "same-origin")
         self.assertEqual(response.headers["x-content-type-options"], "nosniff")
 
-    def test_a_request_that_takes_only_gzip_gets_the_gzip_copy(self):
-        # A weight of 0 is RFC 9110's "not acceptable", and a lower weight is a
-        # lower preference.
-        for accepted in ("gzip", "br;q=0, gzip", "gzip, br; q=0.0", "gzip;q=1, br;q=0.5", "*, br;q=0"):
+    def test_a_request_that_takes_brotli_at_any_weight_gets_the_brotli_copy(self):
+        # A weight of 0 is RFC 9110's "not acceptable"; any other admits it.
+        for accepted in ("br;q=0.5, gzip", "gzip;q=1, br;q=0.1", "*", "gzip;q=0, *;q=1"):
             with self.subTest(accepted=accepted):
-                self._assert_copy(self._get("/app.0123456789ab.css", **{"Accept-Encoding": accepted}), "gzip")
+                self._assert_copy(self._get("/app.0123456789ab.css", **{"Accept-Encoding": accepted}), "br")
 
-    def test_a_coding_with_no_copy_gives_way_to_the_next(self):
-        response = self._get("/app.0123456789ab.css", copies=("gzip",), **{"Accept-Encoding": "br, gzip"})
-        self._assert_copy(response, "gzip")
+    def test_a_request_that_takes_only_gzip_gets_the_asset_itself(self):
+        # Even beside a gzip copy an older collect left: brotli is the one copy sent.
+        for accepted in ("gzip", "br;q=0, gzip", "gzip, br; q=0.0", "*, br;q=0"):
+            with self.subTest(accepted=accepted):
+                response = self._get("/app.0123456789ab.css", copies=("br", "gzip"), **{"Accept-Encoding": accepted})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.text, self.BODY)
+                self.assertNotIn("content-encoding", response.headers)
+                self.assertEqual(response.headers["vary"], "Accept-Encoding")
 
     def test_an_unhashed_name_is_compressed_but_never_pinned(self):
-        response = self._get("/app.css", **{"Accept-Encoding": "gzip"})
-        self.assertEqual(response.text, self.COPY["gzip"])
+        response = self._get("/app.css", **{"Accept-Encoding": "br"})
+        self.assertEqual(response.text, self.COPY["br"])
         self.assertEqual(response.headers["cache-control"], "public, max-age=3600")
 
-    def test_a_request_that_takes_neither_gets_the_asset_itself(self):
-        for accepted in ("identity", "zstd", "gzip;q=0", "br;q=0, gzip; q=0.0", "*;q=0", ""):
+    def test_a_request_that_takes_no_brotli_gets_the_asset_itself(self):
+        for accepted in ("identity", "zstd", "gzip", "br;q=0, gzip; q=0.0", "*;q=0", ""):
             with self.subTest(accepted=accepted):
                 response = self._get("/app.0123456789ab.css", **{"Accept-Encoding": accepted})
                 self.assertEqual(response.text, self.BODY)
@@ -724,12 +668,12 @@ class PrecompressedStaticTests(SimpleTestCase):
     def test_each_representation_has_its_own_validator(self):
         tags = {
             self._get("/app.0123456789ab.css", **{"Accept-Encoding": accepted}).headers["etag"]
-            for accepted in ("br", "gzip", "identity")
+            for accepted in ("br", "identity")
         }
-        self.assertEqual(len(tags), 3)
+        self.assertEqual(len(tags), 2)
 
     def test_a_missing_asset_is_not_found_either_way(self):
-        for accepted in ("br", "gzip", "identity"):
+        for accepted in ("br", "identity"):
             with self.subTest(accepted=accepted):
                 response = self._get("/absent.css", **{"Accept-Encoding": accepted})
                 self.assertEqual(response.status_code, 404)
@@ -756,23 +700,20 @@ class PrecompressedStaticTests(SimpleTestCase):
         from hq.platform.core.static import acceptable_codings
 
         cases = {
-            "gzip": ["gzip"],
-            "GZIP": ["gzip"],
+            "gzip": [],
             "br": ["br"],
-            "gzip, deflate, br, zstd": ["br", "gzip"],
-            "deflate, gzip;q=0.5, br": ["br", "gzip"],
-            "br;q=0.5, gzip": ["gzip", "br"],
-            "*": ["br", "gzip"],
+            "BR": ["br"],
+            "gzip, deflate, br, zstd": ["br"],
+            "br;q=0.5, gzip": ["br"],
+            "*": ["br"],
             "": [],
             "identity": [],
             "br;q=0": [],
-            "br;q=0, gzip": ["gzip"],
-            "gzip;q=0": [],
-            "gzip;q=nonsense": [],
-            "xgzip, brotli": [],
+            "br;q=nonsense": [],
+            "xbr, brotli": [],
             "gzip;q=0, *;q=1": ["br"],
-            "*;q=1, gzip;q=0": ["br"],
-            "zstd, *;q=0.1": ["br", "gzip"],
+            "*;q=1, br;q=0": [],
+            "zstd, *;q=0.1": ["br"],
             "*;q=0": [],
         }
         for header, expected in cases.items():
@@ -782,11 +723,10 @@ class PrecompressedStaticTests(SimpleTestCase):
         self.assertEqual(acceptable_codings({"type": "http", "headers": []}), [])
 
 
-@override_settings(SEVERINO_TRUSTED_PROXIES=[PROXY])
 class StaticAssetBoundaryTests(SimpleTestCase):
     """The gate must not have a hole where Starlette mounts things."""
 
-    def _probe(self, peer, forwarded=None):
+    def _probe(self, peer):
         from hq.platform.core.network import TrustedNetworkASGI
 
         sent = []
@@ -795,10 +735,7 @@ class StaticAssetBoundaryTests(SimpleTestCase):
             await send({"type": "http.response.start", "status": 200, "headers": []})
             await send({"type": "http.response.body", "body": b"css"})
 
-        headers = []
-        if forwarded:
-            headers.append((b"x-forwarded-for", forwarded.encode()))
-        scope = {"type": "http", "client": (peer, 1234), "headers": headers}
+        scope = {"type": "http", "client": (peer, 1234), "headers": []}
 
         async def send(message):
             sent.append(message)
@@ -816,41 +753,8 @@ class StaticAssetBoundaryTests(SimpleTestCase):
     def test_static_is_served_to_the_tailnet(self):
         self.assertEqual(self._probe("100.64.0.1"), 200)
 
-    @override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=True)
-    def test_static_uses_the_same_forwarded_rule(self):
-        """Shared predicate: a forged header must fail here exactly as elsewhere."""
-
-        self.assertEqual(self._probe("203.0.113.9", forwarded="100.64.0.1"), 403)
-        self.assertEqual(self._probe(PROXY, forwarded="203.0.113.9"), 403)
-        self.assertEqual(self._probe(PROXY, forwarded="100.64.0.1"), 200)
-
 
 class ResponseHeaderTests(TestCase):
-    @override_settings(
-        SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"),
-        SEVERINO_TRUSTED_PROXIES=[PROXY],
-        # Who may reach HQ is a different question from whose word HQ takes
-        # about the scheme, and this test is about the second. With the gate
-        # on, neither request would get far enough to have an answer: the
-        # gate has its own tests above, and this one would silently become an
-        # assertion about them instead.
-        SEVERINO_ENFORCE_TRUSTED_NETWORK=False,
-    )
-    def test_only_a_trusted_proxy_can_assert_https(self):
-        from django.http import HttpResponse
-
-        from hq.platform.core.network import TrustedNetworkMiddleware
-
-        observed = []
-        middleware = TrustedNetworkMiddleware(lambda request: observed.append(request.is_secure()) or HttpResponse())
-        stranger = RequestFactory().get("/", REMOTE_ADDR="100.64.0.77", HTTP_X_FORWARDED_PROTO="https")
-        proxy = RequestFactory().get("/", REMOTE_ADDR=PROXY, HTTP_X_FORWARDED_PROTO="https")
-
-        middleware(stranger)
-        middleware(proxy)
-
-        self.assertEqual(observed, [False, True])
-
     def test_the_browser_boundary_headers_are_present(self):
         response = self.client.get("/accounts/login/", REMOTE_ADDR="127.0.0.1")
         self.assertEqual(response["X-Frame-Options"], "DENY")

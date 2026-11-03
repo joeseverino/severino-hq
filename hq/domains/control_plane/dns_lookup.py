@@ -8,11 +8,9 @@ address. No credential travels with it, which is why it runs here.
 """
 
 import json
-import urllib.request
-from typing import override
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
 
+import httpx2
 from django.conf import settings
 
 from hq.platform.application.connection_contracts import (
@@ -20,6 +18,7 @@ from hq.platform.application.connection_contracts import (
     ConnectionInstance,
     ConnectionSpec,
 )
+from hq.platform.application.http_read import UNREACHABLE, fetch, redirect_target
 from hq.platform.application.reach import public_host
 from hq.platform.application.security import Capability
 from hq.platform.core.errors import UpstreamUnavailable
@@ -108,7 +107,7 @@ class LookupNotFound(LookupUnavailable):
     """The registry answered, and holds no record of what was asked."""
 
 
-class _HTTPSOnlyRedirects(urllib.request.HTTPRedirectHandler):
+def _https_public_redirects(response: httpx2.Response) -> None:
     """Follow a registry's redirect, but never down to plain HTTP.
 
     RDAP is a bootstrap service: `rdap.org` answers with a redirect to whichever
@@ -118,22 +117,17 @@ class _HTTPSOnlyRedirects(urllib.request.HTTPRedirectHandler):
     answer a question about privacy.
     """
 
-    @override
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        target = urlsplit(newurl)
-        if target.scheme != "https":
-            raise LookupUnavailable("A registry redirected away from HTTPS.")
-        # A registry is on the public internet. A redirect to anything else is
-        # a request HQ would make on the registry's behalf, from inside.
-        if not target.hostname or not public_host(target.hostname):
-            raise LookupUnavailable("A registry redirected to an address that is not public.")
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+    target = redirect_target(response)
+    if target is None:
+        return
+    if target.scheme != "https":
+        raise LookupUnavailable("A registry redirected away from HTTPS.")
+    # A registry is on the public internet. A redirect to anything else is
+    # a request HQ would make on the registry's behalf, from inside.
+    if not target.host or not public_host(target.host):
+        raise LookupUnavailable("A registry redirected to an address that is not public.")
 
 
-# The outbound call, its scheme guard, its timeout and its one exception type
-# live together in the Django app, as ``projects.github``'s do, and the service
-# above injects these functions as defaults so no test opens a socket.
-_opener = urllib.request.build_opener(_HTTPSOnlyRedirects)
 # An RDAP or DNS answer is kilobytes; anything past this is not one.
 MAX_ANSWER_BYTES = 1024 * 1024
 
@@ -152,15 +146,9 @@ def _base(name: str) -> str:
     return f"https://{parsed.netloc}"
 
 
-def _answer(response) -> object:
-    if response.status != 200:
-        raise LookupUnavailable("The registry answered unexpectedly.")
-    raw = response.read(MAX_ANSWER_BYTES + 1)
-    if len(raw) > MAX_ANSWER_BYTES:
-        raise LookupUnavailable("The registry answered with more than an answer.")
-    return json.loads(raw.decode("utf-8"))
-
-
+# The outbound call, its scheme guard, its timeout and its one exception type
+# live together in the Django app, as ``projects.github``'s do, and the service
+# above injects these functions as defaults so no test opens a socket.
 def _get(url: str, *, timeout: int | None = None, accept: str) -> dict:
     """One JSON reading, or ``LookupUnavailable``.
 
@@ -171,25 +159,30 @@ def _get(url: str, *, timeout: int | None = None, accept: str) -> dict:
     """
 
     seconds = timeout or settings.SEVERINO_LOOKUP_TIMEOUT_SECONDS
-    request = urllib.request.Request(url, headers={"Accept": accept, "User-Agent": "severino-hq"})
     try:
-        with _opener.open(request, timeout=seconds) as response:
-            payload = _answer(response)
-    except LookupUnavailable:
-        raise
-    except HTTPError as exc:
-        # 404 from RDAP means the address is not allocated to anyone the
-        # registries know, which is an answer rather than a fault, but it
-        # arrives as an exception, and the service above reads the absence.
-        # The exception is also the response, socket included, so it is closed
-        # here rather than whenever the chained LookupUnavailable is collected.
-        exc.close()
-        if exc.code == 404:
-            raise LookupNotFound("The registry has no record of that.") from exc
-        raise LookupUnavailable("The registry answered unexpectedly.") from exc
-    except (URLError, TimeoutError, OSError) as exc:
+        response, raw = fetch(
+            "GET",
+            url,
+            headers={"Accept": accept, "User-Agent": "severino-hq"},
+            timeout=seconds,
+            limit=MAX_ANSWER_BYTES,
+            follow_redirects=True,
+            on_response=(_https_public_redirects,),
+        )
+    except UNREACHABLE as exc:
         raise LookupUnavailable("The registry could not be reached.") from exc
-    except (ValueError, UnicodeDecodeError) as exc:
+    # 404 from RDAP means the address is not allocated to anyone the
+    # registries know, which is an answer rather than a fault, and the
+    # service above reads the absence.
+    if response.status_code == 404:
+        raise LookupNotFound("The registry has no record of that.")
+    if response.status_code != 200:
+        raise LookupUnavailable("The registry answered unexpectedly.")
+    if len(raw) > MAX_ANSWER_BYTES:
+        raise LookupUnavailable("The registry answered with more than an answer.")
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except ValueError as exc:
         raise LookupUnavailable("The registry answered with nothing usable.") from exc
     if not isinstance(payload, dict):
         raise LookupUnavailable("The registry answered with nothing usable.")

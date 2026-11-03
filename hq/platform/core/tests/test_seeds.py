@@ -9,6 +9,7 @@ from django.conf import settings
 from django.test import SimpleTestCase, TestCase
 
 from hq.platform.core import seeds
+from hq.platform.core.example_estate.names import OWNER_USERNAME
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.tests import test_browser_fixtures
 
@@ -25,7 +26,9 @@ class RegistryTests(SimpleTestCase):
         self.assertIsNot(seeds.get("showcase"), seeds.SEEDS["empty"])
 
     def test_a_stress_estate_is_known_by_name_once_its_builder_is_loaded(self):
-        self.assertIs(seeds.get("sparse").plant, test_browser_fixtures.build_estate)
+        # Read first: the module registers its estates as it loads, which a lazy import waits for.
+        builder = test_browser_fixtures.build_estate
+        self.assertIs(seeds.get("sparse").plant, builder)
 
     def test_the_server_side_of_the_registry_loads_no_test_module(self):
         probe = (
@@ -45,6 +48,6 @@ class BuiltTests(TestCase):
     def test_a_set_is_built_under_the_settings_it_is_shown_under(self):
         with throwaway_media(), seeds.built("showcase") as owner:
             self.assertEqual(settings.SEVERINO_POSTURE, "advanced")
-            self.assertEqual(owner.username, "example")
+            self.assertEqual(owner.username, OWNER_USERNAME)
 
         self.assertEqual(settings.SEVERINO_POSTURE, "")
