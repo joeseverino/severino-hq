@@ -32,6 +32,7 @@ from hq.domains.expenses.models import Expense
 from hq.domains.jobs.models import Job
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
+from hq.platform.application.security import API_INTERFACE, WEB_INTERFACE
 from hq.platform.core.models import AuditLog
 from hq.platform.search_index.services import rebuild_search_index
 lazy from hq.domains.control_plane.bridge_actions import ACTIONS
@@ -333,7 +334,11 @@ def _history(scale, user, expenses, assets) -> list[AuditLog]:
     subjects = [("expense", expense.pk, str(expense)) for expense in expenses[:200]]
     subjects += [("asset", asset.pk, str(asset)) for asset in assets[:100]]
     rows = []
-    for index in range(_count(scale, 6000)):
+    count = _count(scale, 6000)
+    # Dated as `_spread` dates the other records, but as each is written: the
+    # log is append-only.
+    now, step = timezone.now(), timedelta(days=4 * 365) / max(count, 1)
+    for index in range(count):
         kind, key, label = subjects[index % len(subjects)]
         rows.append(
             AuditLog(
@@ -346,11 +351,10 @@ def _history(scale, user, expenses, assets) -> list[AuditLog]:
                 connection="example-ssh" if index % 9 == 0 else "",
                 message="Recorded by the bench seed.",
                 metadata={"changes": {"notes": ["", "example"]}} if index % 3 == 0 else {},
+                created_at=now - step * (count - index),
             )
         )
-    history = _create(AuditLog, rows)
-    _spread(AuditLog, "created_at", history, 4 * 365)
-    return history
+    return _create(AuditLog, rows)
 
 
 def _jobs(scale: float, user) -> list[Job]:
@@ -633,7 +637,7 @@ def _operations(scale: float, user, resources: list[ManagedResource]) -> None:
                 state="succeeded" if index % 9 else "failed",
                 requested_by=user,
                 requested_actor="bench",
-                requested_interface="web",
+                requested_interface=WEB_INTERFACE,
                 idempotency_key=f"example-operation-{index}",
                 result={"changed": False},
                 completed_at=now - timedelta(hours=index),
@@ -652,7 +656,7 @@ def _operations(scale: float, user, resources: list[ManagedResource]) -> None:
                 resource_key=resources[index % len(resources)].key,
                 content_fingerprint=f"{index:064x}",
                 requested_actor="example-agent",
-                requested_interface="api",
+                requested_interface=API_INTERFACE,
                 expires_at=now + timedelta(days=1),
                 **(
                     {"state": "pending"}

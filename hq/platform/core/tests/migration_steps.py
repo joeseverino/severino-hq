@@ -4,14 +4,15 @@ from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
-from hq.platform.core import revisions
+from hq.platform.core import append_only, revisions
 
 
 class MigrationStepTestCase(TransactionTestCase):
     """Each ``migrate`` moves the test database to ``targets`` and returns that state's models.
 
-    The revision triggers name a table an earlier state does not have, so they
-    are lifted for the trip and put back with the schema.
+    The revision triggers name a table an earlier state does not have, and the
+    audit log's guard columns it does not have, so both are lifted for the trip
+    and put back with the schema.
     """
 
     def migrate(self, *targets: tuple[str, str]):
@@ -19,6 +20,7 @@ class MigrationStepTestCase(TransactionTestCase):
             cursor.execute("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name GLOB 'hq_revision_*'")
             for (name,) in cursor.fetchall():
                 cursor.execute(f'DROP TRIGGER "{name}"')
+        append_only.drop()
         MigrationExecutor(connection).migrate(list(targets))
         return MigrationExecutor(connection).loader.project_state(list(targets)).apps
 

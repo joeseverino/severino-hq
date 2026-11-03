@@ -94,7 +94,8 @@ class Job(models.Model):
 
     @override
     def __str__(self):
-        return f"{self.kind}: {self.get_state_display()}"
+        # What the job is, never its state: a row that names it outlives the state.
+        return self.label or self.kind
 
     @property
     def is_live(self) -> bool:

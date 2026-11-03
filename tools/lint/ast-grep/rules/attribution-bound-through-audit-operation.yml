@@ -1,0 +1,29 @@
+# A write attributed to the principal that made it binds through
+# `audit_operation(operation=..., principal=principal)`, the one place that
+# reads a principal's interface and actor, so every door names a row's author
+# the same way. `operation_context` stays for an attribution that is not a
+# principal's own (a job runner's interface and its job's actor).
+id: attribution-bound-through-audit-operation
+language: python
+severity: error
+message: The principal's interface and actor are spelled out by hand; bind them with `audit_operation`.
+note: >-
+  `with audit_operation(operation=name, principal=principal):` binds the same
+  interface, actor and operation (hq_sdk.audit exports it to plugins).
+ignores:
+  - "hq/platform/core/audit.py"
+rule:
+  pattern: operation_context($$$)
+  all:
+    - has:
+        kind: argument_list
+        has:
+          pattern:
+            context: f(interface=$P.interface)
+            selector: keyword_argument
+    - has:
+        kind: argument_list
+        has:
+          pattern:
+            context: f(actor=$P.actor)
+            selector: keyword_argument

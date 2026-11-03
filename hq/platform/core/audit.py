@@ -7,17 +7,17 @@ to whoever the request being answered signed in (``request_context``).
 """
 
 import json
-import logging
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from logging import getLogger
 from typing import Any, Literal, overload
 from uuid import UUID
 
 from django.core.serializers.json import DjangoJSONEncoder
+from django.db import transaction
 from django.db.models.signals import post_delete, post_init, post_save
 from django.dispatch import receiver
 lazy from django.contrib.auth.base_user import AbstractBaseUser
@@ -29,22 +29,28 @@ from hq.platform.application.payload_words import changed_words
 lazy from hq.platform.application.request_identity import signed_in
 
 from . import speculation
+from .attribution import OperationContext, bound, operation_context
 from .facets import as_metadata as facet_metadata
+from .logging import get_request_id
 from .models import AuditLog
 lazy from .facets import Facet
 
-logger = logging.getLogger("severino.audit")
+logger = getLogger("severino.audit")
 
 _AUDITED_MODELS: dict[type, str] = {}
-_operation_context: ContextVar[OperationContext | None] = ContextVar("hq_operation_context", default=None)
 _connection_context: ContextVar[str] = ContextVar("hq_audit_connection", default="")
+# A seed's say in the rows it causes: when each happened and who did it.
+type Stamp = Callable[[Model | None, str, str], dict[str, Any] | None]
+_stamp_context: ContextVar[Stamp | None] = ContextVar("hq_audit_stamp", default=None)
 
 # The object type of an event about one connection.
 CONNECTION_AUDIT_TYPE = "Connection"
 
 # Machine records of HQ looking, as (action, object type). The only events
 # `prune_routine` removes, after SEVERINO_AUDIT_ROUTINE_DAYS.
-ROUTINE_EVENTS: frozenset[tuple[str, str]] = frozenset({(AuditLog.Action.OBSERVED, CONNECTION_AUDIT_TYPE)})
+ROUTINE_EVENTS: frozenset[tuple[str, str]] = frozenset(
+    {(AuditLog.Action.OBSERVED, CONNECTION_AUDIT_TYPE), (AuditLog.Action.OBSERVED, "Background job")}
+)
 # The security record: people, access and change. Never pruned.
 SECURITY_ACTIONS: frozenset[str] = frozenset(
     {
@@ -57,6 +63,7 @@ SECURITY_ACTIONS: frozenset[str] = frozenset(
         AuditLog.Action.UPLOADED,
         AuditLog.Action.EXPORTED,
         AuditLog.Action.IMPORTED,
+        AuditLog.Action.DONE,
         AuditLog.Action.FAILED,
         AuditLog.Action.SETTINGS_CHANGED,
         AuditLog.Action.VIEWED,
@@ -176,42 +183,38 @@ def _changes(before: dict | None, after: dict, secret: frozenset) -> dict:
     return changed
 
 
-@dataclass(frozen=True, slots=True)
-class OperationContext:
-    """Stable attribution shared by web, MCP, and CLI adapters."""
-
-    interface: str
-    actor: str
-    operation: str
-    operation_id: str = ""
+# Who a row names when its request's caller never signed in.
+ANONYMOUS = "anonymous"
 
 
-@contextmanager
-def operation_context(*, interface: str, actor: str, operation: str, operation_id: str = "") -> Iterator[None]:
-    """Attach adapter-neutral attribution to audit events in this operation."""
+class Unattributed(RuntimeError):
+    """An audit row written with nothing bound to say who acted: a door that did not bind."""
 
-    token = _operation_context.set(
-        OperationContext(
-            interface=interface,
-            actor=actor,
-            operation=operation,
-            operation_id=operation_id,
+
+def _bound(doing: str) -> OperationContext:
+    context = bound()
+    if context is None:
+        raise Unattributed(
+            f"{doing} with no operation bound. Every door binds one where it starts "
+            "(hq.platform.core.attribution); work outside a door binds its own with audit_operation."
         )
-    )
-    try:
-        yield
-    finally:
-        _operation_context.reset(token)
+    return context
 
 
 @contextmanager
 def audit_operation(*, operation: str, principal: object | None = None, operation_id: str = "") -> Iterator[None]:
-    """Attribute a plugin operation without restating adapter fallbacks."""
+    """Attribute an operation to the principal that made it: the one way a
+    host service or a plugin binds a principal's interface and actor.
+
+    Without a principal the operation is the bound caller's, and with nobody
+    bound it is refused, so no operation is written down as nobody's.
+    """
 
     # A plugin hands whatever principal it holds, or none.
+    outer = _bound(f"The operation {operation!r} began") if principal is None else bound()
     with operation_context(
-        interface=getattr(principal, "interface", None) or "cli",
-        actor=getattr(principal, "actor", None) or "local-operator",
+        interface=getattr(principal, "interface", None) or (outer.interface if outer else ""),
+        actor=getattr(principal, "actor", None) or (outer.actor if outer else ""),
         operation=operation,
         operation_id=operation_id,
     ):
@@ -222,11 +225,23 @@ def audit_operation(*, operation: str, principal: object | None = None, operatio
 def audit_connection(connection_ref: str) -> Iterator[None]:
     """Name the connection the events in this block went through."""
 
-    token = _connection_context.set(str(connection_ref or "").strip())
-    try:
+    with _connection_context.set(str(connection_ref or "").strip()):
         yield
-    finally:
-        _connection_context.reset(token)
+
+
+@contextmanager
+def stamped(stamp: Stamp) -> Iterator[None]:
+    """Let ``stamp`` date and attribute each event recorded in the block.
+
+    For a seed, whose records are all written in one moment: the log is
+    append-only, so an event is written with its time and author or not at
+    all. ``stamp(obj, action, object_type)`` answers ``created_at``, ``user``,
+    ``metadata`` to merge in or the ``operation_id`` of the request that made
+    it, or None to leave the event as it is.
+    """
+
+    with _stamp_context.set(stamp):
+        yield
 
 
 def audited_labels() -> dict[type, str]:
@@ -421,6 +436,9 @@ def record_event(
     # A page fetched on a guess does nothing worth recording, so it does not
     # get as far as recording it.
     speculation.refuse("it does something the audit log records")
+    # Raised before the best-effort write below, so a path that reaches here
+    # unbound fails where it runs rather than leaving a row nobody wrote.
+    context = _bound(f"A {action} row was recorded")
     # The request is what a context variable holds, never its lazy user:
     # asgiref compares a variable's values when it restores a context
     # (``asgiref.sync._restore_context``), and comparing the lazy user would
@@ -438,34 +456,87 @@ def record_event(
         except Exception:  # noqa: BLE001 - an object's own __str__ may raise
             object_repr = ""
 
-    context = _operation_context.get()
+    stamp = _stamp_context.get()
+    stamps = (stamp(obj, action, object_type) if stamp is not None else None) or {}
+    user = stamps.get("user", user)
     # Facets first, so an explicit `metadata` key still wins.
-    event_metadata = {**facet_metadata(facets), **(metadata or {})}
-    if context is not None:
-        event_metadata = {
-            "interface": context.interface,
-            "actor": context.actor,
-            "operation": context.operation,
-            **event_metadata,
-        }
+    event_metadata = {
+        "interface": context.interface,
+        "actor": _actor(context, user, stamped_user="user" in stamps),
+        "operation": context.operation,
+        **facet_metadata(facets),
+        **(metadata or {}),
+        **stamps.get("metadata", {}),
+    }
 
     try:
-        return AuditLog.objects.create(
+        row = AuditLog.objects.create(
             user=user,
             action=action,
             object_type=object_type,
             object_id=object_id,
             object_repr=object_repr,
-            operation_id=context.operation_id if context is not None else "",
+            operation_id=stamps.get("operation_id", context.operation_id),
             connection=(str(connection or "").strip() or _connection_context.get())[:160],
             message=message,
             metadata=event_metadata,
+            **({"created_at": stamps["created_at"]} if "created_at" in stamps else {}),
         )
     except Exception:
         logger.exception("Failed to write AuditLog entry")
         if required:
             raise
         return None
+    emit_line("audit.recorded", _line(row))
+    return row
+
+
+def _actor(context: OperationContext, user: AbstractBaseUser | None, *, stamped_user: bool) -> str:
+    """Who a row says acted, in its own text, which outlives the account the
+    user column points at: a seed's stamped author, else the operation's actor,
+    else whoever the request had signed in when the row was written."""
+
+    if stamped_user and user is not None:
+        return user.get_username()
+    if context.actor:
+        return context.actor
+    return user.get_username() if user is not None else ANONYMOUS
+
+
+def _line(row: AuditLog) -> dict[str, Any]:
+    """A stored row as its log line carries it: what was written, redacted as it was."""
+
+    metadata = row.metadata or {}
+    return {
+        "id": row.pk,
+        "created_at": row.created_at.isoformat(),
+        "action": row.action,
+        "user_id": row.user_id,
+        "actor": metadata.get("actor"),
+        "interface": metadata.get("interface"),
+        "object_type": row.object_type,
+        "object_id": row.object_id,
+        "object_repr": row.object_repr,
+        "operation_id": row.operation_id,
+        "connection": row.connection,
+        "message": row.message,
+        "metadata": metadata,
+    }
+
+
+def emit_line(event: str, line: dict[str, Any]) -> None:
+    """Write ``line`` as one JSON line on the audit logger once the write it
+    describes commits, and never for one rolled back.
+
+    The copy of the log outside HQ: what a reader of the container's output,
+    or a shipper of it, holds even if the database is lost or rewritten.
+    """
+
+    line = {**line, "request_id": get_request_id()}
+    transaction.on_commit(
+        lambda: logger.info("%s %s", event, line["id"], extra={"event": event, "audit": line}),
+        robust=True,
+    )
 
 
 @overload

@@ -143,19 +143,27 @@ def _smaller(number: int | Decimal) -> int | Decimal:
     return nines + (number - int(number)) if isinstance(number, Decimal) else nines
 
 
-def _stop_clocks(row):
-    """Every moment the row's save read off the clock (a `created_at`, an
-    `updated_at`) set to the one `_when` gives: read off the clock, a list's
-    dates and times are as long as the hour the run happens to reach it, and
-    so are the widths its columns are drawn at."""
+def _save_with_stopped_clocks(row):
+    """Save the row with every moment its save would read off the clock (a
+    `created_at`, an `updated_at`) set to the one `_when` gives: read off the
+    clock, a list's dates and times are as long as the hour the run happens
+    to reach it, and so are the widths its columns are drawn at.
+
+    A moment that is only a default is given before the save, since a row
+    may never be written twice (the audit log); one the save stamps itself
+    (`auto_now`) is set after it."""
 
     clocks = {
-        field.name: _when() if isinstance(field, models.DateTimeField) else _when().date()
+        field: _when() if isinstance(field, models.DateTimeField) else _when().date()
         for field in row._meta.concrete_fields
         if isinstance(field, models.DateField) and not _filled(field)
     }
-    if clocks:
-        type(row)._base_manager.filter(pk=row.pk).update(**clocks)
+    for field, value in clocks.items():
+        setattr(row, field.attname, value)
+    row.save()
+    stamped = {field.name: value for field, value in clocks.items() if field.auto_now or field.auto_now_add}
+    if stamped:
+        type(row)._base_manager.filter(pk=row.pk).update(**stamped)
 
 
 def _admitted(model, values, exclude):
@@ -267,6 +275,15 @@ class _Fill:
             for field in model._meta.concrete_fields
             if _required(field) and field.name not in given
         }
+        if not sparse:
+            # The user is there before any row, so a row points at them as it
+            # is written: some rows (the audit log) are never written twice.
+            given |= {
+                field.name: self.user
+                for field in model._meta.concrete_fields
+                if field.is_relation and field.null and field.related_model is get_user_model()
+                if field.name not in given
+            }
         fields = [field for field in model._meta.concrete_fields if _filled(field) and not (sparse and field.null)]
         chosen = [field for field in fields if field.choices]
         plain = _admitted(
@@ -293,20 +310,23 @@ class _Fill:
             except ValidationError as error:
                 last = error
                 continue
-            row.save()
-            _stop_clocks(row)
+            _save_with_stopped_clocks(row)
             return row
         raise AssertionError(f"no {model.__name__} row its own rules admit: {last}")
 
     def _relate(self, row):
         """Each optional relation still empty pointed at a row of its own."""
 
-        for field in row._meta.concrete_fields:
-            if field.is_relation and field.null and getattr(row, field.attname) is None:
-                setattr(row, field.name, self._target(field.related_model))
-        row.full_clean()
-        row.save()
-        _stop_clocks(row)
+        empty = [
+            field
+            for field in row._meta.concrete_fields
+            if field.is_relation and field.null and getattr(row, field.attname) is None
+        ]
+        for field in empty:
+            setattr(row, field.name, self._target(field.related_model))
+        if empty:
+            row.full_clean()
+            _save_with_stopped_clocks(row)
         for field in row._meta.many_to_many:
             getattr(row, field.name).add(self._target(field.related_model))
 

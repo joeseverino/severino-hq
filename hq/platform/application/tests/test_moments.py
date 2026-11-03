@@ -231,9 +231,10 @@ class DaySpanTests(TestCase):
 
         day = date(2026, 3, 1)
         for hours in range(-30, 54, 3):
-            row = AuditLog.objects.create(action=AuditLog.Action.CREATED, object_type="Example")
-            AuditLog.objects.filter(pk=row.pk).update(
-                created_at=datetime(2026, 3, 1, 12, tzinfo=UTC) + timedelta(hours=hours)
+            AuditLog.objects.create(
+                action=AuditLog.Action.CREATED,
+                object_type="Example",
+                created_at=datetime(2026, 3, 1, 12, tzinfo=UTC) + timedelta(hours=hours),
             )
         start, end = day_span(day, day)
 

@@ -10,7 +10,7 @@ from typing import Annotated, Any
 from django.db import transaction
 
 from hq.domains.calendars.models import Entry
-from hq.platform.core.audit import operation_context
+from hq.platform.core.audit import audit_operation
 
 from .command_fields import Describe
 from .record_saves import Held, held
@@ -43,7 +43,7 @@ def delete_record(
         raise ValueError(f"confirm must exactly match target {target!r}")
     with (
         transaction.atomic(),
-        operation_context(interface=principal.interface, actor=principal.actor, operation=operation),
+        audit_operation(operation=operation, principal=principal),
     ):
         obj = held(model, _RECORD, lookup, expected_updated_at)
         label = str(obj)

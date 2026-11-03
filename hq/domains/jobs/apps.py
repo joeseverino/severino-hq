@@ -1,22 +1,9 @@
-from typing import override
-
 from django.apps import AppConfig
 
 
+# Not audited by its model: a job's one row in the log is the runner's, written as it ends.
 class JobsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "hq.domains.jobs"
     label = "jobs"
     verbose_name = "Background jobs"
-
-    @override
-    def ready(self):
-        from hq.platform.core.audit import register_audit
-
-        from .models import Job
-
-        # Registered like every other record HQ keeps, so starting a job that
-        # reads an operator's archive leaves the same trail as editing a row
-        # by hand. Work that happens off the request thread is exactly the
-        # work an audit log is for: nobody watched it happen.
-        register_audit(Job, "Background job")

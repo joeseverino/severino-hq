@@ -430,8 +430,15 @@ class ReportAttributionTests(TestCase):
         self.assertEqual(len(ProviderInventory.objects.get(kind="adguard.rewrite").records), 1)
         adopted = ManagedResource.objects.get(kind="adguard.rewrite")
         attributed = {
-            (metadata["interface"], metadata["actor"])
-            for metadata in AuditLog.objects.filter(object_id=str(adopted.pk)).values_list("metadata", flat=True)
-            if "actor" in metadata
+            (action, metadata["interface"], metadata["actor"])
+            for action, metadata in AuditLog.objects.filter(object_id=str(adopted.pk)).values_list("action", "metadata")
         }
-        self.assertEqual(attributed, {("internal", "controller")})
+        # Adopted by HQ itself, for the controller; what else the sweep moved
+        # is the controller's own report, through its door.
+        self.assertEqual(
+            attributed,
+            {
+                (AuditLog.Action.CREATED, "internal", "controller"),
+                (AuditLog.Action.UPDATED, "controller", "controller"),
+            },
+        )

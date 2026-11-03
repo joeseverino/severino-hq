@@ -3,10 +3,13 @@ it was made, dated to when it was really made and by whom.
 
 The seed writes every record in one moment, so without this the audit log
 would read as a single run by the system. Each event's author is the operator
-for what they keep by hand and declare, the agent for the runbooks it mirrors
-from the vault, and the system for scheduled work and the controller's reads.
+for what they keep by hand and declare, in the browser, the agent for the
+runbooks it mirrors from the vault, over MCP (``doors``). The scheduler's runs
+record their own endings (``work.jobs``), as every job does.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
@@ -14,17 +17,19 @@ from django.utils import timezone
 
 from hq.domains.calendars.models import Entry
 from hq.domains.control_plane.models import ManagedResource
-from hq.domains.jobs.models import Job
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
 from hq.platform.application import agent_registry, linked_accounts
-from hq.platform.core.audit import audited_labels
+from hq.platform.application.documentation import SYNC as DOCUMENTATION_SYNC
+from hq.platform.application.security import JOB_INTERFACE, MCP_INTERFACE
+from hq.platform.core.audit import audited_labels, stamped
 from hq.platform.core.models import AgentIdentity, AuditLog, LinkedAccount
 lazy from hq.domains.assets.models import Asset
 lazy from hq.domains.content.models import ContentItem
 lazy from hq.domains.docs_index.models import DocumentationRecord
 lazy from hq.domains.expenses.models import Expense
 
+from . import doors
 from .agents import AGENT
 from .names import CONTAINERS, MACHINE, hexed
 from .records import RUNBOOKS
@@ -45,7 +50,9 @@ MACHINE_DAYS = 425
 AGENT_DAYS = 300
 # The runbooks the agent mirrors: how many days ago each was first mirrored.
 MIRRORED = {doc_id: written for doc_id, *_rest, written, _reviewed in RUNBOOKS}
-SYNC = {"interface": "mcp", "actor": AGENT, "operation": "documentation.sync"}
+SYNC = {"interface": MCP_INTERFACE, "actor": AGENT, "operation": DOCUMENTATION_SYNC}
+# HQ's own scheduled work, which nobody asked for in the moment.
+SCHEDULED = {"interface": JOB_INTERFACE, "actor": "system"}
 
 
 def _on(day, *key) -> datetime:
@@ -72,54 +79,113 @@ def _resource_days(key: str) -> int:
     return MACHINE_DAYS - 15
 
 
-# Each kind the estate writes: its model, who makes it, and when a record of
-# it was made and last changed.
+def _by_hand(create: str, edit: str, key: str):
+    """Kept by hand in the browser: made on the ``create`` page, changed on the
+    ``edit`` page of the record, whose address names it by ``key``."""
+
+    def door(record, action):
+        if action == AuditLog.Action.CREATED:
+            return doors.stamp(doors.page(create))
+        return doors.stamp(doors.page(edit, **{key: getattr(record, key)}))
+
+    return door
+
+
+def _signed_in(_record, _action):
+    """Made by the sign-in, from the accounts the identity provider names."""
+
+    return doors.stamp(doors.page(doors.SIGN_IN))
+
+
+def _mirrored(_record, _action):
+    """Mirrored by the agent from the vault, one call over MCP each."""
+
+    return {"metadata": SYNC, "operation_id": doors.stamp(doors.mcp())["operation_id"]}
+
+
+# Each kind the estate writes: its model, the door its rows came through
+# (``None``: the one the step that writes it binds), and when a record of it
+# was made and last changed. A record kept by hand with no operator to keep it
+# is HQ's own (``SCHEDULED``).
 KINDS = (
-    (Project, "operator", lambda p: (_days_back(PROJECTS[p.slug][0], p.slug), _days_back(PROJECTS[p.slug][1], p.slug))),
-    (ManagedResource, "operator", lambda r: (_days_back(_resource_days(r.key), r.key),) * 2),
-    (ContentItem, "operator", lambda c: (_on(c.published_at - timedelta(days=3), c.slug), _on(c.published_at, c.slug))),
-    (Expense, "operator", lambda e: (_on(e.date, "expense", e.pk),) * 2),
-    (Receipt, "operator", lambda r: (_on(r.date, "receipt", r.pk),) * 2),
-    (Asset, "operator", lambda a: (_on(a.purchase_date, a.slug),) * 2),
-    (Entry, "operator", lambda e: (_days_back(20 + int(hexed(e.title), 16) % 180, e.title),) * 2),
-    (LinkedAccount, "operator", lambda a: (_days_back(MACHINE_DAYS, a.provider),) * 2),
+    (
+        Project,
+        _by_hand("projects:create", "projects:edit", "slug"),
+        lambda p: (_days_back(PROJECTS[p.slug][0], p.slug), _days_back(PROJECTS[p.slug][1], p.slug)),
+    ),
+    (
+        ManagedResource,
+        _by_hand("control_plane:create", "control_plane:edit", "key"),
+        lambda r: (_days_back(_resource_days(r.key), r.key),) * 2,
+    ),
+    (
+        ContentItem,
+        _by_hand("content:create", "content:edit", "slug"),
+        lambda c: (_on(c.published_at - timedelta(days=3), c.slug), _on(c.published_at, c.slug)),
+    ),
+    (Expense, _by_hand("expenses:create", "expenses:edit", "pk"), lambda e: (_on(e.date, "expense", e.pk),) * 2),
+    (Receipt, _by_hand("receipts:create", "receipts:edit", "pk"), lambda r: (_on(r.date, "receipt", r.pk),) * 2),
+    (Asset, _by_hand("assets:create", "assets:edit", "slug"), lambda a: (_on(a.purchase_date, a.slug),) * 2),
+    (
+        Entry,
+        _by_hand("calendar:entry_new", "calendar:entry_edit", "uid"),
+        lambda e: (_days_back(20 + int(hexed(e.title), 16) % 180, e.title),) * 2,
+    ),
+    (LinkedAccount, _signed_in, lambda a: (_days_back(MACHINE_DAYS, a.provider),) * 2),
     (
         DocumentationRecord,
-        "agent",
+        _mirrored,
         lambda d: (_days_back(MIRRORED[d.doc_id], d.doc_id), _on(d.last_reviewed, d.doc_id)),
     ),
-    (AgentIdentity, "agent", lambda a: (_days_back(AGENT_DAYS, a.client_id),) * 2),
-    (Job, "system", lambda j: (j.created_at,) * 2),
+    # Its first call names the door it was first seen through (``agents.seen``).
+    (AgentIdentity, None, lambda a: (_days_back(AGENT_DAYS, a.client_id),) * 2),
 )
 
 
-def settle(owner=None):
-    """Date every record and its audit events, and name who made them.
+@contextmanager
+def dated(owner=None) -> Iterator[None]:
+    """Each audit event the block records about a record of ``KINDS``, written
+    dated to when the record was made or last changed, and by whom.
 
-    ``owner`` is the operator; without one, the database's first account is."""
+    ``owner`` is the operator; without one, the database's first account is.
+    """
 
     owner = owner or get_user_model().objects.order_by("pk").first()
     labels = {**audited_labels(), LinkedAccount: linked_accounts.AUDIT_LABEL, AgentIdentity: agent_registry.AUDIT_LABEL}
-    for model, actor, made in KINDS:
-        records = {str(record.pk): record for record in model.objects.all()}
-        for event in AuditLog.objects.filter(
-            object_type=labels[model], action__in=(AuditLog.Action.CREATED, AuditLog.Action.UPDATED)
-        ):
-            record = records.get(event.object_id)
-            if record is None:
-                continue
-            created, changed = made(record)
-            when = created if event.action == AuditLog.Action.CREATED else changed
-            AuditLog.objects.filter(pk=event.pk).update(created_at=when, **_by(actor, event, owner))
-        _date(model, records.values(), made)
+    kinds = {model: (labels[model], door, made) for model, door, made in KINDS}
+
+    def stamp(record, action, object_type):
+        label, door, made = kinds.get(type(record), (None, None, None))
+        if object_type != label or action not in (AuditLog.Action.CREATED, AuditLog.Action.UPDATED):
+            return None
+        created, changed = made(record)
+        return {
+            "created_at": created if action == AuditLog.Action.CREATED else changed,
+            **_by(door, owner, record, action),
+        }
+
+    with stamped(stamp):
+        yield
 
 
-def _by(actor, event, owner):
-    if actor == "operator" and owner is not None:
-        return {"user": owner}
-    if actor == "agent":
-        return {"metadata": {**(event.metadata or {}), **SYNC}}
-    return {}
+def settle():
+    """Date every record the way its audit events are (``dated``)."""
+
+    for model, _door, made in KINDS:
+        _date(model, model.objects.all(), made)
+
+
+def _by(door, owner, record, action):
+    """Who wrote the row and through which door: the agent its own, everyone
+    else the operator, through theirs."""
+
+    if door is None:
+        return {}
+    if door is _mirrored:
+        return door(record, action)
+    if owner is None:
+        return {"metadata": SCHEDULED}
+    return {"user": owner, **door(record, action)}
 
 
 def _date(model, records, made):

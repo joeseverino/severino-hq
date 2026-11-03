@@ -25,16 +25,14 @@ from .estate_sizes import assert_cost_does_not_grow
 
 
 def _event(action, object_type="", *, days_old=0, connection="", user=None, message=""):
-    event = AuditLog.objects.create(
+    return AuditLog.objects.create(
         action=action,
         object_type=object_type,
         connection=connection,
         user=user,
         message=message,
+        created_at=timezone.now() - timedelta(days=days_old),
     )
-    if days_old:
-        AuditLog.objects.filter(pk=event.pk).update(created_at=timezone.now() - timedelta(days=days_old))
-    return event
 
 
 class ClassificationTests(TestCase):

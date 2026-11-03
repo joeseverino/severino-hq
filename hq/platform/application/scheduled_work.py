@@ -137,7 +137,8 @@ SCHEDULED: tuple[ScheduledWork, ...] = (
     ScheduledWork("units.read", "Check HQ's own services after a failure", _unit_state),
 )
 
-ACTOR = "timer"
+# The scheduler acts under one name, whichever job it starts.
+ACTOR = runner.SCHEDULER
 
 
 def job_names() -> dict[str, str]:

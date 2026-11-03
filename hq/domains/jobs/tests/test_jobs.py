@@ -130,7 +130,7 @@ class JobRunnerTests(TransactionTestCase):
         user = get_user_model().objects.create_user("operator", password="x" * 14)
         job = self.wait(start("test.audited", "Audited", lambda p: {"rows": 3}, requested_by=user))
 
-        entry = AuditLog.objects.filter(action=AuditLog.Action.IMPORTED, object_id=str(job.pk)).first()
+        entry = AuditLog.objects.filter(action=AuditLog.Action.DONE, object_id=str(job.pk)).first()
         self.assertIsNotNone(entry, "a finished job must say so in the audit log")
         # Attributed. There is no request on a worker thread, so an audit row
         # written without being told the user records the work as having been
@@ -286,7 +286,7 @@ class RunOnTheCallingThreadTests(TestCase):
         job = run("test.inline", "Inline", lambda progress: {"seen": 3}, actor="timer")
 
         self.assertEqual((job.state, job.result, job.percent), ("succeeded", {"seen": 3}, 100))
-        ended = AuditLog.objects.filter(operation_id=str(job.pk), action=AuditLog.Action.IMPORTED).get()
+        ended = AuditLog.objects.filter(operation_id=str(job.pk), action=AuditLog.Action.OBSERVED).get()
         self.assertEqual(ended.metadata["counts"], {"seen": 3})
 
     def test_it_takes_the_same_slot_as_a_started_job(self):
