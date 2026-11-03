@@ -3020,8 +3020,8 @@
                   }
                 },
                 "ok": {
-                  "const": true,
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
                 }
               },
               "required": [
@@ -3064,8 +3064,8 @@
                   "$ref": "#/components/schemas/AssetRecord"
                 },
                 "ok": {
-                  "const": true,
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
                 }
               },
               "required": [
@@ -3088,8 +3088,8 @@
                   "$ref": "#/components/schemas/CapabilityAnswer"
                 },
                 "ok": {
-                  "const": true,
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
                 }
               },
               "required": [
@@ -3169,8 +3169,8 @@
                   }
                 },
                 "ok": {
-                  "const": true,
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
                 }
               },
               "required": [
@@ -3193,8 +3193,8 @@
                   "$ref": "#/components/schemas/ContactSubmissionRow"
                 },
                 "ok": {
-                  "const": true,
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
                 }
               },
               "required": [
@@ -3217,8 +3217,8 @@
                   "$ref": "#/components/schemas/ContainerRecord"
                 },
                 "ok": {
-                  "const": true,
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
                 }
               },
               "required": [
@@ -3241,8 +3241,8 @@
                   "$ref": "#/components/schemas/CredentialRecord"
                 },
                 "ok": {
-                  "const": true,
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
                 }
               },
               "required": [
@@ -3265,8 +3265,8 @@
                   "$ref": "#/components/schemas/DomainRecord"
                 },
                 "ok": {
-                  "const": true,
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
                 }
               },
               "required": [
@@ -3289,8 +3289,8 @@
                   "$ref": "#/components/schemas/EntryRecord"
                 },
                 "ok": {
-                  "const": true,
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
                 }
               },
               "required": [
@@ -3343,8 +3343,8 @@
                   "$ref": "#/components/schemas/MachineRecord"
                 },
                 "ok": {
-                  "const": true,
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
                 }
               },
               "required": [
@@ -3387,8 +3387,8 @@
                   "type": "object"
                 },
                 "ok": {
-                  "const": true,
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
                 }
               },
               "required": [
@@ -3432,8 +3432,8 @@
                   "$ref": "#/components/schemas/PathRecord"
                 },
                 "ok": {
-                  "const": true,
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
                 }
               },
               "required": [
@@ -3476,8 +3476,8 @@
                   "$ref": "#/components/schemas/RelationshipsRecord"
                 },
                 "ok": {
-                  "const": true,
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
                 }
               },
               "required": [
@@ -3510,8 +3510,8 @@
                   "$ref": "#/components/schemas/ResourceCollection"
                 },
                 "ok": {
-                  "const": true,
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
                 }
               },
               "required": [
@@ -3554,8 +3554,8 @@
                   "$ref": "#/components/schemas/ServiceRecord"
                 },
                 "ok": {
-                  "const": true,
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
                 }
               },
               "required": [
@@ -3668,8 +3668,8 @@
                   "$ref": "#/components/schemas/UpgradeRecord"
                 },
                 "ok": {
-                  "const": true,
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
                 }
               },
               "required": [
@@ -3696,12 +3696,15 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The command that uses it, by name; null for none."
           },
           "effect": {
+            "description": "What using it does: `read`, `remote_write`, `infrastructure_change` or `destructive`.",
             "type": "string"
           },
           "governs_kinds": {
+            "description": "The types of record it lets HQ manage; empty for none.",
             "items": {
               "type": "string"
             },
@@ -3715,15 +3718,19 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "How HQ proves the credential allows it: `scoped`, `coarse` or `none`, where `scoped` is checked against `required_scopes`; null where the connection says nothing."
           },
           "label": {
+            "description": "What it lets HQ do, in a few words.",
             "type": "string"
           },
           "name": {
+            "description": "The name of what it lets HQ do, unique within its type of connection.",
             "type": "string"
           },
           "required_scopes": {
+            "description": "The permissions the credential must carry for it, in the service's own names.",
             "items": {
               "type": "string"
             },
@@ -3737,9 +3744,11 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The list those records are read from, by the name `describe_resources` gives it; null for none."
           },
           "summary": {
+            "description": "What it lets HQ do, in a sentence.",
             "type": "string"
           }
         },
@@ -3760,24 +3769,30 @@
         "additionalProperties": false,
         "properties": {
           "action": {
+            "description": "The button that opens it, such as `Open containers`; empty for none.",
             "type": "string"
           },
           "detail": {
+            "description": "More on it: what was read, and what to do.",
             "type": "string"
           },
           "label": {
+            "description": "What needs doing, in a line.",
             "type": "string"
           },
           "since": {
-            "type": "string"
+            "$ref": "#/components/schemas/Since"
           },
           "source": {
+            "description": "The part of HQ it comes from, in words, such as `Containers`.",
             "type": "string"
           },
           "status": {
+            "description": "How urgent it is: `serious` or `attention`.",
             "type": "string"
           },
           "url": {
+            "description": "The page where it is dealt with.",
             "type": "string"
           }
         },
@@ -3846,12 +3861,15 @@
         "description": "One thing on the calendar in the span, from whichever source holds it.",
         "properties": {
           "all_day": {
+            "description": "Whether it takes whole days, with no time of day.",
             "type": "boolean"
           },
           "calendar": {
+            "description": "The name of that source, as the calendar's list of them shows it.",
             "type": "string"
           },
           "detail": {
+            "description": "More about it in a line, such as where it is and how often; empty for none.",
             "type": "string"
           },
           "ends": {
@@ -3862,12 +3880,15 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "When it ends, in the terms `starts` takes and exclusive of that day or moment: whole days over the 3rd to the 5th end on the 6th. Null for a single day or moment."
           },
           "source": {
+            "description": "The id of the source it comes from, which showing or hiding a calendar takes.",
             "type": "string"
           },
           "starts": {
+            "description": "When it starts: an ISO 8601 date for one that takes whole days, else a date-time.",
             "type": "string"
           },
           "state": {
@@ -3878,12 +3899,15 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "For a plan, how it stands: `done`, `missed` or `planned`; null for a plain fact."
           },
           "title": {
+            "description": "What it is, in a line.",
             "type": "string"
           },
           "url": {
+            "description": "Where HQ shows it, a path; empty for none.",
             "type": "string"
           }
         },
@@ -3900,6 +3924,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -3927,8 +3952,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -3942,6 +3967,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -3965,8 +3991,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -4183,26 +4209,19 @@
       },
       "AssetLinks": {
         "additionalProperties": false,
+        "description": "The records an asset is linked to.",
         "properties": {
           "content": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/LinkedContent"
           },
           "documentation": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/LinkedDocs"
           },
           "expense_ids": {
-            "items": {
-              "type": "integer"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/LinkedExpenses"
           },
           "projects": {
+            "description": "The slugs of the projects this asset serves, sorted.",
             "items": {
               "type": "string"
             },
@@ -4226,93 +4245,82 @@
         "description": "One asset with the records it is linked to.",
         "properties": {
           "business_use_percentage": {
-            "type": "integer"
+            "$ref": "#/components/schemas/AssetRow/properties/business_use_percentage"
           },
           "category": {
-            "type": "string"
+            "$ref": "#/components/schemas/AssetRow/properties/category"
           },
           "estimated_deductible_amount": {
-            "type": "string"
+            "$ref": "#/components/schemas/AssetRow/properties/estimated_deductible_amount"
           },
           "infrastructure": {
-            "type": "string"
+            "$ref": "#/components/schemas/AssetRow/properties/infrastructure"
           },
           "item_name": {
-            "type": "string"
+            "$ref": "#/components/schemas/AssetRow/properties/item_name"
           },
           "notes": {
-            "type": "string"
+            "$ref": "#/components/schemas/AssetRow/properties/notes"
           },
           "payment_method": {
-            "type": "string"
+            "$ref": "#/components/schemas/AssetRow/properties/payment_method"
           },
           "purchase_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/AssetRow/properties/purchase_date"
           },
           "relationships": {
             "$ref": "#/components/schemas/AssetLinks"
           },
           "serial_number": {
-            "type": "string"
+            "$ref": "#/components/schemas/AssetRow/properties/serial_number"
           },
           "slug": {
-            "type": "string"
+            "$ref": "#/components/schemas/AssetRow/properties/slug"
           },
           "status": {
-            "type": "string"
+            "$ref": "#/components/schemas/AssetRow/properties/status"
           },
           "total_cost": {
-            "type": "string"
+            "$ref": "#/components/schemas/AssetRow/properties/total_cost"
           },
           "updated_at": {
-            "type": "string"
+            "$ref": "#/components/schemas/AssetRow/properties/updated_at"
           },
           "vendor": {
-            "type": "string"
+            "$ref": "#/components/schemas/AssetRow/properties/vendor"
           },
           "warranty_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/AssetRow/properties/warranty_date"
           }
         },
         "type": "object"
       },
       "AssetRow": {
         "additionalProperties": false,
+        "description": "One asset: what it is, what it cost and what it is to the business.",
         "properties": {
           "business_use_percentage": {
-            "type": "integer"
+            "$ref": "#/components/schemas/BusinessUseShare"
           },
           "category": {
+            "description": "What type of asset it is: `networking`, `server_hardware`, `software`, `subscription`, `domain`, `hosting`, `camera_audio`, `office`, `tools`, `training` or `other`.",
             "type": "string"
           },
           "estimated_deductible_amount": {
-            "type": "string"
+            "$ref": "#/components/schemas/DeductibleAmount"
           },
           "infrastructure": {
+            "description": "The machine, domain or certificate this asset is, as `type:key` such as `machine:lab-1`; empty for none.",
             "type": "string"
           },
           "item_name": {
-            "type": "string"
+            "$ref": "#/components/schemas/AssetName"
           },
           "notes": {
-            "type": "string"
+            "$ref": "#/components/schemas/Notes"
           },
           "payment_method": {
-            "type": "string"
+            "$ref": "#/components/schemas/PaymentMethod"
           },
           "purchase_date": {
             "anyOf": [
@@ -4322,24 +4330,28 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "When it was bought, an ISO 8601 date; null when not recorded."
           },
           "serial_number": {
+            "description": "The maker's serial number; empty when not recorded.",
             "type": "string"
           },
           "slug": {
-            "type": "string"
+            "$ref": "#/components/schemas/RecordSlug"
           },
           "status": {
+            "description": "Whether it is in use, or how it left: `active`, `retired`, `sold`, `returned` or `replaced`.",
             "type": "string"
           },
           "total_cost": {
-            "type": "string"
+            "$ref": "#/components/schemas/TotalCostAmount"
           },
           "updated_at": {
-            "type": "string"
+            "$ref": "#/components/schemas/UpdatedAt"
           },
           "vendor": {
+            "description": "Who it was bought from; empty when not recorded.",
             "type": "string"
           },
           "warranty_date": {
@@ -4350,7 +4362,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "When its warranty ends, an ISO 8601 date; null for none recorded."
           }
         },
         "type": "object"
@@ -4534,16 +4547,19 @@
         "properties": {
           "applied": {
             "const": false,
+            "description": "Whether anything changed, which nothing has while the call waits.",
             "type": "boolean"
           },
           "approval": {
             "$ref": "#/components/schemas/HeldRequest"
           },
           "message": {
+            "description": "HQ's sentence for the caller: that the change waits, and what to do next.",
             "type": "string"
           },
           "queued": {
             "const": false,
+            "description": "Whether any work was queued, which it never is while the call waits.",
             "type": "boolean"
           },
           "repeated": {
@@ -4552,6 +4568,7 @@
           },
           "status": {
             "const": "awaiting_approval",
+            "description": "That the call waits for a person.",
             "type": "string"
           }
         },
@@ -4569,9 +4586,11 @@
         "additionalProperties": false,
         "properties": {
           "id": {
+            "description": "What stands in the way, as a stable id an agent can act on, such as `mounts-unread`.",
             "type": "string"
           },
           "reason": {
+            "description": "What stands in the way, in a sentence.",
             "type": "string"
           }
         },
@@ -4586,19 +4605,27 @@
         "description": "One value of a breakdown and what it was asked for.",
         "properties": {
           "dimension": {
+            "description": "Which breakdown it is in: `path`, `referrer`, `country`, `device`, `browser` or `os`.",
             "type": "string"
           },
           "pageviews": {
+            "description": "How many pages were viewed over the days asked for, estimated from a sample.",
             "type": "integer"
           },
           "value": {
+            "description": "The page, referrer, country, device, browser or operating system it counts, as the browser sent it.",
             "type": "string"
           },
           "visits": {
+            "description": "How many visits it had over the days asked for, estimated from a sample.",
             "type": "integer"
           }
         },
         "type": "object"
+      },
+      "BusinessUseShare": {
+        "description": "How much of it is for the business, a whole percentage from 0 to 100.",
+        "type": "integer"
       },
       "CalendarEntryCreateRequest": {
         "additionalProperties": false,
@@ -4900,41 +4927,38 @@
         "description": "What the capability answers, in the shape its command names, or that it waits for a person.",
         "title": "Capability answer"
       },
-      "CapabilityEntry": {
+      "CapabilityDescription": {
         "additionalProperties": false,
+        "description": "One registry entry as every adapter describes it.",
         "properties": {
           "effect": {
+            "description": "What running it does: `read`, `remote_write`, `infrastructure_change` or `destructive`.",
             "type": "string"
           },
           "execution_notes": {
+            "description": "What running it does, step by step, a sentence each.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
-          "idempotency_key_required": {
-            "type": "boolean"
-          },
           "input_schema": {
+            "description": "The JSON Schema of the command it takes as `payload`.",
             "type": "object"
           },
           "label": {
+            "description": "What a person calls the command.",
             "type": "string"
           },
           "name": {
+            "description": "The command's dotted name, which running it takes.",
             "type": "string"
           },
           "permitted": {
-            "type": "boolean"
-          },
-          "request_schema": {
-            "type": "object"
+            "$ref": "#/components/schemas/Permitted"
           },
           "required_capabilities": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/RequiredPermissions"
           },
           "resource": {
             "anyOf": [
@@ -4944,9 +4968,11 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The list its targets are read from, by the name `describe_resources` gives it; null for none."
           },
           "summary": {
+            "description": "What the command does, in a sentence.",
             "type": "string"
           },
           "target": {
@@ -4957,18 +4983,22 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "What names the record it acts on: `slug`, `doc_id`, `integer` or `key`; null for a command that takes none."
           },
           "target_help": {
+            "description": "What to send as the target, in a sentence; empty for none.",
             "type": "string"
           },
           "target_initial_fields": {
+            "description": "The fields of its command filled in from the target's record, to be changed from there.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "target_label": {
+            "description": "What a person calls the record it acts on; empty for none.",
             "type": "string"
           },
           "target_query": {
@@ -4988,16 +5018,100 @@
                 }
               ]
             },
+            "description": "What a record must hold to be offered as its target, value by field; empty for any record.",
             "type": "object"
           },
           "variants": {
             "additionalProperties": {
               "type": "string"
             },
+            "description": "What its button says in each of its modes, by the mode's name, where one button cannot say all.",
             "type": "object"
           },
           "verb": {
+            "description": "What its button says.",
             "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "verb",
+          "variants",
+          "summary",
+          "effect",
+          "required_capabilities",
+          "target",
+          "target_label",
+          "target_help",
+          "target_query",
+          "execution_notes",
+          "target_initial_fields",
+          "resource",
+          "input_schema",
+          "permitted"
+        ],
+        "type": "object"
+      },
+      "CapabilityEntry": {
+        "additionalProperties": false,
+        "description": "One capability as the machine API describes it: with the body it is called by.",
+        "properties": {
+          "effect": {
+            "$ref": "#/components/schemas/CapabilityDescription/properties/effect"
+          },
+          "execution_notes": {
+            "$ref": "#/components/schemas/CapabilityDescription/properties/execution_notes"
+          },
+          "idempotency_key_required": {
+            "description": "Whether this caller must send an idempotency key to run it: any change, from all but the host's shell.",
+            "type": "boolean"
+          },
+          "input_schema": {
+            "$ref": "#/components/schemas/CapabilityDescription/properties/input_schema"
+          },
+          "label": {
+            "$ref": "#/components/schemas/CapabilityDescription/properties/label"
+          },
+          "name": {
+            "$ref": "#/components/schemas/CapabilityDescription/properties/name"
+          },
+          "permitted": {
+            "$ref": "#/components/schemas/CapabilityDescription/properties/permitted"
+          },
+          "request_schema": {
+            "description": "The JSON Schema of the body a call to run it sends.",
+            "type": "object"
+          },
+          "required_capabilities": {
+            "$ref": "#/components/schemas/CapabilityDescription/properties/required_capabilities"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/CapabilityDescription/properties/resource"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CapabilityDescription/properties/summary"
+          },
+          "target": {
+            "$ref": "#/components/schemas/CapabilityDescription/properties/target"
+          },
+          "target_help": {
+            "$ref": "#/components/schemas/CapabilityDescription/properties/target_help"
+          },
+          "target_initial_fields": {
+            "$ref": "#/components/schemas/CapabilityDescription/properties/target_initial_fields"
+          },
+          "target_label": {
+            "$ref": "#/components/schemas/CapabilityDescription/properties/target_label"
+          },
+          "target_query": {
+            "$ref": "#/components/schemas/CapabilityDescription/properties/target_query"
+          },
+          "variants": {
+            "$ref": "#/components/schemas/CapabilityDescription/properties/variants"
+          },
+          "verb": {
+            "$ref": "#/components/schemas/CapabilityDescription/properties/verb"
           }
         },
         "required": [
@@ -5024,16 +5138,18 @@
       },
       "CapabilityRequestCatalog": {
         "additionalProperties": false,
+        "description": "The capability catalog as the machine API answers it: each entry with the body it is called by.",
         "properties": {
           "capabilities": {
+            "description": "Each capability asked for that this caller's interface can run.",
             "items": {
               "$ref": "#/components/schemas/CapabilityEntry"
             },
             "type": "array"
           },
           "schema_version": {
-            "const": 2,
-            "type": "integer"
+            "$ref": "#/components/schemas/SchemaVersion",
+            "const": 2
           }
         },
         "required": [
@@ -5071,6 +5187,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -5099,8 +5216,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -5114,6 +5231,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -5140,8 +5258,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -5155,6 +5273,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -5177,8 +5296,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -5192,6 +5311,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -5218,8 +5338,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -5237,14 +5357,15 @@
         "description": "What ``describe_connections`` answers.",
         "properties": {
           "connections": {
+            "description": "Every type of connection HQ knows.",
             "items": {
               "$ref": "#/components/schemas/ConnectionDescription"
             },
             "type": "array"
           },
           "schema_version": {
-            "const": 1,
-            "type": "integer"
+            "$ref": "#/components/schemas/SchemaVersion",
+            "const": 1
           }
         },
         "required": [
@@ -5258,6 +5379,7 @@
         "description": "One connection family as every adapter describes it.",
         "properties": {
           "abilities": {
+            "description": "What it lets HQ do, one entry for each thing.",
             "items": {
               "$ref": "#/components/schemas/AbilityDescription"
             },
@@ -5271,9 +5393,11 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The service's own documentation for it; null for none."
           },
           "label": {
+            "description": "What a person calls this type of connection.",
             "type": "string"
           },
           "management_route": {
@@ -5284,19 +5408,18 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The page where its settings are changed, by its route name; null for none."
           },
           "name": {
+            "description": "The name of this type of connection.",
             "type": "string"
           },
           "permitted": {
-            "type": "boolean"
+            "$ref": "#/components/schemas/Permitted"
           },
           "required_capabilities": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/RequiredPermissions"
           },
           "secret_store": {
             "anyOf": [
@@ -5306,7 +5429,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Where its credential is kept, such as `1Password`; null for none."
           },
           "setup_route": {
             "anyOf": [
@@ -5316,20 +5440,15 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The page where one is set up, by its route name; null for none."
           },
           "summary": {
+            "description": "What this type of connection lets HQ reach, in a sentence.",
             "type": "string"
           },
           "web_route": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/WebRoute"
           }
         },
         "required": [
@@ -5351,29 +5470,25 @@
         "description": "One connection whole: what its credential sees and changes, how it is reached, and the fix.",
         "properties": {
           "actions": {
+            "description": "What the reader may do to the connection, each already checked against the reader's permissions.",
             "items": {
               "$ref": "#/components/schemas/ActionLink"
             },
             "type": "array"
           },
           "authority": {
+            "description": "What HQ knows of the credential's permissions: `proven`, `whole_account`, `undeclared`, `unknown`, `missing` or `none`.",
             "type": "string"
           },
           "changes": {
+            "description": "What its credential may change, each with the permissions it needs and whether it holds them.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "connection_ref": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/ConnectionStandingRow/properties/connection_ref"
           },
           "controller_id": {
             "anyOf": [
@@ -5383,7 +5498,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The controller that reported it; null for one read without one."
           },
           "credential_fix": {
             "anyOf": [
@@ -5393,19 +5509,29 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "How to fix its credential: the permissions missing, what they would show, its expiry and the steps; null when it needs no fix."
           },
           "credential_model": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What sort of credential it is, `scoped`, `coarse`, `none` or `rejected`, the last for one the service refused; null when that is not known."
           },
           "dependencies": {
+            "description": "What the connection depends on, each a label, a page and a record's key.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "detail": {
-            "type": "string"
+            "$ref": "#/components/schemas/ConnectionStandingRow/properties/detail"
           },
           "endpoint": {
             "anyOf": [
@@ -5415,34 +5541,38 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The address HQ reaches the service at; null when none is shown."
           },
           "facts": {
+            "description": "What the connection reported of itself, each a label and value.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "family": {
-            "type": "string"
+            "$ref": "#/components/schemas/ConnectionStandingRow/properties/family"
           },
           "family_label": {
+            "description": "The connection type's name, in words.",
             "type": "string"
           },
           "granted_scopes": {
+            "description": "The permissions the credential carries, as the service names them.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/ConnectionStandingRow/properties/id"
           },
           "kind": {
-            "type": "string"
+            "$ref": "#/components/schemas/ConnectionStandingRow/properties/kind"
           },
           "label": {
-            "type": "string"
+            "$ref": "#/components/schemas/ConnectionStandingRow/properties/label"
           },
           "last_activity": {
             "anyOf": [
@@ -5452,23 +5582,18 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The latest audit entry about it: a summary, when, and the entry's id; null for none."
           },
           "lifecycle": {
+            "description": "Where it is in its life: `configured`, `unprobed`, `reachable`, `ready`, `unreachable`, `unauthorized`, `stale`, `revoked` or `unreported`.",
             "type": "string"
           },
           "observed_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/ConnectionStandingRow/properties/observed_at"
           },
           "open_problems": {
-            "type": "integer"
+            "$ref": "#/components/schemas/ConnectionStandingRow/properties/open_problems"
           },
           "reach": {
             "anyOf": [
@@ -5478,7 +5603,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "How HQ reaches its address: the network, the host and machine, and on the tailnet the path and traffic; null when that was not worked out."
           },
           "read_now": {
             "anyOf": [
@@ -5498,15 +5624,18 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "When a refresh of it was asked for that has not run yet, an ISO 8601 date-time; null when none waits."
           },
           "reads": {
+            "description": "What its credential reads, each a label with what was last read and the permissions behind it.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "scopes_known": {
+            "description": "Whether the service reported the credential's permissions, so an empty `granted_scopes` means none.",
             "type": "boolean"
           },
           "secret_store": {
@@ -5517,7 +5646,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Where its credential is kept; null when its type names no place."
           },
           "sight": {
             "anyOf": [
@@ -5527,15 +5657,17 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "What its credential can read: the service, why the service refused the credential, what it changes, and a count in each state; null when nothing reads through it."
           },
           "status": {
-            "type": "string"
+            "$ref": "#/components/schemas/ConnectionStandingRow/properties/status"
           },
           "status_label": {
-            "type": "string"
+            "$ref": "#/components/schemas/ConnectionStandingRow/properties/status_label"
           },
           "targets": {
+            "description": "What the connection points at, each a label, a page and a record's key.",
             "items": {
               "type": "object"
             },
@@ -5549,9 +5681,11 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The part of HQ that uses it, as the navigation names it; null for none."
           },
           "would_also_see": {
+            "description": "What the credential would also read with more permissions, each naming them.",
             "items": {
               "type": "string"
             },
@@ -5571,27 +5705,33 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The ref its controller and HQ's audit log name it by, which a read of one names it by; null for none."
           },
           "detail": {
+            "description": "A line on what it last reported, such as how much it holds; empty when there is nothing to add.",
             "type": "string"
           },
           "family": {
+            "description": "The connection type's name, such as `infrastructure.controllers`; `family_label` says it in words.",
             "type": "string"
           },
           "id": {
+            "description": "The connection's id across HQ, which a read of one also names it by.",
             "type": "string"
           },
           "kind": {
+            "description": "What it connects to, such as the service a controller's connection reads.",
             "type": "string"
           },
           "label": {
+            "description": "The connection's name, as its row heads it.",
             "type": "string"
           },
           "observed_at": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/ObservedAt"
               },
               {
                 "type": "null"
@@ -5599,12 +5739,15 @@
             ]
           },
           "open_problems": {
+            "description": "How many open problems about the connection the reader may see.",
             "type": "integer"
           },
           "status": {
+            "description": "How the connection stands: `serious`, `attention`, `neutral` or `good`.",
             "type": "string"
           },
           "status_label": {
+            "description": "How the connection stands, in the words its row shows.",
             "type": "string"
           }
         },
@@ -5745,21 +5888,27 @@
         "description": "One message as HQ last read it from the form's table, with a review it asked for laid over.\n\nA field the table left empty may be absent; the message's own fields are\nthe contact form's, its metadata the visitor's browser's.",
         "properties": {
           "account_id": {
+            "description": "The id of the Cloudflare account that holds the table.",
             "type": "string"
           },
           "admin_notes": {
+            "description": "The notes kept on it, for HQ only; empty for none.",
             "type": "string"
           },
           "assigned_to": {
+            "description": "Who is handling it; empty for nobody.",
             "type": "string"
           },
           "browser": {
+            "description": "The visitor's browser, as the site recorded it.",
             "type": "string"
           },
           "connection_ref": {
+            "description": "The Cloudflare connection it was read through, by name.",
             "type": "string"
           },
           "country": {
+            "description": "The country it was sent from, as the site recorded it.",
             "type": "string"
           },
           "created_at": {
@@ -5770,45 +5919,59 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "When it was sent, an ISO 8601 date-time; null when the table says nothing."
           },
           "database": {
+            "description": "The name of the D1 database that holds the table.",
             "type": "string"
           },
           "database_id": {
+            "description": "The id of the D1 database that holds the table.",
             "type": "string"
           },
           "device": {
+            "description": "The type of device it was sent from, as the site recorded it.",
             "type": "string"
           },
           "email": {
+            "description": "The email address the visitor gave.",
             "type": "string"
           },
           "id": {
+            "description": "The message's id in the form's table, which the review and delete commands take.",
             "type": "integer"
           },
           "ip_address": {
+            "description": "The IP address it was sent from.",
             "type": "string"
           },
           "message": {
+            "description": "What the visitor wrote, in full.",
             "type": "string"
           },
           "message_preview": {
+            "description": "The message's first 160 characters, for a list to show.",
             "type": "string"
           },
           "name": {
+            "description": "The name the visitor gave.",
             "type": "string"
           },
           "pending": {
+            "description": "Whether a review HQ asked for is not in the table yet; the fields it changes already show it.",
             "type": "boolean"
           },
           "source_url": {
+            "description": "The page the form was sent from.",
             "type": "string"
           },
           "status": {
+            "description": "Where its review stands: `unread`, `read`, `replied`, `archived` or `spam`.",
             "type": "string"
           },
           "turnstile": {
+            "description": "What the form's bot check found, as the site recorded it, such as `verified`.",
             "type": "string"
           },
           "updated_at": {
@@ -5819,9 +5982,11 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "When the table last changed it, an ISO 8601 date-time; null when the table says nothing."
           },
           "user_agent": {
+            "description": "The visitor's browser's whole user agent string.",
             "type": "string"
           }
         },
@@ -5832,21 +5997,23 @@
         "description": "One running container whole: its image and standing, how it runs and what it uses.",
         "properties": {
           "address": {
-            "type": "string"
+            "$ref": "#/components/schemas/ContainerRow/properties/address"
           },
           "compose_project": {
-            "type": "string"
+            "$ref": "#/components/schemas/ContainerRow/properties/compose_project"
           },
           "image": {
+            "description": "What it runs: the reference, registry, repository, tag, digest and image id, whether it is pinned by digest, when it was built, and its source.",
             "type": "object"
           },
           "machine": {
-            "type": "string"
+            "$ref": "#/components/schemas/ContainerRow/properties/machine"
           },
           "name": {
-            "type": "string"
+            "$ref": "#/components/schemas/ContainerRow/properties/name"
           },
           "posture": {
+            "description": "How it measures against the container standard: how many checks it meets of those measured, each check's state, why each unmet one matters and its fix, and what is off by design.",
             "type": "object"
           },
           "project": {
@@ -5857,7 +6024,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The project it belongs to, a name, slug and page; null for none."
           },
           "repository": {
             "anyOf": [
@@ -5867,7 +6035,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The repository whose pipeline deploys it: its default branch, head and deployed commits, whether production was verified, and its open pull requests; null when none deploys it."
           },
           "runtime": {
             "anyOf": [
@@ -5877,28 +6046,28 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "How it is run, from Docker's inspect; null when that was not read."
           },
           "serves": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/ContainerRow/properties/serves"
           },
           "standing": {
+            "description": "Whether what it runs is current and safe: a state and summary, newer tags, the latest release, advisories, and when the registry and upstream were last read.",
             "type": "object"
           },
           "state": {
-            "type": "string"
+            "$ref": "#/components/schemas/ContainerRow/properties/state"
           },
           "status": {
-            "type": "string"
+            "$ref": "#/components/schemas/ContainerRow/properties/status"
           },
           "supply_chain": {
+            "description": "Where its image comes from: its source, provenance, packages, SBOM, attestations, known vulnerabilities and when they were read, and how it measures against the supply chain standard.",
             "type": "object"
           },
           "url": {
-            "type": "string"
+            "$ref": "#/components/schemas/ContainerRow/properties/url"
           },
           "usage": {
             "anyOf": [
@@ -5908,7 +6077,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The memory and CPU it uses beside its limits, and when that was read; null when it was not."
           }
         },
         "type": "object"
@@ -5917,30 +6087,38 @@
         "additionalProperties": false,
         "properties": {
           "address": {
+            "description": "`machine:container`, which a read of one names it by.",
             "type": "string"
           },
           "compose_project": {
+            "description": "The compose project it belongs to; empty for one started on its own.",
             "type": "string"
           },
           "machine": {
+            "description": "The name of the machine it runs on.",
             "type": "string"
           },
           "name": {
+            "description": "The container's name.",
             "type": "string"
           },
           "serves": {
+            "description": "The hostnames it serves.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "state": {
+            "description": "Docker's state for it, such as `running` or `exited`.",
             "type": "string"
           },
           "status": {
+            "description": "Docker's status line for it, such as `Up 12 days (healthy)`.",
             "type": "string"
           },
           "url": {
+            "description": "Its page in HQ: its record's when HQ watches it, else its machine's.",
             "type": "string"
           }
         },
@@ -6118,12 +6296,14 @@
       },
       "ContentRow": {
         "additionalProperties": false,
+        "description": "One writeup, video or page, published or not.",
         "properties": {
           "content_type": {
+            "description": "What form it takes: `article`, `video`, `lab_writeup`, `guide`, `review`, `portfolio_page`, `service_page`, `case_study` or `page`.",
             "type": "string"
           },
           "notes": {
-            "type": "string"
+            "$ref": "#/components/schemas/Notes"
           },
           "published_at": {
             "anyOf": [
@@ -6133,31 +6313,35 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "When it was published, an ISO 8601 date; null when not recorded."
           },
           "published_url": {
-            "type": "string"
+            "$ref": "#/components/schemas/PublishedUrl"
           },
           "slug": {
-            "type": "string"
+            "$ref": "#/components/schemas/RecordSlug"
           },
           "status": {
+            "description": "How far along it is: `draft`, `published` or `archived`.",
             "type": "string"
           },
           "tags": {
+            "description": "The tags it is filed under, in the order they were written.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "title": {
-            "type": "string"
+            "$ref": "#/components/schemas/ContentTitle"
           },
           "topic": {
+            "description": "What it is about, in a few words; empty when not recorded.",
             "type": "string"
           },
           "updated_at": {
-            "type": "string"
+            "$ref": "#/components/schemas/UpdatedAt"
           }
         },
         "type": "object"
@@ -6309,31 +6493,30 @@
         "description": "What one service's credential reads, each reading or listing it sees.",
         "properties": {
           "credential_refusal": {
-            "type": "string"
+            "$ref": "#/components/schemas/CredentialRow/properties/credential_refusal"
           },
           "label": {
-            "type": "string"
+            "$ref": "#/components/schemas/CredentialRow/properties/label"
           },
           "manages": {
+            "description": "The types of record its credential changes, in words.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "provider": {
-            "type": "string"
+            "$ref": "#/components/schemas/CredentialRow/properties/provider"
           },
           "sights": {
+            "description": "Each reading or record type it could read, with its state, records, when it was read, the error, the permissions it needs and what would fix it.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "tally": {
-            "items": {
-              "$ref": "#/components/schemas/TallyPart"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/CredentialRow/properties/tally"
           }
         },
         "type": "object"
@@ -6342,15 +6525,19 @@
         "additionalProperties": false,
         "properties": {
           "credential_refusal": {
+            "description": "Why the service refused the credential itself; empty when it did not.",
             "type": "string"
           },
           "label": {
+            "description": "The service's name, as a page heads it.",
             "type": "string"
           },
           "provider": {
+            "description": "The service the credential belongs to, such as `adguard`, which a read of one names it by.",
             "type": "string"
           },
           "tally": {
+            "description": "How many readings and records it reads in each state, for the states it has.",
             "items": {
               "$ref": "#/components/schemas/TallyPart"
             },
@@ -6398,6 +6585,10 @@
           }
         },
         "type": "object"
+      },
+      "DeductibleAmount": {
+        "description": "An estimate of what may be deducted: `total_cost` times `business_use_percentage`, rounded to the cent, as a decimal string.",
+        "type": "string"
       },
       "DeleteCommand": {
         "additionalProperties": false,
@@ -6647,18 +6838,22 @@
         "description": "One documentation pointer; a path or note it may not show is blank.",
         "properties": {
           "doc_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/DocId"
           },
           "doc_type": {
+            "description": "What type of doc it is: `runbook`, `architecture_note`, `deployment_guide`, `troubleshooting_guide`, `recovery_procedure`, `public_article_draft`, `decision_record`, `report` or `queue`.",
             "type": "string"
           },
           "environment": {
+            "description": "Where that system runs: `homelab`, `vps`, `wordpress`, `cloudflare`, `tailscale`, `adguard`, `unifi`, `local_mac` or `other`.",
             "type": "string"
           },
           "external_url": {
+            "description": "Where it is published outside HQ; empty for none.",
             "type": "string"
           },
           "github_path": {
+            "description": "Its path in a repository; empty for none.",
             "type": "string"
           },
           "last_reviewed": {
@@ -6669,12 +6864,14 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "When it was last checked against what it describes, an ISO 8601 date; null for never."
           },
           "notes": {
-            "type": "string"
+            "$ref": "#/components/schemas/Notes"
           },
           "obsidian_path": {
+            "description": "Its path in the vault; empty for none.",
             "type": "string"
           },
           "published_at": {
@@ -6685,22 +6882,26 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "When it was published, an ISO 8601 date; null when it is not."
           },
           "sensitivity": {
+            "description": "Who may read it, `public`, `internal`, `sensitive` or `restricted`; a restricted doc is never listed.",
             "type": "string"
           },
           "status": {
+            "description": "Where the doc stands: `draft`, `active`, `deprecated` or `archived`.",
             "type": "string"
           },
           "system": {
+            "description": "The system or service it is about; empty for none.",
             "type": "string"
           },
           "title": {
-            "type": "string"
+            "$ref": "#/components/schemas/DocumentationTitle"
           },
           "updated_at": {
-            "type": "string"
+            "$ref": "#/components/schemas/UpdatedAt"
           }
         },
         "type": "object"
@@ -6951,27 +7152,29 @@
         "description": "One domain with its records, its connection and what HQ makes of it.",
         "properties": {
           "connection_ref": {
+            "description": "The connection that reads the domain's DNS records; empty for none.",
             "type": "string"
           },
           "declaration": {
-            "type": "string"
+            "$ref": "#/components/schemas/DomainRow/properties/declaration"
           },
           "insights": {
+            "description": "What HQ makes of the domain, each a label, value, detail and link, and whether it is a concern or a notice.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "name": {
-            "type": "string"
+            "$ref": "#/components/schemas/DomainRow/properties/name"
           },
           "node": {
-            "type": "string"
+            "$ref": "#/components/schemas/DomainRow/properties/node"
           },
           "observed_at": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/ObservedAt"
               },
               {
                 "type": "null"
@@ -6979,32 +7182,24 @@
             ]
           },
           "reachable": {
+            "description": "Whether that connection answered its last read.",
             "type": "boolean"
           },
           "records": {
+            "description": "The domain's DNS records as last read, each its name, record type, value, whether it is proxied, its TTL in seconds, the key of HQ's record of it (empty for none), and whether only the live zone holds it.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "registration": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Registration"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/DomainRow/properties/registration"
           },
           "services": {
-            "items": {
-              "$ref": "#/components/schemas/ZoneMemberPart"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/DomainRow/properties/services"
           },
           "url": {
-            "type": "string"
+            "$ref": "#/components/schemas/DomainRow/properties/url"
           }
         },
         "type": "object"
@@ -7013,12 +7208,15 @@
         "additionalProperties": false,
         "properties": {
           "declaration": {
+            "description": "The key of HQ's record of the domain's DNS zone; empty when HQ keeps none.",
             "type": "string"
           },
           "name": {
+            "description": "The domain's name, which a read of one names it by.",
             "type": "string"
           },
           "node": {
+            "description": "The domain's id in the topology: `zone:` and its name.",
             "type": "string"
           },
           "registration": {
@@ -7032,12 +7230,14 @@
             ]
           },
           "services": {
+            "description": "The services under the domain, HQ's own among them.",
             "items": {
               "$ref": "#/components/schemas/ZoneMemberPart"
             },
             "type": "array"
           },
           "url": {
+            "description": "The domain's page in HQ.",
             "type": "string"
           }
         },
@@ -7096,6 +7296,7 @@
         "description": "One of your own events, as its command writes it.",
         "properties": {
           "about": {
+            "description": "What it is about, as `type:key`; empty for nothing.",
             "type": "string"
           },
           "ends_at": {
@@ -7106,7 +7307,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The time it ends, as `HH:MM`; null for none."
           },
           "ends_on": {
             "anyOf": [
@@ -7116,21 +7318,26 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The day it ends, an ISO 8601 date; null for one that ends the day it starts."
           },
           "interval": {
+            "description": "How far apart its times are, in what `repeat` names: 2 with `weekly` is every other week.",
             "type": "integer"
           },
           "location": {
+            "description": "Where it happens; empty when not recorded.",
             "type": "string"
           },
           "notes": {
-            "type": "string"
+            "$ref": "#/components/schemas/Notes"
           },
           "repeat": {
+            "description": "How often it repeats: `daily`, `weekly`, `monthly` or `yearly`; empty for once.",
             "type": "string"
           },
           "repeat_label": {
+            "description": "How it repeats, as a person says it, such as `Every 2 weeks on Mon`; empty for once.",
             "type": "string"
           },
           "repeat_until": {
@@ -7141,7 +7348,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The last day it repeats, an ISO 8601 date; null for no last day."
           },
           "starts_at": {
             "anyOf": [
@@ -7151,24 +7359,29 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The time it starts, as `HH:MM`; null for one that takes the whole day."
           },
           "starts_on": {
+            "description": "The day it starts, an ISO 8601 date.",
             "type": "string"
           },
           "title": {
-            "type": "string"
+            "$ref": "#/components/schemas/CalendarEntryTitle"
           },
           "uid": {
+            "description": "The event's id, which reading it, changing it and deleting it each take.",
             "type": "string"
           },
           "updated_at": {
-            "type": "string"
+            "$ref": "#/components/schemas/UpdatedAt"
           },
           "url": {
+            "description": "Its day on HQ's calendar, a path.",
             "type": "string"
           },
           "weekdays": {
+            "description": "For one that repeats weekly, the days of the week it falls on, Monday as 0; else empty.",
             "items": {
               "type": "integer"
             },
@@ -7203,21 +7416,27 @@
         "additionalProperties": false,
         "properties": {
           "detail": {
+            "description": "A line under it, such as how many are offline; empty for none.",
             "type": "string"
           },
           "id": {
+            "description": "The figure's stable id, such as `hq.estate.machines`.",
             "type": "string"
           },
           "label": {
+            "description": "What it counts, as the dashboard heads it.",
             "type": "string"
           },
           "status": {
+            "description": "`attention` when it needs a look; empty otherwise.",
             "type": "string"
           },
           "url": {
+            "description": "The page that lists what it counts, or of the one thing it is about.",
             "type": "string"
           },
           "value": {
+            "description": "The figure as a page shows it, such as `3` or `24 days`.",
             "type": "string"
           }
         },
@@ -7471,15 +7690,18 @@
         "description": "One expense; each related record by its slug or id, or null.",
         "properties": {
           "about": {
+            "description": "What it was for, as `type:key`, where none of the related records says it; empty for none.",
             "type": "string"
           },
           "business_purpose": {
+            "description": "Why the business needed it; empty when not recorded.",
             "type": "string"
           },
           "business_use_percentage": {
-            "type": "integer"
+            "$ref": "#/components/schemas/BusinessUseShare"
           },
           "category": {
+            "description": "What type of expense it is: `hosting`, `domains`, `software`, `hardware`, `networking`, `office`, `education`, `subscriptions`, `content_production`, `consulting_tools`, `professional_services` or `miscellaneous`.",
             "type": "string"
           },
           "date": {
@@ -7490,25 +7712,28 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "When it was spent, an ISO 8601 date; null when not recorded."
           },
           "estimated_deductible_amount": {
-            "type": "string"
+            "$ref": "#/components/schemas/DeductibleAmount"
           },
           "id": {
+            "description": "The expense's id, which its page and the records linked to it name it by.",
             "type": "integer"
           },
           "item": {
-            "type": "string"
+            "$ref": "#/components/schemas/ExpenseItem"
           },
           "notes": {
-            "type": "string"
+            "$ref": "#/components/schemas/Notes"
           },
           "paid_from": {
+            "description": "The account that paid, as `type:key`; empty when not recorded.",
             "type": "string"
           },
           "payment_method": {
-            "type": "string"
+            "$ref": "#/components/schemas/PaymentMethod"
           },
           "related_asset": {
             "anyOf": [
@@ -7518,7 +7743,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The slug of the asset this bought or kept running; null for none."
           },
           "related_content": {
             "anyOf": [
@@ -7528,7 +7754,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The slug of the writeup or page this paid for; null for none."
           },
           "related_documentation": {
             "anyOf": [
@@ -7538,7 +7765,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The vault doc ID of the doc that records it; null for none, or for one too sensitive to share."
           },
           "related_project": {
             "anyOf": [
@@ -7548,16 +7776,17 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The slug of the project this was spent on; null for none."
           },
           "total_cost": {
-            "type": "string"
+            "$ref": "#/components/schemas/TotalCostAmount"
           },
           "updated_at": {
-            "type": "string"
+            "$ref": "#/components/schemas/UpdatedAt"
           },
           "vendor": {
-            "type": "string"
+            "$ref": "#/components/schemas/ExpenseVendor"
           }
         },
         "type": "object"
@@ -7766,8 +7995,8 @@
             "description": "Why HQ refused, and what gets past it."
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -7817,8 +8046,8 @@
             "description": "The rule the read was narrowed to; null for every rule's."
           },
           "schema_version": {
-            "const": 2,
-            "type": "integer"
+            "$ref": "#/components/schemas/SchemaVersion",
+            "const": 2
           },
           "summary": {
             "$ref": "#/components/schemas/FindingsSummary"
@@ -7869,6 +8098,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -7893,8 +8123,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -7905,8 +8135,10 @@
       },
       "GetOperation": {
         "additionalProperties": false,
+        "description": "How one record of a resource is read, where it can be.",
         "properties": {
           "identifier": {
+            "description": "The field of a record that `get_resource` finds it by.",
             "type": "string"
           }
         },
@@ -7947,17 +8179,22 @@
       },
       "HealthPart": {
         "additionalProperties": false,
+        "description": "Its health as last read, and the condition behind it.",
         "properties": {
           "label": {
+            "description": "Its health in the words a page shows, such as `Working`.",
             "type": "string"
           },
           "message": {
+            "description": "The message on that condition, or why it has not been read yet; empty for none.",
             "type": "string"
           },
           "reason": {
+            "description": "The reason on the condition behind it, as reported; empty for none.",
             "type": "string"
           },
           "state": {
+            "description": "Its health in one word, such as `healthy`, `pending` or `unknown`.",
             "type": "string"
           }
         },
@@ -7974,9 +8211,11 @@
         "description": "A call held for a person: what it asks, who asked, and where it is decided.",
         "properties": {
           "capability": {
+            "description": "The command it would run, by name.",
             "type": "string"
           },
           "content_fingerprint": {
+            "description": "A digest of the call and of what it was measured against; an approval holds only while both are unchanged.",
             "type": "string"
           },
           "expires_at": {
@@ -7988,21 +8227,27 @@
             "type": "string"
           },
           "reason": {
+            "description": "Why the caller asked, in its own words; empty when it gave none.",
             "type": "string"
           },
           "requested_actor": {
+            "description": "Who asked, by the name HQ knows the caller by.",
             "type": "string"
           },
           "requested_at": {
+            "description": "When it was asked, an ISO 8601 date-time.",
             "type": "string"
           },
           "requested_interface": {
+            "description": "How it was asked, such as `api` or `mcp`.",
             "type": "string"
           },
           "resource_key": {
+            "description": "The key of what it would change; empty for none.",
             "type": "string"
           },
           "resource_kind": {
+            "description": "The type of what it would change, which is why it waits for a person; empty for none.",
             "type": "string"
           },
           "review_url": {
@@ -8010,9 +8255,11 @@
             "type": "string"
           },
           "state": {
+            "description": "Where the request stands: `pending`, `approved`, `rejected`, `expired` or `stale`; only a `pending` one can still be decided.",
             "type": "string"
           },
           "target": {
+            "description": "The record the command would act on, as the call named it; empty for none.",
             "type": "string"
           }
         },
@@ -8045,24 +8292,30 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The certificate the hop presents, its name, issuer and expiry and where it was read, or why HQ cannot say; null when it presents none."
           },
           "check": {
+            "description": "Whether what the request showed here agrees with what was read: a state, label and detail. Present only on a hop the calling request walked.",
             "type": "object"
           },
           "detail": {
+            "description": "A line on what it does there, such as where it forwards; empty when there is nothing to add.",
             "type": "string"
           },
           "evidence": {
+            "description": "What the request carried at the hop, each a label, value, detail and role. Present only on a hop the calling request walked.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "label": {
+            "description": "The hop in the words its step is headed with.",
             "type": "string"
           },
           "layers": {
+            "description": "The admission layers decided at the hop, each with its state, detail, boundary, mechanism and rules. Present only on a hop the calling request walked.",
             "items": {
               "type": "object"
             },
@@ -8076,12 +8329,15 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The page of what the hop names; null when it has none."
           },
           "name": {
+            "description": "Which one it is, such as a hostname or a machine's name; empty when `label` says it.",
             "type": "string"
           },
           "overlays": {
+            "description": "What sits over the hop, such as an access gate, each a relation and a link.",
             "items": {
               "type": "object"
             },
@@ -8095,12 +8351,15 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Where HQ read the hop: the reading's type, label, connection and when, or HQ's own record; null when nothing says."
           },
           "step": {
+            "description": "What the hop is, such as `dns`, `ingress`, `machine` or `container`.",
             "type": "string"
           },
           "unread": {
+            "description": "What HQ could not read about the hop, a sentence; empty when nothing is missing.",
             "type": "string"
           }
         },
@@ -8210,9 +8469,11 @@
         "additionalProperties": false,
         "properties": {
           "digest": {
+            "description": "The image's digest, `sha256:` and its hash; empty when not read yet.",
             "type": "string"
           },
           "tag": {
+            "description": "The image's tag.",
             "type": "string"
           }
         },
@@ -8573,6 +8834,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -8592,8 +8854,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -8607,6 +8869,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -8626,8 +8889,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -8660,22 +8923,47 @@
         ],
         "type": "object"
       },
+      "LinkedContent": {
+        "description": "The slugs of the writeups and pages linked to it, sorted.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "LinkedDocs": {
+        "description": "The vault doc IDs of the docs linked to it, sorted, leaving out any too sensitive to share.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "LinkedExpenses": {
+        "description": "The ids of the expenses linked to it, newest first.",
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
       "ListOperation": {
         "additionalProperties": false,
+        "description": "How a resource is listed, where it can be.",
         "properties": {
           "fields": {
+            "description": "The fields each item keeps unless the caller names its own; absent, items keep them all.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "filters": {
+            "description": "The fields a listing narrows by; `describe_resources` given this name says each one's type and choices.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "query_schema": {
+            "description": "The JSON Schema of what a listing takes; only in a read of this one resource.",
             "type": "object"
           }
         },
@@ -8748,54 +9036,56 @@
         "description": "One machine whole: how it is reached, what it serves and what runs on it.",
         "properties": {
           "addresses": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/MachineRow/properties/addresses"
           },
           "aliases": {
+            "description": "Other names the same machine is known by.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "containers": {
+            "description": "The containers last read on it, each its name, compose project, image, state, status, what it publishes, the key of HQ's record that watches it, and when it was read.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "containers_visible": {
+            "description": "Whether any connected credential reads containers, so an empty `containers` means none run there.",
             "type": "boolean"
           },
           "declaration": {
+            "description": "The key of HQ's record of the machine; empty when HQ keeps none.",
             "type": "string"
           },
           "header_addresses": {
+            "description": "The addresses a person reaches it at, tailnet then LAN then public, each a label, the address and who holds a public one.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "hostnames": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/MachineRow/properties/hostnames"
           },
           "hq_hostnames": {
+            "description": "The hostnames HQ answers at on the machine; empty unless `runs_hq`.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "name": {
-            "type": "string"
+            "$ref": "#/components/schemas/MachineRow/properties/name"
           },
           "node": {
+            "description": "The machine's id in the topology: `machine:` and its name.",
             "type": "string"
           },
           "opened_by": {
+            "description": "Those of `reached_by` whose credential opens a shell or a Docker environment on it.",
             "items": {
               "type": "string"
             },
@@ -8809,43 +9099,44 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "What the tailnet reports of it: whether it is online, its names and addresses, OS and client, key expiry, tags, routes, exit node and SSH settings, and when that was read; null when the tailnet does not know it."
           },
           "reached_by": {
+            "description": "The connections HQ reaches it through, by ref.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "resources": {
+            "description": "The keys of HQ's records on the machine.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "role": {
-            "type": "string"
+            "$ref": "#/components/schemas/MachineRow/properties/role"
           },
           "roles": {
-            "items": {
-              "$ref": "#/components/schemas/RolePart"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/MachineRow/properties/roles"
           },
           "runs_hq": {
-            "type": "boolean"
+            "$ref": "#/components/schemas/MachineRow/properties/runs_hq"
           },
           "state": {
-            "type": "string"
+            "$ref": "#/components/schemas/MachineRow/properties/state"
           },
           "unanswered": {
+            "description": "Those of `reached_by` that did not answer their last check.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "url": {
-            "type": "string"
+            "$ref": "#/components/schemas/MachineRow/properties/url"
           }
         },
         "type": "object"
@@ -8854,36 +9145,44 @@
         "additionalProperties": false,
         "properties": {
           "addresses": {
+            "description": "Every address HQ knows reaches the machine, with a port where one is part of it.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "hostnames": {
+            "description": "The hostnames served from the machine.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "name": {
+            "description": "The machine's name, which a read of one names it by.",
             "type": "string"
           },
           "role": {
+            "description": "The role HQ's record of the machine gives it, such as `Docker host`; empty for none.",
             "type": "string"
           },
           "roles": {
+            "description": "What the machine does for the rest of the network, as derived from what was read.",
             "items": {
               "$ref": "#/components/schemas/RolePart"
             },
             "type": "array"
           },
           "runs_hq": {
+            "description": "Whether HQ itself runs on the machine.",
             "type": "boolean"
           },
           "state": {
+            "description": "Whether it can be reached now, such as `online`, `away` for a personal device that is off, `offline` or `not monitored`.",
             "type": "string"
           },
           "url": {
+            "description": "The machine's page in HQ.",
             "type": "string"
           }
         },
@@ -8894,56 +9193,55 @@
         "description": "One managed record whole: what HQ expects of it and what was last read.",
         "properties": {
           "conditions": {
+            "description": "Its conditions as last reported, each a type such as `Ready` or `Degraded`, whether it holds, a reason and a message.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "enabled": {
-            "type": "boolean"
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/enabled"
           },
           "generation": {
+            "description": "Which version of HQ's copy this is, counting up from 1 as it changes.",
             "type": "integer"
           },
           "health": {
-            "$ref": "#/components/schemas/HealthPart"
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/health"
           },
           "id": {
+            "description": "The record's id in HQ's database.",
             "type": "string"
           },
           "in_sync": {
-            "type": "boolean"
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/in_sync"
           },
           "key": {
-            "type": "string"
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/key"
           },
           "kind": {
-            "type": "string"
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/kind"
           },
           "last_observed_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/last_observed_at"
           },
           "observed_generation": {
+            "description": "Which version of HQ's copy was last applied and confirmed back; it equals the current version when no change waits to apply.",
             "type": "integer"
           },
           "public_effect": {
-            "type": "boolean"
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/public_effect"
           },
           "spec": {
+            "description": "What HQ expects of it, in the shape its type takes; empty for a type whose settings HQ withholds.",
             "type": "object"
           },
           "status": {
+            "description": "What was last read of it, as its type reports it. A certificate's file is left out, `certificate_available` saying HQ holds one.",
             "type": "object"
           },
           "updated_at": {
-            "type": "string"
+            "$ref": "#/components/schemas/UpdatedAt"
           }
         },
         "required": [
@@ -9015,9 +9313,11 @@
         "description": "One managed record, what HQ derives from it, and the operations run on it.",
         "properties": {
           "derived": {
+            "description": "What HQ makes of the record: its health, what may be done to it and why not, its machines and services, what HQ expects beside what is live, a certificate's expiry and use, the changes waiting for approval, and what uses it.",
             "type": "object"
           },
           "operations": {
+            "description": "The latest operations that changed it, newest first.",
             "items": {
               "type": "object"
             },
@@ -9033,24 +9333,28 @@
         "additionalProperties": false,
         "properties": {
           "enabled": {
+            "description": "Whether HQ applies this record; false, HQ keeps it without applying it.",
             "type": "boolean"
           },
           "health": {
             "$ref": "#/components/schemas/HealthPart"
           },
           "in_sync": {
+            "description": "Whether the latest change to HQ's copy has been applied and confirmed back.",
             "type": "boolean"
           },
           "key": {
+            "description": "The key HQ files the record under, which a read of one names it by.",
             "type": "string"
           },
           "kind": {
+            "description": "The record's type, such as `adguard.rewrite`.",
             "type": "string"
           },
           "last_observed_at": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/ObservedAt"
               },
               {
                 "type": "null"
@@ -9058,6 +9362,7 @@
             ]
           },
           "public_effect": {
+            "description": "Whether applying a record of this type changes what the internet sees, such as a public DNS record.",
             "type": "boolean"
           }
         },
@@ -9072,21 +9377,27 @@
         "description": "One search match: a machine, service or domain, or a record.",
         "properties": {
           "group": {
+            "description": "The heading a list of results files it under.",
             "type": "string"
           },
           "kind": {
+            "description": "What sort of match it is, such as `machine`, `service` or `zone`, or the list a record is in.",
             "type": "string"
           },
           "label": {
+            "description": "What it is called, as a result shows it.",
             "type": "string"
           },
           "name": {
+            "description": "Its id where it is listed, such as a machine's name, a hostname or a record's key.",
             "type": "string"
           },
           "summary": {
+            "description": "A line on it, with the text that matched.",
             "type": "string"
           },
           "url": {
+            "description": "Its page in HQ.",
             "type": "string"
           }
         },
@@ -9097,6 +9408,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -9116,8 +9428,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -9127,9 +9439,10 @@
         "type": "object"
       },
       "NextPage": {
-        "description": "Where the page after a list's is read from: ``cursor``, sent back with the same filters.",
+        "description": "Where the page after a list's is read from.",
         "properties": {
           "cursor": {
+            "description": "What reads the page after this one, sent back as the `cursor` filter with the same filters.",
             "type": "string"
           }
         },
@@ -9143,6 +9456,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -9162,8 +9476,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -9174,6 +9488,10 @@
       },
       "Notes": {
         "description": "Anything else worth keeping.",
+        "type": "string"
+      },
+      "ObservedAt": {
+        "description": "When it was last read from its source, an ISO 8601 date-time.",
         "type": "string"
       },
       "OperationCommand": {
@@ -9220,14 +9538,18 @@
       },
       "OriginPart": {
         "additionalProperties": false,
+        "description": "Where a request for the name is finally served, and what serves it there.",
         "properties": {
           "address": {
+            "description": "Where a request for the name is finally served: the address a proxy forwards to or a record names.",
             "type": "string"
           },
           "container": {
+            "description": "The container serving it there; empty when none is known.",
             "type": "string"
           },
           "host": {
+            "description": "The machine at that address; empty when it matches none.",
             "type": "string"
           }
         },
@@ -9238,75 +9560,126 @@
         ],
         "type": "object"
       },
+      "Outcome": {
+        "description": "Whether HQ did what was asked: true beside `data`, false beside `error`.",
+        "type": "boolean"
+      },
       "PageLimit": {
         "description": "How many records a page holds, 1 to 100; next.cursor reads the page after.",
         "maximum": 100,
         "minimum": 1,
         "type": "integer"
       },
+      "PagePosition": {
+        "additionalProperties": false,
+        "description": "Where a page of a list stopped.",
+        "properties": {
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NextPage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How many records matched in all, where the list counts them cheaply; else null."
+          },
+          "truncated": {
+            "description": "Whether more records follow this page; `next` reads the page after, and is null on the last.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "total",
+          "truncated",
+          "next"
+        ],
+        "type": "object"
+      },
       "PathRecord": {
         "additionalProperties": false,
         "description": "The path a request for a hostname takes, hop by hop on each route.",
         "properties": {
           "hostname": {
+            "description": "The hostname the path is walked for.",
             "type": "string"
           },
           "line": {
+            "description": "The first route in one line, hop to hop; empty when no route was walked.",
             "type": "string"
           },
           "machine": {
+            "description": "The machine the first route to reach one ends on; empty when none does.",
             "type": "string"
           },
           "observed": {
+            "description": "The readings that name the hostname as something that answers, each its relation, name, link and where it was read.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "redirects_to": {
+            "description": "The hostname a route redirects the request to; empty when none does.",
             "type": "string"
           },
           "routes": {
+            "description": "Each route a request can take, from one DNS answer to what serves the name: what it starts from, the port of a forward, its line and its hops.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "unread": {
+            "description": "What HQ could not read or walk, each a sentence; empty when the path is whole.",
             "items": {
               "type": "string"
             },
             "type": "array"
           }
         },
-        "required": [
-          "hostname",
-          "line",
-          "redirects_to",
-          "machine",
-          "unread",
-          "observed",
-          "routes"
-        ],
         "type": "object"
+      },
+      "PaymentMethod": {
+        "description": "How it was paid: `cash`, `debit`, `credit`, `ach`, `paypal` or `other`; empty when not recorded.",
+        "type": "string"
+      },
+      "Permitted": {
+        "description": "Whether the caller holds every permission `required_capabilities` names; absent from a read that names no caller.",
+        "type": "boolean"
       },
       "Problem": {
         "additionalProperties": false,
         "description": "One open problem about HQ itself.",
         "properties": {
           "detail": {
+            "description": "More on the problem: what was read, and what to do.",
             "type": "string"
           },
           "key": {
+            "description": "What the problem is about, stable while it is the same matter, such as `approval:<id>`.",
             "type": "string"
           },
           "label": {
+            "description": "What is wrong with HQ, in a line.",
             "type": "string"
           },
           "since": {
-            "type": "string"
+            "$ref": "#/components/schemas/Since"
           },
           "status": {
+            "description": "How serious the problem is: `serious` or `attention`.",
             "type": "string"
           },
           "subject": {
@@ -9320,6 +9693,7 @@
             ]
           },
           "url": {
+            "description": "Where the problem is dealt with in HQ.",
             "type": "string"
           }
         },
@@ -9539,30 +9913,23 @@
       },
       "ProjectLinks": {
         "additionalProperties": false,
+        "description": "The records a project is linked to.",
         "properties": {
           "assets": {
+            "description": "The slugs of the assets this project uses, sorted.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "content": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/LinkedContent"
           },
           "documentation": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/LinkedDocs"
           },
           "expense_ids": {
-            "items": {
-              "type": "integer"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/LinkedExpenses"
           }
         },
         "required": [
@@ -9582,53 +9949,43 @@
         "description": "One project with the records it is linked to.",
         "properties": {
           "category": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProjectRow/properties/category"
           },
           "dependency_updates": {
-            "type": "boolean"
+            "$ref": "#/components/schemas/ProjectRow/properties/dependency_updates"
           },
           "description": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProjectRow/properties/description"
           },
           "last_push_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/ProjectRow/properties/last_push_at"
           },
           "name": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProjectRow/properties/name"
           },
           "public_url": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProjectRow/properties/public_url"
           },
           "relationships": {
             "$ref": "#/components/schemas/ProjectLinks"
           },
           "repository_url": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProjectRow/properties/repository_url"
           },
           "slug": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProjectRow/properties/slug"
           },
           "status": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProjectRow/properties/status"
           },
           "technologies": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/ProjectRow/properties/technologies"
           },
           "updated_at": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProjectRow/properties/updated_at"
           },
           "updates": {
-            "$ref": "#/components/schemas/Updates"
+            "$ref": "#/components/schemas/ProjectRow/properties/updates"
           }
         },
         "type": "object"
@@ -9666,14 +10023,18 @@
       },
       "ProjectRow": {
         "additionalProperties": false,
+        "description": "One project; `updates` only where its repository is on GitHub.",
         "properties": {
           "category": {
+            "description": "What type of project it is: `wordpress_security`, `cloudflare`, `dns_email_security`, `homelab`, `vps`, `tailscale`, `adguard`, `networking`, `tls_certificates`, `automation`, `cybersecurity_labs` or `other`.",
             "type": "string"
           },
           "dependency_updates": {
+            "description": "Whether HQ's dependency update run covers its repository.",
             "type": "boolean"
           },
           "description": {
+            "description": "What it is, in a few sentences; empty when none was written.",
             "type": "string"
           },
           "last_push_at": {
@@ -9684,31 +10045,36 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "When its repository was last pushed to, an ISO 8601 date-time; null until HQ has read it."
           },
           "name": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProjectName"
           },
           "public_url": {
+            "description": "Where it can be seen published; empty for none.",
             "type": "string"
           },
           "repository_url": {
+            "description": "The address of its code repository; empty for none.",
             "type": "string"
           },
           "slug": {
-            "type": "string"
+            "$ref": "#/components/schemas/RecordSlug"
           },
           "status": {
+            "description": "Where it stands: `idea`, `active`, `paused`, `completed`, `published` or `archived`.",
             "type": "string"
           },
           "technologies": {
+            "description": "The technologies it uses, in the order they were written.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "updated_at": {
-            "type": "string"
+            "$ref": "#/components/schemas/UpdatedAt"
           },
           "updates": {
             "$ref": "#/components/schemas/Updates"
@@ -9864,6 +10230,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -9888,8 +10255,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -9903,6 +10270,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -9928,8 +10296,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -9938,67 +10306,132 @@
         ],
         "type": "object"
       },
-      "ReadingRecord": {
+      "ReadingItem": {
         "additionalProperties": false,
-        "description": "One type of reading with the records it holds, as its schema admits them.",
         "properties": {
           "error": {
-            "type": "string"
+            "$ref": "#/components/schemas/ReadingRow/properties/error"
           },
           "facet": {
+            "description": "What its records supply a service: `certificate`, `dns`, `network`, `proxy`, `registration` or `runtime`, or empty for none.",
             "type": "string"
-          },
-          "items": {
-            "items": {
-              "type": "object"
-            },
-            "type": "array"
           },
           "kind": {
-            "type": "string"
+            "$ref": "#/components/schemas/ReadingRow/properties/kind"
           },
           "label": {
-            "type": "string"
+            "$ref": "#/components/schemas/ReadingRow/properties/label"
           },
           "observed_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/ReadingRow/properties/observed_at"
           },
           "provider": {
-            "type": "string"
+            "$ref": "#/components/schemas/ReadingRow/properties/provider"
           },
           "provider_label": {
+            "description": "The service's name, in words.",
             "type": "string"
           },
           "read_by": {
+            "description": "Who takes the reading, `controller`, `hq` or `request`: a controller through a connection's credential, HQ from a public registry, or HQ from the requests it serves.",
             "type": "string"
           },
           "records": {
-            "type": "integer"
+            "$ref": "#/components/schemas/ReadingRow/properties/records"
           },
           "refusal": {
+            "description": "Whether the service refused the credential or one permission, `credential` or `permission`; empty when neither.",
             "type": "string"
           },
           "relation": {
+            "description": "What a record is to what it joins, a short phrase such as `Served by Pages project`; empty for none.",
             "type": "string"
           },
           "remedy": {
+            "description": "What would let HQ read it, such as the permissions to add; empty when nothing is missing.",
             "type": "string"
           },
           "requires": {
+            "description": "The permissions the read needs, each as the service names it.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "state": {
-            "type": "string"
+            "$ref": "#/components/schemas/ReadingRow/properties/state"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "provider",
+          "state",
+          "records",
+          "observed_at",
+          "error",
+          "provider_label",
+          "read_by",
+          "facet",
+          "relation",
+          "requires",
+          "refusal",
+          "remedy"
+        ],
+        "type": "object"
+      },
+      "ReadingRecord": {
+        "additionalProperties": false,
+        "description": "One type of reading with the records it holds, as its schema admits them.",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ReadingRow/properties/error"
+          },
+          "facet": {
+            "$ref": "#/components/schemas/ReadingItem/properties/facet"
+          },
+          "items": {
+            "description": "The records it holds, each as its type's schema admits it; empty for a type HQ withholds.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ReadingRow/properties/kind"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ReadingRow/properties/label"
+          },
+          "observed_at": {
+            "$ref": "#/components/schemas/ReadingRow/properties/observed_at"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ReadingRow/properties/provider"
+          },
+          "provider_label": {
+            "$ref": "#/components/schemas/ReadingItem/properties/provider_label"
+          },
+          "read_by": {
+            "$ref": "#/components/schemas/ReadingItem/properties/read_by"
+          },
+          "records": {
+            "$ref": "#/components/schemas/ReadingRow/properties/records"
+          },
+          "refusal": {
+            "$ref": "#/components/schemas/ReadingItem/properties/refusal"
+          },
+          "relation": {
+            "$ref": "#/components/schemas/ReadingItem/properties/relation"
+          },
+          "remedy": {
+            "$ref": "#/components/schemas/ReadingItem/properties/remedy"
+          },
+          "requires": {
+            "$ref": "#/components/schemas/ReadingItem/properties/requires"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ReadingRow/properties/state"
           }
         },
         "type": "object"
@@ -10007,18 +10440,21 @@
         "additionalProperties": false,
         "properties": {
           "error": {
+            "description": "Why the last read failed, as the service said; empty when it did not.",
             "type": "string"
           },
           "kind": {
+            "description": "The reading's type, such as `adguard.client`, which a read of one names it by.",
             "type": "string"
           },
           "label": {
+            "description": "The reading's name, in words.",
             "type": "string"
           },
           "observed_at": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/ObservedAt"
               },
               {
                 "type": "null"
@@ -10026,12 +10462,15 @@
             ]
           },
           "provider": {
+            "description": "The service it is read from, such as `adguard`.",
             "type": "string"
           },
           "records": {
+            "description": "How many records the last read stored.",
             "type": "integer"
           },
           "state": {
+            "description": "How its last read went: `readable`, `partial`, `refused`, `unreadable`, `not_connected` or `never_swept`.",
             "type": "string"
           }
         },
@@ -10074,9 +10513,11 @@
         "description": "One receipt's metadata; never its file, path or address.",
         "properties": {
           "amount": {
+            "description": "The amount on the receipt, a decimal string with two places such as `12.50`.",
             "type": "string"
           },
           "content_type": {
+            "description": "The file's media type: `application/pdf`, `image/jpeg`, `image/png`, `image/webp`, `image/heic`, `image/heif`, `image/gif`, `image/tiff` or `text/plain`.",
             "type": "string"
           },
           "date": {
@@ -10087,15 +10528,18 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The day on the receipt, an ISO 8601 date; null when not recorded."
           },
           "id": {
+            "description": "The receipt's id, which its page names it by.",
             "type": "integer"
           },
           "notes": {
-            "type": "string"
+            "$ref": "#/components/schemas/Notes"
           },
           "original_filename": {
+            "description": "The file's name as it was uploaded; empty when it had none.",
             "type": "string"
           },
           "related_asset": {
@@ -10106,7 +10550,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The slug of the asset it is matched to; null for none."
           },
           "related_expense": {
             "anyOf": [
@@ -10116,18 +10561,22 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The id of the expense it is matched to; null for none."
           },
           "size_bytes": {
+            "description": "How big the file is, in bytes.",
             "type": "integer"
           },
           "updated_at": {
-            "type": "string"
+            "$ref": "#/components/schemas/UpdatedAt"
           },
           "uploaded_at": {
+            "description": "When the file was uploaded, an ISO 8601 date-time.",
             "type": "string"
           },
           "vendor": {
+            "description": "Who was paid, as the receipt names them; empty when not recorded.",
             "type": "string"
           }
         },
@@ -10231,6 +10680,10 @@
         ],
         "type": "object"
       },
+      "RecordSlug": {
+        "description": "Its address in HQ, unique among records of its type: what its page and its links name it by.",
+        "type": "string"
+      },
       "RefusalCode": {
         "description": "Which cause, from HQ's table of codes (docs/API.md, Errors). Branch on the status.",
         "type": "string"
@@ -10244,14 +10697,18 @@
       },
       "Registration": {
         "additionalProperties": false,
+        "description": "The domain's registration as last read: when it runs out and whether it renews.",
         "properties": {
           "auto_renew": {
+            "description": "Whether the registrar renews it on its own.",
             "type": "boolean"
           },
           "expires": {
+            "description": "When the registration runs out, an ISO 8601 date-time.",
             "type": "string"
           },
           "source": {
+            "description": "The reading the date comes from, in words.",
             "type": "string"
           }
         },
@@ -10267,24 +10724,29 @@
         "description": "One node's edges, grouped by what each says from it, and the readings that hold it.",
         "properties": {
           "focus_url": {
+            "description": "The topology page centered on the node.",
             "type": "string"
           },
           "groups": {
+            "description": "Its relationships under what each says from the node (`phrase`), in page order (`rank`): each item the other end as a link, the reading it came from, when that was read, and whether it is out of date.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "node": {
+            "description": "The id of the node asked about, such as `machine:<name>` or `zone:<domain>`.",
             "type": "string"
           },
           "readings": {
+            "description": "The readings joined to the node, each its type, label, connection and the records it holds about it.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "unreadable": {
+            "description": "The readings about the node that could not be read, in words.",
             "items": {
               "type": "string"
             },
@@ -10298,6 +10760,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -10317,8 +10780,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -10327,21 +10790,30 @@
         ],
         "type": "object"
       },
+      "RequiredPermissions": {
+        "description": "The permissions a caller must hold, every one of them, to use it.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "ResourceCatalog": {
         "additionalProperties": false,
         "description": "What ``describe_resources`` answers.",
         "properties": {
           "resources": {
+            "description": "Each resource asked for: every one, or the one named.",
             "items": {
               "$ref": "#/components/schemas/ResourceDescription"
             },
             "type": "array"
           },
           "schema_version": {
-            "const": 2,
-            "type": "integer"
+            "$ref": "#/components/schemas/SchemaVersion",
+            "const": 2
           },
           "schemas": {
+            "description": "Where each list's whole query schema is; only where the answer holds every resource.",
             "type": "string"
           }
         },
@@ -10355,36 +10827,24 @@
         "description": "One page of a list: every list holds these, and may hold metadata of its own.",
         "properties": {
           "count": {
+            "description": "How many records this page holds.",
             "type": "integer"
           },
           "items": {
+            "description": "The page's records, in the list's order, each in its row's shape.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "next": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/NextPage"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/PagePosition/properties/next"
           },
           "total": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/PagePosition/properties/total"
           },
           "truncated": {
-            "type": "boolean"
+            "$ref": "#/components/schemas/PagePosition/properties/truncated"
           }
         },
         "required": [
@@ -10401,35 +10861,28 @@
         "description": "One registry entry as every adapter describes it.",
         "properties": {
           "label": {
+            "description": "What a person calls the resource.",
             "type": "string"
           },
           "name": {
+            "description": "The resource's name, which `list_resource` and `get_resource` take.",
             "type": "string"
           },
           "operations": {
             "$ref": "#/components/schemas/ResourceOperations"
           },
           "permitted": {
-            "type": "boolean"
+            "$ref": "#/components/schemas/Permitted"
           },
           "required_capabilities": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/RequiredPermissions"
           },
           "summary": {
+            "description": "What the resource holds, in a sentence.",
             "type": "string"
           },
           "web_route": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/WebRoute"
           }
         },
         "required": [
@@ -10444,6 +10897,7 @@
       },
       "ResourceOperations": {
         "additionalProperties": false,
+        "description": "What can be done with a resource: each read it serves, or null.",
         "properties": {
           "get": {
             "anyOf": [
@@ -10488,6 +10942,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -10510,8 +10965,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -10525,6 +10980,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -10547,8 +11003,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -10566,9 +11022,11 @@
         "additionalProperties": false,
         "properties": {
           "id": {
+            "description": "The role's stable id, such as `tailnet-dns`.",
             "type": "string"
           },
           "label": {
+            "description": "The role, in words.",
             "type": "string"
           }
         },
@@ -10580,14 +11038,18 @@
       },
       "RootData": {
         "additionalProperties": false,
+        "description": "What this API is, and what the presented credential may do.",
         "properties": {
           "actor": {
+            "description": "Who the presented credential acts as, by the name HQ records its calls under.",
             "type": "string"
           },
           "api_version": {
+            "description": "The version of the API's contract this host serves, the number after `v` in each path.",
             "type": "integer"
           },
           "granted": {
+            "description": "The permissions the credential holds, sorted.",
             "items": {
               "type": "string"
             },
@@ -10597,9 +11059,11 @@
             "$ref": "#/components/schemas/RootLinks"
           },
           "resource": {
+            "description": "The audience a token must be issued for to be accepted here.",
             "type": "string"
           },
           "service": {
+            "description": "Which service this is: always `severino-hq`.",
             "type": "string"
           }
         },
@@ -10652,6 +11116,10 @@
         ],
         "type": "object"
       },
+      "SchemaVersion": {
+        "description": "Which version of this answer's shape it is; it moves when a client must read the shape differently.",
+        "type": "integer"
+      },
       "SearchLimit": {
         "description": "How many matches to return, 1 to 100, best first.",
         "maximum": 100,
@@ -10660,8 +11128,10 @@
       },
       "SearchOperation": {
         "additionalProperties": false,
+        "description": "How a resource is searched, where it can be.",
         "properties": {
           "scope": {
+            "description": "The name search takes to look only in this resource.",
             "type": "string"
           }
         },
@@ -10817,48 +11287,33 @@
         "description": "One service name whole, each facet with the records behind it.",
         "properties": {
           "facets": {
+            "description": "Each part the service is made of, such as its DNS record, proxy, certificate and container: whether it is there, its state, and the keys of HQ's records behind it.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "faults": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/ServiceRow/properties/faults"
           },
           "hostname": {
-            "type": "string"
+            "$ref": "#/components/schemas/ServiceRow/properties/hostname"
           },
           "mark": {
+            "description": "`hq` for HQ's own name, `observed` for a name only a reading holds, empty for any other service.",
             "type": "string"
           },
           "origin": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/OriginPart"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/ServiceRow/properties/origin"
           },
           "project": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/ServiceRow/properties/project"
           },
           "status": {
-            "type": "string"
+            "$ref": "#/components/schemas/ServiceRow/properties/status"
           },
           "status_label": {
-            "type": "string"
+            "$ref": "#/components/schemas/ServiceRow/properties/status_label"
           }
         },
         "required": [
@@ -10890,12 +11345,14 @@
         "additionalProperties": false,
         "properties": {
           "faults": {
+            "description": "What is not set up right, each a sentence; empty when nothing is.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "hostname": {
+            "description": "The service's hostname, which a read of one names it by.",
             "type": "string"
           },
           "origin": {
@@ -10916,12 +11373,15 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The name of the project published at this name; null for none."
           },
           "status": {
+            "description": "How the service stands by its health rule: `good`, `attention`, `serious` or `unknown`, the last when nothing reads its health.",
             "type": "string"
           },
           "status_label": {
+            "description": "The service's health in the words its row shows, such as `Working`.",
             "type": "string"
           }
         },
@@ -10932,6 +11392,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -10951,8 +11412,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -10960,6 +11421,10 @@
           "error"
         ],
         "type": "object"
+      },
+      "Since": {
+        "description": "When the matter began, an ISO 8601 date-time, where its source knows; empty when it does not.",
+        "type": "string"
       },
       "Slug": {
         "description": "Its address in HQ; blank derives one from the name.",
@@ -10972,8 +11437,8 @@
             "description": "What the operation answers, in the shape its response names."
           },
           "ok": {
-            "const": true,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
           }
         },
         "required": [
@@ -11020,6 +11485,7 @@
         "description": "The tailnet's policy and what HQ makes of it.",
         "properties": {
           "app_connectors": {
+            "description": "The tailnet's app connectors, as read.",
             "items": {
               "type": "object"
             },
@@ -11029,6 +11495,7 @@
             "additionalProperties": {
               "type": "integer"
             },
+            "description": "How many grants, groups, tags and tests the policy holds.",
             "type": "object"
           },
           "credential_refusal": {
@@ -11039,7 +11506,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Why the service refused the tailnet's credential; null when it did not."
           },
           "declaration": {
             "anyOf": [
@@ -11049,66 +11517,78 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The key of HQ's record of the policy, which a change to it edits; null when none."
           },
           "findings": {
+            "description": "The open problems about the tailnet that the reader may see.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "grants": {
+            "description": "The policy's grants as written, each with the machines its sources and destinations name, and its ports.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "groups": {
+            "description": "The policy's groups, each a name and its members.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "known": {
+            "description": "Whether the policy has been read: true once it holds a group, tag or grant.",
             "type": "boolean"
           },
           "locked_out": {
+            "description": "The machines tailnet lock keeps off the tailnet.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "services": {
+            "description": "The tailnet's services, as read.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "settings": {
+            "description": "The tailnet's settings, each a label and value, with the machines a value names.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "ssh_rules": {
+            "description": "The policy's SSH rules as written, each with the machines its sources and destinations name.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "tags": {
+            "description": "The policy's tags, each a name, its owners and the machines that carry it.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "tests": {
+            "description": "The policy's tests, as written.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "unread": {
+            "description": "Each tailnet reading that could not be read: its type, label and state, why, and what would fix it.",
             "items": {
               "type": "object"
             },
@@ -11193,9 +11673,11 @@
         "additionalProperties": false,
         "properties": {
           "count": {
+            "description": "How many readings and records are in this state.",
             "type": "integer"
           },
           "state": {
+            "description": "The state, in words: `Readable`, `Partly read`, `Refused`, `Could not be read`, `Not connected` or `Never read`.",
             "type": "string"
           }
         },
@@ -11210,6 +11692,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -11236,8 +11719,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -11263,6 +11746,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -11289,8 +11773,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -11342,8 +11826,8 @@
             "type": "array"
           },
           "schema_version": {
-            "const": 2,
-            "type": "integer"
+            "$ref": "#/components/schemas/SchemaVersion",
+            "const": 2
           },
           "summary": {
             "$ref": "#/components/schemas/TopologySummary"
@@ -11402,8 +11886,8 @@
             "type": "string"
           },
           "observed_at": {
-            "default": "",
-            "type": "string"
+            "$ref": "#/components/schemas/ObservedAt",
+            "default": ""
           },
           "source": {
             "description": "The id of the node it reads from.",
@@ -11510,8 +11994,8 @@
             "type": "string"
           },
           "observed_at": {
-            "default": "",
-            "type": "string"
+            "$ref": "#/components/schemas/ObservedAt",
+            "default": ""
           },
           "observed_revision": {
             "default": 0,
@@ -11645,6 +12129,10 @@
         "description": "What it cost in all.",
         "title": "Total cost"
       },
+      "TotalCostAmount": {
+        "description": "What it cost in all, a decimal string with two places such as `12.50`.",
+        "type": "string"
+      },
       "TraceAnswer": {
         "additionalProperties": false,
         "description": "A trace from one node: which way it followed the edges, how far, and each node it reached.",
@@ -11701,6 +12189,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -11720,8 +12209,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -11735,6 +12224,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -11754,8 +12244,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -11769,6 +12259,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -11788,8 +12279,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -11803,6 +12294,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -11829,8 +12321,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -11844,6 +12336,7 @@
         "properties": {
           "error": {
             "additionalProperties": false,
+            "description": "Why HQ refused, and what gets past it.",
             "properties": {
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
@@ -11868,8 +12361,8 @@
             "type": "object"
           },
           "ok": {
-            "const": false,
-            "type": "boolean"
+            "$ref": "#/components/schemas/Outcome",
+            "const": false
           }
         },
         "required": [
@@ -11884,6 +12377,7 @@
       },
       "UpdateRun": {
         "additionalProperties": false,
+        "description": "How the latest dependency update run that covered the repository went.",
         "properties": {
           "finished_at": {
             "anyOf": [
@@ -11893,9 +12387,11 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "When it ended, an ISO 8601 date-time; null while it still runs."
           },
           "outcome": {
+            "description": "How it ended: `ok`, `failed` or `timeout`, or `handed_off` while it still runs.",
             "type": "string"
           },
           "started_at": {
@@ -11906,7 +12402,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "When it started, an ISO 8601 date-time."
           }
         },
         "required": [
@@ -11916,9 +12413,13 @@
         ],
         "type": "object"
       },
+      "UpdatedAt": {
+        "description": "When it last changed in HQ, an ISO 8601 date-time.",
+        "type": "string"
+      },
       "Updates": {
         "additionalProperties": false,
-        "description": "What HQ's update run has open in the repository; a count it could not read is null.",
+        "description": "What HQ's update run has open in the repository, and its latest run, null before any; a count it\ncould not read is null.",
         "properties": {
           "last_run": {
             "anyOf": [
@@ -11938,7 +12439,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "How many days the oldest of them has been open; null when none is."
           },
           "open_pulls": {
             "anyOf": [
@@ -11948,7 +12450,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "How many pull requests the update run has open in the repository."
           },
           "unmatched_alerts": {
             "anyOf": [
@@ -11958,7 +12461,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "How many open Dependabot alerts no open update pull request answers."
           }
         },
         "required": [
@@ -11974,39 +12478,40 @@
         "description": "One upgrade whole: what it fixes and introduces, its data, and the steps it would take.",
         "properties": {
           "address": {
-            "type": "string"
+            "$ref": "#/components/schemas/UpgradeRow/properties/address"
           },
           "blockers": {
-            "items": {
-              "$ref": "#/components/schemas/BlockerPart"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/UpgradeRow/properties/blockers"
           },
           "change": {
-            "type": "string"
+            "$ref": "#/components/schemas/UpgradeRow/properties/change"
           },
           "data": {
+            "description": "The writable mounts holding its data, snapshotted before the upgrade and restored on rollback.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "fixes": {
+            "description": "The advisories and vulnerabilities against what runs that the new version is clear of.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "from": {
-            "$ref": "#/components/schemas/ImageAt"
+            "$ref": "#/components/schemas/UpgradeRow/properties/from"
           },
           "introduces": {
+            "description": "Any serious vulnerability the new version would bring.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "not_automatic": {
+            "description": "Why it would not apply on its own, though a person may approve it: every blocker, then the bar a patch must clear.",
             "items": {
               "$ref": "#/components/schemas/BlockerPart"
             },
@@ -12020,31 +12525,35 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The release of the version it moves to: its tag, page and when it was published; null for none."
           },
           "risk": {
-            "type": "string"
+            "$ref": "#/components/schemas/UpgradeRow/properties/risk"
           },
           "stateful": {
+            "description": "Whether it keeps data in writable mounts, which `data` lists.",
             "type": "boolean"
           },
           "steps": {
+            "description": "The steps an upgrade would take, in order, each an id, label and detail.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "to": {
-            "$ref": "#/components/schemas/ImageAt"
+            "$ref": "#/components/schemas/UpgradeRow/properties/to"
           },
           "verified_by": {
+            "description": "What would show the new version works, such as its health check; empty when nothing would.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "viable": {
-            "type": "boolean"
+            "$ref": "#/components/schemas/UpgradeRow/properties/viable"
           }
         },
         "type": "object"
@@ -12053,27 +12562,34 @@
         "additionalProperties": false,
         "properties": {
           "address": {
+            "description": "The container's `machine:container`, which a read of one names it by.",
             "type": "string"
           },
           "blockers": {
+            "description": "Each reason it cannot go ahead yet; empty when none.",
             "items": {
               "$ref": "#/components/schemas/BlockerPart"
             },
             "type": "array"
           },
           "change": {
+            "description": "The size of the version change, by the first number that differs: `patch`, `minor`, `major` or `unknown`.",
             "type": "string"
           },
           "from": {
-            "$ref": "#/components/schemas/ImageAt"
+            "$ref": "#/components/schemas/ImageAt",
+            "description": "The image it runs now."
           },
           "risk": {
+            "description": "How likely the upgrade is to go wrong: `low`, `medium` or `high`.",
             "type": "string"
           },
           "to": {
-            "$ref": "#/components/schemas/ImageAt"
+            "$ref": "#/components/schemas/ImageAt",
+            "description": "The image the upgrade would move it to."
           },
           "viable": {
+            "description": "Whether nothing blocks it: true when `blockers` is empty.",
             "type": "boolean"
           }
         },
@@ -12113,6 +12629,18 @@
           "payload"
         ],
         "type": "object"
+      },
+      "WebRoute": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "The page of HQ's web interface that shows it, by its route name such as `projects:list`; null for none.",
+        "title": "Web route"
       },
       "WorkflowOutcome": {
         "additionalProperties": false,
@@ -12210,9 +12738,11 @@
         "additionalProperties": false,
         "properties": {
           "hostname": {
+            "description": "The hostname of a service under the domain.",
             "type": "string"
           },
           "status": {
+            "description": "How that service stands: `serious`, `attention`, `neutral` or `good`.",
             "type": "string"
           }
         },
@@ -12260,8 +12790,8 @@
                       "$ref": "#/components/schemas/RootData"
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -12380,8 +12910,8 @@
                       "$ref": "#/components/schemas/CapabilityRequestCatalog"
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -12610,8 +13140,8 @@
                       "$ref": "#/components/schemas/CapabilityAnswer"
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -15287,8 +15817,8 @@
                       "$ref": "#/components/schemas/CapabilityAnswer"
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -15748,8 +16278,8 @@
                       "$ref": "#/components/schemas/CapabilityAnswer"
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -16540,8 +17070,8 @@
                       "$ref": "#/components/schemas/ConnectionCatalog"
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -16685,8 +17215,8 @@
                       "$ref": "#/components/schemas/Findings"
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -16844,8 +17374,8 @@
                       "$ref": "#/components/schemas/ResourceCatalog"
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -17014,8 +17544,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -17141,8 +17671,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -17259,8 +17789,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -17537,8 +18067,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -17623,8 +18153,8 @@
                       "$ref": "#/components/schemas/ConnectionStandingRecord"
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -17863,8 +18393,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -18028,8 +18558,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -18111,8 +18641,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -18277,8 +18807,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -18366,8 +18896,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -18498,8 +19028,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -18641,8 +19171,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -18736,8 +19266,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -18883,8 +19413,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -18969,8 +19499,8 @@
                       "$ref": "#/components/schemas/ManagedResourceRecord"
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -19071,8 +19601,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -19270,8 +19800,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -19380,8 +19910,8 @@
                       "$ref": "#/components/schemas/ProjectRecord"
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -19529,8 +20059,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -19603,8 +20133,8 @@
                       "$ref": "#/components/schemas/ReadingRecord"
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -19705,8 +20235,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -19837,8 +20367,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -19936,8 +20466,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -20068,8 +20598,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -20200,8 +20730,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -20289,8 +20819,8 @@
                       }
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [
@@ -20643,8 +21173,8 @@
                       "$ref": "#/components/schemas/TopologyAnswer"
                     },
                     "ok": {
-                      "const": true,
-                      "type": "boolean"
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
                     }
                   },
                   "required": [

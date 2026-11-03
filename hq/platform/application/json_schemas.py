@@ -21,10 +21,11 @@ adds (its ``default``). ``fields`` reads a schema's fields whole again.
 
 import re
 from collections.abc import Iterable, Mapping
-from typing import Any, override
+from types import get_original_bases
+from typing import Any, TypedDict, is_typeddict, override
 
 from pydantic import GetCoreSchemaHandler, TypeAdapter
-from pydantic.json_schema import DEFAULT_REF_TEMPLATE, GenerateJsonSchema, JsonSchemaMode, JsonSchemaValue
+from pydantic.json_schema import DEFAULT_REF_TEMPLATE, GenerateJsonSchema, JsonRef, JsonSchemaMode, JsonSchemaValue
 from pydantic_core import core_schema
 
 from .labels import field_label
@@ -39,18 +40,16 @@ class PublishedSchema(GenerateJsonSchema):
     # Whether a TypedDict that says nothing of other keys is closed: the API
     # reads every one strictly, so its document closes each.
     closes_typed_dicts = True
+    # Whether a TypedDict that extends another refers to each field it
+    # inherits, the base a definition of its own (``DocumentSchema``).
+    refers_inherited = False
 
     @override
     def generate(self, schema: core_schema.CoreSchema, mode: JsonSchemaMode = "validation") -> JsonSchemaValue:
         value = super().generate(schema, mode)
         _title_compositions(value.get("$defs", {}))
+        _point_inherited(value)
         return value
-
-    @override
-    def generate_definitions(self, inputs: Any) -> tuple[dict[Any, JsonSchemaValue], dict[Any, JsonSchemaValue]]:
-        refs, definitions = super().generate_definitions(inputs)
-        _title_compositions(definitions)
-        return refs, definitions
 
     @override
     def field_title_should_be_set(self, schema: Any) -> bool:
@@ -63,7 +62,31 @@ class PublishedSchema(GenerateJsonSchema):
         value = super().typed_dict_schema(schema)
         if self.closes_typed_dicts:
             value.setdefault("additionalProperties", False)
+        if self.refers_inherited and (cls := schema.get("cls")) is not None:
+            self._refer_inherited(value, cls)
         return _unsaid(_untitled(value, schema.get("cls")))
+
+    def _refer_inherited(self, value: JsonSchemaValue, cls: type) -> None:
+        # Each property the base already says becomes a reference to the
+        # base's, so a field is said once, where it is declared. A subclass
+        # adding no key is the base under another name, and is written whole.
+        # A field a base inherits in turn is referred to where it is declared.
+        properties = value.get("properties", {})
+        for base in _ancestors(cls):
+            if _keys(base) >= _keys(cls):
+                continue
+            reference = self.generate_inner(TypeAdapter(base).core_schema)
+            said = (self.get_schema_from_definitions(JsonRef(reference.get("$ref", ""))) or {}).get("properties", {})
+            for name, field in said.items():
+                if properties.get(name) == field:
+                    properties[name] = {"$ref": reference["$ref"], _INHERITED: name}
+
+    @override
+    def generate_definitions(self, inputs: Any) -> tuple[dict[Any, JsonSchemaValue], dict[Any, JsonSchemaValue]]:
+        refs, definitions = super().generate_definitions(inputs)
+        _title_compositions(definitions)
+        _point_inherited(definitions)
+        return refs, definitions
 
     @override
     def model_schema(self, schema: core_schema.ModelSchema) -> JsonSchemaValue:
@@ -94,6 +117,50 @@ class AnswerSchema(PublishedSchema):
         if (schema.get("metadata") or {}).get(_WRITTEN):
             return {"type": "object"}
         return super().generate_inner(schema)
+
+
+class DocumentSchema(PublishedSchema):
+    """The same, a TypedDict that extends another saying each field it
+    inherits as a reference to its base's: the API document, whose every
+    definition is a component a JSON pointer can reach into. A base's fields
+    are referred to one by one, never through ``allOf``, since a closed base
+    refuses every key its extension adds."""
+
+    refers_inherited = True
+
+
+# The key a reference to an inherited field carries until Pydantic has named
+# every definition, when it becomes a pointer to the base's property.
+_INHERITED = "hq_inherited"
+
+
+def _keys(typed_dict: Any) -> frozenset[str]:
+    return typed_dict.__required_keys__ | typed_dict.__optional_keys__
+
+
+def _ancestors(cls: type) -> list[type]:
+    """Each TypedDict ``cls`` extends, its own bases first."""
+
+    found: list[type] = []
+    waiting = list(get_original_bases(cls))
+    while waiting:
+        base = waiting.pop(0)
+        if is_typeddict(base) and base is not TypedDict and base not in found:
+            found.append(base)
+            waiting.extend(get_original_bases(base))
+    return found
+
+
+def _point_inherited(value: Any) -> None:
+    if isinstance(value, list):
+        for item in value:
+            _point_inherited(item)
+    elif isinstance(value, dict):
+        if isinstance(name := value.get(_INHERITED), str) and "$ref" in value:
+            del value[_INHERITED]
+            value["$ref"] += "/properties/" + name.replace("~", "~0").replace("/", "~1")
+        for item in value.values():
+            _point_inherited(item)
 
 
 def _title_compositions(definitions: Mapping[str, JsonSchemaValue]) -> None:
@@ -165,7 +232,7 @@ def json_schemas(
     """Each of ``kinds``' schemas by its key, and the definitions they share by name."""
 
     adapters = [(key, mode, TypeAdapter(kind)) for key, kind in kinds.items()]
-    refs, definitions = TypeAdapter.json_schemas(adapters, ref_template=ref_template, schema_generator=PublishedSchema)
+    refs, definitions = TypeAdapter.json_schemas(adapters, ref_template=ref_template, schema_generator=DocumentSchema)
     return {key: refs[(key, mode)] for key in kinds}, definitions.get("$defs", {})
 
 

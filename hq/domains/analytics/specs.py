@@ -1,13 +1,15 @@
 """The analytics resource, declared on its domain in application/domains.py."""
 
-from typing import TypedDict
+from typing import Annotated, TypedDict
 
 from pydantic import Field, create_model
 
 from hq.platform.application import analytics
+from hq.platform.application.describe import Describe, listed
 from hq.platform.application.integration_specs import ResourceSpec
 from hq.platform.application.resources import TopQuery, one_of
 from hq.platform.application.security import Capability
+from hq.platform.application.ui import ended
 
 from .models import RumDaily
 
@@ -29,10 +31,13 @@ AnalyticsQuery = create_model(
 class Breakdown(TypedDict):
     """One value of a breakdown and what it was asked for."""
 
-    dimension: str
-    value: str
-    visits: int
-    pageviews: int
+    dimension: Annotated[str, Describe(ended(f"Which breakdown it is in: {listed(RumDaily.Dimension.values)}"))]
+    value: Annotated[
+        str,
+        Describe("The page, referrer, country, device, browser or operating system it counts, as the browser sent it."),
+    ]
+    visits: Annotated[int, Describe("How many visits it had over the days asked for, estimated from a sample.")]
+    pageviews: Annotated[int, Describe("How many pages were viewed over the days asked for, estimated from a sample.")]
 
 
 def resources() -> tuple[ResourceSpec, ...]:

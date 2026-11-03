@@ -4,7 +4,6 @@ Also how each relation ranks on a page, and the one way an edge is emitted, so
 every module that adds edges gives them the same stable id and phrase.
 """
 
-from collections.abc import Iterable
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import Annotated
@@ -12,7 +11,8 @@ from typing import Annotated
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink as TopologyAction
-from .command_fields import Describe
+from .answer_fields import ObservedAt
+from .describe import Describe, listed
 from .entity_links import EntityLink
 from .timestamps import moment
 from .ui import ended
@@ -82,14 +82,6 @@ NODE_KIND_ORDER = {
 STANDINGS = ("serious", "attention", "neutral", "good")
 
 
-def one_of(values: Iterable[str]) -> str:
-    """A closed set's values as a description names them: ``a``, ``b`` or ``c``,
-    leaving out an empty one."""
-
-    named = [f"`{value}`" for value in values if value]
-    return f"{', '.join(named[:-1])} or {named[-1]}" if len(named) > 1 else "".join(named)
-
-
 @dataclass(frozen=True, slots=True)
 class TopologyNode:
     """One addressable thing in the derived topology."""
@@ -101,7 +93,7 @@ class TopologyNode:
             "a trace's focus, a problem's subject. Stable while the thing it stands for exists."
         ),
     ]
-    kind: Annotated[str, Describe(ended(f"What sort of thing it is: {one_of(NODE_KIND_ORDER)}"))]
+    kind: Annotated[str, Describe(ended(f"What sort of thing it is: {listed(NODE_KIND_ORDER)}"))]
     label: Annotated[
         str,
         Describe(
@@ -124,7 +116,7 @@ class TopologyNode:
             "what tells the two apart. Empty otherwise."
         ),
     ] = ""
-    status: Annotated[str, Describe(ended(f"How it stands: {one_of(STANDINGS)}"))] = "neutral"
+    status: Annotated[str, Describe(ended(f"How it stands: {listed(STANDINGS)}"))] = "neutral"
     status_label: Annotated[str, Describe("How it stands, in the words a page shows beside it.")] = ""
     detail: Annotated[str, Describe("A line on why it stands as it does; empty when there is nothing to add.")] = ""
     url: Annotated[
@@ -158,11 +150,11 @@ class TopologyNode:
             "Empty otherwise."
         ),
     ] = ""
-    # When this was last observed, ISO 8601, or "" when nothing observes it.
-    # Health describes the content of the last observation and says nothing
-    # about its age, so a thing observed once and never again reads healthy
-    # forever. This is the fact that distinguishes the two.
-    observed_at: str = ""
+    # "" when nothing reads it. Health describes the content of the last
+    # observation and says nothing about its age, so a thing observed once
+    # and never again reads healthy forever. This is the fact that
+    # distinguishes the two.
+    observed_at: ObservedAt = ""
     # What was asked for, and what was last confirmed back. Between them the
     # whole of triage: equal means a reconcile already ran against this exact
     # declaration, so a difference the world still shows is the declaration
@@ -248,24 +240,23 @@ class TopologyEdge:
     id: Annotated[str, Describe("The relationship's id, stable while both ends and the relation hold.")]
     source: Annotated[str, Describe("The id of the node it reads from.")]
     target: Annotated[str, Describe("The id of the node it points to.")]
-    kind: Annotated[str, Describe(f"The relation: {one_of(RELATIONS)}, the last for one a reading supports.")]
+    kind: Annotated[str, Describe(f"The relation: {listed(RELATIONS)}, the last for one a reading supports.")]
     label: Annotated[str, Describe("The relation as it reads from the source, such as `Runs on`.")]
-    status: Annotated[str, Describe(ended(f"How the relationship stands: {one_of(STANDINGS)}"))] = "neutral"
+    status: Annotated[str, Describe(ended(f"How the relationship stands: {listed(STANDINGS)}"))] = "neutral"
     # An edge a reading supports exists only while its reading does.
     source_kind: Annotated[
         str,
         Describe("The type of reading the relationship rests on; empty for one HQ's records state."),
     ] = ""
     detail: Annotated[str, Describe("What its reading names, in a few words; empty without a reading.")] = ""
-    # When its reading was taken.
-    observed_at: str = ""
+    observed_at: ObservedAt = ""
     entities: Annotated[
         tuple[EntityLink, ...],
         Describe("Each record its reading stands for, as a link; empty without a reading."),
     ] = ()
     facet: Annotated[
         str,
-        Describe(f"What its reading supplies: {one_of(READING_RANKS)}; empty for an overlay that supplies none."),
+        Describe(f"What its reading supplies: {listed(READING_RANKS)}; empty for an overlay that supplies none."),
     ] = ""
 
 

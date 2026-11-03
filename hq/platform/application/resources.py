@@ -13,7 +13,6 @@ from pydantic import (
     Field,
     TypeAdapter,
     ValidationError,
-    WithJsonSchema,
     create_model,
     field_validator,
     with_config,
@@ -35,14 +34,16 @@ from . import (
     services,
     tailnet_context,
 )
+from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion, WebRoute
 from .contracts import DOTTED_NAME
+from .describe import Describe
 from .field_masks import FieldMaskRefusal, Fields, asks_whole, selected
 from .input_errors import pydantic_refusal
 from .integration_specs import PAGE_FIELD, ResourceSpec
 from .integration_validation import required_capability_names
 from .integrations import integration_graph
 from .json_schemas import json_schema
-from .projection import MAX_PAGE_SIZE, CursorRefusal, NextPage, PageScope, page_size, paging, shape_version
+from .projection import MAX_PAGE_SIZE, CursorRefusal, NextPage, PageScope, page_size, paging
 from .record_errors import HostRefusal, RecordNotFound
 from .refusal_status import next_call
 from .resource_records import (
@@ -595,22 +596,43 @@ def resource_search_capabilities() -> dict[str, tuple[Capability | str, ...]]:
 
 
 class ListOperation(TypedDict):
-    # The fields a listing narrows by; its whole schema is one kind's description.
-    filters: list[str]
-    # The fields each item keeps unless the caller names its own; absent keeps them all.
-    fields: NotRequired[list[str]]
-    query_schema: NotRequired[dict[str, Any]]
+    """How a resource is listed, where it can be."""
+
+    filters: Annotated[
+        list[str],
+        Describe(
+            "The fields a listing narrows by; `describe_resources` given this name says each one's type and choices."
+        ),
+    ]
+    fields: NotRequired[
+        Annotated[
+            list[str],
+            Describe("The fields each item keeps unless the caller names its own; absent, items keep them all."),
+        ]
+    ]
+    query_schema: NotRequired[
+        Annotated[
+            dict[str, Any],
+            Describe("The JSON Schema of what a listing takes; only in a read of this one resource."),
+        ]
+    ]
 
 
 class GetOperation(TypedDict):
-    identifier: str
+    """How one record of a resource is read, where it can be."""
+
+    identifier: Annotated[str, Describe("The field of a record that `get_resource` finds it by.")]
 
 
 class SearchOperation(TypedDict):
-    scope: str
+    """How a resource is searched, where it can be."""
+
+    scope: Annotated[str, Describe("The name search takes to look only in this resource.")]
 
 
 class ResourceOperations(TypedDict):
+    """What can be done with a resource: each read it serves, or null."""
+
     list: ListOperation | None
     get: GetOperation | None
     search: SearchOperation | None
@@ -619,15 +641,13 @@ class ResourceOperations(TypedDict):
 class ResourceDescription(TypedDict):
     """One registry entry as every adapter describes it."""
 
-    name: str
-    label: str
-    summary: str
-    web_route: str | None
-    required_capabilities: list[str]
+    name: Annotated[str, Describe("The resource's name, which `list_resource` and `get_resource` take.")]
+    label: Annotated[str, Describe("What a person calls the resource.")]
+    summary: Annotated[str, Describe("What the resource holds, in a sentence.")]
+    web_route: WebRoute
+    required_capabilities: RequiredPermissions
     operations: ResourceOperations
-    # Whether the asker may read it, by the rule its read refuses by; a
-    # catalog read with no asker only describes.
-    permitted: NotRequired[bool]
+    permitted: NotRequired[Permitted]
 
 
 # What the catalog of every resource says in place of each list's whole schema.
@@ -643,10 +663,11 @@ RESOURCES_SCHEMA_VERSION = 2
 class ResourceCatalog(TypedDict):
     """What ``describe_resources`` answers."""
 
-    schema_version: Annotated[int, WithJsonSchema(shape_version(RESOURCES_SCHEMA_VERSION))]
-    resources: list[ResourceDescription]
-    # Where each list's whole query schema is, said where the answer holds every resource.
-    schemas: NotRequired[str]
+    schema_version: Annotated[SchemaVersion, Pinned(RESOURCES_SCHEMA_VERSION)]
+    resources: Annotated[list[ResourceDescription], Describe("Each resource asked for: every one, or the one named.")]
+    schemas: NotRequired[
+        Annotated[str, Describe("Where each list's whole query schema is; only where the answer holds every resource.")]
+    ]
 
 
 def describe_resources(*, principal: Principal | None = None, name: str = "") -> ResourceCatalog:
@@ -778,11 +799,14 @@ def _listed_fields(spec: ResourceSpec, items: list[dict[str, Any]]) -> list[dict
 
 
 class PagePosition(TypedDict):
-    # How many matched, where the resource counts them cheaply; else null.
-    total: int | None
-    # More follow this page; ``next.cursor``, sent back as the ``cursor`` filter
-    # with the same filters, reads the page after, and ``next`` is null on the last.
-    truncated: bool
+    """Where a page of a list stopped."""
+
+    total: Annotated[
+        int | None, Describe("How many records matched in all, where the list counts them cheaply; else null.")
+    ]
+    truncated: Annotated[
+        bool, Describe("Whether more records follow this page; `next` reads the page after, and is null on the last.")
+    ]
     next: NextPage | None
 
 
@@ -790,8 +814,10 @@ class PagePosition(TypedDict):
 class ResourceCollection(PagePosition):
     """One page of a list: every list holds these, and may hold metadata of its own."""
 
-    items: list[dict[str, Any]]
-    count: int
+    items: Annotated[
+        list[dict[str, Any]], Describe("The page's records, in the list's order, each in its row's shape.")
+    ]
+    count: Annotated[int, Describe("How many records this page holds.")]
 
 
 @with_config(ConfigDict(extra="allow"))

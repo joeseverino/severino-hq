@@ -10,20 +10,20 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, NotRequired, TypedDict
 
-from pydantic import WithJsonSchema
-
 from hq.domains.control_plane.connection_kinds import connection_credential
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS, observer_abilities, registry_label, resource_home
 lazy from hq.domains.control_plane.names import normalized_hostname
 
+from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion, WebRoute
 from .connection_catalog import CONTROLLER_CONNECTIONS
 
 # Declared next to the domains that emit them, so a gateway can import the
 # record without importing this reader. Re-exported here as the one name
 # callers already use.
 from .connection_contracts import (
+    GRANT_MODELS,
     ConnectionAbility,
     ConnectionFact,
     ConnectionInstance,
@@ -32,11 +32,12 @@ from .connection_contracts import (
 )
 from .connection_lifecycle import Lifecycle, probed, standing
 from .connection_setup import guide_url
+from .contracts import EFFECT_MEANINGS
+from .describe import Describe, listed
 from .entity_links import entity_link
 from .integration_validation import required_capability_names
 from .integrations import integration_graph
 from .moments import ago
-from .projection import shape_version
 from .security import Capability, Principal
 from .ui import ended
 lazy from . import machines
@@ -402,40 +403,51 @@ CONNECTIONS_SCHEMA_VERSION = 1
 class AbilityDescription(TypedDict):
     """One ability a connection family offers, as ``describe_connections`` names it."""
 
-    name: str
-    label: str
-    summary: str
-    effect: str
-    required_scopes: list[str]
-    grant: str | None
-    capability: str | None
-    governs_kinds: list[str]
-    subject_resource: str | None
+    name: Annotated[str, Describe("The name of what it lets HQ do, unique within its type of connection.")]
+    label: Annotated[str, Describe("What it lets HQ do, in a few words.")]
+    summary: Annotated[str, Describe("What it lets HQ do, in a sentence.")]
+    effect: Annotated[str, Describe(ended(f"What using it does: {listed(EFFECT_MEANINGS)}"))]
+    required_scopes: Annotated[
+        list[str], Describe("The permissions the credential must carry for it, in the service's own names.")
+    ]
+    grant: Annotated[
+        str | None,
+        Describe(
+            f"How HQ proves the credential allows it: {listed(GRANT_MODELS)}, where `scoped` is checked against "
+            "`required_scopes`; null where the connection says nothing."
+        ),
+    ]
+    capability: Annotated[str | None, Describe("The command that uses it, by name; null for none.")]
+    governs_kinds: Annotated[list[str], Describe("The types of record it lets HQ manage; empty for none.")]
+    subject_resource: Annotated[
+        str | None,
+        Describe("The list those records are read from, by the name `describe_resources` gives it; null for none."),
+    ]
 
 
 class ConnectionDescription(TypedDict):
     """One connection family as every adapter describes it."""
 
-    name: str
-    label: str
-    summary: str
-    required_capabilities: list[str]
-    web_route: str | None
-    management_route: str | None
-    setup_route: str | None
-    documentation_url: str | None
-    secret_store: str | None
-    abilities: list[AbilityDescription]
-    # Whether the asker's capabilities admit the family; a catalog read with no
-    # asker only describes.
-    permitted: NotRequired[bool]
+    name: Annotated[str, Describe("The name of this type of connection.")]
+    label: Annotated[str, Describe("What a person calls this type of connection.")]
+    summary: Annotated[str, Describe("What this type of connection lets HQ reach, in a sentence.")]
+    required_capabilities: RequiredPermissions
+    web_route: WebRoute
+    management_route: Annotated[
+        str | None, Describe("The page where its settings are changed, by its route name; null for none.")
+    ]
+    setup_route: Annotated[str | None, Describe("The page where one is set up, by its route name; null for none.")]
+    documentation_url: Annotated[str | None, Describe("The service's own documentation for it; null for none.")]
+    secret_store: Annotated[str | None, Describe("Where its credential is kept, such as `1Password`; null for none.")]
+    abilities: Annotated[list[AbilityDescription], Describe("What it lets HQ do, one entry for each thing.")]
+    permitted: NotRequired[Permitted]
 
 
 class ConnectionCatalog(TypedDict):
     """What ``describe_connections`` answers."""
 
-    schema_version: Annotated[int, WithJsonSchema(shape_version(CONNECTIONS_SCHEMA_VERSION))]
-    connections: list[ConnectionDescription]
+    schema_version: Annotated[SchemaVersion, Pinned(CONNECTIONS_SCHEMA_VERSION)]
+    connections: Annotated[list[ConnectionDescription], Describe("Every type of connection HQ knows.")]
 
 
 def _ability(ability: ConnectionAbility) -> AbilityDescription:

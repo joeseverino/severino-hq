@@ -12,9 +12,20 @@ from pydantic import Field
 from hq.domains.calendars.models import Entry
 
 from . import calendar_entries
-from .calendar_entries import CHOOSE_SOURCE, EntryCommand, SourceChoiceCommand, choose_source, save_entry
+from .answer_fields import UpdatedAt
+from .calendar import EVENT_STATES
+from .calendar_entries import (
+    CHOOSE_SOURCE,
+    CalendarEntryTitle,
+    EntryCommand,
+    SourceChoiceCommand,
+    choose_source,
+    save_entry,
+)
 from .deletion import DeleteCommand, delete_calendar_entry
+from .describe import Describe, listed
 from .integration_specs import CapabilitySpec, ResourceSpec
+from .record_fields import Notes
 from .records import KEPT
 from .resources import BoundedQuery, limit_words
 from .search_contracts import SearchDefinition
@@ -38,36 +49,54 @@ class AgendaQuery(BoundedQuery):
 class AgendaItem(TypedDict):
     """One thing on the calendar in the span, from whichever source holds it."""
 
-    source: str
-    calendar: str
-    title: str
-    starts: str
-    ends: str | None
-    all_day: bool
-    state: str | None
-    detail: str
-    url: str
+    source: Annotated[str, Describe("The id of the source it comes from, which showing or hiding a calendar takes.")]
+    calendar: Annotated[str, Describe("The name of that source, as the calendar's list of them shows it.")]
+    title: Annotated[str, Describe("What it is, in a line.")]
+    starts: Annotated[
+        str, Describe("When it starts: an ISO 8601 date for one that takes whole days, else a date-time.")
+    ]
+    ends: Annotated[
+        str | None,
+        Describe(
+            "When it ends, in the terms `starts` takes and exclusive of that day or moment: whole days over the 3rd "
+            "to the 5th end on the 6th. Null for a single day or moment."
+        ),
+    ]
+    all_day: Annotated[bool, Describe("Whether it takes whole days, with no time of day.")]
+    state: Annotated[
+        str | None, Describe(f"For a plan, how it stands: {listed(sorted(EVENT_STATES))}; null for a plain fact.")
+    ]
+    detail: Annotated[str, Describe("More about it in a line, such as where it is and how often; empty for none.")]
+    url: Annotated[str, Describe("Where HQ shows it, a path; empty for none.")]
 
 
 class EntryRecord(TypedDict):
     """One of your own events, as its command writes it."""
 
-    uid: str
-    title: str
-    starts_on: str
-    ends_on: str | None
-    starts_at: str | None
-    ends_at: str | None
-    location: str
-    notes: str
-    repeat: str
-    repeat_label: str
-    interval: int
-    weekdays: list[int]
-    repeat_until: str | None
-    about: str
-    url: str
-    updated_at: str
+    uid: Annotated[str, Describe("The event's id, which reading it, changing it and deleting it each take.")]
+    title: CalendarEntryTitle
+    starts_on: Annotated[str, Describe("The day it starts, an ISO 8601 date.")]
+    ends_on: Annotated[
+        str | None, Describe("The day it ends, an ISO 8601 date; null for one that ends the day it starts.")
+    ]
+    starts_at: Annotated[str | None, Describe("The time it starts, as `HH:MM`; null for one that takes the whole day.")]
+    ends_at: Annotated[str | None, Describe("The time it ends, as `HH:MM`; null for none.")]
+    location: Annotated[str, Describe("Where it happens; empty when not recorded.")]
+    notes: Notes
+    repeat: Annotated[str, Describe(f"How often it repeats: {listed(Entry.Repeat.values)}; empty for once.")]
+    repeat_label: Annotated[
+        str, Describe("How it repeats, as a person says it, such as `Every 2 weeks on Mon`; empty for once.")
+    ]
+    interval: Annotated[
+        int, Describe("How far apart its times are, in what `repeat` names: 2 with `weekly` is every other week.")
+    ]
+    weekdays: Annotated[
+        list[int], Describe("For one that repeats weekly, the days of the week it falls on, Monday as 0; else empty.")
+    ]
+    repeat_until: Annotated[str | None, Describe("The last day it repeats, an ISO 8601 date; null for no last day.")]
+    about: Annotated[str, Describe("What it is about, as `type:key`; empty for nothing.")]
+    url: Annotated[str, Describe("Its day on HQ's calendar, a path.")]
+    updated_at: UpdatedAt
 
 
 def capabilities() -> tuple[CapabilitySpec, ...]:

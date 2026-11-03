@@ -9,7 +9,7 @@ quietly changed meaning.
 import json
 import re
 from collections.abc import Callable, Iterable, Mapping
-from typing import Annotated, Any, Concatenate, Literal, TypedDict, cast
+from typing import Annotated, Any, Concatenate, TypedDict, cast
 
 from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser
@@ -27,6 +27,7 @@ from pydantic import (
 from hq.platform.application import agent_admission
 from hq.platform.application.agent_access import AgentRefusal
 from hq.platform.application.agent_limits import Limited
+from hq.platform.application.answer_fields import Outcome, Pinned
 from hq.platform.application.call_envelope import ENVELOPE_SCHEMA, INTEGER_TARGET, read_body
 from hq.platform.application.capabilities import (
     CapabilitiesVersion,
@@ -36,6 +37,7 @@ from hq.platform.application.capabilities import (
     run_capability,
 )
 from hq.platform.application.connections import ConnectionCatalog, describe_connections
+from hq.platform.application.describe import Describe
 from hq.platform.application.findings import Findings, FindingsQuery, findings as application_findings
 from hq.platform.application.held_answer import AwaitingApproval
 from hq.platform.application.integration_specs import (
@@ -97,7 +99,7 @@ class Failure(RefusalEnvelope):
 class Ok[T](TypedDict):
     """Every success: ``ok``, and what the operation answers under ``data``."""
 
-    ok: Literal[True]
+    ok: Annotated[Outcome, Pinned(value=True)]
     data: Annotated[T, Field(description="What the operation answers, in the shape its response names.")]
 
 
@@ -139,24 +141,38 @@ def root_links() -> Any:
 
 
 class RootData(TypedDict):
-    service: str
-    api_version: int
-    resource: str
-    actor: str
-    granted: list[str]
+    """What this API is, and what the presented credential may do."""
+
+    service: Annotated[str, Describe("Which service this is: always `severino-hq`.")]
+    api_version: Annotated[
+        int, Describe("The version of the API's contract this host serves, the number after `v` in each path.")
+    ]
+    resource: Annotated[str, Describe("The audience a token must be issued for to be accepted here.")]
+    actor: Annotated[str, Describe("Who the presented credential acts as, by the name HQ records its calls under.")]
+    granted: Annotated[list[str], Describe("The permissions the credential holds, sorted.")]
     # Typed by the URLconf, read once this module and it are both loaded.
     links: Annotated[dict[str, str], GetPydanticSchema(lambda _source, handler: handler(root_links()))]
 
 
 class CapabilityEntry(CapabilityDescription):
-    idempotency_key_required: bool
-    request_schema: dict[str, Any]
+    """One capability as the machine API describes it: with the body it is called by."""
+
+    idempotency_key_required: Annotated[
+        bool,
+        Describe(
+            "Whether this caller must send an idempotency key to run it: any change, from all but the host's shell."
+        ),
+    ]
+    request_schema: Annotated[dict[str, Any], Describe("The JSON Schema of the body a call to run it sends.")]
 
 
-# The capability catalog as this door answers it: each entry with the body it is called by.
 class CapabilityRequestCatalog(TypedDict):
+    """The capability catalog as the machine API answers it: each entry with the body it is called by."""
+
     schema_version: CapabilitiesVersion
-    capabilities: list[CapabilityEntry]
+    capabilities: Annotated[
+        list[CapabilityEntry], Describe("Each capability asked for that this caller's interface can run.")
+    ]
 
 
 def _json(payload: Mapping[str, Any], *, status: int = 200) -> HttpResponse:

@@ -89,6 +89,15 @@ class _Components:
 
     def __init__(self) -> None:
         self.schemas: dict[str, Any] = {}
+        # The components a caller's field mask may trim, which promise no field.
+        self.masked: set[str] = set()
+
+    def mask(self, name: str) -> None:
+        """Promise no field of the component ``name``, whichever schema writes it first."""
+
+        self.masked.add(name)
+        if name in self.schemas:
+            self.schemas[name].pop("required", None)
 
     def typed(self, types: dict[str, Any]) -> dict[str, dict[str, Any]]:
         """Schemas for Python types, their definitions hoisted into components."""
@@ -99,6 +108,8 @@ class _Components:
         return refs
 
     def add(self, name: str, schema: dict[str, Any]) -> str:
+        if name in self.masked:
+            schema = {key: value for key, value in schema.items() if key != "required"}
         if self.schemas.setdefault(name, schema) != schema:
             raise OpenAPIError(
                 f"Two schemas claim the component name {name!r}: each meaning is a type alias of its own name."
@@ -512,7 +523,8 @@ class _Builder:
         waits = later and set(codes) <= LATER_CODES
         if not later:
             del properties["retry_after"]
-        error = {**detail, "properties": properties}
+        # The envelope's words for ``error`` stay with the narrowed copy of its type.
+        error = {**detail, "properties": properties, "description": envelope["properties"]["error"]["description"]}
         if waits:
             error["required"] = [*detail["required"], "retry_after"]
         self.components.add(schema, {**envelope, "properties": {**envelope["properties"], "error": error}})
@@ -757,7 +769,7 @@ class _Builder:
         name = kind.__name__
         if name not in self.components.schemas:
             self.components.typed({name: kind})
-            self.components.schemas[name].pop("required", None)
+        self.components.mask(name)
         return {"$ref": SCHEMAS + name}
 
     def page_of(self, row: type | None) -> tuple[str, dict[str, Any]] | None:

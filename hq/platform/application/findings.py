@@ -18,7 +18,7 @@ from typing import Annotated, Any, Literal, TypedDict
 from urllib.parse import urlencode
 
 from django.conf import settings
-from pydantic import ConfigDict, Field, WithJsonSchema, create_model, with_config
+from pydantic import ConfigDict, Field, create_model, with_config
 
 from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions
 lazy from hq.domains.control_plane.models import OperationRequest
@@ -47,10 +47,11 @@ from .action_links import (
     read_now_link,
     topology_investigation_links,
 )
-from .command_fields import Describe
+from .answer_fields import Pinned, SchemaVersion
 from .contracts import route_url
 from .derivations import derivation, present
 from .derived_inputs import ESTATE_READS, estate_variant
+from .describe import Describe, listed
 from .finding_model import (
     CHECK_AGAIN,
     Finding,
@@ -65,7 +66,7 @@ from .first_seen import recorded
 from .integration_validation import required_capability_names
 from .integrations import IntegrationGraph, integration_graph
 from .json_schemas import Written
-from .projection import QUERY, shape_version
+from .projection import QUERY
 from .security import Capability, Principal
 from .topology import derive_topology
 from .topology_model import (
@@ -73,7 +74,6 @@ from .topology_model import (
     STANDINGS,
     Topology,
     TopologyNode,
-    one_of,
 )
 from .ui import ended
 from .workflows import (
@@ -645,7 +645,7 @@ class SerializedFinding(TypedDict):
     ]
     affected_scopes: Annotated[list[str], Describe("Other record types or reading types it bears on.")]
     title: Annotated[str, Describe("The problem, in a line.")]
-    severity: Annotated[str, Describe(f"How serious it is: {one_of(SEVERITIES)}, most severe first.")]
+    severity: Annotated[str, Describe(f"How serious it is: {listed(SEVERITIES)}, most severe first.")]
     explanation: Annotated[str, Describe("Why it matters and what it rests on, in sentences.")]
     evidence: Annotated[list[FindingEvidence], Describe("What it rests on, a labeled line each.")]
     remedies: Annotated[
@@ -750,7 +750,7 @@ class FindingsSummary(TypedDict):
 class Findings(TypedDict):
     """What ``findings`` answers."""
 
-    schema_version: Annotated[int, WithJsonSchema(shape_version(FINDINGS_SCHEMA_VERSION))]
+    schema_version: Annotated[SchemaVersion, Pinned(FINDINGS_SCHEMA_VERSION)]
     rule: Annotated[str | None, Describe("The rule the read was narrowed to; null for every rule's.")]
     summary: FindingsSummary
     findings: Annotated[

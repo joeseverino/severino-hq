@@ -12,13 +12,14 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
-from typing import Any, TypedDict
+from typing import Annotated, Any, TypedDict
 
 from django.conf import settings
 from django.db.models import FETCH_PEERS, FETCH_RAISE, Q, QuerySet
 from pydantic import ConfigDict
 lazy from django.utils import timezone
 
+from .describe import Describe
 from .record_errors import RecordNotFound
 
 # The most rows any single read will return, whatever a caller asks for.
@@ -30,15 +31,11 @@ MAX_PAGE_SIZE = 100
 
 
 class NextPage(TypedDict):
-    """Where the page after a list's is read from: ``cursor``, sent back with the same filters."""
+    """Where the page after a list's is read from."""
 
-    cursor: str
-
-
-def shape_version(version: int) -> dict[str, Any]:
-    """A projection's ``schema_version`` as JSON Schema: the one number its answer carries."""
-
-    return {"type": "integer", "const": version}
+    cursor: Annotated[
+        str, Describe("What reads the page after this one, sent back as the `cursor` filter with the same filters.")
+    ]
 
 
 _MISSING = object()

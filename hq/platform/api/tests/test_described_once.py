@@ -1,5 +1,5 @@
-"""The API document writes each described fragment once, and each named
-alias it defines says what it is.
+"""The API document writes each described fragment once, each named alias
+it defines says what it is, and each property says what it holds.
 
 A fragment many declarations share is declared once, where its meaning
 lives, as a named type alias (``json_schemas``), and the document writes it
@@ -72,12 +72,47 @@ def _referred(document: dict[str, Any], value: dict[str, Any]) -> str:
 
     schema = value.get("schema")
     ref = value.get("$ref") or (schema.get("$ref") if isinstance(schema, dict) else None)
+    target = _at(document, ref)
+    return ref if isinstance(target, dict) and isinstance(target.get("description"), str) else ""
+
+
+def _at(document: dict[str, Any], ref: Any) -> Any:
+    """What a local ``$ref`` points at in ``document``, or None."""
+
     if not isinstance(ref, str) or not ref.startswith("#/"):
-        return ""
+        return None
     target: Any = document
     for part in ref.removeprefix("#/").split("/"):
         target = target.get(part) if isinstance(target, dict) else None
-    return ref if isinstance(target, dict) and isinstance(target.get("description"), str) else ""
+    return target
+
+
+def _says(document: dict[str, Any], schema: Any, seen: frozenset[str] = frozenset()) -> bool:
+    """Whether ``schema`` says what it holds: by its own description, by what
+    it refers to (a component, or the base field an inherited one names), or
+    by every member of its union but null."""
+
+    if not isinstance(schema, dict):
+        return False
+    if isinstance(schema.get("description"), str):
+        return True
+    ref = schema.get("$ref")
+    if isinstance(ref, str) and ref not in seen:
+        return _says(document, _at(document, ref), seen | {ref})
+    members = [part for key in ("anyOf", "oneOf") for part in schema.get(key, ()) if part.get("type") != "null"]
+    return bool(members) and all(_says(document, part, seen) for part in members)
+
+
+def unsaid(document: dict[str, Any]) -> list[str]:
+    """Each property of the document's components that says nothing of what
+    it holds, as ``Component.property``."""
+
+    return [
+        f"{name}.{field}"
+        for name, schema in document["components"]["schemas"].items()
+        for field, value in (schema.get("properties") or {}).items()
+        if not _says(document, value)
+    ]
 
 
 def described_once(document: dict[str, Any]) -> None:
@@ -241,6 +276,38 @@ class DescribedOnceTests(SimpleTestCase):
 
         self.assertIn("ExpectedUpdatedAt", set(schemas) & aliases)
         self.assertEqual(_undescribed(schemas, aliases), [])
+
+    def test_every_property_the_document_writes_says_what_it_holds(self):
+        self.assertEqual(
+            unsaid(openapi.document()),
+            [],
+            "Say what each field holds where it is declared, `Annotated[T, Describe(...)]` "
+            "(hq/platform/application/describe.py), or in the docstring of the type it refers to; a meaning "
+            "several types share is a named alias (hq/platform/application/answer_fields.py).",
+        )
+
+    def test_a_property_says_what_it_holds_by_itself_its_component_or_its_base_field(self):
+        schemas = {
+            "Said": {"description": "Said once.", "type": "object"},
+            "Unsaid": {"type": "object"},
+            "Row": {"properties": {"note": _NOTES}},
+            "Example": {
+                "properties": {
+                    "own": _NOTES,
+                    "component": {"$ref": openapi.SCHEMAS + "Said"},
+                    "nullable": {"anyOf": [{"$ref": openapi.SCHEMAS + "Said"}, {"type": "null"}]},
+                    "inherited": {"$ref": openapi.SCHEMAS + "Row/properties/note"},
+                    "bare": {"type": "string"},
+                    "unsaid_component": {"$ref": openapi.SCHEMAS + "Unsaid"},
+                    "half_said": {"anyOf": [{"$ref": openapi.SCHEMAS + "Said"}, {"type": "string"}]},
+                }
+            },
+        }
+
+        self.assertEqual(
+            unsaid({"paths": {}, "components": {"schemas": schemas}}),
+            ["Example.bare", "Example.unsaid_component", "Example.half_said"],
+        )
 
     def test_an_alias_whose_whole_schema_drops_its_description_is_found(self):
         _, definitions = json_schemas(

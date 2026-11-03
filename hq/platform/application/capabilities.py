@@ -6,15 +6,17 @@ from dataclasses import replace
 from typing import Annotated, Any, Literal, NamedTuple, TypedDict
 
 from django.db import transaction
-from pydantic import ConfigDict, TypeAdapter, WithJsonSchema, with_config
+from pydantic import ConfigDict, TypeAdapter, with_config
 
 from hq.platform.core.audit import audit_connection, audit_operation
 lazy from hq.platform.core.doorbell import ask_soon
 
+from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion
 from .approvals import hold_for_approval
 from .call_envelope import read_call
 from .capability_policy import Rule, decide
-from .contracts import DOTTED_NAME
+from .contracts import DOTTED_NAME, EFFECT_MEANINGS
+from .describe import Describe, listed
 from .held_answer import HeldCall
 from .idempotency import (
     KEY_SHAPE,
@@ -43,7 +45,7 @@ from .integration_specs import (
 )
 from .integrations import integration_graph
 from .labels import human_label
-from .projection import QueryRefusal, shape_version
+from .projection import QueryRefusal
 from .refusal_status import Refusal, next_call, refusal_of, refuse
 from .security import (
     CLI_INTERFACE,
@@ -53,6 +55,7 @@ from .security import (
     could_hold,
     require_all,
 )
+from .ui import ended
 
 
 class _UnknownFields(Exception):
@@ -95,23 +98,36 @@ def authorize_capability(spec: CapabilitySpec, principal: Principal) -> None:
 class CapabilityDescription(TypedDict):
     """One registry entry as every adapter describes it."""
 
-    name: str
-    label: str
-    verb: str
-    variants: dict[str, str]
-    summary: str
-    effect: str
-    required_capabilities: list[str]
-    target: str | None
-    target_label: str
-    target_help: str
-    target_query: dict[str, str | int | float | bool]
-    execution_notes: list[str]
-    target_initial_fields: list[str]
-    resource: str | None
-    input_schema: dict[str, Any]
-    # Whether the asker may run it, by the rule ``authorize_capability`` refuses by.
-    permitted: bool
+    name: Annotated[str, Describe("The command's dotted name, which running it takes.")]
+    label: Annotated[str, Describe("What a person calls the command.")]
+    verb: Annotated[str, Describe("What its button says.")]
+    variants: Annotated[
+        dict[str, str],
+        Describe("What its button says in each of its modes, by the mode's name, where one button cannot say all."),
+    ]
+    summary: Annotated[str, Describe("What the command does, in a sentence.")]
+    effect: Annotated[str, Describe(ended(f"What running it does: {listed(EFFECT_MEANINGS)}"))]
+    required_capabilities: RequiredPermissions
+    target: Annotated[
+        str | None,
+        Describe(f"What names the record it acts on: {listed(TARGET_KINDS)}; null for a command that takes none."),
+    ]
+    target_label: Annotated[str, Describe("What a person calls the record it acts on; empty for none.")]
+    target_help: Annotated[str, Describe("What to send as the target, in a sentence; empty for none.")]
+    target_query: Annotated[
+        dict[str, str | int | float | bool],
+        Describe("What a record must hold to be offered as its target, value by field; empty for any record."),
+    ]
+    execution_notes: Annotated[list[str], Describe("What running it does, step by step, a sentence each.")]
+    target_initial_fields: Annotated[
+        list[str], Describe("The fields of its command filled in from the target's record, to be changed from there.")
+    ]
+    resource: Annotated[
+        str | None,
+        Describe("The list its targets are read from, by the name `describe_resources` gives it; null for none."),
+    ]
+    input_schema: Annotated[dict[str, Any], Describe("The JSON Schema of the command it takes as `payload`.")]
+    permitted: Permitted
 
 
 class InvalidCapabilityQuery(QueryRefusal):
@@ -142,14 +158,16 @@ def _narrowed(name: str, resource: str) -> list[CapabilitySpec]:
 # The shape describe_capabilities answers in; it moves when that shape does.
 CAPABILITIES_SCHEMA_VERSION = 2
 # That version as every door declares it: the one number the catalog carries.
-CapabilitiesVersion = Annotated[int, WithJsonSchema(shape_version(CAPABILITIES_SCHEMA_VERSION))]
+CapabilitiesVersion = Annotated[SchemaVersion, Pinned(CAPABILITIES_SCHEMA_VERSION)]
 
 
 class CapabilityCatalog(TypedDict):
     """What ``describe_capabilities`` answers."""
 
     schema_version: CapabilitiesVersion
-    capabilities: list[CapabilityDescription]
+    capabilities: Annotated[
+        list[CapabilityDescription], Describe("Each command asked for that the caller's interface can run.")
+    ]
 
 
 def describe_capabilities(*, principal: Principal, name: str = "", resource: str = "") -> CapabilityCatalog:

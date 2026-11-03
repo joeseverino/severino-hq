@@ -3,13 +3,11 @@ so a door declares it without loading the graph."""
 
 from typing import Annotated, Any, NotRequired, TypedDict
 
-from pydantic import WithJsonSchema
-
-from .command_fields import Describe
+from .answer_fields import Pinned, SchemaVersion
+from .describe import Describe, listed
 from .json_schemas import Written
-from .projection import shape_version
 from .topology_lenses import TRACE_DIRECTIONS
-from .topology_model import TopologyEdge, TopologyNode, one_of
+from .topology_model import TopologyEdge, TopologyNode
 
 # The shape topology answers in; it moves when that shape does.
 TOPOLOGY_SCHEMA_VERSION = 2
@@ -29,7 +27,7 @@ class TraceAnswer(TypedDict):
     direction: Annotated[
         str,
         Describe(
-            f"Which way it followed the edges, {one_of(TRACE_DIRECTIONS)}: `outbound` goes from source to "
+            f"Which way it followed the edges, {listed(TRACE_DIRECTIONS)}: `outbound` goes from source to "
             "target, toward what the focus depends on, and `inbound` goes back, toward what depends on it."
         ),
     ]
@@ -57,7 +55,7 @@ class TopologyAnswer(TypedDict):
     """What ``topology`` answers: the graph a lens or a trace narrows to, or,
     asked for neither, its counts and the lenses that would narrow it."""
 
-    schema_version: Annotated[int, WithJsonSchema(shape_version(TOPOLOGY_SCHEMA_VERSION))]
+    schema_version: Annotated[SchemaVersion, Pinned(TOPOLOGY_SCHEMA_VERSION)]
     lens: Annotated[str | None, Describe("The lens the graph was narrowed to; null when none was asked for.")]
     trace: Annotated[TraceAnswer | None, Describe("The trace the graph was narrowed to; null without a focus.")]
     summary: TopologySummary

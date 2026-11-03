@@ -577,7 +577,12 @@ validates every description against the specification.
 the capability, resource and domain registries, so one added anywhere appears
 in it with no edit. It says each described fragment once: a fragment several
 declarations share is a named type alias where its meaning lives, written as
-the component of that name with every use a `$ref`. A document holding two
+the component of that name with every use a `$ref`. A TypedDict that extends
+another is the same: the base is a component of its own, and each field the
+extension inherits is a `$ref` to the base's property
+(`#/components/schemas/MachineRow/properties/name`), so a field is described
+where it is declared. It is never `allOf` its base, since a closed base refuses
+every key its extension adds. A document holding two
 identical described fragments fails `test_described_once.py`, run in
 the host's suite and in the composed suite before a deploy, so an extension's
 declarations are held too. Serving the document never runs it.

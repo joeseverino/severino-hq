@@ -14,11 +14,12 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Annotated, Any, Literal, NotRequired, TypedDict
+from typing import Annotated, Any, NotRequired, TypedDict
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from pydantic import Field, ValidationError as PydanticValidationError
 
+from .answer_fields import Outcome, Pinned
 from .input_errors import django_refusal, pydantic_refusal
 from .projection import QueryRefusal
 from .record_errors import HostRefusal
@@ -235,7 +236,7 @@ class ErrorDetail(TypedDict):
 
 
 class RefusalEnvelope(TypedDict):
-    ok: Literal[False]
+    ok: Annotated[Outcome, Pinned(value=False)]
     error: Annotated[ErrorDetail, Field(description="Why HQ refused, and what gets past it.")]
 
 

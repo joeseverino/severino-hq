@@ -1,6 +1,6 @@
 """Contact submissions' commands and resource, declared on their domain in application/domains.py."""
 
-from typing import NotRequired, TypedDict
+from typing import Annotated, NotRequired, TypedDict, get_args
 
 from pydantic import Field
 
@@ -14,9 +14,13 @@ from hq.platform.application.contact_submissions import (
     execute_contact_list,
     execute_contact_review,
 )
+from hq.platform.application.describe import Describe, listed
 from hq.platform.application.integration_specs import CapabilitySpec, ResourceSpec
 from hq.platform.application.resources import STATUS_FILTER, TEXT_FILTER, BoundedQuery
 from hq.platform.application.security import Capability
+from hq.platform.application.ui import ended
+
+from .inbox import PREVIEW_LENGTH
 
 
 class ContactSubmissionQuery(BoundedQuery):
@@ -31,29 +35,40 @@ class ContactSubmissionRow(TypedDict):
     the contact form's, its metadata the visitor's browser's.
     """
 
-    id: int
-    connection_ref: NotRequired[str]
-    account_id: NotRequired[str]
-    database_id: NotRequired[str]
-    database: NotRequired[str]
-    created_at: NotRequired[str | None]
-    updated_at: NotRequired[str | None]
-    name: NotRequired[str]
-    email: NotRequired[str]
-    message: NotRequired[str]
-    status: NotRequired[str]
-    assigned_to: NotRequired[str]
-    admin_notes: NotRequired[str]
-    country: NotRequired[str]
-    ip_address: NotRequired[str]
-    browser: NotRequired[str]
-    device: NotRequired[str]
-    user_agent: NotRequired[str]
-    source_url: NotRequired[str]
-    turnstile: NotRequired[str]
-    # Whether a review HQ asked for is not in the table yet.
-    pending: bool
-    message_preview: str
+    id: Annotated[int, Describe("The message's id in the form's table, which the review and delete commands take.")]
+    connection_ref: NotRequired[Annotated[str, Describe("The Cloudflare connection it was read through, by name.")]]
+    account_id: NotRequired[Annotated[str, Describe("The id of the Cloudflare account that holds the table.")]]
+    database_id: NotRequired[Annotated[str, Describe("The id of the D1 database that holds the table.")]]
+    database: NotRequired[Annotated[str, Describe("The name of the D1 database that holds the table.")]]
+    created_at: NotRequired[
+        Annotated[str | None, Describe("When it was sent, an ISO 8601 date-time; null when the table says nothing.")]
+    ]
+    updated_at: NotRequired[
+        Annotated[
+            str | None,
+            Describe("When the table last changed it, an ISO 8601 date-time; null when the table says nothing."),
+        ]
+    ]
+    name: NotRequired[Annotated[str, Describe("The name the visitor gave.")]]
+    email: NotRequired[Annotated[str, Describe("The email address the visitor gave.")]]
+    message: NotRequired[Annotated[str, Describe("What the visitor wrote, in full.")]]
+    status: NotRequired[Annotated[str, Describe(ended(f"Where its review stands: {listed(get_args(ContactStatus))}"))]]
+    assigned_to: NotRequired[Annotated[str, Describe("Who is handling it; empty for nobody.")]]
+    admin_notes: NotRequired[Annotated[str, Describe("The notes kept on it, for HQ only; empty for none.")]]
+    country: NotRequired[Annotated[str, Describe("The country it was sent from, as the site recorded it.")]]
+    ip_address: NotRequired[Annotated[str, Describe("The IP address it was sent from.")]]
+    browser: NotRequired[Annotated[str, Describe("The visitor's browser, as the site recorded it.")]]
+    device: NotRequired[Annotated[str, Describe("The type of device it was sent from, as the site recorded it.")]]
+    user_agent: NotRequired[Annotated[str, Describe("The visitor's browser's whole user agent string.")]]
+    source_url: NotRequired[Annotated[str, Describe("The page the form was sent from.")]]
+    turnstile: NotRequired[
+        Annotated[str, Describe("What the form's bot check found, as the site recorded it, such as `verified`.")]
+    ]
+    pending: Annotated[
+        bool,
+        Describe("Whether a review HQ asked for is not in the table yet; the fields it changes already show it."),
+    ]
+    message_preview: Annotated[str, Describe(f"The message's first {PREVIEW_LENGTH} characters, for a list to show.")]
 
 
 def capabilities() -> tuple[CapabilitySpec, ...]:
