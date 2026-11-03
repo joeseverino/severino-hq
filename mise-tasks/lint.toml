@@ -170,4 +170,7 @@ usage = '''
 arg "<shell>" help="The shell to run the suite under, which the suite finds in SHELL_UNDER_TEST; - runs it as its first line says"
 arg "<suite>" help="The suite, tests/shell/test-*.sh"
 '''
+# A suite matches the words the tools it runs print, and mise colors them
+# under GitHub Actions even with no terminal.
+env = { NO_COLOR = "1" }
 run = 'if [ "$usage_shell" = - ]; then exec "$usage_suite"; fi; SHELL_UNDER_TEST="$usage_shell" exec "$usage_shell" "$usage_suite"'
