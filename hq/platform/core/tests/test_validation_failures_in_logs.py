@@ -8,6 +8,7 @@ validation failure by where and how it failed, never by what it held.
 
 import json
 import logging
+from typing import Never
 
 from django.test import SimpleTestCase
 from pydantic import BaseModel, ValidationError
@@ -31,7 +32,7 @@ def _invalid() -> ValidationError:
     raise AssertionError("the command accepted its planted value")
 
 
-def _raise(kind: type[Exception], cause: BaseException | None) -> None:
+def _raise(kind: type[Exception], cause: BaseException | None) -> Never:
     if cause is None:
         raise kind("The handler could not read its command.")
     raise kind("The handler could not read its command.") from cause
@@ -44,10 +45,11 @@ def _under(kind: type[Exception], invalid: ValidationError | None, *, implicit: 
     try:
         if invalid is None:
             _raise(kind, None)
-        try:
-            raise invalid
-        except ValidationError as handled:
-            _raise(kind, None if implicit else handled)
+        else:
+            try:
+                raise invalid
+            except ValidationError as handled:
+                _raise(kind, None if implicit else handled)
     except kind as exc:
         return exc
     raise AssertionError("nothing was raised")
