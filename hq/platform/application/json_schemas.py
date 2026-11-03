@@ -236,7 +236,12 @@ class Written:
     """``Annotated[dict[str, Any], Written(Kind)]``: a part the API document
     types whole, as ``Kind``, and an MCP tool's shape leaves an object. It is a
     dataclass as ``asdict`` writes it: a dict to the type checker and ``Kind``
-    to every validator."""
+    to every validator.
+
+    A stdlib dataclass with no config of its own takes the config of the
+    answer that holds it, so one held by several answers carries its own
+    (``pydantic.with_config``), or a closed holder and an open one write it as
+    two components of one name."""
 
     def __init__(self, kind: type) -> None:
         self.kind = kind

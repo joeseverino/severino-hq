@@ -115,6 +115,34 @@ def unsaid(document: dict[str, Any]) -> list[str]:
     ]
 
 
+# The one object written bare by design: every list's own route narrows the
+# base's items to its row type through ``allOf``.
+_NARROWED = frozenset({"components.schemas.ResourceCollection.properties.items.items"})
+_BARE = {"type": "object"}
+
+
+def _bare_objects(value: Any, path: str, *, names: bool = False) -> Iterator[str]:
+    """The path of each object schema under ``value`` that names none of its fields."""
+
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from _bare_objects(item, f"{path}.{index}")
+        return
+    if not isinstance(value, dict):
+        return
+    if not names and value == _BARE:
+        yield path
+    for key, item in value.items():
+        if names or (key not in _VALUES and not key.startswith("x-")):
+            yield from _bare_objects(item, f"{path}.{key}" if path else key, names=not names and key in _NAME_MAPS)
+
+
+def shapeless(document: dict[str, Any]) -> list[str]:
+    """Each object the document writes inline with no word of its shape, by its path."""
+
+    return [path for path in _bare_objects(document, "") if path not in _NARROWED]
+
+
 def described_once(document: dict[str, Any]) -> None:
     """Refuse a document holding two identical described fragments, or a
     described use of a described component, naming the first."""
@@ -284,6 +312,38 @@ class DescribedOnceTests(SimpleTestCase):
             "Say what each field holds where it is declared, `Annotated[T, Describe(...)]` "
             "(hq/platform/application/describe.py), or in the docstring of the type it refers to; a meaning "
             "several types share is a named alias (hq/platform/application/answer_fields.py).",
+        )
+
+    def test_every_object_the_document_writes_says_its_shape(self):
+        self.assertEqual(
+            shapeless(openapi.document()),
+            [],
+            "Each part of an answer HQ builds names its fields: declare a TypedDict beside the record that "
+            "holds it (hq/platform/application/resource_records.py), each field with `Describe`. A part in its "
+            "source's own shape uses the open alias `AsRead` (hq/platform/application/answer_fields.py).",
+        )
+
+    def test_an_inline_object_naming_no_field_is_found_where_a_described_one_and_a_value_are_not(self):
+        schemas = {
+            "Example": {
+                "properties": {
+                    "bare": {"type": "object"},
+                    "listed": {"items": {"type": "object"}, "type": "array"},
+                    "nullable": {"anyOf": [{"type": "object"}, {"type": "null"}]},
+                    "said": {"description": "Its source's own shape.", "type": "object"},
+                    "type": {"$ref": openapi.SCHEMAS + "Said"},
+                },
+                "examples": [{"type": "object"}],
+            }
+        }
+
+        self.assertEqual(
+            shapeless({"paths": {}, "components": {"schemas": schemas}}),
+            [
+                "components.schemas.Example.properties.bare",
+                "components.schemas.Example.properties.listed.items",
+                "components.schemas.Example.properties.nullable.anyOf.0",
+            ],
         )
 
     def test_a_property_says_what_it_holds_by_itself_its_component_or_its_base_field(self):

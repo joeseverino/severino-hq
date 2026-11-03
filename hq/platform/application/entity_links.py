@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Annotated, Any
 from urllib.parse import urlsplit
 
+from pydantic import ConfigDict, with_config
 lazy from django.utils.text import slugify
 
 from hq.domains.control_plane.names import LEADS_TO, names_a_host, normalized_hostname
@@ -23,6 +24,8 @@ lazy from .infrastructure import enabled_resources
 lazy from .projection import read_once
 
 
+# Its own config, so it is written one way under every answer that holds it.
+@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class EntityLink:
     """A name, and the page it opens, when there is one."""

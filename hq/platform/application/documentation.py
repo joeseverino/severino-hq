@@ -6,6 +6,8 @@ from datetime import date
 from functools import partial
 from typing import Annotated, Any, Literal, TypedDict, final
 
+from pydantic import ConfigDict, with_config
+
 from hq.domains.docs_index.importer import (
     import_manifest_data,
     validate_manifest_data,
@@ -114,7 +116,7 @@ type ConfirmPrune = Annotated[bool, Describe("Confirms the delete that prune_orp
 
 @dataclass(frozen=True, slots=True)
 class DocumentationSyncCommand:
-    manifest: Annotated[list[dict[str, Any]], Describe("The documentation records to sync, one per doc.")]
+    manifest: Annotated[list[ManifestEntry], Describe("The documentation records to sync, one per doc.")]
     update_existing: UpdateExisting = True
     report_orphans: Annotated[bool, Describe("Report records the manifest no longer lists.")] = False
     prune_orphans: PruneOrphans = False
@@ -141,6 +143,42 @@ type ExternalUrl = Annotated[str, Describe("Where it is published outside HQ; em
 type LastReviewed = Annotated[
     date | None, Describe("When it was last checked against what it describes, an ISO 8601 date; null for never.")
 ]
+
+
+# The vault's manifest copies a doc's frontmatter as it is written, so any
+# field may be absent or null, and a key HQ does not read is passed over; the
+# importer holds each entry to the frontmatter schema.
+@with_config(ConfigDict(extra="allow"))
+class ManifestEntry(TypedDict, total=False):
+    """One doc of the vault's manifest: its frontmatter, its path, and what it relates to."""
+
+    doc_id: DocId | None
+    title: DocumentationTitle | None
+    doc_type: DocType | None
+    system: Annotated[str | None, Describe("The system or service the doc is about.")]
+    system_service: Annotated[str | None, Describe("The same as `system`, under the name HQ stores it by.")]
+    environment: DocEnvironment | None
+    status: DocStatus | None
+    sensitivity: DocSensitivity | None
+    path: Annotated[str | None, Describe("Where the doc is in the vault, which `obsidian_path` stands in for.")]
+    obsidian_path: ObsidianPath | None
+    github_path: GithubPath | None
+    external_url: ExternalUrl | None
+    last_reviewed: LastReviewed | None
+    published_at: PublishedAt | None
+    notes: Notes | None
+    related_projects: Annotated[list[str] | None, Describe("The slugs of the projects the doc is about.")]
+    related_assets: Annotated[list[str] | None, Describe("The slugs of the assets the doc is about.")]
+    content_type: Annotated[
+        str | None, Describe("For site content, what it is on the site, such as `portfolio_article` or `page`.")
+    ]
+    slug: Annotated[str | None, Describe("For site content, the slug of the item it mirrors to.")]
+    published: Annotated[bool | None, Describe("For site content, whether it is live on the site.")]
+    topic: Annotated[str | None, Describe("For site content, what it is about, in a line.")]
+    description: Annotated[str | None, Describe("For site content, its description, which `topic` stands in for.")]
+    excerpt: Annotated[str | None, Describe("For site content, its excerpt, read where it has no description.")]
+    tags: Annotated[list[str] | None, Describe("The doc's tags.")]
+    technologies: Annotated[list[str] | None, Describe("For site content, what it was built with, read as its tags.")]
 
 
 @dataclass(frozen=True, slots=True)

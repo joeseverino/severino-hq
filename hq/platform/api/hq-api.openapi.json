@@ -67,9 +67,275 @@
                       "description": "Confirms the delete that prune_orphans asks for.",
                       "type": "boolean"
                     },
+                    "DocEnvironment": {
+                      "description": "Where that system runs: `homelab`, `vps`, `wordpress`, `cloudflare`, `tailscale`, `adguard`, `unifi`, `local_mac` or `other`.",
+                      "type": "string"
+                    },
+                    "DocId": {
+                      "description": "The doc's ID in the vault.",
+                      "type": "string"
+                    },
+                    "DocSensitivity": {
+                      "description": "Who may read it, `public`, `internal`, `sensitive` or `restricted`; a restricted doc never reaches an agent.",
+                      "type": "string"
+                    },
+                    "DocStatus": {
+                      "description": "Where the doc stands: `draft`, `active`, `deprecated` or `archived`.",
+                      "type": "string"
+                    },
+                    "DocType": {
+                      "description": "What type of doc it is: `runbook`, `architecture_note`, `deployment_guide`, `troubleshooting_guide`, `recovery_procedure`, `public_article_draft`, `decision_record`, `report` or `queue`.",
+                      "type": "string"
+                    },
+                    "DocumentationTitle": {
+                      "description": "The doc's title.",
+                      "type": "string"
+                    },
+                    "ExternalUrl": {
+                      "description": "Where it is published outside HQ; empty for none.",
+                      "type": "string"
+                    },
+                    "GithubPath": {
+                      "description": "Its path in a repository; empty for none.",
+                      "type": "string"
+                    },
+                    "LastReviewed": {
+                      "anyOf": [
+                        {
+                          "format": "date",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "When it was last checked against what it describes, an ISO 8601 date; null for never.",
+                      "title": "Last reviewed"
+                    },
+                    "ManifestEntry": {
+                      "description": "One doc of the vault's manifest: its frontmatter, its path, and what it relates to.",
+                      "properties": {
+                        "content_type": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "For site content, what it is on the site, such as `portfolio_article` or `page`."
+                        },
+                        "description": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "For site content, its description, which `topic` stands in for."
+                        },
+                        "doc_id": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/DocId"
+                            }
+                          ]
+                        },
+                        "doc_type": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/DocType"
+                            }
+                          ]
+                        },
+                        "environment": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/DocEnvironment"
+                            }
+                          ]
+                        },
+                        "excerpt": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "For site content, its excerpt, read where it has no description."
+                        },
+                        "external_url": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/ExternalUrl"
+                            }
+                          ]
+                        },
+                        "github_path": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/GithubPath"
+                            }
+                          ]
+                        },
+                        "last_reviewed": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/LastReviewed"
+                            }
+                          ]
+                        },
+                        "notes": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/Notes"
+                            }
+                          ]
+                        },
+                        "obsidian_path": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/ObsidianPath"
+                            }
+                          ]
+                        },
+                        "path": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "Where the doc is in the vault, which `obsidian_path` stands in for."
+                        },
+                        "published": {
+                          "anyOf": [
+                            {
+                              "type": "boolean"
+                            }
+                          ],
+                          "description": "For site content, whether it is live on the site."
+                        },
+                        "published_at": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/PublishedAt"
+                            }
+                          ]
+                        },
+                        "related_assets": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          ],
+                          "description": "The slugs of the assets the doc is about."
+                        },
+                        "related_projects": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          ],
+                          "description": "The slugs of the projects the doc is about."
+                        },
+                        "sensitivity": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/DocSensitivity"
+                            }
+                          ]
+                        },
+                        "slug": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "For site content, the slug of the item it mirrors to."
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/DocStatus"
+                            }
+                          ]
+                        },
+                        "system": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "The system or service the doc is about."
+                        },
+                        "system_service": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "The same as `system`, under the name HQ stores it by."
+                        },
+                        "tags": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          ],
+                          "description": "The doc's tags."
+                        },
+                        "technologies": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          ],
+                          "description": "For site content, what it was built with, read as its tags."
+                        },
+                        "title": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/DocumentationTitle"
+                            }
+                          ]
+                        },
+                        "topic": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "For site content, what it is about, in a line."
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Notes": {
+                      "description": "Anything else worth keeping.",
+                      "type": "string"
+                    },
+                    "ObsidianPath": {
+                      "description": "Its path in the vault; empty for none.",
+                      "type": "string"
+                    },
                     "PruneOrphans": {
                       "description": "Delete records the manifest no longer lists.",
                       "type": "boolean"
+                    },
+                    "PublishedAt": {
+                      "anyOf": [
+                        {
+                          "format": "date",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "When it was published, an ISO 8601 date; null when it is not.",
+                      "title": "Published at"
                     },
                     "UpdateExisting": {
                       "description": "Update records HQ already holds.",
@@ -95,7 +361,7 @@
                     "manifest": {
                       "description": "The records to sync, one per entry.",
                       "items": {
-                        "type": "object"
+                        "$ref": "#/$defs/ManifestEntry"
                       },
                       "type": "array"
                     },
@@ -127,6 +393,30 @@
                       "description": "Confirms the delete that prune_orphans asks for.",
                       "type": "boolean"
                     },
+                    "DocEnvironment": {
+                      "description": "Where that system runs: `homelab`, `vps`, `wordpress`, `cloudflare`, `tailscale`, `adguard`, `unifi`, `local_mac` or `other`.",
+                      "type": "string"
+                    },
+                    "DocId": {
+                      "description": "The doc's ID in the vault.",
+                      "type": "string"
+                    },
+                    "DocSensitivity": {
+                      "description": "Who may read it, `public`, `internal`, `sensitive` or `restricted`; a restricted doc never reaches an agent.",
+                      "type": "string"
+                    },
+                    "DocStatus": {
+                      "description": "Where the doc stands: `draft`, `active`, `deprecated` or `archived`.",
+                      "type": "string"
+                    },
+                    "DocType": {
+                      "description": "What type of doc it is: `runbook`, `architecture_note`, `deployment_guide`, `troubleshooting_guide`, `recovery_procedure`, `public_article_draft`, `decision_record`, `report` or `queue`.",
+                      "type": "string"
+                    },
+                    "DocumentationTitle": {
+                      "description": "The doc's title.",
+                      "type": "string"
+                    },
                     "ExpectedUpdatedAt": {
                       "description": "The target's `updated_at`, copied as it was last read. Where the command checks it, a record changed since is refused `conflict`; without it the record is taken as it is now.",
                       "examples": [
@@ -135,9 +425,251 @@
                       "format": "date-time",
                       "type": "string"
                     },
+                    "ExternalUrl": {
+                      "description": "Where it is published outside HQ; empty for none.",
+                      "type": "string"
+                    },
+                    "GithubPath": {
+                      "description": "Its path in a repository; empty for none.",
+                      "type": "string"
+                    },
+                    "LastReviewed": {
+                      "anyOf": [
+                        {
+                          "format": "date",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "When it was last checked against what it describes, an ISO 8601 date; null for never.",
+                      "title": "Last reviewed"
+                    },
+                    "ManifestEntry": {
+                      "description": "One doc of the vault's manifest: its frontmatter, its path, and what it relates to.",
+                      "properties": {
+                        "content_type": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "For site content, what it is on the site, such as `portfolio_article` or `page`."
+                        },
+                        "description": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "For site content, its description, which `topic` stands in for."
+                        },
+                        "doc_id": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/DocId"
+                            }
+                          ]
+                        },
+                        "doc_type": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/DocType"
+                            }
+                          ]
+                        },
+                        "environment": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/DocEnvironment"
+                            }
+                          ]
+                        },
+                        "excerpt": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "For site content, its excerpt, read where it has no description."
+                        },
+                        "external_url": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/ExternalUrl"
+                            }
+                          ]
+                        },
+                        "github_path": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/GithubPath"
+                            }
+                          ]
+                        },
+                        "last_reviewed": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/LastReviewed"
+                            }
+                          ]
+                        },
+                        "notes": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/Notes"
+                            }
+                          ]
+                        },
+                        "obsidian_path": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/ObsidianPath"
+                            }
+                          ]
+                        },
+                        "path": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "Where the doc is in the vault, which `obsidian_path` stands in for."
+                        },
+                        "published": {
+                          "anyOf": [
+                            {
+                              "type": "boolean"
+                            }
+                          ],
+                          "description": "For site content, whether it is live on the site."
+                        },
+                        "published_at": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/PublishedAt"
+                            }
+                          ]
+                        },
+                        "related_assets": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          ],
+                          "description": "The slugs of the assets the doc is about."
+                        },
+                        "related_projects": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          ],
+                          "description": "The slugs of the projects the doc is about."
+                        },
+                        "sensitivity": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/DocSensitivity"
+                            }
+                          ]
+                        },
+                        "slug": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "For site content, the slug of the item it mirrors to."
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/DocStatus"
+                            }
+                          ]
+                        },
+                        "system": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "The system or service the doc is about."
+                        },
+                        "system_service": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "The same as `system`, under the name HQ stores it by."
+                        },
+                        "tags": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          ],
+                          "description": "The doc's tags."
+                        },
+                        "technologies": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          ],
+                          "description": "For site content, what it was built with, read as its tags."
+                        },
+                        "title": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/DocumentationTitle"
+                            }
+                          ]
+                        },
+                        "topic": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "For site content, what it is about, in a line."
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Notes": {
+                      "description": "Anything else worth keeping.",
+                      "type": "string"
+                    },
+                    "ObsidianPath": {
+                      "description": "Its path in the vault; empty for none.",
+                      "type": "string"
+                    },
                     "PruneOrphans": {
                       "description": "Delete records the manifest no longer lists.",
                       "type": "boolean"
+                    },
+                    "PublishedAt": {
+                      "anyOf": [
+                        {
+                          "format": "date",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "When it was published, an ISO 8601 date; null when it is not.",
+                      "title": "Published at"
                     },
                     "UpdateExisting": {
                       "description": "Update records HQ already holds.",
@@ -171,7 +703,7 @@
                         "manifest": {
                           "description": "The records to sync, one per entry.",
                           "items": {
-                            "type": "object"
+                            "$ref": "#/$defs/ManifestEntry"
                           },
                           "type": "array"
                         },
@@ -3879,30 +4411,6 @@
         },
         "description": "Not Found."
       },
-      "ObjectSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "type": "object"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
       "ObservedAcceptedOrHeldSuccess": {
         "content": {
           "application/json": {
@@ -4347,6 +4855,30 @@
         },
         "description": "Not Found."
       },
+      "ResourceRecordAnswerSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/ResourceRecordAnswer"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
       "ResourceSavedOrHeldSuccess": {
         "content": {
           "application/json": {
@@ -4766,6 +5298,110 @@
         ],
         "type": "object"
       },
+      "AbilityPart": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActionLink",
+                "title": "Action link"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether the credential holds every permission it needs; null when not known."
+          },
+          "capability": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The command it lets HQ run; null for none."
+          },
+          "effect": {
+            "description": "What using it does, such as `read` or `remote_write`.",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "How HQ knows whether it holds: `verified`, `coarse`, `not_applicable`, `unverified`, `undeclared`, `unknown`, `missing` or `revoked`.",
+            "type": "string"
+          },
+          "grant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How the service grants it: `scoped`, `coarse` or `none`; null when not said."
+          },
+          "label": {
+            "description": "What it lets HQ do, in words.",
+            "type": "string"
+          },
+          "missing_scopes": {
+            "description": "The permissions it needs that the credential lacks.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "What it lets HQ do, by its stable name.",
+            "type": "string"
+          },
+          "required_scopes": {
+            "description": "The permissions it needs, as the service names them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "subject_resource": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The list of records it governs; null for none."
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "effect",
+          "required_scopes",
+          "grant",
+          "evidence",
+          "available",
+          "missing_scopes",
+          "capability",
+          "subject_resource",
+          "action"
+        ],
+        "type": "object"
+      },
       "ActionItemRow": {
         "additionalProperties": false,
         "properties": {
@@ -4800,6 +5436,7 @@
         "type": "object"
       },
       "ActionLink": {
+        "additionalProperties": false,
         "description": "One safe route from observed state to an existing HQ use case.",
         "properties": {
           "capability": {
@@ -4906,6 +5543,34 @@
       "AdminNotes": {
         "description": "The notes kept on it, for HQ only; empty for none.",
         "type": "string"
+      },
+      "AdvisoryPart": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "The advisory's or vulnerability's id, such as a GHSA or CVE id.",
+            "type": "string"
+          },
+          "severity": {
+            "description": "How serious it is, as its source rates it.",
+            "type": "string"
+          },
+          "summary": {
+            "description": "What the advisory warns of, in a line.",
+            "type": "string"
+          },
+          "url": {
+            "description": "Its page.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "severity",
+          "summary",
+          "url"
+        ],
+        "type": "object"
       },
       "AgendaItem": {
         "additionalProperties": false,
@@ -5102,6 +5767,14 @@
         ],
         "description": "The operation queued to apply the change at once; null where none was.",
         "title": "Applying"
+      },
+      "AsRead": {
+        "description": "An object in its source's own shape, passed on as HQ read it: its keys are the source's.",
+        "type": "object"
+      },
+      "AskedAt": {
+        "description": "When it was asked for, an ISO 8601 date-time.",
+        "type": "string"
       },
       "AssetCategory": {
         "description": "What type of asset it is: `networking`, `server_hardware`, `software`, `subscription`, `domain`, `hosting`, `camera_audio`, `office`, `tools`, `training` or `other`.",
@@ -5602,6 +6275,10 @@
         "maxLength": 120,
         "type": "string"
       },
+      "AttemptCount": {
+        "description": "How many times a controller has tried it.",
+        "type": "integer"
+      },
       "AwaitingApproval": {
         "additionalProperties": false,
         "description": "A call held for a person, which is no error: nothing is written or queued until one agrees.",
@@ -5967,7 +6644,7 @@
       "CapabilityAnswer": {
         "anyOf": [
           {
-            "type": "object"
+            "$ref": "#/components/schemas/CommandAnswer"
           },
           {
             "$ref": "#/components/schemas/AwaitingApproval",
@@ -6208,6 +6885,52 @@
         ],
         "type": "object"
       },
+      "CertificatePart": {
+        "additionalProperties": false,
+        "properties": {
+          "expiry": {
+            "description": "When it runs out, as read; empty when not read.",
+            "type": "string"
+          },
+          "issuer": {
+            "description": "Who issued it; empty when not read.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The name the certificate is for; empty when not read.",
+            "type": "string"
+          },
+          "role": {
+            "description": "What the certificate is at the hop, such as the edge's or the origin's.",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HopSourcePart",
+                "title": "Hop source part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where HQ read the certificate; null when nothing says."
+          },
+          "unread": {
+            "description": "Why HQ cannot say what certificate the hop presents; empty when it can.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "name",
+          "issuer",
+          "expiry",
+          "source",
+          "unread"
+        ],
+        "type": "object"
+      },
       "CertificateRenewRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -6398,6 +7121,58 @@
         ],
         "type": "object"
       },
+      "CommandAnswer": {
+        "description": "What the command answers, in the shape its capability names, which that capability's own route in this document gives.",
+        "type": "object"
+      },
+      "CompletedAt": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "When it finished, an ISO 8601 date-time; null until it has.",
+        "title": "Completed at"
+      },
+      "ComposeProject": {
+        "description": "The compose project it belongs to; empty for one started on its own.",
+        "type": "string"
+      },
+      "ConditionPart": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "description": "The controller's sentence on it; empty for none.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why, in the controller's one word for it; empty for none.",
+            "type": "string"
+          },
+          "since": {
+            "description": "When it began to hold as it does, an ISO 8601 date-time, once HQ has stored it.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Whether the condition holds now.",
+            "type": "boolean"
+          },
+          "type": {
+            "description": "What the condition says of the record, such as `Ready`, `Drifted` or `Degraded`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "reason",
+          "message"
+        ],
+        "type": "object"
+      },
       "ConfirmPrune": {
         "description": "Confirms the delete that prune_orphans asks for.",
         "type": "boolean"
@@ -6515,6 +7290,29 @@
         ],
         "type": "object"
       },
+      "ConnectionLinkPart": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "description": "What it is, by name.",
+            "type": "string"
+          },
+          "resource_key": {
+            "description": "The key of HQ's record it is; empty when it is none.",
+            "type": "string"
+          },
+          "url": {
+            "description": "Its page; empty for none.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "url",
+          "resource_key"
+        ],
+        "type": "object"
+      },
       "ConnectionStandingRecord": {
         "additionalProperties": false,
         "description": "One connection whole: what its credential sees and changes, how it is reached, and the fix.",
@@ -6531,9 +7329,9 @@
             "type": "string"
           },
           "changes": {
-            "description": "What its credential may change, each with the permissions it needs and whether it holds them.",
+            "description": "What its credential may change.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/AbilityPart"
             },
             "type": "array"
           },
@@ -6554,13 +7352,14 @@
           "credential_fix": {
             "anyOf": [
               {
-                "type": "object"
+                "$ref": "#/components/schemas/CredentialFixPart",
+                "title": "Credential fix part"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "How to fix its credential: the permissions missing, what they would show, its expiry and the steps; null when it needs no fix."
+            "description": "How to fix its credential; null when it needs no fix."
           },
           "credential_model": {
             "anyOf": [
@@ -6574,9 +7373,9 @@
             "description": "What sort of credential it is, `scoped`, `coarse`, `none` or `rejected`, the last for one the service refused; null when that is not known."
           },
           "dependencies": {
-            "description": "What the connection depends on, each a label, a page and a record's key.",
+            "description": "What the connection depends on.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/ConnectionLinkPart"
             },
             "type": "array"
           },
@@ -6595,9 +7394,9 @@
             "description": "The address HQ reaches the service at; null when none is shown."
           },
           "facts": {
-            "description": "What the connection reported of itself, each a label and value.",
+            "description": "What the connection reported of itself.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/FactPart"
             },
             "type": "array"
           },
@@ -6627,13 +7426,14 @@
           "last_activity": {
             "anyOf": [
               {
-                "type": "object"
+                "$ref": "#/components/schemas/LastActivityPart",
+                "title": "Last activity part"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "The latest audit entry about it: a summary, when, and the entry's id; null for none."
+            "description": "The latest audit entry about it; null for none."
           },
           "lifecycle": {
             "description": "Where it is in its life: `configured`, `unprobed`, `reachable`, `ready`, `unreachable`, `unauthorized`, `stale`, `revoked` or `unreported`.",
@@ -6648,13 +7448,14 @@
           "reach": {
             "anyOf": [
               {
-                "type": "object"
+                "$ref": "#/components/schemas/ReachPart",
+                "title": "Reach part"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "How HQ reaches its address: the network, the host and machine, and on the tailnet the path and traffic; null when that was not worked out."
+            "description": "How HQ reaches its address; null when that was not worked out."
           },
           "read_now": {
             "anyOf": [
@@ -6679,9 +7480,9 @@
             "description": "When a refresh of it was asked for that has not run yet, an ISO 8601 date-time; null when none waits."
           },
           "reads": {
-            "description": "What its credential reads, each a label with what was last read and the permissions behind it.",
+            "description": "What its credential reads.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/ReadPart"
             },
             "type": "array"
           },
@@ -6703,13 +7504,14 @@
           "sight": {
             "anyOf": [
               {
-                "type": "object"
+                "$ref": "#/components/schemas/CredentialSightPart",
+                "title": "Credential sight part"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "What its credential can read: the service, why the service refused the credential, what it changes, and a count in each state; null when nothing reads through it."
+            "description": "What its credential can read; null when nothing reads through it."
           },
           "status": {
             "$ref": "#/components/schemas/ConnectionStandingRow/properties/status"
@@ -6718,9 +7520,9 @@
             "$ref": "#/components/schemas/ConnectionStandingRow/properties/status_label"
           },
           "targets": {
-            "description": "What the connection points at, each a label, a page and a record's key.",
+            "description": "What the connection points at.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/ConnectionLinkPart"
             },
             "type": "array"
           },
@@ -7156,35 +7958,37 @@
           "project": {
             "anyOf": [
               {
-                "type": "object"
+                "$ref": "#/components/schemas/ProjectPart",
+                "title": "Project part"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "The project it belongs to, a name, slug and page; null for none."
+            "description": "The project it belongs to; null for none."
           },
           "repository": {
             "anyOf": [
               {
-                "type": "object"
+                "$ref": "#/components/schemas/RepositoryPart",
+                "title": "Repository part"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "The repository whose pipeline deploys it: its default branch, head and deployed commits, whether production was verified, and its open pull requests; null when none deploys it."
+            "description": "The repository whose pipeline deploys it; null when none deploys it."
           },
           "runtime": {
             "anyOf": [
               {
-                "type": "object"
+                "$ref": "#/components/schemas/AsRead"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "How it is run, from Docker's inspect; null when that was not read."
+            "description": "How it is run, as Docker's inspect reports it; null when that was not read."
           },
           "serves": {
             "$ref": "#/components/schemas/ContainerRow/properties/serves"
@@ -7209,13 +8013,14 @@
           "usage": {
             "anyOf": [
               {
-                "type": "object"
+                "$ref": "#/components/schemas/UsagePart",
+                "title": "Usage part"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "The memory and CPU it uses beside its limits, and when that was read; null when it was not."
+            "description": "The memory and CPU it uses beside its limits; null when that was not read."
           }
         },
         "type": "object"
@@ -7228,8 +8033,7 @@
             "type": "string"
           },
           "compose_project": {
-            "description": "The compose project it belongs to; empty for one started on its own.",
-            "type": "string"
+            "$ref": "#/components/schemas/ComposeProject"
           },
           "machine": {
             "description": "The name of the machine it runs on.",
@@ -7676,6 +8480,80 @@
         "description": "Whether the call created the record, rather than changing one HQ held.",
         "type": "boolean"
       },
+      "CredentialFixPart": {
+        "additionalProperties": false,
+        "properties": {
+          "expired": {
+            "description": "Whether it has run out.",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the credential runs out, an ISO 8601 date-time; null for never."
+          },
+          "expiring": {
+            "description": "Whether it runs out soon enough to replace now.",
+            "type": "boolean"
+          },
+          "missing": {
+            "description": "The permissions the service refused while the credential is valid.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "permissions": {
+            "description": "Every permission the replacement is issued with.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "refused": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The service's words when it refused the credential; null when it did not."
+          },
+          "steps": {
+            "description": "What a person does to replace it, in order.",
+            "items": {
+              "$ref": "#/components/schemas/OperatorStep"
+            },
+            "type": "array"
+          },
+          "unseen": {
+            "description": "What those permissions would let HQ see.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "missing",
+          "unseen",
+          "refused",
+          "expires_at",
+          "expiring",
+          "expired",
+          "permissions",
+          "steps"
+        ],
+        "type": "object"
+      },
       "CredentialRecord": {
         "additionalProperties": false,
         "description": "What one service's credential reads, each reading or listing it sees.",
@@ -7687,19 +8565,15 @@
             "$ref": "#/components/schemas/CredentialRow/properties/label"
           },
           "manages": {
-            "description": "The types of record its credential changes, in words.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/CredentialSightPart/properties/manages"
           },
           "provider": {
             "$ref": "#/components/schemas/CredentialRow/properties/provider"
           },
           "sights": {
-            "description": "Each reading or record type it could read, with its state, records, when it was read, the error, the permissions it needs and what would fix it.",
+            "description": "Each reading or record type it could read.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/SightPart"
             },
             "type": "array"
           },
@@ -7732,6 +8606,39 @@
             "type": "array"
           }
         },
+        "type": "object"
+      },
+      "CredentialSightPart": {
+        "additionalProperties": false,
+        "description": "What a connection's credential can read, counted in each state.",
+        "properties": {
+          "credential_refusal": {
+            "$ref": "#/components/schemas/CredentialRow/properties/credential_refusal"
+          },
+          "label": {
+            "$ref": "#/components/schemas/CredentialRow/properties/label"
+          },
+          "manages": {
+            "description": "The types of record its credential changes, in words.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/CredentialRow/properties/provider"
+          },
+          "tally": {
+            "$ref": "#/components/schemas/CredentialRow/properties/tally"
+          }
+        },
+        "required": [
+          "provider",
+          "label",
+          "credential_refusal",
+          "tally",
+          "manages"
+        ],
         "type": "object"
       },
       "Cursor": {
@@ -7871,6 +8778,49 @@
       "DeploymentNotes": {
         "description": "How it is deployed.",
         "type": "string"
+      },
+      "DnsRecordPart": {
+        "additionalProperties": false,
+        "properties": {
+          "declaration": {
+            "description": "The key of HQ's record of it; empty for none.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The name in the zone the record is for.",
+            "type": "string"
+          },
+          "observed_only": {
+            "description": "Whether only the live zone holds it, with no record of HQ's.",
+            "type": "boolean"
+          },
+          "proxied": {
+            "description": "Whether the DNS service proxies traffic for it.",
+            "type": "boolean"
+          },
+          "record_type": {
+            "description": "The record's type, such as `A`, `CNAME` or `TXT`.",
+            "type": "string"
+          },
+          "ttl": {
+            "description": "How long a resolver may keep it, in seconds; 1 leaves it to the DNS service.",
+            "type": "integer"
+          },
+          "value": {
+            "description": "What the record holds, as the zone lists it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "record_type",
+          "value",
+          "proxied",
+          "ttl",
+          "declaration",
+          "observed_only"
+        ],
+        "type": "object"
       },
       "DocEnvironment": {
         "description": "Where that system runs: `homelab`, `vps`, `wordpress`, `cloudflare`, `tailscale`, `adguard`, `unifi`, `local_mac` or `other`.",
@@ -8199,7 +9149,7 @@
               "manifest": {
                 "description": "The documentation records to sync, one per doc.",
                 "items": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/ManifestEntry"
                 },
                 "type": "array"
               },
@@ -8428,9 +9378,9 @@
             "$ref": "#/components/schemas/DomainRow/properties/declaration"
           },
           "insights": {
-            "description": "What HQ makes of the domain, each a label, value, detail and link, and whether it is a concern or a notice.",
+            "description": "What HQ makes of the domain.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/InsightPart"
             },
             "type": "array"
           },
@@ -8455,9 +9405,9 @@
             "type": "boolean"
           },
           "records": {
-            "description": "The domain's DNS records as last read, each its name, record type, value, whether it is proxied, its TTL in seconds, the key of HQ's record of it (empty for none), and whether only the live zone holds it.",
+            "description": "The domain's DNS records as last read.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/DnsRecordPart"
             },
             "type": "array"
           },
@@ -8540,6 +9490,7 @@
         "type": "object"
       },
       "EntityLink": {
+        "additionalProperties": false,
         "description": "A name, and the page it opens, when there is one.",
         "properties": {
           "detail": {
@@ -8745,6 +9696,34 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "EvidencePart": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "description": "A line on what HQ makes of it; empty for none.",
+            "type": "string"
+          },
+          "label": {
+            "description": "What the request carried, such as a header or an address.",
+            "type": "string"
+          },
+          "role": {
+            "description": "For an address the request was forwarded through: `judged`, `proxy` or `ignored`; else empty.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Its value, as the request carried it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "detail",
+          "role"
+        ],
         "type": "object"
       },
       "ExpectedUpdatedAt": {
@@ -9223,6 +10202,60 @@
         "description": "Where it is published outside HQ; empty for none.",
         "type": "string"
       },
+      "FacetPart": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "Which part of the service it is, such as `dns`, `proxy`, `certificate` or `runtime`.",
+            "type": "string"
+          },
+          "label": {
+            "description": "That part in the words its card is headed with, such as `DNS`.",
+            "type": "string"
+          },
+          "present": {
+            "description": "Whether any record of HQ's supplies it.",
+            "type": "boolean"
+          },
+          "resources": {
+            "description": "The keys of HQ's records that supply it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "state": {
+            "description": "How the records behind it stand: `good`, `attention` or `serious`; empty when none supplies it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "present",
+          "state",
+          "resources"
+        ],
+        "type": "object"
+      },
+      "FactPart": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "description": "What the fact is about, in a few words.",
+            "type": "string"
+          },
+          "value": {
+            "description": "The fact, as the connection reported it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ],
+        "type": "object"
+      },
       "Failure": {
         "additionalProperties": false,
         "properties": {
@@ -9417,6 +10450,67 @@
         ],
         "type": "object"
       },
+      "GrantPortPart": {
+        "properties": {
+          "entry": {
+            "description": "A port entry, as the grant writes it.",
+            "type": "string"
+          },
+          "name": {
+            "description": "What the port is for, such as `HTTPS`; empty when not known.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry",
+          "name"
+        ],
+        "type": "object"
+      },
+      "GroupPart": {
+        "additionalProperties": false,
+        "properties": {
+          "members": {
+            "description": "Its members, as the policy writes them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "The group's name, as the policy writes it, such as `group:admins`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "members"
+        ],
+        "type": "object"
+      },
+      "HeaderAddressPart": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "description": "The address a person reaches the machine at there.",
+            "type": "string"
+          },
+          "holder": {
+            "description": "Who holds a public address, such as the company that hosts it; empty for any other.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Which network the address is on, such as `Tailnet`, `LAN` or `Public`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "address",
+          "holder"
+        ],
+        "type": "object"
+      },
       "HealthPart": {
         "additionalProperties": false,
         "description": "Its health as last read, and the condition behind it.",
@@ -9520,6 +10614,34 @@
         ],
         "type": "object"
       },
+      "HopCheckPart": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "description": "What the request showed beside what was read.",
+            "type": "string"
+          },
+          "label": {
+            "description": "That, in the words the hop shows.",
+            "type": "string"
+          },
+          "state": {
+            "description": "Whether the request agrees with the readings at the hop, in one word.",
+            "type": "string"
+          },
+          "step": {
+            "description": "What a person does to settle a disagreement; empty for none.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "label",
+          "detail",
+          "step"
+        ],
+        "type": "object"
+      },
       "HopRow": {
         "additionalProperties": false,
         "description": "One hop of HQ's own path; a hop walked for the calling request adds what it showed there.",
@@ -9527,26 +10649,27 @@
           "certificate": {
             "anyOf": [
               {
-                "type": "object"
+                "$ref": "#/components/schemas/CertificatePart",
+                "title": "Certificate part"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "The certificate the hop presents, its name, issuer and expiry and where it was read, or why HQ cannot say; null when it presents none."
+            "description": "The certificate the hop presents, or why HQ cannot say; null when it presents none."
           },
           "check": {
-            "description": "Whether what the request showed here agrees with what was read: a state, label and detail. Present only on a hop the calling request walked.",
-            "type": "object"
+            "$ref": "#/components/schemas/HopCheckPart",
+            "description": "Whether what the request showed here agrees with what was read. Present only on a hop the calling request walked."
           },
           "detail": {
             "description": "A line on what it does there, such as where it forwards; empty when there is nothing to add.",
             "type": "string"
           },
           "evidence": {
-            "description": "What the request carried at the hop, each a label, value, detail and role. Present only on a hop the calling request walked.",
+            "description": "What the request carried at the hop. Present only on a hop the calling request walked.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/EvidencePart"
             },
             "type": "array"
           },
@@ -9555,16 +10678,17 @@
             "type": "string"
           },
           "layers": {
-            "description": "The admission layers decided at the hop, each with its state, detail, boundary, mechanism and rules. Present only on a hop the calling request walked.",
+            "description": "The admission layers decided at the hop. Present only on a hop the calling request walked.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/LayerPart"
             },
             "type": "array"
           },
           "link": {
             "anyOf": [
               {
-                "type": "object"
+                "$ref": "#/components/schemas/EntityLink",
+                "title": "Entity link"
               },
               {
                 "type": "null"
@@ -9577,22 +10701,23 @@
             "type": "string"
           },
           "overlays": {
-            "description": "What sits over the hop, such as an access gate, each a relation and a link.",
+            "description": "What sits over the hop, such as an access gate.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/OverlayPart"
             },
             "type": "array"
           },
           "source": {
             "anyOf": [
               {
-                "type": "object"
+                "$ref": "#/components/schemas/HopSourcePart",
+                "title": "Hop source part"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Where HQ read the hop: the reading's type, label, connection and when, or HQ's own record; null when nothing says."
+            "description": "Where HQ read the hop; null when nothing says."
           },
           "step": {
             "description": "What the hop is, such as `dns`, `ingress`, `machine` or `container`.",
@@ -9603,6 +10728,46 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "HopSourcePart": {
+        "additionalProperties": false,
+        "description": "Where HQ read a hop: a reading, or HQ's own record.",
+        "properties": {
+          "connection": {
+            "description": "The connection the reading came through; empty for HQ's own record.",
+            "type": "string"
+          },
+          "declared": {
+            "description": "The key of HQ's record it comes from, when HQ holds it rather than reads it; else empty.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "The type of the reading or record it was read from.",
+            "type": "string"
+          },
+          "label": {
+            "description": "That type, in words.",
+            "type": "string"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObservedAt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "connection",
+          "observed_at",
+          "declared"
+        ],
         "type": "object"
       },
       "HqImportRequest": {
@@ -9700,7 +10865,7 @@
               "manifest": {
                 "description": "The records to sync, one per entry.",
                 "items": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/ManifestEntry"
                 },
                 "type": "array"
               },
@@ -10266,6 +11431,44 @@
         ],
         "type": "object"
       },
+      "InsightPart": {
+        "additionalProperties": false,
+        "properties": {
+          "concern": {
+            "description": "Whether it is a concern to act on.",
+            "type": "boolean"
+          },
+          "detail": {
+            "description": "More on it, in a sentence; empty for none.",
+            "type": "string"
+          },
+          "label": {
+            "description": "What the insight is about, in a few words.",
+            "type": "string"
+          },
+          "notice": {
+            "description": "Whether it is a notice worth knowing, short of a concern.",
+            "type": "boolean"
+          },
+          "url": {
+            "description": "Where to look into it; empty for none.",
+            "type": "string"
+          },
+          "value": {
+            "description": "What HQ found, in a few words.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "detail",
+          "url",
+          "concern",
+          "notice"
+        ],
+        "type": "object"
+      },
       "InternalServerErrorRefusal": {
         "additionalProperties": false,
         "properties": {
@@ -10336,6 +11539,37 @@
         ],
         "type": "object"
       },
+      "JoinedReadingPart": {
+        "additionalProperties": false,
+        "properties": {
+          "connection": {
+            "description": "The connection it was read through; empty for none.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "The reading's type, such as `adguard.client`.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The reading's name, as a page heads it.",
+            "type": "string"
+          },
+          "records": {
+            "description": "The records it holds about the node, as its type's schema admits them.",
+            "items": {
+              "$ref": "#/components/schemas/AsRead"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "connection",
+          "records"
+        ],
+        "type": "object"
+      },
       "KeptValue": {
         "additionalProperties": false,
         "description": "A stored value the import kept in place of the one the document offered.",
@@ -10360,6 +11594,29 @@
         ],
         "type": "object"
       },
+      "LastActivityPart": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "description": "The entry's id in HQ's audit log.",
+            "type": "integer"
+          },
+          "created_at": {
+            "description": "When it was recorded, an ISO 8601 date-time.",
+            "type": "string"
+          },
+          "summary": {
+            "description": "What the entry records, in a line.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "created_at",
+          "audit_id"
+        ],
+        "type": "object"
+      },
       "LastReviewed": {
         "anyOf": [
           {
@@ -10372,6 +11629,57 @@
         ],
         "description": "When it was last checked against what it describes, an ISO 8601 date; null for never.",
         "title": "Last reviewed"
+      },
+      "LayerPart": {
+        "additionalProperties": false,
+        "properties": {
+          "boundary": {
+            "description": "The security boundary it belongs to; empty for none.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "Why it was decided so, in a sentence.",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "The value it was decided from; empty for none.",
+            "type": "string"
+          },
+          "id": {
+            "description": "The layer's stable id, such as `edge` or `identity`.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The layer, in words.",
+            "type": "string"
+          },
+          "mechanism": {
+            "description": "What enforces it; empty for none.",
+            "type": "string"
+          },
+          "rules": {
+            "description": "The rules behind it, where what decides it has rules.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "state": {
+            "description": "`holds`, `does-not`, or `unknown` when what decides it did not answer.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "state",
+          "detail",
+          "evidence",
+          "boundary",
+          "mechanism",
+          "rules"
+        ],
+        "type": "object"
       },
       "LensEntry": {
         "additionalProperties": false,
@@ -10505,6 +11813,59 @@
         ],
         "type": "object"
       },
+      "MachineContainerPart": {
+        "additionalProperties": false,
+        "properties": {
+          "image": {
+            "description": "The image reference it runs.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The container's name, as Docker reports it.",
+            "type": "string"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObservedAt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "published": {
+            "description": "The ports it publishes, as Docker lists them; empty for none.",
+            "type": "string"
+          },
+          "stack": {
+            "$ref": "#/components/schemas/ComposeProject"
+          },
+          "state": {
+            "description": "Docker's state for the container, such as `running`.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Docker's status line for the container.",
+            "type": "string"
+          },
+          "watcher": {
+            "description": "The key of HQ's record that watches it; empty for none.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "stack",
+          "image",
+          "state",
+          "status",
+          "published",
+          "watcher",
+          "observed_at"
+        ],
+        "type": "object"
+      },
       "MachineRecord": {
         "additionalProperties": false,
         "description": "One machine whole: how it is reached, what it serves and what runs on it.",
@@ -10520,9 +11881,9 @@
             "type": "array"
           },
           "containers": {
-            "description": "The containers last read on it, each its name, compose project, image, state, status, what it publishes, the key of HQ's record that watches it, and when it was read.",
+            "description": "The containers last read on it.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/MachineContainerPart"
             },
             "type": "array"
           },
@@ -10535,9 +11896,9 @@
             "type": "string"
           },
           "header_addresses": {
-            "description": "The addresses a person reaches it at, tailnet then LAN then public, each a label, the address and who holds a public one.",
+            "description": "The addresses a person reaches it at, tailnet then LAN then public.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/HeaderAddressPart"
             },
             "type": "array"
           },
@@ -10568,13 +11929,14 @@
           "presence": {
             "anyOf": [
               {
-                "type": "object"
+                "$ref": "#/components/schemas/PresencePart",
+                "title": "Presence part"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "What the tailnet reports of it: whether it is online, its names and addresses, OS and client, key expiry, tags, routes, exit node and SSH settings, and when that was read; null when the tailnet does not know it."
+            "description": "What the tailnet reports of it; null when the tailnet does not know it."
           },
           "reached_by": {
             "description": "The connections HQ reaches it through, by ref.",
@@ -10667,9 +12029,9 @@
         "description": "One managed record whole: what HQ expects of it and what was last read.",
         "properties": {
           "conditions": {
-            "description": "Its conditions as last reported, each a type such as `Ready` or `Degraded`, whether it holds, a reason and a message.",
+            "description": "Its conditions as the controller last reported them.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/ConditionPart"
             },
             "type": "array"
           },
@@ -10793,7 +12155,7 @@
           "operations": {
             "description": "The latest operations that changed it, newest first.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/OperationSummary"
             },
             "type": "array"
           },
@@ -10844,6 +12206,287 @@
       },
       "ManagedResourceSpec": {
         "description": "What HQ expects of it, in the shape its type takes.",
+        "type": "object"
+      },
+      "ManifestEntry": {
+        "description": "One doc of the vault's manifest: its frontmatter, its path, and what it relates to.",
+        "properties": {
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For site content, what it is on the site, such as `portfolio_article` or `page`."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For site content, its description, which `topic` stands in for."
+          },
+          "doc_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "doc_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "environment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocEnvironment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "excerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For site content, its excerpt, read where it has no description."
+          },
+          "external_url": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExternalUrl"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "github_path": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GithubPath"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_reviewed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LastReviewed"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Notes"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "obsidian_path": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObsidianPath"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the doc is in the vault, which `obsidian_path` stands in for."
+          },
+          "published": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For site content, whether it is live on the site."
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublishedAt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "related_assets": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The slugs of the assets the doc is about."
+          },
+          "related_projects": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The slugs of the projects the doc is about."
+          },
+          "sensitivity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocSensitivity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For site content, the slug of the item it mirrors to."
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The system or service the doc is about."
+          },
+          "system_service": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The same as `system`, under the name HQ stores it by."
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The doc's tags."
+          },
+          "technologies": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For site content, what it was built with, read as its tags."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentationTitle"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For site content, what it is about, in a line."
+          }
+        },
         "type": "object"
       },
       "Match": {
@@ -10909,6 +12552,34 @@
         "required": [
           "ok",
           "error"
+        ],
+        "type": "object"
+      },
+      "MountPart": {
+        "additionalProperties": false,
+        "properties": {
+          "destination": {
+            "description": "Where it is mounted in the container.",
+            "type": "string"
+          },
+          "read_only": {
+            "description": "Whether the container may only read it.",
+            "type": "boolean"
+          },
+          "source": {
+            "description": "Where its data is kept on the machine, or the volume's name.",
+            "type": "string"
+          },
+          "type": {
+            "description": "What sort of mount it is, such as `bind` or `volume`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "source",
+          "destination",
+          "read_only"
         ],
         "type": "object"
       },
@@ -11049,8 +12720,60 @@
         "description": "When it was last read from its source, an ISO 8601 date-time.",
         "type": "string"
       },
+      "ObservedPart": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "description": "A line on what it does for the hostname; empty for none.",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntityLink",
+                "title": "Entity link"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "description": "What answers for the hostname, by name.",
+            "type": "string"
+          },
+          "relation": {
+            "description": "What the reading says the hostname is to it, such as `Served by`.",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HopSourcePart",
+                "title": "Hop source part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where HQ read it; null when nothing says."
+          }
+        },
+        "required": [
+          "relation",
+          "name",
+          "link",
+          "detail",
+          "source"
+        ],
+        "type": "object"
+      },
       "ObsidianPath": {
         "description": "Its path in the vault; empty for none.",
+        "type": "string"
+      },
+      "OperationAction": {
+        "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop` or `approve-routes`.",
         "type": "string"
       },
       "OperationCommand": {
@@ -11068,40 +12791,32 @@
         },
         "type": "object"
       },
+      "OperationId": {
+        "description": "The operation's id.",
+        "type": "string"
+      },
       "OperationItem": {
         "additionalProperties": false,
         "description": "One operation asked of the controller, as it stands.",
         "properties": {
           "action": {
-            "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop` or `approve-routes`.",
-            "type": "string"
+            "$ref": "#/components/schemas/OperationAction"
           },
           "attempt_count": {
-            "description": "How many times a controller has tried it.",
-            "type": "integer"
+            "$ref": "#/components/schemas/AttemptCount"
           },
           "claimed_by": {
             "description": "The controller working on it; empty while none is.",
             "type": "string"
           },
           "completed_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "When it finished, an ISO 8601 date-time; null until it has."
+            "$ref": "#/components/schemas/CompletedAt"
           },
           "created_at": {
-            "description": "When it was asked for, an ISO 8601 date-time.",
-            "type": "string"
+            "$ref": "#/components/schemas/AskedAt"
           },
           "id": {
-            "description": "The operation's id.",
-            "type": "string"
+            "$ref": "#/components/schemas/OperationId"
           },
           "lease_expires_at": {
             "anyOf": [
@@ -11118,12 +12833,10 @@
             "$ref": "#/components/schemas/OperationReason"
           },
           "requested_actor": {
-            "description": "Who asked for it, by the name HQ knows them by.",
-            "type": "string"
+            "$ref": "#/components/schemas/RequestedActor"
           },
           "requested_interface": {
-            "description": "Which door it was asked through, such as `api` or `web`.",
-            "type": "string"
+            "$ref": "#/components/schemas/RequestedInterface"
           },
           "resource": {
             "description": "The key of the record it acts on.",
@@ -11134,8 +12847,7 @@
             "type": "object"
           },
           "state": {
-            "description": "Where it stands: `queued`, `claimed`, `succeeded`, `failed` or `cancelled`.",
-            "type": "string"
+            "$ref": "#/components/schemas/OperationState"
           }
         },
         "required": [
@@ -11175,6 +12887,134 @@
       "OperationReason": {
         "description": "Why it is done, in the asker's words; empty for none.",
         "type": "string"
+      },
+      "OperationState": {
+        "description": "Where it stands: `queued`, `claimed`, `succeeded`, `failed` or `cancelled`.",
+        "type": "string"
+      },
+      "OperationSummary": {
+        "additionalProperties": false,
+        "description": "One operation in a record's history: how it ended, in a sentence, and what it found.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/OperationAction"
+          },
+          "action_label": {
+            "description": "What it does, in words.",
+            "type": "string"
+          },
+          "affected": {
+            "description": "Those of `evidence` that do not match what HQ expects of them.",
+            "items": {
+              "$ref": "#/components/schemas/AsRead"
+            },
+            "type": "array"
+          },
+          "approved_by": {
+            "description": "Who agreed to a change a credential asked for; empty for anything else.",
+            "type": "string"
+          },
+          "attempt_count": {
+            "$ref": "#/components/schemas/AttemptCount"
+          },
+          "automatic": {
+            "description": "Whether the controller ran it on its own, unasked.",
+            "type": "boolean"
+          },
+          "by": {
+            "description": "Who asked for it, as a person reads it: `Automatic` for the controller.",
+            "type": "string"
+          },
+          "completed_at": {
+            "$ref": "#/components/schemas/CompletedAt"
+          },
+          "condition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConditionPart",
+                "title": "Condition part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first condition its run reported holding; null for none."
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/AskedAt"
+          },
+          "evidence": {
+            "description": "What uses the record, each as the controller found it on its run.",
+            "items": {
+              "$ref": "#/components/schemas/AsRead"
+            },
+            "type": "array"
+          },
+          "expected_fingerprint_sha256": {
+            "description": "The SHA-256 fingerprint of the certificate the run expected to find; empty for none.",
+            "type": "string"
+          },
+          "headline": {
+            "description": "How it ended, in a sentence.",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/OperationId"
+          },
+          "matched": {
+            "description": "How many of `evidence` match what HQ expects of them.",
+            "type": "integer"
+          },
+          "raw_result": {
+            "description": "What the controller reported of its run, leaving out a certificate's file.",
+            "type": "object"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/OperationReason"
+          },
+          "requested_actor": {
+            "$ref": "#/components/schemas/RequestedActor"
+          },
+          "requested_interface": {
+            "$ref": "#/components/schemas/RequestedInterface"
+          },
+          "state": {
+            "$ref": "#/components/schemas/OperationState"
+          },
+          "state_label": {
+            "description": "How it ended or where it stands, in the words its pill shows.",
+            "type": "string"
+          },
+          "tone": {
+            "description": "How its pill is colored: `paused`, `active`, `serious`, `attention` or `good`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "action_label",
+          "state",
+          "state_label",
+          "tone",
+          "headline",
+          "automatic",
+          "requested_actor",
+          "requested_interface",
+          "by",
+          "approved_by",
+          "created_at",
+          "completed_at",
+          "attempt_count",
+          "reason",
+          "condition",
+          "affected",
+          "evidence",
+          "matched",
+          "expected_fingerprint_sha256",
+          "raw_result"
+        ],
+        "type": "object"
       },
       "OperatorStep": {
         "additionalProperties": false,
@@ -11230,6 +13070,31 @@
       "Outcome": {
         "description": "Whether HQ did what was asked: true beside `data`, false beside `error`.",
         "type": "boolean"
+      },
+      "OverlayPart": {
+        "additionalProperties": false,
+        "properties": {
+          "link": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntityLink",
+                "title": "Entity link"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "relation": {
+            "description": "What it is to the hop, such as an access gate.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "relation",
+          "link"
+        ],
+        "type": "object"
       },
       "PageLimit": {
         "description": "How many records a page holds, 1 to 100; next.cursor reads the page after.",
@@ -11305,6 +13170,80 @@
         ],
         "type": "object"
       },
+      "PartOfReading": {
+        "additionalProperties": false,
+        "description": "The part of a type a sweep could not read, and the permissions it needs.",
+        "properties": {
+          "label": {
+            "description": "The part, in words.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The part's name among its type's parts; empty for the whole type.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "The service whose credential reads the part, where it is not its type's own; else empty.",
+            "type": "string"
+          },
+          "requires": {
+            "description": "The permissions reading the part needs, as the service names them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "requires",
+          "provider"
+        ],
+        "type": "object"
+      },
+      "PartRefusalPart": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "description": "The machine's address, when it was refused on a machine; else empty.",
+            "type": "string"
+          },
+          "connection_ref": {
+            "description": "The connection it was refused to; empty for none.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "The type the refused part belongs to.",
+            "type": "string"
+          },
+          "part": {
+            "$ref": "#/components/schemas/PartOfReading"
+          },
+          "reason": {
+            "description": "The service's words for the refusal; empty for none.",
+            "type": "string"
+          },
+          "refusal": {
+            "description": "How it was refused, `credential`, `permission`, `address` or `network`; empty when the cause is unknown.",
+            "type": "string"
+          },
+          "scope": {
+            "description": "What it was refused on, such as a zone, a hostname or a machine; empty for all of it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "part",
+          "refusal",
+          "reason",
+          "scope",
+          "connection_ref",
+          "address"
+        ],
+        "type": "object"
+      },
       "PathRecord": {
         "additionalProperties": false,
         "description": "The path a request for a hostname takes, hop by hop on each route.",
@@ -11322,9 +13261,9 @@
             "type": "string"
           },
           "observed": {
-            "description": "The readings that name the hostname as something that answers, each its relation, name, link and where it was read.",
+            "description": "What the readings that name the hostname as something that answers hold.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/ObservedPart"
             },
             "type": "array"
           },
@@ -11333,9 +13272,9 @@
             "type": "string"
           },
           "routes": {
-            "description": "Each route a request can take, from one DNS answer to what serves the name: what it starts from, the port of a forward, its line and its hops.",
+            "description": "Each route a request can take, from one DNS answer to what serves the name.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/RoutePart"
             },
             "type": "array"
           },
@@ -11356,6 +13295,263 @@
       "Permitted": {
         "description": "Whether the caller holds every permission `required_capabilities` names; absent from a read that names no caller.",
         "type": "boolean"
+      },
+      "PolicyCounts": {
+        "additionalProperties": false,
+        "description": "How many grants, groups, tags and tests the policy holds.",
+        "properties": {
+          "grants": {
+            "description": "How many grants the policy holds.",
+            "type": "integer"
+          },
+          "groups": {
+            "description": "How many groups the policy holds.",
+            "type": "integer"
+          },
+          "tags": {
+            "description": "How many tags the policy holds.",
+            "type": "integer"
+          },
+          "tests": {
+            "description": "How many tests the policy holds.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "grants",
+          "groups",
+          "tags",
+          "tests"
+        ],
+        "type": "object"
+      },
+      "PolicyGrantPart": {
+        "properties": {
+          "destinations": {
+            "$ref": "#/components/schemas/PolicyRulePart/properties/destinations"
+          },
+          "dst": {
+            "$ref": "#/components/schemas/PolicyRulePart/properties/dst"
+          },
+          "ports": {
+            "description": "The ports it opens, each with what it is for.",
+            "items": {
+              "$ref": "#/components/schemas/GrantPortPart"
+            },
+            "type": "array"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/PolicyRulePart/properties/sources"
+          },
+          "src": {
+            "$ref": "#/components/schemas/PolicyRulePart/properties/src"
+          }
+        },
+        "required": [
+          "src",
+          "dst",
+          "sources",
+          "destinations",
+          "ports"
+        ],
+        "type": "object"
+      },
+      "PolicyNamePart": {
+        "additionalProperties": false,
+        "properties": {
+          "link": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntityLink",
+                "title": "Entity link"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The machine it stands for; null when it names none HQ knows."
+          },
+          "text": {
+            "description": "A name as the policy writes it, such as a tag, a group or an address.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "link"
+        ],
+        "type": "object"
+      },
+      "PolicyRulePart": {
+        "properties": {
+          "destinations": {
+            "description": "Each of its destinations, with the machine it stands for.",
+            "items": {
+              "$ref": "#/components/schemas/PolicyNamePart"
+            },
+            "type": "array"
+          },
+          "dst": {
+            "description": "Its destinations, as the policy writes them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sources": {
+            "description": "Each of its sources, with the machine it stands for.",
+            "items": {
+              "$ref": "#/components/schemas/PolicyNamePart"
+            },
+            "type": "array"
+          },
+          "src": {
+            "description": "Its sources, as the policy writes them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "src",
+          "dst",
+          "sources",
+          "destinations"
+        ],
+        "type": "object"
+      },
+      "PresencePart": {
+        "additionalProperties": false,
+        "properties": {
+          "advertised_routes": {
+            "description": "The routes it offers the tailnet.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "authorized": {
+            "description": "Whether the tailnet has authorized it; one it has not reaches nothing.",
+            "type": "boolean"
+          },
+          "blocks_incoming": {
+            "description": "Whether it accepts no inbound connection at all.",
+            "type": "boolean"
+          },
+          "client_version": {
+            "description": "The version of the tailnet client it runs.",
+            "type": "string"
+          },
+          "dns_name": {
+            "description": "Its MagicDNS name.",
+            "type": "string"
+          },
+          "enabled_routes": {
+            "description": "Those of its routes the tailnet has approved, which alone work.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "exit_node_approved": {
+            "description": "Whether the tailnet has approved it as an exit node.",
+            "type": "boolean"
+          },
+          "key_expires": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When its node key runs out, as reported; null when it does not."
+          },
+          "lan_address": {
+            "description": "The LAN address its client reports; empty for none.",
+            "type": "string"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the tailnet last saw it, as reported; null when not said."
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObservedAt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "offers_exit_node": {
+            "description": "Whether it offers to be an exit node.",
+            "type": "boolean"
+          },
+          "online": {
+            "description": "Whether the tailnet says it is online now.",
+            "type": "boolean"
+          },
+          "os": {
+            "description": "The operating system its client reports.",
+            "type": "string"
+          },
+          "ssh_enabled": {
+            "description": "Whether Tailscale SSH is on for it.",
+            "type": "boolean"
+          },
+          "tags": {
+            "description": "The tags it carries.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tailnet_address": {
+            "description": "Its address on the tailnet.",
+            "type": "string"
+          },
+          "tailnet_name": {
+            "description": "What the tailnet calls it.",
+            "type": "string"
+          },
+          "update_available": {
+            "description": "Whether a newer client is published for it.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "online",
+          "last_seen",
+          "tailnet_name",
+          "dns_name",
+          "tailnet_address",
+          "lan_address",
+          "os",
+          "client_version",
+          "update_available",
+          "key_expires",
+          "authorized",
+          "tags",
+          "advertised_routes",
+          "enabled_routes",
+          "offers_exit_node",
+          "exit_node_approved",
+          "ssh_enabled",
+          "blocks_incoming",
+          "observed_at"
+        ],
+        "type": "object"
       },
       "Problem": {
         "additionalProperties": false,
@@ -11662,6 +13858,29 @@
         "description": "What the project is called.",
         "type": "string"
       },
+      "ProjectPart": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "The project's name.",
+            "type": "string"
+          },
+          "slug": {
+            "description": "The project's slug, which its page is addressed by.",
+            "type": "string"
+          },
+          "url": {
+            "description": "The project's page in HQ.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "slug",
+          "url"
+        ],
+        "type": "object"
+      },
       "ProjectRecord": {
         "additionalProperties": false,
         "description": "One project with the records it is linked to.",
@@ -11951,6 +14170,41 @@
         "description": "Where it is published; empty for none.",
         "type": "string"
       },
+      "PullRequestPart": {
+        "additionalProperties": false,
+        "properties": {
+          "draft": {
+            "description": "Whether it is a draft.",
+            "type": "boolean"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The pull request's number; null when not read."
+          },
+          "title": {
+            "description": "The pull request's title.",
+            "type": "string"
+          },
+          "url": {
+            "description": "The pull request's page.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "title",
+          "url",
+          "draft"
+        ],
+        "type": "object"
+      },
       "PurchaseDate": {
         "anyOf": [
           {
@@ -11967,6 +14221,170 @@
       "Queued": {
         "description": "Whether this call queued it; false when the same one was already waiting.",
         "type": "boolean"
+      },
+      "ReachMachinePart": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "The machine's name.",
+            "type": "string"
+          },
+          "url": {
+            "description": "The machine's page in HQ; empty for none.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "type": "object"
+      },
+      "ReachPart": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The address that host answers at; null when not read."
+          },
+          "direct_endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The endpoint a direct tailnet path uses; null for none."
+          },
+          "handshake": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the tailnet peers last shook hands; null when not read."
+          },
+          "host": {
+            "description": "The host its address names.",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "That network, in words; null when not known."
+          },
+          "machine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReachMachinePart",
+                "title": "Reach machine part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The machine it is reached at; null when not known."
+          },
+          "network": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The network it is reached over: `loopback`, `tailnet`, `network` or `public`; null when not known."
+          },
+          "peer_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`direct`, `relayed` or `negotiating` over the tailnet; null off the tailnet."
+          },
+          "relay": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The relay a tailnet path goes through; null for none."
+          },
+          "rx_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The bytes received from it over the tailnet; null when not read."
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How it is reached, in one line; null when not known."
+          },
+          "tx_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The bytes sent to it over the tailnet; null when not read."
+          }
+        },
+        "required": [
+          "network",
+          "label",
+          "summary",
+          "host",
+          "address",
+          "machine",
+          "peer_path",
+          "direct_endpoint",
+          "relay",
+          "handshake",
+          "rx_bytes",
+          "tx_bytes"
+        ],
+        "type": "object"
       },
       "ReadConflictRefusal": {
         "additionalProperties": false,
@@ -12046,6 +14464,45 @@
         "required": [
           "ok",
           "error"
+        ],
+        "type": "object"
+      },
+      "ReadPart": {
+        "additionalProperties": false,
+        "properties": {
+          "ability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AbilityPart",
+                "title": "Ability part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The permissions behind it; null when none are named."
+          },
+          "label": {
+            "description": "What it reads, in words.",
+            "type": "string"
+          },
+          "sight": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SeenPart",
+                "title": "Seen part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What was last read of it; null when nothing reads it yet."
+          }
+        },
+        "required": [
+          "label",
+          "sight",
+          "ability"
         ],
         "type": "object"
       },
@@ -12136,7 +14593,7 @@
           "items": {
             "description": "The records it holds, each as its type's schema admits it; empty for a type HQ withholds.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/AsRead"
             },
             "type": "array"
           },
@@ -12484,6 +14941,73 @@
         ],
         "type": "object"
       },
+      "RelationGroupPart": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "description": "The other end of each relationship it holds.",
+            "items": {
+              "$ref": "#/components/schemas/RelationshipPart"
+            },
+            "type": "array"
+          },
+          "phrase": {
+            "description": "What each relationship in it says from the node, such as `runs on`.",
+            "type": "string"
+          },
+          "rank": {
+            "description": "Where the group falls in page order, lowest first.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "phrase",
+          "rank",
+          "items"
+        ],
+        "type": "object"
+      },
+      "RelationshipPart": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "$ref": "#/components/schemas/EntityLink"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObservedAt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntityLink",
+                "title": "Entity link"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The reading it came from; null when nothing says."
+          },
+          "stale": {
+            "description": "Whether the reading it came from is out of date.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "entity",
+          "source",
+          "observed_at",
+          "stale"
+        ],
+        "type": "object"
+      },
       "RelationshipsRecord": {
         "additionalProperties": false,
         "description": "One node's edges, grouped by what each says from it, and the readings that hold it.",
@@ -12493,9 +15017,9 @@
             "type": "string"
           },
           "groups": {
-            "description": "Its relationships under what each says from the node (`phrase`), in page order (`rank`): each item the other end as a link, the reading it came from, when that was read, and whether it is out of date.",
+            "description": "Its relationships, grouped by what each says from the node.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/RelationGroupPart"
             },
             "type": "array"
           },
@@ -12504,9 +15028,9 @@
             "type": "string"
           },
           "readings": {
-            "description": "The readings joined to the node, each its type, label, connection and the records it holds about it.",
+            "description": "The readings joined to the node.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/JoinedReadingPart"
             },
             "type": "array"
           },
@@ -12518,6 +15042,36 @@
             "type": "array"
           }
         },
+        "type": "object"
+      },
+      "ReleasePart": {
+        "additionalProperties": false,
+        "properties": {
+          "published": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it was published, an ISO 8601 date-time; null when not said."
+          },
+          "tag": {
+            "description": "The release's tag.",
+            "type": "string"
+          },
+          "url": {
+            "description": "The release's page.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag",
+          "url",
+          "published"
+        ],
         "type": "object"
       },
       "RenewalAllowed": {
@@ -12561,6 +15115,57 @@
         ],
         "type": "object"
       },
+      "RepositoryPart": {
+        "additionalProperties": false,
+        "properties": {
+          "default_branch": {
+            "description": "The repository's default branch.",
+            "type": "string"
+          },
+          "deployed": {
+            "description": "The commit production runs, by its last deployment; empty when not read.",
+            "type": "string"
+          },
+          "head": {
+            "description": "The commit the default branch is at; empty when not read.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The repository's name, `owner/name`.",
+            "type": "string"
+          },
+          "open_pull_requests": {
+            "description": "Its open pull requests.",
+            "items": {
+              "$ref": "#/components/schemas/PullRequestPart"
+            },
+            "type": "array"
+          },
+          "undeployed": {
+            "description": "Whether the default branch is ahead of what production runs.",
+            "type": "boolean"
+          },
+          "url": {
+            "description": "The repository's page.",
+            "type": "string"
+          },
+          "verified": {
+            "description": "Whether the checks after its last deployment confirmed production.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "url",
+          "default_branch",
+          "head",
+          "deployed",
+          "undeployed",
+          "verified",
+          "open_pull_requests"
+        ],
+        "type": "object"
+      },
       "RepositoryUrl": {
         "description": "The address of its code repository; empty for none.",
         "type": "string"
@@ -12599,6 +15204,14 @@
           "error"
         ],
         "type": "object"
+      },
+      "RequestedActor": {
+        "description": "Who asked for it, by the name HQ knows them by.",
+        "type": "string"
+      },
+      "RequestedInterface": {
+        "description": "Which door it was asked through, such as `api` or `web`.",
+        "type": "string"
       },
       "RequiredPermissions": {
         "description": "The permissions a caller must hold, every one of them, to use it.",
@@ -12826,6 +15439,10 @@
         ],
         "type": "object"
       },
+      "ResourceRecordAnswer": {
+        "description": "One record, in the shape its resource names, which that resource's own route in this document gives.",
+        "type": "object"
+      },
       "ResourceSaved": {
         "additionalProperties": false,
         "description": "A managed record as saved, and the reconcile queued to apply it.",
@@ -12954,6 +15571,44 @@
         ],
         "type": "object"
       },
+      "RoutePart": {
+        "additionalProperties": false,
+        "properties": {
+          "hops": {
+            "description": "The route's hops, in the order a request takes them.",
+            "items": {
+              "$ref": "#/components/schemas/HopRow"
+            },
+            "type": "array"
+          },
+          "line": {
+            "description": "The route in one line, hop to hop.",
+            "type": "string"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The port a TCP or UDP forward listens on; null for any other route."
+          },
+          "via": {
+            "description": "What the route starts from, such as one DNS answer.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "via",
+          "port",
+          "line",
+          "hops"
+        ],
+        "type": "object"
+      },
       "RunRequested": {
         "additionalProperties": false,
         "description": "A dependency update run, asked for now.",
@@ -13001,6 +15656,76 @@
       "SecurityNotes": {
         "description": "What protects it, and what to watch.",
         "type": "string"
+      },
+      "SeenPart": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/SightPart/properties/error"
+          },
+          "freshness": {
+            "description": "How current its last read is, in one word.",
+            "type": "string"
+          },
+          "freshness_label": {
+            "description": "How current its last read is, in the words its row shows.",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SightPart/properties/kind"
+          },
+          "label": {
+            "$ref": "#/components/schemas/SightPart/properties/label"
+          },
+          "observed_at": {
+            "$ref": "#/components/schemas/SightPart/properties/observed_at"
+          },
+          "parts": {
+            "$ref": "#/components/schemas/SightPart/properties/parts"
+          },
+          "permissions": {
+            "$ref": "#/components/schemas/SightPart/properties/permissions"
+          },
+          "records": {
+            "$ref": "#/components/schemas/SightPart/properties/records"
+          },
+          "refusal": {
+            "$ref": "#/components/schemas/SightPart/properties/refusal"
+          },
+          "remedy": {
+            "$ref": "#/components/schemas/SightPart/properties/remedy"
+          },
+          "requires": {
+            "$ref": "#/components/schemas/SightPart/properties/requires"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SightPart/properties/source"
+          },
+          "state": {
+            "$ref": "#/components/schemas/SightPart/properties/state"
+          },
+          "state_label": {
+            "$ref": "#/components/schemas/SightPart/properties/state_label"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "source",
+          "state",
+          "state_label",
+          "records",
+          "observed_at",
+          "error",
+          "requires",
+          "refusal",
+          "permissions",
+          "parts",
+          "remedy",
+          "freshness",
+          "freshness_label"
+        ],
+        "type": "object"
       },
       "SerialNumber": {
         "description": "The maker's serial number; empty when not recorded.",
@@ -13176,9 +15901,9 @@
         "description": "One service name whole, each facet with the records behind it.",
         "properties": {
           "facets": {
-            "description": "Each part the service is made of, such as its DNS record, proxy, certificate and container: whether it is there, its state, and the keys of HQ's records behind it.",
+            "description": "Each part the service is made of, such as its DNS record, proxy, certificate and container.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/FacetPart"
             },
             "type": "array"
           },
@@ -13312,6 +16037,124 @@
         ],
         "type": "object"
       },
+      "SettingPart": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "description": "The setting, in words.",
+            "type": "string"
+          },
+          "machines": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PolicyNamePart"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The machines its value names; null for a value that names none."
+          },
+          "value": {
+            "description": "Its value, as a page shows it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "machines"
+        ],
+        "type": "object"
+      },
+      "SightPart": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "description": "Why its last read failed, as the service said; empty when it did not.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "The reading or record type it could read.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The type it could read, in words.",
+            "type": "string"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObservedAt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "parts": {
+            "description": "Its parts that were refused while the rest read.",
+            "items": {
+              "$ref": "#/components/schemas/PartRefusalPart"
+            },
+            "type": "array"
+          },
+          "permissions": {
+            "description": "The permissions `requires` names, one each.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "records": {
+            "description": "How many records its last read stored.",
+            "type": "integer"
+          },
+          "refusal": {
+            "description": "How the service refused the read, `credential` or `permission`; empty when it did not.",
+            "type": "string"
+          },
+          "remedy": {
+            "description": "What would let HQ read all of it; empty when nothing is missing.",
+            "type": "string"
+          },
+          "requires": {
+            "description": "The permissions it needs, as the service names them in one line; empty for none.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Whether it is a reading's type or a record's: `reading` or `resource`.",
+            "type": "string"
+          },
+          "state": {
+            "description": "Whether the credential could read it: `readable`, `partial`, `refused`, `unreadable`, `not_connected` or `never_swept`.",
+            "type": "string"
+          },
+          "state_label": {
+            "description": "That, in the words its row shows.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "source",
+          "state",
+          "state_label",
+          "records",
+          "observed_at",
+          "error",
+          "requires",
+          "refusal",
+          "permissions",
+          "parts",
+          "remedy"
+        ],
+        "type": "object"
+      },
       "Since": {
         "description": "When the matter began, an ISO 8601 date-time, where its source knows; empty when it does not.",
         "type": "string"
@@ -13374,6 +16217,35 @@
         "description": "How the sync went: how many docs it created, updated and skipped, the links naming a record HQ does not hold, and the orphans found or pruned where asked.",
         "type": "object"
       },
+      "TagPart": {
+        "additionalProperties": false,
+        "properties": {
+          "machines": {
+            "description": "The machines that carry it.",
+            "items": {
+              "$ref": "#/components/schemas/EntityLink"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "The tag's name, as the policy writes it, such as `tag:server`.",
+            "type": "string"
+          },
+          "owners": {
+            "description": "Who may apply it, as the policy writes them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "owners",
+          "machines"
+        ],
+        "type": "object"
+      },
       "Tailnet": {
         "additionalProperties": false,
         "description": "The tailnet's policy and what HQ makes of it.",
@@ -13381,16 +16253,12 @@
           "app_connectors": {
             "description": "The tailnet's app connectors, as read.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/AsRead"
             },
             "type": "array"
           },
           "counts": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "description": "How many grants, groups, tags and tests the policy holds.",
-            "type": "object"
+            "$ref": "#/components/schemas/PolicyCounts"
           },
           "credential_refusal": {
             "anyOf": [
@@ -13417,21 +16285,21 @@
           "findings": {
             "description": "The open problems about the tailnet that the reader may see.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/SerializedFinding"
             },
             "type": "array"
           },
           "grants": {
-            "description": "The policy's grants as written, each with the machines its sources and destinations name, and its ports.",
+            "description": "The policy's grants as written.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/PolicyGrantPart"
             },
             "type": "array"
           },
           "groups": {
-            "description": "The policy's groups, each a name and its members.",
+            "description": "The policy's groups.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/GroupPart"
             },
             "type": "array"
           },
@@ -13449,42 +16317,42 @@
           "services": {
             "description": "The tailnet's services, as read.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/AsRead"
             },
             "type": "array"
           },
           "settings": {
-            "description": "The tailnet's settings, each a label and value, with the machines a value names.",
+            "description": "The tailnet's settings.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/SettingPart"
             },
             "type": "array"
           },
           "ssh_rules": {
-            "description": "The policy's SSH rules as written, each with the machines its sources and destinations name.",
+            "description": "The policy's SSH rules as written.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/PolicyRulePart"
             },
             "type": "array"
           },
           "tags": {
-            "description": "The policy's tags, each a name, its owners and the machines that carry it.",
+            "description": "The policy's tags.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/TagPart"
             },
             "type": "array"
           },
           "tests": {
             "description": "The policy's tests, as written.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/AsRead"
             },
             "type": "array"
           },
           "unread": {
-            "description": "Each tailnet reading that could not be read: its type, label and state, why, and what would fix it.",
+            "description": "Each tailnet reading that could not be read.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/UnreadPart"
             },
             "type": "array"
           }
@@ -14153,6 +17021,82 @@
         ],
         "type": "object"
       },
+      "UnreadPart": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The service's words for the failure; null for none."
+          },
+          "kind": {
+            "description": "The tailnet reading's type.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The tailnet reading, in words.",
+            "type": "string"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How the service refused it, `credential` or `permission`; null when it did not."
+          },
+          "remedy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What would let HQ read it; null when nothing would."
+          },
+          "requires": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The permissions reading it needs; null for none."
+          },
+          "state": {
+            "description": "Why it was not read: `readable`, `partial`, `refused`, `unreadable`, `not_connected` or `never_swept`.",
+            "type": "string"
+          },
+          "state_label": {
+            "description": "Why, in the words its row shows.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "state",
+          "state_label",
+          "refusal",
+          "error",
+          "remedy",
+          "requires"
+        ],
+        "type": "object"
+      },
       "UnsupportedMediaTypeRefusal": {
         "additionalProperties": false,
         "properties": {
@@ -14389,14 +17333,14 @@
           "data": {
             "description": "The writable mounts holding its data, snapshotted before the upgrade and restored on rollback.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/MountPart"
             },
             "type": "array"
           },
           "fixes": {
             "description": "The advisories and vulnerabilities against what runs that the new version is clear of.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/AdvisoryPart"
             },
             "type": "array"
           },
@@ -14406,7 +17350,7 @@
           "introduces": {
             "description": "Any serious vulnerability the new version would bring.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/AdvisoryPart"
             },
             "type": "array"
           },
@@ -14420,13 +17364,14 @@
           "release": {
             "anyOf": [
               {
-                "type": "object"
+                "$ref": "#/components/schemas/ReleasePart",
+                "title": "Release part"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "The release of the version it moves to: its tag, page and when it was published; null for none."
+            "description": "The release of the version it moves to; null for none."
           },
           "risk": {
             "$ref": "#/components/schemas/UpgradeRow/properties/risk"
@@ -14436,9 +17381,9 @@
             "type": "boolean"
           },
           "steps": {
-            "description": "The steps an upgrade would take, in order, each an id, label and detail.",
+            "description": "The steps an upgrade would take, in order.",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/UpgradeStepPart"
             },
             "type": "array"
           },
@@ -14493,6 +17438,107 @@
             "type": "boolean"
           }
         },
+        "type": "object"
+      },
+      "UpgradeStepPart": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "description": "What the step does, in a sentence.",
+            "type": "string"
+          },
+          "id": {
+            "description": "The step's stable id.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The step, in a few words.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "UsagePart": {
+        "additionalProperties": false,
+        "properties": {
+          "cpu_limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How many cores it may use; null for no limit."
+          },
+          "cpu_percent_of_one_core": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The CPU it used since the read before, as a percentage of one core; null until two reads have sampled one run of it."
+          },
+          "memory_bytes": {
+            "description": "The memory it uses, in bytes.",
+            "type": "integer"
+          },
+          "memory_counted_as": {
+            "description": "How `memory_bytes` was counted, as Docker reports it.",
+            "type": "string"
+          },
+          "memory_limit_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its memory limit, in bytes; null for none."
+          },
+          "memory_of_limit_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How much of its memory limit it uses, a percentage; null without a limit."
+          },
+          "read_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When its use was read, an ISO 8601 date-time; null when not said."
+          }
+        },
+        "required": [
+          "memory_bytes",
+          "memory_counted_as",
+          "memory_limit_bytes",
+          "memory_of_limit_percent",
+          "cpu_percent_of_one_core",
+          "cpu_limit",
+          "read_at"
+        ],
         "type": "object"
       },
       "VisitRefreshRequest": {
@@ -23110,7 +26156,7 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ObjectSuccess"
+            "$ref": "#/components/responses/ResourceRecordAnswerSuccess"
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"

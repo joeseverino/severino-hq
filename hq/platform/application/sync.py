@@ -5,19 +5,26 @@ credentials reach, so no document describes it.
 """
 
 from dataclasses import dataclass
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Literal, TypedDict
 
 from django.db import transaction
 
 from .command_fields import Describe
-from .documentation import ConfirmPrune, DocumentationSync, PruneOrphans, UpdateExisting, sync_documentation
+from .documentation import (
+    ConfirmPrune,
+    DocumentationSync,
+    ManifestEntry,
+    PruneOrphans,
+    UpdateExisting,
+    sync_documentation,
+)
 from .refusal_status import RefusalEnvelope, refused
 from .security import Principal
 
 
 @dataclass(frozen=True, slots=True)
 class HQSyncCommand:
-    manifest: Annotated[list[dict[str, Any]], Describe("The records to sync, one per entry.")]
+    manifest: Annotated[list[ManifestEntry], Describe("The records to sync, one per entry.")]
     update_existing: UpdateExisting = True
     report_orphans: Annotated[bool, Describe("Report records the manifest no longer lists.")] = True
     prune_orphans: PruneOrphans = False

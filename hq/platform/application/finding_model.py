@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Any, NotRequired, TypedDict
 
+from pydantic import ConfigDict, with_config
+
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink
@@ -242,6 +244,8 @@ def built_findings(fields: tuple[dict[str, Any], ...]) -> tuple[Finding, ...]:
     return tuple(Finding(**item) for item in fields)
 
 
+# Its own config, so it is written one way under every answer that holds it.
+@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class OperatorStep:
     """A command an operator runs on their own machine. HQ never runs it."""

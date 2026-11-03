@@ -77,6 +77,13 @@ type LinkedDocs = Annotated[
 ]
 type LinkedContent = Annotated[list[str], Describe("The slugs of the writeups and pages linked to it, sorted.")]
 type LinkedExpenses = Annotated[list[int], Describe("The ids of the expenses linked to it, newest first.")]
+# A part HQ passes on in the shape its source gave it (a provider's record, a
+# policy entry as written, a reading type's record), so its keys are the
+# source's and HQ names none of them. Every part HQ builds says its fields.
+type AsRead = Annotated[
+    dict[str, Any],
+    Describe("An object in its source's own shape, passed on as HQ read it: its keys are the source's."),
+]
 # An item of the action queue, which HQ's own problems are too.
 type Since = Annotated[
     str,

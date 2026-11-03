@@ -53,9 +53,275 @@
                     "description": "Confirms the delete that prune_orphans asks for.",
                     "type": "boolean"
                   },
+                  "DocEnvironment": {
+                    "description": "Where that system runs: `homelab`, `vps`, `wordpress`, `cloudflare`, `tailscale`, `adguard`, `unifi`, `local_mac` or `other`.",
+                    "type": "string"
+                  },
+                  "DocId": {
+                    "description": "The doc's ID in the vault.",
+                    "type": "string"
+                  },
+                  "DocSensitivity": {
+                    "description": "Who may read it, `public`, `internal`, `sensitive` or `restricted`; a restricted doc never reaches an agent.",
+                    "type": "string"
+                  },
+                  "DocStatus": {
+                    "description": "Where the doc stands: `draft`, `active`, `deprecated` or `archived`.",
+                    "type": "string"
+                  },
+                  "DocType": {
+                    "description": "What type of doc it is: `runbook`, `architecture_note`, `deployment_guide`, `troubleshooting_guide`, `recovery_procedure`, `public_article_draft`, `decision_record`, `report` or `queue`.",
+                    "type": "string"
+                  },
+                  "DocumentationTitle": {
+                    "description": "The doc's title.",
+                    "type": "string"
+                  },
+                  "ExternalUrl": {
+                    "description": "Where it is published outside HQ; empty for none.",
+                    "type": "string"
+                  },
+                  "GithubPath": {
+                    "description": "Its path in a repository; empty for none.",
+                    "type": "string"
+                  },
+                  "LastReviewed": {
+                    "anyOf": [
+                      {
+                        "format": "date",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "When it was last checked against what it describes, an ISO 8601 date; null for never.",
+                    "title": "Last reviewed"
+                  },
+                  "ManifestEntry": {
+                    "description": "One doc of the vault's manifest: its frontmatter, its path, and what it relates to.",
+                    "properties": {
+                      "content_type": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "For site content, what it is on the site, such as `portfolio_article` or `page`."
+                      },
+                      "description": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "For site content, its description, which `topic` stands in for."
+                      },
+                      "doc_id": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/DocId"
+                          }
+                        ]
+                      },
+                      "doc_type": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/DocType"
+                          }
+                        ]
+                      },
+                      "environment": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/DocEnvironment"
+                          }
+                        ]
+                      },
+                      "excerpt": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "For site content, its excerpt, read where it has no description."
+                      },
+                      "external_url": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/ExternalUrl"
+                          }
+                        ]
+                      },
+                      "github_path": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/GithubPath"
+                          }
+                        ]
+                      },
+                      "last_reviewed": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/LastReviewed"
+                          }
+                        ]
+                      },
+                      "notes": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/Notes"
+                          }
+                        ]
+                      },
+                      "obsidian_path": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/ObsidianPath"
+                          }
+                        ]
+                      },
+                      "path": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "Where the doc is in the vault, which `obsidian_path` stands in for."
+                      },
+                      "published": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          }
+                        ],
+                        "description": "For site content, whether it is live on the site."
+                      },
+                      "published_at": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/PublishedAt"
+                          }
+                        ]
+                      },
+                      "related_assets": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        ],
+                        "description": "The slugs of the assets the doc is about."
+                      },
+                      "related_projects": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        ],
+                        "description": "The slugs of the projects the doc is about."
+                      },
+                      "sensitivity": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/DocSensitivity"
+                          }
+                        ]
+                      },
+                      "slug": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "For site content, the slug of the item it mirrors to."
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/DocStatus"
+                          }
+                        ]
+                      },
+                      "system": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "The system or service the doc is about."
+                      },
+                      "system_service": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "The same as `system`, under the name HQ stores it by."
+                      },
+                      "tags": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        ],
+                        "description": "The doc's tags."
+                      },
+                      "technologies": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        ],
+                        "description": "For site content, what it was built with, read as its tags."
+                      },
+                      "title": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/DocumentationTitle"
+                          }
+                        ]
+                      },
+                      "topic": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "For site content, what it is about, in a line."
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "Notes": {
+                    "description": "Anything else worth keeping.",
+                    "type": "string"
+                  },
+                  "ObsidianPath": {
+                    "description": "Its path in the vault; empty for none.",
+                    "type": "string"
+                  },
                   "PruneOrphans": {
                     "description": "Delete records the manifest no longer lists.",
                     "type": "boolean"
+                  },
+                  "PublishedAt": {
+                    "anyOf": [
+                      {
+                        "format": "date",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "When it was published, an ISO 8601 date; null when it is not.",
+                    "title": "Published at"
                   },
                   "UpdateExisting": {
                     "description": "Update records HQ already holds.",
@@ -81,7 +347,7 @@
                   "manifest": {
                     "description": "The records to sync, one per entry.",
                     "items": {
-                      "type": "object"
+                      "$ref": "#/$defs/ManifestEntry"
                     },
                     "type": "array"
                   },
@@ -113,6 +379,30 @@
                     "description": "Confirms the delete that prune_orphans asks for.",
                     "type": "boolean"
                   },
+                  "DocEnvironment": {
+                    "description": "Where that system runs: `homelab`, `vps`, `wordpress`, `cloudflare`, `tailscale`, `adguard`, `unifi`, `local_mac` or `other`.",
+                    "type": "string"
+                  },
+                  "DocId": {
+                    "description": "The doc's ID in the vault.",
+                    "type": "string"
+                  },
+                  "DocSensitivity": {
+                    "description": "Who may read it, `public`, `internal`, `sensitive` or `restricted`; a restricted doc never reaches an agent.",
+                    "type": "string"
+                  },
+                  "DocStatus": {
+                    "description": "Where the doc stands: `draft`, `active`, `deprecated` or `archived`.",
+                    "type": "string"
+                  },
+                  "DocType": {
+                    "description": "What type of doc it is: `runbook`, `architecture_note`, `deployment_guide`, `troubleshooting_guide`, `recovery_procedure`, `public_article_draft`, `decision_record`, `report` or `queue`.",
+                    "type": "string"
+                  },
+                  "DocumentationTitle": {
+                    "description": "The doc's title.",
+                    "type": "string"
+                  },
                   "ExpectedUpdatedAt": {
                     "description": "The target's `updated_at`, copied as it was last read. Where the command checks it, a record changed since is refused `conflict`; without it the record is taken as it is now.",
                     "examples": [
@@ -121,9 +411,251 @@
                     "format": "date-time",
                     "type": "string"
                   },
+                  "ExternalUrl": {
+                    "description": "Where it is published outside HQ; empty for none.",
+                    "type": "string"
+                  },
+                  "GithubPath": {
+                    "description": "Its path in a repository; empty for none.",
+                    "type": "string"
+                  },
+                  "LastReviewed": {
+                    "anyOf": [
+                      {
+                        "format": "date",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "When it was last checked against what it describes, an ISO 8601 date; null for never.",
+                    "title": "Last reviewed"
+                  },
+                  "ManifestEntry": {
+                    "description": "One doc of the vault's manifest: its frontmatter, its path, and what it relates to.",
+                    "properties": {
+                      "content_type": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "For site content, what it is on the site, such as `portfolio_article` or `page`."
+                      },
+                      "description": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "For site content, its description, which `topic` stands in for."
+                      },
+                      "doc_id": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/DocId"
+                          }
+                        ]
+                      },
+                      "doc_type": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/DocType"
+                          }
+                        ]
+                      },
+                      "environment": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/DocEnvironment"
+                          }
+                        ]
+                      },
+                      "excerpt": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "For site content, its excerpt, read where it has no description."
+                      },
+                      "external_url": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/ExternalUrl"
+                          }
+                        ]
+                      },
+                      "github_path": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/GithubPath"
+                          }
+                        ]
+                      },
+                      "last_reviewed": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/LastReviewed"
+                          }
+                        ]
+                      },
+                      "notes": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/Notes"
+                          }
+                        ]
+                      },
+                      "obsidian_path": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/ObsidianPath"
+                          }
+                        ]
+                      },
+                      "path": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "Where the doc is in the vault, which `obsidian_path` stands in for."
+                      },
+                      "published": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          }
+                        ],
+                        "description": "For site content, whether it is live on the site."
+                      },
+                      "published_at": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/PublishedAt"
+                          }
+                        ]
+                      },
+                      "related_assets": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        ],
+                        "description": "The slugs of the assets the doc is about."
+                      },
+                      "related_projects": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        ],
+                        "description": "The slugs of the projects the doc is about."
+                      },
+                      "sensitivity": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/DocSensitivity"
+                          }
+                        ]
+                      },
+                      "slug": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "For site content, the slug of the item it mirrors to."
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/DocStatus"
+                          }
+                        ]
+                      },
+                      "system": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "The system or service the doc is about."
+                      },
+                      "system_service": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "The same as `system`, under the name HQ stores it by."
+                      },
+                      "tags": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        ],
+                        "description": "The doc's tags."
+                      },
+                      "technologies": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        ],
+                        "description": "For site content, what it was built with, read as its tags."
+                      },
+                      "title": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/DocumentationTitle"
+                          }
+                        ]
+                      },
+                      "topic": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "For site content, what it is about, in a line."
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "Notes": {
+                    "description": "Anything else worth keeping.",
+                    "type": "string"
+                  },
+                  "ObsidianPath": {
+                    "description": "Its path in the vault; empty for none.",
+                    "type": "string"
+                  },
                   "PruneOrphans": {
                     "description": "Delete records the manifest no longer lists.",
                     "type": "boolean"
+                  },
+                  "PublishedAt": {
+                    "anyOf": [
+                      {
+                        "format": "date",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "When it was published, an ISO 8601 date; null when it is not.",
+                    "title": "Published at"
                   },
                   "UpdateExisting": {
                     "description": "Update records HQ already holds.",
@@ -157,7 +689,7 @@
                       "manifest": {
                         "description": "The records to sync, one per entry.",
                         "items": {
-                          "type": "object"
+                          "$ref": "#/$defs/ManifestEntry"
                         },
                         "type": "array"
                       },

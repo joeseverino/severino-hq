@@ -678,7 +678,16 @@ def resource_list(request: APIRequest, name: str) -> HttpResponse:
     return _ok(list_application_resource(name, filters, principal=request.principal, strict=False, fields=fields))
 
 
-@_endpoint(("GET",), title="Get a resource record", data=dict[str, Any], codes=RESOURCE_CODES)
+# What the generic read of one answers; each resource's own route names its record's shape.
+type ResourceRecordAnswer = Annotated[
+    dict[str, Any],
+    Field(
+        description="One record, in the shape its resource names, which that resource's own route in this document gives."
+    ),
+]
+
+
+@_endpoint(("GET",), title="Get a resource record", data=ResourceRecordAnswer, codes=RESOURCE_CODES)
 def resource_detail(request: APIRequest, name: str, identifier: str) -> HttpResponse:
     """Get one resource record through its declared identifier contract."""
 
@@ -763,10 +772,20 @@ def _without_outcome(kind: Any) -> Any:
     return data
 
 
+# What a command answers in its own shape, which its capability's own route
+# names.
+type CommandAnswer = Annotated[
+    dict[str, Any],
+    Field(
+        description="What the command answers, in the shape its capability names, which that capability's own route in this document gives."
+    ),
+]
+
+
 # What a call answers under ``data`` where its capability names no shape of
 # its own: an object, or that it waits for a person.
 type CapabilityAnswer = Annotated[
-    dict[str, Any] | AwaitingApproval,
+    CommandAnswer | AwaitingApproval,
     Field(description="What the capability answers, in the shape its command names, or that it waits for a person."),
 ]
 

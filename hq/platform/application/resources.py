@@ -35,6 +35,13 @@ from . import (
     tailnet_context,
 )
 from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion, WebRoute
+from .connection_records import (
+    ConnectionStandingRecord,
+    ConnectionStandingRow,
+    CredentialRecord,
+    CredentialRow,
+    Tailnet,
+)
 from .contracts import DOTTED_NAME
 from .describe import Describe
 from .field_masks import FieldMaskRefusal, Fields, asks_whole, selected
@@ -48,12 +55,8 @@ from .record_errors import HostRefusal, RecordNotFound
 from .refusal_status import next_call
 from .resource_records import (
     ActionItemRow,
-    ConnectionStandingRecord,
-    ConnectionStandingRow,
     ContainerRecord,
     ContainerRow,
-    CredentialRecord,
-    CredentialRow,
     DomainRecord,
     DomainRow,
     EstateFigure,
@@ -70,7 +73,6 @@ from .resource_records import (
     RelationshipsRecord,
     ServiceRecord,
     ServiceRow,
-    Tailnet,
     UpgradeRecord,
     UpgradeRow,
 )

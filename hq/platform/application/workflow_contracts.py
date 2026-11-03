@@ -5,10 +5,17 @@ from typing import Annotated
 
 from .describe import Describe
 
+# What `pydantic.with_config` sets, written here since this leaf loads no
+# pydantic: each class carries its own config, so it is written one way under
+# every answer that holds it.
+_OWN_CONFIG = {"extra": "forbid"}
+
 
 @dataclass(frozen=True, slots=True)
 class ActionLink:
     """One safe route from observed state to an existing HQ use case."""
+
+    __pydantic_config__ = _OWN_CONFIG
 
     name: Annotated[
         str,
@@ -44,6 +51,8 @@ class ActionLink:
 class WorkflowOutcome:
     """The observable fact that completes a workflow."""
 
+    __pydantic_config__ = _OWN_CONFIG
+
     kind: Annotated[
         str, Describe("What completes it: `claim_absent`, once the problem it resolves is no longer reported.")
     ]
@@ -56,6 +65,8 @@ class WorkflowOutcome:
 @dataclass(frozen=True, slots=True)
 class WorkflowStep:
     """One ordered phase; actions still execute through their owning use case."""
+
+    __pydantic_config__ = _OWN_CONFIG
 
     phase: Annotated[
         str,
@@ -88,6 +99,8 @@ class WorkflowStep:
 @dataclass(frozen=True, slots=True)
 class WorkflowPlan:
     """A contextual route from evidence to action to observed resolution."""
+
+    __pydantic_config__ = _OWN_CONFIG
 
     id: Annotated[str, Describe("The plan's id, the same at every read of the problem it resolves.")]
     label: Annotated[str, Describe("The plan's heading, such as `What to do`.")]

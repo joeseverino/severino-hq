@@ -22,7 +22,6 @@ from .approvals import consent_gap
 from .asks import WAITING
 from .cadence import request_reading, ring_doorbell, swept
 from .command_fields import Describe
-from .describe import listed
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .infrastructure import (
     ManagedResourceCommand,
@@ -32,7 +31,20 @@ from .infrastructure import (
 )
 from .record_errors import PolicyError, RecordNotFound, Sentence
 from .record_saves import Created
-from .resource_records import ManagedResourceItem
+from .resource_records import (
+    AskedAt,
+    AttemptCount,
+    CompletedAt,
+    ConditionPart,
+    ManagedResourceItem,
+    OperationAction,
+    OperationId,
+    OperationReason,
+    OperationState,
+    OperationSummary,
+    RequestedActor,
+    RequestedInterface,
+)
 from .security import CONTROLLER_INTERFACE, Principal, is_agent
 from .ui import counted, ended
 lazy from . import tailnet
@@ -50,27 +62,24 @@ class OperationCommand:
     reason: Annotated[str, Describe("Why it is done, kept with the operation it queues.")] = ""
 
 
-type OperationReason = Annotated[str, Describe("Why it is done, in the asker's words; empty for none.")]
-
-
 class OperationItem(TypedDict):
     """One operation asked of the controller, as it stands."""
 
-    id: Annotated[str, Describe("The operation's id.")]
+    id: OperationId
     resource: Annotated[str, Describe("The key of the record it acts on.")]
-    action: Annotated[str, Describe(ended(f"What it does: {listed(OperationRequest.Action.values)}"))]
-    state: Annotated[str, Describe(ended(f"Where it stands: {listed(OperationRequest.State.values)}"))]
+    action: OperationAction
+    state: OperationState
     reason: OperationReason
-    requested_actor: Annotated[str, Describe("Who asked for it, by the name HQ knows them by.")]
-    requested_interface: Annotated[str, Describe("Which door it was asked through, such as `api` or `web`.")]
-    created_at: Annotated[str, Describe("When it was asked for, an ISO 8601 date-time.")]
-    completed_at: Annotated[str | None, Describe("When it finished, an ISO 8601 date-time; null until it has.")]
+    requested_actor: RequestedActor
+    requested_interface: RequestedInterface
+    created_at: AskedAt
+    completed_at: CompletedAt
     claimed_by: Annotated[str, Describe("The controller working on it; empty while none is.")]
     lease_expires_at: Annotated[
         str | None,
         Describe("When the controller's hold on it lapses, an ISO 8601 date-time; null while none holds it."),
     ]
-    attempt_count: Annotated[int, Describe("How many times a controller has tried it.")]
+    attempt_count: AttemptCount
     result: Annotated[dict[str, Any], Describe("What the controller reported of its run; empty until it has run.")]
 
 
@@ -155,7 +164,7 @@ _PROBLEM_CONDITIONS = ("Degraded", "Drifted")
 HISTORY_WINDOW = 200
 
 
-def _active(result: dict[str, Any]) -> list[dict[str, Any]]:
+def _active(result: dict[str, Any]) -> list[ConditionPart]:
     return [item for item in result.get("conditions") or [] if item.get("status") is True]
 
 
@@ -199,7 +208,7 @@ def requested_by(operation: OperationRequest) -> str:
     return operation.requested_actor
 
 
-def operation_summary(operation: OperationRequest) -> dict[str, Any]:
+def operation_summary(operation: OperationRequest) -> OperationSummary:
     """Project one operation into one sentence and its structured evidence."""
     result = operation.result or {}
     status = result.get("status") or {}
@@ -274,7 +283,7 @@ def changes(operations: Any, limit: int) -> list[OperationRequest]:
     return kept[:limit]
 
 
-def resource_history(resource: ManagedResource, limit: int = 20) -> list[dict[str, Any]]:
+def resource_history(resource: ManagedResource, limit: int = 20) -> list[OperationSummary]:
     """One record's history: each operation that changed something, newest first."""
 
     return [operation_summary(operation) for operation in changes(resource.operations.all()[:HISTORY_WINDOW], limit)]
