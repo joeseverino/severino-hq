@@ -21,7 +21,7 @@ from hq.platform.application.calendar_entries import (
     upcoming,
     when_label,
 )
-from hq.platform.application.capabilities import capability_words
+from hq.platform.application.capabilities import capability_title, capability_words
 from hq.platform.application.deletion import delete_calendar_entry
 from hq.platform.application.moments import when_day
 from hq.platform.application.pages import PageAction, PageMixin
@@ -214,11 +214,14 @@ class EntryDetailView(RedirectView):
 
 
 class EntryCreateView(EntryWrite, EntryPage, ReferencePickerMixin, ServiceCreateMixin, CreateView):
-    page_title = "Add event"
     form_class = EntryForm
     template_name = "calendars/entry_form.html"
     service = staticmethod(save_entry)
     command_from_cleaned_data = staticmethod(entry_command)
+
+    @override
+    def get_page_title(self):
+        return capability_title("calendar.entry.create")
 
     @override
     def get_initial(self):

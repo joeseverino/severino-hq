@@ -6,7 +6,7 @@ from hq.platform.application.tests.markup import elements
 from hq.platform.core.audit_views import AuditLogListView
 from hq.platform.core.models import AuditLog
 
-from .test_web import _AuthedTestCase
+from .signed_in_case import _AuthedTestCase
 
 
 class AuditColumnTests(SimpleTestCase):

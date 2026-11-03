@@ -1,6 +1,6 @@
 // The stylesheet's contract, held by `lint:css`. Paths are relative to this
 // file. Any rule Stylelint cannot express stays a test beside StyleContractTests
-// (hq/platform/application/tests/test_architecture.py), with its reason.
+// (hq/platform/application/tests/test_architecture_styles.py), with its reason.
 
 const tokens = "../../static/css/app/tokens.css";
 const cuts = "../../static/css/app/cuts.css";

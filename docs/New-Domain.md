@@ -82,7 +82,7 @@ docstring is the rule.
 | `StyleContractTests`, `SharedPrimitiveStyleTests` | CSS, layers |
 | `TemplateCommentTests` | what a `{# #}` comment left open is |
 | `lint:complexity` | complexipy's cognitive complexity, 20 per function |
-| `FileSizeTests` | no source file past 1,000 lines; a test file over it is listed in a baseline that only shrinks |
+| `FileSizeTests` | no source or test file past 1,000 lines |
 | `OneDefinitionTests` | a module-level name is assigned once |
 | `PageReadCapabilityTests` | every routed page reads under one capability (`required_capability`, else `read`), refused before its view; a route that answers without a session authorizes itself |
 | `PageTrailTests` | a view declares `page_trail`, every crumb above it, and `trail_label`, not a `get_page_trail` that restates them |

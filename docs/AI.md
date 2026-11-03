@@ -71,7 +71,7 @@ on a laptop and a pass in CI mean the same thing
 so several agents on one machine never run two suites at once
 ([Heavy gates take turns](Development.md#heavy-gates-take-turns)). The
 architecture is held by tests and lint rules, among them
-`test_architecture.py`, `lint:ast-grep` and
+the `test_architecture*.py` modules, `lint:ast-grep` and
 `test_the_host_source_never_names_an_installed_extension`. The rest of the
 bar is written down where every agent reads it:
 [Rules that eliminate bug classes](../AGENTS.md#rules-that-eliminate-bug-classes)

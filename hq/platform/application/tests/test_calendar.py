@@ -421,7 +421,7 @@ class PageTests(TestCase):
         self.assertIn("Dentist", text(response))
         self.assertIn(entry.get_absolute_url(), hrefs(response))
         self.assertTrue(select(response, "data-hotkey", "t"))
-        self.assertIn("Add event", text(response))
+        self.assertIn("Add an event", text(response))
         self.assertNotIn("My Calendar", text(response))
         # An entry opens beside its day: once, with what can be done to it.
         opened = self.client.get(entry.get_absolute_url())
@@ -460,12 +460,12 @@ class PageTests(TestCase):
         month = self.client.get(reverse("calendar:month"), {"day": timezone.localdate().isoformat()})
         form = self.client.get(reverse("calendar:entry_new"))
 
-        self.assertEqual(text(month).count("Add event"), 2)  # the head and the day panel
+        self.assertEqual(text(month).count("Add an event"), 2)  # the head and the day panel
         # Both open the form on the day that is open.
         on_the_day = f"{reverse('calendar:entry_new')}?on={timezone.localdate().isoformat()}"
         self.assertEqual(hrefs(month).count(on_the_day), 2)
-        self.assertEqual(texts(form, "h1"), ["Add event"])
-        self.assertIn("Add event", [button.words for button in select(form, "type", "submit")])
+        self.assertEqual(texts(form, "h1"), ["Add an event"])
+        self.assertIn("Add an event", [button.words for button in select(form, "type", "submit")])
         for gone in ("New entry", "Add to calendar"):
             self.assertNotIn(gone, text(month))
             self.assertNotIn(gone, text(form))

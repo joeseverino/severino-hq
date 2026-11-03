@@ -25,6 +25,13 @@ def field_label(name: str, title: str | None = None) -> str:
     return said[:1].upper() + said[1:]
 
 
+def one(noun: str) -> str:
+    """``noun`` after its indefinite article, as a command names what it acts
+    on: "an asset", "a receipt"."""
+
+    return f"{'an' if noun[:1].lower() in 'aeiou' else 'a'} {noun}"
+
+
 def lower_first(text: str) -> str:
     """A label as it reads mid-sentence, leaving an acronym alone.
 

@@ -24,7 +24,7 @@ ADMITTED_RANGES = (
     ip_network("2001:db8::/32"),
     # Every home LAN and Docker bridge is numbered from these (RFC 1918). Not
     # 192.168.0.0/16: a host there reads as somebody's own machine, as the
-    # repository-wide check (test_architecture's reachable endpoints) holds.
+    # repository-wide check (StyleContractTests' reachable endpoints) holds.
     ip_network("10.0.0.0/8"),
     ip_network("172.16.0.0/12"),
     # The range Tailscale numbers every tailnet from, and its IPv6 prefix.

@@ -546,7 +546,7 @@ class DomainCardTests(TestCase):
     """Four cards; parked names, a weaker posture and missing mail policy said plainly."""
 
     def setUp(self):
-        from .test_zones import APEX, record, sweep
+        from .zone_records import APEX, record, sweep
 
         sweep(
             zones=[

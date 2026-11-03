@@ -88,20 +88,20 @@ MYPYPATH="$hq_root" "$python" -m mypy --cache-dir "$work/mypy"
 # plugin's wording and markup as they hold the host's; the view checks read
 # every routed view's source, the plugin's included.
 "$python" "$hq_root/manage.py" test "$django_app" hq.platform.application.tests.test_plugins hq.platform.application.tests.test_rendered \
-    hq.platform.application.tests.test_architecture.InterfaceTextTests hq.platform.core.tests.test_counts.CountPlacementTests \
+    hq.platform.application.tests.test_architecture_pages.InterfaceTextTests hq.platform.core.tests.test_counts.CountPlacementTests \
     hq.platform.core.tests.test_template_chips.TemplateChipTests hq.platform.core.tests.test_table_contract.TableContractTests \
     hq.platform.application.tests.test_reading_age.OneWordingTests \
     hq.platform.application.tests.test_script_loading hq.platform.application.tests.test_action_words.DeclaredWordsTests \
-    hq.platform.application.tests.test_architecture.PageTitleTests hq.platform.application.tests.test_architecture.OnePrimitiveTests \
-    hq.platform.application.tests.test_architecture.FragmentPrimitiveTests \
+    hq.platform.application.tests.test_architecture_pages.PageTitleTests hq.platform.application.tests.test_architecture_primitives.OnePrimitiveTests \
+    hq.platform.application.tests.test_architecture_primitives.FragmentPrimitiveTests \
     hq.platform.application.tests.test_shared_markup.SharedMarkupTemplateTests \
     hq.platform.core.tests.test_template_values.TemplateValueTests hq.platform.core.tests.test_row_groups.RowGroupTests \
     hq.platform.core.tests.test_template_separators.TemplateSeparatorTests \
     hq.platform.application.tests.test_action_words.CallSiteWordsTests \
-    hq.platform.application.tests.test_architecture.StyleContractTests.test_a_rows_block_detail_opens_beneath_the_row \
+    hq.platform.application.tests.test_architecture_styles.StyleContractTests.test_a_rows_block_detail_opens_beneath_the_row \
     hq.platform.application.tests.test_view_writes.ViewWriteTests.test_no_view_writes_outside_the_chokepoint \
     hq.platform.application.tests.test_architecture.DeliveryAdapterArchitectureTests.test_paginated_list_views_use_the_shared_table_engine \
-    hq.platform.application.tests.test_architecture.PageTrailTests
+    hq.platform.application.tests.test_architecture_pages.PageTrailTests
 
 # Production installs admitted wheels with --no-deps. Recreate that exact
 # dependency boundary in an isolated environment so an undeclared host pin

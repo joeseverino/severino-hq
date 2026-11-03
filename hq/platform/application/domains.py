@@ -423,7 +423,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             lookup="pk",
             command="hq.platform.application.expenses:ExpenseCommand",
             save="hq.platform.application.expenses:save_expense",
-            wording=(("create", "", "Record expense"),),
+            wording=(("create", "", "Record an expense"),),
         ),
     ),
     DomainDescriptor(

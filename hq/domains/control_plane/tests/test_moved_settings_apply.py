@@ -25,7 +25,7 @@ from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.test_certificates import SEAL_PUBLIC_KEY, a_certificate
 
 from ..models import ManagedResource, OperationRequest, ProviderInventory
-from .test_control_plane import certificate_spec, declare_targets
+from .certificate_cases import certificate_spec, declare_targets
 
 PROXY = {
     "domain_names": ["app.example.com"],

@@ -110,9 +110,9 @@ CONTROLLER_REFRESH = CapabilitySpec(
         "Wake the controller. HQ's web process holds no credential for any service.",
         "The controller reads what HQ says is due, with its own credentials.",
     ),
-    label="Refresh",
+    label="Refresh HQ's readings",
+    verb="Refresh",
     variants=(("all", "Refresh all"),),
-    wants="refresh what HQ reads",
 )
 
 _RECEIPT_FILE_NOTES = (
@@ -168,7 +168,7 @@ CORE_CAPABILITY_SPECS = (
             "Record the switch and who set it; the next update run reads it.",
         ),
         target_initial_fields=("dependency_updates",),
-        label="Dependency updates",
+        label="Turn dependency updates on or off",
         variants=(("on", "Turn on updates"), ("off", "Turn off updates")),
         wants="turn dependency updates on or off for {target}",
     ),
@@ -237,7 +237,8 @@ CORE_CAPABILITY_SPECS = (
             "Read the record again as HQ last found it live, never from the request.",
             "Write HQ's copy equal to it, so applying it changes nothing.",
         ),
-        label="Manage in HQ",
+        label="Manage a record in HQ",
+        verb="Manage in HQ",
         wants="manage a record HQ found live",
         reached_from="control_plane:services",
     ),
@@ -321,7 +322,8 @@ CORE_CAPABILITY_SPECS = (
         pins.PinCommand,
         pins.pin,
         execution_notes=("Pin it last among your pins of its type, or unpin it.",),
-        label="Pin",
+        label="Pin or unpin an item",
+        verb="Pin",
         reached_from=ON_ITS_PAGE,
     ),
     CapabilitySpec(
@@ -357,7 +359,8 @@ CORE_CAPABILITY_SPECS = (
             "Set each named row aside as it was drawn.",
             "Set each named item aside as the queue holds it now.",
         ),
-        label="Set aside",
+        label="Set action items aside",
+        verb="Set aside",
         reached_from="action_items",
     ),
     CapabilitySpec(
@@ -367,7 +370,8 @@ CORE_CAPABILITY_SPECS = (
         Capability.SET_ASIDE_ACTION_ITEMS,
         action_items.RestoreCommand,
         action_items.restore,
-        label="Bring back",
+        label="Bring action items back",
+        verb="Bring back",
         reached_from="action_items",
     ),
     CapabilitySpec(
@@ -403,7 +407,8 @@ CORE_CAPABILITY_SPECS = (
                 "Refuse a container switched off in HQ, or one Portainer cannot do this to.",
                 "Queue it once for the controller, which does it outside this request.",
             ),
-            label=action.label,
+            label=f"{action.label} a container",
+            verb=action.label,
         )
         for action, handler, summary, effect in (
             (
@@ -510,8 +515,8 @@ CORE_CAPABILITY_SPECS = (
             "Queue one renewal for the controller, which does the work outside this request.",
             "Return what was queued and why, recorded under whoever asked.",
         ),
-        label=OperationRequest.Action.RENEW.label,
-        wants="renew the certificate {target}",
+        label="Renew a certificate",
+        verb=OperationRequest.Action.RENEW.label,
     ),
     CapabilitySpec(
         UPLOAD,
@@ -576,7 +581,9 @@ CORE_CAPABILITY_SPECS = (
         target_help="The machine whose telemetry to show.",
         target_query=(("kind", MACHINE_KIND),),
         execution_notes=("Refuse a record that is not an enabled machine.",),
-        label="Show on the dashboard",
+        label="Show a machine on the dashboard",
+        verb="Show on the dashboard",
+        wants="show {target} on the dashboard",
         variants=(("on", "Show on the dashboard"), ("off", "Take off the dashboard")),
         state=dashboard_machine_selected,
     ),
@@ -694,7 +701,7 @@ CORE_CAPABILITY_SPECS = (
             "Change only the rules that differ from what holds, each recorded on its own.",
             "Refuse a rule no agent could hold, approval on a read, and a rule for an agent its grant does not allow.",
         ),
-        label="Set agent policy",
+        label="Set the agent policy",
     ),
 )
 

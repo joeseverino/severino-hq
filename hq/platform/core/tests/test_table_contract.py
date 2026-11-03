@@ -18,7 +18,7 @@ from hq.platform.application.tables import TableColumn, TableListMixin, ranked, 
 from hq.platform.application.tests.markup import all_elements, elements, select, with_class, within
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
 
-from .test_web import _AuthedTestCase
+from .signed_in_case import _AuthedTestCase
 
 TEMPLATES = Path(__file__).resolve().parents[4] / "templates"
 

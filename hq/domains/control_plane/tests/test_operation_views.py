@@ -130,7 +130,7 @@ class AgentStopTests(TestCase):
         shown = preview(waiting)
         # The act is the whole of it, said by its sentence.
         self.assertEqual((shown.rows, shown.lines), ((), ()))
-        self.assertEqual(str(asked(waiting)), "example-agent wants to stop example-web")
+        self.assertEqual(str(asked(waiting)), "example-agent wants to stop the container example-web")
 
         approve(ApproveCommand(held["approval"]["id"]), principal=self.operator)
 

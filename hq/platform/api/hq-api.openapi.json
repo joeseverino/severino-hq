@@ -15041,7 +15041,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Create asset",
+        "summary": "Create an asset",
         "tags": [
           "hq.assets"
         ],
@@ -15109,7 +15109,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Delete asset",
+        "summary": "Delete an asset",
         "tags": [
           "hq.assets"
         ],
@@ -15217,7 +15217,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Update asset",
+        "summary": "Update an asset",
         "tags": [
           "hq.assets"
         ],
@@ -15285,7 +15285,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Create or update asset",
+        "summary": "Create or update an asset",
         "tags": [
           "hq.assets"
         ],
@@ -15353,7 +15353,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Add event",
+        "summary": "Add an event",
         "tags": [
           "hq.calendar"
         ],
@@ -15421,7 +15421,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Delete event",
+        "summary": "Delete an event",
         "tags": [
           "hq.calendar"
         ],
@@ -15489,7 +15489,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Edit event",
+        "summary": "Edit an event",
         "tags": [
           "hq.calendar"
         ],
@@ -15557,7 +15557,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Renew certificate",
+        "summary": "Renew a certificate",
         "tags": [
           "hq.infrastructure"
         ],
@@ -15825,7 +15825,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Create content item",
+        "summary": "Create a content item",
         "tags": [
           "hq.content"
         ],
@@ -15893,7 +15893,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Delete content item",
+        "summary": "Delete a content item",
         "tags": [
           "hq.content"
         ],
@@ -15961,7 +15961,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Update content item",
+        "summary": "Update a content item",
         "tags": [
           "hq.content"
         ],
@@ -16165,7 +16165,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Create document",
+        "summary": "Create a document",
         "tags": [
           "hq.docs"
         ],
@@ -16233,7 +16233,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Delete document",
+        "summary": "Delete a document",
         "tags": [
           "hq.docs"
         ],
@@ -16381,7 +16381,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Update document",
+        "summary": "Update a document",
         "tags": [
           "hq.docs"
         ],
@@ -16449,7 +16449,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Record expense",
+        "summary": "Record an expense",
         "tags": [
           "hq.expenses"
         ],
@@ -16517,7 +16517,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Delete expense",
+        "summary": "Delete an expense",
         "tags": [
           "hq.expenses"
         ],
@@ -16609,7 +16609,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Update expense",
+        "summary": "Update an expense",
         "tags": [
           "hq.expenses"
         ],
@@ -16895,7 +16895,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Refresh",
+        "summary": "Refresh HQ's readings",
         "tags": [
           "hq.connections"
         ],
@@ -17031,7 +17031,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Manage in HQ",
+        "summary": "Manage a record in HQ",
         "tags": [
           "hq.services"
         ],
@@ -17315,7 +17315,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Restart",
+        "summary": "Restart a container",
         "tags": [
           "hq.infrastructure"
         ],
@@ -17383,7 +17383,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Start",
+        "summary": "Start a container",
         "tags": [
           "hq.infrastructure"
         ],
@@ -17451,7 +17451,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Stop",
+        "summary": "Stop a container",
         "tags": [
           "hq.infrastructure"
         ],
@@ -17980,7 +17980,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Create project",
+        "summary": "Create a project",
         "tags": [
           "hq.projects"
         ],
@@ -18048,7 +18048,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Delete project",
+        "summary": "Delete a project",
         "tags": [
           "hq.projects"
         ],
@@ -18197,7 +18197,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Dependency updates",
+        "summary": "Turn dependency updates on or off",
         "tags": [
           "hq.projects"
         ],
@@ -18421,7 +18421,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Update project",
+        "summary": "Update a project",
         "tags": [
           "hq.projects"
         ],
@@ -18489,7 +18489,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Create or update project",
+        "summary": "Create or update a project",
         "tags": [
           "hq.projects"
         ],
@@ -18557,7 +18557,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Delete receipt",
+        "summary": "Delete a receipt",
         "tags": [
           "hq.receipts"
         ],
@@ -18625,7 +18625,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Update receipt",
+        "summary": "Update a receipt",
         "tags": [
           "hq.receipts"
         ],

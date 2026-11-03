@@ -111,8 +111,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             EntryCommand,
             save_entry,
             subject_resource="calendar",
-            label="Add event",
-            wants="add an event",
+            label="Add an event",
         ),
         CapabilitySpec(
             "calendar.entry.update",
@@ -125,9 +124,8 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             "calendar",
             target_label="Event",
             target_help="The event to change.",
-            label="Edit event",
+            label="Edit an event",
             verb="Edit",
-            wants="edit the event {target}",
         ),
         CapabilitySpec(
             "calendar.entry.delete",
@@ -140,8 +138,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             "calendar",
             target_label="Event",
             target_help="The event to delete.",
-            label="Delete event",
-            wants="delete the event {target}",
+            label="Delete an event",
         ),
         CapabilitySpec(
             CHOOSE_SOURCE,

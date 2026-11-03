@@ -18,9 +18,9 @@ from hq.platform.core.audit import audit_operation
 
 from .deletion import DeleteCommand, RecordDeleted, delete_record
 from .domains import Records, host_records, load, records_of
-from .integration_specs import TARGET, TARGET_KINDS, CapabilitySpec
+from .integration_specs import TARGET_KINDS, CapabilitySpec
 from .json_schemas import choices
-from .labels import lower_first
+from .labels import lower_first, one
 from .security import Principal
 from .ui import ended
 
@@ -198,7 +198,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             command,
             records.save,
             ended(f"Add a new {title}"),
-            f"Create {title}",
+            f"Create {one(title)}",
             False,
         ),
         (
@@ -209,7 +209,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             command,
             records.upsert,
             f"Add a new {title}, or update it if it already exists. On one that exists, {lower_first(KEPT)}",
-            f"Create or update {title}",
+            f"Create or update {one(title)}",
             False,
         ),
         (
@@ -220,7 +220,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             command,
             records.save,
             ended(f"Change one {title}"),
-            f"Update {title}",
+            f"Update {one(title)}",
             True,
         ),
         (
@@ -231,7 +231,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             DeleteCommand,
             deleter(records.resource),
             ended(f"Delete one {title}"),
-            f"Delete {title}",
+            f"Delete {one(title)}",
             True,
         ),
     )
@@ -252,7 +252,6 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             label=wording.get(verb, ("", ""))[1] or label,
             # Every record's form is opened by the same word.
             verb="Edit" if verb == "update" else "",
-            wants=_wants(wording.get(verb, ("", ""))[1] or label, title, targeted=targeted),
         )
         for verb, declared, effect, permission, command_type, handler, summary, label, targeted in verbs
         if declared
@@ -264,20 +263,6 @@ def _keeping(verb: str, summary: str) -> str:
     whatever its domain's own wording says first."""
 
     return f"{summary} {KEPT}" if verb == "update" else summary
-
-
-def _wants(label: str, title: str, *, targeted: bool) -> str:
-    """What asking for a record command wants done, from its name: "delete
-    the asset {target}" from "Delete asset", "create an asset" from "Create
-    asset". "" for a name that does not end in the record's own word."""
-
-    said = lower_first(label)
-    if not said.endswith(f" {title}"):
-        return ""
-    if targeted:
-        return f"{said.removesuffix(title)}the {title} {TARGET}"
-    article = "an" if title[:1] in "aeiou" else "a"
-    return f"{said.removesuffix(title)}{article} {title}"
 
 
 def capability_specs() -> tuple[CapabilitySpec, ...]:

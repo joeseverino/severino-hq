@@ -327,7 +327,7 @@ class SettingTests(PolicyTestCase):
     def test_an_agent_rule_cannot_reach_past_its_pocket_id_grant(self):
         AgentIdentity.objects.create(client_id="example-agent", granted=["read", "write_projects"])
 
-        with self.assertRaisesMessage(ValueError, "Pocket ID does not allow example-agent to use Delete project."):
+        with self.assertRaisesMessage(ValueError, "Pocket ID does not allow example-agent to use Delete a project."):
             self.set(scope=Scope.AGENT, subject="example-agent")
 
     def test_an_agent_rule_needs_an_agent_that_has_been_seen(self):
@@ -410,7 +410,7 @@ class PageTests(PolicyTestCase):
 
         response = self.client.post(reverse("agent_policy"), form_keyed({field: Rule.ALLOW}), follow=True)
 
-        self.assertIn("Pocket ID does not allow example-agent to use Delete project.", text(response))
+        self.assertIn("Pocket ID does not allow example-agent to use Delete a project.", text(response))
         self.assertFalse(CapabilityRule.objects.exists())
 
     def test_signed_out_it_cannot_be_reached(self):
@@ -423,8 +423,8 @@ class PageTests(PolicyTestCase):
         projects = next(group for group in groups if group.label == "Projects")
         actions = [row.label for row in projects.rows]
 
-        self.assertIn("Create project", actions)
-        self.assertIn("Delete project", actions)
+        self.assertIn("Create a project", actions)
+        self.assertIn("Delete a project", actions)
         self.assertEqual(
             [row.effect for row in projects.rows],
             sorted(
@@ -507,7 +507,7 @@ class CommandTitleTests(TestCase):
         from ..integration_validation import validate_capability_spec
 
         with self.assertRaises(ImproperlyConfigured):
-            validate_capability_spec(replace(spec("project.create"), label=" Create project"))
+            validate_capability_spec(replace(spec("project.create"), label=" Create a project"))
 
     def test_a_command_type_without_a_schema_does_not_compose(self):
         from dataclasses import dataclass, replace

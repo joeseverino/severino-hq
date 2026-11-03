@@ -8,7 +8,14 @@ from django.test import SimpleTestCase, tag
 
 ROOT = Path(__file__).resolve().parents[4]
 CHECKLIST = ROOT / "docs" / "New-Domain.md"
-RULE_FILES = ("test_architecture.py", "test_domains.py", "test_domain_declaration.py")
+RULE_FILES = (
+    "test_architecture.py",
+    "test_architecture_pages.py",
+    "test_architecture_primitives.py",
+    "test_architecture_styles.py",
+    "test_domains.py",
+    "test_domain_declaration.py",
+)
 CITATION = re.compile(r"\b([A-Z]\w*Tests)\.(test_\w+)\b")
 
 

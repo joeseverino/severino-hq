@@ -102,7 +102,7 @@ class CommandViewTests(TestCase):
     def test_the_page_is_a_title_what_it_changes_and_one_button(self):
         response = self.client.get("/commands/project.create/")
 
-        self.assertEqual([button.words for button in submits(response)], ["Create project"])
+        self.assertEqual([button.words for button in submits(response)], ["Create a project"])
         self.assertNotIn("project.create", text(response))
         for built in (
             "manage_projects",
