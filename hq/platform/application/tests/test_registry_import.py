@@ -105,7 +105,7 @@ class ValidationTests(TestCase):
     def assert_refused(self, document, *fragments):
         result = run(document)
         self.assertFalse(result["ok"], result)
-        text = json.dumps(result["problems"])
+        text = json.dumps(result["error"]["details"])
         for fragment in fragments:
             self.assertIn(fragment, text)
         self.assertFalse(Project.objects.exists())
@@ -147,7 +147,7 @@ class ValidationTests(TestCase):
 
     def test_every_problem_is_reported_at_once(self):
         result = self.assert_refused({"projects": [{"name": "A"}, {"slug": "b", "name": "B", "category": "nope"}]})
-        self.assertEqual(len(result["problems"]), 2)
+        self.assertEqual(len(result["error"]["details"]), 2)
 
     def test_the_record_limit_is_enforced(self):
         document = {"projects": [{"slug": f"p-{index}", "name": "P"} for index in range(MAX_IMPORT_RECORDS + 1)]}
@@ -165,7 +165,7 @@ class ValidationTests(TestCase):
             result = run()
 
         self.assertFalse(result["ok"])
-        self.assertIn("refused while writing", json.dumps(result["problems"]))
+        self.assertIn("refused while writing", json.dumps(result["error"]["details"]))
         self.assertFalse(Project.objects.exists())
         self.assertFalse(imported_events().exists())
 

@@ -14,6 +14,7 @@ from typing import override
 from django.core.management.base import BaseCommand, CommandError
 
 from hq.platform.application.capabilities import execute_capability
+from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.security import cli_principal
 from hq.platform.application.ui import counted
 
@@ -54,16 +55,13 @@ class Command(BaseCommand):
         if options["json"]:
             self.stdout.write(json.dumps(result, default=str))
         if not result["ok"]:
-            if not options["json"]:
-                for problem in result.get("problems", ()):
+            refusal = refusal_of(result)
+            if not options["json"] and refusal.code == "invalid_input":
+                for problem in refusal.details:
                     label = f"{problem['kind']} {problem['slug'] or '#' + str(problem['index'])}"
-                    for error in problem["errors"]:
-                        self.stderr.write(f"  {label}: {error}")
-            error = result.get("error", {})
-            raise CommandError(
-                error.get("message")
-                or f"{counted(len(result.get('problems', ())), 'record')} refused. Nothing was imported."
-            )
+                    for problem_error in problem["errors"]:
+                        self.stderr.write(f"  {label}: {problem_error}")
+            raise CommandError(refusal.message)
         if options["json"]:
             return
         for kind in ("projects", "assets"):

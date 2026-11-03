@@ -35,11 +35,22 @@ from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
 from .entity_links import entity_link, kind_label, node_name, record_name
 from .infrastructure import RESOURCE_TONES, is_drifted, resource_health
+from .integration_validation import required_capability_names
+from .projection import QueryRefusal, projection_scope
 from .resource_capabilities import REMOVAL_CAPABILITY, removals_pending, resource_capabilities
 from .resource_context import record_summary, shared_names
 from .security import Capability, Principal
+from .topology_answer import TOPOLOGY_SCHEMA_VERSION, TopologyAnswer, TopologySummary
 from .topology_facts import add_connection_facts, add_observed_facts
-from .topology_lenses import TOPOLOGY_LENSES, TopologyLens, apply_lens, apply_trace, lens_for
+from .topology_lenses import (
+    MAX_TRACE_DEPTH,
+    TOPOLOGY_LENSES,
+    TRACE_DIRECTIONS,
+    TopologyLens,
+    apply_lens,
+    apply_trace,
+    lens_for,
+)
 from .topology_model import (
     Topology,
     TopologyEdge,
@@ -47,12 +58,12 @@ from .topology_model import (
     TopologyTrace,
     derived_id,
     edge_between,
+    gate_covers,
     newest_stamp,
 )
 lazy from .adoption import manages_through
 lazy from .hq_self import serving
 lazy from .posture import estate_posture
-lazy from .projection import projection_scope
 lazy from .topology_estate import add_estate
 
 _KIND_ORDER = {
@@ -152,7 +163,9 @@ def _resource_actions(
     return tuple(actions)
 
 
-def _link_node(link: ConnectionLink, *, kind: str, through: str = "") -> TopologyNode:
+def _link_node(
+    link: ConnectionLink, *, kind: str, read_capabilities: tuple[str, ...], through: str = ""
+) -> TopologyNode:
     """A node for something a connection names and HQ keeps no record of.
 
     A link carries a name and a page, and no noun for what the thing is. A
@@ -168,7 +181,31 @@ def _link_node(link: ConnectionLink, *, kind: str, through: str = "") -> Topolog
         subtitle=reached if kind == "target" else "Not read yet",
         url=link.url,
         actions=((TopologyAction("open", "Open", "read", link.url),) if link.url else ()),
+        read_capabilities=read_capabilities,
     )
+
+
+def _named_by(nodes: dict[str, TopologyNode], node: TopologyNode) -> None:
+    """Add a node a connection names, or widen who may read one another already named."""
+
+    current = nodes.get(node.id)
+    nodes[node.id] = (
+        node
+        if current is None
+        else replace(current, read_capabilities=_least_gate(current.read_capabilities, node.read_capabilities))
+    )
+
+
+def _least_gate(current: tuple[str, ...], named: tuple[str, ...]) -> tuple[str, ...]:
+    """The gate of a node more than one family names: a reader of either may be
+    told of it, so the narrower gate where one holds the other, else both,
+    since one gate cannot say either."""
+
+    if gate_covers(named, current):
+        return current
+    if gate_covers(current, named):
+        return named
+    return tuple(dict.fromkeys((*current, *named)))
 
 
 def _connection_actions(spec: ConnectionSpec) -> tuple[TopologyAction, ...]:
@@ -247,6 +284,7 @@ def _merge_controller_node(
     group_label: str,
     url: str,
     principal: Principal,
+    read_capabilities: tuple[str, ...],
     observed_at: str = "",
 ) -> None:
     """Join every distinct emitted connection workflow onto one controller.
@@ -267,6 +305,7 @@ def _merge_controller_node(
             url=url,
             observed_at=observed_at,
             actions=emitted,
+            read_capabilities=read_capabilities,
         )
     else:
         additions = tuple(item for item in emitted if all(existing.url != item.url for existing in current.actions))
@@ -274,6 +313,7 @@ def _merge_controller_node(
             current,
             observed_at=newest_stamp(current.observed_at, observed_at),
             actions=current.actions + additions,
+            read_capabilities=_least_gate(current.read_capabilities, read_capabilities),
         )
 
 
@@ -293,8 +333,8 @@ def _connection_nodes(
             nodes[node.id] = node
             if instance.controller_id:
                 _controller_edge(group, instance, node, connection_url, nodes, edges, principal)
-            _target_edges(instance, node.id, nodes, edges)
-            _dependency_edges(instance, node.id, nodes, edges)
+            _target_edges(instance, node, nodes, edges)
+            _dependency_edges(instance, node, nodes, edges)
             _ability_edges(group, connection, node.id, edges)
 
 
@@ -315,6 +355,7 @@ def _declared_ability_nodes(group, nodes, principal) -> None:
                 detail=ability.summary,
                 url=_focus_url(ability_id),
                 actions=_ability_actions(ability, ability_id, principal),
+                read_capabilities=required_capability_names(group.spec),
             ),
         )
 
@@ -341,6 +382,7 @@ def _connection_node(group, instance, spec_actions, connection_url) -> TopologyN
         kind_key=group.spec.name,
         observed_at=(instance.observed_at.isoformat() if instance.observed_at else ""),
         actions=spec_actions,
+        read_capabilities=required_capability_names(group.spec),
     )
 
 
@@ -353,16 +395,18 @@ def _controller_edge(group, instance, node, connection_url, nodes, edges, princi
         group_label=group.spec.label,
         url=connection_url,
         principal=principal,
+        read_capabilities=node.read_capabilities,
         observed_at=node.observed_at,
     )
     relation = edge_between(controller_id, node.id, "carries")
     edges[relation.id] = relation
 
 
-def _target_edges(instance, connection_id, nodes, edges) -> None:
+def _target_edges(instance, connection, nodes, edges) -> None:
+    connection_id = connection.id
     for target in instance.targets:
-        node = _link_node(target, kind="target", through=instance.label)
-        nodes.setdefault(node.id, node)
+        node = _link_node(target, kind="target", read_capabilities=connection.read_capabilities, through=instance.label)
+        _named_by(nodes, node)
         relation = edge_between(connection_id, node.id, "reaches", status=instance.status)
         edges[relation.id] = relation
         # A target that is also a declaration using this connection.
@@ -372,14 +416,15 @@ def _target_edges(instance, connection_id, nodes, edges) -> None:
             edges[relation.id] = relation
 
 
-def _dependency_edges(instance, connection_id, nodes, edges) -> None:
+def _dependency_edges(instance, connection, nodes, edges) -> None:
+    connection_id = connection.id
     for dependency in instance.dependencies:
         resource_id = f"resource:{dependency.resource_key}"
         if dependency.resource_key and resource_id in nodes:
             target_id = resource_id
         else:
-            node = _link_node(dependency, kind="dependency")
-            nodes.setdefault(node.id, node)
+            node = _link_node(dependency, kind="dependency", read_capabilities=connection.read_capabilities)
+            _named_by(nodes, node)
             target_id = node.id
         relation = edge_between(connection_id, target_id, "used_by", status=instance.status)
         edges[relation.id] = relation
@@ -532,7 +577,7 @@ def _derive(principal: Principal) -> Topology:
     )
     ordered_edges = tuple(sorted(edges.values(), key=lambda edge: (edge.kind, edge.source, edge.target)))
     unmet = tuple(
-        (standing.check.id, standing.reading.evidence, standing.reading.met is not None)
+        (standing.check.id, standing.reading.evidence, standing.reading.read_capabilities)
         for standing in estate_posture(groups).unmet
     )
     return Topology(ordered_nodes, ordered_edges, unmet)
@@ -589,21 +634,46 @@ def _governs_edges(groups, resources, edges: dict[str, TopologyEdge]) -> None:
                     edges[relation.id] = relation
 
 
+class InvalidTopologyQuery(QueryRefusal):
+    """A narrowing input the topology cannot be read by; ``reason`` says which and what would."""
+
+
+def _depth(depth: int) -> int:
+    """The hops a trace was asked to follow, refusing a count outside 1 to ``MAX_TRACE_DEPTH``."""
+
+    if not 1 <= depth <= MAX_TRACE_DEPTH:
+        raise InvalidTopologyQuery(f"topology: depth is a whole number from 1 to {MAX_TRACE_DEPTH}.")
+    return depth
+
+
+def _lens(name: str) -> TopologyLens | None:
+    """The lens ``name`` asks for, none when it asks for none, refusing a name no lens has."""
+
+    if not name:
+        return None
+    selected = lens_for(name)
+    if selected is None:
+        names = ", ".join(item.name for item in TOPOLOGY_LENSES)
+        raise InvalidTopologyQuery(f"topology: lens must be one of {names}.")
+    return selected
+
+
+def _counts(topology: Topology) -> TopologySummary:
+    kinds: dict[str, int] = {}
+    for node in topology.nodes:
+        kinds[node.kind] = kinds.get(node.kind, 0) + 1
+    return {"nodes": len(topology.nodes), "edges": len(topology.edges), "kinds": dict(sorted(kinds.items()))}
+
+
 def serialize_topology(
     topology: Topology,
     *,
     lens: TopologyLens | None = None,
     trace: TopologyTrace | None = None,
-) -> dict[str, Any]:
-    counts: dict[str, int] = {}
-    for node in topology.nodes:
-        counts[node.kind] = counts.get(node.kind, 0) + 1
+) -> TopologyAnswer:
     return {
-        "ok": True,
-        "schema_version": 2,
-        # Which lens produced this payload, and every lens that could have.
+        "schema_version": TOPOLOGY_SCHEMA_VERSION,
         "lens": lens.name if lens else None,
-        "lenses": [{"name": item.name, "label": item.label, "summary": item.summary} for item in TOPOLOGY_LENSES],
         "trace": (
             {
                 "focus": trace.focus,
@@ -614,11 +684,7 @@ def serialize_topology(
             if trace
             else None
         ),
-        "summary": {
-            "nodes": len(topology.nodes),
-            "edges": len(topology.edges),
-            "kinds": dict(sorted(counts.items())),
-        },
+        "summary": _counts(topology),
         "nodes": [asdict(node) for node in topology.nodes],
         "edges": [asdict(edge) for edge in topology.edges],
     }
@@ -630,13 +696,37 @@ def topology(
     lens: str = "",
     focus: str = "",
     direction: str = "both",
-    depth: int | str = 2,
-) -> dict[str, Any]:
-    """Return the shared serialized projection for machine delivery adapters."""
+    depth: int = 2,
+) -> TopologyAnswer:
+    """The shared serialized projection for machine delivery adapters.
 
-    selected = lens_for(lens) if lens else None
+    Nodes come with a lens or a focus. Asked for neither, it answers what the
+    estate holds and the lenses that would narrow it, since the whole graph is
+    more than a client can read. An input that names nothing is refused with
+    the choices that would.
+    """
+
+    principal.require(Capability.READ)
+    selected = _lens(lens)
+    # An adapter sends an empty value for a parameter it was not given.
+    direction = direction or "both"
+    if direction not in TRACE_DIRECTIONS:
+        raise InvalidTopologyQuery(f"topology: direction must be one of {', '.join(TRACE_DIRECTIONS)}.")
+    hops = _depth(depth)
     projection = derive_topology(principal=principal)
+    if not selected and not focus:
+        return {
+            "schema_version": TOPOLOGY_SCHEMA_VERSION,
+            "lens": None,
+            "trace": None,
+            "summary": _counts(projection),
+            "lenses": [{"name": item.name, "label": item.label, "summary": item.summary} for item in TOPOLOGY_LENSES],
+        }
     if selected is not None:
         projection = apply_lens(projection, selected)
-    projection, trace = apply_trace(projection, focus, direction=direction, depth=depth)
+    if focus and focus not in {node.id for node in projection.nodes}:
+        raise InvalidTopologyQuery(
+            "topology: focus names no node here; it is a node's id, as a lens's answer gives each one."
+        )
+    projection, trace = apply_trace(projection, focus, direction=direction, depth=hops)
     return serialize_topology(projection, lens=selected, trace=trace)

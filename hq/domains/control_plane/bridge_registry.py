@@ -10,9 +10,9 @@ import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from pydantic import TypeAdapter
 from pydantic.json_schema import JsonSchemaMode
 
+from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.ui import ended
 
 from .connection_shapes import SHAPES
@@ -171,7 +171,7 @@ def components(
     """One type as component schemas: itself under ``name``, and each type it
     is built from under the owner's name followed by its own."""
 
-    raw = TypeAdapter(schema).json_schema(mode=mode, ref_template=REFERENCE + "{model}")
+    raw = json_schema(schema, mode=mode, ref_template=REFERENCE + "{model}")
     nested = raw.pop("$defs", {})
     prefix = owner or name
     rename = {inner: prefix + inner for inner in nested}

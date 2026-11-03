@@ -12,7 +12,7 @@ from hq.domains.docs_index.importer import (
 )
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
-from hq.platform.core.audit import operation_context, record_event
+from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
 
 from .command_fields import Describe, Names
@@ -20,10 +20,13 @@ from .entity_links import EntityLink, entity_link
 from .labels import plural
 from .projection import listing
 from .record_errors import PolicyError
+from .record_fields import Notes, PublishedAt
 from .record_saves import Held, Link, linked_saver
 from .references import Mention, Mentions
+from .refusal_status import refuse
 from .security import Capability, Principal
 from .sensitivity import safe_records
+from .ui import counted
 
 MAX_MANIFEST_ITEMS = 2000
 SYNC = "documentation.sync"
@@ -101,19 +104,31 @@ def related_documents(
     )
 
 
+# What a sync of records from a manifest does with the records HQ holds,
+# said once for each sync that takes it.
+type UpdateExisting = Annotated[bool, Describe("Update records HQ already holds.")]
+type PruneOrphans = Annotated[bool, Describe("Delete records the manifest no longer lists.")]
+type ConfirmPrune = Annotated[bool, Describe("Confirms the delete that prune_orphans asks for.")]
+
+
 @dataclass(frozen=True, slots=True)
 class DocumentationSyncCommand:
     manifest: Annotated[list[dict[str, Any]], Describe("The documentation records to sync, one per doc.")]
-    update_existing: Annotated[bool, Describe("Update records HQ already holds.")] = True
+    update_existing: UpdateExisting = True
     report_orphans: Annotated[bool, Describe("Report records the manifest no longer lists.")] = False
-    prune_orphans: Annotated[bool, Describe("Delete records the manifest no longer lists.")] = False
-    confirm_prune: Annotated[bool, Describe("Confirms the delete that prune_orphans asks for.")] = False
+    prune_orphans: PruneOrphans = False
+    confirm_prune: ConfirmPrune = False
+
+
+# The fields a doc is added and changed by that take no default, said once for both.
+type DocId = Annotated[str, Describe("The doc's ID in the vault.")]
+type DocumentationTitle = Annotated[str, Describe("The doc's title.")]
 
 
 @dataclass(frozen=True, slots=True)
 class DocumentationCommand:
-    doc_id: Annotated[str, Describe("The doc's ID in the vault.")]
-    title: Annotated[str, Describe("The doc's title.")]
+    doc_id: DocId
+    title: DocumentationTitle
     doc_type: Annotated[str, Describe("What type of doc it is.")] = "runbook"
     system_service: Annotated[str, Describe("The system or service it is about.")] = ""
     environment: Annotated[str, Describe("Where that system runs.")] = "other"
@@ -123,8 +138,8 @@ class DocumentationCommand:
     github_path: Annotated[str, Describe("Its path in a repository.")] = ""
     external_url: Annotated[str, Describe("Where it is published outside HQ.")] = ""
     last_reviewed: Annotated[date | None, Describe("When it was last checked against what it describes.")] = None
-    published_at: Annotated[date | None, Describe("When it was published.")] = None
-    notes: Annotated[str, Describe("Anything else worth keeping.")] = ""
+    published_at: PublishedAt = None
+    notes: Notes = ""
     related_projects: Annotated[tuple[str, ...], Names("projects"), Describe("The projects this doc covers.")] = ()
     related_assets: Annotated[tuple[str, ...], Names("assets"), Describe("The assets this doc covers.")] = ()
     related_expenses: Annotated[
@@ -206,15 +221,11 @@ def sync_documentation(
         raise PolicyError("Every manifest record must be a JSON object.")
     problems = validate_manifest_data(manifest)
     if problems:
-        return {"ok": False, "problems": problems}
+        return refuse("invalid_input", f"{counted(len(problems), 'record')} refused. Nothing was synced.", problems)
     if prune_orphans and not confirm_prune:
         raise PolicyError("confirm_prune must be true when prune_orphans is true")
 
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation=SYNC,
-    ):
+    with audit_operation(operation=SYNC, principal=principal):
         stats = import_manifest_data(
             manifest,
             update_existing=update_existing,

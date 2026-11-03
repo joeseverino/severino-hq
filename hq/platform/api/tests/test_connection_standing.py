@@ -6,7 +6,7 @@ from django.test import TestCase, override_settings
 from hq.platform.application.tests.test_page_projections import page_lists, populate, served_lists
 
 from ..testing import ContractClient
-from .test_api import ISSUER, RESOURCE, _serving, _token
+from .tokens import ISSUER, RESOURCE, _serving, _token
 
 
 @override_settings(OIDC_ISSUER=ISSUER, SEVERINO_API_RESOURCE=RESOURCE, SEVERINO_SITE_HOST="hq.example.com")

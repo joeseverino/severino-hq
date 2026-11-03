@@ -2,7 +2,8 @@
 
    The viewer reads its look from `--scalar-*` custom properties and keeps its
    own rules in cascade layers it declares after HQ's, so they outrank
-   every layered HQ rule. This sheet is unlayered, which outranks both, and
+   every layered HQ rule. This sheet is unlayered, which outranks both (but
+   for one rule in HQ's own layers, which takes HQ's controls back out), and
    is loaded by this page only. It holds no color, size or face of its own:
    every value is an HQ token, and each color token already carries its
    light and dark halves, so the reference follows `color-scheme` with the
@@ -13,6 +14,10 @@
    viewer pins or floats can be drawn over HQ's header. */
 .content:has(> .api-reference) { max-width: none; padding: 0; overflow-x: visible; isolation: isolate; }
 .content > .api-reference { margin: 0; }
+
+/* The viewer pins its sidebar and section bars this far down, under HQ's
+   header, which is one row of one height at every width. */
+.api-reference { --scalar-custom-header-height: var(--site-header-height); }
 
 /* Said until the viewer has mounted; one that has not mounted after a while
    is said to have failed, with the document itself. Both lines share one
@@ -135,6 +140,20 @@
   --scalar-sidebar-search-color: var(--muted);
 }
 
+/* HQ draws its controls with element rules (a link's ink, a field's box in
+   base.css, a button's raised box in page.css), so each reaches the controls
+   the viewer draws and gives them whatever the viewer's own rules leave
+   unsaid: a raised shadow and a control's height on a dotted "Example", a box
+   round each status tab. The viewer's controls are its own, so each of HQ's
+   layers gives way there to the layers before it, and the viewer draws them
+   alone. */
+@layer base {
+  .api-reference :is(button, input, select, textarea, a) { all: revert-layer; }
+}
+@layer components {
+  .api-reference :is(button, input, select, textarea, a) { all: revert-layer; }
+}
+
 /* The viewer's own utilities are unlayered and scoped two classes deep, so a
    rule that takes something away names one class more. */
 
@@ -151,6 +170,46 @@
 /* A group has no operations of its own: its section is its heading, over the
    domains it holds, with no empty list beside it. */
 .api-reference .scalar-app .endpoints-card:not(:has(a)) { display: none; }
+
+/* Every heading the viewer draws takes one size, its `--font-size`; each
+   level of the tree is given a step of its own: a section at the top (a group
+   or a domain outside one), a domain inside a group, then an operation. */
+.api-reference .scalar-app .section-header:has(h2) { --font-size: var(--text-4xl); }
+.api-reference .scalar-app .tag-section-nested .section-header:has(h2) { --font-size: var(--text-2xl); }
+.api-reference .scalar-app .operation-title { --font-size: var(--text-xl); }
+
+/* A path in a section's list of operations wraps at the card's edge rather
+   than running under it. */
+.api-reference .scalar-app .endpoints .endpoint { white-space: normal; }
+.api-reference .scalar-app .endpoints .endpoint-path { min-width: 0; overflow-wrap: anywhere; }
+
+/* The viewer cuts a long value to one line behind an ellipsis: a property's
+   type and the values it takes, its default and example, an operation's path.
+   Each is what a reader came to read, so it wraps at the column's edge and is
+   read whole; a name with no break in it breaks where it meets the edge. */
+.api-reference .scalar-app :is(
+  .property-detail-truncate > .property-detail-value,
+  .property-example-value span,
+  .property-default-value span,
+  .endpoint-label-path
+) { white-space: normal; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; }
+
+/* A code sample keeps its lines but wraps each at the column's edge, so a
+   reader on a phone reads the whole request and answer without scrolling
+   sideways; copying it still copies the lines as written. Its highlighting
+   sets each token's own spacing, so the tokens are told too. */
+.api-reference .scalar-app .scalar-code-block :is(pre, pre *) { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* An answer's statuses take a second row rather than run past the card. */
+.api-reference .scalar-app .tab-list { flex-wrap: wrap; }
+
+/* Where the viewer stacks an operation into one column, its heading leads and
+   the badges and actions follow it. */
+@container references-container (width <= 900px) {
+  .api-reference .scalar-app .operation-layout {
+    grid-template-areas: "heading" "badge" "description" "examples" "details";
+  }
+}
 
 /* One sample language is offered, so there is nothing to choose between. */
 .api-reference .scalar-app .scalar-reference-intro-clients { display: none; }

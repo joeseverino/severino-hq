@@ -1,0 +1,16 @@
+id: refusal-built-by-refuse
+valid:
+  - 'return refuse("precondition", reason)'
+  - 'return {"ok": True, "started": True}'
+  - 'result["github"] = {"ok": False, "error": "This project has no GitHub repository address."}'
+  - 'operation.result = {"ok": False, "message": "Unresolvable", "reason": "Unresolvable"}'
+  - 'return {"ok": False, "records": [], "error": failures[0]}'
+  - 'shown = {"error": {"code": "example", "message": "Example."}}'
+invalid:
+  - 'return {"ok": False, "error": {"code": "precondition", "message": reason}}'
+  - "return {'ok': False, 'error': {'code': code, 'message': said}}"
+  - |
+    return {
+        "ok": False,
+        "error": {"code": "precondition", "message": "No project is opted in."},
+    }

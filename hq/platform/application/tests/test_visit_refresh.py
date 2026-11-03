@@ -18,9 +18,10 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory, ReadRequest
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.providers import registry_label
+from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.models import AuditLog
 
-from .. import visit_refresh
+from .. import cadence, visit_refresh
 from ..asks import READ_WAITING, Standing, read_standing, watched
 from ..capabilities import execute_capability
 from ..freshness import VISIT_EVERY
@@ -95,7 +96,7 @@ class VisitRefreshTests(TestCase):
         self.assertEqual(result["requested"], [FAST])
         self.assertTrue(result["live"])
         self.assertEqual(asked(), {FAST})
-        self.assertEqual(len(rung), 1)
+        self.assertEqual(rung.count(cadence.ring_doorbell), 1)
 
     def test_a_fresh_reading_is_left_alone_however_often_the_page_is_opened(self):
         store(FAST, age=VISIT_EVERY - timedelta(seconds=5))
@@ -127,7 +128,7 @@ class VisitRefreshTests(TestCase):
             result = self.ask()
 
         self.assertEqual(sorted(result["requested"]), sorted(kinds))
-        self.assertEqual(len(rung), 1)
+        self.assertEqual(rung.count(cadence.ring_doorbell), 1)
 
     def test_opening_the_dashboard_asks_again_for_what_its_queue_says_github_holds(self):
         store(REPOSITORY_KIND, age=OLD)
@@ -453,7 +454,7 @@ class VisitRefreshViewTests(TestCase):
         store(FAST, age=OLD)
 
     def post(self, client=None, **body):
-        return (client or self.client).post(self.url, {"subject": "example", "name": "known", **body})
+        return (client or self.client).post(self.url, form_keyed({"subject": "example", "name": "known", **body}))
 
     def test_it_needs_a_session(self):
         with page(FAST):
@@ -483,6 +484,21 @@ class VisitRefreshViewTests(TestCase):
         self.assertEqual(self.client.get(found["status"]).json()["state"], found["state"])
         row = AuditLog.objects.get(object_type="Read request")
         self.assertEqual((row.metadata["actor"], row.metadata["operation"]), (self.user.username, VISIT_REFRESH))
+
+    def test_a_refusal_in_a_code_hq_does_not_hold_is_answered_as_operation_failed(self):
+        self.client.force_login(self.user)
+        raw = {"ok": False, "error": {"code": "example_unlisted", "details": "/srv/example/raw-detail"}}
+
+        with (
+            page(FAST),
+            patch("hq.domains.control_plane.visit_views.execute_posted", return_value=raw),
+            self.assertLogs("severino.capabilities", "ERROR"),
+        ):
+            response = self.post()
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json()["error"]["code"], "operation_failed")
+        self.assertNotIn(b"raw-detail", response.content)
 
     def test_opening_or_prefetching_the_address_reads_nothing(self):
         self.client.force_login(self.user)
@@ -527,7 +543,7 @@ class VisitRefreshViewTests(TestCase):
 
         self.client.force_login(self.user)
 
-        for raised, code in ((PolicyError("The example is busy."), "precondition"), (ValueError(), "operation_failed")):
+        for raised, code in ((PolicyError("The example is busy."), "precondition"), (ValueError(), "rejected")):
             with self.subTest(code=code), page(FAST), patch.object(visit_refresh, "request_reads", side_effect=raised):
                 response = self.post()
                 self.assertEqual(response.json()["error"]["code"], code)

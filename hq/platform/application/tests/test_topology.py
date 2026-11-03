@@ -25,6 +25,7 @@ from ..connections import (
 from ..plugin_testing import offering
 from ..security import Capability, Principal
 from ..topology import (
+    TOPOLOGY_SCHEMA_VERSION,
     derive_topology,
     serialize_topology,
     topology as serialized_topology,
@@ -237,7 +238,7 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
 
         payload = serialize_topology(self.project(MANAGE))
 
-        self.assertEqual(payload["schema_version"], 2)
+        self.assertEqual(payload["schema_version"], TOPOLOGY_SCHEMA_VERSION)
         self.assertEqual(payload["summary"]["nodes"], len(payload["nodes"]))
         self.assertEqual(payload["summary"]["edges"], len(payload["edges"]))
         self.assertIn(f"resource:{SENTINEL_RESOURCE}", {node["id"] for node in payload["nodes"]})
@@ -772,17 +773,12 @@ class TopologyLensTests(TestCase):
                 self.assertLessEqual(len(narrowed.nodes), len(whole.nodes))
                 self.assertLessEqual({n.id for n in narrowed.nodes}, whole_ids)
 
-    def test_serialization_names_the_applied_lens_and_every_available_one(self):
+    def test_serialization_names_the_applied_lens(self):
         with host_only():
             applied = serialized_topology(principal=READ, lens="unobserved-resources")
-            unknown = serialized_topology(principal=READ, lens="not-a-lens")
             whole = serialized_topology(principal=READ)
         self.assertEqual(applied["lens"], "unobserved-resources")
-        self.assertEqual([i["name"] for i in applied["lenses"]], [lens.name for lens in topology_lenses()])
         self.assertLess(applied["summary"]["nodes"], whole["summary"]["nodes"])
-        # An unrecognized lens is the whole graph, said out loud.
-        self.assertIsNone(unknown["lens"])
-        self.assertEqual(unknown["summary"], whole["summary"])
 
     def test_a_lens_costs_no_extra_query(self):
         with (
@@ -875,7 +871,8 @@ class MeasuredNodeTests(TestCase):
         self._measure("measured.example.com")
 
         with offering(self._spec("measured.example.com"), alone=True):
-            payload = serialized_topology(principal=READ)
+            measured = next(n for n in derive_topology(principal=READ).nodes if n.label == "measured.example.com")
+            payload = serialized_topology(principal=READ, focus=measured.id, depth=1)
 
         node = next(n for n in payload["nodes"] if n["label"] == "measured.example.com")
         self.assertEqual(node["pageviews"], 412)

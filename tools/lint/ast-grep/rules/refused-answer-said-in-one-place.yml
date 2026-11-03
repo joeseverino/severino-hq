@@ -1,0 +1,51 @@
+# A refused answer becomes what a person sees in one place: web_writes.refused
+# says its own sentence on the form or the next page, and
+# web_writes.refusal_response answers with it at its code's status. Both read
+# it through refusal_status.refusal_of, which a view also reads for a sentence
+# it hands on (a standing, a fragment's failure). A view that opens the
+# envelope by hand picks a status of its own, or swaps HQ's sentence for one
+# it wrote, and the next view does it differently.
+#
+# The application's and the MCP door's readers go through refusal_of too;
+# refusal_status and web_writes are where the envelope is read.
+#
+# The exceptions: the identity provider's back-channel logout, which answers
+# another server, where the status it chooses tells that server whether to
+# retry, which no refusal's own status says. And two readers of a result that
+# is no capability's envelope, only a dict with an "error" key of its own: a
+# refresh's sub-results (projects.refresh_summary) and the DNS resolver's
+# answer (lookup.look_up_address).
+id: refused-answer-said-in-one-place
+language: python
+severity: error
+message: A capability's refusal is read out of its answer by hand.
+note: >-
+  Say it with web_writes.refused (on the form, or the next page's messages),
+  answer with web_writes.refusal_response, or read refusal_of(answer) for its
+  sentence and status.
+files:
+  - "hq/platform/core/**"
+  - "hq/domains/**"
+  - "hq/platform/application/**"
+  - "hq/platform/mcp/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  - "hq/platform/core/oidc_logout.py"
+  - "hq/platform/application/refusal_status.py"
+  - "hq/platform/application/web_writes.py"
+rule:
+  not:
+    inside:
+      stopBy: end
+      kind: function_definition
+      has:
+        field: name
+        regex: ^(refresh_summary|look_up_address)$
+  any:
+    - pattern: $ANSWER["error"]
+    # As written inside an f-string's braces.
+    - pattern: $ANSWER['error']
+    - pattern: $ANSWER.get("error")
+    - pattern: '"error" in $ANSWER'

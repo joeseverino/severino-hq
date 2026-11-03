@@ -1,4 +1,73 @@
 {
+  "assetUpdateV2": {
+    "request": {
+      "payload": {
+        "total_cost": "12.00"
+      },
+      "target": "example-box"
+    },
+    "responses": {
+      "200": {
+        "data": {
+          "asset": {
+            "business_use_percentage": 40,
+            "category": "other",
+            "estimated_deductible_amount": "4.80",
+            "infrastructure": "",
+            "item_name": "Example box",
+            "notes": "Kept.",
+            "payment_method": "",
+            "purchase_date": null,
+            "relationships": {
+              "content": [],
+              "documentation": [],
+              "expense_ids": [],
+              "projects": []
+            },
+            "serial_number": "",
+            "slug": "example-box",
+            "status": "active",
+            "total_cost": "12.00",
+            "updated_at": "2026-01-15T09:30:00+00:00",
+            "vendor": "",
+            "warranty_date": null
+          },
+          "created": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "capabilitiesV2": {
+    "responses": {
+      "403": {
+        "error": {
+          "code": "forbidden",
+          "message": "Refused."
+        },
+        "ok": false
+      }
+    }
+  },
+  "documentationSyncV2": {
+    "responses": {
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "details": [
+            {
+              "doc_id": "",
+              "errors": [
+                "missing doc_id"
+              ]
+            }
+          ],
+          "message": "1 record refused. Nothing was synced."
+        },
+        "ok": false
+      }
+    }
+  },
   "executeV2": {
     "responses": {
       "400": {
@@ -18,7 +87,40 @@
       "404": {
         "error": {
           "code": "unknown_capability",
-          "message": "Unknown capability 'nope.nothing'."
+          "details": {
+            "next": {
+              "arguments": {},
+              "tool": "describe_capabilities"
+            }
+          },
+          "message": "Unknown capability 'nope.nothing'. describe_capabilities lists the ones this caller may run."
+        },
+        "ok": false
+      }
+    }
+  },
+  "expenseUpdateV2": {
+    "responses": {
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "details": [
+            {
+              "loc": [
+                "target"
+              ],
+              "msg": "Input should be a valid integer",
+              "type": "int_parsing"
+            }
+          ],
+          "message": "expense.update: target must be a valid integer."
+        },
+        "ok": false
+      },
+      "403": {
+        "error": {
+          "code": "forbidden",
+          "message": "api principal 'example-automation' lacks 'write_expenses'."
         },
         "ok": false
       }
@@ -26,6 +128,20 @@
   },
   "findingsV2": {
     "responses": {
+      "200": {
+        "data": {
+          "findings": [],
+          "rule": null,
+          "schema_version": 2,
+          "summary": {
+            "findings": 0,
+            "returned": 0,
+            "severities": {},
+            "truncated": false
+          }
+        },
+        "ok": true
+      },
       "400": {
         "error": {
           "code": "invalid_input",
@@ -123,6 +239,15 @@
       "404": {
         "error": {
           "code": "not_found",
+          "details": {
+            "identifier": "key",
+            "next": {
+              "arguments": {
+                "name": "infrastructure.resources"
+              },
+              "tool": "list_resource"
+            }
+          },
           "message": "That record was not found."
         },
         "ok": false
@@ -134,6 +259,15 @@
       "404": {
         "error": {
           "code": "not_found",
+          "details": {
+            "identifier": "name",
+            "next": {
+              "arguments": {
+                "name": "machines"
+              },
+              "tool": "list_resource"
+            }
+          },
           "message": "No machine has that name."
         },
         "ok": false
@@ -169,6 +303,15 @@
       "404": {
         "error": {
           "code": "not_found",
+          "details": {
+            "identifier": "slug",
+            "next": {
+              "arguments": {
+                "name": "projects"
+              },
+              "tool": "list_resource"
+            }
+          },
           "message": "No record has that slug."
         },
         "ok": false
@@ -190,6 +333,27 @@
       }
     }
   },
+  "hqImportV2": {
+    "responses": {
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "details": [
+            {
+              "errors": [
+                "slug is required."
+              ],
+              "index": 1,
+              "kind": "project",
+              "slug": ""
+            }
+          ],
+          "message": "1 record refused. Nothing was imported."
+        },
+        "ok": false
+      }
+    }
+  },
   "infrastructureReconcileV2": {
     "responses": {
       "409": {
@@ -198,6 +362,48 @@
           "message": "This record is switched off in HQ."
         },
         "ok": false
+      }
+    }
+  },
+  "listActionItemsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 3,
+          "items": [
+            {
+              "action": "",
+              "detail": "A test from outside your network got an answer on this port.",
+              "label": "sentinel-dns is open to the internet on port 443",
+              "since": "",
+              "source": "Infrastructure",
+              "status": "serious",
+              "url": "/infrastructure/findings/?rule=perimeter-open"
+            },
+            {
+              "action": "",
+              "detail": "The test did not run because the machine reported no public address.",
+              "label": "HQ could not test whether sentinel-dns is open to the internet",
+              "since": "",
+              "source": "Infrastructure",
+              "status": "attention",
+              "url": "/infrastructure/findings/?rule=perimeter-unchecked"
+            },
+            {
+              "action": "Open service",
+              "detail": "Resolves to 192.0.2.10, a documentation address. Nothing answers there.",
+              "label": "sentinel.example.test is not set up properly",
+              "since": "",
+              "source": "Services",
+              "status": "attention",
+              "url": "/infrastructure/services/sentinel.example.test/"
+            }
+          ],
+          "next": null,
+          "total": 3,
+          "truncated": false
+        },
+        "ok": true
       }
     }
   },
@@ -218,7 +424,7 @@
           "days": 28,
           "end": "2026-01-14",
           "items": [],
-          "next": "",
+          "next": null,
           "sample_interval": 1,
           "start": "2025-12-18",
           "total": null,
@@ -234,11 +440,22 @@
         "data": {
           "count": 0,
           "items": [],
-          "next": "",
+          "next": null,
           "total": 0,
           "truncated": false
         },
         "ok": true
+      }
+    }
+  },
+  "listConnectionStandingV2": {
+    "responses": {
+      "403": {
+        "error": {
+          "code": "forbidden",
+          "message": "api principal 'example-automation' lacks 'read'."
+        },
+        "ok": false
       }
     }
   },
@@ -259,8 +476,8 @@
         "data": {
           "count": 0,
           "items": [],
-          "next": "",
-          "total": null,
+          "next": null,
+          "total": 0,
           "truncated": false
         },
         "ok": true
@@ -273,8 +490,131 @@
         "data": {
           "count": 0,
           "items": [],
-          "next": "",
+          "next": null,
           "total": 0,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listCredentialsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 10,
+          "items": [
+            {
+              "credential_refusal": "",
+              "label": "ACME certificate authority",
+              "provider": "acme",
+              "tally": []
+            },
+            {
+              "credential_refusal": "",
+              "label": "AdGuard Home",
+              "provider": "adguard",
+              "tally": [
+                {
+                  "count": 1,
+                  "state": "Readable"
+                },
+                {
+                  "count": 3,
+                  "state": "Never read"
+                }
+              ]
+            },
+            {
+              "credential_refusal": "",
+              "label": "Cloudflare API",
+              "provider": "cloudflare_api",
+              "tally": [
+                {
+                  "count": 8,
+                  "state": "Never read"
+                }
+              ]
+            },
+            {
+              "credential_refusal": "",
+              "label": "Cloudflare DNS",
+              "provider": "cloudflare_dns",
+              "tally": [
+                {
+                  "count": 2,
+                  "state": "Never read"
+                }
+              ]
+            },
+            {
+              "credential_refusal": "",
+              "label": "GitHub App",
+              "provider": "github_app",
+              "tally": [
+                {
+                  "count": 3,
+                  "state": "Never read"
+                }
+              ]
+            },
+            {
+              "credential_refusal": "",
+              "label": "Nginx Proxy Manager",
+              "provider": "npm",
+              "tally": [
+                {
+                  "count": 6,
+                  "state": "Never read"
+                }
+              ]
+            },
+            {
+              "credential_refusal": "",
+              "label": "1Password",
+              "provider": "onepassword",
+              "tally": []
+            },
+            {
+              "credential_refusal": "",
+              "label": "Portainer",
+              "provider": "portainer",
+              "tally": [
+                {
+                  "count": 7,
+                  "state": "Never read"
+                }
+              ]
+            },
+            {
+              "credential_refusal": "",
+              "label": "SSH",
+              "provider": "ssh",
+              "tally": [
+                {
+                  "count": 1,
+                  "state": "Readable"
+                },
+                {
+                  "count": 1,
+                  "state": "Never read"
+                }
+              ]
+            },
+            {
+              "credential_refusal": "",
+              "label": "Tailscale",
+              "provider": "tailscale",
+              "tally": [
+                {
+                  "count": 5,
+                  "state": "Never read"
+                }
+              ]
+            }
+          ],
+          "next": null,
+          "total": 10,
           "truncated": false
         },
         "ok": true
@@ -287,7 +627,7 @@
         "data": {
           "count": 0,
           "items": [],
-          "next": "",
+          "next": null,
           "total": 0,
           "truncated": false
         },
@@ -301,7 +641,7 @@
         "data": {
           "count": 0,
           "items": [],
-          "next": "",
+          "next": null,
           "total": 0,
           "truncated": false
         },
@@ -345,10 +685,10 @@
               "label": "Connections",
               "status": "",
               "url": "/infrastructure/connections/",
-              "value": "4"
+              "value": "2"
             }
           ],
-          "next": "",
+          "next": null,
           "total": 4,
           "truncated": false
         },
@@ -362,7 +702,7 @@
         "data": {
           "count": 0,
           "items": [],
-          "next": "",
+          "next": null,
           "total": 0,
           "truncated": false
         },
@@ -393,46 +733,41 @@
           "count": 1,
           "items": [
             {
-              "conditions": [
-                {
-                  "message": "Matches HQ's settings.",
-                  "reason": "Observed",
-                  "since": "2026-01-15T09:30:00+00:00",
-                  "status": true,
-                  "type": "Ready"
-                }
-              ],
               "enabled": true,
-              "generation": 1,
               "health": {
                 "label": "Working",
                 "message": "Matches HQ's settings.",
                 "reason": "Observed",
                 "state": "healthy"
               },
-              "id": "5da6c038-f78f-583a-b073-5da59683c5b1",
               "in_sync": true,
               "key": "sentinel-rewrite",
               "kind": "adguard.rewrite",
               "last_observed_at": "2026-01-15T09:30:00+00:00",
-              "observed_generation": 1,
-              "public_effect": false,
-              "spec": {
-                "answer": "192.0.2.10",
-                "domain": "sentinel.example.test"
-              },
-              "status": {
-                "answer": "192.0.2.10",
-                "domain": "sentinel.example.test"
-              },
-              "updated_at": "2026-01-15T09:30:00+00:00"
+              "public_effect": false
             }
           ],
-          "next": "",
+          "next": null,
           "total": 1,
           "truncated": false
         },
         "ok": true
+      },
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "details": [
+            {
+              "loc": [
+                "kind"
+              ],
+              "msg": "Input should be 'tls.certificate', 'tls.uploaded_certificate', 'npm.proxy_host', 'github.delivery', 'portainer.stack', 'portainer.container', 'tailscale.device', 'tailscale.policy', 'network', 'pki.authority', 'machine', 'tls.delivery_target', 'caddy.route', 'adguard.rewrite', 'cloudflare.dns_record', 'cloudflare.zone' or 'cloudflare.contact_inbox'",
+              "type": "literal_error"
+            }
+          ],
+          "message": "infrastructure.resources: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox."
+        },
+        "ok": false
       }
     }
   },
@@ -442,7 +777,7 @@
         "data": {
           "count": 0,
           "items": [],
-          "next": "",
+          "next": null,
           "total": 0,
           "truncated": false
         },
@@ -460,7 +795,7 @@
               "slug": "selected-over-the-wire"
             }
           ],
-          "next": "",
+          "next": null,
           "total": 1,
           "truncated": false
         },
@@ -488,6 +823,13 @@
           "message": "api principal 'example-automation' lacks 'read'."
         },
         "ok": false
+      },
+      "500": {
+        "error": {
+          "code": "operation_failed",
+          "message": "This request could not be executed."
+        },
+        "ok": false
       }
     }
   },
@@ -497,7 +839,7 @@
         "data": {
           "count": 0,
           "items": [],
-          "next": "",
+          "next": null,
           "total": 0,
           "truncated": false
         },
@@ -511,7 +853,7 @@
         "data": {
           "count": 0,
           "items": [],
-          "next": "",
+          "next": null,
           "total": 0,
           "truncated": false
         },
@@ -526,43 +868,10 @@
           "count": 1,
           "items": [
             {
-              "facets": [
-                {
-                  "id": "runtime",
-                  "label": "Container",
-                  "present": false,
-                  "resources": [],
-                  "state": ""
-                },
-                {
-                  "id": "dns",
-                  "label": "DNS",
-                  "present": true,
-                  "resources": [
-                    "sentinel-rewrite"
-                  ],
-                  "state": "good"
-                },
-                {
-                  "id": "proxy",
-                  "label": "Proxy",
-                  "present": false,
-                  "resources": [],
-                  "state": ""
-                },
-                {
-                  "id": "certificate",
-                  "label": "Certificate",
-                  "present": false,
-                  "resources": [],
-                  "state": ""
-                }
-              ],
               "faults": [
                 "Resolves to 192.0.2.10, a documentation address. Nothing answers there."
               ],
               "hostname": "sentinel.example.test",
-              "mark": "",
               "origin": {
                 "address": "192.0.2.10",
                 "container": "",
@@ -573,8 +882,8 @@
               "status_label": "Incomplete"
             }
           ],
-          "next": "",
-          "total": null,
+          "next": null,
+          "total": 1,
           "truncated": false
         },
         "ok": true
@@ -687,7 +996,7 @@
               ]
             }
           ],
-          "next": "",
+          "next": null,
           "total": 1,
           "truncated": false
         },
@@ -701,8 +1010,8 @@
         "data": {
           "count": 0,
           "items": [],
-          "next": "",
-          "total": null,
+          "next": null,
+          "total": 0,
           "truncated": false
         },
         "ok": true
@@ -729,6 +1038,13 @@
         },
         "ok": false
       },
+      "403": {
+        "error": {
+          "code": "forbidden",
+          "message": "'example-nobody' holds no 'read', which this page reads under."
+        },
+        "ok": false
+      },
       "503": {
         "error": {
           "code": "not_configured",
@@ -741,8 +1057,8 @@
   "projectCreateV2": {
     "request": {
       "payload": {
-        "name": "Machine sync",
-        "slug": "machine-sync",
+        "name": "Capped",
+        "slug": "from-the-phone",
         "status": "active"
       }
     },
@@ -755,7 +1071,7 @@
             "dependency_updates": false,
             "description": "",
             "last_push_at": null,
-            "name": "Machine sync",
+            "name": "Capped",
             "public_url": "",
             "relationships": {
               "assets": [],
@@ -764,7 +1080,7 @@
               "expense_ids": []
             },
             "repository_url": "",
-            "slug": "machine-sync",
+            "slug": "from-the-phone",
             "status": "active",
             "technologies": [],
             "updated_at": "2026-01-15T09:30:00+00:00"
@@ -775,7 +1091,10 @@
       "400": {
         "error": {
           "code": "idempotency_key_required",
-          "message": "Idempotency-Key is required for capabilities that change state."
+          "details": {
+            "field": "payload.idempotency_key"
+          },
+          "message": "A retry key is required for capabilities that change state: send a new one as payload.idempotency_key, and the same one again when you retry this change."
         },
         "ok": false
       },
@@ -796,7 +1115,7 @@
       "409": {
         "error": {
           "code": "idempotency_conflict",
-          "message": "This Idempotency-Key was already used for a different request."
+          "message": "This retry key was already used for a different request."
         },
         "ok": false
       },
@@ -804,6 +1123,13 @@
         "error": {
           "code": "unsupported_media_type",
           "message": "Content-Type must be application/json."
+        },
+        "ok": false
+      },
+      "500": {
+        "error": {
+          "code": "operation_failed",
+          "message": "project.create could not be executed."
         },
         "ok": false
       }
@@ -846,13 +1172,36 @@
               "expense_ids": []
             },
             "repository_url": "",
-            "slug": "renamed",
+            "slug": "hq",
             "status": "idea",
             "technologies": [],
             "updated_at": "2026-01-15T09:30:00+00:00"
           }
         },
         "ok": true
+      },
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "details": [
+            {
+              "loc": [
+                "expected_updated_at"
+              ],
+              "msg": "Input is invalid",
+              "type": "value_error"
+            }
+          ],
+          "message": "project.update: expected_updated_at is invalid."
+        },
+        "ok": false
+      },
+      "403": {
+        "error": {
+          "code": "forbidden",
+          "message": "api principal 'example-automation' lacks 'write_projects'."
+        },
+        "ok": false
       },
       "404": {
         "error": {
@@ -865,6 +1214,163 @@
         "error": {
           "code": "conflict",
           "message": "That project changed after it was read."
+        },
+        "ok": false
+      }
+    }
+  },
+  "resourceListV2": {
+    "responses": {
+      "403": {
+        "error": {
+          "code": "forbidden",
+          "message": "api principal 'example-automation' lacks 'read_audit_log'."
+        },
+        "ok": false
+      },
+      "404": {
+        "error": {
+          "code": "unknown_resource",
+          "details": {
+            "next": {
+              "arguments": {},
+              "tool": "describe_resources"
+            }
+          },
+          "message": "HQ serves no resource by that name; describe_resources names each one."
+        },
+        "ok": false
+      }
+    }
+  },
+  "resourcesV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "resources": [
+            {
+              "label": "Projects",
+              "name": "projects",
+              "operations": {
+                "get": {
+                  "identifier": "slug"
+                },
+                "list": {
+                  "filters": [
+                    "limit",
+                    "cursor",
+                    "status",
+                    "query",
+                    "updates"
+                  ],
+                  "query_schema": {
+                    "$defs": {
+                      "Cursor": {
+                        "anyOf": [
+                          {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "The page after the one whose next.cursor this is. Send it as it came, with the filters that page was read with; absent, the first page."
+                      },
+                      "PageLimit": {
+                        "description": "How many records a page holds, 1 to 100; next.cursor reads the page after.",
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "TextFilter": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Only the records whose text holds this, ignoring case; absent, every record."
+                      }
+                    },
+                    "additionalProperties": false,
+                    "properties": {
+                      "cursor": {
+                        "$ref": "#/$defs/Cursor",
+                        "default": null
+                      },
+                      "limit": {
+                        "$ref": "#/$defs/PageLimit",
+                        "default": 50
+                      },
+                      "query": {
+                        "$ref": "#/$defs/TextFilter",
+                        "default": null
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "enum": [
+                              "idea",
+                              "active",
+                              "paused",
+                              "completed",
+                              "published",
+                              "archived"
+                            ],
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Only the records in this status; absent, every status."
+                      },
+                      "updates": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "True for the projects HQ's dependency update run covers, false for the rest; absent, both."
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "search": {
+                  "scope": "projects"
+                }
+              },
+              "permitted": true,
+              "required_capabilities": [
+                "read"
+              ],
+              "summary": "Projects and their safe cross-domain relationships.",
+              "web_route": "projects:list"
+            }
+          ],
+          "schema_version": 2
+        },
+        "ok": true
+      },
+      "404": {
+        "error": {
+          "code": "unknown_resource",
+          "details": {
+            "next": {
+              "arguments": {},
+              "tool": "describe_resources"
+            }
+          },
+          "message": "HQ serves no resource by that name; describe_resources names each one."
         },
         "ok": false
       }
@@ -917,6 +1423,70 @@
   },
   "topologyV2": {
     "responses": {
+      "200": {
+        "data": {
+          "lens": null,
+          "lenses": [
+            {
+              "label": "Has a problem",
+              "name": "attention",
+              "summary": "Everything with a problem right now."
+            },
+            {
+              "label": "In HQ but not found by any connection",
+              "name": "unobserved-resources",
+              "summary": "Records HQ keeps that no connection reports using."
+            },
+            {
+              "label": "In HQ but no connection can change it",
+              "name": "ungoverned-resources",
+              "summary": "Records HQ keeps that none of its connections can change."
+            },
+            {
+              "label": "Things HQ could read but currently cannot",
+              "name": "unobserved-abilities",
+              "summary": "What a service offers that no working connection reads now."
+            },
+            {
+              "label": "Reached by a connection but not in HQ",
+              "name": "unresolved-dependencies",
+              "summary": "Things a connection uses that HQ keeps no record of."
+            },
+            {
+              "label": "Not read as recently as the rest",
+              "name": "stale-observations",
+              "summary": "Things last read well before others of the same type."
+            },
+            {
+              "label": "Connected to nothing",
+              "name": "isolated",
+              "summary": "Things with no link to anything else."
+            }
+          ],
+          "schema_version": 2,
+          "summary": {
+            "edges": 10,
+            "kinds": {
+              "ability": 57,
+              "connection": 2,
+              "controller": 1,
+              "resource": 1,
+              "service": 1,
+              "target": 2
+            },
+            "nodes": 64
+          },
+          "trace": null
+        },
+        "ok": true
+      },
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "message": "topology: lens must be one of attention, unobserved-resources, ungoverned-resources, unobserved-abilities, unresolved-dependencies, stale-observations, isolated."
+        },
+        "ok": false
+      },
       "403": {
         "error": {
           "code": "forbidden",

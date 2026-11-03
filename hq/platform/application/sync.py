@@ -10,17 +10,17 @@ from typing import Annotated, Any
 from django.db import transaction
 
 from .command_fields import Describe
-from .documentation import sync_documentation
+from .documentation import ConfirmPrune, PruneOrphans, UpdateExisting, sync_documentation
 from .security import Principal
 
 
 @dataclass(frozen=True, slots=True)
 class HQSyncCommand:
     manifest: Annotated[list[dict[str, Any]], Describe("The records to sync, one per entry.")]
-    update_existing: Annotated[bool, Describe("Update records HQ already holds.")] = True
+    update_existing: UpdateExisting = True
     report_orphans: Annotated[bool, Describe("Report records the manifest no longer lists.")] = True
-    prune_orphans: Annotated[bool, Describe("Delete records the manifest no longer lists.")] = False
-    confirm_prune: Annotated[bool, Describe("Confirms the delete that prune_orphans asks for.")] = False
+    prune_orphans: PruneOrphans = False
+    confirm_prune: ConfirmPrune = False
 
 
 @transaction.atomic

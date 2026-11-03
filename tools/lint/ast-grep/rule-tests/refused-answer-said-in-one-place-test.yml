@@ -1,0 +1,31 @@
+id: refused-answer-said-in-one-place
+valid:
+  - |
+    if refused(request, result):
+        return redirect("example:detail")
+  - |
+    if refusal := refused(request, result, form=form):
+        return render(request, "example.html", status=refusal.status)
+  - |
+    if not result["ok"]:
+        return refusal_response(result)
+  - 'note = refusal_of(result).message'
+  - 'errors = form.errors["example"]'
+  - |
+    def refresh_summary(result):
+        return result["content"]["error"]
+invalid:
+  - |
+    def request_app_read(answer):
+        return (answer.get("error") or {}).get("message")
+  - 'messages.error(request, result["error"]["message"])'
+  - |
+    if result["error"]["code"] == "not_found":
+        raise Http404
+  - 'status = refusal_status(found["error"]["code"])'
+  - 'code = (ran.answer.get("error") or {}).get("code")'
+  - |
+    if "error" in result:
+        return None
+  - |
+    messages.error(request, f"Nothing was imported: {result['error']['message']}")

@@ -15,7 +15,7 @@ from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
 from hq.domains.assets.models import Asset
 from hq.domains.projects.models import Project
-from hq.platform.core.audit import operation_context, record_event
+from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
 
 from .assets import AssetCommand, upsert_asset
@@ -23,6 +23,7 @@ from .command_fields import Describe
 from .domains import records_of
 from .projects import ProjectCommand, upsert_project
 from .record_errors import RecordConflict, RecordNotFound
+from .refusal_status import refuse
 from .security import Principal, require_all
 from .ui import counted, ended
 
@@ -89,6 +90,12 @@ class _Refused(Exception):
 
 def _problem(kind: str, index: int, slug: str, *errors: str) -> dict[str, Any]:
     return {"kind": kind, "index": index, "slug": slug, "errors": list(errors)}
+
+
+def _refused(message: str, problems: list[dict[str, Any]]) -> dict[str, Any]:
+    """An import refused as invalid input, each record's problems its details."""
+
+    return refuse("invalid_input", message, problems)
 
 
 def _stored(kind: _Kind, instance) -> dict[str, Any]:
@@ -261,24 +268,15 @@ def import_registry(command: HQImportCommand, *, principal: Principal) -> dict[s
     require_all(principal, REQUIRED_CAPABILITIES)
     total = len(command.projects) + len(command.assets)
     if total > MAX_IMPORT_RECORDS:
-        return {
-            "ok": False,
-            "problems": [
-                _problem(
-                    "document",
-                    0,
-                    "",
-                    f"The document holds {counted(total, 'record')}; the limit is {MAX_IMPORT_RECORDS}.",
-                )
-            ],
-        }
+        limit = f"The document holds {counted(total, 'record')}; the limit is {MAX_IMPORT_RECORDS}."
+        return _refused(limit, [_problem("document", 0, "", limit)])
 
     problems: list[dict[str, Any]] = []
     projects = _plan_kind(_PROJECT, command.projects, problems, set())
     known = {item.slug for item in projects} | set(Project.objects.values_list("slug", flat=True))
     assets = _plan_kind(_ASSET, command.assets, problems, known)
     if problems:
-        return {"ok": False, "problems": problems}
+        return _refused(f"{counted(len(problems), 'record')} refused. Nothing was imported.", problems)
 
     summary = {
         outcome: sum(item.outcome == outcome for item in (*projects, *assets))
@@ -295,7 +293,7 @@ def import_registry(command: HQImportCommand, *, principal: Principal) -> dict[s
     try:
         with (
             transaction.atomic(),
-            operation_context(interface=principal.interface, actor=principal.actor, operation="hq.import"),
+            audit_operation(operation="hq.import", principal=principal),
         ):
             for planned in (*projects, *assets):
                 _apply(planned, principal)
@@ -309,7 +307,7 @@ def import_registry(command: HQImportCommand, *, principal: Principal) -> dict[s
             if command.check_only:
                 transaction.set_rollback(True)
     except _Refused as exc:
-        return {"ok": False, "problems": [exc.problem]}
+        return _refused("1 record was refused while writing. Nothing was imported.", [exc.problem])
     return result
 
 

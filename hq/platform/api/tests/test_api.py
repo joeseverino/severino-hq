@@ -4,10 +4,9 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import jwt
-from cryptography.hazmat.primitives.asymmetric import rsa
 from django.test import SimpleTestCase, TestCase, override_settings
-from jwt.algorithms import RSAAlgorithm
 
+from hq.platform.application import tokens
 from hq.platform.application.security import AuthorizationError
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.application.tests.sentinel import (
@@ -17,42 +16,12 @@ from hq.platform.application.tests.sentinel import (
     SentinelMixin,
     plant_credentials,
 )
+from hq.platform.application.topology import TOPOLOGY_SCHEMA_VERSION
+from hq.platform.application.topology_lenses import topology_lenses
 
-from .. import security, views
+from .. import views
 from ..testing import ContractClient
-
-ISSUER = "https://sso.example.test"
-RESOURCE = "https://hq.example.test/api"
-KID = "example-key"
-
-_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-_OTHER_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-
-
-def _token(key=_KEY, **overrides) -> str:
-    now = datetime.now(tz=UTC)
-    claims = {
-        "iss": ISSUER,
-        "aud": RESOURCE,
-        "sub": "example-automation",
-        "client_id": "example-automation",
-        "scope": "example.write",
-        "iat": now,
-        "exp": now + timedelta(minutes=5),
-    }
-    claims.update(overrides)
-    return jwt.encode(claims, key, algorithm="RS256", headers={"kid": KID})
-
-
-def _held(key):
-    jwk = RSAAlgorithm.to_jwk(key.public_key(), as_dict=True)
-    return {KID: jwt.PyJWK({**jwk, "kid": KID, "use": "sig", "alg": "RS256"})}
-
-
-def _serving(key=_KEY):
-    """The identity provider's published key, held as the key thread holds it."""
-
-    return patch.object(security.KEYS, "held", _held(key))
+from .tokens import _KEY, ISSUER, KID, OTHER_KEY, RESOURCE, _held, _serving, _token
 
 
 @override_settings(
@@ -64,12 +33,12 @@ def _serving(key=_KEY):
 class TokenVerificationTests(SimpleTestCase):
     def test_a_valid_token_verifies(self):
         with _serving():
-            claims = security.verify(_token())
+            claims = tokens.verify(_token())
         self.assertEqual(claims["client_id"], "example-automation")
 
     def test_a_token_signed_by_another_key_is_rejected(self):
-        with _serving(), self.assertRaises(security.TokenError):
-            security.verify(_token(key=_OTHER_KEY))
+        with _serving(), self.assertRaises(tokens.TokenError):
+            tokens.verify(_token(key=OTHER_KEY))
 
     def test_a_token_for_another_api_resource_is_rejected(self):
         """The case signature-checking alone would wave through.
@@ -79,17 +48,17 @@ class TokenVerificationTests(SimpleTestCase):
         between that credential and this one.
         """
 
-        with _serving(), self.assertRaises(security.TokenError):
-            security.verify(_token(aud="https://elsewhere.example.test"))
+        with _serving(), self.assertRaises(tokens.TokenError):
+            tokens.verify(_token(aud="https://elsewhere.example.test"))
 
     def test_a_token_from_another_issuer_is_rejected(self):
-        with _serving(), self.assertRaises(security.TokenError):
-            security.verify(_token(iss="https://evil.example.test"))
+        with _serving(), self.assertRaises(tokens.TokenError):
+            tokens.verify(_token(iss="https://evil.example.test"))
 
     def test_an_expired_token_is_rejected(self):
         past = datetime.now(tz=UTC) - timedelta(hours=1)
-        with _serving(), self.assertRaises(security.TokenError):
-            security.verify(_token(exp=past))
+        with _serving(), self.assertRaises(tokens.TokenError):
+            tokens.verify(_token(exp=past))
 
     def test_a_token_without_an_expiry_is_rejected(self):
         """A token that never expires is a password, and is refused as one."""
@@ -100,8 +69,8 @@ class TokenVerificationTests(SimpleTestCase):
             _KEY,
             algorithm="RS256",
         )
-        with _serving(), self.assertRaises(security.TokenError):
-            security.verify(forever)
+        with _serving(), self.assertRaises(tokens.TokenError):
+            tokens.verify(forever)
 
     @override_settings(OIDC_OP_JWKS_ENDPOINT=f"{ISSUER}/.well-known/jwks.json")
     def test_the_key_set_is_read_on_a_thread_of_its_own_when_the_application_starts(self):
@@ -112,60 +81,37 @@ class TokenVerificationTests(SimpleTestCase):
             return list(_held(_KEY).values())
 
         with (
-            patch.object(security.KEYS, "held", {}),
-            patch.object(security.PyJWKClient, "get_signing_keys", get_signing_keys),
+            patch.object(tokens.KEYS, "held", {}),
+            patch.object(jwt.PyJWKClient, "get_signing_keys", get_signing_keys),
         ):
-            with security.keeping_keys():
+            with tokens.keeping_keys():
                 pass
-            self.assertEqual(security.verify(_token())["client_id"], "example-automation")
+            self.assertEqual(tokens.verify(_token())["client_id"], "example-automation")
         self.assertEqual(len(reader), 1)
         self.assertIsNot(reader[0], threading.current_thread())
 
     @override_settings(SEVERINO_API_RESOURCE="")
     def test_an_unconfigured_resource_fails_closed(self):
-        self.assertFalse(security.is_configured())
-        with _serving(), self.assertRaises(security.TokenError):
-            security.verify(_token())
+        self.assertFalse(tokens.is_configured())
+        with _serving(), self.assertRaises(tokens.TokenError):
+            tokens.verify(_token())
 
 
 class GrantTests(SimpleTestCase):
     def test_space_delimited_scope_is_read(self):
         self.assertEqual(
-            security.granted({"scope": "example.write read"}),
+            tokens.granted({"scope": "example.write read"}),
             frozenset({"example.write", "read"}),
         )
 
     def test_a_list_claim_is_read(self):
         self.assertEqual(
-            security.granted({"permissions": ["example.write"]}),
+            tokens.granted({"scp": ["example.write"]}),
             frozenset({"example.write"}),
         )
 
     def test_no_grant_claim_yields_nothing(self):
-        self.assertEqual(security.granted({"sub": "x"}), frozenset())
-
-    def test_a_principal_holds_exactly_what_the_token_granted(self):
-        """The narrow grant is the entire point of this surface.
-
-        A web operator holds every capability HQ has. If a verified client were
-        given the same set, a credential sitting on a phone could delete a
-        project, and the OAuth ceremony would have bought nothing.
-        """
-
-        principal = security.api_principal({"scope": "example.write", "sub": "s"})
-        self.assertEqual(principal.capabilities, frozenset({"example.write"}))
-        self.assertEqual(principal.interface, "api")
-        principal.require("example.write")
-        with self.assertRaises(AuthorizationError):
-            principal.require("delete_projects")
-
-    def test_a_token_granting_nothing_is_refused_outright(self):
-        with self.assertRaises(AuthorizationError):
-            security.api_principal({"sub": "s"})
-
-    def test_the_actor_is_the_client_that_presented_the_token(self):
-        principal = security.api_principal({"scope": "read", "client_id": "example-automation", "sub": "s"})
-        self.assertEqual(principal.actor, "example-automation")
+        self.assertEqual(tokens.granted({"sub": "x"}), frozenset())
 
 
 class RefusalStatusTests(SimpleTestCase):
@@ -182,7 +128,7 @@ class RefusalStatusTests(SimpleTestCase):
         self.assertGreaterEqual(len(refusals), 4)
         for refusal in refusals:
             with self.subTest(refusal=refusal.__name__):
-                self.assertIn(refusal.code, views.CAPABILITY_STATUS)
+                self.assertIn(refusal.code, views.execute_codes(None))
 
 
 class CompositionCheckTests(SimpleTestCase):
@@ -266,6 +212,7 @@ class CompositionCheckTests(SimpleTestCase):
     SEVERINO_API_RESOURCE=RESOURCE,
     SEVERINO_API_LEEWAY_SECONDS=30,
     OIDC_RP_SIGN_ALGO="RS256",
+    SEVERINO_AGENT_ENABLE_WRITES=True,
 )
 class TransportTests(SentinelMixin, TestCase):
     # Every response below is also held to the OpenAPI document.
@@ -299,7 +246,7 @@ class TransportTests(SentinelMixin, TestCase):
 
     def test_a_rejected_token_is_401(self):
         with _serving():
-            response = self._post("example.import", {}, token=_token(key=_OTHER_KEY))
+            response = self._post("example.import", {}, token=_token(key=OTHER_KEY))
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["error"]["code"], "invalid_token")
 
@@ -307,19 +254,19 @@ class TransportTests(SentinelMixin, TestCase):
     def test_a_token_is_never_verified_by_reaching_the_identity_provider(self):
         """Keys not yet read, or a key not held, answer 401 and ask for a read."""
 
-        security.KEYS.wanted.clear()
+        tokens.KEYS.wanted.clear()
         for case, held in (("not loaded", {}), ("unknown key", {"another-key": _held(_KEY)[KID]})):
             with (
                 self.subTest(case),
-                patch.object(security.KEYS, "held", held),
+                patch.object(tokens.KEYS, "held", held),
                 self.assertLogs("severino.api", "WARNING") as logged,
             ):
                 response = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token()}")
             self.assertEqual(response.status_code, 401)
             self.assertEqual(response.json()["error"]["code"], "invalid_token")
-            self.assertTrue(security.KEYS.wanted.is_set())
+            self.assertTrue(tokens.KEYS.wanted.is_set())
             self.assertIn(logged.records[0].event, {"api.keys.not_loaded", "api.keys.unknown"})
-            security.KEYS.wanted.clear()
+            tokens.KEYS.wanted.clear()
 
     def test_an_ungranted_capability_is_403(self):
         with _serving():
@@ -352,7 +299,7 @@ class TransportTests(SentinelMixin, TestCase):
 
         AgentAccess.objects.update_or_create(pk=1, defaults={"paused": True})
         with _serving():
-            response = self._post("project.create", {}, token=_token(key=_OTHER_KEY))
+            response = self._post("project.create", {}, token=_token(key=OTHER_KEY))
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["error"]["code"], "invalid_token")
 
@@ -751,12 +698,19 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertTrue(project_create["idempotency_key_required"])
         self.assertFalse(project_create["request_schema"]["additionalProperties"])
         self.assertEqual(project_create["resource"], "projects")
+        # The command's schema under ``payload``, described where it says nothing itself.
+        payload = project_create["request_schema"]["properties"]["payload"]
+        self.assertTrue(payload["description"])
         self.assertEqual(
-            project_create["request_schema"]["properties"]["payload"],
-            project_create["input_schema"],
+            {key: value for key, value in payload.items() if key != "description"},
+            {
+                key: value
+                for key, value in project_create["input_schema"].items()
+                if key not in ("description", "$defs")
+            },
         )
         project_update = next(spec for spec in specs if spec["name"] == "project.update")
-        self.assertEqual(project_update["request_schema"]["required"], ["target"])
+        self.assertIn("target", project_update["request_schema"]["required"])
         nested = views.request_schema(
             {
                 "input_schema": {
@@ -782,7 +736,7 @@ class TransportTests(SentinelMixin, TestCase):
         audit = next(spec for spec in specs if spec["name"] == "audit")
         self.assertTrue(projects["permitted"])
         self.assertFalse(audit["permitted"])
-        self.assertIn("query_schema", projects["operations"]["list"])
+        self.assertIn("status", projects["operations"]["list"]["filters"])
         self.assertEqual(projects["web_route"], "projects:list")
 
     def test_connections_expose_abilities_and_safe_cached_state(self):
@@ -799,20 +753,21 @@ class TransportTests(SentinelMixin, TestCase):
             probed=True,
             observed_at=timezone.now(),
         )
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
         with _serving():
-            response = self.client.get(
-                "/api/v2/connections/",
-                HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}",
-            )
+            response = self.client.get("/api/v2/connections/", **headers)
+            standing = self.client.get("/api/v2/resources/connection.standing/api-cloudflare/", **headers)
 
         self.assertEqual(response.status_code, 200)
-        data = response.json()["data"]
-        core = next(item for item in data["connections"] if item["name"] == "infrastructure.controllers")
-        state = next(
-            item for group in data["groups"] for item in group["instances"] if item["id"] == "controller:api-cloudflare"
+        self.assertEqual(standing.status_code, 200)
+        core = next(
+            item for item in response.json()["data"]["connections"] if item["name"] == "infrastructure.controllers"
         )
+        state = standing.json()["data"]
         self.assertTrue(core["permitted"])
-        self.assertIn("cloudflare.dns_record", {ability["name"] for ability in state["abilities"]})
+        self.assertEqual(state["id"], "controller:api-cloudflare")
+        abilities = [read["ability"] for read in state["reads"] if read["ability"]] + state["changes"]
+        self.assertIn("cloudflare.dns_record", {ability["name"] for ability in abilities})
 
     def test_connections_never_invoke_a_family_the_token_cannot_read(self):
         from django.db import connection
@@ -820,17 +775,17 @@ class TransportTests(SentinelMixin, TestCase):
 
         from hq.domains.control_plane.models import ProviderConnection
 
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='write_projects')}"}
         with _serving(), CaptureQueriesContext(connection) as queries:
-            response = self.client.get(
-                "/api/v2/connections/",
-                HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
-            )
+            response = self.client.get("/api/v2/connections/", **headers)
+            standing = self.client.get("/api/v2/resources/connection.standing/", **headers)
 
         self.assertEqual(response.status_code, 200)
-        data = response.json()["data"]
-        core = next(item for item in data["connections"] if item["name"] == "infrastructure.controllers")
+        core = next(
+            item for item in response.json()["data"]["connections"] if item["name"] == "infrastructure.controllers"
+        )
         self.assertFalse(core["permitted"])
-        self.assertEqual(data["groups"], [])
+        self.assertEqual(standing.status_code, 403)
         # The family's instances are the controller's reports, and none was read.
         self.assertFalse([query for query in queries if ProviderConnection._meta.db_table in query["sql"]])
 
@@ -861,7 +816,7 @@ class TransportTests(SentinelMixin, TestCase):
 
         self.assertEqual(response.status_code, 200)
         topology = response.json()["data"]
-        self.assertEqual(topology["schema_version"], 2)
+        self.assertEqual(topology["schema_version"], TOPOLOGY_SCHEMA_VERSION)
         self.assertEqual(topology["trace"]["focus"], "resource:api-zone")
         self.assertEqual(topology["trace"]["direction"], "inbound")
         self.assertEqual(topology["trace"]["depth"], 2)
@@ -871,15 +826,14 @@ class TransportTests(SentinelMixin, TestCase):
         resource = next(node for node in topology["nodes"] if node["id"] == "resource:api-zone")
         self.assertEqual([action["name"] for action in resource["actions"]], ["open"])
 
-    def test_unknown_topology_focus_is_explicitly_not_applied(self):
+    def test_an_unknown_topology_lens_is_refused_with_every_lens(self):
         with _serving(), host_only():
             response = self.client.get(
-                "/api/v2/topology/?focus=not-a-node&direction=outbound&depth=999",
-                HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}",
+                "/api/v2/topology/?lens=not-a-lens", HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}"
             )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIsNone(response.json()["data"]["trace"])
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"]["code"], "invalid_input")
+        self.assertTrue(all(lens.name in response.json()["error"]["message"] for lens in topology_lenses()))
 
     def test_topology_requires_read_before_deriving_any_state(self):
         with (

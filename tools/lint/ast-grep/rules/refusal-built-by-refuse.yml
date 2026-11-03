@@ -1,0 +1,34 @@
+# A refusal's envelope has one builder, refusal_status.refuse (or a
+# Refusal's answer), so every door reads one shape: a code its status table
+# holds, a message, and details only when there are some. A dict written out
+# by hand drifts from it, as a key spelled another way or details the doors
+# never read. Other {"ok": false} shapes (a sub-result with an error string, a
+# stored operation result) are not the envelope and are left alone.
+id: refusal-built-by-refuse
+language: python
+severity: error
+message: A refusal's envelope is written out by hand.
+note: Return `refuse(code, message, details)` from hq.platform.application.refusal_status.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  # Where the envelope is built.
+  - "hq/platform/application/refusal_status.py"
+rule:
+  kind: dictionary
+  all:
+    - has:
+        kind: pair
+        all:
+          - has: { field: key, regex: "^[\"']ok[\"']$" }
+          - has: { field: value, kind: "false" }
+    - has:
+        kind: pair
+        all:
+          - has: { field: key, regex: "^[\"']error[\"']$" }
+          - has: { field: value, kind: dictionary }

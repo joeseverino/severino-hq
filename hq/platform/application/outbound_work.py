@@ -27,7 +27,8 @@ from .contracts import DOTTED_NAME
 from .integration_specs import CapabilitySpec, requested
 from .projection import read_once
 from .record_errors import RecordNotFound
-from .security import Principal, person_of
+from .refusal_status import refuse
+from .security import WAITING_INTERFACES, Principal, person_of
 lazy from .domains import host_specs
 lazy from .plugins import plugin_outbound_work
 lazy from .routes import reverse
@@ -228,12 +229,12 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> d
 
     reason = _refusal(work, subject)
     if reason:
-        return {"ok": False, "error": {"code": "precondition", "message": reason}}
+        return refuse("precondition", reason)
 
     def job_work(progress: Progress) -> dict[str, Any]:
         return work.run(progress, subject=subject, principal=principal) or {}
 
-    waited = principal.interface == "cli"
+    waited = principal.interface in WAITING_INTERFACES
     try:
         job = (run if waited else start)(
             work.name,
@@ -256,7 +257,7 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> d
         return {"ok": True, "started": True, "job": str(job.pk), "message": requested(work.words, subject)}
     standing = job_standing(job)
     if standing.state == FAILED:
-        return {"ok": False, "error": {"code": "operation_failed", "message": standing.note}}
+        return refuse("work_failed", standing.note)
     return {"ok": True, "started": True, "job": str(job.pk), "message": standing.note, "result": job.result}
 
 

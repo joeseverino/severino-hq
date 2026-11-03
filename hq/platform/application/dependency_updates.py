@@ -23,6 +23,7 @@ from hq.domains.control_plane.observations.github import (
 from hq.domains.projects.models import Project
 
 from .projection import iso, read_once
+from .refusal_status import refuse
 from .security import Principal
 lazy from .cadence import forced_reads, request_reads
 lazy from .projects import repository_key
@@ -145,10 +146,7 @@ def request_run(_command: DependencyRunCommand, *, principal: Principal) -> dict
 
     del principal
     if not owners():
-        return {
-            "ok": False,
-            "error": {"code": "precondition", "message": "No project is opted in to dependency updates."},
-        }
+        return refuse("precondition", "No project is opted in to dependency updates.")
     request_reads((KIND,))
     asked = asked_at() or timezone.now()
     return {"ok": True, "requested": True, "asked_at": asked.isoformat()}

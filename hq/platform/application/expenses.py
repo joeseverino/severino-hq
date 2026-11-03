@@ -12,9 +12,14 @@ from hq.domains.expenses.models import DEFAULT_CATEGORY, Expense
 from .command_fields import Describe, Names, Refers
 from .money import money
 from .projection import iso
+from .record_fields import Notes, TotalCost
 from .record_saves import Held, Link, linked_saver
 from .sensitivity import SAFE_SENSITIVITIES
 from .ui import Kpi
+
+type ExpenseDate = Annotated[date, Describe("When it was spent.")]
+type ExpenseVendor = Annotated[str, Describe("Who was paid.")]
+type ExpenseItem = Annotated[str, Describe("What was bought.")]
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,15 +85,15 @@ def costs_by_category(rows, *, query, choices, narrowed: bool) -> tuple[CostTota
 
 @dataclass(frozen=True, slots=True)
 class ExpenseCommand:
-    date: Annotated[date, Describe("When it was spent.")]
-    vendor: Annotated[str, Describe("Who was paid.")]
-    item: Annotated[str, Describe("What was bought.")]
+    date: ExpenseDate
+    vendor: ExpenseVendor
+    item: ExpenseItem
     category: Annotated[str, Describe("What type of expense it is.")] = DEFAULT_CATEGORY
-    total_cost: Annotated[Decimal, Describe("What it cost in all.")] = Decimal("0.00")
+    total_cost: TotalCost = Decimal("0.00")
     business_use_percentage: Annotated[int, Describe("How much of it is for the business, as a percentage.")] = 100
     payment_method: Annotated[str, Describe("How it was paid.")] = ""
     business_purpose: Annotated[str, Describe("Why the business needed it.")] = ""
-    notes: Annotated[str, Describe("Anything else worth keeping.")] = ""
+    notes: Notes = ""
     related_project: Annotated[str | None, Names("projects"), Describe("The project this was spent on.")] = None
     related_asset: Annotated[str | None, Names("assets"), Describe("The asset this bought or kept running.")] = None
     related_content: Annotated[

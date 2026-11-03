@@ -27,7 +27,7 @@ from .finding_model import (
 )
 from .freshness import freshness
 from .infrastructure import DRIFT_LABEL
-from .labels import lower_first, plural
+from .labels import field_label, lower_first, plural
 from .moments import ago, duration
 from .render_status_findings import RENDERER_UNITS
 from .topology_lenses import _STALE_AFTER
@@ -476,7 +476,7 @@ def _settings(node: TopologyNode) -> str:
     provider = PROVIDERS.get(node.kind_key)
     fields = provider.spec_type.model_fields if provider else {}
     return ", ".join(
-        (fields[name].title or name.replace("_", " ")).lower() if name in fields else name.replace("_", " ")
+        lower_first(field_label(name, fields[name].title if name in fields else None))
         for name in node.unconfirmed_fields
     )
 

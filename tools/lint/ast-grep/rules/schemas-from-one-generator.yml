@@ -1,0 +1,28 @@
+# Every JSON Schema HQ publishes comes from one generator,
+# hq/platform/application/json_schemas.py, so all of them write a title only
+# where a declaration gives one and close a TypedDict the way the strict API
+# reads it. A call to Pydantic's own generator is a schema that titles each
+# field with its name again and labels it apart from labels.field_label.
+id: schemas-from-one-generator
+language: python
+severity: error
+message: A JSON Schema is generated outside HQ's one generator.
+note: >-
+  Call `json_schema(kind)` or `json_schemas(kinds, ...)` from
+  hq.platform.application.json_schemas, which take a type or its TypeAdapter.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  - "hq/platform/application/json_schemas.py"
+rule:
+  any:
+    - pattern: $KIND.json_schema($$$)
+    - pattern: $KIND.json_schemas($$$)
+    - pattern: $KIND.model_json_schema($$$)
+    - kind: identifier
+      regex: ^GenerateJsonSchema$

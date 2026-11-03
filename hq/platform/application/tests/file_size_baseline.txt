@@ -1,7 +1,6 @@
 # Test files past the ceiling, with the length each had when listed.
 # A listed file may not grow; its line leaves when it is split under 1,000.
 hq/domains/control_plane/tests/test_control_plane.py 1580
-hq/platform/api/tests/test_api.py 1038
 hq/platform/application/tests/test_application_services.py 1218
 hq/platform/application/tests/test_architecture.py 2141
 hq/platform/application/tests/test_findings.py 1742

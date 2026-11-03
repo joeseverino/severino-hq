@@ -1,5 +1,7 @@
 """The receipts resource, declared on its domain in application/domains.py."""
 
+from pydantic import Field
+
 from hq.platform.application import read_models
 from hq.platform.application.integration_specs import ResourceSpec
 from hq.platform.application.resources import BoundedQuery
@@ -10,7 +12,9 @@ from .models import Receipt
 
 
 class ReceiptQuery(BoundedQuery):
-    unmatched_only: bool = False
+    unmatched_only: bool = Field(
+        default=False, description="True for only the receipts matched to no expense and no asset."
+    )
 
 
 def resources() -> tuple[ResourceSpec, ...]:

@@ -5,9 +5,11 @@ transaction, validation, persistence, audit attribution, and canonical result
 shape; adapters only parse input and render output.
 """
 
+import secrets
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, fields, replace
+from dataclasses import dataclass, fields, replace
 from datetime import datetime
+from functools import partial
 from typing import Annotated, Any
 
 from django.conf import settings
@@ -17,7 +19,7 @@ from django.db import transaction
 from hq.domains.content.content_sync import ContentSyncError, sync_content_index
 from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
 from hq.domains.projects.models import Project
-from hq.platform.core.audit import operation_context, record_event
+from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
 lazy from hq.platform.application.routes import reverse
 
@@ -27,8 +29,10 @@ from .github_public import github_repository
 from .outbound_work import OutboundWork
 from .projection import addressable, iso, listing, projection_scope, read_once
 from .record_errors import RecordConflict, RecordNotFound
+from .record_fields import Notes, PublishedUrl, Slug
 from .record_links import linked
-from .record_saves import Held, held
+from .record_saves import Held, held, linked_saver
+from .refusal_status import refusal_of, refuse
 from .security import Principal
 from .standards import MET
 from .ui import counted
@@ -41,6 +45,8 @@ lazy from .github_estate import Repository, repositories, repository_for
 lazy from .github_posture import STANDARD, posture_of
 lazy from .plugins import installed_plugins
 lazy from .timestamps import moment
+
+type ProjectName = Annotated[str, Describe("What the project is called.")]
 
 _PROJECT = Held("That project was not found.", "That project changed after it was read.")
 
@@ -116,17 +122,17 @@ ContentSync = Callable[[], dict[str, Any]]
 
 @dataclass(frozen=True, slots=True)
 class ProjectCommand:
-    name: Annotated[str, Describe("What the project is called.")]
-    slug: Annotated[str, Describe("Its address in HQ; blank derives one from the name.")] = ""
+    name: ProjectName
+    slug: Slug = ""
     category: Annotated[str, Describe("What type of project it is.")] = "other"
     status: Annotated[str, Describe("Where it stands, from idea to archived.")] = Project.Status.IDEA
     description: Annotated[str, Describe("What it is, in a sentence or two.")] = ""
     technologies_used: Annotated[str, Describe("What it is built with.")] = ""
     repository_url: Annotated[str, Describe("Where its code lives.")] = ""
-    public_url: Annotated[str, Describe("Where it is published.")] = ""
+    public_url: PublishedUrl = ""
     deployment_notes: Annotated[str, Describe("How it is deployed.")] = ""
     security_notes: Annotated[str, Describe("What protects it, and what to watch.")] = ""
-    notes: Annotated[str, Describe("Anything else worth keeping.")] = ""
+    notes: Notes = ""
 
 
 def serialize_project(project: Project, *, relationships: bool = False) -> dict[str, Any]:
@@ -215,11 +221,7 @@ def refresh_project(
     result: dict[str, Any] = {"ok": True, "content": None, "github": None, "github_app": None}
     if slug == settings.CONTENT_INDEX_PROJECT_SLUG:
         try:
-            with operation_context(
-                interface=principal.interface,
-                actor=principal.actor,
-                operation="project.refresh_content",
-            ):
+            with audit_operation(operation="project.refresh_content", principal=principal):
                 stats = content_sync()
                 record_event(
                     action=AuditLog.Action.UPDATED,
@@ -270,9 +272,14 @@ def request_app_read(repository_url: str, *, principal: Principal) -> dict[str, 
     connection_ref = str(repository.record.get("connection_ref") or "") if repository else ""
     if not connection_ref:
         return None
-    answer = capabilities.execute_capability(
-        READ_NOW_CAPABILITY, {"connection_ref": connection_ref}, principal=principal
-    )
+    # Asked once for each refresh that runs, which its own key already holds
+    # to once, so a key of its own is fresh each time.
+    answer = capabilities.run_capability(
+        READ_NOW_CAPABILITY,
+        {"connection_ref": connection_ref},
+        principal=principal,
+        idempotency_key=f"refresh:{secrets.token_urlsafe(18)}",
+    ).answer
     if answer.get("ok") and answer.get("requested"):
         return {
             "ok": True,
@@ -280,11 +287,12 @@ def request_app_read(repository_url: str, *, principal: Principal) -> dict[str, 
             "message": str(answer.get("message") or ""),
             "pushed_at": _pushed_at(repository.record.get("pushed_at")),
         }
-    error = answer.get("error") or {}
     return {
         "ok": False,
         "connection_ref": connection_ref,
-        "error": str(error.get("message") or answer.get("message") or "The controller was not asked."),
+        "error": str(answer.get("message") or "The controller was not asked.")
+        if answer.get("ok")
+        else refusal_of(answer).message,
     }
 
 
@@ -301,11 +309,7 @@ def _record_push(project: Project, pushed_at: datetime | None, principal: Princi
         return {"ok": True, "last_push_at": iso(project.last_push_at) or None}
     with (
         transaction.atomic(),
-        operation_context(
-            interface=principal.interface,
-            actor=principal.actor,
-            operation="project.refresh",
-        ),
+        audit_operation(operation="project.refresh", principal=principal),
     ):
         project = held(Project, _PROJECT, {"pk": project.pk}, None)
         project.last_push_at = pushed_at
@@ -393,33 +397,7 @@ def outbound_work() -> tuple[OutboundWork, ...]:
     )
 
 
-@transaction.atomic
-def save_project(
-    command: ProjectCommand,
-    *,
-    principal: Principal,
-    current_slug: str | None = None,
-    expected_updated_at: str | None = None,
-) -> dict[str, Any]:
-    """Create or update one project and return the canonical representation."""
-
-    principal.require(records_of("projects").write)
-    operation = "project.create" if current_slug is None else "project.update"
-    with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
-        created = current_slug is None
-        project = (
-            Project() if current_slug is None else held(Project, _PROJECT, {"slug": current_slug}, expected_updated_at)
-        )
-        for field, value in asdict(command).items():
-            setattr(project, field, value)
-        project.full_clean()
-        project.save()
-
-    return {
-        "ok": True,
-        "created": created,
-        "project": serialize_project(project, relationships=True),
-    }
+save_project = linked_saver("projects", partial(serialize_project, relationships=True), refusals=_PROJECT, links={})
 
 
 DEPENDENCY_UPDATES = "project.dependency_updates"
@@ -458,7 +436,7 @@ def set_dependency_updates(
     project = held(Project, _PROJECT, {"slug": current_slug}, expected_updated_at)
     refused = _updates_refusal(project, enabling=command.dependency_updates)
     if refused:
-        return {"ok": False, "error": {"code": "precondition", "message": refused}}
+        return refuse("precondition", refused)
     if project.dependency_updates != command.dependency_updates:
         project.dependency_updates = command.dependency_updates
         project.full_clean()
@@ -486,6 +464,7 @@ def upsert_project(
     *,
     principal: Principal,
     expected_updated_at: str | None = None,
+    sent: frozenset[str] | None = None,
 ) -> dict[str, Any]:
     """Idempotently create or update a project by its command slug."""
 
@@ -495,6 +474,7 @@ def upsert_project(
         save_project,
         principal=principal,
         expected_updated_at=expected_updated_at,
+        sent=sent,
     )
 
 

@@ -1,6 +1,6 @@
 from django.test import TestCase
 
-from ..topology import serialize_topology
+from ..topology import TOPOLOGY_SCHEMA_VERSION, serialize_topology
 from ..topology_lenses import MAX_TRACE_DEPTH, apply_trace
 from ..topology_model import Topology, TopologyEdge, TopologyNode
 
@@ -68,7 +68,7 @@ class TopologyTraceTests(TestCase):
         narrowed, trace = apply_trace(self.graph, "a", direction="outbound", depth=2)
         payload = serialize_topology(narrowed, trace=trace)
 
-        self.assertEqual(payload["schema_version"], 2)
+        self.assertEqual(payload["schema_version"], TOPOLOGY_SCHEMA_VERSION)
         self.assertEqual(payload["trace"]["focus"], "a")
         self.assertEqual(
             payload["trace"]["hops"],

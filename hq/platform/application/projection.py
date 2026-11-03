@@ -7,11 +7,12 @@ surface shares (paging bounds, the page-size ceiling, timestamp rendering, the
 refusal of an input that cannot narrow) are each defined once here.
 """
 
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
-from typing import Any
+from typing import Any, TypedDict
 
 from django.conf import settings
 from django.db.models import FETCH_PEERS, FETCH_RAISE, Q, QuerySet
@@ -25,6 +26,19 @@ from .record_errors import RecordNotFound
 # web, the API and the MCP, and the last of those is driven by a model that will
 # cheerfully ask for a million records and then try to read them.
 MAX_PAGE_SIZE = 100
+
+
+class NextPage(TypedDict):
+    """Where the page after a list's is read from: ``cursor``, sent back with the same filters."""
+
+    cursor: str
+
+
+def shape_version(version: int) -> dict[str, Any]:
+    """A projection's ``schema_version`` as JSON Schema: the one number its answer carries."""
+
+    return {"type": "integer", "const": version}
+
 
 _MISSING = object()
 _READ_SCOPE: ContextVar[dict[str, Any] | None] = ContextVar("hq_projection_read_scope", default=None)
@@ -62,11 +76,8 @@ def projection_scope(seed: Mapping[str, Any] | None = None, *, apart: bool = Fal
             current[_SEED] = {**current.get(_SEED, {}), **seed}
         yield
         return
-    token = _READ_SCOPE.set({**(seed or {}), _SEED: dict(seed or {})})
-    try:
+    with _READ_SCOPE.set({**(seed or {}), _SEED: dict(seed or {})}):
         yield
-    finally:
-        _READ_SCOPE.reset(token)
 
 
 def seeded() -> dict[str, Any]:
@@ -189,8 +200,8 @@ def listing(
         for field in search:
             matches |= Q(**{f"{field}__icontains": query})
         qs = qs.filter(matches)
-    items = list(qs.order_by(*order)[: page_size(limit)])
-    return {"items": [serialize(row) for row in items], "count": len(items), "total": matched(qs, items, limit)}
+    page = keyset_page(qs, order, limit)
+    return {**page, "items": [serialize(row) for row in page["items"]]}
 
 
 def complete(items: list[Any]) -> dict[str, Any]:
@@ -200,13 +211,151 @@ def complete(items: list[Any]) -> dict[str, Any]:
     dict the read returns, so neither adds paging fields the other lacks.
     """
 
-    return {"items": items, "count": len(items), "total": len(items), "truncated": False, "next": ""}
+    return {"items": items, "count": len(items), "total": len(items), "truncated": False, "next": None}
 
 
 def matched(rows, page: list[Any], limit: int) -> int:
     """How many rows the page was cut from: counted only when the page is full."""
 
     return len(page) if len(page) < page_size(limit) else rows.count()
+
+
+# ----- Paging -------------------------------------------------------------------
+#
+# A list read past its first page sends back the cursor the page before it
+# answered with. ``application.resources`` signs it and binds it to the kind and
+# filters it was issued under; what it carries is a position only the cut that
+# wrote it reads: a keyset over a queryset's order, or a place in a list derived
+# whole on every read. The read opens ``paging`` around its handler, and the
+# first cut made inside it resumes from the position and says where it stopped,
+# so no handler passes a cursor along.
+
+
+class CursorRefusal(QueryRefusal):
+    """A position no cut made under these terms could have written."""
+
+
+@dataclass(slots=True)
+class PageScope:
+    """One list read's position: where the page before it stopped, and, once a cut
+    claims it, where this page stops (``None`` past the last row)."""
+
+    position: dict[str, Any] | None
+    claimed: bool = False
+    after: dict[str, Any] | None = None
+
+
+_PAGE: ContextVar[PageScope | None] = ContextVar("hq_projection_page", default=None)
+
+
+@contextmanager
+def paging(position: dict[str, Any] | None) -> Iterator[PageScope]:
+    """The scope a list read's handler runs in, resuming from ``position``."""
+
+    scope = PageScope(position)
+    with _PAGE.set(scope):
+        yield scope
+
+
+def _claimed() -> PageScope | None:
+    """The list read's scope for the first cut made inside it; nothing for any later
+    cut, which is a page of its own inside one item."""
+
+    scope = _PAGE.get()
+    if scope is None or scope.claimed:
+        return None
+    scope.claimed = True
+    return scope
+
+
+def _keyset(qs: QuerySet, order: tuple[str, ...]) -> tuple[tuple[str, bool], ...]:
+    """``order`` as the column names a keyset compares and whether each descends,
+    with the primary key last so no two rows tie."""
+
+    keys = tuple((name.removeprefix("-"), name.startswith("-")) for name in order)
+    if not any(name in ("pk", qs.model._meta.pk.name) for name, _ in keys):
+        keys += (("pk", keys[-1][1] if keys else False),)
+    for name, _ in keys:
+        field = qs.model._meta.pk if name == "pk" else qs.model._meta.get_field(name)
+        if field.null:
+            # NULL sorts apart from every value and compares to none, so a keyset over it skips rows.
+            raise TypeError(f"{qs.model.__name__}.{name} is nullable, so a list cannot page by it.")
+    return keys
+
+
+def _cursor_value(value: Any) -> Any:
+    return (
+        value.isoformat()
+        if isinstance(value, date | datetime)
+        else value
+        if isinstance(value, int | str)
+        else str(value)
+    )
+
+
+def _past(keys: tuple[tuple[str, bool], ...], position: dict[str, Any]) -> Q:
+    """The rows after ``position`` in the keyset ``keys``: past it on the first key,
+    or tied on each earlier key and past it on the next."""
+
+    values = position.get("keys")
+    if position.get("order") != [name for name, _ in keys] or not isinstance(values, list) or len(values) != len(keys):
+        raise CursorRefusal("cursor was issued for another order of this list.")
+    after = Q()
+    for index, (name, descending) in enumerate(keys):
+        step = Q(**{f"{name}__{'lt' if descending else 'gt'}": values[index]})
+        for earlier, (prior, _) in enumerate(keys[:index]):
+            step &= Q(**{prior: values[earlier]})
+        after |= step
+    return after
+
+
+def keyset_page(qs: QuerySet, order: tuple[str, ...], limit: int) -> dict[str, Any]:
+    """One page of ``qs`` in ``order``: past the list read's cursor when it sent one,
+    and with the position of its last row when more follow."""
+
+    keys = _keyset(qs, order)
+    names = [name for name, _ in keys]
+    scope, size = _claimed(), page_size(limit)
+    position = scope.position if scope is not None else None
+    cut = qs.filter(_past(keys, position)) if position is not None else qs
+    rows = list(cut.order_by(*(f"-{name}" if descending else name for name, descending in keys))[: size + 1])
+    page, more = rows[:size], len(rows) > size
+    total = qs.count() if more or position is not None else len(page)
+    found: dict[str, Any] = {"items": page, "count": len(page), "total": total}
+    if scope is not None:
+        last = page[-1] if more else None
+        scope.after = (
+            None
+            if last is None
+            else {"order": names, "keys": [_cursor_value(last.serializable_value(n)) for n in names]}
+        )
+        found["truncated"] = more
+    return found
+
+
+def window[T](items: Sequence[T], limit: int, *, maximum: int = MAX_PAGE_SIZE) -> tuple[Sequence[T], dict[str, Any]]:
+    """One page of a list derived whole on every read, and its paging fields;
+    ``maximum`` is a page's ceiling where its list declares its own.
+
+    The position is a place in the list: its order is the derivation's (worst
+    first, say), which moves as the estate does, so no key holds a row's place,
+    and a row that moved between two reads can be skipped or shown twice.
+    """
+
+    scope, size = _claimed(), page_size(limit, maximum=maximum)
+    start = 0
+    if scope is not None and scope.position is not None:
+        at: object = scope.position.get("at")
+        if not isinstance(at, int) or isinstance(at, bool) or at < 0:
+            raise CursorRefusal("cursor was issued for another order of this list.")
+        start = at
+    page = items[start : start + size]
+    more = start + size < len(items)
+    found: dict[str, Any] = {"count": len(page), "total": len(items)}
+    if scope is not None:
+        scope.after = {"at": start + size} if more else None
+        found["truncated"] = more
+    return page, found
 
 
 def addressable(model, serialize, slug: str) -> dict[str, Any]:

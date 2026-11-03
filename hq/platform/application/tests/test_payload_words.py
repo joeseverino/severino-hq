@@ -43,6 +43,6 @@ class ValueWordsTests(SimpleTestCase):
         self.assertEqual(value_words(frozenset({"a.example"})), "a.example")
 
     def test_a_field_reads_by_its_title_or_its_name_as_a_sentence(self):
-        self.assertEqual(field_label("confirm_prune", "Confirm Prune"), "Confirm prune")
+        self.assertEqual(field_label("confirm_prune"), "Confirm prune")
         self.assertEqual(field_label("dns_name"), "DNS name")
         self.assertEqual(field_label("doc_id", "Document"), "Document")

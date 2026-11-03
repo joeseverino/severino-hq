@@ -19,9 +19,16 @@ class ImageStandingWords:
     @property
     def checkable(self) -> bool:
         """Whether anything was checked for vulnerabilities: its source's
-        advisories, or its packages against OSV."""
+        advisories, or its packages against OSV. A source named but never
+        read has checked nothing."""
 
-        return bool(self.source or self.checked)
+        return self.upstream_read_at is not None or bool(self.checked)
+
+    @property
+    def awaiting_read(self) -> bool:
+        """Whether its source is known and its advisories are only not read yet."""
+
+        return bool(self.source) and not self.checkable
 
     @property
     def vulnerabilities(self) -> str:
@@ -31,6 +38,8 @@ class ImageStandingWords:
             return f"{len(self.advisories)} known"
         if self.urgent:
             return f"{len(self.urgent)} serious"
+        if self.awaiting_read:
+            return "not read"
         if not self.checkable:
             return "cannot check"
         return "none serious" if self.findings else "none known"
@@ -45,6 +54,8 @@ class ImageStandingWords:
             return "A fixed version of each package exists. No release of the image includes it yet."
         if self.urgent:
             return "Critical or high, in packages that have a fixed version."
+        if self.awaiting_read:
+            return self.unread or "HQ has not read its source's advisories yet."
         if not self.checkable:
             return "The image does not say where its source is, and its publisher provides no package list."
         return ""

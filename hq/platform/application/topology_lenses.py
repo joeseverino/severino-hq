@@ -185,9 +185,10 @@ def apply_trace(
     """Select a bounded dependency neighborhood without deriving new state.
 
     ``outbound`` follows the graph's declared source-to-target direction;
-    ``inbound`` answers what points at the focus. Unknown inputs deliberately
-    leave the projection unchanged and report no applied trace, matching the
-    standing-lens contract used by every delivery adapter.
+    ``inbound`` answers what points at the focus. Unknown inputs leave the
+    projection unchanged and report no applied trace, so a page opened from a
+    stale link still draws; the machine adapters refuse them first, in
+    ``topology.topology``.
     """
 
     if focus not in {node.id for node in topology.nodes}:

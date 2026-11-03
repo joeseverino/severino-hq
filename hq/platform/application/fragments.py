@@ -10,8 +10,9 @@ known by revision answers a repeated question with 304, composing nothing.
 import hashlib
 import re
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from datetime import datetime
+from html import unescape
 from typing import Any
 
 from django.http import HttpRequest, HttpResponse, HttpResponseNotModified
@@ -35,6 +36,21 @@ LONGEST = 24 * 60 * 60
 # and only to the process that rendered it.
 PART_HOLDS = 60
 _PROCESS = str(time.time_ns())
+
+
+# A region's opening tag, and the part it names.
+_REGION = re.compile(r'<[^>]*\sdata-fragment="([^"]*)"[^>]*>')
+_REGION_NAME = re.compile(r'\sdata-fragment-name="([^"]*)"')
+
+
+def regions(page: str, address: str) -> Iterator[tuple[str, str]]:
+    """Each region the page at ``address`` fetches into itself, as the address
+    and part name the browser asks for; an empty address is the page's own,
+    as fragment.js reads it. What renders a site ahead of a browser reads them here."""
+
+    for region in _REGION.finditer(page):
+        named = _REGION_NAME.search(region.group(0))
+        yield unescape(region.group(1)) or address, unescape(named.group(1)) if named else ""
 
 
 def requested(request: HttpRequest) -> str:

@@ -6,9 +6,10 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
+from hq.platform.application.tests.writers import form_keyed
 
 from ..action_links import ActionLink
-from ..findings import InvalidFindingsQuery, derive_findings, finding_rules, findings, rule_for
+from ..findings import FINDINGS_SCHEMA_VERSION, InvalidFindingsQuery, derive_findings, finding_rules, findings, rule_for
 from ..plugin_testing import offering
 from ..reach import TAILNET
 from ..security import Capability, Principal
@@ -649,28 +650,25 @@ class FindingsTests(SentinelMixin, TestCase):
                     f"{rule.name} names a provider family",
                 )
 
-    def test_serialization_names_the_rule_and_every_available_one(self):
+    def test_serialization_names_the_rule_it_was_narrowed_by(self):
         observed(self.rewrite("skipped"), self.now - timedelta(hours=9))
         observed(self.rewrite("swept"), self.now)
 
         with host_only():
             whole = findings(principal=MANAGE)
             narrowed = findings(principal=MANAGE, rule="skipped-by-a-sweep")
-            unknown = findings(principal=MANAGE, rule="not-a-rule")
 
         self.assertEqual(narrowed["rule"], "skipped-by-a-sweep")
-        self.assertIsNone(unknown["rule"])
-        self.assertEqual(unknown["summary"], whole["summary"])
-        self.assertEqual(
-            [item["name"] for item in whole["rules"]],
-            [rule.name for rule in finding_rules()],
-        )
-        self.assertEqual(whole["schema_version"], 2)
+        self.assertIsNone(whole["rule"])
+        self.assertEqual(whole["schema_version"], FINDINGS_SCHEMA_VERSION)
         self.assertTrue(any(item["offers"] for item in whole["findings"]))
         self.assertTrue(any(item["investigations"] for item in whole["findings"]))
         self.assertTrue(any(item["workflow"] for item in whole["findings"]))
         self.assertTrue(all(item["id"] for item in whole["findings"]))
-        self.assertTrue(all(remedy["method"] == "POST" for item in whole["findings"] for remedy in item["remedies"]))
+        # A remedy is a capability and its target on every door, so it names no door's route.
+        remedies = [remedy for item in whole["findings"] for remedy in item["remedies"]]
+        self.assertTrue(remedies)
+        self.assertTrue(all(remedy["capability"] and "url" not in remedy for remedy in remedies))
 
     def test_no_finding_carries_a_credential_a_controller_reported(self):
         plant_credentials()
@@ -1723,7 +1721,7 @@ class UnrecognizedContainerTests(TestCase):
             get_user_model().objects.create_user(username="operator", password="test-only-password")
         )
 
-        self.client.post(finding.remedies[0].url)
+        self.client.post(finding.remedies[0].url, form_keyed())
 
         self.assertTrue(ManagedResource.objects.filter(kind="portainer.container", spec__name="a-stray").exists())
         self.assertEqual(self.found(), [])

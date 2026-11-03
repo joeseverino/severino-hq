@@ -9,7 +9,7 @@ what it would take to change it. Nothing here derives a fact.
 from collections.abc import Callable
 from typing import Any
 
-from .projection import page_size, projection_scope
+from .projection import projection_scope, window
 from .record_errors import RecordNotFound
 lazy from .containers import containers
 lazy from .upgrades import plans
@@ -103,6 +103,23 @@ def _supply_chain(standing: Any) -> dict[str, Any]:
     }
 
 
+def _usage(usage: Any) -> dict[str, Any] | None:
+    """What it uses beside its limits, when its sweep sampled it: bytes and
+    how they were counted, CPU as a share of one core since the sweep before."""
+
+    if usage is None:
+        return None
+    return {
+        "memory_bytes": usage.memory,
+        "memory_counted_as": usage.memory_basis,
+        "memory_limit_bytes": usage.memory_limit or None,
+        "memory_of_limit_percent": usage.memory_of_limit,
+        "cpu_percent_of_one_core": usage.cpu_percent,
+        "cpu_limit": usage.cpu_limit or None,
+        "read_at": _moment(usage.read_at),
+    }
+
+
 def serialize_container(item: Any) -> dict[str, Any]:
     standing = item.standing
     return {
@@ -156,6 +173,7 @@ def serialize_container(item: Any) -> dict[str, Any]:
         ),
         "repository": _repository(standing.repository),
         "runtime": dict(item.runtime) if item.runtime is not None else None,
+        "usage": _usage(item.usage),
         "posture": _posture(item.posture),
         "supply_chain": _supply_chain(standing) | {"standard": _posture(item.supply_chain)},
     }
@@ -163,8 +181,8 @@ def serialize_container(item: Any) -> dict[str, Any]:
 
 def _listed(found: Callable[[], list[Any]], serialize: Callable[[Any], dict[str, Any]], limit: int) -> dict[str, Any]:
     with projection_scope():
-        items = [serialize(item) for item in found()[: page_size(limit)]]
-    return {"items": items, "count": len(items)}
+        page, paging = window(found(), limit)
+        return {**paging, "items": [serialize(item) for item in page]}
 
 
 def _one(found: Callable[[], list[Any]], address: str, serialize: Callable[[Any], dict[str, Any]]) -> dict[str, Any]:

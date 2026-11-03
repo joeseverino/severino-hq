@@ -5,6 +5,7 @@ from django.test import SimpleTestCase
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.integration_specs import IDEMPOTENCY_FIELD, capability_schema
+from hq.platform.application.json_schemas import fields
 
 
 def host_specs():
@@ -14,7 +15,7 @@ def host_specs():
 class CommandDescriptionTests(SimpleTestCase):
     def test_a_form_shows_each_description_as_its_help(self):
         for spec in host_specs():
-            properties = capability_schema(spec).get("properties", {})
+            properties = fields(capability_schema(spec))
             form = command_form_class(spec)()
             for name, field in properties.items():
                 if name in form.fields and name != IDEMPOTENCY_FIELD:
@@ -25,7 +26,7 @@ class CommandDescriptionTests(SimpleTestCase):
         missing = sorted(
             f"{spec.name}.{name}"
             for spec in host_specs()
-            for name, field in capability_schema(spec).get("properties", {}).items()
+            for name, field in fields(capability_schema(spec)).items()
             if not str(field.get("description", "")).strip()
         )
 

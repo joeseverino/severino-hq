@@ -12,24 +12,30 @@ from typing import Annotated, Any, get_args
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from pydantic import Field
 
 from hq.domains.contacts import inbox
 from hq.domains.control_plane.desired_state import desired_fingerprint
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.cloudflare import CONTACT_CHANGES_LIMIT, ContactStatus
 from hq.domains.control_plane.providers import validate_spec
-from hq.platform.core.audit import operation_context, record_event
+from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
 
 from .adoption import OBSERVES_ONLY, observes_only
 from .cadence import request_reading
 from .command_fields import Describe
+from .integration_specs import Kept, keeps
+from .projection import window
 from .record_errors import PolicyError, RecordNotFound
+from .record_saves import written
 from .resource_operations import queue_reconcile
 from .security import Principal
 
 CONTACT_STATUSES = frozenset(get_args(ContactStatus))
 ASSIGNEE_LENGTH = 120
+# The inbox page reads its whole list at once, so a page may hold more than an API page.
+MOST_SHOWN = 500
 REVIEW = "contact.submission.review"
 DELETE = "contact.submission.delete"
 
@@ -44,7 +50,7 @@ class ContactListCommand:
 @dataclass(frozen=True, slots=True)
 class ContactReviewCommand:
     status: Annotated[str, Describe("Where the submission stands.")]
-    assigned_to: Annotated[str, Describe("Who is handling it.")] = ""
+    assigned_to: Annotated[str, Field(max_length=ASSIGNEE_LENGTH), Describe("Who is handling it.")] = ""
     admin_notes: Annotated[str, Describe("Notes on it, for HQ only.")] = ""
 
 
@@ -68,13 +74,14 @@ def _matches(row: dict[str, Any], status: str, wanted: str) -> bool:
     return not wanted or any(wanted in str(row.get(name) or "").casefold() for name in ("name", "email", "message"))
 
 
-def list_contact_submissions(*, status: str = "", query: str = "", limit: int = 100) -> dict[str, Any]:
-    status = _status(status, allow_blank=True)
-    if limit < 1 or limit > 500:
-        raise ValueError("limit must be between 1 and 500")
+def list_contact_submissions(*, status: str | None = None, query: str = "", limit: int = 100) -> dict[str, Any]:
+    status = _status(status or "", allow_blank=True)
+    if limit < 1 or limit > MOST_SHOWN:
+        raise ValueError(f"limit must be between 1 and {MOST_SHOWN}")
     wanted = query.strip().casefold()
-    items = [row for row in inbox.current().rows if _matches(row, status, wanted)][:limit]
-    return {"items": items, "count": len(items)}
+    matches = [row for row in inbox.current().rows if _matches(row, status, wanted)]
+    items, paged = window(matches, limit, maximum=MOST_SHOWN)
+    return {**paged, "items": list(items)}
 
 
 def find_submission(identifier: int, current: inbox.Inbox | None = None) -> dict[str, Any] | None:
@@ -176,30 +183,31 @@ def _declare(spec: dict[str, Any], *, principal: Principal) -> None:
     transaction.on_commit(lambda: request_reading(inbox.READING))
 
 
+def _review_of(submission: dict[str, Any]) -> dict[str, Any]:
+    """A submission's review as it stands, as a review sends it."""
+
+    return {name: submission.get(name) or "" for name in inbox.REVIEWED}
+
+
+@keeps(Kept(lambda current_id: _review_of(_submission(current_id, inbox.current()))))
 @transaction.atomic
 def execute_contact_review(
     command: ContactReviewCommand,
     *,
     principal: Principal,
     current_id: int,
+    sent: frozenset[str] | None = None,
 ) -> dict[str, Any]:
-    status = _status(command.status)
-    if len(command.assigned_to) > ASSIGNEE_LENGTH:
-        too_long = ValidationError("Too long.", code="max_length", params={"limit_value": ASSIGNEE_LENGTH})
-        raise ValidationError({"assigned_to": too_long})
     current = inbox.current()
     before = _submission(current_id, current)
     review = {
         "id": current_id,
-        "status": status,
-        "assigned_to": command.assigned_to.strip(),
-        "admin_notes": command.admin_notes,
+        **_review_of(before),
+        **written(command, sent),
     }
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation=REVIEW,
-    ):
+    status = review["status"] = _status(review["status"])
+    review["assigned_to"] = review["assigned_to"].strip()
+    with audit_operation(operation=REVIEW, principal=principal):
         _declare(_change(current, review), principal=principal)
         record_event(
             action=AuditLog.Action.UPDATED,
@@ -230,11 +238,7 @@ def execute_contact_delete(
         # Already gone, or already waiting to be deleted: the requested end
         # state either way, so a retry succeeds.
         return {"ok": True, "deleted": {"id": current_id, "already_absent": True}}
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation=DELETE,
-    ):
+    with audit_operation(operation=DELETE, principal=principal):
         _declare(_change(current, {"delete": current_id}), principal=principal)
         record_event(
             action=AuditLog.Action.DELETED,

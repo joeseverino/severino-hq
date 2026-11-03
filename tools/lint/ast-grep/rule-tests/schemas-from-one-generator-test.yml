@@ -1,0 +1,15 @@
+id: schemas-from-one-generator
+valid:
+  - 'from hq.platform.application.json_schemas import json_schema'
+  - 'schema = json_schema(Command)'
+  - 'refs, definitions = json_schemas(types, mode="serialization", ref_template=SCHEMAS + "{model}")'
+  - 'json_schema(adapter(spec_type), mode="validation")'
+invalid:
+  - 'schema = TypeAdapter(Command).json_schema()'
+  - 'raw = TypeAdapter(schema).json_schema(mode=mode, ref_template=REFERENCE + "{model}")'
+  - 'Command.model_json_schema(by_alias=True)'
+  - 'TypeAdapter.json_schemas(adapters, ref_template=SCHEMAS)'
+  - 'from pydantic.json_schema import GenerateJsonSchema'
+  - |
+    class Closed(GenerateJsonSchema):
+        pass

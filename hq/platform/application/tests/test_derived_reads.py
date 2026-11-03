@@ -11,14 +11,14 @@ from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.platform.api.tests.test_api import ISSUER, RESOURCE, _serving, _token
+from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
 from hq.platform.core.tests.estate_sizes import (
     assert_cost_does_not_grow,
     assert_subject_cost_does_not_grow,
     distinct,
 )
 from hq.platform.mcp import services as mcp_services
-from hq.platform.mcp.identity import reset_principal, set_principal
+from hq.platform.mcp.identity import set_principal
 from hq_sdk import resources as sdk_resources
 
 from ..resources import describe_resources, get_resource, list_resource
@@ -152,7 +152,7 @@ class TotalTests(TestCase):
         for found in (machines, domains, estate_figures):
             self.assertEqual(found["total"], found["count"])
             self.assertFalse(found["truncated"])
-            self.assertEqual(found["next"], "")
+            self.assertIsNone(found["next"])
 
 
 class AuthorizationTests(TestCase):
@@ -168,8 +168,7 @@ class AuthorizationTests(TestCase):
                 get_resource(name, identifier, principal=NOBODY)
 
     def test_the_mcp_tool_refuses_a_caller_without_read(self):
-        bound = set_principal(NOBODY)
-        self.addCleanup(reset_principal, bound)
+        self.enterContext(set_principal(NOBODY))
 
         for name, query in LISTS.items():
             with self.subTest(name), self.assertRaises(AuthorizationError):
@@ -220,8 +219,7 @@ class ApiTests(TestCase):
 class McpCliAndSdkTests(TestCase):
     def setUp(self):
         estate(2)
-        bound = set_principal(mcp_principal())
-        self.addCleanup(reset_principal, bound)
+        self.enterContext(set_principal(mcp_principal()))
 
     def test_the_generic_mcp_tools_serve_every_derived_read(self):
         for name, query in LISTS.items():
@@ -276,7 +274,7 @@ class NoSecretTests(TestCase):
         self.assertNotIn(PLANTED, json.dumps(found))
 
     def test_no_derived_read_names_a_secret_looking_field(self):
-        answers = [list_resource(name, query, principal=READER) for name, query in LISTS.items()]
+        answers = [list_resource(name, query, principal=READER, fields=["*"]) for name, query in LISTS.items()]
         answers += [get_resource(name, identifier, principal=READER) for name, identifier in DETAILS.items()]
         for answer in answers:
             named = {name for name in keys(answer) if SECRET_KEY_NAME.search(str(name))}
@@ -324,7 +322,7 @@ class QueryBudgetTests(TestCase):
     def test_lists(self):
         for name, rows in COUNTED_LISTS.items():
             with self.subTest(name):
-                self.assert_flat(partial(list_resource, name, LISTS[name], principal=READER), rows)
+                self.assert_flat(partial(list_resource, name, LISTS[name], principal=READER, fields=["*"]), rows)
 
     def test_details(self):
         for name, rows in COUNTED_DETAILS.items():

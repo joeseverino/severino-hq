@@ -10,7 +10,7 @@ from typing import Any
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 
-from .projection import projection_scope, read_once
+from .projection import complete, projection_scope, read_once
 from .record_errors import RecordNotFound
 from .service_facets import zone_holding
 from .services import (
@@ -107,7 +107,7 @@ def list_services() -> dict[str, Any]:
 
     with projection_scope():
         items = [serialize_service(service) for service in listed_services()]
-    return {"items": items, "count": len(items)}
+    return complete(items)
 
 
 def get_service(hostname: str) -> dict[str, Any]:

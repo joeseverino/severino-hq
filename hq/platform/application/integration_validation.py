@@ -15,13 +15,16 @@ from pydantic import BaseModel, PydanticUndefinedAnnotation, PydanticUserError, 
 from .connection_contracts import GRANT_MODELS, ConnectionAbility, ConnectionSpec
 from .contracts import DJANGO_ROUTE, DOTTED_NAME, EFFECTS, SCOPE_NAME
 from .integration_specs import (
+    PAGE_FIELD,
     RESERVED_QUERY_FIELD,
+    SENT_KEYWORD,
     STALE_WRITE_KEYWORD,
     TARGET,
     TARGET_KINDS,
     CapabilitySpec,
     ResourceSpec,
     command_schema,
+    takes_sent_fields,
     takes_stale_write_token,
 )
 from .search_contracts import SearchDefinition
@@ -112,6 +115,8 @@ def _validate_capability_handler(spec: CapabilitySpec) -> None:
     kwargs: dict[str, Any] = {"principal": None}
     if takes_stale_write_token(spec.handler):
         kwargs[STALE_WRITE_KEYWORD] = None
+    if takes_sent_fields(spec.handler):
+        kwargs[SENT_KEYWORD] = None
     kind = TARGET_KINDS.get(spec.target_kind) if spec.target_kind else None
     if kind:
         kwargs[kind.keyword] = None
@@ -155,9 +160,19 @@ def _validate_list_contract(spec: ResourceSpec) -> None:
         raise ImproperlyConfigured(
             f"Resource {spec.name!r} query may not declare {RESERVED_QUERY_FIELD!r}: it selects the keys returned."
         )
+    # An extension's declaration is read as it arrived, which its annotation does not promise.
+    declared: tuple[object, ...] = spec.list_fields
+    if declared and (
+        not spec.list_handler
+        or len(declared) != len(set(declared))
+        or any(not isinstance(field, str) or not field.isidentifier() for field in declared)
+    ):
+        raise ImproperlyConfigured(
+            f"Resource {spec.name!r} list_fields must be the unique top-level names of a list's items."
+        )
     if spec.list_handler and spec.list_query_type:
         try:
-            values = spec.list_query_type().model_dump()
+            values = spec.list_query_type().model_dump(exclude={PAGE_FIELD})
             inspect.signature(spec.list_handler, annotation_format=Format.STRING).bind(
                 **values, **_principal_argument(spec)
             )

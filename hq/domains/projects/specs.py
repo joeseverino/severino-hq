@@ -1,19 +1,28 @@
 """The projects resource, declared on its domain in application/domains.py."""
 
+from pydantic import Field, create_model
+
 from hq.platform.application import projects
 from hq.platform.application.integration_specs import ResourceSpec
-from hq.platform.application.resources import BoundedQuery
+from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, TextFilter, one_of
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
 
 from .models import Project
 
-
-class ProjectQuery(BoundedQuery):
-    status: str | None = None
-    query: str | None = None
-    # True for the projects HQ's dependency update run covers, False for the rest.
-    updates: bool | None = None
+ProjectQuery = create_model(
+    "ProjectQuery",
+    __base__=BoundedQuery,
+    status=(one_of(Project.Status.values) | None, Field(default=None, description=STATUS_FILTER)),
+    query=(TextFilter, None),
+    updates=(
+        bool | None,
+        Field(
+            default=None,
+            description="True for the projects HQ's dependency update run covers, false for the rest; absent, both.",
+        ),
+    ),
+)
 
 
 def resources() -> tuple[ResourceSpec, ...]:

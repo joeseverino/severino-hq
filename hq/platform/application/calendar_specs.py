@@ -14,15 +14,18 @@ from . import calendar_entries
 from .calendar_entries import CHOOSE_SOURCE, EntryCommand, SourceChoiceCommand, choose_source, save_entry
 from .deletion import DeleteCommand, delete_calendar_entry
 from .integration_specs import CapabilitySpec, ResourceSpec
-from .resources import BoundedQuery
+from .records import KEPT
+from .resources import BoundedQuery, limit_field
 from .search_contracts import SearchDefinition
 from .security import Capability
 
 
 class AgendaQuery(BoundedQuery):
-    start: date | None = None
-    days: int = Field(default=14, ge=1, le=calendar_entries.AGENDA_DAYS)
-    limit: int = Field(default=200, ge=1, le=500)
+    start: date | None = Field(default=None, description="The first day the span covers; absent, today.")
+    days: int = Field(
+        default=14, ge=1, le=calendar_entries.AGENDA_DAYS, description="How many days the span covers, from start."
+    )
+    limit: int = limit_field(200, calendar_entries.AGENDA_PAGE)
 
 
 def capabilities() -> tuple[CapabilitySpec, ...]:
@@ -40,7 +43,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
         ),
         CapabilitySpec(
             "calendar.entry.update",
-            "Change one of your events on the calendar.",
+            f"Change one of your events on the calendar. {KEPT}",
             "remote_write",
             Capability.WRITE_CALENDAR,
             EntryCommand,
