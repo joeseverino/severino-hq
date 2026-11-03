@@ -7,6 +7,7 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.capabilities import capability_registry, execute_capability
 from hq.platform.application.contact_submissions import ASSIGNEE_LENGTH, REVIEW
 from hq.platform.application.integration_specs import capability_schema
+from hq.platform.application.json_schemas import fields
 from hq.platform.application.tests.writers import keyed
 
 from .. import inbox
@@ -50,4 +51,4 @@ class TheReviewSchemaTests(SimpleTestCase):
         schema = capability_schema(capability_registry()[REVIEW])
 
         self.assertNotIn("required", schema)
-        self.assertEqual(schema["properties"]["assigned_to"]["maxLength"], ASSIGNEE_LENGTH)
+        self.assertEqual(fields(schema)["assigned_to"]["maxLength"], ASSIGNEE_LENGTH)

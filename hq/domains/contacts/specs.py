@@ -1,6 +1,6 @@
 """Contact submissions' commands and resource, declared on their domain in application/domains.py."""
 
-from typing import Annotated, NotRequired, TypedDict, get_args
+from typing import Annotated, NotRequired, TypedDict
 
 from pydantic import Field
 
@@ -14,11 +14,10 @@ from hq.platform.application.contact_submissions import (
     execute_contact_list,
     execute_contact_review,
 )
-from hq.platform.application.describe import Describe, listed
+from hq.platform.application.describe import Describe
 from hq.platform.application.integration_specs import CapabilitySpec, ResourceSpec
 from hq.platform.application.resources import STATUS_FILTER, TEXT_FILTER, BoundedQuery
 from hq.platform.application.security import Capability
-from hq.platform.application.ui import ended
 
 from .inbox import PREVIEW_LENGTH
 
@@ -52,9 +51,9 @@ class ContactSubmissionRow(TypedDict):
     name: NotRequired[Annotated[str, Describe("The name the visitor gave.")]]
     email: NotRequired[Annotated[str, Describe("The email address the visitor gave.")]]
     message: NotRequired[Annotated[str, Describe("What the visitor wrote, in full.")]]
-    status: NotRequired[Annotated[str, Describe(ended(f"Where its review stands: {listed(get_args(ContactStatus))}"))]]
-    assigned_to: NotRequired[Annotated[str, Describe("Who is handling it; empty for nobody.")]]
-    admin_notes: NotRequired[Annotated[str, Describe("The notes kept on it, for HQ only; empty for none.")]]
+    status: NotRequired[contact_submissions.ReviewStatus]
+    assigned_to: NotRequired[contact_submissions.Assignee]
+    admin_notes: NotRequired[contact_submissions.AdminNotes]
     country: NotRequired[Annotated[str, Describe("The country it was sent from, as the site recorded it.")]]
     ip_address: NotRequired[Annotated[str, Describe("The IP address it was sent from.")]]
     browser: NotRequired[Annotated[str, Describe("The visitor's browser, as the site recorded it.")]]

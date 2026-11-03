@@ -1,7 +1,6 @@
 """What the browser gate hands the page, held without a browser."""
 
 import re
-from unittest import mock
 
 from django.test import SimpleTestCase
 
@@ -156,9 +155,7 @@ class PlantTests(SimpleTestCase):
         """A check is proven able to fail by the plant PlantedBrowserTests
         requires it to find: one with none could pass every page forever."""
 
-        # axe's source is installed by setup:lint-tools, which naming the checks needs none of.
-        with mock.patch.object(axe, "axe_probe", return_value=""):
-            checks = survey_checks("/", WIDE)
+        checks = survey_checks("/", WIDE)
         self.assertIn("sideways", checks)
         self.assertEqual(sorted(set(checks) - set(planted.PLANTS)), [], "a check with no plant in planted.PLANTS")
         self.assertEqual(sorted(set(planted.PLANTS) - set(checks)), [], "a plant for no check the survey runs")

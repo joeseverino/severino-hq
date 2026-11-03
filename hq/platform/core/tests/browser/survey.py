@@ -1,6 +1,9 @@
 """Every check the layout gates hold, as probes with their arguments, and how a reading becomes findings."""
 
+from collections.abc import Callable, Mapping
+from functools import partial
 from pathlib import Path
+from typing import Any, override
 
 from hq.platform.core.tests.browser.probes.axe import contrast_read, rules_read
 from hq.platform.core.tests.browser.probes.boxes import (
@@ -70,14 +73,42 @@ _FIELDS_READ = (FIELD_EDGES, [SELECTORS["fillable"], FIELD_CONTRAST, SELECTORS["
 _BUTTON_EDGES_READ = (BUTTON_EDGES, SELECTORS["pressed"])
 
 
+class Probes(Mapping[str, Any]):
+    """Probes as ``(source, arg)`` by check, each read only when it is asked
+    for: naming the checks reads none, so a tree without the lint tools (the
+    image, the composed suite's copy) names them all the same."""
+
+    def __init__(self, reads: Mapping[str, Callable[[], Any]]):
+        self._reads = reads
+
+    @override
+    def __getitem__(self, check):
+        return self._reads[check]()
+
+    @override
+    def __contains__(self, check):
+        return check in self._reads
+
+    @override
+    def __iter__(self):
+        return iter(self._reads)
+
+    @override
+    def __len__(self):
+        return len(self._reads)
+
+
+_PALETTE: dict[str, Callable[[], Any]] = {
+    "contrast": contrast_read,
+    "fields": partial(_probe, _FIELDS_READ),
+    "button edges": partial(_probe, _BUTTON_EDGES_READ),
+}
+
+
 def palette_probes():
     """Every check whose verdict depends on the palette the page is drawn in."""
 
-    return {
-        "contrast": contrast_read(),
-        "fields": _FIELDS_READ,
-        "button edges": _BUTTON_EDGES_READ,
-    }
+    return Probes(_PALETTE)
 
 
 _SIDEWAYS_READ = (SIDEWAYS, SELECTORS["sideways"])
@@ -151,12 +182,11 @@ def geometry_probes(path, width):
     """The geometry's probes on ``path`` at ``width``, as ``(source, arg)``
     by check: the dashboard's readings only on the dashboard."""
 
-    probes = {check: _probe(probe) for check, probe in _GEOMETRY.items()}
-    # axe's source is read once a run first asks for it, never on import.
-    probes["axe"] = rules_read()
+    reads: dict[str, Callable[[], Any]] = {check: partial(_probe, probe) for check, probe in _GEOMETRY.items()}
+    reads["axe"] = rules_read
     if path == "/":
-        probes["readings"] = (_READINGS_OF, SELECTORS["readings"])
-    return probes
+        reads["readings"] = partial(_probe, (_READINGS_OF, SELECTORS["readings"]))
+    return Probes(reads)
 
 
 def survey_checks(path, width):

@@ -15,7 +15,6 @@ from typing import Annotated, Any, NotRequired, TypedDict
 
 from hq.domains.control_plane.observations.contract import READERS, READING_FACETS
 from hq.domains.control_plane.provider_adapters.contracts import REFUSALS
-from hq.domains.docs_index.models import DocumentationRecord
 
 from .answer_fields import ObservedAt, Since, UpdatedAt
 from .connection_catalog import AUTHORITY_LABELS
@@ -23,9 +22,20 @@ from .connection_contracts import CREDENTIAL_MODELS
 from .connection_lifecycle import Lifecycle
 from .credential_sight import STATE_LABELS
 from .describe import Describe, listed
-from .documentation import DocId, DocumentationTitle
+from .documentation import (
+    DocEnvironment,
+    DocId,
+    DocSensitivity,
+    DocStatus,
+    DocType,
+    DocumentationTitle,
+    ExternalUrl,
+    GithubPath,
+    LastReviewed,
+    ObsidianPath,
+)
 from .plugins import ATTENTION_ORDER
-from .record_fields import Notes
+from .record_fields import Notes, PublishedAt
 from .service_health import ATTENTION, GOOD, SERIOUS, UNKNOWN
 from .services import HQ_MARK, OBSERVED_MARK
 from .topology_model import STANDINGS
@@ -788,25 +798,16 @@ class DocumentationRow(TypedDict):
 
     doc_id: DocId
     title: DocumentationTitle
-    doc_type: Annotated[str, Describe(ended(f"What type of doc it is: {listed(DocumentationRecord.DocType.values)}"))]
+    doc_type: DocType
     system: Annotated[str, Describe("The system or service it is about; empty for none.")]
-    environment: Annotated[
-        str, Describe(ended(f"Where that system runs: {listed(DocumentationRecord.Environment.values)}"))
-    ]
-    status: Annotated[str, Describe(ended(f"Where the doc stands: {listed(DocumentationRecord.Status.values)}"))]
-    sensitivity: Annotated[
-        str,
-        Describe(
-            f"Who may read it, {listed(DocumentationRecord.Sensitivity.values)}; a restricted doc is never listed."
-        ),
-    ]
-    obsidian_path: Annotated[str, Describe("Its path in the vault; empty for none.")]
-    github_path: Annotated[str, Describe("Its path in a repository; empty for none.")]
-    external_url: Annotated[str, Describe("Where it is published outside HQ; empty for none.")]
-    last_reviewed: Annotated[
-        str | None, Describe("When it was last checked against what it describes, an ISO 8601 date; null for never.")
-    ]
-    published_at: Annotated[str | None, Describe("When it was published, an ISO 8601 date; null when it is not.")]
+    environment: DocEnvironment
+    status: DocStatus
+    sensitivity: DocSensitivity
+    obsidian_path: ObsidianPath
+    github_path: GithubPath
+    external_url: ExternalUrl
+    last_reviewed: LastReviewed
+    published_at: PublishedAt
     notes: Notes
     updated_at: UpdatedAt
 

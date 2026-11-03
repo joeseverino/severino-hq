@@ -25,12 +25,14 @@ from hq.platform.core.models import AuditLog
 from .adoption import OBSERVES_ONLY, observes_only
 from .cadence import request_reading
 from .command_fields import Describe
+from .describe import listed
 from .integration_specs import Kept, keeps
 from .projection import window
 from .record_errors import PolicyError, RecordNotFound
 from .record_saves import written
 from .resource_operations import queue_reconcile
 from .security import Principal
+from .ui import ended
 lazy from .record_answers import ContactSubmissionPage
 
 CONTACT_STATUSES = frozenset(get_args(ContactStatus))
@@ -39,6 +41,12 @@ ASSIGNEE_LENGTH = 120
 MOST_SHOWN = 500
 REVIEW = "contact.submission.review"
 DELETE = "contact.submission.delete"
+
+
+# A submission's review fields as its command writes them and its row reads them back, each said once.
+type ReviewStatus = Annotated[str, Describe(ended(f"Where its review stands: {listed(get_args(ContactStatus))}"))]
+type Assignee = Annotated[str, Field(max_length=ASSIGNEE_LENGTH), Describe("Who is handling it; empty for nobody.")]
+type AdminNotes = Annotated[str, Describe("The notes kept on it, for HQ only; empty for none.")]
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,9 +58,9 @@ class ContactListCommand:
 
 @dataclass(frozen=True, slots=True)
 class ContactReviewCommand:
-    status: Annotated[str, Describe("Where the submission stands.")]
-    assigned_to: Annotated[str, Field(max_length=ASSIGNEE_LENGTH), Describe("Who is handling it.")] = ""
-    admin_notes: Annotated[str, Describe("Notes on it, for HQ only.")] = ""
+    status: ReviewStatus
+    assigned_to: Assignee = ""
+    admin_notes: AdminNotes = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,19 +117,19 @@ def execute_contact_list(
     principal: Principal,
 ) -> ContactSubmissionPage:
     del principal
-    listed = list_contact_submissions(
+    found = list_contact_submissions(
         status=command.status,
         query=command.query,
         limit=command.limit,
     )
     page: ContactSubmissionPage = {
         "ok": True,
-        "items": listed["items"],
-        "count": listed["count"],
-        "total": listed["total"],
+        "items": found["items"],
+        "count": found["count"],
+        "total": found["total"],
     }
-    if "truncated" in listed:
-        page["truncated"] = listed["truncated"]
+    if "truncated" in found:
+        page["truncated"] = found["truncated"]
     return page
 
 

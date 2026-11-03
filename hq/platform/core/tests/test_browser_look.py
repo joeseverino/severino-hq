@@ -810,7 +810,7 @@ class _Unanswered:
 
     def __init__(self):
         self.base, self.base_errors, self.errors = None, {}, {("estate/example", 402): []}
-        self.unanswered = {"estate/example": 404}
+        self.unanswered_pages = {"estate/example": 404}
         # The tree the run began on, unchanged at its close.
         self.tree = "example-tree"
 

@@ -5,11 +5,11 @@ is the same audited write as one added on the page.
 """
 
 import calendar as month_lengths
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from itertools import count
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, TypedDict, cast
 
 from django.db import transaction
 from django.db.models import Q
@@ -25,6 +25,7 @@ from hq.platform.core.audit import audit_operation
 from .calendar import CalendarEvent, CalendarSource, gather
 from .command_fields import Describe, Refers
 from .derivations import derivation
+from .describe import listed
 from .integration_specs import Kept, keeps
 from .moments import when_day
 from .projection import window
@@ -192,9 +193,33 @@ def repeat_label(entry: Entry) -> str:
 # ----- Writing ----------------------------------------------------------------
 
 
-# The fields an entry is added and changed by that take no default, said once for both.
+# An entry's fields as its command writes them and its record reads them back, each said once.
 type CalendarEntryTitle = Annotated[str, Describe("What the entry is.")]
-type CalendarEntryStartsOn = Annotated[date, Describe("The day it starts.")]
+type CalendarEntryStartsOn = Annotated[date, Describe("The day it starts, an ISO 8601 date.")]
+type CalendarEntryEndsOn = Annotated[
+    date | None, Describe("The day it ends, an ISO 8601 date; null for one that ends the day it starts.")
+]
+type CalendarEntryLocation = Annotated[str, Describe("Where it happens; empty when not recorded.")]
+Repeat = Literal["", "daily", "weekly", "monthly", "yearly"]
+type CalendarEntryRepeat = Annotated[
+    Repeat,
+    Describe(f"How often it repeats: {listed(Entry.Repeat.values)}; empty for once."),
+]
+type CalendarEntryInterval = Annotated[
+    int,
+    Field(ge=INTERVAL_MINIMUM, le=INTERVAL_MAXIMUM),
+    Describe("How far apart its times are, in what `repeat` names: 2 with `weekly` is every other week."),
+]
+type CalendarEntryWeekdays = Annotated[
+    Sequence[int],
+    Describe("For one that repeats weekly, the days of the week it falls on, Monday as 0; else empty."),
+]
+type CalendarEntryRepeatUntil = Annotated[
+    date | None, Describe("The last day it repeats, an ISO 8601 date; null for no last day.")
+]
+type CalendarEntryAbout = Annotated[
+    str, Refers(Entry, "about"), Describe("What it is about, as `type:key`; empty for nothing.")
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,22 +228,16 @@ class EntryCommand:
 
     title: CalendarEntryTitle
     starts_on: CalendarEntryStartsOn
-    ends_on: Annotated[date | None, Describe("The day it ends, for one that spans days.")] = None
+    ends_on: CalendarEntryEndsOn = None
     starts_at: Annotated[time | None, Describe("The time it starts; blank for all day.")] = None
     ends_at: Annotated[time | None, Describe("The time it ends.")] = None
-    location: Annotated[str, Describe("Where it happens.")] = ""
+    location: CalendarEntryLocation = ""
     notes: Notes = ""
-    repeat: Annotated[
-        Literal["", "daily", "weekly", "monthly", "yearly"], Describe("How often it repeats; blank for once.")
-    ] = ""
-    interval: Annotated[
-        int,
-        Field(ge=INTERVAL_MINIMUM, le=INTERVAL_MAXIMUM),
-        Describe("Every how many days, weeks, months or years it repeats."),
-    ] = 1
-    weekdays: Annotated[tuple[int, ...], Describe("The days of the week a weekly entry falls on, Monday as 0.")] = ()
-    repeat_until: Annotated[date | None, Describe("The last day it repeats.")] = None
-    about: Annotated[str, Refers(Entry, "about"), Describe("What the entry is about, as type:identity.")] = ""
+    repeat: CalendarEntryRepeat = ""
+    interval: CalendarEntryInterval = 1
+    weekdays: CalendarEntryWeekdays = ()
+    repeat_until: CalendarEntryRepeatUntil = None
+    about: CalendarEntryAbout = ""
 
 
 def serialize_entry(entry: Entry) -> EntryRecord:
@@ -231,7 +250,8 @@ def serialize_entry(entry: Entry) -> EntryRecord:
         "ends_at": entry.ends_at.isoformat(timespec="minutes") if entry.ends_at else None,
         "location": entry.location,
         "notes": entry.notes,
-        "repeat": entry.repeat,
+        # Every write passes EntryCommand, whose type holds repeat to these.
+        "repeat": cast(Repeat, entry.repeat),
         "repeat_label": repeat_label(entry),
         "interval": entry.interval,
         "weekdays": list(entry.weekday_numbers),

@@ -780,15 +780,16 @@
             "code": "invalid_input",
             "details": [
               {
-                "errors": [
-                  "slug is required."
+                "loc": [
+                  "projects",
+                  1,
+                  "slug"
                 ],
-                "index": 1,
-                "kind": "project",
-                "slug": ""
+                "msg": "Field required",
+                "type": "missing"
               }
             ],
-            "message": "1 record refused. Nothing was imported."
+            "message": "hq.import: projects[1].slug is required."
           },
           "ok": false
         },
@@ -3111,10 +3112,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/AssetSaved"
+                      "$ref": "#/components/schemas/AssetSaved",
+                      "title": "Asset saved"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -3211,10 +3214,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/ContactDeleted"
+                      "$ref": "#/components/schemas/ContactDeleted",
+                      "title": "Contact deleted"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -3242,10 +3247,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/ContactReviewed"
+                      "$ref": "#/components/schemas/ContactReviewed",
+                      "title": "Contact reviewed"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -3381,10 +3388,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/ContentSaved"
+                      "$ref": "#/components/schemas/ContentSaved",
+                      "title": "Content saved"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -3412,10 +3421,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/ControllerSweepRequested"
+                      "$ref": "#/components/schemas/ControllerSweepRequested",
+                      "title": "Controller sweep requested"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -3467,10 +3478,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/DependencyUpdatesSet"
+                      "$ref": "#/components/schemas/DependencyUpdatesSet",
+                      "title": "Dependency updates set"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -3498,10 +3511,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/DocumentationSaved"
+                      "$ref": "#/components/schemas/DocumentationSaved",
+                      "title": "Documentation saved"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -3529,10 +3544,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/DocumentationSynced"
+                      "$ref": "#/components/schemas/DocumentationSynced",
+                      "title": "Documentation synced"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -3584,10 +3601,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/EmptyGroupsRemoved"
+                      "$ref": "#/components/schemas/EmptyGroupsRemoved",
+                      "title": "Empty groups removed"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -3639,10 +3658,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/EntrySaved"
+                      "$ref": "#/components/schemas/EntrySaved",
+                      "title": "Entry saved"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -3670,10 +3691,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/ExpenseSaved"
+                      "$ref": "#/components/schemas/ExpenseSaved",
+                      "title": "Expense saved"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -3711,10 +3734,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/HqImported"
+                      "$ref": "#/components/schemas/HqImported",
+                      "title": "HQ imported"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -3742,10 +3767,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/HqSynced"
+                      "$ref": "#/components/schemas/HqSynced",
+                      "title": "HQ synced"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -3885,10 +3912,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/ObservedAccepted"
+                      "$ref": "#/components/schemas/ObservedAccepted",
+                      "title": "Observed accepted"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -3937,13 +3966,16 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/OperationQueued"
+                      "$ref": "#/components/schemas/OperationQueued",
+                      "title": "Operation queued"
                     },
                     {
-                      "$ref": "#/components/schemas/DeclarationForgotten"
+                      "$ref": "#/components/schemas/DeclarationForgotten",
+                      "title": "Declaration forgotten"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -3971,10 +4003,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/OperationQueued"
+                      "$ref": "#/components/schemas/OperationQueued",
+                      "title": "Operation queued"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -4002,10 +4036,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/PanelsRefreshRequested"
+                      "$ref": "#/components/schemas/PanelsRefreshRequested",
+                      "title": "Panels refresh requested"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -4057,10 +4093,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/ProfileReadRequested"
+                      "$ref": "#/components/schemas/ProfileReadRequested",
+                      "title": "Profile read requested"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -4088,10 +4126,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/ProjectSaved"
+                      "$ref": "#/components/schemas/ProjectSaved",
+                      "title": "Project saved"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -4139,10 +4179,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/ReceiptSaved"
+                      "$ref": "#/components/schemas/ReceiptSaved",
+                      "title": "Receipt saved"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -4170,10 +4212,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/RecordDeleted"
+                      "$ref": "#/components/schemas/RecordDeleted",
+                      "title": "Record deleted"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -4225,10 +4269,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/RenewalQueued"
+                      "$ref": "#/components/schemas/RenewalQueued",
+                      "title": "Renewal queued"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -4310,10 +4356,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/ResourceSaved"
+                      "$ref": "#/components/schemas/ResourceSaved",
+                      "title": "Resource saved"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -4341,10 +4389,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/RunRequested"
+                      "$ref": "#/components/schemas/RunRequested",
+                      "title": "Run requested"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -4372,10 +4422,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/ServiceAdopted"
+                      "$ref": "#/components/schemas/ServiceAdopted",
+                      "title": "Service adopted"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -4541,10 +4593,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/VisitRefreshed"
+                      "$ref": "#/components/schemas/VisitRefreshed",
+                      "title": "Visit refreshed"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -4572,10 +4626,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/WorkRequested"
+                      "$ref": "#/components/schemas/WorkRequested",
+                      "title": "Work requested"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -4603,10 +4659,12 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/ZoneAdopted"
+                      "$ref": "#/components/schemas/ZoneAdopted",
+                      "title": "Zone adopted"
                     },
                     {
-                      "$ref": "#/components/schemas/AwaitingApproval"
+                      "$ref": "#/components/schemas/AwaitingApproval",
+                      "title": "Awaiting approval"
                     }
                   ]
                 },
@@ -4845,6 +4903,10 @@
         ],
         "type": "object"
       },
+      "AdminNotes": {
+        "description": "The notes kept on it, for HQ only; empty for none.",
+        "type": "string"
+      },
       "AgendaItem": {
         "additionalProperties": false,
         "description": "One thing on the calendar in the span, from whichever source holds it.",
@@ -5031,7 +5093,8 @@
       "Applying": {
         "anyOf": [
           {
-            "$ref": "#/components/schemas/OperationItem"
+            "$ref": "#/components/schemas/OperationItem",
+            "title": "Operation item"
           },
           {
             "type": "null"
@@ -5040,20 +5103,23 @@
         "description": "The operation queued to apply the change at once; null where none was.",
         "title": "Applying"
       },
+      "AssetCategory": {
+        "description": "What type of asset it is: `networking`, `server_hardware`, `software`, `subscription`, `domain`, `hosting`, `camera_audio`, `office`, `tools`, `training` or `other`.",
+        "type": "string"
+      },
       "AssetCommand": {
         "additionalProperties": false,
         "description": "The command: the fields its input schema names.",
         "properties": {
           "business_use_percentage": {
+            "$ref": "#/components/schemas/BusinessUseShare",
             "default": 100,
-            "description": "How much of its use is for the business, as a percentage.",
             "maximum": 100,
-            "minimum": 0,
-            "type": "integer"
+            "minimum": 0
           },
           "category": {
+            "$ref": "#/components/schemas/AssetCategory",
             "default": "other",
-            "description": "What type of asset it is.",
             "enum": [
               "networking",
               "server_hardware",
@@ -5067,7 +5133,6 @@
               "training",
               "other"
             ],
-            "type": "string",
             "x-enumDescriptions": {
               "camera_audio": "Camera / audio",
               "domain": "Domain",
@@ -5086,13 +5151,8 @@
             "$ref": "#/components/schemas/IdempotencyKey"
           },
           "infrastructure": {
-            "default": "",
-            "description": "The machine, domain or certificate this asset is, as type:identity.",
-            "type": "string",
-            "x-hq-reference": {
-              "field": "infrastructure",
-              "model": "assets.asset"
-            }
+            "$ref": "#/components/schemas/AssetInfrastructure",
+            "default": ""
           },
           "item_name": {
             "$ref": "#/components/schemas/AssetName"
@@ -5103,8 +5163,8 @@
             "format": "textarea"
           },
           "payment_method": {
+            "$ref": "#/components/schemas/PaymentMethod",
             "default": "",
-            "description": "How it was paid for.",
             "enum": [
               "",
               "cash",
@@ -5114,7 +5174,6 @@
               "paypal",
               "other"
             ],
-            "type": "string",
             "x-enumDescriptions": {
               "": "Not set",
               "ach": "ACH / bank transfer",
@@ -5126,41 +5185,24 @@
             }
           },
           "purchase_date": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "When it was bought."
+            "$ref": "#/components/schemas/PurchaseDate",
+            "default": null
           },
           "related_projects": {
-            "default": [],
-            "description": "The projects this asset serves.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "x-hq-records": {
-              "resource": "projects"
-            }
+            "$ref": "#/components/schemas/AssetProjects",
+            "default": []
           },
           "serial_number": {
-            "default": "",
-            "description": "The maker's serial number.",
-            "type": "string"
+            "$ref": "#/components/schemas/SerialNumber",
+            "default": ""
           },
           "slug": {
             "$ref": "#/components/schemas/Slug",
             "default": ""
           },
           "status": {
+            "$ref": "#/components/schemas/AssetStatus",
             "default": "active",
-            "description": "Whether it is in use, or how it left.",
             "enum": [
               "active",
               "retired",
@@ -5168,7 +5210,6 @@
               "returned",
               "replaced"
             ],
-            "type": "string",
             "x-enumDescriptions": {
               "active": "Active",
               "replaced": "Replaced",
@@ -5182,22 +5223,12 @@
             "default": "0.00"
           },
           "vendor": {
-            "default": "",
-            "description": "Who it was bought from.",
-            "type": "string"
+            "$ref": "#/components/schemas/AssetVendor",
+            "default": ""
           },
           "warranty_date": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "When its warranty ends."
+            "$ref": "#/components/schemas/WarrantyDate",
+            "default": null
           }
         },
         "required": [
@@ -5246,6 +5277,14 @@
         ],
         "type": "object"
       },
+      "AssetInfrastructure": {
+        "description": "The machine, domain or certificate this asset is, as `type:key` such as `machine:lab-1`; empty for none.",
+        "type": "string",
+        "x-hq-reference": {
+          "field": "infrastructure",
+          "model": "assets.asset"
+        }
+      },
       "AssetLinks": {
         "additionalProperties": false,
         "description": "The records an asset is linked to.",
@@ -5278,6 +5317,16 @@
       "AssetName": {
         "description": "What the asset is called.",
         "type": "string"
+      },
+      "AssetProjects": {
+        "description": "The projects this asset serves.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array",
+        "x-hq-records": {
+          "resource": "projects"
+        }
       },
       "AssetRecord": {
         "additionalProperties": false,
@@ -5342,15 +5391,13 @@
             "$ref": "#/components/schemas/BusinessUseShare"
           },
           "category": {
-            "description": "What type of asset it is: `networking`, `server_hardware`, `software`, `subscription`, `domain`, `hosting`, `camera_audio`, `office`, `tools`, `training` or `other`.",
-            "type": "string"
+            "$ref": "#/components/schemas/AssetCategory"
           },
           "estimated_deductible_amount": {
             "$ref": "#/components/schemas/DeductibleAmount"
           },
           "infrastructure": {
-            "description": "The machine, domain or certificate this asset is, as `type:key` such as `machine:lab-1`; empty for none.",
-            "type": "string"
+            "$ref": "#/components/schemas/AssetInfrastructure"
           },
           "item_name": {
             "$ref": "#/components/schemas/AssetName"
@@ -5362,26 +5409,16 @@
             "$ref": "#/components/schemas/PaymentMethod"
           },
           "purchase_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "When it was bought, an ISO 8601 date; null when not recorded."
+            "$ref": "#/components/schemas/PurchaseDate"
           },
           "serial_number": {
-            "description": "The maker's serial number; empty when not recorded.",
-            "type": "string"
+            "$ref": "#/components/schemas/SerialNumber"
           },
           "slug": {
             "$ref": "#/components/schemas/RecordSlug"
           },
           "status": {
-            "description": "Whether it is in use, or how it left: `active`, `retired`, `sold`, `returned` or `replaced`.",
-            "type": "string"
+            "$ref": "#/components/schemas/AssetStatus"
           },
           "total_cost": {
             "$ref": "#/components/schemas/TotalCostAmount"
@@ -5390,19 +5427,10 @@
             "$ref": "#/components/schemas/UpdatedAt"
           },
           "vendor": {
-            "description": "Who it was bought from; empty when not recorded.",
-            "type": "string"
+            "$ref": "#/components/schemas/AssetVendor"
           },
           "warranty_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "When its warranty ends, an ISO 8601 date; null for none recorded."
+            "$ref": "#/components/schemas/WarrantyDate"
           }
         },
         "type": "object"
@@ -5424,6 +5452,10 @@
         ],
         "type": "object"
       },
+      "AssetStatus": {
+        "description": "Whether it is in use, or how it left: `active`, `retired`, `sold`, `returned` or `replaced`.",
+        "type": "string"
+      },
       "AssetUpdateRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -5436,13 +5468,12 @@
             "description": "The command: the fields its input schema names.",
             "properties": {
               "business_use_percentage": {
-                "description": "How much of its use is for the business, as a percentage.",
+                "$ref": "#/components/schemas/BusinessUseShare",
                 "maximum": 100,
-                "minimum": 0,
-                "type": "integer"
+                "minimum": 0
               },
               "category": {
-                "description": "What type of asset it is.",
+                "$ref": "#/components/schemas/AssetCategory",
                 "enum": [
                   "networking",
                   "server_hardware",
@@ -5456,7 +5487,6 @@
                   "training",
                   "other"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "camera_audio": "Camera / audio",
                   "domain": "Domain",
@@ -5475,12 +5505,7 @@
                 "$ref": "#/components/schemas/IdempotencyKey"
               },
               "infrastructure": {
-                "description": "The machine, domain or certificate this asset is, as type:identity.",
-                "type": "string",
-                "x-hq-reference": {
-                  "field": "infrastructure",
-                  "model": "assets.asset"
-                }
+                "$ref": "#/components/schemas/AssetInfrastructure"
               },
               "item_name": {
                 "$ref": "#/components/schemas/AssetName"
@@ -5490,7 +5515,7 @@
                 "format": "textarea"
               },
               "payment_method": {
-                "description": "How it was paid for.",
+                "$ref": "#/components/schemas/PaymentMethod",
                 "enum": [
                   "",
                   "cash",
@@ -5500,7 +5525,6 @@
                   "paypal",
                   "other"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "": "Not set",
                   "ach": "ACH / bank transfer",
@@ -5512,36 +5536,19 @@
                 }
               },
               "purchase_date": {
-                "anyOf": [
-                  {
-                    "format": "date",
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "When it was bought."
+                "$ref": "#/components/schemas/PurchaseDate"
               },
               "related_projects": {
-                "description": "The projects this asset serves.",
-                "items": {
-                  "type": "string"
-                },
-                "type": "array",
-                "x-hq-records": {
-                  "resource": "projects"
-                }
+                "$ref": "#/components/schemas/AssetProjects"
               },
               "serial_number": {
-                "description": "The maker's serial number.",
-                "type": "string"
+                "$ref": "#/components/schemas/SerialNumber"
               },
               "slug": {
                 "$ref": "#/components/schemas/Slug"
               },
               "status": {
-                "description": "Whether it is in use, or how it left.",
+                "$ref": "#/components/schemas/AssetStatus",
                 "enum": [
                   "active",
                   "retired",
@@ -5549,7 +5556,6 @@
                   "returned",
                   "replaced"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "active": "Active",
                   "replaced": "Replaced",
@@ -5562,20 +5568,10 @@
                 "$ref": "#/components/schemas/TotalCost"
               },
               "vendor": {
-                "description": "Who it was bought from.",
-                "type": "string"
+                "$ref": "#/components/schemas/AssetVendor"
               },
               "warranty_date": {
-                "anyOf": [
-                  {
-                    "format": "date",
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "When its warranty ends."
+                "$ref": "#/components/schemas/WarrantyDate"
               }
             },
             "type": "object"
@@ -5596,6 +5592,15 @@
       },
       "AssetUpsertRequest": {
         "$ref": "#/components/schemas/AssetCreateRequest"
+      },
+      "AssetVendor": {
+        "description": "Who it was bought from; empty when not recorded.",
+        "type": "string"
+      },
+      "Assignee": {
+        "description": "Who is handling it; empty for nobody.",
+        "maxLength": 120,
+        "type": "string"
       },
       "AwaitingApproval": {
         "additionalProperties": false,
@@ -5679,9 +5684,21 @@
         },
         "type": "object"
       },
+      "BusinessPurpose": {
+        "description": "Why the business needed it; empty when not recorded.",
+        "type": "string"
+      },
       "BusinessUseShare": {
         "description": "How much of it is for the business, a whole percentage from 0 to 100.",
         "type": "integer"
+      },
+      "CalendarEntryAbout": {
+        "description": "What it is about, as `type:key`; empty for nothing.",
+        "type": "string",
+        "x-hq-reference": {
+          "field": "about",
+          "model": "calendars.entry"
+        }
       },
       "CalendarEntryCreateRequest": {
         "additionalProperties": false,
@@ -5695,13 +5712,8 @@
             "description": "One entry, as every surface states it.",
             "properties": {
               "about": {
-                "default": "",
-                "description": "What the entry is about, as type:identity.",
-                "type": "string",
-                "x-hq-reference": {
-                  "field": "about",
-                  "model": "calendars.entry"
-                }
+                "$ref": "#/components/schemas/CalendarEntryAbout",
+                "default": ""
               },
               "ends_at": {
                 "anyOf": [
@@ -5717,61 +5729,31 @@
                 "description": "The time it ends."
               },
               "ends_on": {
-                "anyOf": [
-                  {
-                    "format": "date",
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "The day it ends, for one that spans days."
+                "$ref": "#/components/schemas/CalendarEntryEndsOn",
+                "default": null
               },
               "idempotency_key": {
                 "$ref": "#/components/schemas/IdempotencyKey"
               },
               "interval": {
-                "default": 1,
-                "description": "Every how many days, weeks, months or years it repeats.",
-                "maximum": 366,
-                "minimum": 1,
-                "type": "integer"
+                "$ref": "#/components/schemas/CalendarEntryInterval",
+                "default": 1
               },
               "location": {
-                "default": "",
-                "description": "Where it happens.",
-                "type": "string"
+                "$ref": "#/components/schemas/CalendarEntryLocation",
+                "default": ""
               },
               "notes": {
                 "$ref": "#/components/schemas/Notes",
                 "default": ""
               },
               "repeat": {
-                "default": "",
-                "description": "How often it repeats; blank for once.",
-                "enum": [
-                  "",
-                  "daily",
-                  "weekly",
-                  "monthly",
-                  "yearly"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/CalendarEntryRepeat",
+                "default": ""
               },
               "repeat_until": {
-                "anyOf": [
-                  {
-                    "format": "date",
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "The last day it repeats."
+                "$ref": "#/components/schemas/CalendarEntryRepeatUntil",
+                "default": null
               },
               "starts_at": {
                 "anyOf": [
@@ -5793,12 +5775,8 @@
                 "$ref": "#/components/schemas/CalendarEntryTitle"
               },
               "weekdays": {
-                "default": [],
-                "description": "The days of the week a weekly entry falls on, Monday as 0.",
-                "items": {
-                  "type": "integer"
-                },
-                "type": "array"
+                "$ref": "#/components/schemas/CalendarEntryWeekdays",
+                "default": []
               }
             },
             "required": [
@@ -5838,8 +5816,55 @@
         ],
         "type": "object"
       },
+      "CalendarEntryEndsOn": {
+        "anyOf": [
+          {
+            "format": "date",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "The day it ends, an ISO 8601 date; null for one that ends the day it starts.",
+        "title": "Calendar entry ends on"
+      },
+      "CalendarEntryInterval": {
+        "description": "How far apart its times are, in what `repeat` names: 2 with `weekly` is every other week.",
+        "maximum": 366,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "CalendarEntryLocation": {
+        "description": "Where it happens; empty when not recorded.",
+        "type": "string"
+      },
+      "CalendarEntryRepeat": {
+        "description": "How often it repeats: `daily`, `weekly`, `monthly` or `yearly`; empty for once.",
+        "enum": [
+          "",
+          "daily",
+          "weekly",
+          "monthly",
+          "yearly"
+        ],
+        "type": "string"
+      },
+      "CalendarEntryRepeatUntil": {
+        "anyOf": [
+          {
+            "format": "date",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "The last day it repeats, an ISO 8601 date; null for no last day.",
+        "title": "Calendar entry repeat until"
+      },
       "CalendarEntryStartsOn": {
-        "description": "The day it starts.",
+        "description": "The day it starts, an ISO 8601 date.",
         "format": "date",
         "type": "string"
       },
@@ -5859,12 +5884,7 @@
             "description": "One entry, as every surface states it.",
             "properties": {
               "about": {
-                "description": "What the entry is about, as type:identity.",
-                "type": "string",
-                "x-hq-reference": {
-                  "field": "about",
-                  "model": "calendars.entry"
-                }
+                "$ref": "#/components/schemas/CalendarEntryAbout"
               },
               "ends_at": {
                 "anyOf": [
@@ -5879,55 +5899,25 @@
                 "description": "The time it ends."
               },
               "ends_on": {
-                "anyOf": [
-                  {
-                    "format": "date",
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "The day it ends, for one that spans days."
+                "$ref": "#/components/schemas/CalendarEntryEndsOn"
               },
               "idempotency_key": {
                 "$ref": "#/components/schemas/IdempotencyKey"
               },
               "interval": {
-                "description": "Every how many days, weeks, months or years it repeats.",
-                "maximum": 366,
-                "minimum": 1,
-                "type": "integer"
+                "$ref": "#/components/schemas/CalendarEntryInterval"
               },
               "location": {
-                "description": "Where it happens.",
-                "type": "string"
+                "$ref": "#/components/schemas/CalendarEntryLocation"
               },
               "notes": {
                 "$ref": "#/components/schemas/Notes"
               },
               "repeat": {
-                "description": "How often it repeats; blank for once.",
-                "enum": [
-                  "",
-                  "daily",
-                  "weekly",
-                  "monthly",
-                  "yearly"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/CalendarEntryRepeat"
               },
               "repeat_until": {
-                "anyOf": [
-                  {
-                    "format": "date",
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "The last day it repeats."
+                "$ref": "#/components/schemas/CalendarEntryRepeatUntil"
               },
               "starts_at": {
                 "anyOf": [
@@ -5948,11 +5938,7 @@
                 "$ref": "#/components/schemas/CalendarEntryTitle"
               },
               "weekdays": {
-                "description": "The days of the week a weekly entry falls on, Monday as 0.",
-                "items": {
-                  "type": "integer"
-                },
-                "type": "array"
+                "$ref": "#/components/schemas/CalendarEntryWeekdays"
               }
             },
             "type": "object"
@@ -5971,13 +5957,21 @@
         ],
         "type": "object"
       },
+      "CalendarEntryWeekdays": {
+        "description": "For one that repeats weekly, the days of the week it falls on, Monday as 0; else empty.",
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
       "CapabilityAnswer": {
         "anyOf": [
           {
             "type": "object"
           },
           {
-            "$ref": "#/components/schemas/AwaitingApproval"
+            "$ref": "#/components/schemas/AwaitingApproval",
+            "title": "Awaiting approval"
           }
         ],
         "description": "What the capability answers, in the shape its command names, or that it waits for a person.",
@@ -6665,7 +6659,8 @@
           "read_now": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ActionLink"
+                "$ref": "#/components/schemas/ActionLink",
+                "title": "Action link"
               },
               {
                 "type": "null"
@@ -6993,20 +6988,16 @@
             "description": "The command: the fields its input schema names.",
             "properties": {
               "admin_notes": {
-                "description": "Notes on it, for HQ only.",
-                "type": "string"
+                "$ref": "#/components/schemas/AdminNotes"
               },
               "assigned_to": {
-                "description": "Who is handling it.",
-                "maxLength": 120,
-                "type": "string"
+                "$ref": "#/components/schemas/Assignee"
               },
               "idempotency_key": {
                 "$ref": "#/components/schemas/IdempotencyKey"
               },
               "status": {
-                "description": "Where the submission stands.",
-                "type": "string"
+                "$ref": "#/components/schemas/ReviewStatus"
               }
             },
             "type": "object"
@@ -7041,12 +7032,10 @@
             "type": "string"
           },
           "admin_notes": {
-            "description": "The notes kept on it, for HQ only; empty for none.",
-            "type": "string"
+            "$ref": "#/components/schemas/AdminNotes"
           },
           "assigned_to": {
-            "description": "Who is handling it; empty for nobody.",
-            "type": "string"
+            "$ref": "#/components/schemas/Assignee"
           },
           "browser": {
             "description": "The visitor's browser, as the site recorded it.",
@@ -7116,8 +7105,7 @@
             "type": "string"
           },
           "status": {
-            "description": "Where its review stands: `unread`, `read`, `replied`, `archived` or `spam`.",
-            "type": "string"
+            "$ref": "#/components/schemas/ReviewStatus"
           },
           "turnstile": {
             "description": "What the form's bot check found, as the site recorded it, such as `verified`.",
@@ -7285,8 +7273,8 @@
             "description": "The command: the fields its input schema names.",
             "properties": {
               "content_type": {
+                "$ref": "#/components/schemas/ContentType",
                 "default": "article",
-                "description": "What type of writing it is.",
                 "enum": [
                   "article",
                   "video",
@@ -7298,7 +7286,6 @@
                   "case_study",
                   "page"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "article": "Article",
                   "case_study": "Case study",
@@ -7379,14 +7366,13 @@
                 "type": "string"
               },
               "status": {
+                "$ref": "#/components/schemas/ContentStatus",
                 "default": "draft",
-                "description": "Where it stands, from draft to published.",
                 "enum": [
                   "draft",
                   "published",
                   "archived"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "archived": "Archived",
                   "draft": "Draft",
@@ -7402,9 +7388,8 @@
                 "$ref": "#/components/schemas/ContentTitle"
               },
               "topic": {
-                "default": "",
-                "description": "What it is about, in a few words.",
-                "type": "string"
+                "$ref": "#/components/schemas/ContentTopic",
+                "default": ""
               }
             },
             "required": [
@@ -7448,22 +7433,13 @@
         "description": "One writeup, video or page, published or not.",
         "properties": {
           "content_type": {
-            "description": "What form it takes: `article`, `video`, `lab_writeup`, `guide`, `review`, `portfolio_page`, `service_page`, `case_study` or `page`.",
-            "type": "string"
+            "$ref": "#/components/schemas/ContentType"
           },
           "notes": {
             "$ref": "#/components/schemas/Notes"
           },
           "published_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "When it was published, an ISO 8601 date; null when not recorded."
+            "$ref": "#/components/schemas/PublishedAt"
           },
           "published_url": {
             "$ref": "#/components/schemas/PublishedUrl"
@@ -7472,8 +7448,7 @@
             "$ref": "#/components/schemas/RecordSlug"
           },
           "status": {
-            "description": "How far along it is: `draft`, `published` or `archived`.",
-            "type": "string"
+            "$ref": "#/components/schemas/ContentStatus"
           },
           "tags": {
             "description": "The tags it is filed under, in the order they were written.",
@@ -7486,8 +7461,7 @@
             "$ref": "#/components/schemas/ContentTitle"
           },
           "topic": {
-            "description": "What it is about, in a few words; empty when not recorded.",
-            "type": "string"
+            "$ref": "#/components/schemas/ContentTopic"
           },
           "updated_at": {
             "$ref": "#/components/schemas/UpdatedAt"
@@ -7512,8 +7486,20 @@
         ],
         "type": "object"
       },
+      "ContentStatus": {
+        "description": "How far along it is: `draft`, `published` or `archived`.",
+        "type": "string"
+      },
       "ContentTitle": {
         "description": "What it is called.",
+        "type": "string"
+      },
+      "ContentTopic": {
+        "description": "What it is about, in a few words; empty when not recorded.",
+        "type": "string"
+      },
+      "ContentType": {
+        "description": "What form it takes: `article`, `video`, `lab_writeup`, `guide`, `review`, `portfolio_page`, `service_page`, `case_study` or `page`.",
         "type": "string"
       },
       "ContentUpdateRequest": {
@@ -7528,7 +7514,7 @@
             "description": "The command: the fields its input schema names.",
             "properties": {
               "content_type": {
-                "description": "What type of writing it is.",
+                "$ref": "#/components/schemas/ContentType",
                 "enum": [
                   "article",
                   "video",
@@ -7540,7 +7526,6 @@
                   "case_study",
                   "page"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "article": "Article",
                   "case_study": "Case study",
@@ -7613,13 +7598,12 @@
                 "type": "string"
               },
               "status": {
-                "description": "Where it stands, from draft to published.",
+                "$ref": "#/components/schemas/ContentStatus",
                 "enum": [
                   "draft",
                   "published",
                   "archived"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "archived": "Archived",
                   "draft": "Draft",
@@ -7634,8 +7618,7 @@
                 "$ref": "#/components/schemas/ContentTitle"
               },
               "topic": {
-                "description": "What it is about, in a few words.",
-                "type": "string"
+                "$ref": "#/components/schemas/ContentTopic"
               }
             },
             "type": "object"
@@ -7868,6 +7851,10 @@
         ],
         "type": "object"
       },
+      "DependencyUpdates": {
+        "description": "Whether HQ's dependency update run covers its repository, opening pull requests there.",
+        "type": "boolean"
+      },
       "DependencyUpdatesSet": {
         "additionalProperties": false,
         "description": "The project, with its dependency updates as the call left them.",
@@ -7881,8 +7868,28 @@
         ],
         "type": "object"
       },
+      "DeploymentNotes": {
+        "description": "How it is deployed.",
+        "type": "string"
+      },
+      "DocEnvironment": {
+        "description": "Where that system runs: `homelab`, `vps`, `wordpress`, `cloudflare`, `tailscale`, `adguard`, `unifi`, `local_mac` or `other`.",
+        "type": "string"
+      },
       "DocId": {
         "description": "The doc's ID in the vault.",
+        "type": "string"
+      },
+      "DocSensitivity": {
+        "description": "Who may read it, `public`, `internal`, `sensitive` or `restricted`; a restricted doc never reaches an agent.",
+        "type": "string"
+      },
+      "DocStatus": {
+        "description": "Where the doc stands: `draft`, `active`, `deprecated` or `archived`.",
+        "type": "string"
+      },
+      "DocType": {
+        "description": "What type of doc it is: `runbook`, `architecture_note`, `deployment_guide`, `troubleshooting_guide`, `recovery_procedure`, `public_article_draft`, `decision_record`, `report` or `queue`.",
         "type": "string"
       },
       "DocumentationCreateRequest": {
@@ -7900,8 +7907,8 @@
                 "$ref": "#/components/schemas/DocId"
               },
               "doc_type": {
+                "$ref": "#/components/schemas/DocType",
                 "default": "runbook",
-                "description": "What type of doc it is.",
                 "enum": [
                   "runbook",
                   "architecture_note",
@@ -7913,7 +7920,6 @@
                   "report",
                   "queue"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "architecture_note": "Architecture note",
                   "decision_record": "Decision record",
@@ -7927,8 +7933,8 @@
                 }
               },
               "environment": {
+                "$ref": "#/components/schemas/DocEnvironment",
                 "default": "other",
-                "description": "Where that system runs.",
                 "enum": [
                   "homelab",
                   "vps",
@@ -7940,7 +7946,6 @@
                   "local_mac",
                   "other"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "adguard": "AdGuard",
                   "cloudflare": "Cloudflare",
@@ -7954,30 +7959,19 @@
                 }
               },
               "external_url": {
-                "default": "",
-                "description": "Where it is published outside HQ.",
-                "type": "string"
+                "$ref": "#/components/schemas/ExternalUrl",
+                "default": ""
               },
               "github_path": {
-                "default": "",
-                "description": "Its path in a repository.",
-                "type": "string"
+                "$ref": "#/components/schemas/GithubPath",
+                "default": ""
               },
               "idempotency_key": {
                 "$ref": "#/components/schemas/IdempotencyKey"
               },
               "last_reviewed": {
-                "anyOf": [
-                  {
-                    "format": "date",
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "When it was last checked against what it describes."
+                "$ref": "#/components/schemas/LastReviewed",
+                "default": null
               },
               "notes": {
                 "$ref": "#/components/schemas/Notes",
@@ -7985,9 +7979,8 @@
                 "format": "textarea"
               },
               "obsidian_path": {
-                "default": "",
-                "description": "Its path in the vault.",
-                "type": "string"
+                "$ref": "#/components/schemas/ObsidianPath",
+                "default": ""
               },
               "published_at": {
                 "$ref": "#/components/schemas/PublishedAt",
@@ -8028,15 +8021,14 @@
                 }
               },
               "sensitivity": {
+                "$ref": "#/components/schemas/DocSensitivity",
                 "default": "internal",
-                "description": "Who may read it; restricted docs never reach an agent.",
                 "enum": [
                   "public",
                   "internal",
                   "sensitive",
                   "restricted"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "internal": "Internal",
                   "public": "Public",
@@ -8045,15 +8037,14 @@
                 }
               },
               "status": {
+                "$ref": "#/components/schemas/DocStatus",
                 "default": "draft",
-                "description": "Where the doc stands.",
                 "enum": [
                   "draft",
                   "active",
                   "deprecated",
                   "archived"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "active": "Active",
                   "archived": "Archived",
@@ -8115,57 +8106,34 @@
             "$ref": "#/components/schemas/DocId"
           },
           "doc_type": {
-            "description": "What type of doc it is: `runbook`, `architecture_note`, `deployment_guide`, `troubleshooting_guide`, `recovery_procedure`, `public_article_draft`, `decision_record`, `report` or `queue`.",
-            "type": "string"
+            "$ref": "#/components/schemas/DocType"
           },
           "environment": {
-            "description": "Where that system runs: `homelab`, `vps`, `wordpress`, `cloudflare`, `tailscale`, `adguard`, `unifi`, `local_mac` or `other`.",
-            "type": "string"
+            "$ref": "#/components/schemas/DocEnvironment"
           },
           "external_url": {
-            "description": "Where it is published outside HQ; empty for none.",
-            "type": "string"
+            "$ref": "#/components/schemas/ExternalUrl"
           },
           "github_path": {
-            "description": "Its path in a repository; empty for none.",
-            "type": "string"
+            "$ref": "#/components/schemas/GithubPath"
           },
           "last_reviewed": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "When it was last checked against what it describes, an ISO 8601 date; null for never."
+            "$ref": "#/components/schemas/LastReviewed"
           },
           "notes": {
             "$ref": "#/components/schemas/Notes"
           },
           "obsidian_path": {
-            "description": "Its path in the vault; empty for none.",
-            "type": "string"
+            "$ref": "#/components/schemas/ObsidianPath"
           },
           "published_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "When it was published, an ISO 8601 date; null when it is not."
+            "$ref": "#/components/schemas/PublishedAt"
           },
           "sensitivity": {
-            "description": "Who may read it, `public`, `internal`, `sensitive` or `restricted`; a restricted doc is never listed.",
-            "type": "string"
+            "$ref": "#/components/schemas/DocSensitivity"
           },
           "status": {
-            "description": "Where the doc stands: `draft`, `active`, `deprecated` or `archived`.",
-            "type": "string"
+            "$ref": "#/components/schemas/DocStatus"
           },
           "system": {
             "description": "The system or service it is about; empty for none.",
@@ -8292,7 +8260,7 @@
                 "$ref": "#/components/schemas/DocId"
               },
               "doc_type": {
-                "description": "What type of doc it is.",
+                "$ref": "#/components/schemas/DocType",
                 "enum": [
                   "runbook",
                   "architecture_note",
@@ -8304,7 +8272,6 @@
                   "report",
                   "queue"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "architecture_note": "Architecture note",
                   "decision_record": "Decision record",
@@ -8318,7 +8285,7 @@
                 }
               },
               "environment": {
-                "description": "Where that system runs.",
+                "$ref": "#/components/schemas/DocEnvironment",
                 "enum": [
                   "homelab",
                   "vps",
@@ -8330,7 +8297,6 @@
                   "local_mac",
                   "other"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "adguard": "AdGuard",
                   "cloudflare": "Cloudflare",
@@ -8344,35 +8310,23 @@
                 }
               },
               "external_url": {
-                "description": "Where it is published outside HQ.",
-                "type": "string"
+                "$ref": "#/components/schemas/ExternalUrl"
               },
               "github_path": {
-                "description": "Its path in a repository.",
-                "type": "string"
+                "$ref": "#/components/schemas/GithubPath"
               },
               "idempotency_key": {
                 "$ref": "#/components/schemas/IdempotencyKey"
               },
               "last_reviewed": {
-                "anyOf": [
-                  {
-                    "format": "date",
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "When it was last checked against what it describes."
+                "$ref": "#/components/schemas/LastReviewed"
               },
               "notes": {
                 "$ref": "#/components/schemas/Notes",
                 "format": "textarea"
               },
               "obsidian_path": {
-                "description": "Its path in the vault.",
-                "type": "string"
+                "$ref": "#/components/schemas/ObsidianPath"
               },
               "published_at": {
                 "$ref": "#/components/schemas/PublishedAt"
@@ -8409,14 +8363,13 @@
                 }
               },
               "sensitivity": {
-                "description": "Who may read it; restricted docs never reach an agent.",
+                "$ref": "#/components/schemas/DocSensitivity",
                 "enum": [
                   "public",
                   "internal",
                   "sensitive",
                   "restricted"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "internal": "Internal",
                   "public": "Public",
@@ -8425,14 +8378,13 @@
                 }
               },
               "status": {
-                "description": "Where the doc stands.",
+                "$ref": "#/components/schemas/DocStatus",
                 "enum": [
                   "draft",
                   "active",
                   "deprecated",
                   "archived"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "active": "Active",
                   "archived": "Archived",
@@ -8539,7 +8491,8 @@
           "registration": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Registration"
+                "$ref": "#/components/schemas/Registration",
+                "title": "Registration"
               },
               {
                 "type": "null"
@@ -8639,8 +8592,7 @@
         "description": "One of your own events, as its command writes it.",
         "properties": {
           "about": {
-            "description": "What it is about, as `type:key`; empty for nothing.",
-            "type": "string"
+            "$ref": "#/components/schemas/CalendarEntryAbout"
           },
           "ends_at": {
             "anyOf": [
@@ -8665,19 +8617,16 @@
             "description": "The day it ends, an ISO 8601 date; null for one that ends the day it starts."
           },
           "interval": {
-            "description": "How far apart its times are, in what `repeat` names: 2 with `weekly` is every other week.",
-            "type": "integer"
+            "$ref": "#/components/schemas/CalendarEntryInterval"
           },
           "location": {
-            "description": "Where it happens; empty when not recorded.",
-            "type": "string"
+            "$ref": "#/components/schemas/CalendarEntryLocation"
           },
           "notes": {
             "$ref": "#/components/schemas/Notes"
           },
           "repeat": {
-            "description": "How often it repeats: `daily`, `weekly`, `monthly` or `yearly`; empty for once.",
-            "type": "string"
+            "$ref": "#/components/schemas/CalendarEntryRepeat"
           },
           "repeat_label": {
             "description": "How it repeats, as a person says it, such as `Every 2 weeks on Mon`; empty for once.",
@@ -8724,11 +8673,7 @@
             "type": "string"
           },
           "weekdays": {
-            "description": "For one that repeats weekly, the days of the week it falls on, Monday as 0; else empty.",
-            "items": {
-              "type": "integer"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/CalendarEntryWeekdays"
           }
         },
         "type": "object"
@@ -8810,6 +8755,49 @@
         "format": "date-time",
         "type": "string"
       },
+      "ExpenseAbout": {
+        "description": "What it was for, as `type:key`, where none of the related records says it; empty for none.",
+        "type": "string",
+        "x-hq-reference": {
+          "field": "about",
+          "model": "expenses.expense"
+        }
+      },
+      "ExpenseAsset": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "The slug of the asset this bought or kept running; null for none.",
+        "title": "Expense asset",
+        "x-hq-records": {
+          "resource": "assets"
+        }
+      },
+      "ExpenseCategory": {
+        "description": "What type of expense it is: `hosting`, `domains`, `software`, `hardware`, `networking`, `office`, `education`, `subscriptions`, `content_production`, `consulting_tools`, `professional_services` or `miscellaneous`.",
+        "type": "string"
+      },
+      "ExpenseContent": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "The slug of the writeup or page this paid for; null for none.",
+        "title": "Expense content",
+        "x-hq-records": {
+          "key": "slug",
+          "resource": "content"
+        }
+      },
       "ExpenseCreateRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -8822,29 +8810,22 @@
             "description": "The command: the fields its input schema names.",
             "properties": {
               "about": {
-                "default": "",
-                "description": "What it was for, as type:identity.",
-                "type": "string",
-                "x-hq-reference": {
-                  "field": "about",
-                  "model": "expenses.expense"
-                }
+                "$ref": "#/components/schemas/ExpenseAbout",
+                "default": ""
               },
               "business_purpose": {
-                "default": "",
-                "description": "Why the business needed it.",
-                "type": "string"
+                "$ref": "#/components/schemas/BusinessPurpose",
+                "default": ""
               },
               "business_use_percentage": {
+                "$ref": "#/components/schemas/BusinessUseShare",
                 "default": 100,
-                "description": "How much of it is for the business, as a percentage.",
                 "maximum": 100,
-                "minimum": 0,
-                "type": "integer"
+                "minimum": 0
               },
               "category": {
+                "$ref": "#/components/schemas/ExpenseCategory",
                 "default": "miscellaneous",
-                "description": "What type of expense it is.",
                 "enum": [
                   "hosting",
                   "domains",
@@ -8859,7 +8840,6 @@
                   "professional_services",
                   "miscellaneous"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "consulting_tools": "Consulting tools",
                   "content_production": "Content production",
@@ -8890,17 +8870,12 @@
                 "format": "textarea"
               },
               "paid_from": {
-                "default": "",
-                "description": "The account that paid, as type:identity.",
-                "type": "string",
-                "x-hq-reference": {
-                  "field": "paid_from",
-                  "model": "expenses.expense"
-                }
+                "$ref": "#/components/schemas/PaidFrom",
+                "default": ""
               },
               "payment_method": {
+                "$ref": "#/components/schemas/PaymentMethod",
                 "default": "",
-                "description": "How it was paid.",
                 "enum": [
                   "",
                   "cash",
@@ -8910,7 +8885,6 @@
                   "paypal",
                   "other"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "": "Not set",
                   "ach": "ACH / bank transfer",
@@ -8922,66 +8896,20 @@
                 }
               },
               "related_asset": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "The asset this bought or kept running.",
-                "x-hq-records": {
-                  "resource": "assets"
-                }
+                "$ref": "#/components/schemas/ExpenseAsset",
+                "default": null
               },
               "related_content": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "The writeup or page this paid for.",
-                "x-hq-records": {
-                  "key": "slug",
-                  "resource": "content"
-                }
+                "$ref": "#/components/schemas/ExpenseContent",
+                "default": null
               },
               "related_documentation": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "The doc that records this expense.",
-                "x-hq-records": {
-                  "key": "doc_id",
-                  "resource": "documentation"
-                }
+                "$ref": "#/components/schemas/ExpenseDoc",
+                "default": null
               },
               "related_project": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "The project this was spent on.",
-                "x-hq-records": {
-                  "resource": "projects"
-                }
+                "$ref": "#/components/schemas/ExpenseProject",
+                "default": null
               },
               "total_cost": {
                 "$ref": "#/components/schemas/TotalCost",
@@ -9005,7 +8933,7 @@
         "type": "object"
       },
       "ExpenseDate": {
-        "description": "When it was spent.",
+        "description": "When it was spent, an ISO 8601 date.",
         "format": "date",
         "type": "string"
       },
@@ -9041,39 +8969,59 @@
         ],
         "type": "object"
       },
+      "ExpenseDoc": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "The vault doc ID of the doc that records it; null for none, or for one too sensitive to share.",
+        "title": "Expense doc",
+        "x-hq-records": {
+          "key": "doc_id",
+          "resource": "documentation"
+        }
+      },
       "ExpenseItem": {
         "description": "What was bought.",
         "type": "string"
+      },
+      "ExpenseProject": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "The slug of the project this was spent on; null for none.",
+        "title": "Expense project",
+        "x-hq-records": {
+          "resource": "projects"
+        }
       },
       "ExpenseRow": {
         "additionalProperties": false,
         "description": "One expense; each related record by its slug or id, or null.",
         "properties": {
           "about": {
-            "description": "What it was for, as `type:key`, where none of the related records says it; empty for none.",
-            "type": "string"
+            "$ref": "#/components/schemas/ExpenseAbout"
           },
           "business_purpose": {
-            "description": "Why the business needed it; empty when not recorded.",
-            "type": "string"
+            "$ref": "#/components/schemas/BusinessPurpose"
           },
           "business_use_percentage": {
             "$ref": "#/components/schemas/BusinessUseShare"
           },
           "category": {
-            "description": "What type of expense it is: `hosting`, `domains`, `software`, `hardware`, `networking`, `office`, `education`, `subscriptions`, `content_production`, `consulting_tools`, `professional_services` or `miscellaneous`.",
-            "type": "string"
+            "$ref": "#/components/schemas/ExpenseCategory"
           },
           "date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "When it was spent, an ISO 8601 date; null when not recorded."
+            "$ref": "#/components/schemas/ExpenseDate"
           },
           "estimated_deductible_amount": {
             "$ref": "#/components/schemas/DeductibleAmount"
@@ -9089,55 +9037,22 @@
             "$ref": "#/components/schemas/Notes"
           },
           "paid_from": {
-            "description": "The account that paid, as `type:key`; empty when not recorded.",
-            "type": "string"
+            "$ref": "#/components/schemas/PaidFrom"
           },
           "payment_method": {
             "$ref": "#/components/schemas/PaymentMethod"
           },
           "related_asset": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The slug of the asset this bought or kept running; null for none."
+            "$ref": "#/components/schemas/ExpenseAsset"
           },
           "related_content": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The slug of the writeup or page this paid for; null for none."
+            "$ref": "#/components/schemas/ExpenseContent"
           },
           "related_documentation": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The vault doc ID of the doc that records it; null for none, or for one too sensitive to share."
+            "$ref": "#/components/schemas/ExpenseDoc"
           },
           "related_project": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The slug of the project this was spent on; null for none."
+            "$ref": "#/components/schemas/ExpenseProject"
           },
           "total_cost": {
             "$ref": "#/components/schemas/TotalCostAmount"
@@ -9180,25 +9095,18 @@
             "description": "The command: the fields its input schema names.",
             "properties": {
               "about": {
-                "description": "What it was for, as type:identity.",
-                "type": "string",
-                "x-hq-reference": {
-                  "field": "about",
-                  "model": "expenses.expense"
-                }
+                "$ref": "#/components/schemas/ExpenseAbout"
               },
               "business_purpose": {
-                "description": "Why the business needed it.",
-                "type": "string"
+                "$ref": "#/components/schemas/BusinessPurpose"
               },
               "business_use_percentage": {
-                "description": "How much of it is for the business, as a percentage.",
+                "$ref": "#/components/schemas/BusinessUseShare",
                 "maximum": 100,
-                "minimum": 0,
-                "type": "integer"
+                "minimum": 0
               },
               "category": {
-                "description": "What type of expense it is.",
+                "$ref": "#/components/schemas/ExpenseCategory",
                 "enum": [
                   "hosting",
                   "domains",
@@ -9213,7 +9121,6 @@
                   "professional_services",
                   "miscellaneous"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "consulting_tools": "Consulting tools",
                   "content_production": "Content production",
@@ -9243,15 +9150,10 @@
                 "format": "textarea"
               },
               "paid_from": {
-                "description": "The account that paid, as type:identity.",
-                "type": "string",
-                "x-hq-reference": {
-                  "field": "paid_from",
-                  "model": "expenses.expense"
-                }
+                "$ref": "#/components/schemas/PaidFrom"
               },
               "payment_method": {
-                "description": "How it was paid.",
+                "$ref": "#/components/schemas/PaymentMethod",
                 "enum": [
                   "",
                   "cash",
@@ -9261,7 +9163,6 @@
                   "paypal",
                   "other"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "": "Not set",
                   "ach": "ACH / bank transfer",
@@ -9273,62 +9174,16 @@
                 }
               },
               "related_asset": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "The asset this bought or kept running.",
-                "x-hq-records": {
-                  "resource": "assets"
-                }
+                "$ref": "#/components/schemas/ExpenseAsset"
               },
               "related_content": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "The writeup or page this paid for.",
-                "x-hq-records": {
-                  "key": "slug",
-                  "resource": "content"
-                }
+                "$ref": "#/components/schemas/ExpenseContent"
               },
               "related_documentation": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "The doc that records this expense.",
-                "x-hq-records": {
-                  "key": "doc_id",
-                  "resource": "documentation"
-                }
+                "$ref": "#/components/schemas/ExpenseDoc"
               },
               "related_project": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "The project this was spent on.",
-                "x-hq-records": {
-                  "resource": "projects"
-                }
+                "$ref": "#/components/schemas/ExpenseProject"
               },
               "total_cost": {
                 "$ref": "#/components/schemas/TotalCost"
@@ -9362,6 +9217,10 @@
       },
       "ExpenseVendor": {
         "description": "Who was paid.",
+        "type": "string"
+      },
+      "ExternalUrl": {
+        "description": "Where it is published outside HQ; empty for none.",
         "type": "string"
       },
       "Failure": {
@@ -9523,6 +9382,10 @@
           "identifier"
         ],
         "type": "object"
+      },
+      "GithubPath": {
+        "description": "Its path in a repository; empty for none.",
+        "type": "string"
       },
       "GithubProfileReadRequest": {
         "additionalProperties": false,
@@ -9754,9 +9617,9 @@
             "description": "The command: the fields its input schema names.",
             "properties": {
               "assets": {
-                "description": "Assets to import, each as an asset record.",
+                "description": "Assets to import, each laid over the one of its slug.",
                 "items": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/ImportedAsset"
                 },
                 "type": "array"
               },
@@ -9769,9 +9632,9 @@
                 "$ref": "#/components/schemas/IdempotencyKey"
               },
               "projects": {
-                "description": "Projects to import, each as a project record.",
+                "description": "Projects to import, each laid over the one of its slug.",
                 "items": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/ImportedProject"
                 },
                 "type": "array"
               }
@@ -9933,6 +9796,101 @@
           "updated",
           "unchanged",
           "kept"
+        ],
+        "type": "object"
+      },
+      "ImportedAsset": {
+        "additionalProperties": false,
+        "description": "An asset to import: its slug, and the fields to lay over the asset stored under it.",
+        "properties": {
+          "business_use_percentage": {
+            "$ref": "#/components/schemas/BusinessUseShare"
+          },
+          "category": {
+            "$ref": "#/components/schemas/AssetCategory"
+          },
+          "infrastructure": {
+            "$ref": "#/components/schemas/AssetInfrastructure"
+          },
+          "item_name": {
+            "$ref": "#/components/schemas/AssetName"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/Notes"
+          },
+          "payment_method": {
+            "$ref": "#/components/schemas/PaymentMethod"
+          },
+          "purchase_date": {
+            "$ref": "#/components/schemas/PurchaseDate"
+          },
+          "related_projects": {
+            "$ref": "#/components/schemas/AssetProjects"
+          },
+          "serial_number": {
+            "$ref": "#/components/schemas/SerialNumber"
+          },
+          "slug": {
+            "$ref": "#/components/schemas/RecordSlug"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AssetStatus"
+          },
+          "total_cost": {
+            "$ref": "#/components/schemas/TotalCost"
+          },
+          "vendor": {
+            "$ref": "#/components/schemas/AssetVendor"
+          },
+          "warranty_date": {
+            "$ref": "#/components/schemas/WarrantyDate"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "type": "object"
+      },
+      "ImportedProject": {
+        "additionalProperties": false,
+        "description": "A project to import: its slug, and the fields to lay over the project stored under it.",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/ProjectCategory"
+          },
+          "deployment_notes": {
+            "$ref": "#/components/schemas/DeploymentNotes"
+          },
+          "description": {
+            "$ref": "#/components/schemas/ProjectDescription"
+          },
+          "name": {
+            "$ref": "#/components/schemas/ProjectName"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/Notes"
+          },
+          "public_url": {
+            "$ref": "#/components/schemas/PublishedUrl"
+          },
+          "repository_url": {
+            "$ref": "#/components/schemas/RepositoryUrl"
+          },
+          "security_notes": {
+            "$ref": "#/components/schemas/SecurityNotes"
+          },
+          "slug": {
+            "$ref": "#/components/schemas/RecordSlug"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectStatus"
+          },
+          "technologies_used": {
+            "$ref": "#/components/schemas/TechnologiesUsed"
+          }
+        },
+        "required": [
+          "slug"
         ],
         "type": "object"
       },
@@ -10401,6 +10359,19 @@
           "offered"
         ],
         "type": "object"
+      },
+      "LastReviewed": {
+        "anyOf": [
+          {
+            "format": "date",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "When it was last checked against what it describes, an ISO 8601 date; null for never.",
+        "title": "Last reviewed"
       },
       "LensEntry": {
         "additionalProperties": false,
@@ -11078,6 +11049,10 @@
         "description": "When it was last read from its source, an ISO 8601 date-time.",
         "type": "string"
       },
+      "ObsidianPath": {
+        "description": "Its path in the vault; empty for none.",
+        "type": "string"
+      },
       "OperationCommand": {
         "additionalProperties": false,
         "description": "The command: the fields its input schema names.",
@@ -11269,7 +11244,8 @@
           "next": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/NextPage"
+                "$ref": "#/components/schemas/NextPage",
+                "title": "Next page"
               },
               {
                 "type": "null"
@@ -11298,6 +11274,14 @@
           "next"
         ],
         "type": "object"
+      },
+      "PaidFrom": {
+        "description": "The account that paid, as `type:key`; empty when not recorded.",
+        "type": "string",
+        "x-hq-reference": {
+          "field": "paid_from",
+          "model": "expenses.expense"
+        }
       },
       "PanelsRefreshRequested": {
         "additionalProperties": false,
@@ -11399,7 +11383,8 @@
           "subject": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ActionLink"
+                "$ref": "#/components/schemas/ActionLink",
+                "title": "Action link"
               },
               {
                 "type": "null"
@@ -11432,13 +11417,17 @@
         ],
         "type": "object"
       },
+      "ProjectCategory": {
+        "description": "What type of project it is: `wordpress_security`, `cloudflare`, `dns_email_security`, `homelab`, `vps`, `tailscale`, `adguard`, `networking`, `tls_certificates`, `automation`, `cybersecurity_labs` or `other`.",
+        "type": "string"
+      },
       "ProjectCommand": {
         "additionalProperties": false,
         "description": "The command: the fields its input schema names.",
         "properties": {
           "category": {
+            "$ref": "#/components/schemas/ProjectCategory",
             "default": "other",
-            "description": "What type of project it is.",
             "enum": [
               "wordpress_security",
               "cloudflare",
@@ -11453,7 +11442,6 @@
               "cybersecurity_labs",
               "other"
             ],
-            "type": "string",
             "x-enumDescriptions": {
               "adguard": "AdGuard",
               "automation": "Automation / scripts",
@@ -11470,16 +11458,14 @@
             }
           },
           "deployment_notes": {
+            "$ref": "#/components/schemas/DeploymentNotes",
             "default": "",
-            "description": "How it is deployed.",
-            "format": "textarea",
-            "type": "string"
+            "format": "textarea"
           },
           "description": {
+            "$ref": "#/components/schemas/ProjectDescription",
             "default": "",
-            "description": "What it is, in a sentence or two.",
-            "format": "textarea",
-            "type": "string"
+            "format": "textarea"
           },
           "idempotency_key": {
             "$ref": "#/components/schemas/IdempotencyKey"
@@ -11497,23 +11483,21 @@
             "default": ""
           },
           "repository_url": {
-            "default": "",
-            "description": "Where its code lives.",
-            "type": "string"
+            "$ref": "#/components/schemas/RepositoryUrl",
+            "default": ""
           },
           "security_notes": {
+            "$ref": "#/components/schemas/SecurityNotes",
             "default": "",
-            "description": "What protects it, and what to watch.",
-            "format": "textarea",
-            "type": "string"
+            "format": "textarea"
           },
           "slug": {
             "$ref": "#/components/schemas/Slug",
             "default": ""
           },
           "status": {
+            "$ref": "#/components/schemas/ProjectStatus",
             "default": "idea",
-            "description": "Where it stands, from idea to archived.",
             "enum": [
               "idea",
               "active",
@@ -11522,7 +11506,6 @@
               "published",
               "archived"
             ],
-            "type": "string",
             "x-enumDescriptions": {
               "active": "Active",
               "archived": "Archived",
@@ -11533,9 +11516,8 @@
             }
           },
           "technologies_used": {
-            "default": "",
-            "description": "What it is built with.",
-            "type": "string"
+            "$ref": "#/components/schemas/TechnologiesUsed",
+            "default": ""
           }
         },
         "required": [
@@ -11617,8 +11599,7 @@
             "description": "Whether HQ's dependency update run covers the project's repository.",
             "properties": {
               "dependency_updates": {
-                "description": "Whether HQ's dependency update run opens pull requests in this project's repository.",
-                "type": "boolean"
+                "$ref": "#/components/schemas/DependencyUpdates"
               },
               "idempotency_key": {
                 "$ref": "#/components/schemas/IdempotencyKey"
@@ -11643,6 +11624,10 @@
           "target"
         ],
         "type": "object"
+      },
+      "ProjectDescription": {
+        "description": "What it is, in a sentence or two; empty when none was written.",
+        "type": "string"
       },
       "ProjectLinks": {
         "additionalProperties": false,
@@ -11759,16 +11744,13 @@
         "description": "One project; `updates` only where its repository is on GitHub.",
         "properties": {
           "category": {
-            "description": "What type of project it is: `wordpress_security`, `cloudflare`, `dns_email_security`, `homelab`, `vps`, `tailscale`, `adguard`, `networking`, `tls_certificates`, `automation`, `cybersecurity_labs` or `other`.",
-            "type": "string"
+            "$ref": "#/components/schemas/ProjectCategory"
           },
           "dependency_updates": {
-            "description": "Whether HQ's dependency update run covers its repository.",
-            "type": "boolean"
+            "$ref": "#/components/schemas/DependencyUpdates"
           },
           "description": {
-            "description": "What it is, in a few sentences; empty when none was written.",
-            "type": "string"
+            "$ref": "#/components/schemas/ProjectDescription"
           },
           "last_push_at": {
             "anyOf": [
@@ -11785,19 +11767,16 @@
             "$ref": "#/components/schemas/ProjectName"
           },
           "public_url": {
-            "description": "Where it can be seen published; empty for none.",
-            "type": "string"
+            "$ref": "#/components/schemas/PublishedUrl"
           },
           "repository_url": {
-            "description": "The address of its code repository; empty for none.",
-            "type": "string"
+            "$ref": "#/components/schemas/RepositoryUrl"
           },
           "slug": {
             "$ref": "#/components/schemas/RecordSlug"
           },
           "status": {
-            "description": "Where it stands: `idea`, `active`, `paused`, `completed`, `published` or `archived`.",
-            "type": "string"
+            "$ref": "#/components/schemas/ProjectStatus"
           },
           "technologies": {
             "description": "The technologies it uses, in the order they were written.",
@@ -11832,6 +11811,10 @@
         ],
         "type": "object"
       },
+      "ProjectStatus": {
+        "description": "Where it stands: `idea`, `active`, `paused`, `completed`, `published` or `archived`.",
+        "type": "string"
+      },
       "ProjectUpdateRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -11844,7 +11827,7 @@
             "description": "The command: the fields its input schema names.",
             "properties": {
               "category": {
-                "description": "What type of project it is.",
+                "$ref": "#/components/schemas/ProjectCategory",
                 "enum": [
                   "wordpress_security",
                   "cloudflare",
@@ -11859,7 +11842,6 @@
                   "cybersecurity_labs",
                   "other"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "adguard": "AdGuard",
                   "automation": "Automation / scripts",
@@ -11876,14 +11858,12 @@
                 }
               },
               "deployment_notes": {
-                "description": "How it is deployed.",
-                "format": "textarea",
-                "type": "string"
+                "$ref": "#/components/schemas/DeploymentNotes",
+                "format": "textarea"
               },
               "description": {
-                "description": "What it is, in a sentence or two.",
-                "format": "textarea",
-                "type": "string"
+                "$ref": "#/components/schemas/ProjectDescription",
+                "format": "textarea"
               },
               "idempotency_key": {
                 "$ref": "#/components/schemas/IdempotencyKey"
@@ -11899,19 +11879,17 @@
                 "$ref": "#/components/schemas/PublishedUrl"
               },
               "repository_url": {
-                "description": "Where its code lives.",
-                "type": "string"
+                "$ref": "#/components/schemas/RepositoryUrl"
               },
               "security_notes": {
-                "description": "What protects it, and what to watch.",
-                "format": "textarea",
-                "type": "string"
+                "$ref": "#/components/schemas/SecurityNotes",
+                "format": "textarea"
               },
               "slug": {
                 "$ref": "#/components/schemas/Slug"
               },
               "status": {
-                "description": "Where it stands, from idea to archived.",
+                "$ref": "#/components/schemas/ProjectStatus",
                 "enum": [
                   "idea",
                   "active",
@@ -11920,7 +11898,6 @@
                   "published",
                   "archived"
                 ],
-                "type": "string",
                 "x-enumDescriptions": {
                   "active": "Active",
                   "archived": "Archived",
@@ -11931,8 +11908,7 @@
                 }
               },
               "technologies_used": {
-                "description": "What it is built with.",
-                "type": "string"
+                "$ref": "#/components/schemas/TechnologiesUsed"
               }
             },
             "type": "object"
@@ -11968,12 +11944,25 @@
             "type": "null"
           }
         ],
-        "description": "When it was published.",
+        "description": "When it was published, an ISO 8601 date; null when it is not.",
         "title": "Published at"
       },
       "PublishedUrl": {
-        "description": "Where it is published.",
+        "description": "Where it is published; empty for none.",
         "type": "string"
+      },
+      "PurchaseDate": {
+        "anyOf": [
+          {
+            "format": "date",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "When it was bought, an ISO 8601 date; null when not recorded.",
+        "title": "Purchase date"
       },
       "Queued": {
         "description": "Whether this call queued it; false when the same one was already waiting.",
@@ -12230,6 +12219,21 @@
         },
         "type": "object"
       },
+      "ReceiptAsset": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "The slug of the asset this receipt is for; null for none.",
+        "title": "Receipt asset",
+        "x-hq-records": {
+          "resource": "assets"
+        }
+      },
       "ReceiptDeleteRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -12261,6 +12265,22 @@
           "target"
         ],
         "type": "object"
+      },
+      "ReceiptExpense": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "The id of the expense this receipt proves; null for none.",
+        "title": "Receipt expense",
+        "x-hq-records": {
+          "key": "id",
+          "resource": "expenses"
+        }
       },
       "ReceiptRow": {
         "additionalProperties": false,
@@ -12297,26 +12317,10 @@
             "type": "string"
           },
           "related_asset": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The slug of the asset it is matched to; null for none."
+            "$ref": "#/components/schemas/ReceiptAsset"
           },
           "related_expense": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The id of the expense it is matched to; null for none."
+            "$ref": "#/components/schemas/ReceiptExpense"
           },
           "size_bytes": {
             "description": "How big the file is, in bytes.",
@@ -12395,33 +12399,10 @@
                 "format": "textarea"
               },
               "related_asset": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "The asset this receipt is for.",
-                "x-hq-records": {
-                  "resource": "assets"
-                }
+                "$ref": "#/components/schemas/ReceiptAsset"
               },
               "related_expense": {
-                "anyOf": [
-                  {
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "The expense this receipt proves.",
-                "x-hq-records": {
-                  "key": "id",
-                  "resource": "expenses"
-                }
+                "$ref": "#/components/schemas/ReceiptExpense"
               },
               "vendor": {
                 "description": "Who issued the receipt.",
@@ -12580,6 +12561,10 @@
         ],
         "type": "object"
       },
+      "RepositoryUrl": {
+        "description": "The address of its code repository; empty for none.",
+        "type": "string"
+      },
       "RequestTooLargeRefusal": {
         "additionalProperties": false,
         "properties": {
@@ -12727,7 +12712,8 @@
           "get": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/GetOperation"
+                "$ref": "#/components/schemas/GetOperation",
+                "title": "Get operation"
               },
               {
                 "type": "null"
@@ -12737,7 +12723,8 @@
           "list": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ListOperation"
+                "$ref": "#/components/schemas/ListOperation",
+                "title": "List operation"
               },
               {
                 "type": "null"
@@ -12747,7 +12734,8 @@
           "search": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/SearchOperation"
+                "$ref": "#/components/schemas/SearchOperation",
+                "title": "Search operation"
               },
               {
                 "type": "null"
@@ -12863,6 +12851,10 @@
         "description": "Whole seconds until asking again can succeed; the `Retry-After` header repeats it.",
         "minimum": 1,
         "type": "integer"
+      },
+      "ReviewStatus": {
+        "description": "Where its review stands: `unread`, `read`, `replied`, `archived` or `spam`.",
+        "type": "string"
       },
       "RolePart": {
         "additionalProperties": false,
@@ -13006,6 +12998,14 @@
         ],
         "type": "object"
       },
+      "SecurityNotes": {
+        "description": "What protects it, and what to watch.",
+        "type": "string"
+      },
+      "SerialNumber": {
+        "description": "The maker's serial number; empty when not recorded.",
+        "type": "string"
+      },
       "SerializedFinding": {
         "additionalProperties": false,
         "description": "One finding as every machine door carries it.",
@@ -13119,7 +13119,8 @@
           "workflow": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/WorkflowPlan"
+                "$ref": "#/components/schemas/WorkflowPlan",
+                "title": "Workflow plan"
               },
               {
                 "type": "null"
@@ -13246,7 +13247,8 @@
           "origin": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/OriginPart"
+                "$ref": "#/components/schemas/OriginPart",
+                "title": "Origin part"
               },
               {
                 "type": "null"
@@ -13621,6 +13623,10 @@
         ],
         "type": "object"
       },
+      "TechnologiesUsed": {
+        "description": "What it is built with.",
+        "type": "string"
+      },
       "TextFilter": {
         "anyOf": [
           {
@@ -13727,7 +13733,8 @@
           "trace": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/TraceAnswer"
+                "$ref": "#/components/schemas/TraceAnswer",
+                "title": "Trace answer"
               },
               {
                 "type": "null"
@@ -14316,7 +14323,8 @@
           "last_run": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/UpdateRun"
+                "$ref": "#/components/schemas/UpdateRun",
+                "title": "Update run"
               },
               {
                 "type": "null"
@@ -14580,6 +14588,19 @@
           "status"
         ],
         "type": "object"
+      },
+      "WarrantyDate": {
+        "anyOf": [
+          {
+            "format": "date",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "When its warranty ends, an ISO 8601 date; null for none recorded.",
+        "title": "Warranty date"
       },
       "WebRoute": {
         "anyOf": [
@@ -15138,10 +15159,12 @@
                     "data": {
                       "anyOf": [
                         {
-                          "$ref": "#/components/schemas/AssetSaved"
+                          "$ref": "#/components/schemas/AssetSaved",
+                          "title": "Asset saved"
                         },
                         {
-                          "$ref": "#/components/schemas/AwaitingApproval"
+                          "$ref": "#/components/schemas/AwaitingApproval",
+                          "title": "Awaiting approval"
                         }
                       ]
                     },
@@ -17822,10 +17845,12 @@
                     "data": {
                       "anyOf": [
                         {
-                          "$ref": "#/components/schemas/ProjectSaved"
+                          "$ref": "#/components/schemas/ProjectSaved",
+                          "title": "Project saved"
                         },
                         {
-                          "$ref": "#/components/schemas/AwaitingApproval"
+                          "$ref": "#/components/schemas/AwaitingApproval",
+                          "title": "Awaiting approval"
                         }
                       ]
                     },
@@ -18290,10 +18315,12 @@
                     "data": {
                       "anyOf": [
                         {
-                          "$ref": "#/components/schemas/ProjectSaved"
+                          "$ref": "#/components/schemas/ProjectSaved",
+                          "title": "Project saved"
                         },
                         {
-                          "$ref": "#/components/schemas/AwaitingApproval"
+                          "$ref": "#/components/schemas/AwaitingApproval",
+                          "title": "Awaiting approval"
                         }
                       ]
                     },

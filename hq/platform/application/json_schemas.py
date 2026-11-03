@@ -9,14 +9,19 @@ labels a field from its name through ``labels.field_label`` instead, while an
 alias that names a bare composition (``type TotalCost = Annotated[Decimal,
 ...]``, a number or a string) is titled from its name by that same labeler, so
 a viewer offering its branches says what it is rather than the name it is
-filed under. A TypedDict's keys are all of its keys, as
+filed under. A branch of a choice that names a definition is titled the same
+way beside its ``$ref``, which the viewer reads over the definition's own, so
+its selector says "Asset saved" for ``AssetSaved``. A TypedDict's keys are all of its keys, as
 the strict API reads them; an object open to any key says so by saying
 nothing, JSON Schema's default.
 
 A fragment many declarations share is a named type alias (``type Notes =
 Annotated[str, Describe(...)]``): Pydantic writes it once, as the definition
 named for the alias, and each use as a ``$ref`` to it beside what that use
-adds (its ``default``). ``fields`` reads a schema's fields whole again.
+adds (its ``default``). A bound (a length, a range) is never a use's own:
+Pydantic writes one given at a use into the alias's definition, so it goes in
+the alias, and a field that needs another bound is an alias of its own.
+``fields`` reads a schema's fields whole again.
 """
 
 import re
@@ -48,6 +53,7 @@ class PublishedSchema(GenerateJsonSchema):
     def generate(self, schema: core_schema.CoreSchema, mode: JsonSchemaMode = "validation") -> JsonSchemaValue:
         value = super().generate(schema, mode)
         _title_compositions(value.get("$defs", {}))
+        _title_branches(value, value.get("$defs", {}))
         _point_inherited(value)
         return value
 
@@ -85,6 +91,7 @@ class PublishedSchema(GenerateJsonSchema):
     def generate_definitions(self, inputs: Any) -> tuple[dict[Any, JsonSchemaValue], dict[Any, JsonSchemaValue]]:
         refs, definitions = super().generate_definitions(inputs)
         _title_compositions(definitions)
+        _title_branches([refs, definitions], definitions)
         _point_inherited(definitions)
         return refs, definitions
 
@@ -168,7 +175,34 @@ def _title_compositions(definitions: Mapping[str, JsonSchemaValue]) -> None:
     # always says its own shape. Its name is its declaration.
     for name, definition in definitions.items():
         if is_bare_composition(definition) and "title" not in definition:
-            definition["title"] = field_label(re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name).lower())
+            definition["title"] = _said(name)
+
+
+def _title_branches(value: Any, definitions: Mapping[str, JsonSchemaValue]) -> None:
+    # A branch naming a class's definition is titled beside its ``$ref``,
+    # where the choice offers it: the definition itself stays untitled, filed
+    # by name. A branch of a scalar alias is labeled by its type.
+    if isinstance(value, list):
+        for item in value:
+            _title_branches(item, definitions)
+    elif isinstance(value, dict):
+        for branch in [*value.get("anyOf", ()), *value.get("oneOf", ())]:
+            _title_branch(branch, definitions)
+        for item in value.values():
+            _title_branches(item, definitions)
+
+
+def _title_branch(branch: Any, definitions: Mapping[str, JsonSchemaValue]) -> None:
+    ref = branch.get("$ref", "") if isinstance(branch, dict) else ""
+    name = ref.rsplit("/", 1)[-1].replace("~1", "/").replace("~0", "~")
+    if "properties" in definitions.get(name, {}) and "title" not in branch:
+        branch["title"] = _said(name)
+
+
+def _said(name: str) -> str:
+    """A definition's name as words: ``AssetSaved`` is "Asset saved"."""
+
+    return field_label(re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name).lower())
 
 
 def is_bare_composition(definition: Mapping[str, Any]) -> bool:

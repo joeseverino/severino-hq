@@ -36,16 +36,23 @@ UPDATE = "receipt.update"
 _RECEIPT = Held("That receipt was not found.", "That receipt changed after it was read.")
 
 
+# The records a receipt is matched to, as its command writes them and its row reads them back.
+type ReceiptExpense = Annotated[
+    int | None, Names("expenses", key="id"), Describe("The id of the expense this receipt proves; null for none.")
+]
+type ReceiptAsset = Annotated[
+    str | None, Names("assets"), Describe("The slug of the asset this receipt is for; null for none.")
+]
+
+
 @dataclass(frozen=True, slots=True)
 class ReceiptMetadataCommand:
     vendor: Annotated[str, Describe("Who issued the receipt.")] = ""
     date: Annotated[Date | None, Describe("The date on the receipt.")] = None
     amount: Annotated[Decimal, Describe("The amount it shows.")] = Decimal("0.00")
     notes: Notes = ""
-    related_expense: Annotated[
-        int | None, Names("expenses", key="id"), Describe("The expense this receipt proves.")
-    ] = None
-    related_asset: Annotated[str | None, Names("assets"), Describe("The asset this receipt is for.")] = None
+    related_expense: ReceiptExpense = None
+    related_asset: ReceiptAsset = None
 
 
 @dataclass(frozen=True, slots=True)

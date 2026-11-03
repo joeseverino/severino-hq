@@ -6,19 +6,48 @@ from decimal import Decimal
 from functools import partial
 from typing import Annotated, Any
 
-from hq.domains.assets.models import Asset
+from hq.domains.assets.models import ASSET_CATEGORY_CHOICES, PAYMENT_METHOD_CHOICES, Asset
 
+from .answer_fields import BusinessUseShare
 from .command_fields import Describe, Names, Refers
+from .describe import listed
 from .entity_links import EntityLink, entity_link
 from .projection import addressable, iso, listing
 from .record_fields import Notes, Slug, TotalCost
 from .record_links import linked
 from .record_saves import Held, Link, linked_saver, saved_type
 from .security import Principal
+from .ui import ended
 from .upserts import upsert_by_slug
 lazy from . import zones
 
+# An asset's fields as its command writes them and its row reads them back, each said once.
 type AssetName = Annotated[str, Describe("What the asset is called.")]
+type AssetVendor = Annotated[str, Describe("Who it was bought from; empty when not recorded.")]
+type AssetCategory = Annotated[
+    str, Describe(ended(f"What type of asset it is: {listed(value for value, _ in ASSET_CATEGORY_CHOICES)}"))
+]
+type AssetStatus = Annotated[
+    str, Describe(ended(f"Whether it is in use, or how it left: {listed(Asset.Status.values)}"))
+]
+type PurchaseDate = Annotated[date | None, Describe("When it was bought, an ISO 8601 date; null when not recorded.")]
+type SerialNumber = Annotated[str, Describe("The maker's serial number; empty when not recorded.")]
+type WarrantyDate = Annotated[
+    date | None, Describe("When its warranty ends, an ISO 8601 date; null for none recorded.")
+]
+type AssetProjects = Annotated[tuple[str, ...], Names("projects"), Describe("The projects this asset serves.")]
+type AssetInfrastructure = Annotated[
+    str,
+    Refers(Asset, "infrastructure"),
+    Describe(
+        "The machine, domain or certificate this asset is, as `type:key` such as `machine:lab-1`; empty for none."
+    ),
+]
+# How an asset or an expense was paid, from the one set both choose from.
+type PaymentMethod = Annotated[
+    str,
+    Describe(f"How it was paid: {listed(value for value, _ in PAYMENT_METHOD_CHOICES)}; empty when not recorded."),
+]
 
 
 def managed_domain(asset: Asset) -> EntityLink | None:
@@ -38,22 +67,18 @@ def managed_domain(asset: Asset) -> EntityLink | None:
 class AssetCommand:
     item_name: AssetName
     slug: Slug = ""
-    vendor: Annotated[str, Describe("Who it was bought from.")] = ""
-    category: Annotated[str, Describe("What type of asset it is.")] = "other"
-    purchase_date: Annotated[date | None, Describe("When it was bought.")] = None
+    vendor: AssetVendor = ""
+    category: AssetCategory = "other"
+    purchase_date: PurchaseDate = None
     total_cost: TotalCost = Decimal("0.00")
-    business_use_percentage: Annotated[int, Describe("How much of its use is for the business, as a percentage.")] = 100
-    payment_method: Annotated[str, Describe("How it was paid for.")] = ""
-    serial_number: Annotated[str, Describe("The maker's serial number.")] = ""
-    warranty_date: Annotated[date | None, Describe("When its warranty ends.")] = None
-    status: Annotated[str, Describe("Whether it is in use, or how it left.")] = Asset.Status.ACTIVE
+    business_use_percentage: BusinessUseShare = 100
+    payment_method: PaymentMethod = ""
+    serial_number: SerialNumber = ""
+    warranty_date: WarrantyDate = None
+    status: AssetStatus = Asset.Status.ACTIVE
     notes: Notes = ""
-    related_projects: Annotated[tuple[str, ...], Names("projects"), Describe("The projects this asset serves.")] = ()
-    infrastructure: Annotated[
-        str,
-        Refers(Asset, "infrastructure"),
-        Describe("The machine, domain or certificate this asset is, as type:identity."),
-    ] = ""
+    related_projects: AssetProjects = ()
+    infrastructure: AssetInfrastructure = ""
 
 
 def serialize_asset(asset: Asset, *, relationships: bool = False) -> dict[str, Any]:

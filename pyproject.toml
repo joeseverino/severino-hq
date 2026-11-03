@@ -311,8 +311,8 @@ ignore = [".claude/worktrees"]
 
 [tool.mypy]
 # The interpreter it runs on is the one requires-python admits. Every module
-# below but the browser test package (its override says why) is held to the
-# strict flags; an import they follow is read for its types and never
+# below but the browser gate's package and dev:look's modules (their override
+# says why) is held to the strict flags; an import they follow is read for its types and never
 # reported, so the flags reach nothing else. Every other source module is
 # held to its reach alone, by tools/lint/mypy-reach.toml's pass.
 files = [
@@ -347,6 +347,10 @@ files = [
     "tests/sdk_consumer",
     "tools/credentials.py",
     "hq/platform/core/tests/browser",
+    "hq/platform/core/tests/look.py",
+    "hq/platform/core/tests/look_records.py",
+    "hq/platform/core/tests/look_report.py",
+    "hq/platform/core/tests/look_tables.py",
 ]
 exclude = "(^|/)(tests\\.py|test_[^/]*\\.py|migrations/)"
 follow_imports = "silent"
@@ -365,10 +369,18 @@ disallow_untyped_decorators = true
 disallow_any_generics = true
 warn_return_any = true
 
-# The browser gate's package is held to calls that exist: its bodies are
-# checked as written, without the annotations the seams above must carry.
+# The browser gate's package, and dev:look's modules built on it, are held to
+# calls that exist and to overrides that say so: their bodies are checked as
+# written, without the annotations the seams above must carry. mypy matches
+# a module pattern only by whole names (`.*`), so each of dev:look's is named.
 [[tool.mypy.overrides]]
-module = ["hq.platform.core.tests.browser.*"]
+module = [
+    "hq.platform.core.tests.browser.*",
+    "hq.platform.core.tests.look",
+    "hq.platform.core.tests.look_records",
+    "hq.platform.core.tests.look_report",
+    "hq.platform.core.tests.look_tables",
+]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 disallow_untyped_decorators = false

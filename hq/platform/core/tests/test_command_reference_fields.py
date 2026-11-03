@@ -25,6 +25,8 @@ from hq.platform.application.tests.markup import within
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
 
+from .command_shapes import field_schema
+
 User = get_user_model()
 
 # The host's commands whose field is a type:identity reference, and the column each fills.
@@ -64,8 +66,9 @@ def reference_fields() -> dict[tuple[str, str], tuple[type, str]]:
 
     found = {}
     for name, spec in capability_registry().items():
-        for field, schema in capability_schema(spec).get("properties", {}).items():
-            if isinstance(reference := schema.get("x-hq-reference"), dict):
+        schema = capability_schema(spec)
+        for field in schema.get("properties", {}):
+            if isinstance(reference := field_schema(schema, field).get("x-hq-reference"), dict):
                 found[name, field] = (apps.get_model(reference["model"]), reference["field"])
     return found
 

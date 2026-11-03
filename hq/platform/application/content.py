@@ -8,14 +8,20 @@ lazy from urllib.parse import urlsplit
 from hq.domains.content.models import ContentItem
 
 from .command_fields import Describe, Names
+from .describe import listed
 from .entity_links import EntityLink, entity_link, web_url
 from .projection import iso, listing
 from .record_fields import Notes, PublishedAt, PublishedUrl
 from .record_saves import Held, Link, linked_saver
 from .sensitivity import safe_doc_ids
+from .ui import ended
 lazy from .published_sites import projects_by_hostname
 
+# A writeup's fields as its command writes them and its row reads them back, each said once.
 type ContentTitle = Annotated[str, Describe("What it is called.")]
+type ContentType = Annotated[str, Describe(ended(f"What form it takes: {listed(ContentItem.Type.values)}"))]
+type ContentStatus = Annotated[str, Describe(ended(f"How far along it is: {listed(ContentItem.Status.values)}"))]
+type ContentTopic = Annotated[str, Describe("What it is about, in a few words; empty when not recorded.")]
 
 
 def published_on(urls) -> EntityLink | None:
@@ -40,9 +46,9 @@ def published_on(urls) -> EntityLink | None:
 class ContentCommand:
     title: ContentTitle
     slug: Annotated[str, Describe("Its address in HQ; blank derives one from the title.")] = ""
-    content_type: Annotated[str, Describe("What type of writing it is.")] = ContentItem.Type.ARTICLE
-    status: Annotated[str, Describe("Where it stands, from draft to published.")] = ContentItem.Status.DRAFT
-    topic: Annotated[str, Describe("What it is about, in a few words.")] = ""
+    content_type: ContentType = ContentItem.Type.ARTICLE
+    status: ContentStatus = ContentItem.Status.DRAFT
+    topic: ContentTopic = ""
     tags: Annotated[str, Describe("Tags, separated by commas.")] = ""
     published_url: PublishedUrl = ""
     published_at: PublishedAt = None

@@ -18,13 +18,14 @@ from django.db import transaction
 
 from hq.domains.content.content_sync import ContentSyncError, sync_content_index
 from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
-from hq.domains.projects.models import Project
+from hq.domains.projects.models import PROJECT_CATEGORY_CHOICES, Project
 from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.projects.specs import ProjectRecord
 lazy from hq.platform.application.routes import reverse
 
 from .command_fields import Describe
+from .describe import listed
 from .domains import records_of
 from .github_public import github_repository
 from .outbound_work import OutboundWork
@@ -36,7 +37,7 @@ from .record_saves import Held, held, linked_saver, saved_type
 from .refusal_status import RefusalEnvelope, refusal_of, refuse
 from .security import Principal
 from .standards import MET
-from .ui import counted
+from .ui import counted, ended
 from .upserts import upsert_by_slug
 lazy from . import capabilities
 lazy from .action_links import READ_NOW_CAPABILITY
@@ -48,7 +49,20 @@ lazy from .plugins import installed_plugins
 lazy from .record_answers import DependencyUpdatesSet
 lazy from .timestamps import moment
 
+# A project's fields as its command writes them and its row reads them back, each said once.
 type ProjectName = Annotated[str, Describe("What the project is called.")]
+type ProjectCategory = Annotated[
+    str, Describe(ended(f"What type of project it is: {listed(v for v, _ in PROJECT_CATEGORY_CHOICES)}"))
+]
+type ProjectStatus = Annotated[str, Describe(ended(f"Where it stands: {listed(Project.Status.values)}"))]
+type ProjectDescription = Annotated[str, Describe("What it is, in a sentence or two; empty when none was written.")]
+type TechnologiesUsed = Annotated[str, Describe("What it is built with.")]
+type RepositoryUrl = Annotated[str, Describe("The address of its code repository; empty for none.")]
+type DeploymentNotes = Annotated[str, Describe("How it is deployed.")]
+type SecurityNotes = Annotated[str, Describe("What protects it, and what to watch.")]
+type DependencyUpdates = Annotated[
+    bool, Describe("Whether HQ's dependency update run covers its repository, opening pull requests there.")
+]
 
 _PROJECT = Held("That project was not found.", "That project changed after it was read.")
 
@@ -126,14 +140,14 @@ ContentSync = Callable[[], dict[str, Any]]
 class ProjectCommand:
     name: ProjectName
     slug: Slug = ""
-    category: Annotated[str, Describe("What type of project it is.")] = "other"
-    status: Annotated[str, Describe("Where it stands, from idea to archived.")] = Project.Status.IDEA
-    description: Annotated[str, Describe("What it is, in a sentence or two.")] = ""
-    technologies_used: Annotated[str, Describe("What it is built with.")] = ""
-    repository_url: Annotated[str, Describe("Where its code lives.")] = ""
+    category: ProjectCategory = "other"
+    status: ProjectStatus = Project.Status.IDEA
+    description: ProjectDescription = ""
+    technologies_used: TechnologiesUsed = ""
+    repository_url: RepositoryUrl = ""
     public_url: PublishedUrl = ""
-    deployment_notes: Annotated[str, Describe("How it is deployed.")] = ""
-    security_notes: Annotated[str, Describe("What protects it, and what to watch.")] = ""
+    deployment_notes: DeploymentNotes = ""
+    security_notes: SecurityNotes = ""
     notes: Notes = ""
 
 
@@ -414,9 +428,7 @@ class DependencyUpdatesCommand:
 
     # Named as the project's own field, so a form opened on a project reads
     # its current value from the project's detail.
-    dependency_updates: Annotated[
-        bool, Describe("Whether HQ's dependency update run opens pull requests in this project's repository.")
-    ]
+    dependency_updates: DependencyUpdates
 
 
 @transaction.atomic

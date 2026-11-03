@@ -16,7 +16,12 @@ from .answer_fields import UpdatedAt
 from .calendar import EVENT_STATES
 from .calendar_entries import (
     CHOOSE_SOURCE,
+    CalendarEntryAbout,
+    CalendarEntryInterval,
+    CalendarEntryLocation,
+    CalendarEntryRepeat,
     CalendarEntryTitle,
+    CalendarEntryWeekdays,
     EntryCommand,
     SourceChoiceCommand,
     choose_source,
@@ -75,26 +80,23 @@ class EntryRecord(TypedDict):
 
     uid: Annotated[str, Describe("The event's id, which reading it, changing it and deleting it each take.")]
     title: CalendarEntryTitle
+    # A day is read back as its ISO text, which the command's date type does not hold.
     starts_on: Annotated[str, Describe("The day it starts, an ISO 8601 date.")]
     ends_on: Annotated[
         str | None, Describe("The day it ends, an ISO 8601 date; null for one that ends the day it starts.")
     ]
     starts_at: Annotated[str | None, Describe("The time it starts, as `HH:MM`; null for one that takes the whole day.")]
     ends_at: Annotated[str | None, Describe("The time it ends, as `HH:MM`; null for none.")]
-    location: Annotated[str, Describe("Where it happens; empty when not recorded.")]
+    location: CalendarEntryLocation
     notes: Notes
-    repeat: Annotated[str, Describe(f"How often it repeats: {listed(Entry.Repeat.values)}; empty for once.")]
+    repeat: CalendarEntryRepeat
     repeat_label: Annotated[
         str, Describe("How it repeats, as a person says it, such as `Every 2 weeks on Mon`; empty for once.")
     ]
-    interval: Annotated[
-        int, Describe("How far apart its times are, in what `repeat` names: 2 with `weekly` is every other week.")
-    ]
-    weekdays: Annotated[
-        list[int], Describe("For one that repeats weekly, the days of the week it falls on, Monday as 0; else empty.")
-    ]
+    interval: CalendarEntryInterval
+    weekdays: CalendarEntryWeekdays
     repeat_until: Annotated[str | None, Describe("The last day it repeats, an ISO 8601 date; null for no last day.")]
-    about: Annotated[str, Describe("What it is about, as `type:key`; empty for nothing.")]
+    about: CalendarEntryAbout
     url: Annotated[str, Describe("Its day on HQ's calendar, a path.")]
     updated_at: UpdatedAt
 

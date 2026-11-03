@@ -16,5 +16,5 @@ from .command_fields import Describe
 type Notes = Annotated[str, Describe("Anything else worth keeping.")]
 type Slug = Annotated[str, Describe("Its address in HQ; blank derives one from the name.")]
 type TotalCost = Annotated[Decimal, Describe("What it cost in all.")]
-type PublishedAt = Annotated[date | None, Describe("When it was published.")]
-type PublishedUrl = Annotated[str, Describe("Where it is published.")]
+type PublishedAt = Annotated[date | None, Describe("When it was published, an ISO 8601 date; null when it is not.")]
+type PublishedUrl = Annotated[str, Describe("Where it is published; empty for none.")]

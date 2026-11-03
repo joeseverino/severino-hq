@@ -438,7 +438,7 @@ def _relay(command: list[str], sink, ref: str, **options) -> None:
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, **options
     ) as run:
         try:
-            for line in run.stdout:
+            for line in run.stdout or ():
                 sink.write(line)
                 print(f"{ref}: {line}", end="", flush=True)
         except BaseException:
@@ -621,7 +621,21 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     # ``open`` finds it.
     on_reference = False
 
+    # What the run was asked and the base it is held to, set once by `setUpClass`.
+    tree: str
+    clock_at: float
+    asked: list[str]
+    base: Found | None
+    base_measured: Measured
+    base_errors: Found
+    # Each estate page asked for by its address, the pages followed added.
+    addresses: dict[str, str]
+    estate_client: Client | None
+    # Each estate address answered, with its status and any speculation refusal.
+    answered: dict[str, tuple[int, str]]
+
     @classmethod
+    @override
     def setUpClass(cls):
         # The tree the run draws from, held to the end (`changed_since`).
         cls.tree = tree_of(Path(settings.BASE_DIR))
@@ -655,6 +669,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         return _asked().text("rule") or ("survey" if _asked().text("base") else "")
 
     @classmethod
+    @override
     def render(cls):
         pages = cls.asked
         estate = [estate_name(path) for path in navigation()]
@@ -700,12 +715,14 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     # alone cannot say whose it is.
     on_estate = False
 
+    @override
     def answer(self, route):
         """A stress page or a static file, as the layout gate answers it:
         `respond` answers the estate's pages itself."""
 
         BrowserGate.answer(self, route)
 
+    @override
     def respond(self, route):
         request = route.request
         parts = urlsplit(request.url)
@@ -734,7 +751,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         # A browser route cannot answer with a redirect, so it is followed here.
         response = self.estate_client.get(address, secure=True, follow=True, **{**headers, **REQUEST})
         self.answered[address] = (response.status_code, response.get("X-Speculation-Refused", ""))
-        body = b"".join(response.streaming_content) if response.streaming else response.content
+        body = response.getvalue()
         # The event loop's own connection, closed rather than left to leak.
         connections.close_all()
         route.fulfill(
@@ -743,10 +760,12 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             body=body,
         )
 
+    @override
     def visit(self, path, width):
         self.on_estate = True
         super().visit(path, width)
 
+    @override
     def open(self, name, width):
         if is_estate(name):
             self.visit(self.addresses[name], width)
@@ -768,7 +787,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if _asked().switch("dark"):
             self.page.emulate_media(color_scheme="dark")
         self.errors: Found = {}
-        self.unanswered: dict[str, int | None] = {}
+        self.unanswered_pages: dict[str, int | None] = {}
         if _asked().switch("deep"):
             self.follow(widths[0])
         self.measured: Measured = {}
@@ -795,11 +814,11 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             printed = [f"Page by page: {REPORT}", *said, *printed]
             failed = [said[-1]] * rule_failed + failed
         # A page that did not answer was not looked at, here or at a base, so it fails either way.
-        unanswered = [f"{name} answered {status}, not 200" for name, status in self.unanswered.items()]
+        unanswered = [f"{name} answered {status}, not 200" for name, status in self.unanswered_pages.items()]
         base = f", the base's in {_shown(this_run() / BASE_OUT)}/" if self.base is not None else ""
         shots = f"Screenshots in {_shown(this_run())}/{base}"
         # Last, as it voids every verdict before it.
-        changed = [said] if (said := changed_since(self.tree, Path(settings.BASE_DIR))) else []
+        changed = [moved] if (moved := changed_since(self.tree, Path(settings.BASE_DIR))) else []
         print(*printed, *unanswered, shots, *changed, sep="\n", flush=True)
         return failed + unanswered + changed
 
@@ -813,7 +832,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             for width in widths:
                 stall_watch.mark(f"dev:look {name} at {width}")
                 print(f"Looking at {name} at {width}", flush=True)
-                self.shots = []
+                self.shots: list[tuple[str, str]] = []
                 said = found[name, width] = self.look(name, width, rule)
                 errors = self.errors[name, width] = self.refusals_so_far()
                 report = _shot(name, width).with_suffix(".txt")
@@ -1013,7 +1032,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.page.screenshot(path=shot, animations="disabled")
         tall, band = self.page.evaluate(_DIALOG_EXTENT, dialog)
         tops = [*range(0, tall - band, band * 3 // 4), tall - band] if tall > band else []
-        bands = [(shot.name, 0, band)]
+        bands: list[Band] = [(shot.name, 0, band)]
         for number, top in enumerate(tops, start=1):
             self.page.evaluate(_DIALOG_SCROLL, [dialog, top])
             cut = shot.with_name(f"{shot.stem}.band-{number:02}.png")
@@ -1045,7 +1064,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if is_estate(name) and (said := self.answered.get(_address(self.page.url), (None, ""))) != (200, ""):
             status, refusal = said
             if status != 200:
-                self.unanswered[name] = status
+                self.unanswered_pages[name] = status
             return f"answered {status}{f', refused as a guess ({refusal})' if refusal else ''}, not looked at"
         if not self.page.locator("main").count():
             return "not a page of HQ's (no main), not looked at"

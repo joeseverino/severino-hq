@@ -16,6 +16,7 @@ from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
 
 from .command_fields import Describe, Names
+from .describe import listed
 from .entity_links import EntityLink, entity_link
 from .labels import plural
 from .projection import listing
@@ -26,7 +27,7 @@ from .references import Mention, Mentions
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Capability, Principal
 from .sensitivity import safe_records
-from .ui import counted
+from .ui import counted, ended
 
 MAX_MANIFEST_ITEMS = 2000
 SYNC = "documentation.sync"
@@ -120,24 +121,41 @@ class DocumentationSyncCommand:
     confirm_prune: ConfirmPrune = False
 
 
-# The fields a doc is added and changed by that take no default, said once for both.
+# A doc's fields as its command writes them and its row reads them back, each said once.
 type DocId = Annotated[str, Describe("The doc's ID in the vault.")]
 type DocumentationTitle = Annotated[str, Describe("The doc's title.")]
+type DocType = Annotated[str, Describe(ended(f"What type of doc it is: {listed(DocumentationRecord.DocType.values)}"))]
+type DocEnvironment = Annotated[
+    str, Describe(ended(f"Where that system runs: {listed(DocumentationRecord.Environment.values)}"))
+]
+type DocStatus = Annotated[str, Describe(ended(f"Where the doc stands: {listed(DocumentationRecord.Status.values)}"))]
+type DocSensitivity = Annotated[
+    str,
+    Describe(
+        f"Who may read it, {listed(DocumentationRecord.Sensitivity.values)}; a restricted doc never reaches an agent."
+    ),
+]
+type ObsidianPath = Annotated[str, Describe("Its path in the vault; empty for none.")]
+type GithubPath = Annotated[str, Describe("Its path in a repository; empty for none.")]
+type ExternalUrl = Annotated[str, Describe("Where it is published outside HQ; empty for none.")]
+type LastReviewed = Annotated[
+    date | None, Describe("When it was last checked against what it describes, an ISO 8601 date; null for never.")
+]
 
 
 @dataclass(frozen=True, slots=True)
 class DocumentationCommand:
     doc_id: DocId
     title: DocumentationTitle
-    doc_type: Annotated[str, Describe("What type of doc it is.")] = "runbook"
+    doc_type: DocType = "runbook"
     system_service: Annotated[str, Describe("The system or service it is about.")] = ""
-    environment: Annotated[str, Describe("Where that system runs.")] = "other"
-    status: Annotated[str, Describe("Where the doc stands.")] = "draft"
-    sensitivity: Annotated[str, Describe("Who may read it; restricted docs never reach an agent.")] = "internal"
-    obsidian_path: Annotated[str, Describe("Its path in the vault.")] = ""
-    github_path: Annotated[str, Describe("Its path in a repository.")] = ""
-    external_url: Annotated[str, Describe("Where it is published outside HQ.")] = ""
-    last_reviewed: Annotated[date | None, Describe("When it was last checked against what it describes.")] = None
+    environment: DocEnvironment = "other"
+    status: DocStatus = "draft"
+    sensitivity: DocSensitivity = "internal"
+    obsidian_path: ObsidianPath = ""
+    github_path: GithubPath = ""
+    external_url: ExternalUrl = ""
+    last_reviewed: LastReviewed = None
     published_at: PublishedAt = None
     notes: Notes = ""
     related_projects: Annotated[tuple[str, ...], Names("projects"), Describe("The projects this doc covers.")] = ()

@@ -10,6 +10,7 @@ from hq.domains.calendars.models import Entry
 from hq.platform.application import business_use
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.integration_specs import capability_schema
+from hq.platform.application.json_schemas import fields
 
 
 class RecordBoundsTests(SimpleTestCase):
@@ -30,7 +31,7 @@ class CalendarIntervalBoundsTests(TestCase):
     """A rule a model holds as a constraint rather than a validator, said alike."""
 
     def test_a_repeat_interval_says_exactly_the_range_its_model_holds(self):
-        field = capability_schema(capability_registry()["calendar.entry.create"])["properties"]["interval"]
+        field = fields(capability_schema(capability_registry()["calendar.entry.create"]))["interval"]
         low, high = field["minimum"], field["maximum"]
         for interval in (low - 1, low, high, high + 1):
             with self.subTest(interval=interval):

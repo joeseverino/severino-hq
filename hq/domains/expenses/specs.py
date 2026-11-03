@@ -4,17 +4,15 @@ from typing import Annotated, TypedDict
 
 from pydantic import Field, create_model
 
-from hq.domains.assets.specs import PaymentMethod
-from hq.platform.application import read_models
+from hq.platform.application import expenses, read_models
 from hq.platform.application.answer_fields import BusinessUseShare, DeductibleAmount, TotalCostAmount, UpdatedAt
-from hq.platform.application.describe import Describe, listed
-from hq.platform.application.expenses import ExpenseItem, ExpenseVendor
+from hq.platform.application.assets import PaymentMethod
+from hq.platform.application.describe import Describe
 from hq.platform.application.integration_specs import ResourceSpec
 from hq.platform.application.record_fields import Notes
 from hq.platform.application.resources import BoundedQuery, one_of
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
-from hq.platform.application.ui import ended
 
 from .models import EXPENSE_CATEGORY_CHOICES, Expense
 
@@ -33,29 +31,22 @@ class ExpenseRow(TypedDict):
     """One expense; each related record by its slug or id, or null."""
 
     id: Annotated[int, Describe("The expense's id, which its page and the records linked to it name it by.")]
-    date: Annotated[str | None, Describe("When it was spent, an ISO 8601 date; null when not recorded.")]
-    vendor: ExpenseVendor
-    item: ExpenseItem
-    category: Annotated[
-        str, Describe(ended(f"What type of expense it is: {listed(value for value, _ in EXPENSE_CATEGORY_CHOICES)}"))
-    ]
+    date: expenses.ExpenseDate
+    vendor: expenses.ExpenseVendor
+    item: expenses.ExpenseItem
+    category: expenses.ExpenseCategory
     total_cost: TotalCostAmount
     business_use_percentage: BusinessUseShare
     estimated_deductible_amount: DeductibleAmount
     payment_method: PaymentMethod
-    business_purpose: Annotated[str, Describe("Why the business needed it; empty when not recorded.")]
+    business_purpose: expenses.BusinessPurpose
     notes: Notes
-    related_project: Annotated[str | None, Describe("The slug of the project this was spent on; null for none.")]
-    related_asset: Annotated[str | None, Describe("The slug of the asset this bought or kept running; null for none.")]
-    related_content: Annotated[str | None, Describe("The slug of the writeup or page this paid for; null for none.")]
-    related_documentation: Annotated[
-        str | None,
-        Describe("The vault doc ID of the doc that records it; null for none, or for one too sensitive to share."),
-    ]
-    paid_from: Annotated[str, Describe("The account that paid, as `type:key`; empty when not recorded.")]
-    about: Annotated[
-        str, Describe("What it was for, as `type:key`, where none of the related records says it; empty for none.")
-    ]
+    related_project: expenses.ExpenseProject
+    related_asset: expenses.ExpenseAsset
+    related_content: expenses.ExpenseContent
+    related_documentation: expenses.ExpenseDoc
+    paid_from: expenses.PaidFrom
+    about: expenses.ExpenseAbout
     updated_at: UpdatedAt
 
 

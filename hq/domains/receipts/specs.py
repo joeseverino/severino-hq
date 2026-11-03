@@ -4,7 +4,7 @@ from typing import Annotated, TypedDict
 
 from pydantic import Field
 
-from hq.platform.application import read_models
+from hq.platform.application import read_models, receipts
 from hq.platform.application.answer_fields import UpdatedAt
 from hq.platform.application.describe import Describe, listed
 from hq.platform.application.integration_specs import ResourceSpec
@@ -35,8 +35,8 @@ class ReceiptRow(TypedDict):
     date: Annotated[str | None, Describe("The day on the receipt, an ISO 8601 date; null when not recorded.")]
     amount: Annotated[str, Describe("The amount on the receipt, a decimal string with two places such as `12.50`.")]
     notes: Notes
-    related_expense: Annotated[int | None, Describe("The id of the expense it is matched to; null for none.")]
-    related_asset: Annotated[str | None, Describe("The slug of the asset it is matched to; null for none.")]
+    related_expense: receipts.ReceiptExpense
+    related_asset: receipts.ReceiptAsset
     uploaded_at: Annotated[str, Describe("When the file was uploaded, an ISO 8601 date-time.")]
     updated_at: UpdatedAt
 

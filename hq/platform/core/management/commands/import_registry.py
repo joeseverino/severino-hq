@@ -48,6 +48,16 @@ class Command(BaseCommand):
             raise CommandError('The document is an object: {"projects": [...], "assets": [...]}.')
         return data
 
+    def _problems(self, details: list) -> None:
+        # A record the command's type refuses is named in the message; one the
+        # import refuses is a problem of its own, listed here.
+        for problem in details:
+            if "errors" not in problem:
+                continue
+            label = f"{problem['kind']} {problem['slug'] or '#' + str(problem['index'])}"
+            for problem_error in problem["errors"]:
+                self.stderr.write(f"  {label}: {problem_error}")
+
     @override
     def handle(self, *args, **options):
         payload = {**self._document(options["path"]), "check_only": options["check_only"]}
@@ -57,10 +67,7 @@ class Command(BaseCommand):
         if not result["ok"]:
             refusal = refusal_of(result)
             if not options["json"] and refusal.code == "invalid_input":
-                for problem in refusal.details:
-                    label = f"{problem['kind']} {problem['slug'] or '#' + str(problem['index'])}"
-                    for problem_error in problem["errors"]:
-                        self.stderr.write(f"  {label}: {problem_error}")
+                self._problems(refusal.details)
             raise CommandError(refusal.message)
         if options["json"]:
             return

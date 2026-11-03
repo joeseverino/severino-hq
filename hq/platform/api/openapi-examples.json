@@ -763,15 +763,16 @@
           "code": "invalid_input",
           "details": [
             {
-              "errors": [
-                "slug is required."
+              "loc": [
+                "projects",
+                1,
+                "slug"
               ],
-              "index": 1,
-              "kind": "project",
-              "slug": ""
+              "msg": "Field required",
+              "type": "missing"
             }
           ],
-          "message": "1 record refused. Nothing was imported."
+          "message": "hq.import: projects[1].slug is required."
         },
         "ok": false
       }

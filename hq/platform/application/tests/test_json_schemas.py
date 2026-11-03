@@ -24,6 +24,18 @@ class _Priced(BaseModel):
     cost: ExampleCost = 0
 
 
+class ExampleSaved(TypedDict):
+    created: bool
+
+
+class ExampleHeld(TypedDict):
+    held: bool
+
+
+class _Answered(TypedDict):
+    data: ExampleSaved | ExampleHeld | None
+
+
 class GeneratorTests(SimpleTestCase):
     def test_a_title_is_written_only_where_a_declaration_gives_it(self):
         schema = json_schema(_Command)
@@ -45,6 +57,13 @@ class GeneratorTests(SimpleTestCase):
 
         self.assertEqual(schema["$defs"]["ExampleCost"]["title"], "Example cost")
         self.assertNotIn("title", schema)
+
+    def test_a_class_offered_in_a_choice_is_titled_there_by_its_name(self):
+        schema = json_schema(_Answered)
+
+        branches = schema["properties"]["data"]["anyOf"]
+        self.assertEqual([branch.get("title") for branch in branches], ["Example saved", "Example held", None])
+        self.assertNotIn("title", schema["$defs"]["ExampleSaved"])
 
     def test_a_typed_dict_is_closed_and_an_open_object_says_nothing(self):
         schema = json_schema(_Detail)

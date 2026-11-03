@@ -114,7 +114,11 @@ class ValidationTests(TestCase):
         return result
 
     def test_a_record_without_a_slug_is_refused(self):
-        self.assert_refused({"projects": [{"name": "No slug"}]}, "slug is required")
+        result = self.assert_refused({"projects": [{"name": "No slug"}]})
+        self.assertEqual([problem["loc"] for problem in result["error"]["details"]], [["projects", 0, "slug"]])
+
+    def test_a_blank_slug_is_refused(self):
+        self.assert_refused({"projects": [{"slug": " ", "name": "Blank slug"}]}, "slug is required")
 
     def test_a_slug_twice_is_refused(self):
         self.assert_refused(
@@ -123,10 +127,8 @@ class ValidationTests(TestCase):
         )
 
     def test_an_unknown_field_is_refused(self):
-        self.assert_refused(
-            {"projects": [{"slug": "example", "name": "A", "hostname": "example.com"}]},
-            "Unknown fields: hostname",
-        )
+        result = self.assert_refused({"projects": [{"slug": "example", "name": "A", "hostname": "example.com"}]})
+        self.assertEqual([problem["loc"] for problem in result["error"]["details"]], [["projects", 0, "hostname"]])
 
     def test_a_bad_choice_is_refused_before_anything_is_written(self):
         self.assert_refused(
@@ -146,8 +148,12 @@ class ValidationTests(TestCase):
         )
 
     def test_every_problem_is_reported_at_once(self):
-        result = self.assert_refused({"projects": [{"name": "A"}, {"slug": "b", "name": "B", "category": "nope"}]})
-        self.assertEqual(len(result["error"]["details"]), 2)
+        shape = self.assert_refused({"projects": [{"name": "A"}, {"slug": "b", "name": "B", "hostname": "nope"}]})
+        self.assertEqual(len(shape["error"]["details"]), 2)
+        content = self.assert_refused(
+            {"projects": [{"slug": "a", "name": "A", "status": "nope"}, {"slug": "b", "name": "B", "category": "nope"}]}
+        )
+        self.assertEqual(len(content["error"]["details"]), 2)
 
     def test_the_record_limit_is_enforced(self):
         document = {"projects": [{"slug": f"p-{index}", "name": "P"} for index in range(MAX_IMPORT_RECORDS + 1)]}

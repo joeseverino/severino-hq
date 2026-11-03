@@ -7,24 +7,49 @@ value wins over an imported one: docs/Derived-Facts.md#one-time-import.
 """
 
 from dataclasses import asdict, dataclass, field, fields
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, NotRequired, TypedDict
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from pydantic import TypeAdapter, ValidationError as PydanticValidationError
+from pydantic import ConfigDict, TypeAdapter, ValidationError as PydanticValidationError, with_config
 
 from hq.domains.assets.models import Asset
 from hq.domains.projects.models import Project
 from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
 
-from .answer_fields import RecordSlug
-from .assets import AssetCommand, upsert_asset
+from .answer_fields import BusinessUseShare, RecordSlug
+from .assets import (
+    AssetCategory,
+    AssetCommand,
+    AssetInfrastructure,
+    AssetName,
+    AssetProjects,
+    AssetStatus,
+    AssetVendor,
+    PaymentMethod,
+    PurchaseDate,
+    SerialNumber,
+    WarrantyDate,
+    upsert_asset,
+)
 from .command_fields import Describe
 from .describe import listed
 from .domains import records_of
-from .projects import ProjectCommand, upsert_project
+from .projects import (
+    DeploymentNotes,
+    ProjectCategory,
+    ProjectCommand,
+    ProjectDescription,
+    ProjectName,
+    ProjectStatus,
+    RepositoryUrl,
+    SecurityNotes,
+    TechnologiesUsed,
+    upsert_project,
+)
 from .record_errors import RecordConflict, RecordNotFound
+from .record_fields import Notes, PublishedUrl, TotalCost
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal, require_all
 from .ui import counted, ended
@@ -41,12 +66,52 @@ DERIVED_FIELDS: dict[str, tuple[str, ...]] = {
 REQUIRED_CAPABILITIES = (records_of("projects").write, records_of("assets").write)
 
 
+# A record of the document is laid over the one stored under its slug, so
+# every field but the slug may be left out. Closed: a field the command does
+# not have is refused rather than dropped.
+@with_config(ConfigDict(extra="forbid"))
+class ImportedProject(TypedDict):
+    """A project to import: its slug, and the fields to lay over the project stored under it."""
+
+    slug: RecordSlug
+    name: NotRequired[ProjectName]
+    category: NotRequired[ProjectCategory]
+    status: NotRequired[ProjectStatus]
+    description: NotRequired[ProjectDescription]
+    technologies_used: NotRequired[TechnologiesUsed]
+    repository_url: NotRequired[RepositoryUrl]
+    public_url: NotRequired[PublishedUrl]
+    deployment_notes: NotRequired[DeploymentNotes]
+    security_notes: NotRequired[SecurityNotes]
+    notes: NotRequired[Notes]
+
+
+@with_config(ConfigDict(extra="forbid"))
+class ImportedAsset(TypedDict):
+    """An asset to import: its slug, and the fields to lay over the asset stored under it."""
+
+    slug: RecordSlug
+    item_name: NotRequired[AssetName]
+    vendor: NotRequired[AssetVendor]
+    category: NotRequired[AssetCategory]
+    purchase_date: NotRequired[PurchaseDate]
+    total_cost: NotRequired[TotalCost]
+    business_use_percentage: NotRequired[BusinessUseShare]
+    payment_method: NotRequired[PaymentMethod]
+    serial_number: NotRequired[SerialNumber]
+    warranty_date: NotRequired[WarrantyDate]
+    status: NotRequired[AssetStatus]
+    notes: NotRequired[Notes]
+    related_projects: NotRequired[AssetProjects]
+    infrastructure: NotRequired[AssetInfrastructure]
+
+
 @dataclass(frozen=True, slots=True)
 class HQImportCommand:
-    projects: Annotated[list[dict[str, Any]], Describe("Projects to import, each as a project record.")] = field(
-        default_factory=list
+    projects: Annotated[list[ImportedProject], Describe("Projects to import, each laid over the one of its slug.")] = (
+        field(default_factory=list)
     )
-    assets: Annotated[list[dict[str, Any]], Describe("Assets to import, each as an asset record.")] = field(
+    assets: Annotated[list[ImportedAsset], Describe("Assets to import, each laid over the one of its slug.")] = field(
         default_factory=list
     )
     check_only: Annotated[bool, Describe("Check the import without saving anything.")] = False
@@ -113,15 +178,15 @@ def _stored(kind: _Kind, instance) -> dict[str, Any]:
 
 
 def _existing(kind: _Kind, records: list[Any]) -> dict[str, Any]:
-    slugs = [str(record.get("slug", "")).strip() for record in records if isinstance(record, dict)]
+    slugs = [record["slug"].strip() for record in records]
     query = kind.model.objects.filter(slug__in=slugs)
     if kind is _ASSET:
         query = query.prefetch_related("related_projects")
     return {row.slug: row for row in query}
 
 
-def _shape_errors(record: dict, slug: str, seen: set[str], names: set[str]) -> list[str]:
-    """A record's slug and field-name errors; records the slug as seen."""
+def _slug_errors(slug: str, seen: set[str]) -> list[str]:
+    """A record's slug errors; records the slug as seen."""
 
     errors = []
     if not slug:
@@ -129,9 +194,6 @@ def _shape_errors(record: dict, slug: str, seen: set[str], names: set[str]) -> l
     elif slug in seen:
         errors.append("slug appears twice in this document.")
     seen.add(slug)
-    unknown = sorted(set(record) - names)
-    if unknown:
-        errors.append(ended(f"Unknown fields: {', '.join(unknown)}"))
     return errors
 
 
@@ -194,16 +256,12 @@ def _plan_kind(
     problems: list[dict[str, Any]],
     known_projects: set[str],
 ) -> list[_Planned]:
-    names = {item.name for item in fields(kind.command)}
     existing = _existing(kind, records)
     seen: set[str] = set()
     planned = []
     for index, record in enumerate(records):
-        if not isinstance(record, dict):
-            problems.append(_problem(kind.name, index, "", "Each record is a JSON object."))
-            continue
-        slug = str(record.get("slug", "")).strip()
-        errors = _shape_errors(record, slug, seen, names)
+        slug = record["slug"].strip()
+        errors = _slug_errors(slug, seen)
         if not errors:
             plan, errors = _plan_record(kind, index, record, slug, existing.get(slug), known_projects)
         if errors:

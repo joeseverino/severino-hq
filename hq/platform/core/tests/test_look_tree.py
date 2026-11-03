@@ -6,11 +6,13 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 from hq.platform.core.tests import look
 
 
+# git runs here, and no image ships it.
+@tag("source")
 class TreeChangedTests(SimpleTestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()

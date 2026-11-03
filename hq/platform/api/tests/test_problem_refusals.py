@@ -41,7 +41,7 @@ class ProblemRefusalTests(TestCase):
         self.assertEqual(response.status_code, 400, response.content)
         error = response.json()["error"]
         self.assertEqual(error["code"], "invalid_input")
-        self.assertEqual([problem["index"] for problem in error["details"]], [1])
+        self.assertEqual([problem["loc"] for problem in error["details"]], [["projects", 1, "slug"]])
         self.assertFalse(Project.objects.exists())
 
     def test_a_docs_sync_with_a_bad_record_is_400_with_each_problem(self):
