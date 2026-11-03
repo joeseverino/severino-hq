@@ -464,7 +464,7 @@ class TransportTests(SentinelMixin, TestCase):
         Project.objects.create(name="Example", slug="example")
         with _serving():
             response = self.client.post(
-                "/api/v2/capabilities/project.dependency_updates/",
+                "/api/v2/capabilities/project.dependency_updates.set/",
                 data=json.dumps({"target": "example", "payload": {"dependency_updates": False}}),
                 content_type="application/json",
                 HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
@@ -756,7 +756,7 @@ class TransportTests(SentinelMixin, TestCase):
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
         with _serving():
             response = self.client.get("/api/v2/connections/", **headers)
-            standing = self.client.get("/api/v2/resources/connection.standing/api-cloudflare/", **headers)
+            standing = self.client.get("/api/v2/resources/connections/api-cloudflare/", **headers)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(standing.status_code, 200)
@@ -778,7 +778,7 @@ class TransportTests(SentinelMixin, TestCase):
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='write_projects')}"}
         with _serving(), CaptureQueriesContext(connection) as queries:
             response = self.client.get("/api/v2/connections/", **headers)
-            standing = self.client.get("/api/v2/resources/connection.standing/", **headers)
+            standing = self.client.get("/api/v2/resources/connections/", **headers)
 
         self.assertEqual(response.status_code, 200)
         core = next(
@@ -860,7 +860,7 @@ class TransportTests(SentinelMixin, TestCase):
             ]
             reads += [
                 f"/api/v2/resources/readings/{SENTINEL_READING}/",
-                "/api/v2/resources/infrastructure.resources/sentinel-rewrite/",
+                "/api/v2/resources/infrastructure/sentinel-rewrite/",
             ]
             served = ""
             for url in reads:

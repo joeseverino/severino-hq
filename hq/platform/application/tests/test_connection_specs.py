@@ -87,9 +87,9 @@ def _finance_spec() -> ConnectionSpec:
 
 
 def _standing(principal: Principal) -> list[dict]:
-    """Each connection as the registered ``connection.standing`` read answers it."""
+    """Each connection as the registered ``connections`` read answers it."""
 
-    return list_resource("connection.standing", principal=principal, fields=[WHOLE_RECORD])["items"]
+    return list_resource("connections", principal=principal, fields=[WHOLE_RECORD])["items"]
 
 
 def _abilities(item: dict) -> list[dict]:
@@ -323,7 +323,7 @@ class ConnectionRegistrationTests(TestCase):
                 "infrastructure.resource.adopt",
                 "infrastructure.service.adopt",
                 "infrastructure.zone.adopt",
-                "infrastructure.reconcile",
+                "infrastructure.resource.reconcile",
                 "infrastructure.resource.remove",
                 # Scoped to the device kind, so it surfaces here for the same
                 # reason `certificate.renew` does not: the ability names what
@@ -335,11 +335,11 @@ class ConnectionRegistrationTests(TestCase):
                 "tailnet.reach.allow",
             },
         )
-        self.assertIn("via Tailnet device", commands["infrastructure.reconcile"].badges)
+        self.assertIn("via Tailnet device", commands["infrastructure.resource.reconcile"].badges)
         self.assertIn("via Tailnet device", commands["tailnet.routes.approve"].badges)
         self.assertEqual(
-            commands["infrastructure.reconcile"].url,
-            "/commands/infrastructure.reconcile/?kind=tailscale.device&kind=tailscale.policy",
+            commands["infrastructure.resource.reconcile"].url,
+            "/commands/infrastructure.resource.reconcile/?kind=tailscale.device&kind=tailscale.policy",
         )
         self.assertNotIn("certificate.renew", commands)
 
@@ -370,7 +370,7 @@ class ConnectionRegistrationTests(TestCase):
             {ability["name"] for ability in changes},
             {"tailscale.device", "tailscale.policy"},
         )
-        self.assertTrue(all(ability["subject_resource"] == "infrastructure.resources" for ability in changes))
+        self.assertTrue(all(ability["subject_resource"] == "infrastructure" for ability in changes))
         self.assertEqual(
             {ability["name"]: ability["governs_kinds"] for ability in changes},
             {

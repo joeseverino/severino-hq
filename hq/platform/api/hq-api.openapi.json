@@ -466,7 +466,7 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
-      "getConnectionStandingV2OK": {
+      "getConnectionsV2OK": {
         "dataValue": {
           "data": {
             "actions": [
@@ -496,7 +496,7 @@
                 "missing_scopes": [],
                 "name": "cloudflare.dns_record",
                 "required_scopes": [],
-                "subject_resource": "infrastructure.resources"
+                "subject_resource": "infrastructure"
               }
             ],
             "connection_ref": "api-cloudflare",
@@ -533,7 +533,7 @@
                   "missing_scopes": [],
                   "name": "cloudflare.zone",
                   "required_scopes": [],
-                  "subject_resource": "infrastructure.resources"
+                  "subject_resource": "infrastructure"
                 },
                 "label": "Domain",
                 "sight": {
@@ -587,7 +587,7 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
-      "getInfrastructureResourcesV2NotFound": {
+      "getInfrastructureV2NotFound": {
         "dataValue": {
           "error": {
             "code": "not_found",
@@ -595,7 +595,7 @@
               "identifier": "key",
               "next": {
                 "arguments": {
-                  "name": "infrastructure.resources"
+                  "name": "infrastructure"
                 },
                 "tool": "list_resource"
               }
@@ -606,7 +606,7 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
-      "getInfrastructureResourcesV2OK": {
+      "getInfrastructureV2OK": {
         "dataValue": {
           "data": {
             "derived": {
@@ -794,7 +794,7 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
-      "infrastructureReconcileV2Conflict": {
+      "infrastructureResourceReconcileV2Conflict": {
         "dataValue": {
           "error": {
             "code": "precondition",
@@ -973,7 +973,7 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
-      "listConnectionStandingV2Forbidden": {
+      "listConnectionsV2Forbidden": {
         "dataValue": {
           "error": {
             "code": "forbidden",
@@ -983,7 +983,7 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
-      "listConnectionStandingV2OK": {
+      "listConnectionsV2OK": {
         "dataValue": {
           "data": {
             "count": 10,
@@ -1600,7 +1600,7 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
-      "listInfrastructureResourcesV2BadRequest": {
+      "listInfrastructureV2BadRequest": {
         "dataValue": {
           "error": {
             "code": "invalid_input",
@@ -1613,13 +1613,13 @@
                 "type": "literal_error"
               }
             ],
-            "message": "infrastructure.resources: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox."
+            "message": "infrastructure: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox."
           },
           "ok": false
         },
         "summary": "Recorded by HQ's test suite."
       },
-      "listInfrastructureResourcesV2OK": {
+      "listInfrastructureV2OK": {
         "dataValue": {
           "data": {
             "count": 42,
@@ -2287,7 +2287,7 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
-      "lookupAddressV2BadRequest": {
+      "lookupAddressReadV2BadRequest": {
         "dataValue": {
           "error": {
             "code": "invalid_input",
@@ -2428,7 +2428,7 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
-      "projectDependencyUpdatesV2Conflict": {
+      "projectDependencyUpdatesSetV2Conflict": {
         "dataValue": {
           "error": {
             "code": "precondition",
@@ -2743,17 +2743,17 @@
       }
     },
     "headers": {
-      "TooManyRequestsRetryAfter": {
+      "ChangeTooManyRequestsRetryAfter": {
         "description": "Whole seconds until asking again can succeed, as `error.retry_after` says.",
-        "required": true,
+        "required": false,
         "schema": {
           "minimum": 1,
           "type": "integer"
         }
       },
-      "TooManyRequestsTooManyPendingApprovalsRetryAfter": {
+      "TooManyRequestsRetryAfter": {
         "description": "Whole seconds until asking again can succeed, as `error.retry_after` says.",
-        "required": false,
+        "required": true,
         "schema": {
           "minimum": 1,
           "type": "integer"
@@ -3034,21 +3034,21 @@
         },
         "description": "Success."
       },
-      "ApprovalSubjectUnreadableNotFound": {
+      "AnyCallBadRequest": {
         "content": {
           "application/json": {
             "schema": {
-              "$ref": "#/components/schemas/ApprovalSubjectUnreadableNotFoundRefusal"
+              "$ref": "#/components/schemas/AnyCallBadRequestRefusal"
             }
           }
         },
-        "description": "Not Found."
+        "description": "Bad Request."
       },
-      "ApprovalSubjectUnreadableNotFoundUnknownCapability": {
+      "AnyCallNotFound": {
         "content": {
           "application/json": {
             "schema": {
-              "$ref": "#/components/schemas/ApprovalSubjectUnreadableNotFoundUnknownCapabilityRefusal"
+              "$ref": "#/components/schemas/AnyCallNotFoundRefusal"
             }
           }
         },
@@ -3102,25 +3102,50 @@
         },
         "description": "Success."
       },
-      "ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed": {
+      "ChangeConflict": {
         "content": {
           "application/json": {
             "schema": {
-              "$ref": "#/components/schemas/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailedRefusal"
+              "$ref": "#/components/schemas/ChangeConflictRefusal"
             }
           }
         },
         "description": "Conflict."
       },
-      "ConflictPreconditionRejectedWorkFailed": {
+      "ChangeForbidden": {
         "content": {
           "application/json": {
             "schema": {
-              "$ref": "#/components/schemas/ConflictPreconditionRejectedWorkFailedRefusal"
+              "$ref": "#/components/schemas/ChangeForbiddenRefusal"
             }
           }
         },
-        "description": "Conflict."
+        "description": "Forbidden."
+      },
+      "ChangeNotFound": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ChangeNotFoundRefusal"
+            }
+          }
+        },
+        "description": "Not Found."
+      },
+      "ChangeTooManyRequests": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ChangeTooManyRequestsRefusal"
+            }
+          }
+        },
+        "description": "Too Many Requests.",
+        "headers": {
+          "Retry-After": {
+            "$ref": "#/components/headers/ChangeTooManyRequestsRetryAfter"
+          }
+        }
       },
       "ContactSubmissionRowPageSuccess": {
         "content": {
@@ -3288,56 +3313,6 @@
         },
         "description": "Forbidden."
       },
-      "ForbiddenDeclinedDeniedByPolicy": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ForbiddenDeclinedDeniedByPolicyRefusal"
-            }
-          }
-        },
-        "description": "Forbidden."
-      },
-      "ForbiddenDeniedByPolicy": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ForbiddenDeniedByPolicyRefusal"
-            }
-          }
-        },
-        "description": "Forbidden."
-      },
-      "IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowedRefusal"
-            }
-          }
-        },
-        "description": "Bad Request."
-      },
-      "IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowedTargetRequired": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowedTargetRequiredRefusal"
-            }
-          }
-        },
-        "description": "Bad Request."
-      },
-      "IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequiredRefusal"
-            }
-          }
-        },
-        "description": "Bad Request."
-      },
       "InternalServerError": {
         "content": {
           "application/json": {
@@ -3353,16 +3328,6 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/InvalidInputRefusal"
-            }
-          }
-        },
-        "description": "Bad Request."
-      },
-      "InvalidInputInvalidJsonInvalidMaterialTargetNotAllowed": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/InvalidInputInvalidJsonInvalidMaterialTargetNotAllowedRefusal"
             }
           }
         },
@@ -3402,31 +3367,11 @@
         },
         "description": "Method Not Allowed."
       },
-      "MethodNotAllowedUnsupportedOperation": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/MethodNotAllowedUnsupportedOperationRefusal"
-            }
-          }
-        },
-        "description": "Method Not Allowed."
-      },
       "NotFound": {
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/NotFoundRefusal"
-            }
-          }
-        },
-        "description": "Not Found."
-      },
-      "NotFoundUnknownResource": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/NotFoundUnknownResourceRefusal"
             }
           }
         },
@@ -3501,6 +3446,26 @@
         },
         "description": "Success."
       },
+      "ReadConflict": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ReadConflictRefusal"
+            }
+          }
+        },
+        "description": "Conflict."
+      },
+      "ReadForbidden": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ReadForbiddenRefusal"
+            }
+          }
+        },
+        "description": "Forbidden."
+      },
       "RelationshipsRecordSuccess": {
         "content": {
           "application/json": {
@@ -3559,6 +3524,26 @@
         },
         "description": "Success."
       },
+      "ResourceReadMethodNotAllowed": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ResourceReadMethodNotAllowedRefusal"
+            }
+          }
+        },
+        "description": "Method Not Allowed."
+      },
+      "ResourceReadNotFound": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ResourceReadNotFoundRefusal"
+            }
+          }
+        },
+        "description": "Not Found."
+      },
       "ServiceRecordSuccess": {
         "content": {
           "application/json": {
@@ -3593,6 +3578,16 @@
         },
         "description": "Service Unavailable."
       },
+      "TargetedChangeBadRequest": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/TargetedChangeBadRequestRefusal"
+            }
+          }
+        },
+        "description": "Bad Request."
+      },
       "TooManyRequests": {
         "content": {
           "application/json": {
@@ -3605,21 +3600,6 @@
         "headers": {
           "Retry-After": {
             "$ref": "#/components/headers/TooManyRequestsRetryAfter"
-          }
-        }
-      },
-      "TooManyRequestsTooManyPendingApprovals": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/TooManyRequestsTooManyPendingApprovalsRefusal"
-            }
-          }
-        },
-        "description": "Too Many Requests.",
-        "headers": {
-          "Retry-After": {
-            "$ref": "#/components/headers/TooManyRequestsTooManyPendingApprovalsRetryAfter"
           }
         }
       },
@@ -3657,6 +3637,26 @@
           }
         },
         "description": "Unsupported Media Type."
+      },
+      "UntargetedChangeBadRequest": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UntargetedChangeBadRequestRefusal"
+            }
+          }
+        },
+        "description": "Bad Request."
+      },
+      "UntargetedReadBadRequest": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UntargetedReadBadRequestRefusal"
+            }
+          }
+        },
+        "description": "Bad Request."
       },
       "UpgradeRecordSuccess": {
         "content": {
@@ -3885,7 +3885,7 @@
         "minimum": 1,
         "type": "integer"
       },
-      "ApprovalSubjectUnreadableNotFoundRefusal": {
+      "AnyCallBadRequestRefusal": {
         "additionalProperties": false,
         "properties": {
           "error": {
@@ -3894,8 +3894,13 @@
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
                 "enum": [
-                  "approval_subject_unreadable",
-                  "not_found"
+                  "idempotency_key_required",
+                  "invalid_idempotency_key",
+                  "invalid_input",
+                  "invalid_json",
+                  "invalid_material",
+                  "target_not_allowed",
+                  "target_required"
                 ]
               },
               "details": {
@@ -3922,7 +3927,7 @@
         ],
         "type": "object"
       },
-      "ApprovalSubjectUnreadableNotFoundUnknownCapabilityRefusal": {
+      "AnyCallNotFoundRefusal": {
         "additionalProperties": false,
         "properties": {
           "error": {
@@ -5051,11 +5056,7 @@
         ],
         "type": "object"
       },
-      "ConfirmPrune": {
-        "description": "Confirms the delete that prune_orphans asks for.",
-        "type": "boolean"
-      },
-      "ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailedRefusal": {
+      "ChangeConflictRefusal": {
         "additionalProperties": false,
         "properties": {
           "error": {
@@ -5098,7 +5099,7 @@
         ],
         "type": "object"
       },
-      "ConflictPreconditionRejectedWorkFailedRefusal": {
+      "ChangeForbiddenRefusal": {
         "additionalProperties": false,
         "properties": {
           "error": {
@@ -5107,10 +5108,12 @@
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
                 "enum": [
-                  "conflict",
-                  "precondition",
-                  "rejected",
-                  "work_failed"
+                  "agent_blocked",
+                  "agents_paused",
+                  "declined",
+                  "denied_by_policy",
+                  "forbidden",
+                  "insufficient_scope"
                 ]
               },
               "details": {
@@ -5136,6 +5139,88 @@
           "error"
         ],
         "type": "object"
+      },
+      "ChangeNotFoundRefusal": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/RefusalCode",
+                "enum": [
+                  "approval_subject_unreadable",
+                  "not_found"
+                ]
+              },
+              "details": {
+                "$ref": "#/components/schemas/RefusalDetails"
+              },
+              "message": {
+                "$ref": "#/components/schemas/RefusalMessage"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "error"
+        ],
+        "type": "object"
+      },
+      "ChangeTooManyRequestsRefusal": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/RefusalCode",
+                "enum": [
+                  "rate_limited",
+                  "too_many_calls",
+                  "too_many_pending_approvals"
+                ]
+              },
+              "details": {
+                "$ref": "#/components/schemas/RefusalDetails"
+              },
+              "message": {
+                "$ref": "#/components/schemas/RefusalMessage"
+              },
+              "retry_after": {
+                "$ref": "#/components/schemas/RetryAfter"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "error"
+        ],
+        "type": "object"
+      },
+      "ConfirmPrune": {
+        "description": "Confirms the delete that prune_orphans asks for.",
+        "type": "boolean"
       },
       "ConnectionCatalog": {
         "additionalProperties": false,
@@ -5561,6 +5646,39 @@
         ],
         "type": "object"
       },
+      "ContactSubmissionListRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "The command: the fields its input schema names.",
+            "properties": {
+              "limit": {
+                "default": 100,
+                "description": "At most this many submissions.",
+                "type": "integer"
+              },
+              "query": {
+                "default": "",
+                "description": "Only submissions mentioning these words.",
+                "type": "string"
+              },
+              "status": {
+                "default": "",
+                "description": "Only submissions in this state; blank for all.",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
       "ContactSubmissionReviewRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -5697,39 +5815,6 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "ContactSubmissionsListRequest": {
-        "additionalProperties": false,
-        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
-        "properties": {
-          "expected_updated_at": {
-            "$ref": "#/components/schemas/ExpectedUpdatedAt"
-          },
-          "payload": {
-            "additionalProperties": false,
-            "description": "The command: the fields its input schema names.",
-            "properties": {
-              "limit": {
-                "default": 100,
-                "description": "At most this many submissions.",
-                "type": "integer"
-              },
-              "query": {
-                "default": "",
-                "description": "Only submissions mentioning these words.",
-                "type": "string"
-              },
-              "status": {
-                "default": "",
-                "description": "Only submissions in this state; blank for all.",
-                "type": "string"
-              }
-            },
-            "type": "object"
-          }
-        },
-        "required": [],
         "type": "object"
       },
       "ContainerRecord": {
@@ -6277,17 +6362,10 @@
         "description": "The page after the one whose next.cursor this is. Send it as it came, with the filters that page was read with; absent, the first page.",
         "title": "Cursor"
       },
-      "DashboardRefreshCommand": {
-        "additionalProperties": false,
-        "description": "A refresh names nothing: which panels it asks for is HQ's to work out.",
-        "properties": {
-          "idempotency_key": {
-            "$ref": "#/components/schemas/IdempotencyKey"
-          }
-        },
-        "type": "object"
+      "DashboardPanelsRefreshDueRequest": {
+        "$ref": "#/components/schemas/DashboardPanelsRefreshRequest"
       },
-      "DashboardRefreshRequestRequest": {
+      "DashboardPanelsRefreshRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
         "properties": {
@@ -6301,8 +6379,15 @@
         "required": [],
         "type": "object"
       },
-      "DashboardRefreshStaleRequest": {
-        "$ref": "#/components/schemas/DashboardRefreshRequestRequest"
+      "DashboardRefreshCommand": {
+        "additionalProperties": false,
+        "description": "A refresh names nothing: which panels it asks for is HQ's to work out.",
+        "properties": {
+          "idempotency_key": {
+            "$ref": "#/components/schemas/IdempotencyKey"
+          }
+        },
+        "type": "object"
       },
       "DeleteCommand": {
         "additionalProperties": false,
@@ -7750,87 +7835,6 @@
         ],
         "type": "object"
       },
-      "ForbiddenDeclinedDeniedByPolicyRefusal": {
-        "additionalProperties": false,
-        "properties": {
-          "error": {
-            "additionalProperties": false,
-            "properties": {
-              "code": {
-                "$ref": "#/components/schemas/RefusalCode",
-                "enum": [
-                  "agent_blocked",
-                  "agents_paused",
-                  "declined",
-                  "denied_by_policy",
-                  "forbidden",
-                  "insufficient_scope"
-                ]
-              },
-              "details": {
-                "$ref": "#/components/schemas/RefusalDetails"
-              },
-              "message": {
-                "$ref": "#/components/schemas/RefusalMessage"
-              }
-            },
-            "required": [
-              "code",
-              "message"
-            ],
-            "type": "object"
-          },
-          "ok": {
-            "const": false,
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok",
-          "error"
-        ],
-        "type": "object"
-      },
-      "ForbiddenDeniedByPolicyRefusal": {
-        "additionalProperties": false,
-        "properties": {
-          "error": {
-            "additionalProperties": false,
-            "properties": {
-              "code": {
-                "$ref": "#/components/schemas/RefusalCode",
-                "enum": [
-                  "agent_blocked",
-                  "agents_paused",
-                  "denied_by_policy",
-                  "forbidden",
-                  "insufficient_scope"
-                ]
-              },
-              "details": {
-                "$ref": "#/components/schemas/RefusalDetails"
-              },
-              "message": {
-                "$ref": "#/components/schemas/RefusalMessage"
-              }
-            },
-            "required": [
-              "code",
-              "message"
-            ],
-            "type": "object"
-          },
-          "ok": {
-            "const": false,
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok",
-          "error"
-        ],
-        "type": "object"
-      },
       "ForbiddenRefusal": {
         "additionalProperties": false,
         "properties": {
@@ -8173,130 +8177,6 @@
         "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
         "type": "string"
       },
-      "IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowedRefusal": {
-        "additionalProperties": false,
-        "properties": {
-          "error": {
-            "additionalProperties": false,
-            "properties": {
-              "code": {
-                "$ref": "#/components/schemas/RefusalCode",
-                "enum": [
-                  "idempotency_key_required",
-                  "invalid_idempotency_key",
-                  "invalid_input",
-                  "invalid_json",
-                  "invalid_material",
-                  "target_not_allowed"
-                ]
-              },
-              "details": {
-                "$ref": "#/components/schemas/RefusalDetails"
-              },
-              "message": {
-                "$ref": "#/components/schemas/RefusalMessage"
-              }
-            },
-            "required": [
-              "code",
-              "message"
-            ],
-            "type": "object"
-          },
-          "ok": {
-            "const": false,
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok",
-          "error"
-        ],
-        "type": "object"
-      },
-      "IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowedTargetRequiredRefusal": {
-        "additionalProperties": false,
-        "properties": {
-          "error": {
-            "additionalProperties": false,
-            "properties": {
-              "code": {
-                "$ref": "#/components/schemas/RefusalCode",
-                "enum": [
-                  "idempotency_key_required",
-                  "invalid_idempotency_key",
-                  "invalid_input",
-                  "invalid_json",
-                  "invalid_material",
-                  "target_not_allowed",
-                  "target_required"
-                ]
-              },
-              "details": {
-                "$ref": "#/components/schemas/RefusalDetails"
-              },
-              "message": {
-                "$ref": "#/components/schemas/RefusalMessage"
-              }
-            },
-            "required": [
-              "code",
-              "message"
-            ],
-            "type": "object"
-          },
-          "ok": {
-            "const": false,
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok",
-          "error"
-        ],
-        "type": "object"
-      },
-      "IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequiredRefusal": {
-        "additionalProperties": false,
-        "properties": {
-          "error": {
-            "additionalProperties": false,
-            "properties": {
-              "code": {
-                "$ref": "#/components/schemas/RefusalCode",
-                "enum": [
-                  "idempotency_key_required",
-                  "invalid_idempotency_key",
-                  "invalid_input",
-                  "invalid_json",
-                  "invalid_material",
-                  "target_required"
-                ]
-              },
-              "details": {
-                "$ref": "#/components/schemas/RefusalDetails"
-              },
-              "message": {
-                "$ref": "#/components/schemas/RefusalMessage"
-              }
-            },
-            "required": [
-              "code",
-              "message"
-            ],
-            "type": "object"
-          },
-          "ok": {
-            "const": false,
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok",
-          "error"
-        ],
-        "type": "object"
-      },
       "ImageAt": {
         "additionalProperties": false,
         "properties": {
@@ -8329,7 +8209,7 @@
                 "description": "The connection to read now, every type its credential reads.",
                 "type": "string",
                 "x-hq-records": {
-                  "resource": "connection.standing"
+                  "resource": "connections"
                 }
               },
               "every_connection": {
@@ -8353,30 +8233,6 @@
           }
         },
         "required": [],
-        "type": "object"
-      },
-      "InfrastructureReconcileRequest": {
-        "additionalProperties": false,
-        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
-        "properties": {
-          "expected_updated_at": {
-            "$ref": "#/components/schemas/ExpectedUpdatedAt"
-          },
-          "payload": {
-            "$ref": "#/components/schemas/OperationCommand"
-          },
-          "target": {
-            "description": "The record to apply: its key.",
-            "examples": [
-              "example-key"
-            ],
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "target"
-        ],
         "type": "object"
       },
       "InfrastructureResourceAcceptObservedRequest": {
@@ -8490,6 +8346,30 @@
         ],
         "type": "object"
       },
+      "InfrastructureResourceReconcileRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/OperationCommand"
+          },
+          "target": {
+            "description": "The record to apply: its key.",
+            "examples": [
+              "example-key"
+            ],
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
+      },
       "InfrastructureResourceRemoveRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -8513,6 +8393,39 @@
           "target"
         ],
         "type": "object"
+      },
+      "InfrastructureResourceRestartRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/OperationCommand"
+          },
+          "target": {
+            "$ref": "#/components/schemas/InfrastructureResourceRestartTarget"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
+      },
+      "InfrastructureResourceRestartTarget": {
+        "description": "The container to act on: its key.",
+        "examples": [
+          "example-key"
+        ],
+        "minLength": 1,
+        "type": "string"
+      },
+      "InfrastructureResourceStartRequest": {
+        "$ref": "#/components/schemas/InfrastructureResourceRestartRequest"
+      },
+      "InfrastructureResourceStopRequest": {
+        "$ref": "#/components/schemas/InfrastructureResourceRestartRequest"
       },
       "InfrastructureResourceUpdateRequest": {
         "additionalProperties": false,
@@ -8558,33 +8471,6 @@
         ],
         "type": "object"
       },
-      "InfrastructureRestartRequest": {
-        "additionalProperties": false,
-        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
-        "properties": {
-          "expected_updated_at": {
-            "$ref": "#/components/schemas/ExpectedUpdatedAt"
-          },
-          "payload": {
-            "$ref": "#/components/schemas/OperationCommand"
-          },
-          "target": {
-            "$ref": "#/components/schemas/InfrastructureRestartTarget"
-          }
-        },
-        "required": [
-          "target"
-        ],
-        "type": "object"
-      },
-      "InfrastructureRestartTarget": {
-        "description": "The container to act on: its key.",
-        "examples": [
-          "example-key"
-        ],
-        "minLength": 1,
-        "type": "string"
-      },
       "InfrastructureServiceAdoptRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -8617,12 +8503,6 @@
           "payload"
         ],
         "type": "object"
-      },
-      "InfrastructureStartRequest": {
-        "$ref": "#/components/schemas/InfrastructureRestartRequest"
-      },
-      "InfrastructureStopRequest": {
-        "$ref": "#/components/schemas/InfrastructureRestartRequest"
       },
       "InfrastructureZoneAdoptRequest": {
         "additionalProperties": false,
@@ -8668,45 +8548,6 @@
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
                 "const": "operation_failed"
-              },
-              "details": {
-                "$ref": "#/components/schemas/RefusalDetails"
-              },
-              "message": {
-                "$ref": "#/components/schemas/RefusalMessage"
-              }
-            },
-            "required": [
-              "code",
-              "message"
-            ],
-            "type": "object"
-          },
-          "ok": {
-            "const": false,
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok",
-          "error"
-        ],
-        "type": "object"
-      },
-      "InvalidInputInvalidJsonInvalidMaterialTargetNotAllowedRefusal": {
-        "additionalProperties": false,
-        "properties": {
-          "error": {
-            "additionalProperties": false,
-            "properties": {
-              "code": {
-                "$ref": "#/components/schemas/RefusalCode",
-                "enum": [
-                  "invalid_input",
-                  "invalid_json",
-                  "invalid_material",
-                  "target_not_allowed"
-                ]
               },
               "details": {
                 "$ref": "#/components/schemas/RefusalDetails"
@@ -8810,7 +8651,7 @@
         ],
         "type": "object"
       },
-      "LookupAddressRequest": {
+      "LookupAddressReadRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
         "properties": {
@@ -8842,7 +8683,7 @@
         ],
         "type": "object"
       },
-      "LookupNameRequest": {
+      "LookupNameReadRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
         "properties": {
@@ -9252,43 +9093,6 @@
         ],
         "type": "object"
       },
-      "MethodNotAllowedUnsupportedOperationRefusal": {
-        "additionalProperties": false,
-        "properties": {
-          "error": {
-            "additionalProperties": false,
-            "properties": {
-              "code": {
-                "$ref": "#/components/schemas/RefusalCode",
-                "enum": [
-                  "method_not_allowed",
-                  "unsupported_operation"
-                ]
-              },
-              "details": {
-                "$ref": "#/components/schemas/RefusalDetails"
-              },
-              "message": {
-                "$ref": "#/components/schemas/RefusalMessage"
-              }
-            },
-            "required": [
-              "code",
-              "message"
-            ],
-            "type": "object"
-          },
-          "ok": {
-            "const": false,
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok",
-          "error"
-        ],
-        "type": "object"
-      },
       "NextPage": {
         "description": "Where the page after a list's is read from: ``cursor``, sent back with the same filters.",
         "properties": {
@@ -9310,43 +9114,6 @@
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
                 "const": "not_found"
-              },
-              "details": {
-                "$ref": "#/components/schemas/RefusalDetails"
-              },
-              "message": {
-                "$ref": "#/components/schemas/RefusalMessage"
-              }
-            },
-            "required": [
-              "code",
-              "message"
-            ],
-            "type": "object"
-          },
-          "ok": {
-            "const": false,
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok",
-          "error"
-        ],
-        "type": "object"
-      },
-      "NotFoundUnknownResourceRefusal": {
-        "additionalProperties": false,
-        "properties": {
-          "error": {
-            "additionalProperties": false,
-            "properties": {
-              "code": {
-                "$ref": "#/components/schemas/RefusalCode",
-                "enum": [
-                  "not_found",
-                  "unknown_resource"
-                ]
               },
               "details": {
                 "$ref": "#/components/schemas/RefusalDetails"
@@ -9674,7 +9441,28 @@
         ],
         "type": "object"
       },
-      "ProjectDependencyUpdatesRequest": {
+      "ProjectDependencyUpdatesRunRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "A run of every opted-in repository now.",
+            "properties": {
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "ProjectDependencyUpdatesSetRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
         "properties": {
@@ -9711,27 +9499,6 @@
           "payload",
           "target"
         ],
-        "type": "object"
-      },
-      "ProjectDependencyUpdatesRunRequest": {
-        "additionalProperties": false,
-        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
-        "properties": {
-          "expected_updated_at": {
-            "$ref": "#/components/schemas/ExpectedUpdatedAt"
-          },
-          "payload": {
-            "additionalProperties": false,
-            "description": "A run of every opted-in repository now.",
-            "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              }
-            },
-            "type": "object"
-          }
-        },
-        "required": [],
         "type": "object"
       },
       "ProjectLinks": {
@@ -10055,6 +9822,85 @@
       "PublishedUrl": {
         "description": "Where it is published.",
         "type": "string"
+      },
+      "ReadConflictRefusal": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/RefusalCode",
+                "enum": [
+                  "conflict",
+                  "precondition",
+                  "rejected",
+                  "work_failed"
+                ]
+              },
+              "details": {
+                "$ref": "#/components/schemas/RefusalDetails"
+              },
+              "message": {
+                "$ref": "#/components/schemas/RefusalMessage"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "error"
+        ],
+        "type": "object"
+      },
+      "ReadForbiddenRefusal": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/RefusalCode",
+                "enum": [
+                  "agent_blocked",
+                  "agents_paused",
+                  "denied_by_policy",
+                  "forbidden",
+                  "insufficient_scope"
+                ]
+              },
+              "details": {
+                "$ref": "#/components/schemas/RefusalDetails"
+              },
+              "message": {
+                "$ref": "#/components/schemas/RefusalMessage"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "error"
+        ],
+        "type": "object"
       },
       "ReadingRecord": {
         "additionalProperties": false,
@@ -10598,6 +10444,80 @@
           "list",
           "get",
           "search"
+        ],
+        "type": "object"
+      },
+      "ResourceReadMethodNotAllowedRefusal": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/RefusalCode",
+                "enum": [
+                  "method_not_allowed",
+                  "unsupported_operation"
+                ]
+              },
+              "details": {
+                "$ref": "#/components/schemas/RefusalDetails"
+              },
+              "message": {
+                "$ref": "#/components/schemas/RefusalMessage"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "error"
+        ],
+        "type": "object"
+      },
+      "ResourceReadNotFoundRefusal": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/RefusalCode",
+                "enum": [
+                  "not_found",
+                  "unknown_resource"
+                ]
+              },
+              "details": {
+                "$ref": "#/components/schemas/RefusalDetails"
+              },
+              "message": {
+                "$ref": "#/components/schemas/RefusalMessage"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "error"
         ],
         "type": "object"
       },
@@ -11227,6 +11147,47 @@
         ],
         "type": "object"
       },
+      "TargetedChangeBadRequestRefusal": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/RefusalCode",
+                "enum": [
+                  "idempotency_key_required",
+                  "invalid_idempotency_key",
+                  "invalid_input",
+                  "invalid_json",
+                  "invalid_material",
+                  "target_required"
+                ]
+              },
+              "details": {
+                "$ref": "#/components/schemas/RefusalDetails"
+              },
+              "message": {
+                "$ref": "#/components/schemas/RefusalMessage"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "error"
+        ],
+        "type": "object"
+      },
       "TextFilter": {
         "anyOf": [
           {
@@ -11266,47 +11227,6 @@
               "code",
               "message",
               "retry_after"
-            ],
-            "type": "object"
-          },
-          "ok": {
-            "const": false,
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok",
-          "error"
-        ],
-        "type": "object"
-      },
-      "TooManyRequestsTooManyPendingApprovalsRefusal": {
-        "additionalProperties": false,
-        "properties": {
-          "error": {
-            "additionalProperties": false,
-            "properties": {
-              "code": {
-                "$ref": "#/components/schemas/RefusalCode",
-                "enum": [
-                  "rate_limited",
-                  "too_many_calls",
-                  "too_many_pending_approvals"
-                ]
-              },
-              "details": {
-                "$ref": "#/components/schemas/RefusalDetails"
-              },
-              "message": {
-                "$ref": "#/components/schemas/RefusalMessage"
-              },
-              "retry_after": {
-                "$ref": "#/components/schemas/RetryAfter"
-              }
-            },
-            "required": [
-              "code",
-              "message"
             ],
             "type": "object"
           },
@@ -11744,6 +11664,86 @@
               "code": {
                 "$ref": "#/components/schemas/RefusalCode",
                 "const": "unsupported_media_type"
+              },
+              "details": {
+                "$ref": "#/components/schemas/RefusalDetails"
+              },
+              "message": {
+                "$ref": "#/components/schemas/RefusalMessage"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "error"
+        ],
+        "type": "object"
+      },
+      "UntargetedChangeBadRequestRefusal": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/RefusalCode",
+                "enum": [
+                  "idempotency_key_required",
+                  "invalid_idempotency_key",
+                  "invalid_input",
+                  "invalid_json",
+                  "invalid_material",
+                  "target_not_allowed"
+                ]
+              },
+              "details": {
+                "$ref": "#/components/schemas/RefusalDetails"
+              },
+              "message": {
+                "$ref": "#/components/schemas/RefusalMessage"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "error"
+        ],
+        "type": "object"
+      },
+      "UntargetedReadBadRequestRefusal": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/RefusalCode",
+                "enum": [
+                  "invalid_input",
+                  "invalid_json",
+                  "invalid_material",
+                  "target_not_allowed"
+                ]
               },
               "details": {
                 "$ref": "#/components/schemas/RefusalDetails"
@@ -12338,22 +12338,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -12362,7 +12362,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -12406,22 +12406,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -12430,7 +12430,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -12505,22 +12505,22 @@
             "description": "Success."
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -12529,7 +12529,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -12573,22 +12573,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -12597,7 +12597,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -12641,22 +12641,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -12665,7 +12665,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -12709,22 +12709,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -12733,7 +12733,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -12777,22 +12777,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -12801,7 +12801,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -12845,22 +12845,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -12869,7 +12869,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -12913,22 +12913,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -12937,7 +12937,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -12952,6 +12952,70 @@
         ],
         "x-hq-capability": "contact.submission.delete",
         "x-hq-effect": "destructive",
+        "x-hq-required-capabilities": [
+          "manage_contacts"
+        ]
+      }
+    },
+    "/api/v2/capabilities/contact.submission.list/": {
+      "post": {
+        "description": "List the messages sent through the contact form.",
+        "operationId": "contactSubmissionListV2",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactSubmissionListRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedReadBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ReadForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ReadConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "List messages",
+        "tags": [
+          "hq.contacts"
+        ],
+        "x-hq-capability": "contact.submission.list",
+        "x-hq-effect": "read",
         "x-hq-required-capabilities": [
           "manage_contacts"
         ]
@@ -12981,22 +13045,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -13005,7 +13069,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -13020,70 +13084,6 @@
         ],
         "x-hq-capability": "contact.submission.review",
         "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "manage_contacts"
-        ]
-      }
-    },
-    "/api/v2/capabilities/contact.submissions.list/": {
-      "post": {
-        "description": "List the messages sent through the contact form.",
-        "operationId": "contactSubmissionsListV2",
-        "parameters": [],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ContactSubmissionsListRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
-          },
-          "400": {
-            "$ref": "#/components/responses/InvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/ForbiddenDeniedByPolicy"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
-          "409": {
-            "$ref": "#/components/responses/ConflictPreconditionRejectedWorkFailed"
-          },
-          "413": {
-            "$ref": "#/components/responses/RequestTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "summary": "List messages",
-        "tags": [
-          "hq.contacts"
-        ],
-        "x-hq-capability": "contact.submissions.list",
-        "x-hq-effect": "read",
         "x-hq-required-capabilities": [
           "manage_contacts"
         ]
@@ -13113,22 +13113,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -13137,7 +13137,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -13181,22 +13181,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -13205,7 +13205,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -13249,22 +13249,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -13273,7 +13273,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -13293,10 +13293,10 @@
         ]
       }
     },
-    "/api/v2/capabilities/dashboard.refresh.request/": {
+    "/api/v2/capabilities/dashboard.panels.refresh/": {
       "post": {
         "description": "Ask for a fresh reading of every dashboard panel a controller can read.",
-        "operationId": "dashboardRefreshRequestV2",
+        "operationId": "dashboardPanelsRefreshV2",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -13306,7 +13306,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DashboardRefreshRequestRequest"
+                "$ref": "#/components/schemas/DashboardPanelsRefreshRequest"
               }
             }
           },
@@ -13317,22 +13317,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -13341,7 +13341,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -13354,17 +13354,17 @@
         "tags": [
           "hq.dashboard"
         ],
-        "x-hq-capability": "dashboard.refresh.request",
+        "x-hq-capability": "dashboard.panels.refresh",
         "x-hq-effect": "infrastructure_change",
         "x-hq-required-capabilities": [
           "manage_infrastructure"
         ]
       }
     },
-    "/api/v2/capabilities/dashboard.refresh.stale/": {
+    "/api/v2/capabilities/dashboard.panels.refresh_due/": {
       "post": {
         "description": "Ask again for the dashboard panels whose reading is due.",
-        "operationId": "dashboardRefreshStaleV2",
+        "operationId": "dashboardPanelsRefreshDueV2",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -13374,7 +13374,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DashboardRefreshStaleRequest"
+                "$ref": "#/components/schemas/DashboardPanelsRefreshDueRequest"
               }
             }
           },
@@ -13385,22 +13385,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -13409,7 +13409,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -13422,7 +13422,7 @@
         "tags": [
           "hq.dashboard"
         ],
-        "x-hq-capability": "dashboard.refresh.stale",
+        "x-hq-capability": "dashboard.panels.refresh_due",
         "x-hq-effect": "infrastructure_change",
         "x-hq-required-capabilities": [
           "manage_infrastructure"
@@ -13453,22 +13453,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -13477,7 +13477,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -13521,22 +13521,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -13545,7 +13545,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -13597,7 +13597,7 @@
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowedRefusal"
+                  "$ref": "#/components/schemas/UntargetedChangeBadRequestRefusal"
                 }
               }
             },
@@ -13607,16 +13607,16 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -13625,7 +13625,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -13669,22 +13669,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -13693,7 +13693,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -13737,22 +13737,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -13761,7 +13761,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -13805,22 +13805,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -13829,7 +13829,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -13881,7 +13881,7 @@
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequiredRefusal"
+                  "$ref": "#/components/schemas/TargetedChangeBadRequestRefusal"
                 }
               }
             },
@@ -13899,20 +13899,20 @@
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenDeclinedDeniedByPolicyRefusal"
+                  "$ref": "#/components/schemas/ChangeForbiddenRefusal"
                 }
               }
             },
             "description": "Forbidden."
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -13921,7 +13921,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -13965,22 +13965,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -13989,7 +13989,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -14042,7 +14042,7 @@
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowedRefusal"
+                  "$ref": "#/components/schemas/UntargetedChangeBadRequestRefusal"
                 }
               }
             },
@@ -14052,16 +14052,16 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -14070,7 +14070,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -14115,22 +14115,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -14139,7 +14139,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -14183,22 +14183,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -14207,7 +14207,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -14221,86 +14221,6 @@
           "hq.connections"
         ],
         "x-hq-capability": "infrastructure.controller.refresh",
-        "x-hq-effect": "infrastructure_change",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
-      }
-    },
-    "/api/v2/capabilities/infrastructure.reconcile/": {
-      "post": {
-        "description": "Apply HQ's copy of one record to the live system.",
-        "operationId": "infrastructureReconcileV2",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/InfrastructureReconcileRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
-          },
-          "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
-          },
-          "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "examples": {
-                  "recorded": {
-                    "$ref": "#/components/examples/infrastructureReconcileV2Conflict"
-                  }
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailedRefusal"
-                }
-              }
-            },
-            "description": "Conflict."
-          },
-          "413": {
-            "$ref": "#/components/responses/RequestTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "summary": "Apply HQ's settings",
-        "tags": [
-          "hq.infrastructure"
-        ],
-        "x-hq-capability": "infrastructure.reconcile",
         "x-hq-effect": "infrastructure_change",
         "x-hq-required-capabilities": [
           "manage_infrastructure"
@@ -14331,22 +14251,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -14355,7 +14275,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -14399,22 +14319,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -14423,7 +14343,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -14467,22 +14387,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -14491,7 +14411,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -14506,6 +14426,86 @@
         ],
         "x-hq-capability": "infrastructure.resource.create",
         "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "manage_infrastructure"
+        ]
+      }
+    },
+    "/api/v2/capabilities/infrastructure.resource.reconcile/": {
+      "post": {
+        "description": "Apply HQ's copy of one record to the live system.",
+        "operationId": "infrastructureResourceReconcileV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InfrastructureResourceReconcileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+          },
+          "400": {
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/infrastructureResourceReconcileV2Conflict"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeConflictRefusal"
+                }
+              }
+            },
+            "description": "Conflict."
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Apply HQ's settings",
+        "tags": [
+          "hq.infrastructure"
+        ],
+        "x-hq-capability": "infrastructure.resource.reconcile",
+        "x-hq-effect": "infrastructure_change",
         "x-hq-required-capabilities": [
           "manage_infrastructure"
         ]
@@ -14535,22 +14535,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -14559,7 +14559,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -14573,6 +14573,210 @@
           "hq.infrastructure"
         ],
         "x-hq-capability": "infrastructure.resource.remove",
+        "x-hq-effect": "destructive",
+        "x-hq-required-capabilities": [
+          "manage_infrastructure"
+        ]
+      }
+    },
+    "/api/v2/capabilities/infrastructure.resource.restart/": {
+      "post": {
+        "description": "Restart the live thing a record names.",
+        "operationId": "infrastructureResourceRestartV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InfrastructureResourceRestartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+          },
+          "400": {
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Restart",
+        "tags": [
+          "hq.infrastructure"
+        ],
+        "x-hq-capability": "infrastructure.resource.restart",
+        "x-hq-effect": "infrastructure_change",
+        "x-hq-required-capabilities": [
+          "manage_infrastructure"
+        ]
+      }
+    },
+    "/api/v2/capabilities/infrastructure.resource.start/": {
+      "post": {
+        "description": "Start the live thing a record names.",
+        "operationId": "infrastructureResourceStartV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InfrastructureResourceStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+          },
+          "400": {
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Start",
+        "tags": [
+          "hq.infrastructure"
+        ],
+        "x-hq-capability": "infrastructure.resource.start",
+        "x-hq-effect": "infrastructure_change",
+        "x-hq-required-capabilities": [
+          "manage_infrastructure"
+        ]
+      }
+    },
+    "/api/v2/capabilities/infrastructure.resource.stop/": {
+      "post": {
+        "description": "Stop the live thing a record names.",
+        "operationId": "infrastructureResourceStopV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InfrastructureResourceStopRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+          },
+          "400": {
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Stop",
+        "tags": [
+          "hq.infrastructure"
+        ],
+        "x-hq-capability": "infrastructure.resource.stop",
         "x-hq-effect": "destructive",
         "x-hq-required-capabilities": [
           "manage_infrastructure"
@@ -14603,22 +14807,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -14627,7 +14831,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -14642,74 +14846,6 @@
         ],
         "x-hq-capability": "infrastructure.resource.update",
         "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
-      }
-    },
-    "/api/v2/capabilities/infrastructure.restart/": {
-      "post": {
-        "description": "Restart the live thing a record names.",
-        "operationId": "infrastructureRestartV2",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/InfrastructureRestartRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
-          },
-          "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
-          },
-          "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
-          "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
-          },
-          "413": {
-            "$ref": "#/components/responses/RequestTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "summary": "Restart",
-        "tags": [
-          "hq.infrastructure"
-        ],
-        "x-hq-capability": "infrastructure.restart",
-        "x-hq-effect": "infrastructure_change",
         "x-hq-required-capabilities": [
           "manage_infrastructure"
         ]
@@ -14739,22 +14875,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -14763,7 +14899,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -14778,142 +14914,6 @@
         ],
         "x-hq-capability": "infrastructure.service.adopt",
         "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
-      }
-    },
-    "/api/v2/capabilities/infrastructure.start/": {
-      "post": {
-        "description": "Start the live thing a record names.",
-        "operationId": "infrastructureStartV2",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/InfrastructureStartRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
-          },
-          "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
-          },
-          "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
-          "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
-          },
-          "413": {
-            "$ref": "#/components/responses/RequestTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "summary": "Start",
-        "tags": [
-          "hq.infrastructure"
-        ],
-        "x-hq-capability": "infrastructure.start",
-        "x-hq-effect": "infrastructure_change",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
-      }
-    },
-    "/api/v2/capabilities/infrastructure.stop/": {
-      "post": {
-        "description": "Stop the live thing a record names.",
-        "operationId": "infrastructureStopV2",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/InfrastructureStopRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
-          },
-          "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
-          },
-          "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
-          "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
-          },
-          "413": {
-            "$ref": "#/components/responses/RequestTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "summary": "Stop",
-        "tags": [
-          "hq.infrastructure"
-        ],
-        "x-hq-capability": "infrastructure.stop",
-        "x-hq-effect": "destructive",
         "x-hq-required-capabilities": [
           "manage_infrastructure"
         ]
@@ -14943,22 +14943,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -14967,7 +14967,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -14987,16 +14987,16 @@
         ]
       }
     },
-    "/api/v2/capabilities/lookup.address/": {
+    "/api/v2/capabilities/lookup.address.read/": {
       "post": {
         "description": "Ask what name and which allocation a public address belongs to.",
-        "operationId": "lookupAddressV2",
+        "operationId": "lookupAddressReadV2",
         "parameters": [],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/LookupAddressRequest"
+                "$ref": "#/components/schemas/LookupAddressReadRequest"
               }
             }
           },
@@ -15011,11 +15011,11 @@
               "application/json": {
                 "examples": {
                   "recorded": {
-                    "$ref": "#/components/examples/lookupAddressV2BadRequest"
+                    "$ref": "#/components/examples/lookupAddressReadV2BadRequest"
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/InvalidInputInvalidJsonInvalidMaterialTargetNotAllowedRefusal"
+                  "$ref": "#/components/schemas/UntargetedReadBadRequestRefusal"
                 }
               }
             },
@@ -15025,7 +15025,7 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeniedByPolicy"
+            "$ref": "#/components/responses/ReadForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -15034,7 +15034,7 @@
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictPreconditionRejectedWorkFailed"
+            "$ref": "#/components/responses/ReadConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -15056,23 +15056,23 @@
         "tags": [
           "hq.tools"
         ],
-        "x-hq-capability": "lookup.address",
+        "x-hq-capability": "lookup.address.read",
         "x-hq-effect": "read",
         "x-hq-required-capabilities": [
           "look_up_public_records"
         ]
       }
     },
-    "/api/v2/capabilities/lookup.name/": {
+    "/api/v2/capabilities/lookup.name.read/": {
       "post": {
         "description": "Ask a public resolver what the internet returns for a hostname.",
-        "operationId": "lookupNameV2",
+        "operationId": "lookupNameReadV2",
         "parameters": [],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/LookupNameRequest"
+                "$ref": "#/components/schemas/LookupNameReadRequest"
               }
             }
           },
@@ -15083,13 +15083,13 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/InvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedReadBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeniedByPolicy"
+            "$ref": "#/components/responses/ReadForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -15098,7 +15098,7 @@
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictPreconditionRejectedWorkFailed"
+            "$ref": "#/components/responses/ReadConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -15120,7 +15120,7 @@
         "tags": [
           "hq.tools"
         ],
-        "x-hq-capability": "lookup.name",
+        "x-hq-capability": "lookup.name.read",
         "x-hq-effect": "read",
         "x-hq-required-capabilities": [
           "look_up_public_records"
@@ -15190,7 +15190,7 @@
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowedRefusal"
+                  "$ref": "#/components/schemas/UntargetedChangeBadRequestRefusal"
                 }
               }
             },
@@ -15225,14 +15225,14 @@
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenDeclinedDeniedByPolicyRefusal"
+                  "$ref": "#/components/schemas/ChangeForbiddenRefusal"
                 }
               }
             },
             "description": "Forbidden."
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
@@ -15246,7 +15246,7 @@
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailedRefusal"
+                  "$ref": "#/components/schemas/ChangeConflictRefusal"
                 }
               }
             },
@@ -15271,7 +15271,7 @@
             "description": "Unsupported Media Type."
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "content": {
@@ -15327,22 +15327,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -15351,7 +15351,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -15395,22 +15395,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -15419,7 +15419,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -15440,10 +15440,10 @@
         ]
       }
     },
-    "/api/v2/capabilities/project.dependency_updates/": {
+    "/api/v2/capabilities/project.dependency_updates.set/": {
       "post": {
         "description": "Whether HQ's dependency update run opens pull requests in a project's repository, from its next run.",
-        "operationId": "projectDependencyUpdatesV2",
+        "operationId": "projectDependencyUpdatesSetV2",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -15453,7 +15453,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProjectDependencyUpdatesRequest"
+                "$ref": "#/components/schemas/ProjectDependencyUpdatesSetRequest"
               }
             }
           },
@@ -15464,16 +15464,16 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
@@ -15483,11 +15483,11 @@
               "application/json": {
                 "examples": {
                   "recorded": {
-                    "$ref": "#/components/examples/projectDependencyUpdatesV2Conflict"
+                    "$ref": "#/components/examples/projectDependencyUpdatesSetV2Conflict"
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailedRefusal"
+                  "$ref": "#/components/schemas/ChangeConflictRefusal"
                 }
               }
             },
@@ -15500,7 +15500,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -15513,7 +15513,7 @@
         "tags": [
           "hq.projects"
         ],
-        "x-hq-capability": "project.dependency_updates",
+        "x-hq-capability": "project.dependency_updates.set",
         "x-hq-effect": "remote_write",
         "x-hq-required-capabilities": [
           "write_projects"
@@ -15544,22 +15544,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -15568,7 +15568,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -15651,7 +15651,7 @@
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequiredRefusal"
+                  "$ref": "#/components/schemas/TargetedChangeBadRequestRefusal"
                 }
               }
             },
@@ -15669,7 +15669,7 @@
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenDeclinedDeniedByPolicyRefusal"
+                  "$ref": "#/components/schemas/ChangeForbiddenRefusal"
                 }
               }
             },
@@ -15684,7 +15684,7 @@
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/ApprovalSubjectUnreadableNotFoundRefusal"
+                  "$ref": "#/components/schemas/ChangeNotFoundRefusal"
                 }
               }
             },
@@ -15702,7 +15702,7 @@
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailedRefusal"
+                  "$ref": "#/components/schemas/ChangeConflictRefusal"
                 }
               }
             },
@@ -15715,7 +15715,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -15759,22 +15759,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -15783,7 +15783,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -15827,22 +15827,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -15851,7 +15851,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -15895,22 +15895,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -15919,7 +15919,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -15963,22 +15963,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -15987,7 +15987,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -16031,22 +16031,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -16055,7 +16055,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -16099,22 +16099,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetRequired"
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -16123,7 +16123,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -16167,22 +16167,22 @@
             "$ref": "#/components/responses/CapabilityAnswerSuccess"
           },
           "400": {
-            "$ref": "#/components/responses/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowed"
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
-            "$ref": "#/components/responses/ApprovalSubjectUnreadableNotFound"
+            "$ref": "#/components/responses/ChangeNotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -16191,7 +16191,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -16232,13 +16232,13 @@
                 "calendar.entry.update",
                 "certificate.renew",
                 "contact.submission.delete",
+                "contact.submission.list",
                 "contact.submission.review",
-                "contact.submissions.list",
                 "content.create",
                 "content.delete",
                 "content.update",
-                "dashboard.refresh.request",
-                "dashboard.refresh.stale",
+                "dashboard.panels.refresh",
+                "dashboard.panels.refresh_due",
                 "documentation.create",
                 "documentation.delete",
                 "documentation.sync",
@@ -16250,23 +16250,23 @@
                 "hq.import",
                 "hq.sync",
                 "infrastructure.controller.refresh",
-                "infrastructure.reconcile",
                 "infrastructure.resource.accept_observed",
                 "infrastructure.resource.adopt",
                 "infrastructure.resource.create",
+                "infrastructure.resource.reconcile",
                 "infrastructure.resource.remove",
+                "infrastructure.resource.restart",
+                "infrastructure.resource.start",
+                "infrastructure.resource.stop",
                 "infrastructure.resource.update",
-                "infrastructure.restart",
                 "infrastructure.service.adopt",
-                "infrastructure.start",
-                "infrastructure.stop",
                 "infrastructure.zone.adopt",
-                "lookup.address",
-                "lookup.name",
+                "lookup.address.read",
+                "lookup.name.read",
                 "project.create",
                 "project.delete",
-                "project.dependency_updates",
                 "project.dependency_updates.run",
+                "project.dependency_updates.set",
                 "project.refresh",
                 "project.update",
                 "project.upsert",
@@ -16328,7 +16328,7 @@
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/IdempotencyKeyRequiredInvalidIdempotencyKeyInvalidInputInvalidJsonInvalidMaterialTargetNotAllowedTargetRequiredRefusal"
+                  "$ref": "#/components/schemas/AnyCallBadRequestRefusal"
                 }
               }
             },
@@ -16355,7 +16355,7 @@
             }
           },
           "403": {
-            "$ref": "#/components/responses/ForbiddenDeclinedDeniedByPolicy"
+            "$ref": "#/components/responses/ChangeForbidden"
           },
           "404": {
             "content": {
@@ -16366,7 +16366,7 @@
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/ApprovalSubjectUnreadableNotFoundUnknownCapabilityRefusal"
+                  "$ref": "#/components/schemas/AnyCallNotFoundRefusal"
                 }
               }
             },
@@ -16376,7 +16376,7 @@
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/ConflictExpiredIdempotencyConflictPreconditionRefusedHoldRejectedStaleWorkFailed"
+            "$ref": "#/components/responses/ChangeConflict"
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLarge"
@@ -16385,7 +16385,7 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequestsTooManyPendingApprovals"
+            "$ref": "#/components/responses/ChangeTooManyRequests"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -16781,7 +16781,7 @@
         ]
       }
     },
-    "/api/v2/resources/action.items/": {
+    "/api/v2/resources/action_items/": {
       "get": {
         "description": "The composed action queue: what needs doing, from every domain.",
         "operationId": "listActionItemsV2",
@@ -16918,10 +16918,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -16937,7 +16937,7 @@
         "tags": [
           "hq.dashboard"
         ],
-        "x-hq-resource": "action.items"
+        "x-hq-resource": "action_items"
       }
     },
     "/api/v2/resources/analytics/": {
@@ -17045,10 +17045,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -17163,10 +17163,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -17211,10 +17211,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -17309,10 +17309,10 @@
             "description": "Forbidden."
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -17357,10 +17357,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -17380,10 +17380,10 @@
         "x-hq-resource": "calendar"
       }
     },
-    "/api/v2/resources/connection.standing/": {
+    "/api/v2/resources/connections/": {
       "get": {
         "description": "Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path.",
-        "operationId": "listConnectionStandingV2",
+        "operationId": "listConnectionsV2",
         "parameters": [
           {
             "$ref": "#/components/parameters/Fields"
@@ -17395,7 +17395,7 @@
               "application/json": {
                 "examples": {
                   "recorded": {
-                    "$ref": "#/components/examples/listConnectionStandingV2OK"
+                    "$ref": "#/components/examples/listConnectionsV2OK"
                   }
                 },
                 "schema": {
@@ -17442,7 +17442,7 @@
               "application/json": {
                 "examples": {
                   "recorded": {
-                    "$ref": "#/components/examples/listConnectionStandingV2Forbidden"
+                    "$ref": "#/components/examples/listConnectionsV2Forbidden"
                   }
                 },
                 "schema": {
@@ -17453,10 +17453,10 @@
             "description": "Forbidden."
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -17472,13 +17472,13 @@
         "tags": [
           "hq.connections"
         ],
-        "x-hq-resource": "connection.standing"
+        "x-hq-resource": "connections"
       }
     },
-    "/api/v2/resources/connection.standing/{identifier}/": {
+    "/api/v2/resources/connections/{identifier}/": {
       "get": {
         "description": "One of the records Connection status lists, found by its `connection_ref`.",
-        "operationId": "getConnectionStandingV2",
+        "operationId": "getConnectionsV2",
         "parameters": [
           {
             "$ref": "#/components/parameters/ConnectionRefIdentifier"
@@ -17493,7 +17493,7 @@
               "application/json": {
                 "examples": {
                   "recorded": {
-                    "$ref": "#/components/examples/getConnectionStandingV2OK"
+                    "$ref": "#/components/examples/getConnectionsV2OK"
                   }
                 },
                 "schema": {
@@ -17527,10 +17527,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -17547,7 +17547,7 @@
           "hq.connections"
         ],
         "x-hq-identifier": "connection_ref",
-        "x-hq-resource": "connection.standing"
+        "x-hq-resource": "connections"
       }
     },
     "/api/v2/resources/contact.submissions/": {
@@ -17629,10 +17629,10 @@
             "description": "Forbidden."
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -17677,10 +17677,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -17767,10 +17767,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -17815,10 +17815,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -17932,10 +17932,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -18015,10 +18015,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -18063,10 +18063,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -18181,10 +18181,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -18270,10 +18270,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -18318,10 +18318,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -18402,10 +18402,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -18557,10 +18557,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -18640,10 +18640,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -18662,10 +18662,10 @@
         "x-hq-resource": "hq"
       }
     },
-    "/api/v2/resources/infrastructure.resources/": {
+    "/api/v2/resources/infrastructure/": {
       "get": {
         "description": "Everything HQ manages: what HQ expects and what is live.",
-        "operationId": "listInfrastructureResourcesV2",
+        "operationId": "listInfrastructureV2",
         "parameters": [
           {
             "$ref": "#/components/parameters/PageLimit"
@@ -18741,7 +18741,7 @@
               "application/json": {
                 "examples": {
                   "recorded": {
-                    "$ref": "#/components/examples/listInfrastructureResourcesV2OK"
+                    "$ref": "#/components/examples/listInfrastructureV2OK"
                   }
                 },
                 "schema": {
@@ -18782,7 +18782,7 @@
               "application/json": {
                 "examples": {
                   "recorded": {
-                    "$ref": "#/components/examples/listInfrastructureResourcesV2BadRequest"
+                    "$ref": "#/components/examples/listInfrastructureV2BadRequest"
                   }
                 },
                 "schema": {
@@ -18799,10 +18799,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -18818,13 +18818,13 @@
         "tags": [
           "hq.infrastructure"
         ],
-        "x-hq-resource": "infrastructure.resources"
+        "x-hq-resource": "infrastructure"
       }
     },
-    "/api/v2/resources/infrastructure.resources/{identifier}/": {
+    "/api/v2/resources/infrastructure/{identifier}/": {
       "get": {
         "description": "One of the records Records lists, found by its `key`.",
-        "operationId": "getInfrastructureResourcesV2",
+        "operationId": "getInfrastructureV2",
         "parameters": [
           {
             "$ref": "#/components/parameters/KeyIdentifier"
@@ -18839,7 +18839,7 @@
               "application/json": {
                 "examples": {
                   "recorded": {
-                    "$ref": "#/components/examples/getInfrastructureResourcesV2OK"
+                    "$ref": "#/components/examples/getInfrastructureV2OK"
                   }
                 },
                 "schema": {
@@ -18877,18 +18877,18 @@
               "application/json": {
                 "examples": {
                   "recorded": {
-                    "$ref": "#/components/examples/getInfrastructureResourcesV2NotFound"
+                    "$ref": "#/components/examples/getInfrastructureV2NotFound"
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundUnknownResourceRefusal"
+                  "$ref": "#/components/schemas/ResourceReadNotFoundRefusal"
                 }
               }
             },
             "description": "Not Found."
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -18905,7 +18905,7 @@
           "hq.infrastructure"
         ],
         "x-hq-identifier": "key",
-        "x-hq-resource": "infrastructure.resources"
+        "x-hq-resource": "infrastructure"
       }
     },
     "/api/v2/resources/machines/": {
@@ -18975,10 +18975,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -19031,14 +19031,14 @@
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundUnknownResourceRefusal"
+                  "$ref": "#/components/schemas/ResourceReadNotFoundRefusal"
                 }
               }
             },
             "description": "Not Found."
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -19056,55 +19056,6 @@
         ],
         "x-hq-identifier": "name",
         "x-hq-resource": "machines"
-      }
-    },
-    "/api/v2/resources/paths/{identifier}/": {
-      "get": {
-        "description": "The path a request for a hostname takes, hop by hop, with each hop's reading and certificate.",
-        "operationId": "getPathsV2",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/HostnameLookup"
-          },
-          {
-            "$ref": "#/components/parameters/Fields"
-          }
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/PathRecordSuccess"
-          },
-          "400": {
-            "$ref": "#/components/responses/InvalidInput"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "summary": "Request paths: one by hostname",
-        "tags": [
-          "hq.services"
-        ],
-        "x-hq-identifier": "hostname",
-        "x-hq-resource": "paths"
       }
     },
     "/api/v2/resources/projects/": {
@@ -19247,10 +19198,10 @@
             "description": "Forbidden."
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -19353,14 +19304,14 @@
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundUnknownResourceRefusal"
+                  "$ref": "#/components/schemas/ResourceReadNotFoundRefusal"
                 }
               }
             },
             "description": "Not Found."
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -19482,10 +19433,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -19556,10 +19507,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -19658,10 +19609,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -19706,10 +19657,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -19790,10 +19741,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -19889,10 +19840,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -19909,6 +19860,55 @@
           "hq.search"
         ],
         "x-hq-resource": "search"
+      }
+    },
+    "/api/v2/resources/service.paths/{identifier}/": {
+      "get": {
+        "description": "The path a request for a service's hostname takes, hop by hop, with each hop's reading and certificate.",
+        "operationId": "getServicePathsV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/HostnameLookup"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PathRecordSuccess"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Service paths: one by hostname",
+        "tags": [
+          "hq.services"
+        ],
+        "x-hq-identifier": "hostname",
+        "x-hq-resource": "service.paths"
       }
     },
     "/api/v2/resources/services/": {
@@ -19972,10 +19972,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -20020,10 +20020,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -20104,10 +20104,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -20193,10 +20193,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -20241,10 +20241,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -20276,11 +20276,11 @@
             "required": true,
             "schema": {
               "enum": [
-                "action.items",
+                "action_items",
                 "analytics",
                 "assets",
                 "calendar",
-                "connection.standing",
+                "connections",
                 "contact.submissions",
                 "containers",
                 "content",
@@ -20290,7 +20290,7 @@
                 "estate",
                 "expenses",
                 "hq",
-                "infrastructure.resources",
+                "infrastructure",
                 "machines",
                 "projects",
                 "readings",
@@ -20342,14 +20342,14 @@
                   }
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundUnknownResourceRefusal"
+                  "$ref": "#/components/schemas/ResourceReadNotFoundRefusal"
                 }
               }
             },
             "description": "Not Found."
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -20381,17 +20381,17 @@
               "enum": [
                 "assets",
                 "calendar",
-                "connection.standing",
+                "connections",
                 "contact.submissions",
                 "containers",
                 "credentials",
                 "domains",
-                "infrastructure.resources",
+                "infrastructure",
                 "machines",
-                "paths",
                 "projects",
                 "readings",
                 "relationships",
+                "service.paths",
                 "services",
                 "upgrades"
               ],
@@ -20425,10 +20425,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFoundUnknownResource"
+            "$ref": "#/components/responses/ResourceReadNotFound"
           },
           "405": {
-            "$ref": "#/components/responses/MethodNotAllowedUnsupportedOperation"
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"

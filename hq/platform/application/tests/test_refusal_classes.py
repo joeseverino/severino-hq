@@ -62,17 +62,17 @@ class OneRefusalClassTests(SimpleTestCase):
 class MissingRecordReadTests(TestCase):
     def test_every_host_resource_answers_a_missing_record_as_not_found(self):
         cases = {
-            "infrastructure.resources": SENT,
+            "infrastructure": SENT,
             "services": f"{SENT}.example.com",
             "machines": SENT,
             "containers": f"{SENT}:{SENT}",
             "upgrades": f"{SENT}:{SENT}",
             "domains": f"{SENT}.example",
             "relationships": f"machine:{SENT}",
-            "paths": f"not a host {SENT}",
+            "service.paths": f"not a host {SENT}",
             "readings": SENT,
             "credentials": SENT,
-            "connection.standing": SENT,
+            "connections": SENT,
             "contact.submissions": 7_340_219,
         }
         for name, identifier in cases.items():

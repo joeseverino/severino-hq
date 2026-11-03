@@ -1,0 +1,45 @@
+id: tally-is-a-counter
+valid:
+  - 'counts = Counter(item.kind for item in items)'
+  - 'totals[key] = totals.get(key, 0) + size'
+  - 'seen[key] = seen.get(key, 1) + 1'
+  - |
+    def sizes(rows):
+        found = defaultdict(int)
+        for row in rows:
+            found[row.name] += row.size
+        return found
+  - |
+    def counted(rows):
+        found = Counter()
+        for row in rows:
+            found[row.name] += 1
+        return found
+  - |
+    def other(rows, found):
+        hits = defaultdict(int)
+        found[rows[0]] += 1
+        return hits
+invalid:
+  - 'counts[node.kind] = counts.get(node.kind, 0) + 1'
+  - 'self.ids[attrs["id"]] = self.ids.get(attrs["id"], 0) + 1'
+  - 'counts[key] = 1 + counts.get(key, 0)'
+  - |
+    def counted(rows):
+        found = defaultdict(int)
+        for row in rows:
+            found[row.name] += 1
+        return found
+  - |
+    def counted(rows):
+        found: dict[str, int] = defaultdict(int)
+        for row in rows:
+            if row.ok:
+                found[row.name] += 1
+        return found
+  - |
+    def counted(rows):
+        found = collections.defaultdict(int)
+        for row in rows:
+            found[row.name] += 1
+        return found

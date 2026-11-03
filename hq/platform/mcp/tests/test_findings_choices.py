@@ -22,7 +22,7 @@ RAISED = Finding(
     severity="attention",
     explanation="Example.",
     evidence=(("Seen", "example"),),
-    remedies=(FindingRemedy("infrastructure.reconcile", "example-subject"),),
+    remedies=(FindingRemedy("infrastructure.resource.reconcile", "example-subject"),),
 )
 
 

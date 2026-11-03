@@ -423,7 +423,7 @@ class GlobalSearchTests(TestCase):
 
         outcome = global_search("tailscale", principal=OPERATOR)
 
-        group = next(item for item in outcome["groups"] if item["scope"] == "infrastructure.resources")
+        group = next(item for item in outcome["groups"] if item["scope"] == "infrastructure")
         (item,) = group["items"]
         self.assertEqual(item["title"], resource.key)
         self.assertEqual(item["badge"], resource.kind_label)
@@ -442,7 +442,7 @@ class GlobalSearchTests(TestCase):
             conditions=[{"type": "Ready", "status": "True"}],
         )
 
-        body = SearchDocument.objects.get(scope="infrastructure.resources", object_id="example-node").body
+        body = SearchDocument.objects.get(scope="infrastructure", object_id="example-node").body
 
         self.assertIn("hostname: alpha", body)
         self.assertIn("key_expiry_disabled: no", body)
@@ -459,7 +459,7 @@ class GlobalSearchTests(TestCase):
             spec={"document": '{\r\n  "grants": [\r\n    {"dst": ["*"]}\r\n  ]\r\n}'},
         )
 
-        body = SearchDocument.objects.get(scope="infrastructure.resources", object_id="example-policy").body
+        body = SearchDocument.objects.get(scope="infrastructure", object_id="example-policy").body
 
         (document,) = [line for line in body.splitlines() if line.startswith("document:")]
         self.assertNotIn("\r", body)

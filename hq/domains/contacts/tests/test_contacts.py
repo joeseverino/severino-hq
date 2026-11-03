@@ -377,9 +377,9 @@ class WithheldSpecTests(TestCase):
         client = ContractClient()
         with override_settings(OIDC_ISSUER=ISSUER, SEVERINO_API_RESOURCE=RESOURCE), _serving():
             token = _token(scope="read")
-            listing = client.get("/api/v2/resources/infrastructure.resources/", HTTP_AUTHORIZATION=f"Bearer {token}")
+            listing = client.get("/api/v2/resources/infrastructure/", HTTP_AUTHORIZATION=f"Bearer {token}")
             detail = client.get(
-                f"/api/v2/resources/infrastructure.resources/{inbox.DECLARATION_KEY}/",
+                f"/api/v2/resources/infrastructure/{inbox.DECLARATION_KEY}/",
                 HTTP_AUTHORIZATION=f"Bearer {token}",
             )
             contacts = client.get("/api/v2/resources/contact.submissions/", HTTP_AUTHORIZATION=f"Bearer {token}")
@@ -395,8 +395,8 @@ class WithheldSpecTests(TestCase):
         from hq.platform.mcp import services
 
         with patch.object(services, "current_principal", mcp_principal):
-            listing = services.list_resource("infrastructure.resources")
-            detail = services.get_resource("infrastructure.resources", inbox.DECLARATION_KEY)
+            listing = services.list_resource("infrastructure")
+            detail = services.get_resource("infrastructure", inbox.DECLARATION_KEY)
 
         self.assertWithheld(str(listing))
         self.assertWithheld(str(detail))

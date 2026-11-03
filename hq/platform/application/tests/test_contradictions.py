@@ -263,7 +263,7 @@ class ServedCertificateTests(TestCase):
         # The node's own reconcile action supplies the link where it is enabled.
         self.assertEqual(
             [(remedy.capability, remedy.target) for remedy in finding.remedies],
-            [("infrastructure.reconcile", "example-wildcard")],
+            [("infrastructure.resource.reconcile", "example-wildcard")],
         )
 
     def test_a_host_serving_the_held_certificate_is_quiet(self):

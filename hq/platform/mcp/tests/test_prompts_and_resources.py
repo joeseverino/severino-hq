@@ -9,6 +9,7 @@ from asgiref.sync import async_to_sync
 from django.test import TestCase
 from mcp import Client
 from mcp.shared.exceptions import MCPError
+from mcp.shared.uri_template import UriTemplate
 
 from hq.platform.application.security import Capability, Principal
 
@@ -84,7 +85,7 @@ class ResourceTests(TestCase):
         listed, read = _session(READER, steps)
 
         self.assertEqual(
-            {str(item.uri) for item in listed.resources}, {"hq://action.items", "hq://approvals", "hq://hq"}
+            {str(item.uri) for item in listed.resources}, {"hq://action_items", "hq://approvals", "hq://hq"}
         )
         for uri, result in read.items():
             with self.subTest(uri=uri):
@@ -108,6 +109,22 @@ class ResourceTests(TestCase):
         self.assertEqual(offered[KIND], f"hq://{KIND}/{{name}}")
         self.assertEqual(json.loads(read.contents[0].text), {"name": "one/two", "state": "ok"})
         self.assertEqual(seen, ["one/two"])
+
+    def test_an_identifier_the_template_expands_reads_back_as_itself(self):
+        seen = []
+        holder = Principal("example-holder", "mcp", frozenset({Capability.READ, "example_read"}))
+        identifier = "a b/c?d#e&f,g%h+i:j;k=é"
+
+        async def steps(client):
+            templates = await client.list_resource_templates()
+            (offered,) = (item.uri_template for item in templates.resource_templates if item.name == KIND)
+            return await client.read_resource(UriTemplate.parse(offered).expand({"name": identifier}))
+
+        with served(with_kind(example_kind(seen))) as server:
+            read = _session(holder, steps, server)
+
+        self.assertEqual(json.loads(read.contents[0].text)["name"], identifier)
+        self.assertEqual(seen, [identifier])
 
     def test_a_kind_the_caller_may_not_read_is_neither_offered_nor_read(self):
         seen = []

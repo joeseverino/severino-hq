@@ -479,8 +479,8 @@ def _glance_reading(metric: dict[str, str], spec: DashboardPanelSpec) -> dict[st
     }
 
 
-DASHBOARD_REFRESH = "dashboard.refresh.request"
-DASHBOARD_REFRESH_STALE = "dashboard.refresh.stale"
+DASHBOARD_REFRESH = "dashboard.panels.refresh"
+DASHBOARD_REFRESH_STALE = "dashboard.panels.refresh_due"
 
 
 @dataclass(frozen=True, slots=True)

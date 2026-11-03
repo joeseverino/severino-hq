@@ -59,7 +59,7 @@ class ContactSubmissionRow(TypedDict):
 def capabilities() -> tuple[CapabilitySpec, ...]:
     return (
         CapabilitySpec(
-            "contact.submissions.list",
+            "contact.submission.list",
             "List the messages sent through the contact form.",
             "read",
             Capability.MANAGE_CONTACTS,

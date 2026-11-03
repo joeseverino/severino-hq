@@ -218,7 +218,7 @@ class AvatarView(View):
 
 
 class AgentPolicyView(PageMixin, TemplateView):
-    """Capability policy. Reads from matrix(), writes through the ``agents.policy.set`` capability."""
+    """Capability policy. Reads from matrix(), writes through the ``agent.policy.set`` capability."""
 
     template_name = "core/agent_policy.html"
     page_title = "Agents"
@@ -295,7 +295,7 @@ class SearchView(PageMixin, TemplateView):
     palette_result_limit = 25
     palette_group_limit = 5
     palette_scope_priority: ClassVar[dict[str, int]] = {
-        "infrastructure.resources": 0,
+        "infrastructure": 0,
         "projects": 1,
         "content": 2,
         "documentation": 3,
@@ -478,7 +478,7 @@ class PublicAddressView(View):
     """What the public internet says about one address, as a fragment.
 
     A GET serves what HQ already holds and asks no one. A POST runs the
-    `lookup.address` capability, which stores what it finds.
+    `lookup.address.read` capability, which stores what it finds.
     """
 
     template_name = "core/_public_address.html"

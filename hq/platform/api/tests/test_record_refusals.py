@@ -47,7 +47,7 @@ class RecordRefusalTransportTests(TestCase):
         self.assertNotIn(SENT, error["message"])
 
     def test_a_missing_record_read_is_404_not_found(self):
-        for name in ("projects", "machines", "infrastructure.resources"):
+        for name in ("projects", "machines", "infrastructure"):
             with self.subTest(name), _serving():
                 response = self.client.get(
                     f"/api/v2/resources/{name}/{SENT}/",
@@ -83,7 +83,7 @@ class RecordRefusalTransportTests(TestCase):
 
         with _serving():
             response = self.client.post(
-                "/api/v2/capabilities/infrastructure.reconcile/",
+                "/api/v2/capabilities/infrastructure.resource.reconcile/",
                 data=json.dumps({"payload": {}, "target": resource.key}),
                 content_type="application/json",
                 HTTP_AUTHORIZATION=f"Bearer {_token(scope='manage_infrastructure')}",
@@ -96,7 +96,7 @@ class RecordRefusalTransportTests(TestCase):
     def test_a_value_hq_cannot_act_on_is_400_invalid_input_in_its_own_words(self):
         with _serving():
             response = self.client.post(
-                "/api/v2/capabilities/lookup.address/",
+                "/api/v2/capabilities/lookup.address.read/",
                 data=json.dumps({"payload": {"address": SENT}}),
                 content_type="application/json",
                 HTTP_AUTHORIZATION=f"Bearer {_token(scope='look_up_public_records')}",

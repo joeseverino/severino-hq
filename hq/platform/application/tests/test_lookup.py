@@ -168,7 +168,7 @@ class ReadCapabilityTests(TestCase):
     def test_both_lookups_are_registered_as_reads(self):
         registry = capability_registry()
 
-        for name in ("lookup.name", "lookup.address"):
+        for name in ("lookup.name.read", "lookup.address.read"):
             with self.subTest(name=name):
                 self.assertEqual(registry[name].effect, "read")
 
@@ -178,15 +178,15 @@ class ReadCapabilityTests(TestCase):
         from unittest import mock
 
         with mock.patch("hq.platform.application.lookup.resolve", return_value=A_NAME):
-            result = execute_capability("lookup.name", {"name": "example.test"}, principal=OPERATOR)
+            result = execute_capability("lookup.name.read", {"name": "example.test"}, principal=OPERATOR)
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["name"], "example.test")
 
     def test_what_is_not_a_name_or_an_address_is_refused_in_the_hosts_words(self):
         for name, payload, said in (
-            ("lookup.name", {"name": "not a name"}, "That is not a hostname."),
-            ("lookup.address", {"address": "not an address"}, "That is not an IP address."),
+            ("lookup.name.read", {"name": "not a name"}, "That is not a hostname."),
+            ("lookup.address.read", {"address": "not an address"}, "That is not an IP address."),
         ):
             with self.subTest(name=name):
                 result = execute_capability(name, payload, principal=OPERATOR)

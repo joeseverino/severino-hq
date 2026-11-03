@@ -19,7 +19,7 @@ from .security import Principal
 from .ui import counted
 
 # The capability the identity provider's back-channel logout runs.
-SIGN_OUT = "sessions.sign_out"
+SIGN_OUT = "session.sign_out"
 
 
 @dataclass(frozen=True, slots=True)

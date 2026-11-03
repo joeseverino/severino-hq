@@ -42,7 +42,8 @@ HOSTNAME = re.compile(
 # with no records. Fixing the set here means that cannot happen.
 RECORD_TYPES = ("A", "AAAA", "CNAME", "MX", "TXT", "NS", "SOA", "CAA")
 
-LOOK_UP_ADDRESS = "lookup.address"
+LOOK_UP_NAME = "lookup.name.read"
+LOOK_UP_ADDRESS = "lookup.address.read"
 
 
 @dataclass(frozen=True, slots=True)

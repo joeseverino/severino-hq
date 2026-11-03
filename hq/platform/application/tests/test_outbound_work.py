@@ -180,16 +180,17 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
         audit = AuditLog.objects.filter(operation_id=str(failed.pk), action=AuditLog.Action.FAILED).get()
         self.assertEqual(audit.metadata["failure"]["message"], "The registry lists nothing for this note.")
 
-    def test_a_fault_is_a_failed_job_with_its_traceback(self):
+    def test_a_fault_is_a_failed_job_named_by_its_kind(self):
         self.registry.listed = OSError("connection reset")
-        with held_jobs() as held:
+        with held_jobs() as held, self.assertLogs("severino.jobs", "ERROR"):
             self.press(headers=SCRIPT)
             held.run()
 
         job = Job.objects.get()
         self.assertEqual(job.state, "failed")
-        self.assertIn("Traceback", job.error)
-        self.assertIn("connection reset", ask(example.LOOKUP, "first-note").standing.note)
+        note = ask(example.LOOKUP, "first-note").standing.note
+        self.assertIn("OSError", note)
+        self.assertNotIn("connection reset", note)
 
     def test_one_runs_at_a_time(self):
         with held_jobs() as held:

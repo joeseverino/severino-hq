@@ -20,7 +20,7 @@ class TheApiAgreesTests(TestCase):
         with _serving():
             for path, field in (
                 (f"/api/v2/resources/projects/?status={OUTSIDE}", "status"),
-                (f"/api/v2/resources/infrastructure.resources/?kind={OUTSIDE}", "kind"),
+                (f"/api/v2/resources/infrastructure/?kind={OUTSIDE}", "kind"),
                 (f"/api/v2/resources/projects/?limit={MAX_PAGE_SIZE + 1}", "limit"),
             ):
                 with self.subTest(path=path):

@@ -12,26 +12,54 @@ from django.utils import timezone
 
 from ..finding_model import Finding, FindingRemedy, FindingRule, OperatorStep
 from ..findings import RULES, _no_help_reason
-from ..item_help import (
-    COMMAND,
-    INSTRUCTION,
-    PLACE,
-    REASON,
-    REMEDY,
-    cannot_help,
-    commands,
-    finding_plan,
-    instructions,
-    item_help,
-)
+from ..item_help import CANNOT, DO, REMEDY, RUN, cannot_help, commands, finding_plan, instructions
 from ..ui import Insight
-from ..workflow_contracts import ActionLink
+from ..workflow_contracts import ActionLink, WorkflowPlan
 from .source import parsed
 
 ROOT = Path(__file__).resolve().parents[4]
 # Owned by a change in flight elsewhere; each is listed here, by file, until
 # its items carry help, and the test below fails when one no longer needs it.
 PENDING: set[str] = set()
+
+# The kinds of help an item can carry, as ``item_help`` names them.
+COMMAND = "command"
+PLACE = "place"
+INSTRUCTION = "instruction"
+REASON = "reason"
+
+
+def _plan_help(plan: WorkflowPlan | None) -> str:
+    kinds = set()
+    for step in plan.steps if plan is not None else ():
+        if step.phase == "act" and any(action.recommended for action in step.actions):
+            kinds.add(REMEDY)
+        elif step.phase == RUN and step.summary.strip():
+            kinds.add(COMMAND)
+        elif step.phase == DO and step.summary.strip():
+            kinds.add(INSTRUCTION)
+        elif step.phase == CANNOT and step.summary.strip():
+            kinds.add(REASON)
+    return next((kind for kind in (REMEDY, COMMAND, INSTRUCTION, REASON) if kind in kinds), "")
+
+
+def item_help(item: Insight) -> str:
+    """Which help an action item carries, by the names above; blank for none.
+
+    The gauge the contract reads: a remedy is an action that names a capability
+    or posts to its owner's route, and anything else on ``actions`` is only a
+    link to look at. A place is the item's own next step with the page it is
+    done on.
+    """
+
+    if any(action.capability or action.method == "POST" for action in item.actions):
+        return REMEDY
+    planned = _plan_help(item.workflow)
+    if planned in (REMEDY, COMMAND):
+        return planned
+    if item.action.strip() and item.url:
+        return PLACE
+    return planned
 
 
 def _insight_calls(path: Path) -> list[ast.Call]:

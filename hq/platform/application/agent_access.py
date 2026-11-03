@@ -22,8 +22,8 @@ logger = logging.getLogger("severino.agents")
 
 AUDIT_LABEL = "Agent access"
 
-SET_AGENT_ACCESS = "agents.access.set"
-SET_AGENT_BLOCK = "agents.block.set"
+SET_AGENT_ACCESS = "agent.access.set"
+SET_AGENT_BLOCK = "agent.block.set"
 
 # Every interface a token reaches HQ through, where a client can be blocked.
 TOKEN_INTERFACES = AGENT_SURFACES | {DEVICE_INTERFACE}

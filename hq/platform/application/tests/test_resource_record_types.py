@@ -98,7 +98,7 @@ class RecordTypeTests(TestCase):
             f"machine:{identifiers['machines'][0]}",
             f"zone:{identifiers['domains'][0]}",
         ]
-        identifiers["paths"] = identifiers["services"][:2]
+        identifiers["service.paths"] = identifiers["services"][:2]
         # The agenda lists every source's events; a read of one is of your own.
         identifiers["calendar"] = [str(uid) for uid in Entry.objects.values_list("uid", flat=True)[:3]]
         read: set[str] = set()

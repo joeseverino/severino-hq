@@ -119,7 +119,7 @@ class SectionsTests(SimpleTestCase):
         self._sections_hold(self.document)
 
     def test_a_core_command_stands_in_the_section_of_the_domain_that_declares_it(self):
-        lookup = self.document["paths"]["/api/v2/capabilities/lookup.name/"]["post"]
+        lookup = self.document["paths"]["/api/v2/capabilities/lookup.name.read/"]["post"]
         self.assertEqual(lookup["tags"], ["hq.tools"])
 
     def test_a_route_serving_one_domain_stands_in_its_section(self):

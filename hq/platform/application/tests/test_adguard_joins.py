@@ -9,7 +9,7 @@ from hq.domains.control_plane.models import ManagedResource, ProviderConnection,
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.adguard import CLIENT_KIND, DNS_KIND, QUERY_KIND
 
-from ..facts import Subject, facts_about, inventory_about
+from ..facts import Subject, inventory_about
 from ..findings import derive_findings
 from ..relationships import relationships_for
 from ..security import Capability, Principal
@@ -109,7 +109,6 @@ class AdGuardJoinTests(TestCase):
         joined = inventory_about("adguard.rewrite", Subject.of(addresses=("100.64.0.10",)))
 
         self.assertEqual({record["domain"] for _s, record in joined}, {"app.example.com", "idle.example.com"})
-        self.assertIn("adguard.rewrite", {fact.source_kind for fact in facts_about(("lab-1",), ("100.64.0.10",))})
 
     def test_a_machine_shows_its_dns_client_identity(self):
         found = relationships_for("machine:laptop-1", principal=READ)

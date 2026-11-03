@@ -17,7 +17,6 @@ from ..derived_reads import get_reading, serialize_path
 from ..findings import findings
 from ..inventory import record_inventory
 from ..inventory_testing import store
-from ..path_dependencies import depends_on
 from ..paths import path_to
 from ..projection import projection_scope
 from ..relationships import relationships_for
@@ -167,7 +166,7 @@ class PathTests(TestCase):
 
         self.assertEqual((end.step, end.label, end.source.kind), ("origin", "Answers 404", "npm.dead_host"))
 
-    def test_a_stream_is_another_route_into_the_ingress_and_not_a_dependency(self):
+    def test_a_stream_is_another_route_into_the_ingress(self):
         path = walk("app.example.com")
 
         (forward,) = [route for route in path.routes if route.port]
@@ -175,7 +174,6 @@ class PathTests(TestCase):
         self.assertEqual(path.primary.port, None)
         self.assertIn(("ingress", "port 2222"), steps(forward))
         self.assertIn(("machine", "edge-1"), steps(forward))
-        self.assertNotIn("edge-1", [item.name for item in depends_on(path)])
         self.assertEqual(serialize_path(path)["routes"][1]["port"], 2222)
 
     def test_a_stream_from_another_npm_is_not_on_this_ingress(self):

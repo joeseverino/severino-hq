@@ -31,7 +31,7 @@ class KeptKeyTests(TestCase):
         self.client.force_login(user)
 
     def test_the_operation_keeps_the_key_the_form_posted(self):
-        opened = self.client.get("/commands/infrastructure.reconcile/", {"target": RESOURCE})
+        opened = self.client.get("/commands/infrastructure.resource.reconcile/", {"target": RESOURCE})
         form = opened.context["form"]
         key = drawn_key(opened, "data-command-form")
         posted = {
@@ -45,7 +45,7 @@ class KeptKeyTests(TestCase):
             if value is not None
         }
 
-        response = self.client.post("/commands/infrastructure.reconcile/", posted)
+        response = self.client.post("/commands/infrastructure.resource.reconcile/", posted)
 
         self.assertEqual(response.status_code, 302, response.context and response.context["form"].errors)
         self.assertEqual(OperationRequest.objects.get().idempotency_key, key)

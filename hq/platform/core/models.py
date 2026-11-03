@@ -204,10 +204,6 @@ class AuditLog(models.Model):
         return object_type_label(self.object_type)
 
     @property
-    def type_plural(self) -> str:
-        return object_type_plural(self.object_type)
-
-    @property
     def actor_label(self) -> str:
         """The operator, else the recorded machine actor, else an unauthenticated source."""
 

@@ -9,9 +9,9 @@
     </div>
     {% url 'agent_access' as agent_access_url %}
     {% if agents_paused %}
-      {% words "agents.access.set" "off" as allow %}{% post_button allow agent_access_url name="paused" value="0" css="btn primary" %}
+      {% words "agent.access.set" "off" as allow %}{% post_button allow agent_access_url name="paused" value="0" css="btn primary" %}
     {% else %}
-      {% words "agents.access.set" "on" as block %}{% post_button block agent_access_url name="paused" value="1" %}
+      {% words "agent.access.set" "on" as block %}{% post_button block agent_access_url name="paused" value="1" %}
     {% endif %}
   </div>
   <p class="agent-state-facts">
@@ -73,9 +73,9 @@ use, what it did over the window, and its own block beside the pause above.
             </td>
             <td class="row-actions">
               {% if identity.blocked_at %}
-                {% words "agents.block.set" "off" as label %}{% include "partials/_target_button.html" with url=block_url target=identity.client_id name="blocked" value="0" label=label css="btn compact primary" %}
+                {% words "agent.block.set" "off" as label %}{% include "partials/_target_button.html" with url=block_url target=identity.client_id name="blocked" value="0" label=label css="btn compact primary" %}
               {% else %}
-                {% words "agents.block.set" "on" as label %}{% include "partials/_target_button.html" with url=block_url target=identity.client_id name="blocked" value="1" label=label css="btn compact" %}
+                {% words "agent.block.set" "on" as label %}{% include "partials/_target_button.html" with url=block_url target=identity.client_id name="blocked" value="1" label=label css="btn compact" %}
               {% endif %}
             </td>
           </tr>
@@ -109,7 +109,7 @@ carries the device permission stands as them. Only theirs, never anybody else's.
             <tr data-device="{{ device.client_id }}">
               <th scope="row" class="row-gutter"><code>{{ device.client_id|breakable }}</code>{% row_toggle %}</th>
               <td>{{ device.registered_at|when:"ago" }}</td>
-              <td class="row-actions">{% words "agents.device.set" "off" as label %}{% include "partials/_target_button.html" with url=device_url target=device.client_id name="registered" value="0" label=label css="btn compact" %}</td>
+              <td class="row-actions">{% words "agent.device.set" "off" as label %}{% include "partials/_target_button.html" with url=device_url target=device.client_id name="registered" value="0" label=label css="btn compact" %}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -126,7 +126,7 @@ carries the device permission stands as them. Only theirs, never anybody else's.
       <input type="text" id="device-client" name="client_id" required autocomplete="off" spellcheck="false" aria-describedby="device-client-help">
       <p class="help" id="device-client-help">The client id your device signs in with.</p>
     </div>
-    <div class="form-actions"><button type="submit" name="registered" value="1" class="btn">{% words "agents.device.set" "on" %}</button></div>
+    <div class="form-actions"><button type="submit" name="registered" value="1" class="btn">{% words "agent.device.set" "on" %}</button></div>
   </form>
 {% endcard %}
 

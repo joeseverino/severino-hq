@@ -56,7 +56,7 @@ class ControllerSweepCommand:
     """
 
     connection_ref: Annotated[
-        str, Names("connection.standing"), Describe("The connection to read now, every type its credential reads.")
+        str, Names("connections"), Describe("The connection to read now, every type its credential reads.")
     ] = ""
     kind: Annotated[str, Names("readings"), Describe("The one type of reading to read now, from every connection.")] = (
         ""

@@ -1,0 +1,21 @@
+name: Host uv
+description: >-
+  host-tool for uv, under the name the default branch's plugin-checks.yml
+  calls. That workflow reaches this action by path in the host branch it
+  checks out, so a branch keeps the name until the default branch's workflow
+  calls host-tool.
+
+inputs:
+  host:
+    description: The host checkout, relative to the workspace.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # A composite action's uses takes no expression, so this names the path
+    # plugin-checks.yml checks the host out to.
+    - uses: ./host/.github/actions/host-tool
+      with:
+        host: ${{ inputs.host }}
+        tool: uv

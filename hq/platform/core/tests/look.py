@@ -46,6 +46,7 @@ from hq.platform.core.tests.browser.reference import (
     wait_for_reference,
 )
 from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser.shots import TALLEST, shoot_page
 from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
 from hq.platform.core.tests.browser.survey import AUDIT, survey_checks
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN
@@ -136,10 +137,6 @@ _EXTENT_HELD = """(shot) => {
   return held[shot].runs >= 3 && now;
 }"""
 _EXTENT_POLL = 100
-# The most of a page a shot holds: the API reference with a tag opened runs
-# far past it, and a browser takes minutes to shoot and cut that much. The
-# rule still reads the whole page.
-_SHOT_TALLEST = 30_000
 
 # Every dialog the page declares, by the id after `modal-` (partials/_modal.html).
 _DIALOGS = """() => [...document.querySelectorAll('dialog.modal[id^="modal-"]')].map((dialog) => dialog.id.slice(6))"""
@@ -949,31 +946,29 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     def screenshot(self, name, width, part="", shows=""):
         """The whole page, or a ``part`` of it open that ``shows`` says, and,
         when it is taller than the window, the same cut into window-sized
-        bands beside it, so each can be read at once. A page past
-        ``_SHOT_TALLEST`` is shot to there, and the shot says so. Shot
-        once its extent holds still; one that never does is shot whole as
-        it stands, with no bands, and the shot says so."""
+        bands beside it, so each can be read at once, each to ``TALLEST``
+        at most (``shoot_page``). Shot once its extent holds still; one
+        that never does is shot as it stands, with no bands, and the shot
+        says so."""
 
         shot = _shot(name, width, part)
         try:
             held = self.page.wait_for_function(_EXTENT_HELD, arg=shot.name, polling=_EXTENT_POLL)
             wide, tall = held.json_value()
         except BrowserError as moving:
-            self.page.screenshot(path=shot, full_page=True, animations="disabled")
+            cut = shoot_page(self.page, shot, animations="disabled")
             said = f"its height never held still, so no bands ({str(moving).splitlines()[0]})"
-            self.shots.append((_shown(shot), ", ".join(filter(None, [shows, said]))))
+            self.shots.append((_shown(shot), ", ".join(filter(None, [shows, cut, said]))))
             return
-        shown = min(tall, _SHOT_TALLEST)
-        clip = {"x": 0, "y": 0, "width": wide, "height": shown}
-        self.page.screenshot(path=shot, full_page=True, clip=clip, animations="disabled")
-        if shown < tall:
-            shows = ", ".join(filter(None, [shows, f"its first {shown} px of {tall}"]))
-        bands = _bands(shown, self.page.viewport_size["height"])
-        for number, (top, height) in enumerate(bands, start=1):
-            self.page.screenshot(
-                path=shot.with_name(f"{shot.stem}.band-{number:02}.png"),
-                full_page=True,
-                clip={"x": 0, "y": top, "width": wide, "height": height},
+        cut = shoot_page(self.page, shot, extent=(wide, tall), animations="disabled")
+        shows = ", ".join(filter(None, [shows, cut]))
+        bands = _bands(min(tall, TALLEST), self.page.viewport_size["height"])
+        for number, band in enumerate(bands, start=1):
+            shoot_page(
+                self.page,
+                shot.with_name(f"{shot.stem}.band-{number:02}.png"),
+                extent=(wide, tall),
+                band=band,
                 animations="disabled",
             )
         self.shots.append((_shown(shot), _with(shows, len(bands))))
@@ -984,11 +979,11 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
         path = _shot(name, width).with_suffix(".failed.png")
         try:
-            self.page.screenshot(path=path, full_page=True, animations="disabled")
+            cut = shoot_page(self.page, path, animations="disabled")
         except BrowserError as broke:
             print(f"{name} at {width}: {said}; no screenshot ({str(broke).splitlines()[0]})", flush=True)
         else:
-            self.shots.append((_shown(path), "as it failed"))
+            self.shots.append((_shown(path), ", ".join(filter(None, ["as it failed", cut]))))
         return [said]
 
     def beside_base(self, name, width, kind, said) -> str:

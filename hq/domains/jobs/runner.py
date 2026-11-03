@@ -6,8 +6,8 @@ stands in for its durability: a job whose process vanished is `lost`, not
 silently absent.
 """
 
+import logging
 import threading
-import traceback
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from datetime import datetime, timedelta
@@ -19,7 +19,8 @@ lazy from django.contrib.auth.base_user import AbstractBaseUser
 lazy from django.contrib.auth.models import AnonymousUser
 
 from hq.platform.application.security import JOB_INTERFACE
-from hq.platform.core.audit import operation_context, record_event
+from hq.platform.core.attribution import door_of_its_own
+from hq.platform.core.audit import record_event
 from hq.platform.core.database import gives_way
 from hq.platform.core.facets import Counts, Failure, Timing
 from hq.platform.core.models import AuditLog
@@ -27,6 +28,18 @@ from hq.platform.core.outbound import OutboundInRequest, off_request, serving_re
 from hq.platform.core.outside_requests import connections_of_its_own
 
 from .models import LOST_ERROR, Job
+
+logger = logging.getLogger("severino.jobs")
+
+# What a job whose thread could not start says went wrong.
+NOT_STARTED = "HQ could not start it; its log holds why."
+
+
+def unexpected(kind: str, job_id: Any) -> str:
+    """What a job a fault stopped says: the fault's kind, and where its trace is."""
+
+    return f"It stopped on an unexpected {kind}; HQ's log, under job {job_id}, says why."
+
 
 # How often progress reaches the database, at most. Work may report per
 # record; at a few million records the reporting would cost more than the work.
@@ -81,7 +94,7 @@ class Failed(RuntimeError):
 
     Work raises it with a sentence for whoever asked: the job ends failed and
     that sentence is what its control says. Any other exception is a fault,
-    kept with its traceback.
+    recorded by its kind, with its traceback in the log.
     """
 
 
@@ -139,10 +152,11 @@ def _launch(job: Job, work: Callable[[Progress], dict[str, Any]]) -> None:
 
     try:
         threading.Thread(target=run_job, args=(job.pk, work), name=f"job:{job.kind}", daemon=True).start()
-    except RuntimeError as exc:
+    except RuntimeError:
+        logger.exception("jobs.not_started job=%s kind=%s", job.pk, job.kind)
         ended = timezone.now()
-        _audit(job, AuditLog.Action.FAILED, "could not start", {"error": str(exc)}, ended)
-        Job.objects.filter(pk=job.pk).update(state=Job.State.FAILED, error=f"Could not start: {exc}", finished_at=ended)
+        _audit(job, AuditLog.Action.FAILED, "could not start", {}, ended)
+        Job.objects.filter(pk=job.pk).update(state=Job.State.FAILED, error=NOT_STARTED, finished_at=ended)
         raise
 
 
@@ -228,14 +242,15 @@ def _work(job_id, work: Callable[[Progress], dict[str, Any]]) -> None:
         except Failed as said:
             # A stated outcome, not a fault: the sentence is the whole record.
             _fail(job, str(said) or "Failed.", Failure(message=str(said)[:400], kind="Failed"))
-        except Exception:  # noqa: BLE001 - a failed job is recorded, never raised
+        except Exception as exc:
             # Recorded here, since an exception left on a thread goes to stderr
-            # and the row sits at `running` forever. The whole traceback, not
-            # just the message: nobody can reproduce a background failure by
-            # running it again from a terminal.
-            detail = traceback.format_exc()
-            last = detail.strip().splitlines()[-1]
-            _fail(job, detail[-8000:], Failure(message=last[:400], kind=last.split(":")[0][:80]))
+            # and the row sits at `running` forever. The row and its audit say
+            # that it failed and by what kind of fault; the traceback goes to
+            # the log alone, since its text can carry anything the work held.
+            logger.exception("jobs.failed job=%s kind=%s", job.pk, job.kind)
+            kind = type(exc).__name__[:80]
+            said = unexpected(kind, job.pk)
+            _fail(job, said, Failure(message=said[:400], kind=kind))
 
 
 def _fail(job: Job, error: str, failure: Failure) -> None:
@@ -289,9 +304,10 @@ def _changed(job: Job, counts: list[Counts]) -> bool:
 
 
 def _its_operation(job: Job) -> AbstractContextManager[None]:
-    """The operation every row of ``job``'s work and its ending is part of, under the job's own id."""
+    """The operation every row of ``job``'s work and its ending is part of, under the job's own id
+    and its requester, whoever is bound where it runs."""
 
-    return operation_context(
+    return door_of_its_own(
         interface=JOB_INTERFACE,
         actor=job.actor or "local-operator",
         operation=job.kind,

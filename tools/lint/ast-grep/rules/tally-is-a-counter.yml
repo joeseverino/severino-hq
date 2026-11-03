@@ -1,0 +1,35 @@
+# A tally is collections.Counter. Counting by hand, `d[k] = d.get(k, 0) + 1`
+# or `+= 1` on a defaultdict(int), writes again what Counter already does, and
+# reads as a mapping that might hold something besides counts. A Counter keeps
+# the order its keys were first counted in, as a dict does, so a page that
+# lists a tally in that order reads the same.
+id: tally-is-a-counter
+language: python
+severity: error
+message: A tally is counted by hand; count it with collections.Counter.
+note: >-
+  `Counter(item.kind for item in items)`, or `counts = Counter()` then
+  `counts[key] += 1` where each key is counted in a loop of its own.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+rule:
+  any:
+    - pattern: $D[$K] = $D.get($K, 0) + 1
+    - pattern: $D[$K] = 1 + $D.get($K, 0)
+    - pattern: $D[$K] += 1
+      inside:
+        kind: function_definition
+        stopBy: end
+        has:
+          stopBy: end
+          any:
+            - pattern: $D = defaultdict(int)
+            - pattern: "$D: $T = defaultdict(int)"
+            - pattern: $D = collections.defaultdict(int)
+            - pattern: "$D: $T = collections.defaultdict(int)"

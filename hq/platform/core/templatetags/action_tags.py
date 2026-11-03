@@ -132,14 +132,6 @@ def _ranked(actions):
 
 
 @register.filter
-def lead_action(actions):
-    """The control a head draws first beside its title."""
-
-    ranked = _ranked(tuple(actions or ()))
-    return ranked[0] if ranked else None
-
-
-@register.filter
 def head_actions(actions):
     """``(beside, menu)``: the controls a head draws beside its title, the
     first two it reaches for, and every one but the lead for its menu, the

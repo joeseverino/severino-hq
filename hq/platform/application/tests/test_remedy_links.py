@@ -75,7 +75,7 @@ class EveryTargetedCommandPreselectsTests(TestCase):
         commands = [
             spec
             for spec in capability_registry().values()
-            if spec.subject_resource == "infrastructure.resources" and spec.target_kind
+            if spec.subject_resource == "infrastructure" and spec.target_kind
         ]
         self.assertTrue(commands)
         for spec in commands:

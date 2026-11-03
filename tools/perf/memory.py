@@ -14,7 +14,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -53,7 +53,7 @@ def ranked(modules: dict[str, dict[str, Any]], stage: str, *, by=group) -> list[
     largest first."""
 
     size: dict[str, int] = defaultdict(int)
-    count: dict[str, int] = defaultdict(int)
+    count: Counter[str] = Counter()
     for module, entry in modules.items():
         if entry["stage"] == stage:
             size[by(module)] += entry["own"]

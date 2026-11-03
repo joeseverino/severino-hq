@@ -1,0 +1,29 @@
+# A browser refuses an image past 32767 px on a side, and a page as tall as the
+# opened API reference takes it past the time a shot is given. A shot of the
+# whole page goes through the one helper that stops it where a shot can be
+# taken and says what it left out, so a failure's screenshot never turns the
+# failure into an error of its own. A shot that names its own clip is bounded
+# by it and stays (the demo's, of one region of its page).
+id: page-screenshot-is-clipped
+language: python
+severity: error
+message: A screenshot of the whole page is taken with no clip, outside the helper that clips it.
+note: >-
+  Call shoot_page(page, path, ...) from hq.platform.core.tests.browser.shots,
+  which shoots to TALLEST at most and returns what the shot left out.
+ignores:
+  - "hq/platform/core/tests/browser/shots.py"
+rule:
+  pattern: $PAGE.screenshot($$$)
+  has:
+    field: arguments
+    has:
+      kind: keyword_argument
+      has: { field: name, regex: ^full_page$ }
+      not: { has: { field: value, regex: ^False$ } }
+  not:
+    has:
+      field: arguments
+      has:
+        kind: keyword_argument
+        has: { field: name, regex: ^clip$ }

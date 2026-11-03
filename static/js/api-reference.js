@@ -29,6 +29,9 @@ const STOCK_SENTENCES = [
 // "../" stay whole.
 const PATH_BREAK = /(?<=[^\s/.?&:-])[/.?&-]/g;
 
+// A hyphen inside a path, with the character after it.
+const PATH_HYPHEN = /-(?=\S)/g;
+
 // A path is a word with a "/" in it. Neither browser engine ends a line
 // inside one but where any character may end it (`overflow-wrap`), which
 // reads as a word cut in two ("refresh.reque" over "st/"), and CSS has no way
@@ -36,22 +39,45 @@ const PATH_BREAK = /(?<=[^\s/.?&:-])[/.?&-]/g;
 // to end one, and is never copied. Scalar draws an operation's heading with
 // one before each such character, and its list of a section's operations
 // and its samples as plain text, so each text node holding a path is split at
-// each such place with a <wbr> between, as it is drawn. The viewer keeps its
-// own node, the first part, and may write a new path into it later, so the
-// parts split off after it are kept to be taken out then.
+// each such place with a <wbr> between, as it is drawn.
+//
+// Both engines also end a line after a hyphen (UAX #14's HY class, kept by
+// every engine's line breaker), and take that later place over the <wbr>
+// before it, so "docker-" would end a line over "host". Only a box that does
+// not wrap takes that place away without a character of its own (a joiner
+// would be copied), so each hyphen and the character after it are set in one
+// (`[data-path-hyphen]` in api-reference.css).
+//
+// The viewer keeps its own node, the first part, and may write a new path
+// into it later, so the parts split off after it are kept to be taken out
+// then.
 const splitOff = new WeakMap();
 const markPaths = (node) => {
   if (!node.isConnected || !node.data.includes("/")) return;
-  const places = [];
+  const breaks = new Set();
+  const hyphens = new Set();
   for (const word of node.data.matchAll(/\S*\/\S*/g)) {
-    for (const at of word[0].matchAll(PATH_BREAK)) places.push(word.index + at.index);
+    for (const at of word[0].matchAll(PATH_BREAK)) breaks.add(word.index + at.index);
+    for (const at of word[0].matchAll(PATH_HYPHEN)) hyphens.add(word.index + at.index);
   }
   const parts = [];
-  for (const place of places.reverse()) {
-    const rest = node.splitText(place);
-    const wbr = document.createElement("wbr");
-    rest.before(wbr);
-    parts.push(wbr, rest);
+  for (const place of [...new Set([...breaks, ...hyphens])].sort((a, b) => b - a)) {
+    let rest = node.splitText(place);
+    parts.push(rest);
+    if (hyphens.has(place)) {
+      parts.push(rest.splitText(2));
+      const joined = document.createElement("span");
+      joined.toggleAttribute("data-path-hyphen", true);
+      rest.replaceWith(joined);
+      joined.append(rest);
+      rest = joined;
+      parts.push(joined);
+    }
+    if (breaks.has(place)) {
+      const wbr = document.createElement("wbr");
+      rest.before(wbr);
+      parts.push(wbr);
+    }
   }
   if (parts.length) splitOff.set(node, parts);
 };

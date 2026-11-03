@@ -99,6 +99,8 @@ SELECTORS = {
     "disclosure": "main details:not([data-menu])",
     # Where the API reference mounts its viewer.
     "reference": "#api-reference-root",
+    # A block of code the reference's viewer draws: a request or answer.
+    "reference_sample": "#api-reference-root pre",
     # Where a vendored script draws markup HQ does not write: the API
     # reference's viewer, which ReferenceBrowserTests holds to its own rules.
     "vendored": "#api-reference-root",

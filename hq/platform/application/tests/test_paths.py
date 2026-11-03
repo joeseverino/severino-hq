@@ -346,7 +346,7 @@ class PathTests(TestCase):
         from ..record_errors import RecordNotFound
 
         with self.assertRaises(RecordNotFound):
-            get_resource("paths", "not a host", principal=READ)
+            get_resource("service.paths", "not a host", principal=READ)
 
     def test_why_unread_names_the_error(self):
         store("caddy.route", reachable=False, error="Connection refused.")
@@ -363,7 +363,7 @@ class ReadTests(TestCase):
         estate()
 
     def test_the_api_returns_the_path_the_page_walks(self):
-        found = get_resource("paths", "app.example.com", principal=READ)
+        found = get_resource("service.paths", "app.example.com", principal=READ)
 
         route = found["routes"][0]
         self.assertEqual(route["via"], "Internal DNS")
@@ -375,7 +375,7 @@ class ReadTests(TestCase):
         from ..security import AuthorizationError
 
         with self.assertRaises((AuthorizationError, ResourceError)):
-            get_resource("paths", "app.example.com", principal=Principal("nobody", "test", frozenset()))
+            get_resource("service.paths", "app.example.com", principal=Principal("nobody", "test", frozenset()))
 
 
 @PUBLIC_RANGE

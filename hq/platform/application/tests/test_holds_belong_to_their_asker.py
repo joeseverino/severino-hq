@@ -25,7 +25,9 @@ SECOND = Principal("example-other-agent", "mcp", GRANT)
 
 
 def ask_reconcile(principal: Principal) -> dict:
-    return execute_capability("infrastructure.reconcile", reconcile_payload(), principal=principal, target=POLICY_KEY)
+    return execute_capability(
+        "infrastructure.resource.reconcile", reconcile_payload(), principal=principal, target=POLICY_KEY
+    )
 
 
 def ask_update(principal: Principal) -> dict:
@@ -124,7 +126,7 @@ class HoldsBelongToTheirAskerTests(TestCase):
         theirs = ask_reconcile(FIRST)["approval"]
 
         def urls(principal):
-            return {item["url"] for item in list_resource("action.items", None, principal=principal)["items"]}
+            return {item["url"] for item in list_resource("action_items", None, principal=principal)["items"]}
 
         read = urls(SECOND)
         self.assertIn(mine["review_url"], read)

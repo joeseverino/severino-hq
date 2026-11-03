@@ -18,7 +18,7 @@ from ..record_errors import PolicyError
 from ..resource_operations import OperationCommand, request_reconcile
 from ..security import cli_principal, mcp_principal
 
-RECONCILE = "infrastructure.reconcile"
+RECONCILE = "infrastructure.resource.reconcile"
 
 
 def switched_off() -> ManagedResource:

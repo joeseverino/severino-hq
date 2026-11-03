@@ -1,15 +1,25 @@
-"""Each refusal response is named for its status and codes alone: operations
-answering the same codes share it, two different sets never share a name, and
-only a refusal that says "later" declares a wait."""
+"""Each refusal response is named in words for its status and the kind of call
+that answers its codes: operations answering the same codes share it, two
+different sets never share a name, and only a refusal that says "later"
+declares a wait."""
 
-from itertools import chain, combinations
+from http import HTTPStatus
 from unittest import mock
 
 from django.test import SimpleTestCase
 
 from hq.platform.application.refusal_status import REFUSAL_STATUS
 
-from .. import openapi
+from .. import openapi, views
+from ..fragments import pascal as _pascal
+
+
+def _by_status(codes):
+    answered: dict[int, set[str]] = {}
+    for code in codes:
+        answered.setdefault(REFUSAL_STATUS[code], set()).add(code)
+    return {status: frozenset(held) for status, held in answered.items()}
+
 
 # refusal_status.LATER_CODES, written out so the test runs against code that has none.
 LATER_CODES = frozenset({"rate_limited", "too_many_calls"})
@@ -52,16 +62,36 @@ class RefusalComponentTests(SimpleTestCase):
                 self.assertEqual(len(names), 1)
 
     def test_no_two_code_sets_reach_one_name(self):
-        """Every set of codes each status has, however many operations come to answer."""
+        """Every set an operation can answer, however many come to: every endpoint's at a
+        status, one code where no endpoint answers, and each kind of call's."""
 
-        names: dict[str, tuple[int, tuple[str, ...]]] = {}
-        for status in sorted(set(REFUSAL_STATUS.values())):
-            codes = sorted(code for code, answered in REFUSAL_STATUS.items() if answered == status)
-            for chosen in chain.from_iterable(combinations(codes, size) for size in range(1, len(codes) + 1)):
-                name = openapi.refusal_name(status, list(chosen))
+        endpoint = _by_status(views.ENDPOINT_CODES)
+        sets = {(status, codes) for status, codes in endpoint.items()}
+        sets |= {(status, frozenset({code})) for code, status in REFUSAL_STATUS.items() if status not in endpoint}
+        sets |= {(status, codes) for kind in openapi.call_kinds() for status, codes in _by_status(kind.codes).items()}
+        names: dict[str, tuple[int, frozenset[str]]] = {}
+        for status, codes in sorted(sets, key=lambda answered: (answered[0], sorted(answered[1]))):
+            name = openapi.refusal_name(status, sorted(codes))
+            with self.subTest(name=name):
+                self.assertNotIn(name, names, (status, sorted(codes)))
+                self.assertLessEqual(len(name), 40)
+            names[name] = (status, codes)
+
+    def test_a_set_no_kind_of_call_answers_fails_the_build_naming_it(self):
+        # Two codes at a status no endpoint answers, that no one kind of call answers together.
+        with self.assertRaisesRegex(openapi.OpenAPIError, "target_not_allowed.*target_required"):
+            openapi.refusal_name(400, ["target_not_allowed", "target_required"])
+
+    def test_a_refusal_of_several_codes_is_named_for_its_kind_and_status_never_its_codes(self):
+        for status, _, schema_name, schema in self._answered():
+            codes = _code_list(schema)
+            phrase = _pascal(HTTPStatus(status).phrase)
+            name = schema_name.removesuffix("Refusal")
+            if len(codes) > 1:
                 with self.subTest(name=name):
-                    self.assertNotIn(name, names, (status, chosen))
-                names[name] = (status, chosen)
+                    self.assertTrue(name.endswith(phrase))
+                    kind = name.removesuffix(phrase)
+                    self.assertFalse([code for code in codes if _pascal(code) in kind], codes)
 
     def test_a_name_two_code_sets_reach_fails_the_build(self):
         with mock.patch.object(openapi, "refusal_name", return_value="Same"), self.assertRaises(openapi.OpenAPIError):

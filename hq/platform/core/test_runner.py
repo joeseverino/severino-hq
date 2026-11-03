@@ -41,6 +41,7 @@ from django.test.runner import (
 )
 lazy from django.apps import apps
 lazy from django.contrib.auth import get_user_model
+lazy from django.core.management.base import BaseCommand
 lazy from django.db.backends.sqlite3.creation import DatabaseCreation
 lazy from django.test import TransactionTestCase
 
@@ -49,7 +50,7 @@ from hq.platform.core.live_objects import live
 lazy from hq.platform.application import agent_limits, plugins, roles
 lazy from hq.platform.application.plugins import clear_plugin_composition_cache
 lazy from hq.platform.core import append_only
-lazy from hq.platform.core.attribution import bind_this_thread
+lazy from hq.platform.core.attribution import bind_this_thread, bound, command_operation, from_the_shell
 
 
 def performance_cores() -> int | None:
@@ -139,6 +140,33 @@ def flush_through_the_audit_guard() -> None:
 
     _fixture_teardown.through_the_audit_guard = True
     TransactionTestCase._fixture_teardown = _fixture_teardown  # noqa: SLF001 - as above
+
+
+def commands_from_the_shell() -> None:
+    """In this process, a management command a test starts runs as ``manage.py``
+    runs it: inside the shell's door, as the local operator.
+
+    So a command that binds someone else inside it is refused here, as it is in
+    production. A command started inside a door that has bound its own (a job,
+    another command) keeps that door's binding, as it does in production.
+    """
+
+    # Django offers no hook before a command runs; call_command and
+    # run_from_argv both pass through BaseCommand.execute, so it is wrapped.
+    execute = BaseCommand.execute
+    if getattr(execute, "from_the_shell", False):
+        return
+
+    def _execute(self, *args, **options):
+        here = bound()
+        if here is None or here.interface != TEST_INTERFACE or here.actor:
+            return execute(self, *args, **options)
+        named = type(self).__module__.rpartition(".")[2]
+        with from_the_shell(command_operation(["manage.py", named])):
+            return execute(self, *args, **options)
+
+    _execute.from_the_shell = True
+    BaseCommand.execute = _execute
 
 
 class _CompositionIsolation:
@@ -594,6 +622,7 @@ def _init_worker_on_file_databases(counter, *args, **kwargs):
     started = _init_worker(counter, *args, **kwargs)
     default_people_to_operator()
     flush_through_the_audit_guard()
+    commands_from_the_shell()
     bind_test_arrangement()
     return started
 
@@ -717,6 +746,7 @@ class SeverinoTestRunner(DiscoverRunner):
         super().setup_test_environment(**kwargs)
         default_people_to_operator()
         flush_through_the_audit_guard()
+        commands_from_the_shell()
         bind_test_arrangement()
 
     def build_suite(self, test_labels=None, **kwargs):

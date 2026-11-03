@@ -295,13 +295,6 @@ def expiry(value):
 
 
 @register.filter
-def posture_state(posture, check_id):
-    """``{{ posture|posture_state:check.id }}``: met, unmet, or unavailable."""
-
-    return posture.state_of(check_id)
-
-
-@register.filter
 def ago_short(value):
     """``ago``, saying nothing rather than the missing mark when there is no moment."""
 

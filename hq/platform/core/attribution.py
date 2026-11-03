@@ -42,16 +42,39 @@ def bound() -> OperationContext | None:
     return _operation_context.get()
 
 
+class Rebound(RuntimeError):
+    """A binding opened inside an operation naming someone other than whoever started it."""
+
+
 @contextmanager
-def operation_context(*, interface: str, actor: str, operation: str, operation_id: str = "") -> Iterator[None]:
+def operation_context(
+    *, interface: str, actor: str, operation: str, operation_id: str = "", rebinds: bool = False
+) -> Iterator[None]:
     """Attach adapter-neutral attribution to audit events in this operation.
 
     Every row written inside one operation carries its one id, so the log reads
     as events: an id given here wins, a binding nested in another keeps the
     outer one's, and the outermost binding without one mints it.
+
+    Who acted is whoever started the operation: once an actor is bound, a
+    nested binding naming another is refused, so no code inside can write its
+    rows as someone else's. The same actor may name another door (a job's
+    work through its requester's principal). A door bound before it knows who
+    is asking (no actor yet) starts an operation of its own, as a served
+    request does, even one a tool serves in its own process, and is named by
+    the first binding inside it. ``rebinds`` is for the host's held changes
+    alone, which the approvals service writes as someone other than whoever is
+    bound: the requester an approved change runs as, and the sweep that lapses
+    an expired one.
     """
 
-    outer = _operation_context.get()
+    outer = None if not actor else _operation_context.get()
+    if outer is not None and outer.actor and not rebinds and actor != outer.actor:
+        raise Rebound(
+            f"{operation!r} binds {interface}/{actor or '(nobody)'} inside {outer.operation!r}, "
+            f"which {outer.interface}/{outer.actor} started. An operation's rows are its starter's: "
+            "run the inner work under the binding in force."
+        )
     operation_id = operation_id or (outer.operation_id if outer is not None else "") or str(uuid7())
     with _operation_context.set(
         OperationContext(
@@ -60,6 +83,23 @@ def operation_context(*, interface: str, actor: str, operation: str, operation_i
             operation=operation,
             operation_id=operation_id,
         )
+    ):
+        yield
+
+
+@contextmanager
+def door_of_its_own(*, interface: str, actor: str, operation: str, operation_id: str) -> Iterator[None]:
+    """Bind an operation as the outermost, whatever is bound around it.
+
+    For the job runner, whose job's rows are its requester's wherever the job runs,
+    on its own thread, to its end on a caller's, or ended by the sweep that
+    finds it lost; and for the example estate's doors, each bound as its real one
+    binds it whatever runs the seed.
+    """
+
+    with (
+        _operation_context.set(None),
+        operation_context(interface=interface, actor=actor, operation=operation, operation_id=operation_id),
     ):
         yield
 

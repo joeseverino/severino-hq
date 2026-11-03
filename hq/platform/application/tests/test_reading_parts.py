@@ -14,7 +14,7 @@ from hq.domains.control_plane.models import ManagedResource, ProviderConnection,
 from hq.domains.control_plane.reading_parts import clean_refused_parts, parts_of
 
 from ..credential_sight import PARTIAL, credential_sight
-from ..facts import UNREADABLE, facts_about, unreadable_labels
+from ..facts import unreadable_labels
 from ..findings import derive_findings
 from ..inventory import inventory_state, record_inventory
 from ..paths import path_to
@@ -107,13 +107,10 @@ class PartlyRefusedReadingTests(TestCase):
         state = {item["kind"]: item for item in inventory_state()}[REDIRECT]
         self.assertEqual((state["state_label"], state["count"]), ("Partly read", 0))
 
-    def test_the_names_facts_say_the_part_was_not_read(self):
+    def test_the_unreadable_labels_name_the_part_not_read(self):
         with projection_scope():
-            facts = facts_about(("example.net",), ())
             labels = unreadable_labels()
 
-        unread = [fact for fact in facts if fact.state == UNREADABLE]
-        self.assertIn(("Redirect rules", PHRASE), [(fact.label, fact.detail) for fact in unread])
         self.assertIn("Redirect rules", labels)
 
     def test_the_path_never_says_the_edge_answers_without_saying_what_was_not_read(self):

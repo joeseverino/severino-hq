@@ -25,6 +25,7 @@ from hq_sdk import (
     connections,
     demo,
     jobs,
+    migrations,
     money,
     outbound,
     pages,
@@ -543,3 +544,12 @@ def a_list_narrowed_by_status_and_text(rows: Callable[..., dict[str, Any]]) -> N
 
     Query(status=1)  # type: ignore[arg-type]
     Query(query=["example"])  # type: ignore[arg-type]
+
+
+def a_capability_renamed() -> None:
+    # A plugin's migration moves the rows the host keeps under its old capability names.
+    renamed = migrations.RenameCapabilities({"example.entries": "example.entry.list"})
+    assert_type(renamed, migrations.RenameCapabilities)
+    assert_type(migrations.CAPABILITY_ROWS, tuple[str, str])
+
+    migrations.RenameCapabilities(["example.entries"])  # type: ignore[arg-type]

@@ -9,7 +9,6 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 
-from ..facts import facts_about
 from ..findings import findings
 from ..paths import path_to
 from ..projection import projection_scope
@@ -172,16 +171,6 @@ class RequestedHostRouteTests(TestCase):
             sorted((item["rule"], item["subject"]) for item in answered_here["findings"]),
         )
         self.assertNotIn("http.request.host", str(passed_through))
-
-    def test_no_fact_names_the_placeholder_as_an_origin(self):
-        self.routes(PLACEHOLDER, to_requested_host=True)
-
-        with projection_scope():
-            facts = facts_about(["example.dev"], [])
-
-        self.assertTrue(any(fact.source_kind == "caddy.route" for fact in facts))
-        self.assertNotIn("Origin", [fact.label for fact in facts if fact.source_kind == "caddy.route"])
-        self.assertNotIn(PLACEHOLDER, [fact.value for fact in facts])
 
     def test_the_catalog_and_the_graph_read_it_without_an_origin(self):
         self.routes(PLACEHOLDER, to_requested_host=True)

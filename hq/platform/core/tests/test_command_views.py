@@ -222,7 +222,7 @@ class CommandViewTests(TestCase):
             spec={},
         )
 
-        response = self.client.get("/commands/infrastructure.reconcile/", {"kind": "tailscale.device"})
+        response = self.client.get("/commands/infrastructure.resource.reconcile/", {"kind": "tailscale.device"})
 
         self.assertIn("example-device", options(response))
         self.assertNotIn("example-zone", options(response))
@@ -382,7 +382,7 @@ class CommandResultProjectionTests(TestCase):
             ],
         }
 
-        response = self._run("lookup.name", payload, {"name": "example.test"})
+        response = self._run("lookup.name.read", payload, {"name": "example.test"})
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
@@ -406,7 +406,7 @@ class CommandResultProjectionTests(TestCase):
     def test_a_shape_the_rules_do_not_fit_shows_the_json_open(self):
         payload = {"ok": True, "nested": {"deep": [1, 2]}, "mixed": [{"a": 1}, {"b": {"c": 2}}]}
 
-        response = self._run("lookup.name", payload, {"name": "example.test"})
+        response = self._run("lookup.name.read", payload, {"name": "example.test"})
 
         self.assertEqual(response.context["result_facts"], ())
         self.assertIsNone(response.context["result_table"])

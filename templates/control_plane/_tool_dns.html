@@ -11,14 +11,14 @@
         <label for="lookup-name">Hostname</label>
         <input type="text" name="name" id="lookup-name" spellcheck="false"
                autocomplete="off" placeholder="example.com"
-               value="{{ asked|dictkey:'lookup.name' }}">
+               value="{{ asked|dictkey:'lookup.name.read' }}">
       </div>
       <div class="form-actions">
-        <button type="submit" class="primary">{% words "lookup.name" %}</button>
+        <button type="submit" class="primary">{% words "lookup.name.read" %}</button>
       </div>
     </form>
 
-    {% with reading=results|dictkey:"lookup.name" %}
+    {% with reading=results|dictkey:"lookup.name.read" %}
       {% if reading %}
     <div class="tool-result">
         {% if reading.ok %}
@@ -60,14 +60,14 @@
         <label for="lookup-address">IP address</label>
         <input type="text" name="address" id="lookup-address" spellcheck="false"
                autocomplete="off" placeholder="1.1.1.1"
-               value="{{ asked|dictkey:'lookup.address' }}">
+               value="{{ asked|dictkey:'lookup.address.read' }}">
       </div>
       <div class="form-actions">
-        <button type="submit" class="primary">{% words "lookup.address" %}</button>
+        <button type="submit" class="primary">{% words "lookup.address.read" %}</button>
       </div>
     </form>
 
-    {% with reading=results|dictkey:"lookup.address" %}
+    {% with reading=results|dictkey:"lookup.address.read" %}
       {% if reading %}
     <div class="tool-result">
         {% if reading.ok %}
@@ -103,8 +103,8 @@
               <form method="post" class="inline-form">
                 {% write_token %}
                 <input type="hidden" name="tab" value="dns">
-                <input type="hidden" name="address" value="{{ asked|dictkey:'lookup.address' }}">
-                <button type="submit" class="btn ghost compact">{% words "lookup.address" %}</button>
+                <input type="hidden" name="address" value="{{ asked|dictkey:'lookup.address.read' }}">
+                <button type="submit" class="btn ghost compact">{% words "lookup.address.read" %}</button>
               </form>
             </p>
           {% endif %}

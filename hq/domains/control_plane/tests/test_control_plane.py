@@ -1162,26 +1162,17 @@ class InfrastructureViewsTests(TestCase):
             claimed_at=timezone.now(),
             lease_expires_at=timezone.now() + timedelta(minutes=5),
         )
-        with self.assertRaisesRegex(ValueError, "secret-bearing"):
-            report_operation(
-                str(operation.id),
-                ControllerReport(
-                    success=True,
-                    observed_generation=self.resource.generation,
-                    status={"api_token": "must-never-enter-hq"},
-                ),
+        status = {"api_token": "must-never-enter-hq", "certificate_pem": "-----BEGIN PRIVATE KEY-----\nnope"}
+        with self.assertLogs("severino.bridge", "WARNING"):
+            bridge_client.call(
+                "report",
+                {"success": False, "observed_generation": self.resource.generation, "status": status},
+                operation=str(operation.id),
                 controller_id="controller",
             )
-        with self.assertRaisesRegex(ValueError, "private-key material"):
-            report_operation(
-                str(operation.id),
-                ControllerReport(
-                    success=True,
-                    observed_generation=self.resource.generation,
-                    status={"certificate_pem": "-----BEGIN PRIVATE KEY-----\nnope"},
-                ),
-                controller_id="controller",
-            )
+        operation.refresh_from_db()
+        self.assertEqual(operation.state, OperationRequest.State.FAILED)
+        self.assertEqual(operation.result["status"], {"api_token": "[redacted]", "certificate_pem": "[redacted]"})
 
     def test_failed_controller_report_preserves_last_verified_status(self):
         verified = {

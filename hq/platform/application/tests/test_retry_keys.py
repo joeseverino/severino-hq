@@ -19,7 +19,7 @@ from ..integration_specs import IDEMPOTENCY_FIELD, capability_schema
 from ..security import Capability, Principal, cli_principal
 
 REFRESH = "infrastructure.controller.refresh"
-RECONCILE = "infrastructure.reconcile"
+RECONCILE = "infrastructure.resource.reconcile"
 DIRECTORY = Path(tempfile.mkdtemp())
 MARKERS = override_settings(
     SEVERINO_CONTROLLER_DOORBELL=str(DIRECTORY / "doorbell"),
@@ -123,7 +123,7 @@ class RefreshTests(TestCase):
 class ReadTests(TestCase):
     def test_a_read_takes_no_key(self):
         result = execute_capability(
-            "lookup.name",
+            "lookup.name.read",
             {"hostname": "example.com", "idempotency_key": "look-once"},
             principal=cli_principal(),
         )

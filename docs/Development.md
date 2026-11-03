@@ -72,6 +72,8 @@ auditor may run any of them.
 | --- | --- | --- |
 | `audit:ruff <rules> [paths]...` | Ruff's findings, counted per rule | `mise run audit:ruff SLF001 '!**/tests/**'` |
 | `audit:ast [globs]...` | per file, the docstrings over 8 lines and the `getattr` calls of a literal name with a default (`tools/audit/ast-grep.yml`) | `mise run audit:ast 'hq/**'` |
+| `audit:dead` | the names `hq/` and `hq_sdk/` define that nothing outside tests reads, as vulture finds them, with what it cannot see handed to it as uses (`[tool.vulture]`, `tools/lint/vulture-whitelist.py`) | `mise run audit:dead --fields` |
+| `audit:layers [importer] [imported]` | the imports between core, application and domains, counted per pair both ways, or one pair's listed by module (grimp) | `mise run audit:layers core domains` |
 | `audit:imports <path>` | the files that import one, string imports included | `mise run audit:imports hq/platform/core/static.py` |
 | `audit:go [linters]` | golangci-lint's findings, counted per linter | `mise run audit:go nilerr,gocritic` |
 | `audit:memory` | each module's own share of Python memory at boot and after a pass over the navigation, extensions composed | `mise run audit:memory --host-alone` |

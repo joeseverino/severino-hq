@@ -108,6 +108,9 @@ cosign = { version = "3.1.3", lazy = true }
 # Go ones judged by whether the controller calls the vulnerable code
 # (lint:audit). Lazy, as age is.
 osv-scanner = { version = "2.7.0", lazy = true }
+# Reads the names templates, strings and other languages' files hand to Python,
+# which vulture cannot see (audit:dead). Lazy, as age is.
+ripgrep = { version = "15.2.0", lazy = true }
 
 # The code graph the structural bar indexes with. Linux takes the portable
 # (static) build so the runner needs no matching libc. Lazy: only

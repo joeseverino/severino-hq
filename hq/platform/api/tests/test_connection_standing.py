@@ -19,7 +19,7 @@ class ConnectionStandingTests(TestCase):
     def test_a_connections_reads_and_changes_are_the_pages(self):
         with _serving():
             response = self.client.get(
-                "/api/v2/resources/connection.standing/example-tailnet/",
+                "/api/v2/resources/connections/example-tailnet/",
                 HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}",
             )
         self.assertEqual(response.status_code, 200)

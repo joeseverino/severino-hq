@@ -716,6 +716,22 @@
         ]
       }
     },
+    "migrations": {
+      "CAPABILITY_ROWS": {
+        "kind": "value",
+        "type": "tuple"
+      },
+      "RenameCapabilities": {
+        "bases": [
+          "RunPython"
+        ],
+        "constructor": [
+          "renamed"
+        ],
+        "kind": "class",
+        "members": {}
+      }
+    },
     "money": {
       "CENTS": {
         "kind": "value",

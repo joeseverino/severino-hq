@@ -370,7 +370,7 @@ def _served_not_held() -> tuple[Finding, ...]:
                 ),
                 remedies=(
                     FindingRemedy(
-                        capability="infrastructure.reconcile",
+                        capability="infrastructure.resource.reconcile",
                         target=resource.key,
                         intent=f"Install {resource.key} again",
                     ),

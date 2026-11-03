@@ -252,14 +252,10 @@ every name under it. The domain page's cards, the service list and pages, and
 the topology's reading edges read `readings()`. Each kind's inventory is read
 once per page, not once per subject.
 
-`facts_about` projects every reading and resource onto a subject's hostnames
-and addresses through the same keys. Each fact carries its source kind, the
-connection that read it, and when. Where two sources disagree the page shows
-both. A kind that could not be read appears as not readable, with its reason; a
-kind no connection could read (`connected` false on its inventory row) yields
-nothing, since it is not a failed read. Only the join keys that name the
-subject are echoed as facts: a resolver list naming two machines gives each
-only its own address.
+A kind that could not be read and could join the subject appears as not
+readable (`unreadable_labels`), with its reason; a kind no connection could
+read (`connected` false on its inventory row) yields nothing, since it is not a
+failed read.
 
 A covering certificate declaration applies to a name only where the ingress
 serving the name names it (`ProviderSpec.certificate`, a proxy host's
@@ -289,8 +285,7 @@ ingress; one with no facet (Cloudflare) at the edge. A `proxy` reading that
 neither redirects nor forwards (an NPM 404 host) ends the path at "Answers
 404". A reading with `upstream` and no facet (an NPM stream) is a route of its
 own beside the web route, one per forward on the same connection's ingress,
-with its `port`. `depends_on` leaves those routes out, since a second way in is
-not a part the name needs.
+with its `port`.
 
 The certificate is per hop: a proxied name shows the edge certificate, then the
 origin certificate the proxy behind it serves; a tailnet name shows the
@@ -319,7 +314,7 @@ the `request.path` read. HQ also records which devices reached it
 seen and a seven-day count, written at most once per source per
 `SEVERINO_REQUEST_PATH_SECONDS`); machine pages show it.
 
-The `paths` resource returns the same path to every adapter, and the service
+The `service.paths` resource returns the same path to every adapter, and the service
 page renders it: a summary, the path hop by hop, what it depends on and what
 depends on it, then the parts and raw readings.
 
@@ -717,7 +712,7 @@ request reads GitHub.
 
 ### Dependency updates
 
-A project opted in by `project.dependency_updates` has its repository updated
+A project opted in by `project.dependency_updates.set` has its repository updated
 by Renovate once a day and when somebody asks (`project.dependency_updates.run`).
 `hq.platform.application.dependency_updates.plan` hands the controller the
 opted-in repositories, grouped by owner, whether a run is due, and

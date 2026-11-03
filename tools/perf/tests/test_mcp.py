@@ -19,7 +19,7 @@ from tools.perf.mcp_probe import (
 
 MB = 1_000_000
 # The probe's names for the action queue's page and its item count.
-QUEUE = "list_resource action.items"
+QUEUE = "list_resource action_items"
 QUEUE_ITEMS = f"{QUEUE} items"
 
 

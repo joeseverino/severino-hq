@@ -317,7 +317,7 @@ class CoverageTests(TestCase):
     def test_the_service_it_serves_stops_asking_for_a_certificate(self):
         from hq.domains.control_plane.models import ManagedResource as Resource
 
-        from ..services import service_or_prospect
+        from ..services import prospects
 
         self.upload("grafana.example")
         Resource.objects.create(
@@ -331,7 +331,7 @@ class CoverageTests(TestCase):
             },
         )
 
-        service = service_or_prospect("grafana.example")
+        service = prospects(("grafana.example",))[0]
 
         self.assertNotIn("no declared certificate covers it", " ".join(service.faults))
 

@@ -213,7 +213,7 @@ class ConnectionProjectionTests(TestCase):
         ):
             self.assertNotIn(retired, response.context)
         web = found.as_dict()
-        read = list_resource("connection.standing", principal=cli_principal(), fields=[WHOLE_RECORD])
+        read = list_resource("connections", principal=cli_principal(), fields=[WHOLE_RECORD])
         # The estate is the same for every caller; the request half is the page's.
         self.assertEqual(without_request(web), without_request(read))
         self.assertIsNone(read["request"])
@@ -224,17 +224,17 @@ class ConnectionProjectionTests(TestCase):
         self.assertFalse({"network", "transport", "proxy"} & {control["id"] for control in read["posture"]["controls"]})
 
     def test_one_connection_reads_as_its_row(self):
-        read = list_resource("connection.standing", principal=cli_principal(), fields=[WHOLE_RECORD])
-        row = get_resource("connection.standing", "example-host", principal=cli_principal())
+        read = list_resource("connections", principal=cli_principal(), fields=[WHOLE_RECORD])
+        row = get_resource("connections", "example-host", principal=cli_principal())
 
         self.assertEqual(row, next(item for item in read["items"] if item["connection_ref"] == "example-host"))
         with self.assertRaises(RecordNotFound):
-            get_resource("connection.standing", "no-such-connection", principal=cli_principal())
+            get_resource("connections", "no-such-connection", principal=cli_principal())
 
     def test_how_hq_reaches_each_connection(self):
         rows = {
             item["connection_ref"]: item
-            for item in list_resource("connection.standing", principal=cli_principal(), fields=[WHOLE_RECORD])["items"]
+            for item in list_resource("connections", principal=cli_principal(), fields=[WHOLE_RECORD])["items"]
         }
 
         ssh = rows["example-host"]["reach"]
@@ -251,7 +251,7 @@ class ConnectionProjectionTests(TestCase):
     def test_what_more_scope_would_show(self):
         rows = {
             item["connection_ref"]: item
-            for item in list_resource("connection.standing", principal=cli_principal(), fields=[WHOLE_RECORD])["items"]
+            for item in list_resource("connections", principal=cli_principal(), fields=[WHOLE_RECORD])["items"]
         }
 
         self.assertEqual(
@@ -274,7 +274,7 @@ class ConnectionProjectionTests(TestCase):
 
         rows = {
             item["connection_ref"]: item
-            for item in list_resource("connection.standing", principal=cli_principal(), fields=[WHOLE_RECORD])["items"]
+            for item in list_resource("connections", principal=cli_principal(), fields=[WHOLE_RECORD])["items"]
         }
         self.assertIsNotNone(rows["example-tailnet"]["read_requested_at"])
         self.assertIsNone(rows["example-host"]["read_requested_at"])
@@ -290,4 +290,4 @@ class ConnectionProjectionTests(TestCase):
 
     def test_unknown_input_is_refused(self):
         with self.assertRaises(InvalidResourceInput):
-            list_resource("connection.standing", {"limit": 5}, principal=cli_principal())
+            list_resource("connections", {"limit": 5}, principal=cli_principal())

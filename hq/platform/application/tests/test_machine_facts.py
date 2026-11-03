@@ -11,7 +11,6 @@ from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..connections import connection_readings
-from ..facts import facts_about
 from ..machines import machine, machine_catalog
 from ..relationships import relationships_for
 from ..security import Capability, Principal
@@ -189,18 +188,6 @@ class PanelTests(TestCase):
         self.assertTrue(any("?focus=machine%3Aexample-host" in href for href in hrefs(page)))
         self.assertIn("Raw readings", text(page))
 
-    def test_an_unconnected_kind_yields_no_facts(self):
-        facts = facts_about(("example-host",), ("100.64.0.1",))
-
-        self.assertNotIn(npm_kind(), {fact.source_kind for fact in facts})
-
-    def test_an_unconnected_tailnet_yields_no_facts(self):
-        store(TAILNET_KIND, reachable=False, connected=False, error="No connection.")
-
-        facts = facts_about(("example-host",), ("100.64.0.1",))
-
-        self.assertNotIn(TAILNET_KIND, {fact.source_kind for fact in facts})
-
 
 class RelationTests(TestCase):
     def test_every_reading_says_what_it_is_to_a_subject(self):
@@ -208,24 +195,6 @@ class RelationTests(TestCase):
             with self.subTest(kind=kind):
                 self.assertTrue(spec.relation.strip())
                 self.assertNotIn("\u2014", spec.relation + spec.address_relation)
-
-    def test_the_join_picks_the_phrase(self):
-        tunnel = OBSERVATIONS["cloudflare.tunnel"]
-        store(
-            "cloudflare.tunnel",
-            {
-                "id": "t1",
-                "name": "example-tunnel",
-                "ingress": [{"hostname": "app.example.com"}],
-                "connections": [{"origin_ip": "192.0.2.20"}],
-            },
-        )
-
-        by_name = {f.label: f.value for f in facts_about(("app.example.com",), ())}
-        by_address = {f.label: f.value for f in facts_about((), ("192.0.2.20",))}
-
-        self.assertEqual(by_name[tunnel.relation], "example-tunnel")
-        self.assertEqual(by_address[tunnel.address_relation], "example-tunnel")
 
 
 class CatalogQueryCountTests(TestCase):
@@ -244,41 +213,3 @@ class CatalogQueryCountTests(TestCase):
 
     def test_reached_through_costs_no_more_queries_for_more_machines(self):
         assert_cost_does_not_grow(self, sizes=(2, 20), arrange=self.arrange, draw=self.draw, rows=len)
-
-
-class TailnetFactsTests(TestCase):
-    """What the tailnet says about a machine, as facts."""
-
-    def tailnet_facts(self, hostnames, addresses):
-        return [fact for fact in facts_about(hostnames, addresses) if fact.source_kind == TAILNET_KIND]
-
-    def test_a_device_says_its_name_addresses_system_and_presence(self):
-        tailnet_connection()
-        bare = device("example-box", "100.64.0.3")
-        del bare["os"]
-        store(TAILNET_KIND, device("example-host", "100.64.0.1"), bare, {"addresses": ["100.64.0.1"]})
-
-        host = {(fact.label, fact.value) for fact in self.tailnet_facts(("example-host",), ())}
-        box = {fact.label for fact in self.tailnet_facts((), ("100.64.0.3",))}
-
-        self.assertEqual(
-            host,
-            {
-                ("Tailnet name", "example-host"),
-                ("Address", "100.64.0.1"),
-                ("Operating system", "linux"),
-                ("Online", "yes"),
-            },
-        )
-        self.assertEqual(box, {"Tailnet name", "Address", "Online"})
-
-    def test_a_tailnet_that_could_not_be_read_says_so(self):
-        from ..facts import UNREADABLE
-
-        tailnet_connection()
-        store(TAILNET_KIND, reachable=False, error="The tailnet refused the key.")
-
-        facts = self.tailnet_facts(("example-host",), ())
-
-        self.assertEqual([fact.state for fact in facts], [UNREADABLE])
-        self.assertIn("refused the key", facts[0].detail)

@@ -285,7 +285,7 @@ def _controller_contract() -> tuple[tuple[ConnectionAbility, ...], dict[str, tup
                 summary=spec.summary,
                 effect="destructive" if spec.destructive else "infrastructure_change",
                 governs_kinds=(kind,),
-                subject_resource="infrastructure.resources",
+                subject_resource="infrastructure",
             )
         )
         for provider in spec.connection_providers:

@@ -20,10 +20,10 @@ class QueueResourceTests(TestCase):
             pass
 
     def test_the_queue_resource_reads_the_kinds_declaration(self):
-        attached = resources.read("hq://action.items", OPERATOR)
+        attached = resources.read("hq://action_items", OPERATOR)
 
-        self.assertEqual(attached, list_resource("action.items", None, principal=OPERATOR))
+        self.assertEqual(attached, list_resource("action_items", None, principal=OPERATOR))
         self.assertTrue(attached["items"])
         self.assertEqual(
-            {key for item in attached["items"] for key in item}, set(resource_registry()["action.items"].list_fields)
+            {key for item in attached["items"] for key in item}, set(resource_registry()["action_items"].list_fields)
         )

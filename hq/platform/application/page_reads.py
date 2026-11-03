@@ -7,6 +7,7 @@ page's remedy ("Connect Portainer") and the Connections page's order follow
 from those names alone, and neither is written per page.
 """
 
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -81,8 +82,5 @@ def need() -> dict[str, tuple[bool, int]]:
     found = resolve(reverse("dashboard")).func
     dashboard = getattr(found, "view_class", found)
     first = set(readers(getattr(dashboard, "page_reads", ())))
-    counts: dict[str, int] = {}
-    for view in pages_reading():
-        for provider in readers(view.page_reads):
-            counts[provider] = counts.get(provider, 0) + 1
+    counts = Counter(provider for view in pages_reading() for provider in readers(view.page_reads))
     return {provider: (provider in first, count) for provider, count in counts.items()}

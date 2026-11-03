@@ -143,5 +143,5 @@ class ChangedSweepTests(TestCase):
         updates = audit_rows.since(before).filter(object_type="Managed resource", action=AuditLog.Action.UPDATED)
         self.assertEqual(updates.count(), 1)
         self.assertIn("status", updates.get().metadata["changes"])
-        body = SearchDocument.objects.get(scope="infrastructure.resources", object_id="app0").body
+        body = SearchDocument.objects.get(scope="infrastructure", object_id="app0").body
         self.assertEqual(body.count("192.0.2.99"), 2)

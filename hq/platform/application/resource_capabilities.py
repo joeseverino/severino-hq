@@ -67,10 +67,6 @@ class ResourceCapabilities:
         return capability_words(REMOVAL_CAPABILITY, "forget" if self.removal == "forget" else "")
 
     @property
-    def converges(self) -> bool:
-        return "reconcile" in self.actions
-
-    @property
     def page_actions(self) -> tuple[tuple[str, Allowed], ...]:
         return tuple((verb, self.actions[verb]) for verb in PAGE_VERBS if verb in self.actions)
 

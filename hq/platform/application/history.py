@@ -7,6 +7,7 @@ page lays them on one line, and a drift finding asks it what happened near when
 it was first seen. Read only from what is already stored; nothing here polls.
 """
 
+from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -196,10 +197,7 @@ class HistoryLine:
             return ()
         if self.kinds:
             return self.kinds
-        found: dict[str, int] = {}
-        for item in self.items:
-            found[item.object_type] = found.get(item.object_type, 0) + 1
-        return tuple(found.items())
+        return tuple(Counter(item.object_type for item in self.items).items())
 
     @property
     def total(self) -> int:

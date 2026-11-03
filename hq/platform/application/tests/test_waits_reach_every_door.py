@@ -15,7 +15,7 @@ from hq.platform.mcp.tests.test_mcp import admitting
 
 from .. import agent_limits
 from ..security import Capability, Principal
-from .test_agent_limits_at_the_doors import TOOL, _bearer, _call, _session
+from .test_agent_limits_at_the_doors import TOOL, _bearer, _call, _clock_held, _session
 
 AT_THE_DOOR = {
     "OIDC_ISSUER": ISSUER,
@@ -33,10 +33,11 @@ def _prompt(ident):
 class RateWaitTests(TestCase):
     def test_the_machine_api_body_carries_the_wait_its_header_says(self):
         bearer = _bearer("example-wait-api")
-        with _serving():
-            self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {bearer}")
+        with _serving(), _clock_held():
+            first = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {bearer}")
             refused = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {bearer}")
 
+        self.assertEqual(first.status_code, 200, "the first call is within the rate")
         self.assertEqual(refused.status_code, 429)
         self.assertEqual(refused.json()["error"]["retry_after"], int(refused["Retry-After"]))
         self.assertGreaterEqual(refused.json()["error"]["retry_after"], 1)
@@ -47,11 +48,13 @@ class RateWaitTests(TestCase):
         bearer = _bearer("example-wait-mcp")
 
         async def steps(post):
-            await post(bearer, _call(1))
-            return await post(bearer, _call(2))
+            return await post(bearer, _call(1)), await post(bearer, _call(2))
 
-        with _serving(), mock.patch(TOOL, return_value={"connections": []}):
-            throttled = _session(steps, asgi.admit_agent).json()["result"]
+        with _serving(), _clock_held(), mock.patch(TOOL, return_value={"connections": []}):
+            first, second = _session(steps, asgi.admit_agent)
+        throttled = second.json()["result"]
+
+        self.assertFalse(first.json()["result"]["isError"], "the first call is within the rate")
 
         wait = throttled["structuredContent"]["error"]["retry_after"]
         self.assertGreaterEqual(wait, 1)
@@ -63,11 +66,13 @@ class RateWaitTests(TestCase):
         bearer = _bearer("example-wait-prompt")
 
         async def steps(post):
-            await post(bearer, _call(1))
-            return await post(bearer, _prompt(2))
+            return await post(bearer, _call(1)), await post(bearer, _prompt(2))
 
-        with _serving(), mock.patch(TOOL, return_value={"connections": []}):
-            error = _session(steps, asgi.admit_agent).json()["error"]
+        with _serving(), _clock_held(), mock.patch(TOOL, return_value={"connections": []}):
+            first, second = _session(steps, asgi.admit_agent)
+        error = second.json()["error"]
+
+        self.assertFalse(first.json()["result"]["isError"], "the first call is within the rate")
 
         self.assertEqual(error["data"]["code"], "rate_limited")
         self.assertGreaterEqual(error["data"]["retry_after"], 1)

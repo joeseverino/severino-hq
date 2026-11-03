@@ -122,7 +122,7 @@ def _narrowed(name: str, resource: str) -> list[CapabilitySpec]:
     """The capabilities under the dotted ``name`` and about ``resource``, refusing what names nothing.
 
     ``name`` is a whole capability name or a prefix of whole segments
-    (``infrastructure`` holds ``infrastructure.reconcile``), so a filter never
+    (``infrastructure`` holds ``infrastructure.resource.reconcile``), so a filter never
     matches half a word.
     """
 

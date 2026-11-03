@@ -51,7 +51,7 @@ class BrakesHoldAskedWorkTests(TestCase):
     def _held(self, key: str, actor: str = AGENT) -> ApprovalRequest:
         agent = Principal(actor, "mcp", GRANT)
         answer = execute_capability(
-            "infrastructure.reconcile", reconcile_payload(key), principal=agent, target=POLICY_KEY
+            "infrastructure.resource.reconcile", reconcile_payload(key), principal=agent, target=POLICY_KEY
         )
         self.assertTrue(answer["ok"], answer)
         return ApprovalRequest.objects.get(state=ApprovalRequest.State.PENDING, requested_actor=actor)
@@ -113,7 +113,7 @@ class BrakesHoldAskedWorkTests(TestCase):
     def test_a_person_named_like_a_blocked_client_is_not_held(self):
         person = an_operator(AGENT)
         answer = execute_capability(
-            "infrastructure.reconcile", reconcile_payload("person"), principal=person, target=POLICY_KEY
+            "infrastructure.resource.reconcile", reconcile_payload("person"), principal=person, target=POLICY_KEY
         )
         self.assertTrue(answer["ok"], answer)
         with _blocked():

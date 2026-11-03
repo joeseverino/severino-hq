@@ -9,18 +9,40 @@ the URIs.
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from functools import cache
 from typing import Any
-from urllib.parse import unquote, urlsplit
 
 from mcp import types
 from mcp.shared.exceptions import MCPError
+from mcp.shared.uri_template import UriTemplate
 
 from hq.platform.application import approvals, resources as registry
-from hq.platform.application.resources import ResourceCollection
+from hq.platform.application.resources import ResourceCollection, ResourceSpec
 from hq.platform.application.security import Principal
 
 SCHEME = "hq"
 MIME = "application/json"
+
+# A fixed view's address. Every address is the SDK's RFC 6570 template, so the
+# client's expansion and HQ's match encode and decode a value the same way.
+VIEW = UriTemplate.parse(f"{SCHEME}://{{view}}")
+
+
+@cache
+def record_template(kind: str, identifier: str) -> UriTemplate:
+    """The address of one record of ``kind``, named by its ``identifier`` field."""
+
+    return UriTemplate.parse(f"{SCHEME}://{kind}/{{{identifier}}}")
+
+
+def _records() -> dict[str, tuple[UriTemplate, ResourceSpec]]:
+    """Each kind with records to read one at a time, and its template, whoever the caller."""
+
+    return {
+        name: (record_template(name, spec.identifier), spec)
+        for name, spec in registry.resource_registry().items()
+        if spec.detail_handler and spec.identifier
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,13 +54,13 @@ class View:
 
     @property
     def uri(self) -> str:
-        return f"{SCHEME}://{self.name}"
+        return VIEW.expand({"view": self.name})
 
 
 def action_queue(principal: Principal) -> ResourceCollection:
     """The queue as its kind's list_fields keep each item: what a person reads it by, and its page in HQ."""
 
-    return registry.list_resource("action.items", None, principal=principal)
+    return registry.list_resource("action_items", None, principal=principal)
 
 
 def hq_itself(principal: Principal) -> ResourceCollection:
@@ -59,7 +81,7 @@ def serialize_held(held: Any) -> dict[str, Any]:
 VIEWS = {
     view.name: view
     for view in (
-        View("action.items", "Needs you", "HQ's action queue: what needs doing, from every domain.", action_queue),
+        View("action_items", "Needs you", "HQ's action queue: what needs doing, from every domain.", action_queue),
         View(
             "approvals",
             "Held requests",
@@ -94,14 +116,14 @@ def templates(principal: Principal) -> types.ListResourceTemplatesResult:
     return types.ListResourceTemplatesResult(
         resource_templates=[
             types.ResourceTemplate(
-                uri_template=f"{SCHEME}://{name}/{{{spec.identifier}}}",
+                uri_template=template.template,
                 name=name,
                 title=spec.label,
                 description=f"{spec.summary} One record, by its {spec.identifier}.",
                 mime_type=MIME,
             )
-            for name, spec in registry.resource_registry().items()
-            if spec.detail_handler and spec.identifier and registry.readable(spec, principal)
+            for name, (template, spec) in _records().items()
+            if registry.readable(spec, principal)
         ]
     )
 
@@ -116,11 +138,11 @@ def completed(uri_template: str, argument: str, typed: str, principal: Principal
     ``typed``, read from its kind's listing as ``principal``, as ``list_resource``
     reads it; nothing for a kind the caller may not read or cannot list."""
 
-    spec = registry.resource_registry().get(urlsplit(uri_template).netloc)
+    spec = next((spec for template, spec in _records().values() if template.template == uri_template), None)
     if (
         spec is None
         or argument != spec.identifier
-        or not (spec.detail_handler and spec.list_handler and spec.list_query_type)
+        or not (spec.list_handler and spec.list_query_type)
         or not registry.readable(spec, principal)
     ):
         return types.Completion(values=[])
@@ -149,14 +171,13 @@ def read(uri: str, principal: Principal) -> Mapping[str, Any]:
     record, its identifier percent-encoded as a template expands it.
     """
 
-    parts = urlsplit(uri)
-    if parts.scheme != SCHEME or parts.query or parts.fragment:
+    for kind, (template, _spec) in _records().items():
+        # A record's template names one variable, its identifier.
+        identifier = next(iter((template.match(uri) or {}).values()), "")
+        if isinstance(identifier, str) and identifier:
+            # Text, as an address carries it: the kind's own identifier type parses it.
+            return registry.get_resource(kind, identifier, principal=principal, strict=False)
+    view = VIEWS.get(str((VIEW.match(uri) or {}).get("view", "")))
+    if view is None:
         raise _nothing_at(uri)
-    identifier = unquote(parts.path.removeprefix("/"))
-    if not identifier:
-        view = VIEWS.get(parts.netloc)
-        if view is None:
-            raise _nothing_at(uri)
-        return view.read(principal)
-    # Text, as an address carries it: the kind's own identifier type parses it.
-    return registry.get_resource(parts.netloc, identifier, principal=principal, strict=False)
+    return view.read(principal)

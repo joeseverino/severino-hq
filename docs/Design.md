@@ -323,7 +323,7 @@ controls stand beside the title at every width, the lead and the next the page
 names, and the rest go behind the overflow menu. A head too narrow for three
 (a container query on the head) folds the second in too. The lead is chosen by what each control is for, never by where it stands: not
 a destructive one while another is offered, then one that can be pressed, then
-the page's primary (`lead_action`). A destructive verb (a stop) is a link to
+the page's primary (`head_actions`). A destructive verb (a stop) is a link to
 its confirmation, which names what it stops.
 
 **A lede earns its line.** Most pages have none. A lede says what the page
@@ -492,7 +492,7 @@ value (a `?month=` address) is built by the view. Extensions get all five from
 
 A count's plural has one owner too: `counted`, which spells a single noun
 through `labels.plural` ("2 entries"). An audit type's plural is
-`AuditLog.type_plural`: the model's `verbose_name_plural` where declared.
+`object_type_plural`: the model's `verbose_name_plural` where declared.
 
 A bare figure counting what a heading heads (`.count`) stands in that
 heading after its words: `<h2>Readings <span class="count">7</span></h2>`,

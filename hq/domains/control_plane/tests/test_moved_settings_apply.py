@@ -255,7 +255,7 @@ class AWriteStartsAPassAtOnceTests(_Estate):
         self.assertTrue(cadence.pass_due())
 
         with self.captureOnCommitCallbacks(execute=True):
-            result = execute_capability("contact.submissions.list", {}, principal=cli_principal())
+            result = execute_capability("contact.submission.list", {}, principal=cli_principal())
 
         self.assertTrue(result["ok"], result)
         self.assertFalse(self.doorbell.exists())

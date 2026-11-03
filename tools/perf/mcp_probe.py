@@ -91,8 +91,8 @@ LISTS = ("prompts/list", "resources/list", "resources/templates/list")
 CATALOG = "describe_resources"
 # The list read an agent makes next, the action queue at its largest page, measured by its
 # structured answer's bytes and the items it holds.
-QUEUE = "list_resource action.items"
-QUEUE_CALL = {"name": "list_resource", "arguments": {"name": "action.items", "filters": {"limit": 100}}}
+QUEUE = "list_resource action_items"
+QUEUE_CALL = {"name": "list_resource", "arguments": {"name": "action_items", "filters": {"limit": 100}}}
 QUEUE_ITEMS = f"{QUEUE} items"
 
 

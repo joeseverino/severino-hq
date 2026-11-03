@@ -661,12 +661,12 @@ class AdoptionSafetyTests(TestCase):
         self.assertFalse(self.watch(response))
 
         # Restart leads by what it is for; Stop asks first, by name.
-        from hq.platform.core.templatetags.action_tags import lead_action
+        from hq.platform.core.templatetags.action_tags import head_actions
 
         actions = response.context["page"].actions
         restart = next(action for action in actions if "/a-docker-host-probe/restart/" in action.url)
         stop = next(action for action in actions if "/a-docker-host-probe/stop/" in action.url)
-        self.assertIs(lead_action(actions), restart)
+        self.assertIs(head_actions(actions)[0][0], restart)
         self.assertEqual((restart.method, stop.method, stop.danger), ("post", "get", True))
         self.assertContains(self.client.get(stop.url), "Stop probe?")
         queued = self.client.post(stop.url, form_keyed())

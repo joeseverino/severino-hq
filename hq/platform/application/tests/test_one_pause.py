@@ -58,7 +58,7 @@ class OnePauseTests(TestCase):
 
     def _held(self, key):
         answer = execute_capability(
-            "infrastructure.reconcile", reconcile_payload(key), principal=AGENT, target=POLICY_KEY
+            "infrastructure.resource.reconcile", reconcile_payload(key), principal=AGENT, target=POLICY_KEY
         )
         self.assertTrue(answer["ok"], answer)
         return ApprovalRequest.objects.get(state=ApprovalRequest.State.PENDING)
@@ -94,7 +94,7 @@ class OnePauseTests(TestCase):
 
         AgentAccess.objects.update_or_create(pk=1, defaults={"paused": True})
         answer = execute_capability(
-            "infrastructure.reconcile", reconcile_payload("person"), principal=self.operator, target=POLICY_KEY
+            "infrastructure.resource.reconcile", reconcile_payload("person"), principal=self.operator, target=POLICY_KEY
         )
         self.assertTrue(answer["ok"], answer)
 

@@ -226,7 +226,7 @@ class DeviceActsAsItsPersonTests(TestCase):
         from hq.platform.core.models import AgentAccess
 
         paused = execute_capability(
-            "agents.access.set",
+            "agent.access.set",
             {"paused": True, "idempotency_key": "example-pause"},
             principal=self._device("govern_agents"),
         )
@@ -245,7 +245,7 @@ class DeviceActsAsItsPersonTests(TestCase):
 
         agent = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
         asked = execute_capability(
-            "infrastructure.reconcile", reconcile_payload("asked"), principal=agent, target=POLICY_KEY
+            "infrastructure.resource.reconcile", reconcile_payload("asked"), principal=agent, target=POLICY_KEY
         )
         self.assertTrue(asked["ok"], asked)
         held = ApprovalRequest.objects.get(state=ApprovalRequest.State.PENDING)

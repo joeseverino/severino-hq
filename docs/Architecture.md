@@ -67,11 +67,11 @@ every adapter:
 | Projection | Module | Also served as |
 |---|---|---|
 | Dashboard snapshot: KPIs, priority work, recent records, upstream state, activity | `dashboard.py` | MCP `dashboard_snapshot` |
-| A managed resource's allowed actions, removal mode, machines, services, readout, certificate expiry | `resource_context.py` | `derived` on the `infrastructure.resources` detail |
+| A managed resource's allowed actions, removal mode, machines, services, readout, certificate expiry | `resource_context.py` | `derived` on the `infrastructure` detail |
 | The tailnet page | `tailnet_context.py` | the `tailnet` resource |
-| The connections page | `connection_context.py` | the `connection.standing` resource |
+| The connections page | `connection_context.py` | the `connections` resource |
 | HQ's own page: release, machine and container, units, readings, problems | `hq_context/` (`release`, `work`, `sight`, composed in `__init__`) | the `hq` resource |
-| How HQ reaches a connection: network, machine, tailnet peering | `connection_reach.py` | inside `connection.standing` |
+| How HQ reaches a connection: network, machine, tailnet peering | `connection_reach.py` | inside `connections` |
 | Days left on anything | `expiry.py` | every page that says it |
 
 Each view renders its projection object and nothing beside it. Infrastructure
@@ -148,7 +148,7 @@ A queue `Insight` keeps the SDK's shape. A remedy is one of its `actions`; a
 command or reason is a `run` or `cannot` step of its `workflow`
 (`hq/platform/application/item_help.py`).
 `hq/platform/application/tests/test_item_help.py` fails on a host provider that
-builds an item without help.
+builds an item without help, read through the `item_help` gauge defined there.
 
 A rule is declared beside the detector that decides it: each module that raises
 findings (`perimeter_findings`, `controller_findings`, `docker_estate`,
@@ -1083,8 +1083,13 @@ old pair or the new one.
 
 Public DNS records reconcile and delete; their zone is declaration-only, because
 changing a zone's settings needs a credential the controller does not hold.
-Short-lived NPM tokens stay in memory, and a report carrying a secret-bearing
-key is rejected.
+Short-lived NPM tokens stay in memory. Before an action reads a payload, the
+bridge strikes every secret in it to `[redacted]` and logs where: a string
+shaped like a credential the controller handles, or the value of a member
+named as one where the contract leaves the shape open
+(`hq/domains/control_plane/secret_shapes.py`). It strikes rather than refuses
+because an outsider writes some of those strings, such as a contact form's
+message. A query holding one is refused, since only the controller writes it.
 
 Public DNS is also gated by a deployment switch, which governs acting rather
 than being visible. A declaration whose every action is locked changes nothing,

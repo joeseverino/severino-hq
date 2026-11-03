@@ -28,7 +28,7 @@ class CapabilityCatalogNarrowsTests(TestCase):
         everything = {item["name"] for item in call("describe_capabilities")["capabilities"]}
         narrowed = {item["name"] for item in call("describe_capabilities", name="infrastructure")["capabilities"]}
 
-        self.assertIn("infrastructure.reconcile", narrowed)
+        self.assertIn("infrastructure.resource.reconcile", narrowed)
         self.assertEqual(narrowed, {name for name in everything if name.startswith("infrastructure.")})
         self.assertLess(len(narrowed), len(everything))
 
@@ -36,10 +36,10 @@ class CapabilityCatalogNarrowsTests(TestCase):
         self.assertEqual(call("describe_capabilities", name="infra")["capabilities"], [])
 
     def test_a_resource_keeps_the_capabilities_that_act_on_it(self):
-        narrowed = call("describe_capabilities", resource="infrastructure.resources")["capabilities"]
+        narrowed = call("describe_capabilities", resource="infrastructure")["capabilities"]
 
         self.assertIn("infrastructure.resource.update", [item["name"] for item in narrowed])
-        self.assertEqual({item["resource"] for item in narrowed}, {"infrastructure.resources"})
+        self.assertEqual({item["resource"] for item in narrowed}, {"infrastructure"})
 
     def test_input_that_names_nothing_is_refused(self):
         for arguments in ({"name": "Infrastructure!"}, {"resource": "example.nothing"}):
@@ -60,22 +60,22 @@ class CutOffListSaysSoTests(TestCase):
             )
 
     def test_a_full_page_says_it_was_cut_off_and_how_to_ask_for_the_rest(self):
-        page = services.list_resource("infrastructure.resources", {"limit": 2})
+        page = services.list_resource("infrastructure", {"limit": 2})
 
         self.assertEqual(page["count"], 2)
         self.assertEqual(page["total"], 3)
         self.assertTrue(page["truncated"])
         self.assertEqual(set(page["next"]), {"cursor"})
-        rest = services.list_resource("infrastructure.resources", {"limit": 2, **page["next"]})
+        rest = services.list_resource("infrastructure", {"limit": 2, **page["next"]})
         self.assertEqual((rest["count"], rest["truncated"], rest["next"]), (1, False, None))
 
     def test_a_page_holding_every_match_says_so(self):
-        page = services.list_resource("infrastructure.resources", {"limit": 5})
+        page = services.list_resource("infrastructure", {"limit": 5})
 
         self.assertEqual((page["count"], page["total"], page["truncated"], page["next"]), (3, 3, False, None))
 
     def test_a_field_mask_keeps_the_notice(self):
-        page = services.list_resource("infrastructure.resources", {"limit": 2}, fields=["key"])
+        page = services.list_resource("infrastructure", {"limit": 2}, fields=["key"])
 
         self.assertTrue(page["truncated"])
         self.assertEqual(page["total"], 3)
@@ -83,7 +83,7 @@ class CutOffListSaysSoTests(TestCase):
     def test_an_invalid_filter_is_refused(self):
         for filters in ({"limit": 0}, {"kinds": "Not A Kind"}, {"page": 2}):
             with self.subTest(filters=filters), self.assertRaises(InvalidResourceInput):
-                services.list_resource("infrastructure.resources", filters)
+                services.list_resource("infrastructure", filters)
 
     def test_a_full_page_from_a_list_that_does_not_count_is_read_as_cut_off(self):
         spec = ResourceSpec("example.things", "Things", "Things.", "read", lambda **_: {}, BoundedQuery)

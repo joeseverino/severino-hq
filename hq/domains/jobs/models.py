@@ -34,7 +34,7 @@ class JobState(models.TextChoices):
     SUCCEEDED = "succeeded", "Done"
     FAILED = "failed", "Failed"
     # Distinct from FAILED: a vanished process is a restart to retry,
-    # a raised exception is a traceback to read.
+    # a raised exception is a fault to read in the log.
     LOST = "lost", "Stopped early"
 
 

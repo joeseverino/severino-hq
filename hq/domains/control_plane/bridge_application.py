@@ -13,6 +13,7 @@ from http import HTTPStatus
 from typing import Any
 
 from asgiref.sync import sync_to_async
+from pydantic import ValidationError
 from starlette.applications import Starlette
 from starlette.exceptions import HTTPException
 from starlette.requests import ClientDisconnect, Request
@@ -22,7 +23,9 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from hq.domains.control_plane.bridge_actions import ACTIONS, CONTROLLER, Action
 from hq.domains.control_plane.bridge_contract import Operation, Parameter, max_body_bytes, operations
+from hq.domains.control_plane.secret_shapes import struck
 from hq.platform.application.security import CONTROLLER_INTERFACE
+from hq.platform.application.ui import ended
 from hq.platform.core.attribution import operation_context
 from hq.platform.core.outside_requests import thread_of_its_own
 
@@ -109,10 +112,39 @@ async def payload_of(operation: Operation, request: Request) -> Any:
         payload = json.loads(raw)
     except ValueError as exc:
         raise Refused(HTTPStatus.BAD_REQUEST, "The payload is not JSON.") from exc
+    # The bridge's one door for secrets: nothing past it holds one. Struck
+    # rather than refused, since an outsider writes some of these strings.
+    # Held to the contract as struck, so what an action reads conforms.
+    payload, strikes = struck(payload)
+    for pointer, what in strikes:
+        logger.warning("bridge.secret_struck action=%s at=%s held=%s", operation.name, pointer, what)
     violation = operation.violation(payload)
     if violation is not None:
         raise Refused(HTTPStatus.UNPROCESSABLE_ENTITY, violation)
     return payload
+
+
+def _refuse_secrets(operation: Operation, parameters: dict[str, Any]) -> None:
+    """A query holding a secret is refused: only the controller writes one,
+    and an identifier struck would name something else."""
+
+    strikes = struck(parameters)[1]
+    if strikes:
+        pointer, what = strikes[0]
+        raise Refused(
+            HTTPStatus.UNPROCESSABLE_ENTITY,
+            f"The {operation.name} query at {pointer} holds {what}, and HQ takes in no secret.",
+        )
+
+
+def _locations(exc: ValidationError) -> str:
+    """Where a validation error's input failed and how, without the input."""
+
+    said = "; ".join(
+        f"{'.'.join(str(part) for part in error['loc']) or 'input'} ({error['type']})"
+        for error in exc.errors(include_url=False, include_context=False, include_input=False)[:5]
+    )
+    return ended(f"The input does not validate at {said}")
 
 
 def _run(action: Action, parameters: dict[str, Any], payload: Any) -> bytes:
@@ -125,6 +157,7 @@ def endpoint(action: Action, operation: Operation) -> Callable[[Request], Awaita
     async def call(request: Request) -> Response:
         try:
             parameters = parameters_of(operation, request)
+            _refuse_secrets(operation, parameters)
             payload = await payload_of(operation, request)
             # Calls in flight together each hold their own connection, and
             # SQLite orders their writes.
@@ -134,13 +167,18 @@ def endpoint(action: Action, operation: Operation) -> Callable[[Request], Awaita
             return problem(refusal.status, refusal.detail)
         except ClientDisconnect:
             return problem(HTTPStatus.BAD_REQUEST, "The caller went away.")
+        except ValidationError as exc:
+            # Its text repeats the input it refused.
+            return problem(HTTPStatus.BAD_REQUEST, _locations(exc))
         except ValueError as exc:
-            # What an action raises for input it will not take; pydantic's
-            # validation error is one.
+            # What an action raises for input it will not take, said in its
+            # own words. A value it repeats is one the controller sent, struck
+            # of every secret at the door above, so the echo holds none.
             return problem(HTTPStatus.BAD_REQUEST, str(exc))
-        except Exception as exc:  # the caller is told, the log keeps the trace
+        except Exception:  # the log keeps the trace
+            # Its text can be anything inside HQ: a query, a path, a value.
             logger.exception("bridge.action_failed action=%s", action.name)
-            return problem(HTTPStatus.INTERNAL_SERVER_ERROR, f"{type(exc).__name__}: {exc}")
+            return problem(HTTPStatus.INTERNAL_SERVER_ERROR, f"HQ failed running {action.name}; its log holds why.")
         if len(answer) > max_body_bytes():
             return problem(HTTPStatus.INTERNAL_SERVER_ERROR, "The answer is larger than the bridge sends.")
         return Response(answer, media_type="application/json")

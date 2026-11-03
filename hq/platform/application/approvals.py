@@ -80,7 +80,7 @@ def is_destructive(spec, command: Any) -> bool:
     return any(getattr(command, flag, False) is True for flag in DELETING_FLAGS)
 
 
-DECLARATIONS = "infrastructure.resources"
+DECLARATIONS = "infrastructure"
 
 # Existing audit rows may carry either label; both are read as approvals.
 AUDIT_LABEL = "Approval"
@@ -464,7 +464,15 @@ def lapse_expired() -> int:
                 .first()
             )
             if held is not None:
-                _settle(held, ApprovalRequest.State.EXPIRED, _LAPSED_NOTE, operation=LAPSE, principal=principal)
+                # HQ's own lapse of the request, whoever runs the sweep.
+                _settle(
+                    held,
+                    ApprovalRequest.State.EXPIRED,
+                    _LAPSED_NOTE,
+                    operation=LAPSE,
+                    principal=principal,
+                    rebinds=True,
+                )
                 lapsed += 1
     return lapsed
 
@@ -500,14 +508,18 @@ def pending(*, principal: Principal, limit: int | None = 50) -> tuple[ApprovalRe
     return waiting
 
 
-def _its_operation(held: ApprovalRequest, operation: str, principal: Principal) -> AbstractContextManager[None]:
+def _its_operation(
+    held: ApprovalRequest, operation: str, principal: Principal, *, rebinds: bool = False
+) -> AbstractContextManager[None]:
     """Bind the operation every row of ``held``'s life is part of: its request,
     its decision, the change it applies and its lapse share its id."""
 
-    return audit_operation(operation=operation, principal=principal, operation_id=str(held.id))
+    return audit_operation(operation=operation, principal=principal, operation_id=str(held.id), rebinds=rebinds)
 
 
-def _settle(held: ApprovalRequest, state: str, note: str, *, operation: str, principal: Principal) -> None:
+def _settle(
+    held: ApprovalRequest, state: str, note: str, *, operation: str, principal: Principal, rebinds: bool = False
+) -> None:
     """Record an outcome nobody chose, in its own transaction.
 
     Its own, because the two callers below go on to raise. Written inside the
@@ -516,7 +528,7 @@ def _settle(held: ApprovalRequest, state: str, note: str, *, operation: str, pri
     means the next reader is offered a decision that cannot be taken.
     """
 
-    with _its_operation(held, operation, principal), transaction.atomic():
+    with _its_operation(held, operation, principal, rebinds=rebinds), transaction.atomic():
         held.state = state
         held.decided_at = timezone.now()
         held.decision_note = note
@@ -634,7 +646,12 @@ def _apply(held: ApprovalRequest, principal: Principal) -> dict[str, Any]:
         locked = ApprovalRequest.objects.select_for_update().get(pk=held.pk)
         if locked.state != ApprovalRequest.State.PENDING:
             raise ApprovalError(f"That request is already {locked.get_state_display().lower()}.")
-        result = execute_approved(spec, command, locked.target or None, principal=acting, sent=frozenset(held.payload))
+        # The one binding that runs as someone other than whoever started the
+        # operation: the approver agreed, and the change is the requester's.
+        with audit_operation(operation=spec.name, principal=acting, operation_id=str(held.id), rebinds=True):
+            result = execute_approved(
+                spec, command, locked.target or None, principal=acting, sent=frozenset(held.payload)
+            )
         locked.state = ApprovalRequest.State.APPROVED
         locked.decided_actor = principal.actor
         locked.decided_interface = principal.interface

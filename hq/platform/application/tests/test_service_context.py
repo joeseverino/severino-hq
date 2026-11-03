@@ -19,7 +19,7 @@ from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..service_context import Cell, ServiceSection, sections_for
-from ..services import service_or_prospect
+from ..services import prospects
 from ..ui import MISSING
 from .markup import select, with_class
 
@@ -32,7 +32,7 @@ def a_service(hostname="probe.example.com"):
         generation=1,
         observed_generation=1,
     )
-    return service_or_prospect(hostname)
+    return prospects((hostname,))[0]
 
 
 def a_project(**fields):

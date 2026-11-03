@@ -1,0 +1,64 @@
+#!/bin/sh
+#MISE description="The imports between hq/platform/core, hq/platform/application and hq/domains, both directions, counted per pair as grimp (import-linter's graph) reads them, or each importing module of one pair listed; reach for it before moving code between the layers or to see which way they lean; read-only"
+#MISE hide=true
+#USAGE arg "[importer]" help="With imported, list this pair's imports instead of counting: core, application or domains"
+#USAGE arg "[imported]" help="The layer the importer imports from: core, application or domains"
+#USAGE flag "--tests" help="Count the layers' tests as importers too; without it, only the code the image runs"
+
+# grimp builds the graph lint:imports holds its contracts to, lazy imports
+# included, with no cache so nothing is written. An import is a direct one
+# from a module of one layer to a module of another; the counts are its
+# matching imports and the modules they come from. Each word is held to a
+# layer's name before Python sees it.
+set -eu
+
+for word in "${usage_importer:-}" "${usage_imported:-}"; do
+    case "${word}" in
+    "" | core | application | domains) ;;
+    *)
+        printf 'audit:layers: %s is not a layer: core, application or domains\n' "${word}" >&2
+        exit 2
+        ;;
+    esac
+done
+if [ -n "${usage_importer:-}" ] && [ -z "${usage_imported:-}" ]; then
+    printf 'audit:layers: name the layer %s imports from as well\n' "${usage_importer}" >&2
+    exit 2
+fi
+
+exec uv run python - <<'EOF'
+import os
+
+import grimp
+
+LAYERS = {"core": "hq.platform.core", "application": "hq.platform.application", "domains": "hq.domains"}
+tests = os.environ.get("usage_tests") == "true"
+graph = grimp.build_graph("hq", cache_dir=None)
+
+
+def imports(importer: str, imported: str) -> list:
+    # A layer is its package and every module under it, and grimp's ** matches only the latter.
+    found = {
+        (i["importer"], i["imported"])
+        for left in ("", ".**")
+        for right in ("", ".**")
+        for i in graph.find_matching_direct_imports(f"{LAYERS[importer]}{left} -> {LAYERS[imported]}{right}")
+    }
+    return [{"importer": a, "imported": b} for a, b in sorted(found) if tests or ".tests." not in f"{a}."]
+
+
+pair = os.environ.get("usage_importer"), os.environ.get("usage_imported")
+if all(pair):
+    found = imports(*pair)
+    for i in found:
+        lines = sorted({d["line_number"] for d in graph.get_import_details(importer=i["importer"], imported=i["imported"])})
+        print(f"{i['importer']} -> {i['imported']}\t{','.join(map(str, lines))}")
+    print(f"{len(found)} imports from {len({i['importer'] for i in found})} modules of {pair[0]} into {pair[1]}")
+else:
+    print("importer\timported\timports\tmodules")
+    for importer in LAYERS:
+        for imported in LAYERS:
+            if importer != imported:
+                found = imports(importer, imported)
+                print(f"{importer}\t{imported}\t{len(found)}\t{len({i['importer'] for i in found})}")
+EOF

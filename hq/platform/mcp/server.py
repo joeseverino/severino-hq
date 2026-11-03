@@ -68,7 +68,7 @@ INSTRUCTIONS = "\n\n".join(
         ),
         (
             "Prompts needs-me, status-brief and held-requests each return one message of HQ's live answer "
-            "for a person to act on. Resources hq://action.items, hq://approvals and hq://hq are the "
+            "for a person to act on. Resources hq://action_items, hq://approvals and hq://hq are the "
             "action queue, the held requests and HQ itself; a template hq://<kind>/{identifier} reads one "
             "record as get_resource does. hq://approvals, the held-requests prompt and the action queue "
             "show you only the held requests you asked for yourself; a request another agent holds is "

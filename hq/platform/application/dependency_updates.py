@@ -1,7 +1,7 @@
 """Which repositories HQ's dependency update run covers, and when it is due.
 
 HQ holds no credential, so it only plans: ``plan`` tells the controller each
-repository a project opts in to (``project.dependency_updates``), by owner, and
+repository a project opts in to (``project.dependency_updates.set``), by owner, and
 whether a run is due, once a day and on ``request_run``. The controller runs
 it (``controller/providers/github_dependency_run.go``), and the hand-off and
 the reading each run comes back as are docs/Derived-Facts.md#dependency-updates.

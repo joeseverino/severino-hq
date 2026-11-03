@@ -54,7 +54,7 @@ class ListPagingTests(TestCase):
         )
 
     def test_a_list_longer_than_a_page_is_walked_to_its_end(self):
-        for name, key in (("projects", "slug"), ("expenses", "id"), ("infrastructure.resources", "key")):
+        for name, key in (("projects", "slug"), ("expenses", "id"), ("infrastructure", "key")):
             with self.subTest(name=name):
                 pages = walked(name, {})
                 seen = [item[key] for page in pages for item in page["items"]]
@@ -86,7 +86,7 @@ class ListPagingTests(TestCase):
         cursor = list_resource("projects", {"limit": 5}, principal=READER)["next"]["cursor"]
 
         for name, sent in (
-            ("infrastructure.resources", cursor),
+            ("infrastructure", cursor),
             ("projects", cursor[:-2] + "xx"),
             ("projects", "example"),
         ):

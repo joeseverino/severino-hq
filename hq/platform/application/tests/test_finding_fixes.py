@@ -256,7 +256,7 @@ class DriftOffersBothWaysTests(TestCase):
         self.assertEqual(remedies[0].label, "Keep the live version")
         self.assertEqual(
             [(r.capability, r.label) for r in remedies[1:]],
-            [("infrastructure.reconcile", "Apply HQ's settings")],
+            [("infrastructure.resource.reconcile", "Apply HQ's settings")],
         )
 
     def test_another_fault_keeps_reconcile_alone(self):

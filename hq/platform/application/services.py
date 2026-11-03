@@ -172,24 +172,6 @@ class Service:
         return ""
 
     @property
-    def origin_is_news(self) -> bool:
-        """Whether saying where this is served adds anything to the cards.
-
-        It usually does not: once a facet names the container and another
-        prints the address it forwards to, a sentence repeating both is a third
-        copy of one fact.
-        """
-
-        if self.origin is None:
-            return False
-        # Something outside answering the name, which no facet can report, or
-        # an address no machine HQ knows holds, the one thing worth interrupting for.
-        if self.origin.external or not self.origin.known:
-            return True
-        # Nothing identified what is running, so the note carries the caveat.
-        return not any(facet.observed for facet in self.facets)
-
-    @property
     def declared_claims(self) -> tuple[Claim, ...]:
         """Claims that name this service, rather than merely answering for it.
 
@@ -417,21 +399,13 @@ def certificate_use(key: str, names: Iterable[str]) -> CertificateUse:
     )
 
 
-def service_or_prospect(hostname: str) -> Service:
-    """The service for this name, or the empty shape of one not declared yet.
-
-    A service with nothing behind it is a coherent thing to look at. Every facet
-    reads "not declared" and offers what could supply it, seeded with the name,
-    which is exactly the page an operator wants before they have built anything.
-    Nothing is stored to make one: ask for a name and this describes it, whether
-    or not anything answers for it yet.
-    """
-
-    return prospects((normalized_hostname(hostname),))[0]
-
-
 def prospects(hostnames: tuple[str, ...]) -> tuple[Service, ...]:
-    """``service_or_prospect`` for several names, from one reading of the declarations."""
+    """The service for each name, or the empty shape of one not declared yet,
+    from one reading of the declarations.
+
+    A service with nothing behind it is a coherent thing to look at: every facet
+    reads "not declared" and offers what could supply it, seeded with the name.
+    Nothing is stored to make one."""
 
     (
         declared,

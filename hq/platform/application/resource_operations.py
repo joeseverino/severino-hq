@@ -471,12 +471,12 @@ def request_stop(command: OperationCommand, *, principal: Principal, current_key
 # The capability that asks for each verb, so a page asks for one by its verb
 # and runs it through the capability runner like every other caller.
 ACTION_CAPABILITY = {
-    OperationRequest.Action.RECONCILE: "infrastructure.reconcile",
+    OperationRequest.Action.RECONCILE: "infrastructure.resource.reconcile",
     OperationRequest.Action.RENEW: "certificate.renew",
     OperationRequest.Action.DELETE: "infrastructure.resource.remove",
-    OperationRequest.Action.RESTART: "infrastructure.restart",
-    OperationRequest.Action.START: "infrastructure.start",
-    OperationRequest.Action.STOP: "infrastructure.stop",
+    OperationRequest.Action.RESTART: "infrastructure.resource.restart",
+    OperationRequest.Action.START: "infrastructure.resource.start",
+    OperationRequest.Action.STOP: "infrastructure.resource.stop",
     OperationRequest.Action.APPROVE_ROUTES: "tailnet.routes.approve",
 }
 

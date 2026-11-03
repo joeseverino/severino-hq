@@ -452,7 +452,7 @@
       }
     }
   },
-  "getConnectionStandingV2": {
+  "getConnectionsV2": {
     "responses": {
       "200": {
         "data": {
@@ -483,7 +483,7 @@
               "missing_scopes": [],
               "name": "cloudflare.dns_record",
               "required_scopes": [],
-              "subject_resource": "infrastructure.resources"
+              "subject_resource": "infrastructure"
             }
           ],
           "connection_ref": "api-cloudflare",
@@ -520,7 +520,7 @@
                 "missing_scopes": [],
                 "name": "cloudflare.zone",
                 "required_scopes": [],
-                "subject_resource": "infrastructure.resources"
+                "subject_resource": "infrastructure"
               },
               "label": "Domain",
               "sight": {
@@ -574,7 +574,7 @@
       }
     }
   },
-  "getInfrastructureResourcesV2": {
+  "getInfrastructureV2": {
     "responses": {
       "200": {
         "data": {
@@ -666,7 +666,7 @@
             "identifier": "key",
             "next": {
               "arguments": {
-                "name": "infrastructure.resources"
+                "name": "infrastructure"
               },
               "tool": "list_resource"
             }
@@ -777,7 +777,7 @@
       }
     }
   },
-  "infrastructureReconcileV2": {
+  "infrastructureResourceReconcileV2": {
     "responses": {
       "409": {
         "error": {
@@ -961,7 +961,7 @@
       }
     }
   },
-  "listConnectionStandingV2": {
+  "listConnectionsV2": {
     "responses": {
       "200": {
         "data": {
@@ -1592,7 +1592,7 @@
       }
     }
   },
-  "listInfrastructureResourcesV2": {
+  "listInfrastructureV2": {
     "responses": {
       "200": {
         "data": {
@@ -1631,7 +1631,7 @@
               "type": "literal_error"
             }
           ],
-          "message": "infrastructure.resources: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox."
+          "message": "infrastructure: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox."
         },
         "ok": false
       }
@@ -2277,7 +2277,7 @@
       }
     }
   },
-  "lookupAddressV2": {
+  "lookupAddressReadV2": {
     "responses": {
       "400": {
         "error": {
@@ -2394,7 +2394,7 @@
       }
     }
   },
-  "projectDependencyUpdatesV2": {
+  "projectDependencyUpdatesSetV2": {
     "responses": {
       "409": {
         "error": {

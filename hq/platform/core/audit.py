@@ -202,12 +202,16 @@ def _bound(doing: str) -> OperationContext:
 
 
 @contextmanager
-def audit_operation(*, operation: str, principal: object | None = None, operation_id: str = "") -> Iterator[None]:
+def audit_operation(
+    *, operation: str, principal: object | None = None, operation_id: str = "", rebinds: bool = False
+) -> Iterator[None]:
     """Attribute an operation to the principal that made it: the one way a
     host service or a plugin binds a principal's interface and actor.
 
     Without a principal the operation is the bound caller's, and with nobody
     bound it is refused, so no operation is written down as nobody's.
+    ``rebinds`` is ``operation_context``'s, for the host's approvals alone:
+    the SDK's ``audit_operation`` does not take it.
     """
 
     # A plugin hands whatever principal it holds, or none.
@@ -217,6 +221,7 @@ def audit_operation(*, operation: str, principal: object | None = None, operatio
         actor=getattr(principal, "actor", None) or (outer.actor if outer else ""),
         operation=operation,
         operation_id=operation_id,
+        rebinds=rebinds,
     ):
         yield
 

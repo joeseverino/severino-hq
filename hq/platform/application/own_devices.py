@@ -20,7 +20,7 @@ logger = logging.getLogger("severino.agents")
 
 AUDIT_LABEL = "Own device"
 
-SET_OWN_DEVICE = "agents.device.set"
+SET_OWN_DEVICE = "agent.device.set"
 
 # A client the identity provider registered. A client known only by a Client
 # ID Metadata Document is named by a URL, which this refuses, so one opt-in

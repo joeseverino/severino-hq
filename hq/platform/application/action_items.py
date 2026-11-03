@@ -31,8 +31,8 @@ lazy from .domains import attention_urls
 FORGET_AFTER = timedelta(days=30)
 
 # The capabilities a person sets items aside, and brings them back, through.
-SET_ASIDE = "action_items.set_aside"
-RESTORE = "action_items.restore"
+SET_ASIDE = "action_item.set_aside"
+RESTORE = "action_item.restore"
 AUDIT_LABEL = "Needs you"
 
 
@@ -268,7 +268,7 @@ def _audit(user, message: str, count: int) -> None:
 
 
 def set_items_aside(command: SetAsideCommand, *, principal: Principal) -> dict[str, Any]:
-    """Set items aside for the person asking: the ``action_items.set_aside`` capability.
+    """Set items aside for the person asking: the ``action_item.set_aside`` capability.
 
     A row names itself and its revision, so it needs no queue. Items named by
     key alone are set aside as the queue holds them now, which is read once
@@ -289,7 +289,7 @@ def set_items_aside(command: SetAsideCommand, *, principal: Principal) -> dict[s
 
 
 def restore(command: RestoreCommand, *, principal: Principal) -> dict[str, Any]:
-    """Bring set-aside items back for the person asking: the ``action_items.restore`` capability."""
+    """Bring set-aside items back for the person asking: the ``action_item.restore`` capability."""
 
     user = person(principal)
     with transaction.atomic():

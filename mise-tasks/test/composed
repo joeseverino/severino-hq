@@ -58,6 +58,8 @@ case "${environment}" in /*) ;; *) environment="${MISE_CONFIG_ROOT}/${environmen
 
 # The verdict runs from the checkout, since the copy holds no tools/, and keeps
 # the run's whole report in var/gate/test-composed.txt, named by its last line.
+# The copy holds none of what a source test reads, so a named label leaves
+# them out here too (lint:source runs them on the checkout).
 revision="$(git rev-parse HEAD)"
 status=0
 env \
@@ -65,6 +67,6 @@ env \
     SEVERINO_HQ_SOURCE="${source_url}" \
     SEVERINO_HQ_REVISION="${revision}" \
     uv run --locked --no-default-groups python -m tools.gate.verdict test:composed \
-    uv run --directory "${tree}" --locked --no-default-groups python manage.py test --noinput --parallel auto "$@" \
+    uv run --directory "${tree}" --locked --no-default-groups python manage.py test --noinput --parallel auto --exclude-tag=source "$@" \
     || status=$?
 exit "${status}"

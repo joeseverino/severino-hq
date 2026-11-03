@@ -115,7 +115,7 @@ class HeldRequestTests(TestCase):
 
     def test_a_reconcile_asked_for_over_a_token_waits_instead_of_queueing(self):
         result = execute_capability(
-            "infrastructure.reconcile",
+            "infrastructure.resource.reconcile",
             reconcile_payload(),
             principal=mcp_principal(),
             target=POLICY_KEY,
@@ -134,7 +134,7 @@ class HeldRequestTests(TestCase):
 
     def test_an_unapproved_request_cannot_be_claimed_because_it_is_not_work_yet(self):
         answer = execute_capability(
-            "infrastructure.reconcile",
+            "infrastructure.resource.reconcile",
             reconcile_payload(),
             principal=mcp_principal(),
             target=POLICY_KEY,
@@ -221,13 +221,13 @@ class HeldRequestTests(TestCase):
 
     def test_asking_the_same_thing_twice_is_one_decision(self):
         first = execute_capability(
-            "infrastructure.reconcile",
+            "infrastructure.resource.reconcile",
             reconcile_payload(),
             principal=mcp_principal(),
             target=POLICY_KEY,
         )
         second = execute_capability(
-            "infrastructure.reconcile",
+            "infrastructure.resource.reconcile",
             reconcile_payload(),
             principal=mcp_principal(),
             target=POLICY_KEY,
@@ -264,7 +264,7 @@ class HeldRequestTests(TestCase):
         """Nothing about a read waits for anybody."""
 
         result = execute_capability(
-            "contact.submissions.list",
+            "contact.submission.list",
             {"status": "new", "limit": 1},
             principal=Principal("reader", "mcp", frozenset({Capability.MANAGE_CONTACTS})),
         )
@@ -275,7 +275,7 @@ class HeldRequestTests(TestCase):
         """Authority first. A request nobody may make is not a decision for anybody."""
 
         result = execute_capability(
-            "infrastructure.reconcile",
+            "infrastructure.resource.reconcile",
             reconcile_payload(),
             principal=Principal("stranger", "mcp", frozenset()),
             target=POLICY_KEY,
@@ -332,7 +332,7 @@ class OperatorRequestTests(TestCase):
 
     def test_the_same_request_from_the_web_interface_is_not_held(self):
         result = execute_capability(
-            "infrastructure.reconcile",
+            "infrastructure.resource.reconcile",
             reconcile_payload(),
             principal=an_operator(),
             target=POLICY_KEY,
@@ -351,7 +351,7 @@ class OperatorRequestTests(TestCase):
         """
 
         result = execute_capability(
-            "infrastructure.reconcile",
+            "infrastructure.resource.reconcile",
             reconcile_payload(),
             principal=Principal(
                 "some-new-adapter",
@@ -374,7 +374,7 @@ class DecisionTests(TestCase):
         managing_everything()
         self.resource = declare_policy()
 
-    def held(self, payload=None, capability="infrastructure.reconcile"):
+    def held(self, payload=None, capability="infrastructure.resource.reconcile"):
         answer = execute_capability(
             capability,
             payload or reconcile_payload(),
@@ -707,7 +707,7 @@ class PreviewTests(TestCase):
         resource.status = {"document": policy_document("group:live")}
         resource.save(update_fields=("status",))
         answer = execute_capability(
-            "infrastructure.reconcile",
+            "infrastructure.resource.reconcile",
             reconcile_payload(),
             principal=mcp_principal(),
             target=POLICY_KEY,
@@ -740,7 +740,7 @@ class SurfaceTests(TestCase):
         self.assertTrue(answer["ok"], answer)
         self.held = ApprovalRequest.objects.get(capability="infrastructure.resource.update")
         answer = execute_capability(
-            "infrastructure.reconcile",
+            "infrastructure.resource.reconcile",
             reconcile_payload(),
             principal=mcp_principal(),
             target=POLICY_KEY,
@@ -753,7 +753,7 @@ class SurfaceTests(TestCase):
         return self.client.get(reverse("core:approval_entry", kwargs={"approval_id": held.id}), follow=True)
 
     def test_the_queue_names_who_asked_the_reason_and_the_difference(self):
-        reconcile = ApprovalRequest.objects.get(capability="infrastructure.reconcile")
+        reconcile = ApprovalRequest.objects.get(capability="infrastructure.resource.reconcile")
 
         amendment = self._entry(self.held)
         self.assertContains(amendment, "mcp-service-account")

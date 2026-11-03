@@ -86,20 +86,22 @@ class CapabilityRunTests(TestCase):
 class BindingTests(TestCase):
     def test_a_nested_binding_keeps_the_outer_id_and_an_explicit_one_wins(self):
         mark = last_row()
-        with audit_operation(operation="example.outer", principal=cli_principal()):
+        operator = cli_principal()
+        with audit_operation(operation="example.outer", principal=operator):
             record_event(action=AuditLog.Action.UPDATED, type_label="Example", message="outer")
-            with audit_operation(operation="example.inner", principal=mcp_principal()):
+            # The same actor through a door of another kind, as a job's work runs.
+            with operation_context(interface="job", actor=operator.actor, operation="example.inner"):
                 record_event(action=AuditLog.Action.UPDATED, type_label="Example", message="inner")
                 with operation_context(
-                    interface="cli", actor="example", operation="example.own", operation_id="example-own"
+                    interface="job", actor=operator.actor, operation="example.own", operation_id="example-own"
                 ):
                     record_event(action=AuditLog.Action.UPDATED, type_label="Example", message="own")
 
         outer, inner, own = rows_after(mark)
         self.assertTrue(outer.operation_id)
         self.assertEqual(inner.operation_id, outer.operation_id)
-        # The inner binding's own name and caller stand.
-        self.assertEqual((inner.metadata["operation"], inner.metadata["interface"]), ("example.inner", "mcp"))
+        # The inner binding's own name and door stand.
+        self.assertEqual((inner.metadata["operation"], inner.metadata["interface"]), ("example.inner", "job"))
         self.assertEqual(own.operation_id, "example-own")
 
 
@@ -148,6 +150,25 @@ class ApprovalLifeTests(TestCase):
         self.assertTrue(any(row.object_type == "Managed resource" for row in decided), "the change is recorded")
         self.assert_one_operation(self.asked + decided)
 
+    def test_an_approved_change_is_written_as_its_requester_inside_the_approvers_operation(self):
+        operator = an_operator()
+        mark = last_row()
+        with audit_operation(operation="example.page", principal=operator):
+            answer = approve(ApproveCommand(str(self.held.id)), principal=operator)
+        self.assertTrue(answer["ok"], answer)
+
+        decided = list(rows_after(mark))
+        changed = [row for row in decided if row.object_type == "Managed resource"]
+        self.assertTrue(changed, "the change is recorded")
+        asker = mcp_principal()
+        self.assertEqual(
+            {(row.metadata["interface"], row.metadata["actor"]) for row in changed}, {(asker.interface, asker.actor)}
+        )
+        self.assertTrue(
+            any(row.object_type == "Approval" and row.metadata["actor"] == operator.actor for row in decided),
+            "the decision is the approver's",
+        )
+
     def test_rejecting_is_part_of_the_approval(self):
         mark = last_row()
         reject(RejectCommand(str(self.held.id), note="Not wanted."), principal=an_operator())
@@ -170,6 +191,8 @@ class ApprovalLifeTests(TestCase):
         lapsed = list(rows_after(mark))
         self.assertTrue(lapsed, "a lapse is audited")
         self.assert_one_operation(self.asked + lapsed)
+        # HQ's own lapse, rebound on purpose whoever runs the sweep.
+        self.assertEqual({row.metadata["actor"] for row in lapsed}, {"approvals"})
 
     def test_a_lapse_found_on_deciding_is_part_of_the_approval(self):
         self.lapse()
@@ -189,10 +212,13 @@ class JobTests(TestCase):
                 return execute_capability(NAME, {"prefix": "example-job"}, principal=cli_principal())
 
         mark = last_row()
-        job = run("example.pair", "Pair", work, actor="example-timer")
+        # Run to its end inside someone else's operation: a job is its requester's wherever it runs.
+        with audit_operation(operation="example.command", principal=mcp_principal()):
+            job = run("example.pair", "Pair", work, actor=cli_principal().actor)
 
         written = [
             row for row in rows_after(mark) if not (row.object_type == "Background job" and row.action == "created")
         ]
         self.assertGreaterEqual(len(written), 3, "the capability's rows and the job's ending")
         self.assertEqual({row.operation_id for row in written}, {str(job.pk)})
+        self.assertEqual({row.metadata["actor"] for row in written}, {cli_principal().actor})

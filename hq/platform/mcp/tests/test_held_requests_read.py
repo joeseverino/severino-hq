@@ -50,7 +50,7 @@ class HeldRequestsReadTests(TestCase):
         declare_policy()
         for asker in (FIRST, SECOND):
             answer = execute_capability(
-                "infrastructure.reconcile", reconcile_payload(), principal=asker, target=POLICY_KEY
+                "infrastructure.resource.reconcile", reconcile_payload(), principal=asker, target=POLICY_KEY
             )
             self.assertTrue(answer["ok"], answer)
 

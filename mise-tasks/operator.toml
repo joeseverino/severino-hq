@@ -56,10 +56,12 @@ run = 'for spec in docs/images/*/*.fig; do brand figure "$spec" --scale 1; done'
 description = "When the API's recorded examples no longer match its document: record them again from the tests that call it, then rewrite the document"
 hide = true
 extends = "django"
-# One process, so outside the heavy turn (tools/gate/turn.py). A recording
-# written elsewhere (HQ_API_RECORD_EXAMPLES_TO, lint:drift-api-examples's)
-# leaves the document as it is.
-run = 'HQ_API_RECORD_EXAMPLES=1 uv run python manage.py test hq.platform.api hq.domains.contacts --parallel 1 && { [ -n "${HQ_API_RECORD_EXAMPLES_TO:-}" ] || uv run python manage.py api_openapi; }'
+# One process, so outside the heavy turn (tools/gate/turn.py). The tests read
+# the examples file before the run writes the new one, so an entry whose
+# operation is gone is dropped first. A recording written elsewhere
+# (HQ_API_RECORD_EXAMPLES_TO, lint:drift-api-examples's) leaves the examples
+# file and the document as they are.
+run = 'elsewhere="${HQ_API_RECORD_EXAMPLES_TO:-}"; { [ -n "$elsewhere" ] || uv run python manage.py api_openapi --prune-examples; } && HQ_API_RECORD_EXAMPLES=1 uv run python manage.py test hq.platform.api hq.domains.contacts --parallel 1 && { [ -n "$elsewhere" ] || uv run python manage.py api_openapi; }'
 
 ["plugin:check"]
 description = "One extension package's contract check against this host, as its CI runs it"

@@ -53,6 +53,7 @@ _WORD_TAKERS = {
     "mise-tasks/audit/ruff": "usage_paths",
     "mise-tasks/audit/ast": "usage_globs",
     "mise-tasks/audit/bcd": "usage_features",
+    "mise-tasks/audit/layers": "usage_importer",
 }
 
 

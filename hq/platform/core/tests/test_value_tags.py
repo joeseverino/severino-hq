@@ -242,9 +242,10 @@ class LeadActionTests(SimpleTestCase):
     """A narrow head keeps the control a page is for, not the one that comes first."""
 
     def lead(self, *actions):
-        from hq.platform.core.templatetags.action_tags import lead_action
+        from hq.platform.core.templatetags.action_tags import head_actions
 
-        return lead_action(actions).label
+        beside, _menu = head_actions(actions)
+        return beside[0].label
 
     def test_a_destructive_control_never_leads_while_another_is_offered(self):
         from hq.platform.application.pages import PageAction

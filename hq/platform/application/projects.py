@@ -400,7 +400,7 @@ def outbound_work() -> tuple[OutboundWork, ...]:
 save_project = linked_saver("projects", partial(serialize_project, relationships=True), refusals=_PROJECT, links={})
 
 
-DEPENDENCY_UPDATES = "project.dependency_updates"
+DEPENDENCY_UPDATES = "project.dependency_updates.set"
 # The repository check updates rest on: Renovate opens its security fixes from
 # these alerts.
 UPDATES_NEED = "vulnerability-alerts"

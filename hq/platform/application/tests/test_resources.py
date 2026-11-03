@@ -99,7 +99,7 @@ class ResourceExecutionTests(TestCase):
         ManagedResource.objects.create(key="policy", kind="tailscale.policy", spec={})
 
         listed = list_resource(
-            "infrastructure.resources",
+            "infrastructure",
             {"kinds": "tailscale.device,tailscale.policy", "limit": 2},
             principal=READ,
         )
@@ -109,7 +109,7 @@ class ResourceExecutionTests(TestCase):
     def test_infrastructure_kinds_filter_rejects_invalid_or_repeated_kinds(self):
         for value in ("not a kind", "tailscale.device,tailscale.device"):
             with self.subTest(value=value), self.assertRaises(InvalidResourceInput):
-                list_resource("infrastructure.resources", {"kinds": value}, principal=READ)
+                list_resource("infrastructure", {"kinds": value}, principal=READ)
 
     def test_every_operation_authorizes_before_reading(self):
         with self.assertRaises(AuthorizationError):

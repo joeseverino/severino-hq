@@ -254,10 +254,6 @@ class PolicyCell:
     # Settable, but not in force until the deployment allows it over MCP.
     dormant: bool = False
 
-    @property
-    def rule_label(self) -> str:
-        return _name(self.rule)
-
 
 @dataclass(frozen=True, slots=True)
 class Row:
@@ -267,10 +263,6 @@ class Row:
     effect_label: str
     default: str
     cells: tuple[PolicyCell, ...]
-
-    @property
-    def everyone(self) -> tuple[PolicyCell, ...]:
-        return tuple(cell for cell in self.cells if cell.scope == Scope.SURFACE)
 
     @property
     def agents(self) -> tuple[PolicyCell, ...]:
@@ -360,7 +352,7 @@ def _subject_label(subject: str) -> str:
     resource = integration_graph().resources.get(subject)
     if resource is not None:
         return resource.label
-    words = subject.removesuffix(".resources").replace(".", " ").replace("_", " ")
+    words = subject.replace(".", " ").replace("_", " ")
     return words[:1].upper() + words[1:]
 
 
@@ -403,7 +395,7 @@ def _cell(spec, column: Column, current, grants, ceiling) -> PolicyCell:
     )
 
 
-SET_POLICY = "agents.policy.set"
+SET_POLICY = "agent.policy.set"
 
 
 @dataclass(frozen=True, slots=True)

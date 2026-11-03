@@ -223,10 +223,6 @@ class ConnectionView:
     authority: str = "none"
 
     @property
-    def lifecycle_label(self) -> str:
-        return Lifecycle(self.lifecycle).label
-
-    @property
     def authority_label(self) -> str:
         if self.abilities and all(state.evidence == "not_applicable" for state in self.abilities):
             return KEYLESS_LABEL

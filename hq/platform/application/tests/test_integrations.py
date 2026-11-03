@@ -310,9 +310,9 @@ class IntegrationGraphTests(TestCase):
     def test_a_connection_emits_its_capability_edge_once(self):
         graph = integration_graph()
         registries = graph.connections["hq.public_registries"]
-        lookup = next(ability for ability in registries.abilities if ability.capability == "lookup.name")
+        lookup = next(ability for ability in registries.abilities if ability.capability == "lookup.name.read")
 
-        self.assertIs(graph.capabilities[lookup.capability], graph.capabilities["lookup.name"])
+        self.assertIs(graph.capabilities[lookup.capability], graph.capabilities["lookup.name.read"])
 
     def test_every_projection_sees_one_synthetic_contribution(self):
         resource = ResourceSpec(

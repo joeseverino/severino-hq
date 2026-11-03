@@ -123,9 +123,9 @@ class TheSharedQueueTests(ReaderTestCase):
             found = {
                 "queue": snapshot["priority"],
                 "queue count": snapshot["priority_count"],
-                "action items": list_resource("action.items", principal=principal)["items"],
+                "action items": list_resource("action_items", principal=principal)["items"],
                 "problem counts": counts,
-                "connections": list_resource("connection.standing", principal=principal),
+                "connections": list_resource("connections", principal=principal),
             }
             if principal is self.viewer:
                 page = self.client.get(reverse("action_items")).content.decode()

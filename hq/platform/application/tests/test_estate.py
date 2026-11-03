@@ -195,7 +195,7 @@ class SearchSnippetTests(TestCase):
         store("cloudflare.zone", {"zone": "example.com", "connection_ref": "example-dns"})
         declare_record("app-record", "app.example.com", "192.0.2.10")
 
-        (item,) = self.group("app-record", "infrastructure.resources")
+        (item,) = self.group("app-record", "infrastructure")
 
         from hq.domains.control_plane.providers import PROVIDERS
 
@@ -209,14 +209,14 @@ class SearchSnippetTests(TestCase):
     def test_a_machine_declaration_opens_the_machine(self):
         ManagedResource.objects.create(key="example-host", kind="machine", spec={"name": "example-host"})
 
-        (item,) = self.group("example-host", "infrastructure.resources")
+        (item,) = self.group("example-host", "infrastructure")
 
         self.assertEqual(item["url"], reverse("control_plane:machine", args=["example-host"]))
 
     def test_a_kind_without_a_readout_shows_its_label(self):
         declared("example-policy", "tailscale.policy", {"document": "{}"})
 
-        (item,) = self.group("example-policy", "infrastructure.resources")
+        (item,) = self.group("example-policy", "infrastructure")
 
         self.assertNotIn("tailscale.policy", item["badge"])
         self.assertNotIn("{", self.text(item))

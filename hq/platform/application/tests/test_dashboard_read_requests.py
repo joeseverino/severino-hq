@@ -39,7 +39,7 @@ class DashboardAskTests(TestCase):
 
     def ask(self) -> AuditLog:
         principal = cli_principal()
-        with audit_operation(operation="dashboard.refresh.request", principal=principal):
+        with audit_operation(operation="dashboard.panels.refresh", principal=principal):
             request_dashboard_refresh(DashboardRefreshCommand(), principal=principal)
         return AuditLog.objects.get(metadata__has_key="panels")
 

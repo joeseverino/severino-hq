@@ -179,18 +179,22 @@ def capability_doors(spec: CapabilitySpec | None) -> tuple[Door, ...]:
             Door.STALE_WRITE,
             *_WRITE_DOORS,
         )
-    doors = [Door.CAPABILITY, Door.TARGETED if spec.target_kind else Door.UNTARGETED]
-    if takes_stale_write_token(spec.handler):
+    return call_doors(
+        targeted=bool(spec.target_kind),
+        stale_write=takes_stale_write_token(spec.handler),
+        changes=spec.effect != "read",
+    )
+
+
+def call_doors(*, targeted: bool, stale_write: bool, changes: bool) -> tuple[Door, ...]:
+    """The doors a call of a capability declared so passes: each kind of call the API document names."""
+
+    doors = [Door.CAPABILITY, Door.TARGETED if targeted else Door.UNTARGETED]
+    if stale_write:
         doors.append(Door.STALE_WRITE)
-    if spec.effect != "read":
+    if changes:
         doors.extend(_WRITE_DOORS)
     return tuple(doors)
-
-
-def capability_codes(spec: CapabilitySpec | None, table: Mapping[str, Code] = CODES) -> frozenset[str]:
-    """The codes a call of ``spec`` can be answered with; for None, a call by any name."""
-
-    return answered_by(*capability_doors(spec), table=table)
 
 
 def _loggable(value: object) -> str:

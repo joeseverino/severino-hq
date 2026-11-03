@@ -8,6 +8,7 @@ mutation that could drift from the thing it claims to represent.
 """
 
 import re
+from collections import Counter
 from dataclasses import asdict, dataclass, replace
 from typing import Annotated, Any, Literal
 
@@ -135,7 +136,7 @@ def _resource_actions(
         actions.append(
             command_action(
                 "reconcile",
-                "infrastructure.reconcile",
+                "infrastructure.resource.reconcile",
                 reverse("control_plane:reconcile", kwargs={"key": key}),
                 method="POST",
                 target=key,
@@ -661,9 +662,7 @@ TopologyQuery = create_model(
 
 
 def _counts(topology: Topology) -> TopologySummary:
-    kinds: dict[str, int] = {}
-    for node in topology.nodes:
-        kinds[node.kind] = kinds.get(node.kind, 0) + 1
+    kinds = Counter(node.kind for node in topology.nodes)
     return {"nodes": len(topology.nodes), "edges": len(topology.edges), "kinds": dict(sorted(kinds.items()))}
 
 

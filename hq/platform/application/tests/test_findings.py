@@ -104,7 +104,7 @@ class FindingsTests(SentinelMixin, TestCase):
         found = next(f for f in self.raised() if f.rule == "skipped-by-a-sweep")
         remedy = found.remedies[0]
 
-        self.assertEqual(remedy.capability, "infrastructure.reconcile")
+        self.assertEqual(remedy.capability, "infrastructure.resource.reconcile")
         self.assertEqual(remedy.target, "skipped-record")
         # Effect is copied from the capability registry, never restated here.
         self.assertTrue(remedy.effect)
@@ -137,7 +137,7 @@ class FindingsTests(SentinelMixin, TestCase):
         # Removal is offered only to a principal allowed to remove; the edit
         # that marks it on demand is the one every manager gets.
         self.assertEqual(offered[0], ("infrastructure.resource.update", "Mark it as running only sometimes"))
-        self.assertNotIn("infrastructure.reconcile", [capability for capability, _ in offered])
+        self.assertNotIn("infrastructure.resource.reconcile", [capability for capability, _ in offered])
 
     def test_a_healthy_estate_says_nothing(self):
         """A rule that cannot be quiet is a lens, not a finding."""
@@ -1337,7 +1337,7 @@ class PathRefusedByTheTailnetTests(TestCase):
 
         offered = {remedy.capability for remedy in finding.remedies}
         self.assertNotIn("tailnet.reach.allow", offered)
-        self.assertIn("infrastructure.reconcile", offered)
+        self.assertIn("infrastructure.resource.reconcile", offered)
 
 
 class WorkThatKeepsFailingTests(TestCase):

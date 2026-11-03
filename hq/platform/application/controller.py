@@ -36,8 +36,6 @@ lazy from .github_profile import plan as github_profiles
 lazy from .resource_capabilities import LIFECYCLE_VERBS
 lazy from .security import CONTROLLER_INTERFACE, cli_principal
 
-_FORBIDDEN_STATUS_KEYS = ("private", "secret", "token", "password", "credential")
-
 
 @dataclass(frozen=True, slots=True)
 class ControllerReport:
@@ -78,20 +76,6 @@ def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any])
     ManagedResource.objects.filter(kind=DELIVERY_TARGET_KIND, spec__connection_ref__in=reached).update(
         last_observed_at=now, updated_at=now
     )
-
-
-def _assert_public_status(value: Any, path: str = "status") -> None:
-    if isinstance(value, dict):
-        for key, child in value.items():
-            normalized = str(key).lower()
-            if any(marker in normalized for marker in _FORBIDDEN_STATUS_KEYS):
-                raise ValueError(f"{path}.{key} is secret-bearing and cannot enter HQ.")
-            _assert_public_status(child, f"{path}.{key}")
-    elif isinstance(value, list):
-        for index, child in enumerate(value):
-            _assert_public_status(child, f"{path}[{index}]")
-    elif isinstance(value, str) and "PRIVATE KEY-----" in value:
-        raise ValueError(f"{path} contains private-key material.")
 
 
 def _compatible_operations(operations, capabilities: tuple[tuple[str, str], ...]):
@@ -383,8 +367,7 @@ def report_operation(
     *,
     controller_id: str,
 ) -> dict[str, Any]:
-    _assert_public_status(report.status)
-    _assert_public_status(report.conditions, "conditions")
+    # Held to the bridge's secret door (``secret_shapes``) before it arrives.
     try:
         operation = OperationRequest.objects.select_for_update().select_related("resource").get(pk=operation_id)
     except (OperationRequest.DoesNotExist, ValueError) as exc:

@@ -322,7 +322,7 @@ class SettingTests(PolicyTestCase):
 
     def test_a_read_can_be_denied_but_not_held(self):
         with self.assertRaisesMessage(ValueError, "List messages only reads."):
-            self.set(spec=spec("contact.submissions.list"))
+            self.set(spec=spec("contact.submission.list"))
 
     def test_an_agent_rule_cannot_reach_past_its_pocket_id_grant(self):
         AgentIdentity.objects.create(client_id="example-agent", granted=["read", "write_projects"])
@@ -365,7 +365,7 @@ class PageTests(PolicyTestCase):
 
         self.assertNotIn(APPROVE, shown)
         self.assertNotIn(UPLOAD, shown)
-        self.assertIn("infrastructure.reconcile", shown)
+        self.assertIn("infrastructure.resource.reconcile", shown)
         with self.assertRaises(ValueError):
             set_rule(
                 scope=Scope.SURFACE,

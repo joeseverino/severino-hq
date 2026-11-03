@@ -31,7 +31,7 @@ NOBODY = Principal("nobody", "test", frozenset({"write_projects"}))
 # Every derived read, and one identifier its detail answers to after ``estate``.
 LISTS = {
     "estate": {},
-    "action.items": {},
+    "action_items": {},
     "machines": {},
     "domains": {},
     "readings": {},
@@ -43,7 +43,7 @@ DETAILS = {
     "machines": "example-host-0",
     "domains": "example.com",
     "relationships": "service:s0.example.com",
-    "paths": "s0.example.com",
+    "service.paths": "s0.example.com",
     "readings": "cloudflare.pages_project",
     "credentials": "cloudflare_api",
 }
@@ -122,8 +122,8 @@ class ApplicationTests(TestCase):
         self.assertEqual(found["items"][0]["name"], "example-host-0")
 
     def test_action_items_filter_as_the_page_does(self):
-        everything = list_resource("action.items", {}, principal=READER)
-        nothing = list_resource("action.items", {"query": "no-such-words-anywhere"}, principal=READER)
+        everything = list_resource("action_items", {}, principal=READER)
+        nothing = list_resource("action_items", {"query": "no-such-words-anywhere"}, principal=READER)
 
         self.assertEqual(nothing["count"], 0)
         self.assertGreaterEqual(everything["count"], 0)

@@ -206,7 +206,7 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
 
         reconcile = next(action for action in node.actions if action.name == "reconcile")
         self.assertEqual(reconcile.method, "POST")
-        self.assertEqual(reconcile.capability, "infrastructure.reconcile")
+        self.assertEqual(reconcile.capability, "infrastructure.resource.reconcile")
 
     def test_disabled_resource_is_named_honestly_and_cannot_reconcile(self):
         resource = ManagedResource.objects.create(
@@ -657,13 +657,13 @@ class ConnectionActionTests(TestCase):
                     "Rotate",
                     "Rotate the credential this connection carries.",
                     effect="infrastructure_change",
-                    capability="infrastructure.reconcile",
+                    capability="infrastructure.resource.reconcile",
                 ),
             )
         )
         ability = next(n for n in self.project(spec, MANAGE).nodes if n.id == "ability:example.declared:example.rotate")
         command = next(a for a in ability.actions if a.name == "command")
-        self.assertEqual(command.capability, "infrastructure.reconcile")
+        self.assertEqual(command.capability, "infrastructure.resource.reconcile")
         self.assertEqual(command.effect, "infrastructure_change")
 
     def test_an_ability_never_advertises_a_command_the_principal_cannot_run(self):
@@ -674,7 +674,7 @@ class ConnectionActionTests(TestCase):
                     "Rotate",
                     "Rotate the credential this connection carries.",
                     effect="infrastructure_change",
-                    capability="infrastructure.reconcile",
+                    capability="infrastructure.resource.reconcile",
                 ),
             )
         )

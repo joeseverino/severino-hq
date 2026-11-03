@@ -66,7 +66,7 @@ def _ask(client):
     return client.session.call_tool(
         "execute_capability",
         {
-            "name": "infrastructure.reconcile",
+            "name": "infrastructure.resource.reconcile",
             "payload": {"idempotency_key": "example-once", "reason": "Stated reason for the change."},
             "target": POLICY_KEY,
         },

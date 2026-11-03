@@ -50,7 +50,7 @@ class DeclarationRefusalTests(RefusalCase):
             key=KEY, kind="adguard.rewrite", spec={"domain": "a.example.com", "answer": "192.0.2.1"}, enabled=False
         )
 
-        error = self.refused("infrastructure.reconcile", _operation(), target=KEY)
+        error = self.refused("infrastructure.resource.reconcile", _operation(), target=KEY)
 
         self.assertEqual(error["code"], "precondition")
         self.assertIn("This record is switched off in HQ.", error["message"])
@@ -74,7 +74,7 @@ class DeclarationRefusalTests(RefusalCase):
             key=KEY, kind="adguard.rewrite", spec={"domain": "a.example.com", "answer": "192.0.2.1"}
         )
 
-        error = self.refused("infrastructure.restart", _operation(), target=KEY)
+        error = self.refused("infrastructure.resource.restart", _operation(), target=KEY)
 
         self.assertEqual(error["code"], "precondition")
         self.assertIn("The controller does not do that to this kind of record.", error["message"])

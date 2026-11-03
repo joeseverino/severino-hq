@@ -9,8 +9,7 @@ page uses it is docs/Derived-Facts.md#facts-about-a-subject.
 
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from types import SimpleNamespace
+from datetime import datetime
 from typing import Any
 
 from hq.domains.control_plane.names import certificate_covers, in_zone, normalized_hostname
@@ -26,41 +25,11 @@ from .entity_links import kind_label
 from .freshness import stale_after
 from .locate import host_of
 from .projection import read_once
-from .tailnet import TAILNET_KIND, snapshots
 from .timestamps import moment
 from .ui import ended
-lazy from . import tailnet
-lazy from .containers import Running
-
-OBSERVED = "observed"
-UNREADABLE = "unreadable"
-STALE = "stale"
 
 _INVENTORY_KEY = "facts.inventory"
 _READINGS_KEY = "facts.readings"
-
-
-@dataclass(frozen=True, slots=True)
-class Fact:
-    """One thing a source says about a subject."""
-
-    label: str
-    value: str
-    source_kind: str
-    source_label: str
-    connection_ref: str = ""
-    observed_at: datetime | None = None
-    state: str = OBSERVED
-    # Context for an observed fact; the reason and ``requires`` for an
-    # unreadable one.
-    detail: str = ""
-    # The schema-filtered reading the fact came from, for the raw readout. Only
-    # readings carry one: an inventory record is not filtered by a schema.
-    record: Mapping[str, Any] | None = field(default=None, compare=False)
-
-    @property
-    def source(self) -> tuple[str, str]:
-        return (self.source_kind, self.connection_ref)
 
 
 @dataclass(frozen=True, slots=True)
@@ -490,23 +459,6 @@ def _refusal_about(refused: PartRefusal, subject: Subject) -> bool:
     )
 
 
-def _part_fact(refused: PartRefusal) -> Fact:
-    return Fact(
-        label=refused.part.label,
-        value="",
-        source_kind=refused.kind,
-        source_label=kind_label(refused.kind),
-        connection_ref=refused.connection_ref,
-        state=UNREADABLE,
-        detail=refused.phrase,
-    )
-
-
-def _part_facts(subject: Subject) -> Iterator[Fact]:
-    for refused in refusals_about(subject):
-        yield _part_fact(refused)
-
-
 def unreadable_labels(subject: Subject | None = None) -> tuple[str, ...]:
     """The labels of joined kinds whose last read was refused, and of refused
     parts.
@@ -559,43 +511,6 @@ def inventory_about(kind: str, subject: Subject) -> tuple[tuple[Any, Mapping[str
     return tuple(found)
 
 
-def facts_about(hostnames: Iterable[str], addresses: Iterable[str]) -> tuple[Fact, ...]:
-    """Every fact any reading or inventory holds about these names and addresses."""
-
-    subject = Subject.of(hostnames, addresses)
-    if not subject:
-        return ()
-    found = [
-        *_reading_facts(subject),
-        *_part_facts(subject),
-        *_provider_facts(subject),
-        *_container_facts(subject),
-        *_tailnet_facts(subject),
-    ]
-    return tuple(
-        _aged(fact, stale_after(fact.source_kind))
-        for fact in sorted(found, key=lambda f: (f.source_label, f.connection_ref))
-    )
-
-
-def _aged(fact: Fact, stale_after: timedelta) -> Fact:
-    if fact.state != OBSERVED or fact.observed_at is None:
-        return fact
-    if not passed(fact.observed_at + stale_after):
-        return fact
-    return Fact(
-        label=fact.label,
-        value=fact.value,
-        source_kind=fact.source_kind,
-        source_label=fact.source_label,
-        connection_ref=fact.connection_ref,
-        observed_at=fact.observed_at,
-        state=STALE,
-        detail=fact.detail,
-        record=fact.record,
-    )
-
-
 def _joined_kinds() -> tuple[str, ...]:
     """The kinds read here other than the tailnet, which has its own reader."""
 
@@ -604,14 +519,6 @@ def _joined_kinds() -> tuple[str, ...]:
         + tuple(kind for kind, provider in PROVIDERS.items() if provider.from_record is not None)
         + (CONTAINER_KIND,)
     )
-
-
-def _joinable_providers() -> Iterator[tuple[str, Any]]:
-    for kind, provider in PROVIDERS.items():
-        if provider.from_record is None:
-            continue
-        if provider.hostnames or provider.answers or provider.origin:
-            yield kind, provider
 
 
 def connection_facts(connection_ref: str, provider: str) -> tuple[tuple[str, str], ...]:
@@ -674,186 +581,8 @@ def _inventory(kind: str) -> tuple[Any, ...]:
     return tuple(snapshot for snapshot in _stored().get(kind, ()) if snapshot.connected)
 
 
-def _unreadable(
-    snapshot,
-    label: str,
-    requires: str,
-    *,
-    reason: str = "",
-    part: str = "",
-    connection_ref: str = "",
-    record: Mapping[str, Any] | None = None,
-) -> Fact:
-    because = reason or snapshot.error or "The last read failed and gave no reason."
-    detail = ended(f"{because} Requires: {requires}") if requires else because
-    return Fact(
-        label=part or label,
-        value="",
-        source_kind=snapshot.kind,
-        source_label=label,
-        connection_ref=connection_ref,
-        observed_at=snapshot.observed_at,
-        state=UNREADABLE,
-        detail=detail,
-        record=record,
-    )
-
-
-def _partial(
-    snapshot,
-    label: str,
-    requires: str,
-    record: Mapping[str, Any],
-    connection_ref: str,
-    readout: Mapping[str, Any] | None = None,
-) -> list[Fact]:
-    """One unreadable fact per part a record says it could not read."""
-
-    unread = record.get("unread")
-    if not unread:
-        return []
-    parts = unread.items() if isinstance(unread, Mapping) else (("", unread),)
-    return [
-        _unreadable(
-            snapshot,
-            label,
-            requires,
-            reason=str(reason),
-            part=str(part),
-            connection_ref=connection_ref,
-            record=readout,
-        )
-        for part, reason in parts
-    ]
-
-
 def _frozen(record: Mapping[str, Any]) -> Mapping[str, Any]:
     return frozendict(dict(record))
-
-
-def _reading_facts(subject: Subject) -> Iterator[Fact]:
-    index = readings()
-    for item in index.unread():
-        if not reading_could_join(item.spec, subject):
-            continue
-        yield Fact(
-            label=item.spec.label,
-            value="",
-            source_kind=item.spec.kind,
-            source_label=item.spec.label,
-            observed_at=item.observed_at,
-            state=UNREADABLE,
-            detail=item.detail,
-        )
-    for joined in index.about(subject):
-        spec = joined.spec
-        source = _joined_source(joined)
-        if joined.title:
-            yield source(joined.relation, joined.title)
-        if joined.issuer:
-            yield source("Issued by", joined.issuer)
-        for name in joined.hostnames:
-            yield source("Hostname", name)
-        for address in joined.addresses:
-            yield source("Address", address)
-        yield from _partial(
-            SimpleNamespace(kind=spec.kind, observed_at=joined.observed_at, error=""),
-            spec.label,
-            ", ".join(spec.requires),
-            joined.record,
-            joined.connection_ref,
-            joined.record,
-        )
-        yield from _record_part_facts(joined)
-
-
-def _record_part_facts(joined: Joined) -> Iterator[Fact]:
-    """The parts refused on this one record, named by its title."""
-
-    title = joined.title.strip().lower()
-    if not title:
-        return
-    for refused in part_refusals((joined.kind,)):
-        if refused.scope == title:
-            yield _part_fact(refused)
-
-
-def _joined_source(joined: Joined) -> Callable[..., Fact]:
-    def fact(name: str, value: str, detail: str = "") -> Fact:
-        return Fact(
-            label=name,
-            value=str(value),
-            source_kind=joined.kind,
-            source_label=joined.label,
-            connection_ref=joined.connection_ref,
-            observed_at=joined.observed_at,
-            detail=detail,
-            record=joined.record,
-        )
-
-    return fact
-
-
-def _source(snapshot, label: str, connection_ref: str, record: Mapping[str, Any] | None = None) -> Callable[..., Fact]:
-    def fact(name: str, value: str, detail: str = "") -> Fact:
-        return Fact(
-            label=name,
-            value=str(value),
-            source_kind=snapshot.kind,
-            source_label=label,
-            connection_ref=connection_ref,
-            observed_at=snapshot.observed_at,
-            detail=detail,
-            record=record,
-        )
-
-    return fact
-
-
-def _requires(provider) -> str:
-    """What reading this kind needs, from the connections the provider declares."""
-
-    if not provider.connection_providers:
-        return ""
-    return f"a reachable {' or '.join(provider.connection_providers)} connection"
-
-
-def _provider_facts(subject: Subject) -> Iterator[Fact]:
-    for kind, provider in _joinable_providers():
-        label = kind_label(kind)
-        for snapshot in _inventory(kind):
-            if not snapshot.reachable:
-                yield _unreadable(snapshot, label, _requires(provider))
-                continue
-            for record in snapshot.records:
-                yield from _record_facts(subject, provider, snapshot, label, record)
-
-
-def _record_facts(subject: Subject, provider, snapshot, label: str, record) -> Iterator[Fact]:
-    """What one provider record says about ``subject``, if it is about it."""
-
-    connection_ref = str(record.get("connection_ref", "") or "")
-    try:
-        names, answers, origin = _record_keys(provider, record)
-    except (KeyError, TypeError, ValueError) as exc:
-        yield _unreadable(
-            snapshot,
-            label,
-            "",
-            reason=f"A record could not be read: {exc!r}.",
-            connection_ref=connection_ref,
-        )
-        return
-    if not _keys_about(subject, names, answers, origin):
-        return
-    source = _source(snapshot, label, connection_ref)
-    for name in names:
-        yield source("Hostname", normalized_hostname(name))
-    for answer in answers:
-        yield source("Address", answer, detail=", ".join(names))
-    if origin and origin not in answers:
-        yield source("Origin", origin, detail=", ".join(names))
-    yield from _partial(snapshot, label, _requires(provider), record, connection_ref)
 
 
 def _record_keys(provider, record, *, by_identity: bool = False) -> tuple[tuple[str, ...], tuple[str, ...], str]:
@@ -882,57 +611,3 @@ def _keys_about(subject: Subject, names: tuple[str, ...], answers: tuple[str, ..
         or subject.holds(answers)
         or (origin and (subject.holds((origin,)) or subject.names((host_of(origin),))))
     )
-
-
-def _container_facts(subject: Subject) -> Iterator[Fact]:
-    provider = PROVIDERS[CONTAINER_KIND]
-    label = provider.label or CONTAINER_KIND
-    for snapshot in _inventory(CONTAINER_KIND):
-        if not snapshot.reachable:
-            yield _unreadable(snapshot, label, _requires(provider))
-            continue
-        for record in snapshot.records:
-            running = Running.of(record, snapshot.observed_at)
-            if not (subject.names((running.host,)) or subject.holds((running.host_address,))):
-                continue
-            source = _source(snapshot, label, running.connection_ref)
-            yield source("Container", running.name, detail=running.state)
-            if running.host_address:
-                yield source("Address", running.host_address)
-            yield from _partial(snapshot, label, _requires(provider), record, running.connection_ref)
-
-
-def _tailnet_facts(subject: Subject) -> Iterator[Fact]:
-    provider = PROVIDERS[TAILNET_KIND]
-    label = provider.label or TAILNET_KIND
-    known = tailnet.devices()
-    for snapshot in snapshots()[TAILNET_KIND]:
-        if not snapshot.connected:
-            continue
-        if not snapshot.reachable:
-            yield _unreadable(snapshot, label, _requires(provider))
-            continue
-        for record in snapshot.records:
-            device = known.get(str(record.get("name", "")))
-            if device is None or not _device_about(device, subject):
-                continue
-            connection_ref = str(record.get("connection_ref", "") or "")
-            yield from _device_facts(device, _source(snapshot, label, connection_ref))
-            yield from _partial(snapshot, label, _requires(provider), record, connection_ref)
-
-
-def _device_about(device: tailnet.Device, subject: Subject) -> bool:
-    """Whether a tailnet device is ``subject``, by any of its names or addresses."""
-
-    return subject.names((device.name, device.label, device.dns_name)) or subject.holds(device.addresses)
-
-
-def _device_facts(device: tailnet.Device, source: Callable[..., Fact]) -> Iterator[Fact]:
-    """What the tailnet says about one device: its name, addresses, system and presence."""
-
-    yield source("Tailnet name", device.label)
-    for address in device.addresses:
-        yield source("Address", address)
-    if device.os:
-        yield source("Operating system", device.os)
-    yield source("Online", "yes" if device.online else "no")

@@ -175,7 +175,7 @@ class ServiceTests(SentinelMixin, TestCase):
 
     def test_a_missing_record_is_not_found_and_names_nothing_sent(self):
         sent = "sent-by-the-caller-7f3a"
-        for name in ("assets", "machines", "infrastructure.resources"):
+        for name in ("assets", "machines", "infrastructure"):
             with self.subTest(name):
                 with self.assertRaises(RecordNotFound):
                     services.get_resource(name, sent)
@@ -262,7 +262,7 @@ class ServiceTests(SentinelMixin, TestCase):
             with self.subTest(name):
                 self.assertNoSentinel(answer)
         # The planted connection was served: the absence is not vacuous.
-        self.assertIn(SENTINEL_CONNECTION, json.dumps(answers["list_resource connection.standing"], default=str))
+        self.assertIn(SENTINEL_CONNECTION, json.dumps(answers["list_resource connections"], default=str))
 
     def readable(self, read, *args):
         from hq.platform.application.security import AuthorizationError
@@ -397,7 +397,7 @@ class ServiceTests(SentinelMixin, TestCase):
             lambda: (instance,),
         )
         with offering(spec, alone=True):
-            listed = services.list_resource("connection.standing")
+            listed = services.list_resource("connections")
 
         self.assertNotIn("example.infrastructure", [item["family"] for item in listed["items"]])
         self.assertNotIn(instance.id, [item["id"] for item in listed["items"]])

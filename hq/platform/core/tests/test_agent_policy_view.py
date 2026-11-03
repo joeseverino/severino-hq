@@ -65,7 +65,7 @@ class DormantColumnTests(TestCase):
 
 
 class PolicyWriteTests(TestCase):
-    """The page's save runs ``agents.policy.set``, which only a person holds."""
+    """The page's save runs ``agent.policy.set``, which only a person holds."""
 
     def setUp(self):
         self.user = get_user_model().objects.create_user("op", password="x" * 20)

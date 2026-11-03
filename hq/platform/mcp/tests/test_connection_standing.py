@@ -17,7 +17,7 @@ class ConnectionStandingTests(TestCase):
         self.enterContext(set_principal(mcp_principal()))
 
     def test_a_connections_reads_and_changes_are_the_pages(self):
-        item = services.get_resource("connection.standing", "example-tailnet")
+        item = services.get_resource("connections", "example-tailnet")
         self.client.force_login(get_user_model().objects.create_user("operator", password="pw", is_staff=True))
         reads, changes = page_lists(self.client, "example-tailnet")
 

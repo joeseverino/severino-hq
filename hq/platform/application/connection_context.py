@@ -7,6 +7,7 @@ read asked for; the summary counts; the security posture; and HQ's own request
 path. None of them derives a fact the others cannot return.
 """
 
+from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any
@@ -303,11 +304,7 @@ class ConnectionsContext:
     def attention_states(self) -> tuple[tuple[int, str], ...]:
         """(count, state) for each state that needs a person, in the rows' own words."""
 
-        counts: dict[str, int] = {}
-        for row in self.rows:
-            if row.lifecycle.needs_attention:
-                label = row.state_label.lower()
-                counts[label] = counts.get(label, 0) + 1
+        counts = Counter(row.state_label.lower() for row in self.rows if row.lifecycle.needs_attention)
         return tuple((count, label) for label, count in counts.items())
 
     @property
@@ -318,10 +315,6 @@ class ConnectionsContext:
         for row in self.rows:
             found.setdefault(row.used_for, []).append(row)
         return tuple((label, tuple(rows)) for label, rows in found.items())
-
-    @property
-    def problem_count(self) -> int:
-        return sum(row.problems for row in self.rows)
 
     @property
     def all_custodied(self) -> bool:

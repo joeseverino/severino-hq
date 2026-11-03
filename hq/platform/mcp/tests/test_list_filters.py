@@ -47,13 +47,13 @@ def declared_choices():
         ("contact.submissions", "status", get_args(ContactStatus)),
         ("expenses", "category", [value for value, _ in EXPENSE_CATEGORY_CHOICES]),
         ("analytics", "dimension", RumDaily.Dimension.values),
-        ("action.items", "status", ATTENTION_ORDER),
+        ("action_items", "status", ATTENTION_ORDER),
         (
-            "action.items",
+            "action_items",
             "source",
             [domain.id for domain in all_domains() if domain.integration.attention is not None],
         ),
-        ("infrastructure.resources", "kind", list(PROVIDERS)),
+        ("infrastructure", "kind", list(PROVIDERS)),
         ("readings", "provider", {spec.provider for spec in OBSERVATIONS.values()}),
     )
 

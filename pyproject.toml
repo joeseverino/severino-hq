@@ -107,6 +107,16 @@ forbidden_modules = ["hq.platform.api", "hq.platform.mcp"]
 # The application's tests drive a call through the doors end to end.
 ignore_imports = ["hq.platform.application.tests.** -> hq.**"]
 
+# audit:dead: a read in a test does not keep a name alive. A function a
+# decorator hands to a caller outside HQ is called: a signal receiver, a system
+# check, an exit hook, a Pydantic validator, and an @override, which its base
+# class calls. Django calls an app's AppConfig by finding it in apps.py, and a
+# form's clean_<field> by building the name.
+[tool.vulture]
+exclude = ["*/tests/*"]
+ignore_decorators = ["@receiver", "@register", "@checks.register", "@atexit.register", "@field_validator", "@model_validator", "@override"]
+ignore_names = ["*Config", "clean_*"]
+
 [tool.uv]
 package = false
 default-groups = ["dev", "tools"]
@@ -126,7 +136,8 @@ tools = [
     # Writes the served font from its source (tools/fonts), and the font tests read it.
     "fonttools==4.68.0",
     "hypothesis==6.170.14",
-    # Holds the layering contracts in [tool.importlinter] (lint:imports).
+    # Holds the layering contracts in [tool.importlinter] (lint:imports); its
+    # graph, grimp, counts the imports between the layers (audit:layers).
     "import-linter==2.15",
     "mypy==2.4.1",
     # The pipeline tests read the workflows through it.
@@ -136,6 +147,8 @@ tools = [
     # Holds the clock still while the API examples are recorded (fix:api-examples).
     "time-machine==3.6.0",
     "types-jsonschema==4.26.0.20261006",
+    # Lists the names nothing outside tests reads (audit:dead, [tool.vulture]).
+    "vulture==2.16",
 ]
 browser = [
     "playwright==1.64.1",
@@ -194,6 +207,8 @@ ignore = [
 "tools/**" = ["TID251"]
 # A synthetic extension standing in for a separate package, outside the host's product code.
 "tests/fixtures/example_hq_plugin/registry.py" = ["TID251"]
+# vulture's whitelist is attribute reads that do nothing, which vulture counts as uses.
+"tools/lint/vulture-whitelist.py" = ["B018"]
 # Django's declarative class bodies: Meta options, form fields and migration operations are lists by contract.
 # Django's RunPython calls a migration function with (apps, schema_editor).
 "**/migrations/*.py" = ["RUF012", "PLC0415", "ARG001"]

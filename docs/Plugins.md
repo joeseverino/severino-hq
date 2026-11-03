@@ -114,6 +114,7 @@ domain; the SDK owns integration mechanics:
 | References to other records | `hq_sdk.references` |
 | Calendar sources | `hq_sdk.calendar` |
 | Tables, forms, UI projections, money, global search | the matching `hq_sdk.*` module |
+| Moving rows the host keeps under a renamed capability | `hq_sdk.migrations` |
 | Synthetic siblings and style checks | `hq_sdk.testing` |
 
 Imports from `application`, `core` or another host app are unsupported: they
@@ -157,7 +158,10 @@ one operation id: the id it is given, else the one of the operation it runs
 inside, else a new one. Without a principal it is the operation of whoever its
 door bound (a request, a job, a command), and with nothing bound it is refused,
 as `record_event` is. Every door binds who acted where it starts, so a row nobody bound is a door's
-defect and fails where it runs.
+defect and fails where it runs. Once an actor is bound, a binding opened inside
+it that names another actor is refused: a job's work runs under its job's
+binding, a command under the shell's, and a step that needs a principal is
+handed the requester's. The same actor may name another interface.
 
 Every extension's `.github/workflows/admit-plugin.yml` is the same, because it
 names nothing about the extension:
@@ -218,6 +222,29 @@ installed.
 In CI it runs against host `main`, or the host branch named like the
 extension's branch when one exists
 ([Coordinated changes](#coordinated-changes)).
+
+### Renaming a capability
+
+A capability's name follows the API's pattern ([API](API.md#names)). HQ keeps
+rows under it: an operator's standing rule, and a change held for a person.
+A rule left under an old name matches nothing, so the call would run at its
+default, and a held change could no longer be approved. A rename therefore
+lands with a migration of the plugin's own that moves them:
+
+```python
+from django.db import migrations
+
+from hq_sdk.migrations import CAPABILITY_ROWS, RenameCapabilities
+
+
+class Migration(migrations.Migration):
+    dependencies = [("example_ledger", "0004_entries"), CAPABILITY_ROWS]
+    operations = [RenameCapabilities({"example.entries": "example.entry.list"})]
+```
+
+`CAPABILITY_ROWS` is the host migration whose rows the operation reads, so
+the migration names no host app. A settled decision and the audit log keep
+the name they were written under.
 
 ### Several extensions in one repository
 
@@ -967,7 +994,8 @@ Three rules keep the work honest:
   ends with a sentence (`progress(..., force=True)`), which the control shows
   when done. A failure the operator can act on is `Failed("...")`: the sentence
   is shown where the work was asked for and nothing stored is touched. Any
-  other exception is a fault, kept with its traceback.
+  other exception is a fault: the job says its kind, and its traceback is in
+  HQ's log alone.
 - **Refuse from what HQ holds.** `refuse(subject)` returns why the work cannot
   be asked for now, or `""`. Every control for the work is drawn unusable with
   that reason: its `ask`, and any link HQ offers to its command (a connection's

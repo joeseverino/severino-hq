@@ -6,6 +6,7 @@ connection is refused; its initialize and tools/list are still served.
 """
 
 import threading
+from contextlib import contextmanager
 from unittest import mock
 
 from asgiref.sync import async_to_sync
@@ -35,6 +36,16 @@ def _call(ident):
 
 def _bearer(actor):
     return _token(actor, scope="read")
+
+
+@contextmanager
+def _clock_held():
+    """Limits of the test's own, on a clock that stands still, for the block: a second
+    call is inside the first's minute on any runner, whatever its clock or the
+    process's shared limits do between the two."""
+
+    with mock.patch.object(agent_limits, "LIMITS", agent_limits.Limits(lambda: 1000.0)):
+        yield
 
 
 def _denials(actor):
@@ -88,7 +99,7 @@ def _code(answer):
 class RateAtTheDoorsTests(TestCase):
     def test_the_machine_api_answers_429_with_retry_after_and_records_a_flood_once(self):
         bearer = _bearer("example-rate-api")
-        with _serving():
+        with _serving(), _clock_held():
             answered = [self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {bearer}") for _ in range(3)]
             written = AuditLog.objects.count()
             flood = [self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {bearer}") for _ in range(5)]
@@ -112,7 +123,7 @@ class RateAtTheDoorsTests(TestCase):
                 await post(bearer, _call(3)),
             ]
 
-        with _serving(), mock.patch(TOOL, return_value={"connections": []}) as tool:
+        with _serving(), _clock_held(), mock.patch(TOOL, return_value={"connections": []}) as tool:
             (first, second), (initialized, throttled) = _session(steps, asgi.admit_agent)
 
         self.assertEqual([_code(first), _code(second)], [None, None])

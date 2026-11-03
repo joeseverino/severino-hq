@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
-from django.utils.functional import SimpleLazyObject
+from django.utils.functional import SimpleLazyObject, empty
 
 from hq.platform.core.tests.registries import ENTRYPOINTS, PREFIX, module_of, registries
 from hq.platform.core.tests.test_settings_env import REPO_ROOT
@@ -118,13 +118,11 @@ class LazyBootTests(SimpleTestCase):
         """A lazy object built by the read would connect its receivers partway through it, so
         the read would depend on the order the collector keeps objects in."""
 
-        built = []
-        planted = SimpleLazyObject(lambda: built.append("built") or object())
+        planted = SimpleLazyObject(object)
 
         registries()
 
-        self.assertEqual(built, [], "the read built a lazy object it passed")
-        del planted
+        self.assertIs(planted._wrapped, empty, "the read built a lazy object it passed")
 
 
 EAGER_PROBE = """

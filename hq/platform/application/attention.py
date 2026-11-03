@@ -658,7 +658,7 @@ def _apply_help(resource) -> dict:
     policy = provider.actions.get("reconcile") if provider else None
     link = None
     if policy is None or policy.mode != "locked":
-        link = remedy_link("infrastructure.reconcile", resource.key)
+        link = remedy_link("infrastructure.resource.reconcile", resource.key)
     if link is not None:
         return {"actions": (link,)}
     return {

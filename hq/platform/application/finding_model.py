@@ -165,7 +165,7 @@ def reconcile_remedy(node: TopologyNode) -> tuple[FindingRemedy, ...]:
     policy = provider.actions.get("reconcile") if provider else None
     if policy is not None and policy.mode == "locked":
         return ()
-    return (FindingRemedy(capability="infrastructure.reconcile", target=node.label),)
+    return (FindingRemedy(capability="infrastructure.resource.reconcile", target=node.label),)
 
 
 def is_observable(kind_key: str) -> bool:

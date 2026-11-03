@@ -8,6 +8,7 @@ is a registered capability, absent for whoever cannot run it (``_resolved``).
 """
 
 import inspect
+from collections import Counter
 from collections.abc import Iterator
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
@@ -144,10 +145,9 @@ def _estate(topology: Topology) -> FindingEstate:
         if newest is None or moment > newest:
             latest[node.kind_key] = moment
     governed = frozenset(edge.target for edge in topology.edges if edge.kind == "governs")
-    counts: dict[str, int] = {}
-    for node in topology.nodes:
-        if node.kind == "resource" and node.managed and node.kind_key:
-            counts[node.kind_key] = counts.get(node.kind_key, 0) + 1
+    counts = Counter(
+        node.kind_key for node in topology.nodes if node.kind == "resource" and node.managed and node.kind_key
+    )
     by_id = {node.id: node for node in topology.nodes}
     return FindingEstate(
         topology,
@@ -355,9 +355,9 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
 # kind through its readings, a check of HQ's standard through the connection
 # standing that reports it.
 _NODE_READ = "relationships"
-_RECORDS_READ = "infrastructure.resources"
+_RECORDS_READ = "infrastructure"
 _READINGS_READ = "readings"
-_POSTURE_READ = "connection.standing"
+_POSTURE_READ = "connections"
 
 
 def read_gate(finding: Finding, subject: TopologyNode | None) -> tuple[str, ...] | None:
@@ -730,9 +730,7 @@ def findings(*, principal: Principal, **narrowing: object) -> Findings:
     limit: int | None = query["limit"]
     floor = SEVERITIES.index(query["severity"]) if query["severity"] else len(SEVERITIES)
     raised = estate_findings(principal=principal, rule=rule)
-    counts: dict[str, int] = {}
-    for finding in raised:
-        counts[finding.severity] = counts.get(finding.severity, 0) + 1
+    counts = Counter(finding.severity for finding in raised)
     eligible = [finding for finding in raised if _rank(finding.severity) <= floor]
     kept = eligible[:limit]
     return {

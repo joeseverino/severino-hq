@@ -52,7 +52,7 @@ from hq.platform.application.refusal_status import (
     Refusal,
     RefusalEnvelope,
     answered_by,
-    capability_codes,
+    capability_doors,
     refusal_of,
 )
 from hq.platform.application.request_identity import signed_in
@@ -628,7 +628,7 @@ findings: View = _projection(
 def connections(request: APIRequest) -> HttpResponse:
     """Connection contracts and whether this token is permitted each.
 
-    A family's instances are the ``connection.standing`` resource.
+    A family's instances are the ``connections`` resource.
     """
 
     return _ok(describe_connections(principal=request.principal))
@@ -708,10 +708,16 @@ def _body_json(request: HttpRequest) -> dict[str, Any]:
 
 
 def execute_codes(spec: CapabilitySpec | None) -> frozenset[str]:
-    """Every code a call of ``spec`` can be answered with: every endpoint's, the
-    envelope's own and the capability's; for None, a call by any name."""
+    """Every code a call of ``spec`` can be answered with; for None, a call by any name."""
 
-    return ENDPOINT_CODES | answered_by(Door.BODY) | capability_codes(spec)
+    return call_codes(capability_doors(spec))
+
+
+def call_codes(doors: Iterable[Door]) -> frozenset[str]:
+    """Every code a capability call passing ``doors`` can be answered with: every
+    endpoint's, the envelope's own and the call's."""
+
+    return ENDPOINT_CODES | answered_by(Door.BODY, *doors)
 
 
 # What a call answers under ``data``: the capability's own result, or that it waits for a person.

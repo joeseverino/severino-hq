@@ -41,7 +41,7 @@ from ..adoption import (
 from ..adoption_testing import managing_everything
 from ..infrastructure import PolicyError, save_managed_resource, suggest_key
 from ..security import cli_principal
-from ..services import service_catalog, service_or_prospect
+from ..services import prospects, service_catalog
 from ..sweep import record_sweep
 from ..zones import (
     adopt_zone_records,
@@ -1169,7 +1169,7 @@ class PublishAServiceTests(TestCase):
         most confident statement on a page about something that does not exist.
         """
 
-        service = service_or_prospect("new.example.com")
+        service = prospects(("new.example.com",))[0]
 
         self.assertEqual(service.status, "unknown")
         self.assertEqual(service.status_label, "Nothing set up in HQ")
@@ -1191,7 +1191,7 @@ class PublishAServiceTests(TestCase):
             enabled=True,
         )
 
-        service = service_or_prospect("new.example.com")
+        service = prospects(("new.example.com",))[0]
 
         certificate = next(f for f in service.facets if f.id == "certificate")
         self.assertTrue(certificate.present)
@@ -1260,7 +1260,7 @@ class ExternallyServedNameTests(TestCase):
     def test_a_cname_declares_where_the_name_is_served(self):
         self._record("apex", "example.com", "CNAME", "example.pages.dev")
 
-        origin = service_or_prospect("example.com").origin
+        origin = prospects(("example.com",))[0].origin
 
         self.assertIsNotNone(origin)
         self.assertEqual(origin.address, "example.pages.dev")
@@ -1272,7 +1272,7 @@ class ExternallyServedNameTests(TestCase):
 
         self._record("apex", "example.com", "CNAME", "example.pages.dev")
 
-        origin = service_or_prospect("example.com").origin
+        origin = prospects(("example.com",))[0].origin
 
         self.assertFalse(origin.known)
         self.assertTrue(origin.external)
@@ -1280,7 +1280,7 @@ class ExternallyServedNameTests(TestCase):
     def test_a_record_that_routes_nothing_declares_no_origin(self):
         self._record("policy", "example.com", "TXT", '"v=spf1 -all"')
 
-        self.assertIsNone(service_or_prospect("example.com").origin)
+        self.assertIsNone(prospects(("example.com",))[0].origin)
 
     def test_an_internal_proxy_origin_is_not_called_external(self):
         ManagedResource.objects.create(
@@ -1307,7 +1307,7 @@ class ExternallyServedNameTests(TestCase):
             enabled=True,
         )
 
-        origin = service_or_prospect("app.example.com").origin
+        origin = prospects(("app.example.com",))[0].origin
 
         self.assertFalse(origin.external)
 
@@ -1397,8 +1397,8 @@ class WhatCountsAsAServiceTests(TestCase):
         self._record("www", "www.example.com", "CNAME", "example.com")
 
         # Asked for by its alias, the page is still the service's.
-        self.assertEqual(service_or_prospect("www.example.com").aliases, ())
-        self.assertEqual(service_or_prospect("example.com").aliases, ("www.example.com",))
+        self.assertEqual(prospects(("www.example.com",))[0].aliases, ())
+        self.assertEqual(prospects(("example.com",))[0].aliases, ("www.example.com",))
 
 
 class KnownHostTests(TestCase):
@@ -1452,7 +1452,7 @@ class AliasRecordPlacementTests(TestCase):
     def setUp(self):
         self._record("site", "example.com", "example.pages.dev")
         self._record("www", "www.example.com", "example.com")
-        self.service = service_or_prospect("example.com")
+        self.service = prospects(("example.com",))[0]
 
     def test_an_alias_does_not_invent_a_wiring_fault(self):
         self.assertEqual(self.service.faults, ())
@@ -1508,7 +1508,7 @@ class ExternallyAnsweredFacetTests(TestCase):
 
     def test_a_routing_facet_is_not_reported_missing_when_the_name_leaves_the_network(self):
         response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "example.com"}))
-        ingress = next(f for f in service_or_prospect("example.com").facets if f.id == "proxy")
+        ingress = next(f for f in prospects(("example.com",))[0].facets if f.id == "proxy")
 
         # A working arrangement, not a gap, and said once. Every facet that
         # routes takes this branch, so a sentence in the card would be printed

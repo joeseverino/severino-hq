@@ -42,6 +42,7 @@ from hq.platform.core.tests.browser.probes.settle import (
 from hq.platform.core.tests.browser.reading import _in_one_trip, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, static_file
+from hq.platform.core.tests.browser.shots import shoot_page
 from hq.platform.core.tests.browser.survey import AS_FINDINGS, _as_is, geometry_probes, palette_probes
 from hq.platform.core.tests.browser.uncaught import Uncaught
 from hq.platform.core.tests.browser.widths import viewport
@@ -61,6 +62,11 @@ def failure_name(params):
     name = "-".join(str(params[key]) for key in keys)
     return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")[:150] or "subtest"
 
+
+# A failure's shot of a long page, the opened API reference above all, is a
+# capture the browser lays the whole page out for, past an action's 5 s; it is
+# given a navigation's 30 s, the failure it shows being already decided.
+_FAILURE_SHOT_WITHIN = 30_000
 
 # What a running test holds that holds the test itself; the parent has no use
 # for either, and Django sends them as None.
@@ -478,35 +484,42 @@ class BrowserGate(SimpleTestCase):
         hq-browser-failure-* folder in the temporary directory, every one of
         which CI keeps when a gate fails, and beside it as ``name``.zip the
         trace of what the test did since its last failure, which
-        `playwright show-trace` opens."""
+        `playwright show-trace` opens. The trace is kept first, so a shot
+        that cannot be taken still leaves it. A page past what a shot holds
+        is shot to there, and the line says so (``shoot_page``)."""
 
         if self.failures is None:
             self.failures = Path(tempfile.mkdtemp(prefix=f"hq-browser-failure-{self._testMethodName}-"))
         path = self.failures / f"{name}.png"
-        self.page.screenshot(path=str(path), full_page=True)
-        print(f"Browser failure screenshot: {path}")
         trace = path.with_suffix(".zip")
         tracing = self.page.context.tracing
         tracing.stop_chunk(path=trace)
         tracing.start_chunk()
         print(f"Browser failure trace: {trace}")
+        cut = shoot_page(self.page, path, timeout=_FAILURE_SHOT_WITHIN)
+        print(f"Browser failure screenshot: {path}" + (f" ({cut})" if cut else ""))
 
     def subtest_failed(self, params):
         """A failed subtest's page, shot while it is still in the browser and
-        named for its page, width and rule. A browser that has gone with the
-        failure is said instead."""
+        named for its page, width and rule."""
 
-        name = failure_name(params)
-        try:
-            self.shoot(name)
-        except BrowserError as gone:
-            print(f"No browser failure screenshot of {name}: {str(gone).splitlines()[0]}")
+        self.shoot_or_say(failure_name(params))
 
     def capture_failure(self):
         """A test that failed outside its subtests, shot as it ended."""
 
         if self.failed:
-            self.shoot("page")
+            self.shoot_or_say("page")
+
+    def shoot_or_say(self, name):
+        """``shoot(name)``, or why there is no shot when the browser cannot take
+        one (it has gone with the failure, or the shot timed out): the test's
+        own failure is what its report shows, never one from its cleanup."""
+
+        try:
+            self.shoot(name)
+        except BrowserError as gone:
+            print(f"No browser failure screenshot of {name}: {str(gone).splitlines()[0]}")
 
     def open(self, name, width):
         self.page.set_viewport_size(viewport(width))

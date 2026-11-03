@@ -254,7 +254,7 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   `iss` and `aud`), then its back-channel logout event, a `sub`, a `jti` and
   no `nonce`. Pocket ID sends no `sid`, so every session of that subject ends;
   the account and its password, kept for break-glass, are untouched. The
-  sessions end through the `sessions.sign_out` capability, run by HQ itself
+  sessions end through the `session.sign_out` capability, run by HQ itself
   with the token's `jti` as its retry key, so a redelivered token acts once and
   the act is audited. Its `end_sessions` capability is held only at the
   internal interface (`HELD_ONLY_AT`), so no person, device or agent signs
@@ -335,7 +335,7 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
 - So a device's standing takes two halves. One permission on HQ's Pocket ID
   API resource, `own_device` (`DEVICE_SCOPE`), given by an administrator to
   each device's client; and the person's own registration of that client in
-  HQ, on the Agents page (`OwnDevice`, `agents.device.set`, held only by a
+  HQ, on the Agents page (`OwnDevice`, `agent.device.set`, held only by a
   person), matched to the token's subject as bound at their sign-in. A token
   carrying the permission from a client its person registered is
   `device_principal`'s, on the `device` interface. Its other permissions are
@@ -395,7 +395,7 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   public contract in `hq-api.openapi.json`, and reads and changes nothing.
 - Until agents resume, a paused agent's held requests cannot be approved, and
   work it queued is not handed to the controller.
-- A person can block one client from the Agents page (`agents.block.set`,
+- A person can block one client from the Agents page (`agent.block.set`,
   held only by a person, as the pause is). The block is read on that client's
   every call at both doors, a person's own device included, and fails closed.
   On `/api/v2/` it is a 403 `agent_blocked`, and on `/api/mcp/` a tool result
@@ -554,7 +554,7 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
 
 - Talk to the public internet from the app server *with a credential*. The
   outbound calls HQ does make are narrow and named: the content index, and the
-  two public-registry lookups behind `lookup.name` / `lookup.address`.
+  two public-registry lookups behind `lookup.name.read` / `lookup.address.read`.
 - Give a lookup a credential. The lookups carry none, which is why they are
   allowed to run in the web process, rather than being queued through the
   controller like provider work.

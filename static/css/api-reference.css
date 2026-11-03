@@ -186,16 +186,19 @@
 .api-reference .scalar-app .endpoints .endpoint-path { display: block; min-width: 0; overflow-wrap: anywhere; }
 
 /* The viewer cuts a long value to one line behind an ellipsis: a property's
-   type and the values it takes, its default and example, an operation's path.
-   Each is what a reader came to read, so it wraps at the column's edge and is
-   read whole; a name with no break in it breaks where it meets the edge. The
-   box around a property's type clips too, so it is let go with the type. */
+   type and the values it takes, its default and example, an operation's path,
+   and the shape a choice between shapes shows (its selector's label, a type
+   or a schema's name, kept whole in a title a phone never shows). Each is
+   what a reader came to read, so it wraps at the column's edge and is read
+   whole; a name with no break in it breaks where it meets the edge. The box
+   around a property's type clips too, so it is let go with the type. */
 .api-reference .scalar-app :is(
   .property-detail-truncate,
   .property-detail-truncate > .property-detail-value,
   .property-example-value span,
   .property-default-value span,
-  .endpoint-label-path
+  .endpoint-label-path,
+  .composition-selector-label
 ) { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
 
 /* A code sample keeps its lines but wraps each at the column's edge, so a
@@ -203,6 +206,12 @@
    sideways; copying it still copies the lines as written. Its highlighting
    sets each token's own spacing, so the tokens are told too. */
 .api-reference .scalar-app .scalar-code-block :is(pre, pre *) { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* A hyphen in a path is held to the character after it, so a line ends
+   before the hyphen, where api-reference.js marks it may, and never after.
+   It is a token of a sample too, so it names the sample's box to outrank the
+   rule above. */
+.api-reference .scalar-app :is(.scalar-code-block pre, *) [data-path-hyphen] { text-wrap-mode: nowrap; }
 
 /* An answer's statuses take a second row rather than run past the card. */
 .api-reference .scalar-app .tab-list { flex-wrap: wrap; }

@@ -282,7 +282,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             web_route="core:audit_list",
         ),
         ResourceSpec(
-            "infrastructure.resources",
+            "infrastructure",
             "Records",
             "Everything HQ manages: what HQ expects and what is live.",
             Capability.READ,
@@ -291,7 +291,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             resource_context.get_managed_resource,
             "key",
             search=ResourceSearchDefinition(
-                "infrastructure.resources",
+                "infrastructure",
                 ManagedResource,
                 "key",
                 ("key", "kind", "spec", "status", "conditions"),
@@ -396,9 +396,9 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             record_type=RelationshipsRecord,
         ),
         ResourceSpec(
-            "paths",
-            "Request paths",
-            "The path a request for a hostname takes, hop by hop, with each hop's reading and certificate.",
+            "service.paths",
+            "Service paths",
+            "The path a request for a service's hostname takes, hop by hop, with each hop's reading and certificate.",
             Capability.READ,
             detail_handler=derived_reads.get_path,
             identifier="hostname",
@@ -456,7 +456,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             row_type=Tailnet,
         ),
         ResourceSpec(
-            "connection.standing",
+            "connections",
             "Connection status",
             "Each connection with what its credential sees, how fresh each reading is, what "
             "was refused and the fix; the summary counts, the security posture and HQ's path.",
@@ -480,7 +480,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
 def dashboard() -> tuple[ResourceSpec, ...]:
     return (
         ResourceSpec(
-            "action.items",
+            "action_items",
             "Needs you",
             "The composed action queue: what needs doing, from every domain.",
             Capability.READ,

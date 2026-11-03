@@ -375,7 +375,10 @@ _REFERENCE_SIDEWAYS = (
 # than one line and starts a line other than at a "/", ".", "-", "?" or "&",
 # where Scalar breaks the path in an operation's heading and api-reference.js
 # breaks one everywhere else, or just after a query's "?", where both engines
-# break one themselves; each line of it shown. A word is the characters
+# break one themselves; each line of it shown. A segment between two marks
+# wider than its line is cut where it meets the edge (`overflow-wrap`), which
+# nothing can avoid, so a line may also start inside a segment that began the
+# line before it and still did not fit there. A word is the characters
 # between two spaces in one box's lines: a box of its own (a flex item, a
 # block) starts a new one. Where a line ends is where the next character
 # drawn starts below the last.
@@ -393,24 +396,45 @@ _REFERENCE_PATH_BREAKS = (
     return boxes.get(el);
   };
   const range = document.createRange();
+  const drawnAt = ([node, at]) => {
+    range.setStart(node, at);
+    range.setEnd(node, at + 1);
+    const drawn = range.getBoundingClientRect();
+    return drawn.width || drawn.height ? drawn : null;
+  };
+  const below = (drawn, above) => drawn.top >= above.bottom - 1;
+  // Whether a line may end inside `line` after its first character.
+  const markIn = (line) => [...line].some((ch, j) =>
+    j > 0 && (line[j - 1] === '?' || (/[/.?&-]/.test(ch) && !/[\s/.?&:-]/.test(line[j - 1]))));
   const found = [];
   let word = [];
+  let before = null;
   const close = () => {
     if (word.some(([node, at]) => node.data[at] === '/')) {
       const lines = [''];
       let last = null;
-      for (const [node, at] of word) {
-        range.setStart(node, at);
-        range.setEnd(node, at + 1);
-        const drawn = range.getBoundingClientRect();
-        if (!drawn.width && !drawn.height) continue;
-        if (last && drawn.top >= last.bottom - 1) lines.push('');
-        lines[lines.length - 1] += node.data[at];
+      let began = true;
+      for (const place of word) {
+        const drawn = drawnAt(place);
+        if (!drawn) continue;
+        if (!last) began = !before || below(drawn, before);
+        if (last && below(drawn, last)) lines.push('');
+        lines[lines.length - 1] += place[0].data[place[1]];
         last = drawn;
       }
-      const atMark = (line, i) => /^[/.?&-]/.test(line) || lines[i].endsWith('?');
-      if (lines.slice(1).some((line, i) => !atMark(line, i))) found.push(lines.join(' | '));
+      // Each line, whether it starts where a segment between two marks
+      // starts a line of its own: the word's first line when it began a
+      // line, a line that starts at a mark, and one inside a segment that
+      // began the line before it and still did not fit there.
+      const starts = [began];
+      for (let i = 1; i < lines.length; i += 1) {
+        const atMark = /^[/.?&-]/.test(lines[i]) || lines[i - 1].endsWith('?');
+        starts.push(atMark || (starts[i - 1] && !markIn(lines[i - 1])));
+      }
+      if (starts.slice(1).some((start) => !start)) found.push(lines.join(' | '));
     }
+    const end = word.length ? drawnAt(word[word.length - 1]) : null;
+    if (end) before = end;
     word = [];
   };
   let box = null;
@@ -418,7 +442,7 @@ _REFERENCE_PATH_BREAKS = (
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     if (!textShown(node) || node.parentElement.closest(unseen)) continue;
     const holder = boxOf(node.parentElement);
-    if (holder !== box) { close(); box = holder; }
+    if (holder !== box) { close(); box = holder; before = null; }
     for (let at = 0; at < node.data.length; at += 1) {
       if (/\s/.test(node.data[at])) close();
       else word.push([node, at]);
@@ -428,6 +452,29 @@ _REFERENCE_PATH_BREAKS = (
   return [...new Set(found)];
 }"""
 )
+
+# A path of many hyphenated parts, and one whose last part, a digest, is wider
+# than any line of a sample.
+_HYPHENATED_PATH = (
+    "/example/alpha-bravo-charlie-delta-echo-foxtrot-golf-hotel-india-juliet-kilo-lima-mike-november-oscar-papa/"
+)
+_DIGEST_PATH = "registry.example.net/example/image@sha512:" + "0123456789abcdef" * 8
+
+# Each path written into a code sample on a line of its own, as the viewer
+# writes one; then the text of each as the page holds it, and how many lines
+# it is drawn over.
+_PLANT_PATHS = """([sample, paths]) => {
+  const planted = paths.map((path) => {
+    const line = document.createElement('span');
+    line.textContent = path;
+    document.querySelector(sample).append('\\n', line);
+    return line;
+  });
+  return new Promise((done) => requestAnimationFrame(() => done(planted.map((line) => ({
+    text: line.textContent,
+    lines: new Set([...line.getClientRects()].map((rect) => Math.round(rect.top))).size,
+  })))));
+}"""
 
 # Each run of text the viewer draws, whole and trimmed.
 _REFERENCE_WORDS = (
@@ -496,33 +543,53 @@ def _strings(value):
 
 
 def reference_outline(document):
-    """The sidebar HQ's own document declares: groups, and the domains under each."""
+    """The sidebar HQ's own document declares: each group, the summaries of
+    its own operations in the document's order, and the domains under it."""
 
     under: dict[str, list[str]] = {}
     for tag in document["tags"]:
         if "parent" in tag:
             under.setdefault(tag["parent"], []).append(tag["summary"])
-    return [[tag["summary"], under.get(tag["name"], [])] for tag in document["tags"] if "parent" not in tag]
+    operations: dict[str, list[str]] = {}
+    for item in document["paths"].values():
+        for operation in item.values():
+            operations.setdefault(operation["tags"][0], []).append(operation["summary"])
+    return [
+        (tag["summary"], operations.get(tag["name"], []), under.get(tag["name"], []))
+        for tag in document["tags"]
+        if "parent" not in tag
+    ]
 
 
 def _named(role, name):
     """An ARIA snapshot node of ``role`` and exactly ``name``, quoted as YAML."""
 
-    return "'" + f"{role} {json.dumps(name)}".replace("'", "''") + "'"
+    return _quoted(f"{role} {json.dumps(name)}")
+
+
+def _quoted(node):
+    """An ARIA snapshot node, quoted as YAML."""
+
+    return "'" + node.replace("'", "''") + "'"
 
 
 def sidebar_snapshot(outline):
     """The sidebar ``outline`` declares with every group open, as an ARIA
     snapshot: the viewer's introduction, then each group, and under a group
-    each domain that opens in turn, both lists exactly those entries. A
-    group's operations are left to the viewer."""
+    its own operations, each a link named for its summary first, then each
+    domain that opens in turn, both lists exactly those entries. A domain's
+    operations are left to the viewer."""
 
     lines = ["- complementary:", "  - list:", "    - /children: equal", "    - listitem:", "      - link /.*/:"]
     lines.append("        - /url: /^#description\\//")
-    for group, domains in outline:
+    for group, operations, domains in outline:
         lines += ["    - listitem:", f"      - {_named('link', group)}", "      - button [expanded]"]
-        if domains:
+        if operations or domains:
             lines += ["      - list:", "        - /children: equal"]
+            for operation in operations:
+                # The pattern is read as a JavaScript one, so only its syntax is escaped.
+                pattern = re.sub(r"[.*+?^${}()|[\]\\/]", r"\\\g<0>", operation)
+                lines += ["        - listitem:", f"          - {_quoted(f'link /^{pattern} /')}"]
             for domain in domains:
                 lines += ["        - listitem:", f"          - {_named('link', domain)}", "          - button"]
     return "\n".join(lines)
@@ -598,16 +665,17 @@ class ReferenceBrowserTests(BrowserGate):
         self.assertLessEqual(frame["sideways"], 1)
 
     def test_the_sidebar_is_hqs_navigation(self):
-        """The groups and domains the document declares, in its order, and nothing else:
-        none for the schemas."""
+        """The groups the document declares, each with its own operations, then
+        its domains, in its order, and nothing else: none for the schemas."""
 
         outline = reference_outline(self.document)
-        self.assertTrue(any(under for _, under in outline))
+        self.assertTrue(any(under for _, _, under in outline))
+        self.assertTrue(any(own and under for _, own, under in outline))
         self.visit(WIDE)
         sidebar = self.sidebar()
         # Each group's control, opened as a reader opens it. A group's control
         # comes before the domains it shows, so the first of its name is its own.
-        for group, _ in outline:
+        for group, _, _ in outline:
             control = sidebar.get_by_role("button", name=re.compile(rf" - {re.escape(group)}$")).first
             if control.get_attribute("aria-expanded") == "false":
                 control.click()
@@ -743,6 +811,26 @@ class ReferenceBrowserTests(BrowserGate):
             self.page.set_viewport_size({"width": REFERENCE_PHONE, "height": 900})
             self.settle()
             self.assert_own_controls()
+
+    def test_a_path_starts_a_line_only_at_a_mark(self):
+        """A hyphenated path starts each line at a mark, never after a hyphen;
+        a digest wider than its line starts one at its mark, then runs on
+        where it meets the edge. Each is copied as written."""
+
+        paths = [_HYPHENATED_PATH, _DIGEST_PATH]
+        for width in (REFERENCE_PHONE, WIDE):
+            with self.subTest(width=width):
+                self.visit(width)
+                self.assertEqual(open_tag(self.page, opened_walk(self.document)[0]), [])
+                self.page.locator(SELECTORS["reference_sample"]).first.wait_for(state="attached")
+                planted = self.page.evaluate(_PLANT_PATHS, [SELECTORS["reference_sample"], paths])
+                self.assertEqual([path["text"] for path in planted], paths)
+                for path in planted:
+                    self.assertGreater(path["lines"], 1)
+                broken = self.page.evaluate(_REFERENCE_PATH_BREAKS, [SELECTORS["reference"], SELECTORS["unseen"]])
+                # Only the planted paths: what the document's own examples
+                # draw is the read-whole test's.
+                self.assertEqual([lines for lines in broken if lines.replace(" | ", "") in paths], [])
 
     def test_a_link_to_an_operation_survives_a_reload(self):
         """The page lands on the entry followed last, however quickly a reader

@@ -778,16 +778,3 @@ class NamingTests(TestCase):
         self.assertEqual(ended("Via Example, Inc."), "Via Example, Inc.")
         self.assertEqual(ended("Via Example"), "Via Example.")
         self.assertEqual(ended(""), "")
-
-    def test_the_facts_panel_names_the_issuer(self):
-        from ..facts import facts_about
-
-        store("cloudflare.edge_certificate", {**EDGE[1], "certificate_authority": "google"})
-        store("cloudflare.dns_record", proxied("www.example.com", "A", "192.0.2.5"))
-
-        facts = facts_about(("www.example.com",), ())
-
-        self.assertIn(
-            ("Issued by", "Google Trust Services"),
-            {(fact.label, fact.value) for fact in facts},
-        )

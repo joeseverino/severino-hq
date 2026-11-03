@@ -81,7 +81,7 @@ class GatewayConnectionTests(TestCase):
         self.assertNotIn("hq.github", names)
 
     def test_safe_runtime_catalog_contains_relationships_and_no_tokens(self):
-        items = list_resource("connection.standing", principal=OPERATOR, fields=[WHOLE_RECORD])["items"]
+        items = list_resource("connections", principal=OPERATOR, fields=[WHOLE_RECORD])["items"]
 
         nws = next(item for item in items if item["family"] == "hq.nws")
         self.assertEqual(nws["status_label"], "keyless")
