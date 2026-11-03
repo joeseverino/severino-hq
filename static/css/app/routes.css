@@ -369,7 +369,7 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
      Its track is squared here, beside the rules that square it, which sit in
      the components layer to beat page.css. */
   .site-header { --header-user: var(--control-size); gap: var(--space-4) var(--space-6); padding: var(--space-5) var(--space-7); }
-  .user-menu > summary { width: var(--control-size); padding: 0; }
+  .user-menu > button { width: var(--control-size); padding: 0; }
   /* Gone, the name still names the summary (its aria-labelledby). */
   .user-menu .user-name { display: none; }
   .brand { font-size: var(--text-md); }

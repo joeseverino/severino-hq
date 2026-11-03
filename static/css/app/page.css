@@ -335,6 +335,27 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   input[type=checkbox], input[type=radio] { inline-size: 20px; block-size: 20px; }
 }
 
+/* ── Menus ────────────────────────────────────────────────────────
+   A menu is its button and the popover the button opens, the two held in a
+   `[data-menu]`. The browser opens the panel in the top layer, closes it on
+   Escape or a press outside, closes any other menu as it opens (a menu inside
+   another, a section's links in the sections drawer, leaves the outer open),
+   and hands focus back to the button. The panel hangs from its own button,
+   the scope keeping each to its own; its containing block is the viewport,
+   so where it would cross the screen it flips to the button's other edge. */
+[data-menu] { anchor-scope: --menu; }
+[data-menu] > [popovertarget] { anchor-name: --menu; }
+[data-menu] > [popover] {
+  position-anchor: --menu;
+  position-area: block-end span-inline-start;
+  position-try-fallbacks: flip-inline;
+  inset: auto;
+  margin: var(--space-3) 0 0;
+  color: inherit;
+}
+/* Each panel says how it is laid out open; closed, it is not drawn. */
+[data-menu] > [popover]:not(:popover-open) { display: none; }
+
 /* ── User menu ────────────────────────────────────────────────────
    This whole component lives after the generic button primitive in the same
    layer. A POST row and a link row therefore share `.menu-item`; their HTML
@@ -356,7 +377,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .action-badge svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 /* Each fills the control's one line exactly, so the line after it starts
    below the control's edge and is not shown. */
-.user-menu > summary > * { flex: none; height: calc(var(--control-size) - 2px); }
+.user-menu > button > * { flex: none; height: calc(var(--control-size) - 2px); }
 /* Who the menu belongs to, above what it offers. */
 /* The picture, when there is one, stands beside both lines; the name and
    what the person may do share the first, when they signed in is the second. */
@@ -371,8 +392,8 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 /* The person's own picture as the control's mark. Its margins make it as tall
    as the control's one line, like everything else in it. */
 .user-menu .user-avatar { width: 22px; height: 22px; margin-block: calc((var(--control-size) - 2px - 22px) / 2); border-radius: 50%; object-fit: cover; background: var(--bg-tint); }
-.user-menu > summary:hover,
-.user-menu[open] > summary { background: var(--bar-control-bg-hover); color: var(--ink); }
+.user-menu > button:hover,
+.user-menu > button:has(+ :popover-open) { border-color: var(--bar-control-line); background: var(--bar-control-bg-hover); color: var(--ink); }
 .user-menu .user-icon {
   fill: none;
   stroke: var(--muted);
@@ -380,13 +401,9 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   stroke-width: 1.8;
   transition: stroke .12s ease;
 }
-.user-menu > summary:hover .user-icon,
-.user-menu[open] > summary .user-icon { stroke: var(--ink); }
+.user-menu > button:hover .user-icon,
+.user-menu > button:has(+ :popover-open) .user-icon { stroke: var(--ink); }
 .user-menu-panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 20;
   display: flex;
   /* As wide as what it holds, up to a width that still fits beside the
      controls to its right on the narrowest phone; a longer name is cut. */

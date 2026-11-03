@@ -131,7 +131,7 @@
         {% endpartialdef %}
         <span class="visually-hidden">Needs you</span>
       </a>
-      <details class="user-menu" data-menu>
+      <div class="user-menu" data-menu>
         {% comment %}
         The mark first and the name after it in source, drawn the other way
         round: when the bar has no room for both, it is the name that wraps
@@ -140,7 +140,7 @@
         served by HQ (`application/avatars.py`).
         {% endcomment %}
         {% with avatar=request.session.avatar %}
-        <summary aria-labelledby="user-name">
+        <button type="button" popovertarget="user-menu" aria-labelledby="user-name">
           {% if avatar %}
           <img class="user-avatar" src="{% url 'avatar' avatar %}" alt="" width="22" height="22" decoding="async">
           {% else %}
@@ -150,8 +150,8 @@
           </svg>
           {% endif %}
           <span class="user-name" id="user-name">{{ user.get_username|breakable }}</span>
-        </summary>
-        <div class="user-menu-panel">
+        </button>
+        <div class="user-menu-panel" id="user-menu" popover>
           {% comment %}
           Who this is, what they may do and when they last signed in, before
           anything they can do: the menu is the one place the header says
@@ -229,7 +229,7 @@
             </form>
           </div>
         </div>
-      </details>
+      </div>
     {% endif %}
   </header>
 
