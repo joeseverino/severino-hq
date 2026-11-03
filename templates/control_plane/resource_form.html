@@ -5,7 +5,7 @@ Every field below is generated from the provider's pydantic model, and that same
 model validates the submission. Nothing here knows what kind of resource this is.
 {% endcomment %}
 <form method="post" class="form">
-  {% csrf_token %}
+  {% write_token %}
   {% if not resource %}<input type="hidden" name="kind" value="{{ kind }}">{% endif %}
   {% include "partials/_form_errors.html" with form=identity %}
   {% include "partials/_form_errors.html" with form=spec %}

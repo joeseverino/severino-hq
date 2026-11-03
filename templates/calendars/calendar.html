@@ -63,7 +63,7 @@ opening a day ask this page for the `calendar` part and take it in place.
           {% for source in sources %}
             <li>
               <form method="post" action="{% url 'calendar:source' source.id %}" data-fragment-target>
-                {% csrf_token %}
+                {% write_token %}
                 <input type="hidden" name="next" value="{{ here }}">
                 <input type="hidden" name="shown" value="{% if source.shown %}0{% else %}1{% endif %}">
                 <button type="submit" class="calendar-source series-{{ source.slot }}" aria-pressed="{% if source.shown %}true{% else %}false{% endif %}">

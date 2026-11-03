@@ -37,7 +37,7 @@
 {% card %}
   {% section_head %}Your notes{% endsection_head %}
   <form method="post" class="form">
-    {% csrf_token %}
+    {% write_token %}
     {% include "partials/_form_errors.html" %}
     {{ form }}
     <div class="form-actions">

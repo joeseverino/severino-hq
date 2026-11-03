@@ -16,7 +16,6 @@ from hq.platform.application.action_links import command_url
 from hq.platform.application.capabilities import (
     authorize_capability,
     capability_registry,
-    execute_capability,
 )
 from hq.platform.application.command_forms import command_form_class, own_fields
 from hq.platform.application.command_targets import (
@@ -27,29 +26,21 @@ from hq.platform.application.command_targets import (
     with_requested_target,
 )
 from hq.platform.application.contracts import route_url
-from hq.platform.application.idempotency import (
-    IdempotencyConflict,
-    execute_once,
-    request_fingerprint,
-    validate_key,
-)
-from hq.platform.application.integration_specs import ON_ITS_PAGE, capability_schema
+from hq.platform.application.integration_specs import ON_ITS_PAGE, capability_schema, kept_by
 from hq.platform.application.integrations import integration_graph
 from hq.platform.application.pages import page_context
 from hq.platform.application.payload_words import value_words
 from hq.platform.application.records import says_only_its_title
-from hq.platform.application.security import AuthorizationError, safe_next, web_principal
+from hq.platform.application.refusal_status import refusal_of
+from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.ui import MISSING
+from hq.platform.application.web_writes import refused, run_posted
 
 
 def _json_value(value):
     """Normalize native form values to the same JSON contract as API/MCP."""
 
     return json.loads(json.dumps(value, cls=DjangoJSONEncoder))
-
-
-def _status(result: dict) -> int:
-    return 200 if result.get("ok", False) else 400
 
 
 _SCALAR = (str, int, float, bool, type(None))
@@ -102,31 +93,6 @@ def _result_table(key: str, records: list[dict]) -> dict:
     }
 
 
-def _new_key() -> str:
-    return validate_key(f"web:{secrets.token_urlsafe(24)}")
-
-
-def _renew_key(form) -> None:
-    data = form.data.copy()
-    data["__execution_key"] = _new_key()
-    form.data = data
-
-
-def _apply_execution_error(form, result: dict) -> None:
-    error = result.get("error", {})
-    details = error.get("details")
-    placed = False
-    if isinstance(details, list):
-        for item in details:
-            location = item.get("loc", ()) if isinstance(item, dict) else ()
-            field = str(location[0]) if location else ""
-            message = item.get("msg", "Invalid value.") if isinstance(item, dict) else ""
-            form.add_error(field if field in form.fields else None, message)
-            placed = True
-    if not placed:
-        form.add_error(None, error.get("message", "That did not run."))
-
-
 class CommandView(View):
     """Render and execute any permitted capability without reimplementing it."""
 
@@ -140,8 +106,8 @@ class CommandView(View):
         self.principal = web_principal(request.user)
         try:
             authorize_capability(self.spec, self.principal)
-        except AuthorizationError as exc:
-            raise PermissionDenied(str(exc)) from exc
+        except Exception as exc:
+            raise PermissionDenied(refusal_of(exc, name=self.spec.name, principal=self.principal).message) from exc
         self.target_options = capability_target_options(
             self.spec,
             principal=self.principal,
@@ -206,14 +172,13 @@ class CommandView(View):
     def _saves_blanks(self, schema: dict) -> bool:
         """Whether a field left blank here overwrites what the record holds.
 
-        A command on a record that may be sent without one of its fields
-        receives that field's default, and no handler can tell it from one
-        the caller chose, so it is saved. A form that opens holding the
-        record's values, or a command whose every field is asked for, blanks
-        nothing.
+        The form leaves a blank field out, so a command on a record that may
+        be sent without it saves its default. One that keeps what it is not
+        sent (``Kept``), a form that opens holding the record's values, or a
+        command whose every field is asked for, blanks nothing.
         """
 
-        if not self.spec.target_kind or self.spec.target_initial_fields:
+        if not self.spec.target_kind or self.spec.target_initial_fields or kept_by(self.spec):
             return False
         return bool(own_fields(schema) - set(schema.get("required", ())))
 
@@ -271,7 +236,7 @@ class CommandView(View):
         }
 
     def get(self, request, name: str):  # noqa: ARG002 - Django passes the URL's name; dispatch read it into spec
-        initial = {"__execution_key": _new_key(), "next": safe_next(request)}
+        initial = {"next": safe_next(request)}
         target = request.GET.get("target", "") if self.spec.target_kind else ""
         known_targets = {option.value for option in self.target_options or ()}
         if target and (self.target_options is None or target in known_targets):
@@ -301,43 +266,15 @@ class CommandView(View):
         payload = _json_value(form.command_payload)
         target = form.cleaned_data.get("__target")
         expected_updated_at = form.cleaned_data.get("__expected_updated_at") or None
-        envelope = {
-            "command": payload,
-            "target": target,
-            "expected_updated_at": expected_updated_at,
-        }
-
-        def run():
-            result = execute_capability(
-                self.spec.name,
-                payload,
-                principal=self.principal,
-                target=target,
-                expected_updated_at=expected_updated_at,
-            )
-            return result, _status(result)
-
-        try:
-            if self.spec.effect == "read":
-                result, status = run()
-                replayed = False
-            else:
-                result, status, replayed = execute_once(
-                    actor=self.principal.actor,
-                    key=validate_key(form.cleaned_data["__execution_key"]),
-                    request_sha256=request_fingerprint(self.spec.name, envelope, api_version=2),
-                    operation=run,
-                    keep=lambda answer, _status: answer.get("ok", False),
-                )
-        except IdempotencyConflict as exc:
-            form.add_error(None, exc.reason)
-            _renew_key(form)
-            return TemplateResponse(request, self.template_name, self._context(form), status=409)
-
-        if not result.get("ok", False):
-            _apply_execution_error(form, result)
-            _renew_key(form)
-            return TemplateResponse(request, self.template_name, self._context(form), status=status)
+        result, replayed = run_posted(
+            request,
+            self.spec.name,
+            payload,
+            target=target,
+            expected_updated_at=expected_updated_at,
+        )
+        if refusal := refused(request, result, form=form):
+            return TemplateResponse(request, self.template_name, self._context(form), status=refusal.status)
 
         token = secrets.token_urlsafe(18)
         request.session["command_center_result"] = {

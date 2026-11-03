@@ -19,7 +19,7 @@ from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
 from hq.platform.core.models import AuditLog
-from hq.platform.mcp.identity import reset_principal, set_principal
+from hq.platform.mcp.identity import set_principal
 from hq.platform.mcp.server import mcp
 from hq_sdk.capabilities import StrictCommand
 
@@ -42,6 +42,7 @@ from ..security import (
     cli_principal,
     mcp_principal,
 )
+from .writers import form_keyed, keyed
 
 
 def as_mcp_caller(call):
@@ -51,11 +52,20 @@ def as_mcp_caller(call):
     shape the tool returns, so they bind the caller the door would have.
     """
 
-    bound = set_principal(mcp_principal())
-    try:
+    with set_principal(mcp_principal()):
         return async_to_sync(call)()
-    finally:
-        reset_principal(bound)
+
+
+def mcp_write(name, payload):
+    """Run a capability through the MCP tool as an agent would, with a retry key,
+    which the tool requires of every change."""
+
+    async def call():
+        return await mcp.tools.get("execute_capability").call(
+            {"name": name, "payload": payload | {"idempotency_key": f"example-{name}"}}
+        )
+
+    return as_mcp_caller(call)
 
 
 class CapabilityTests(TestCase):
@@ -130,7 +140,7 @@ class CapabilityTests(TestCase):
 
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertEqual(result["error"]["message"], "expense.update requires a integer target.")
+        self.assertIn("target must be a valid integer", result["error"]["message"])
 
     def test_an_unauthorized_caller_is_refused_before_its_target_is_read(self):
         result = execute_capability(
@@ -204,19 +214,21 @@ class CapabilityTests(TestCase):
 
         result = execute_capability(
             "hq.sync",
-            {
-                "manifest": [
-                    {
-                        "doc_id": "rb-docs-only",
-                        "title": "Docs only",
-                        "doc_type": "runbook",
-                        "status": "active",
-                        "system": "Example service",
-                        "environment": "other",
-                        "sensitivity": "internal",
-                    }
-                ]
-            },
+            keyed(
+                {
+                    "manifest": [
+                        {
+                            "doc_id": "rb-docs-only",
+                            "title": "Docs only",
+                            "doc_type": "runbook",
+                            "status": "active",
+                            "system": "Example service",
+                            "environment": "other",
+                            "sensitivity": "internal",
+                        }
+                    ]
+                }
+            ),
             principal=docs_only,
         )
 
@@ -363,7 +375,7 @@ class CapabilityTests(TestCase):
         )
 
         self.assertFalse(result["ok"])
-        self.assertEqual(result["error"]["code"], "operation_failed")
+        self.assertEqual(result["error"]["code"], "rejected")
         self.assertEqual(result["error"]["message"], "project.delete could not be executed.")
         self.assertNotIn("wrong-target", result["error"]["message"])
         self.assertTrue(Project.objects.filter(pk=project.pk).exists())
@@ -402,8 +414,8 @@ class CapabilityTests(TestCase):
         self.assertEqual(event.metadata["interface"], "cli")
 
     @override_settings(
-        SEVERINO_MCP_ENABLE_WRITES=True,
-        SEVERINO_MCP_ENABLE_DELETES=False,
+        SEVERINO_AGENT_ENABLE_WRITES=True,
+        SEVERINO_AGENT_ENABLE_DELETES=False,
     )
     def test_mcp_deletes_are_gated_separately_from_writes(self):
         project = Project.objects.create(name="Protected", slug="protected")
@@ -479,8 +491,8 @@ class CapabilityTests(TestCase):
         self.assertEqual(receipt.original_filename, "fixture.pdf")
 
     @override_settings(
-        SEVERINO_MCP_ENABLE_WRITES=True,
-        SEVERINO_MCP_ENABLE_PRUNE=False,
+        SEVERINO_AGENT_ENABLE_WRITES=True,
+        SEVERINO_AGENT_ENABLE_PRUNE=False,
     )
     def test_mcp_prune_is_a_separate_capability(self):
         with self.assertRaisesRegex(AuthorizationError, "prune_documentation"):
@@ -590,7 +602,7 @@ class ProjectApplicationServiceTests(TestCase):
         self.assertEqual(project.updated_at, before)
 
 
-@override_settings(SEVERINO_MCP_ENABLE_WRITES=True)
+@override_settings(SEVERINO_AGENT_ENABLE_WRITES=True)
 class AdapterParityTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="joe", password="test-password")
@@ -599,36 +611,32 @@ class AdapterParityTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.post(
             reverse("projects:create"),
-            {
-                "name": "Web Project",
-                "slug": "web-project",
-                "category": "other",
-                "status": "active",
-                "description": "One core",
-                "technologies_used": "Django, MCP",
-                "repository_url": "",
-                "public_url": "",
-                "deployment_notes": "",
-                "security_notes": "",
-                "notes": "",
-            },
+            form_keyed(
+                {
+                    "name": "Web Project",
+                    "slug": "web-project",
+                    "category": "other",
+                    "status": "active",
+                    "description": "One core",
+                    "technologies_used": "Django, MCP",
+                    "repository_url": "",
+                    "public_url": "",
+                    "deployment_notes": "",
+                    "security_notes": "",
+                    "notes": "",
+                }
+            ),
         )
         self.assertRedirects(response, reverse("projects:detail", args=["web-project"]))
 
-        async def call_mcp():
-            tool = mcp.tools.get("execute_capability")
-            return await tool.call(
-                {
-                    "name": "project.create",
-                    "payload": {
-                        "name": "MCP Project",
-                        "slug": "mcp-project",
-                        "status": "active",
-                    },
-                }
-            )
-
-        mcp_result = as_mcp_caller(call_mcp)
+        mcp_result = mcp_write(
+            "project.create",
+            {
+                "name": "MCP Project",
+                "slug": "mcp-project",
+                "status": "active",
+            },
+        )
 
         self.assertEqual(set(mcp_result), {"ok", "created", "project"})
         self.assertEqual(
@@ -641,7 +649,7 @@ class AdapterParityTests(TestCase):
         )
 
 
-@override_settings(SEVERINO_MCP_ENABLE_WRITES=True)
+@override_settings(SEVERINO_AGENT_ENABLE_WRITES=True)
 class AssetApplicationServiceTests(TestCase):
     def setUp(self):
         self.project = Project.objects.create(name="Homelab", slug="homelab")
@@ -682,39 +690,35 @@ class AssetApplicationServiceTests(TestCase):
         self.client.force_login(user)
         response = self.client.post(
             reverse("assets:create"),
-            {
-                "item_name": "Web Asset",
-                "slug": "web-asset",
-                "vendor": "",
-                "category": "other",
-                "purchase_date": "",
-                "total_cost": "10.00",
-                "business_use_percentage": "100",
-                "payment_method": "",
-                "serial_number": "",
-                "warranty_date": "",
-                "status": "active",
-                "notes": "",
-                "related_projects": [self.project.pk],
-            },
+            form_keyed(
+                {
+                    "item_name": "Web Asset",
+                    "slug": "web-asset",
+                    "vendor": "",
+                    "category": "other",
+                    "purchase_date": "",
+                    "total_cost": "10.00",
+                    "business_use_percentage": "100",
+                    "payment_method": "",
+                    "serial_number": "",
+                    "warranty_date": "",
+                    "status": "active",
+                    "notes": "",
+                    "related_projects": [self.project.pk],
+                }
+            ),
         )
         self.assertRedirects(response, reverse("assets:detail", args=["web-asset"]))
 
-        async def call_mcp():
-            tool = mcp.tools.get("execute_capability")
-            return await tool.call(
-                {
-                    "name": "asset.create",
-                    "payload": {
-                        "item_name": "MCP Asset",
-                        "slug": "mcp-asset",
-                        "total_cost": "20.00",
-                        "related_projects": ["homelab"],
-                    },
-                }
-            )
-
-        mcp_result = as_mcp_caller(call_mcp)
+        mcp_result = mcp_write(
+            "asset.create",
+            {
+                "item_name": "MCP Asset",
+                "slug": "mcp-asset",
+                "total_cost": "20.00",
+                "related_projects": ["homelab"],
+            },
+        )
 
         self.assertEqual(set(mcp_result), {"ok", "created", "asset"})
         self.assertEqual(
@@ -728,8 +732,8 @@ class AssetApplicationServiceTests(TestCase):
 
 
 @override_settings(
-    SEVERINO_MCP_ENABLE_WRITES=True,
-    SEVERINO_MCP_ENABLE_PRUNE=True,
+    SEVERINO_AGENT_ENABLE_WRITES=True,
+    SEVERINO_AGENT_ENABLE_PRUNE=True,
 )
 class DocumentationSyncTests(TestCase):
     manifest = [
@@ -765,16 +769,7 @@ class DocumentationSyncTests(TestCase):
             )
 
     def test_mcp_exposes_sync_through_the_same_service(self):
-        async def call_sync():
-            tool = mcp.tools.get("execute_capability")
-            return await tool.call(
-                {
-                    "name": "documentation.sync",
-                    "payload": {"manifest": self.manifest},
-                }
-            )
-
-        result = as_mcp_caller(call_sync)
+        result = mcp_write("documentation.sync", {"manifest": self.manifest})
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["stats"]["created"], 1)
@@ -800,32 +795,34 @@ class DocumentationSyncTests(TestCase):
         self.client.force_login(user)
         response = self.client.post(
             reverse("docs_index:create"),
-            {
-                "doc_id": "rb-web-doc",
-                "title": "Web Doc",
-                "doc_type": "runbook",
-                "system_service": "",
-                "environment": "other",
-                "status": "active",
-                "sensitivity": "internal",
-                "obsidian_path": "",
-                "github_path": "",
-                "external_url": "",
-                "last_reviewed": "",
-                "notes": "",
-                "related_projects": [],
-                "related_assets": [],
-                "related_expenses": [],
-            },
+            form_keyed(
+                {
+                    "doc_id": "rb-web-doc",
+                    "title": "Web Doc",
+                    "doc_type": "runbook",
+                    "system_service": "",
+                    "environment": "other",
+                    "status": "active",
+                    "sensitivity": "internal",
+                    "obsidian_path": "",
+                    "github_path": "",
+                    "external_url": "",
+                    "last_reviewed": "",
+                    "notes": "",
+                    "related_projects": [],
+                    "related_assets": [],
+                    "related_expenses": [],
+                }
+            ),
         )
         self.assertRedirects(response, reverse("docs_index:detail", args=["rb-web-doc"]))
         self.assertEqual(
-            AuditLog.objects.get(object_repr="rb-web-doc · Web Doc").metadata["operation"],
+            AuditLog.objects.get(object_repr="rb-web-doc\xa0· Web Doc").metadata["operation"],
             "documentation.create",
         )
 
 
-@override_settings(SEVERINO_MCP_ENABLE_WRITES=True)
+@override_settings(SEVERINO_AGENT_ENABLE_WRITES=True)
 class ContentApplicationServiceTests(TestCase):
     def setUp(self):
         self.project = Project.objects.create(name="Site", slug="site")
@@ -847,38 +844,34 @@ class ContentApplicationServiceTests(TestCase):
         self.client.force_login(user)
         response = self.client.post(
             reverse("content:create"),
-            {
-                "title": "Web Content",
-                "slug": "web-content",
-                "content_type": "article",
-                "status": "draft",
-                "topic": "",
-                "tags": "django, mcp",
-                "published_url": "",
-                "published_at": "",
-                "notes": "",
-                "related_projects": [self.project.pk],
-                "related_assets": [],
-                "related_expenses": [],
-                "related_documentation": [],
-            },
+            form_keyed(
+                {
+                    "title": "Web Content",
+                    "slug": "web-content",
+                    "content_type": "article",
+                    "status": "draft",
+                    "topic": "",
+                    "tags": "django, mcp",
+                    "published_url": "",
+                    "published_at": "",
+                    "notes": "",
+                    "related_projects": [self.project.pk],
+                    "related_assets": [],
+                    "related_expenses": [],
+                    "related_documentation": [],
+                }
+            ),
         )
         self.assertRedirects(response, reverse("content:detail", args=["web-content"]))
 
-        async def call_mcp():
-            tool = mcp.tools.get("execute_capability")
-            return await tool.call(
-                {
-                    "name": "content.create",
-                    "payload": {
-                        "title": "MCP Content",
-                        "slug": "mcp-content",
-                        "related_projects": ["site"],
-                    },
-                }
-            )
-
-        mcp_result = as_mcp_caller(call_mcp)
+        mcp_result = mcp_write(
+            "content.create",
+            {
+                "title": "MCP Content",
+                "slug": "mcp-content",
+                "related_projects": ["site"],
+            },
+        )
 
         self.assertEqual(mcp_result["content"]["relationships"]["projects"], ["site"])
         for title, interface in (
@@ -891,7 +884,7 @@ class ContentApplicationServiceTests(TestCase):
             )
 
 
-@override_settings(SEVERINO_MCP_ENABLE_WRITES=True)
+@override_settings(SEVERINO_AGENT_ENABLE_WRITES=True)
 class ExpenseApplicationServiceTests(TestCase):
     def setUp(self):
         self.project = Project.objects.create(name="Ops", slug="ops")
@@ -914,40 +907,36 @@ class ExpenseApplicationServiceTests(TestCase):
         self.client.force_login(user)
         response = self.client.post(
             reverse("expenses:create"),
-            {
-                "date": "2026-07-25",
-                "vendor": "Web Vendor",
-                "item": "Web Expense",
-                "category": "software",
-                "total_cost": "100.00",
-                "business_use_percentage": "75",
-                "payment_method": "credit",
-                "business_purpose": "",
-                "notes": "",
-                "related_project": self.project.pk,
-                "related_asset": "",
-                "related_content": "",
-                "related_documentation": "",
-            },
+            form_keyed(
+                {
+                    "date": "2026-07-25",
+                    "vendor": "Web Vendor",
+                    "item": "Web Expense",
+                    "category": "software",
+                    "total_cost": "100.00",
+                    "business_use_percentage": "75",
+                    "payment_method": "credit",
+                    "business_purpose": "",
+                    "notes": "",
+                    "related_project": self.project.pk,
+                    "related_asset": "",
+                    "related_content": "",
+                    "related_documentation": "",
+                }
+            ),
         )
         self.assertEqual(response.status_code, 302)
 
-        async def call_mcp():
-            tool = mcp.tools.get("execute_capability")
-            return await tool.call(
-                {
-                    "name": "expense.create",
-                    "payload": {
-                        "date": "2026-07-25",
-                        "vendor": "MCP Vendor",
-                        "item": "MCP Expense",
-                        "total_cost": "20.00",
-                        "related_project": "ops",
-                    },
-                }
-            )
-
-        mcp_result = as_mcp_caller(call_mcp)
+        mcp_result = mcp_write(
+            "expense.create",
+            {
+                "date": "2026-07-25",
+                "vendor": "MCP Vendor",
+                "item": "MCP Expense",
+                "total_cost": "20.00",
+                "related_project": "ops",
+            },
+        )
 
         self.assertEqual(mcp_result["expense"]["related_project"], "ops")
         self.assertEqual(
@@ -962,7 +951,7 @@ class DocumentationSyncCapabilityTests(SimpleTestCase):
     def test_doc_sync_flag_grants_only_documentation_sync(self):
         from hq.platform.application.security import AuthorizationError, Capability, mcp_principal
 
-        with self.settings(SEVERINO_MCP_ENABLE_DOC_SYNC=True, SEVERINO_MCP_ENABLE_WRITES=False):
+        with self.settings(SEVERINO_AGENT_ENABLE_DOC_SYNC=True, SEVERINO_AGENT_ENABLE_WRITES=False):
             principal = mcp_principal()
         principal.require(Capability.SYNC_DOCUMENTATION)
         for withheld in (
@@ -979,14 +968,14 @@ class DocumentationSyncCapabilityTests(SimpleTestCase):
     def test_broad_writes_still_imply_doc_sync(self):
         from hq.platform.application.security import Capability, mcp_principal
 
-        with self.settings(SEVERINO_MCP_ENABLE_WRITES=True, SEVERINO_MCP_ENABLE_DOC_SYNC=False):
+        with self.settings(SEVERINO_AGENT_ENABLE_WRITES=True, SEVERINO_AGENT_ENABLE_DOC_SYNC=False):
             mcp_principal().require(Capability.SYNC_DOCUMENTATION)
 
     def test_both_flags_off_withholds_doc_sync(self):
         from hq.platform.application.security import AuthorizationError, Capability, mcp_principal
 
         with (
-            self.settings(SEVERINO_MCP_ENABLE_WRITES=False, SEVERINO_MCP_ENABLE_DOC_SYNC=False),
+            self.settings(SEVERINO_AGENT_ENABLE_WRITES=False, SEVERINO_AGENT_ENABLE_DOC_SYNC=False),
             self.assertRaises(AuthorizationError),
         ):
             mcp_principal().require(Capability.SYNC_DOCUMENTATION)
@@ -999,8 +988,8 @@ class InfrastructureCapabilityTests(SimpleTestCase):
         from hq.platform.application.security import AuthorizationError, Capability, mcp_principal
 
         with self.settings(
-            SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True,
-            SEVERINO_MCP_ENABLE_CERT_RENEWAL=False,
+            SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True,
+            SEVERINO_AGENT_ENABLE_CERT_RENEWAL=False,
         ):
             principal = mcp_principal()
         principal.require(Capability.MANAGE_INFRASTRUCTURE)
@@ -1011,8 +1000,8 @@ class InfrastructureCapabilityTests(SimpleTestCase):
         from hq.platform.application.security import AuthorizationError, Capability, mcp_principal
 
         with self.settings(
-            SEVERINO_MCP_ENABLE_INFRASTRUCTURE=False,
-            SEVERINO_MCP_ENABLE_CERT_RENEWAL=True,
+            SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=False,
+            SEVERINO_AGENT_ENABLE_CERT_RENEWAL=True,
         ):
             principal = mcp_principal()
         principal.require(Capability.REQUEST_CERTIFICATE_RENEWAL)

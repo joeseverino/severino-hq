@@ -8,6 +8,8 @@ nobody chose, which is the whole reason the list needed one.
 
 from django.test import TestCase
 
+from hq.platform.application.tests.writers import form_keyed, keyed
+
 
 class ServiceFavoriteTests(TestCase):
     def setUp(self):
@@ -115,11 +117,13 @@ class PinCapabilityTests(TestCase):
         from hq.platform.application.pins import CHOOSE, DOMAIN, MOVE, PIN, SERVICE, ordered
         from hq.platform.core.models import AuditLog
 
-        self.client.post(reverse("zones:pin", args=["example.com"]))
-        self.client.post(reverse("control_plane:service_pin", args=["one.example.test"]))
-        self.client.post(reverse("control_plane:service_pin", args=["two.example.test"]))
-        self.client.post(reverse("control_plane:service_move", args=["two.example.test"]), {"direction": "up"})
-        self.client.post(reverse("dashboard_links"), {"href": []})
+        self.client.post(reverse("zones:pin", args=["example.com"]), form_keyed())
+        self.client.post(reverse("control_plane:service_pin", args=["one.example.test"]), form_keyed())
+        self.client.post(reverse("control_plane:service_pin", args=["two.example.test"]), form_keyed())
+        self.client.post(
+            reverse("control_plane:service_move", args=["two.example.test"]), form_keyed({"direction": "up"})
+        )
+        self.client.post(reverse("dashboard_links"), form_keyed({"href": []}))
 
         self.assertEqual(list(ordered(self.user, DOMAIN)), ["example.com"])
         self.assertEqual(list(ordered(self.user, SERVICE)), ["two.example.test", "one.example.test"])
@@ -145,7 +149,9 @@ class PinCapabilityTests(TestCase):
             internal_principal("example-purpose"),
         ):
             with self.subTest(interface=principal.interface):
-                result = execute_capability(PIN, {"kind": SERVICE, "key": "one.example.test"}, principal=principal)
+                result = execute_capability(
+                    PIN, keyed({"kind": SERVICE, "key": "one.example.test"}), principal=principal
+                )
 
                 self.assertEqual(result["error"]["code"], "forbidden")
         self.assertFalse(Pin.objects.exists())
@@ -160,8 +166,8 @@ class PinCapabilityTests(TestCase):
         from hq.platform.core.models import Pin
 
         lacking = Principal("an-operator", "web", frozenset({Capability.READ}))
-        with mock.patch("hq.domains.control_plane.zone_views.web_principal", return_value=lacking):
-            response = self.client.post(reverse("zones:pin", args=["example.com"]), follow=True)
+        with mock.patch("hq.platform.application.web_writes.web_principal", return_value=lacking):
+            response = self.client.post(reverse("zones:pin", args=["example.com"]), form_keyed(), follow=True)
 
         self.assertContains(response, Capability.PIN_FAVORITES.value)
         self.assertFalse(Pin.objects.exists())
@@ -179,7 +185,7 @@ class PinCapabilityTests(TestCase):
             (MOVE, {"kind": SERVICE}),
         ):
             with self.subTest(payload=payload):
-                result = execute_capability(name, payload, principal=operator)
+                result = execute_capability(name, keyed(payload), principal=operator)
 
                 self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertFalse(Pin.objects.exists())

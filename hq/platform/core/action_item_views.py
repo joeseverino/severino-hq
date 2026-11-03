@@ -2,18 +2,18 @@
 
 from typing import override
 
-from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import TemplateView, View
 
 from hq.platform.application import action_items as queue_state, fragments
-from hq.platform.application.capabilities import execute_capability
+from hq.platform.application.attention import readable_by
 from hq.platform.application.dashboard import waiting, work_queue
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.web_writes import execute_posted, refused
 
 ACTION_ITEM_FILTERS = ("q", "status", "source", "about")
 
@@ -23,7 +23,7 @@ def _action_items(request, current=None):
 
     if current is None:
         with projection_scope():
-            current = work_queue()
+            current = readable_by(web_principal(request.user), work_queue())
     all_items = queue_state.with_aside_state(current, request.user)
     items = queue_state.filter_items(
         all_items,
@@ -88,7 +88,7 @@ class ActionItemCountView(View):
     """
 
     def get(self, request):
-        count = int(waiting(request.user.pk))
+        count = int(waiting(web_principal(request.user), request.user.pk))
         context = {"profile_action_count": count, "show_action_count": True}
         return fragments.render(request, "base.html#action_count", context, revision=count)
 
@@ -127,6 +127,4 @@ class ActionItemAsideView(View):
         return [item["key"] for item in part]
 
     def _keep(self, capability: str, payload: dict) -> None:
-        result = execute_capability(capability, payload, principal=web_principal(self.request.user))
-        if not result["ok"]:
-            messages.error(self.request, result["error"]["message"])
+        refused(self.request, execute_posted(self.request, capability, payload))

@@ -19,6 +19,7 @@ from hq.domains.control_plane.models import ProviderConnection, ProviderInventor
 from hq.domains.jobs.models import HEARTBEAT_GRACE, Job
 from hq.domains.jobs.testing import held_jobs
 from hq.domains.projects.models import Project
+from hq.platform.application.tests.writers import form_keyed, keyed
 from hq.platform.core.models import AuditLog
 
 from ..capabilities import execute_capability
@@ -165,7 +166,7 @@ class RefreshButtonTests(TestCase):
         (button,) = select(page, "formaction", reverse("jobs:ask", args=[REFRESH]))
         (back,) = (field.attrs["value"] for field in within(page, "id", "hq-post") if field.attrs.get("name") == "next")
         data = {button.attrs["name"]: button.attrs["value"], "next": back}
-        return self.client.post(button.attrs["formaction"], data, headers=headers, follow=True)
+        return self.client.post(button.attrs["formaction"], form_keyed(data), headers=headers, follow=True)
 
     def test_the_button_starts_a_job_and_answers_before_any_of_it_runs(self):
         read_by_app()
@@ -240,7 +241,7 @@ class RefreshCapabilityTests(TestCase):
 
     def test_it_starts_the_job_and_answers_at_once(self):
         with held_jobs():
-            answer = execute_capability(REFRESH, {}, principal=OPERATOR, target="alpha")
+            answer = execute_capability(REFRESH, keyed({}), principal=OPERATOR, target="alpha")
 
         self.assertEqual((answer["ok"], answer["started"]), (True, True))
         self.assertEqual(str(Job.objects.get(kind=REFRESH).pk), answer["job"])
@@ -249,20 +250,20 @@ class RefreshCapabilityTests(TestCase):
         reader = Principal("agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 
         with held_jobs():
-            answer = execute_capability(REFRESH, {}, principal=reader, target="alpha")
+            answer = execute_capability(REFRESH, keyed({}), principal=reader, target="alpha")
 
         self.assertEqual(answer["error"]["code"], "forbidden")
         self.assertFalse(Job.objects.exists())
 
     def test_an_unknown_project_is_not_found_before_any_job(self):
         with held_jobs():
-            answer = execute_capability(REFRESH, {}, principal=OPERATOR, target="missing")
+            answer = execute_capability(REFRESH, keyed({}), principal=OPERATOR, target="missing")
 
         self.assertEqual(answer["error"]["code"], "not_found")
         self.assertFalse(Job.objects.exists())
 
     def test_it_takes_nothing_but_its_project(self):
-        answer = execute_capability(REFRESH, {"slug": "alpha"}, principal=OPERATOR, target="alpha")
+        answer = execute_capability(REFRESH, keyed({"slug": "alpha"}), principal=OPERATOR, target="alpha")
 
         self.assertEqual(answer["error"]["code"], "invalid_input")
         self.assertFalse(Job.objects.exists())

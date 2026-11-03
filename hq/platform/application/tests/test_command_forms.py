@@ -20,20 +20,8 @@ class CapabilityCommandFormTests(SimpleTestCase):
 
         self.assertNotIn("__confirm_effect", form_class.base_fields)
 
-    def test_browser_execution_key_is_strict_and_bounded(self):
-        form_class = command_form_class(capability_registry()["project.create"])
-        form = form_class(
-            {
-                "name": "Example",
-                "__execution_key": "contains a space",
-            }
-        )
-
-        self.assertFalse(form.is_valid())
-        self.assertIn("__execution_key", form.errors)
-
     def test_a_label_is_sentence_case_unless_the_command_declares_one(self):
-        derived = _field_for_schema("purchase_date", {"type": "string", "title": "Purchase Date"}, required=False)
+        derived = _field_for_schema("purchase_date", {"type": "string"}, required=False)
         declared = _field_for_schema("ttl", {"type": "integer", "title": "TTL in seconds"}, required=False)
 
         self.assertEqual(derived.label, "Purchase date")

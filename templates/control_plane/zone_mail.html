@@ -34,7 +34,7 @@ four would turn a typo in a DKIM selector into a mail outage.
 <section class="mail-editor">
   <h3>Senders (SPF)</h3>
   <form method="post" class="form">
-    {% csrf_token %}
+    {% write_token %}
     <input type="hidden" name="section" value="spf">
     <div class="field">
       <label>Allowed senders</label>
@@ -82,7 +82,7 @@ four would turn a typo in a DKIM selector into a mail outage.
   <section class="mail-editor">
     <h3>Failed mail (DMARC)</h3>
     <form method="post" class="form mail-policy-form">
-      {% csrf_token %}
+      {% write_token %}
       <input type="hidden" name="section" value="dmarc">
       {% for tag in policy_tags %}
         <div class="field">

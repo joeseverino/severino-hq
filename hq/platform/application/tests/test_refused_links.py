@@ -19,6 +19,7 @@ from hq.platform.application.action_links import command_action, command_url
 from hq.platform.application.connections import ConnectionAbility, ConnectionInstance, ConnectionSpec
 from hq.platform.application.plugin_testing import offering
 from hq.platform.application.plugins import clear_plugin_composition_cache
+from hq.platform.application.tests.writers import form_keyed
 from hq.platform.application.workflow_contracts import ActionLink
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from hq_sdk.testing import held_jobs
@@ -118,7 +119,7 @@ class ARefusedCommandIsDrawnUnusableTests(ConnectionsPage):
         self.close_the_registry()
 
         with held_jobs() as held:
-            response = self.client.post(reverse("jobs:ask", args=[example.REFRESH]), headers=SCRIPT)
+            response = self.client.post(reverse("jobs:ask", args=[example.REFRESH]), form_keyed(), headers=SCRIPT)
 
         self.assertEqual((response.status_code, response.json()["note"]), (200, CLOSED))
         self.assertEqual((Job.objects.count(), held.waiting), (0, []))

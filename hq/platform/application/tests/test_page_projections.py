@@ -13,10 +13,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+from hq.platform.application.tests.writers import form_keyed
 
 from ..connection_context import ConnectionsContext, connections_context
 from ..record_errors import RecordNotFound
 from ..resources import (
+    WHOLE_RECORD,
     InvalidResourceInput,
     get_resource,
     list_resource,
@@ -211,7 +213,7 @@ class ConnectionProjectionTests(TestCase):
         ):
             self.assertNotIn(retired, response.context)
         web = found.as_dict()
-        read = list_resource("connection.standing", principal=cli_principal())
+        read = list_resource("connection.standing", principal=cli_principal(), fields=[WHOLE_RECORD])
         # The estate is the same for every caller; the request half is the page's.
         self.assertEqual(without_request(web), without_request(read))
         self.assertIsNone(read["request"])
@@ -222,7 +224,7 @@ class ConnectionProjectionTests(TestCase):
         self.assertFalse({"network", "transport", "proxy"} & {control["id"] for control in read["posture"]["controls"]})
 
     def test_one_connection_reads_as_its_row(self):
-        read = list_resource("connection.standing", principal=cli_principal())
+        read = list_resource("connection.standing", principal=cli_principal(), fields=[WHOLE_RECORD])
         row = get_resource("connection.standing", "example-host", principal=cli_principal())
 
         self.assertEqual(row, next(item for item in read["items"] if item["connection_ref"] == "example-host"))
@@ -232,7 +234,7 @@ class ConnectionProjectionTests(TestCase):
     def test_how_hq_reaches_each_connection(self):
         rows = {
             item["connection_ref"]: item
-            for item in list_resource("connection.standing", principal=cli_principal())["items"]
+            for item in list_resource("connection.standing", principal=cli_principal(), fields=[WHOLE_RECORD])["items"]
         }
 
         ssh = rows["example-host"]["reach"]
@@ -249,7 +251,7 @@ class ConnectionProjectionTests(TestCase):
     def test_what_more_scope_would_show(self):
         rows = {
             item["connection_ref"]: item
-            for item in list_resource("connection.standing", principal=cli_principal())["items"]
+            for item in list_resource("connection.standing", principal=cli_principal(), fields=[WHOLE_RECORD])["items"]
         }
 
         self.assertEqual(
@@ -268,11 +270,11 @@ class ConnectionProjectionTests(TestCase):
         self.assertTrue(select(response, "formaction", "/infrastructure/connections/read/?connection_ref=example-host"))
 
     def test_a_read_asked_for_shows_on_its_row(self):
-        self.client.post(reverse("control_plane:read_now"), {"connection_ref": "example-tailnet"})
+        self.client.post(reverse("control_plane:read_now"), form_keyed({"connection_ref": "example-tailnet"}))
 
         rows = {
             item["connection_ref"]: item
-            for item in list_resource("connection.standing", principal=cli_principal())["items"]
+            for item in list_resource("connection.standing", principal=cli_principal(), fields=[WHOLE_RECORD])["items"]
         }
         self.assertIsNotNone(rows["example-tailnet"]["read_requested_at"])
         self.assertIsNone(rows["example-host"]["read_requested_at"])

@@ -312,9 +312,7 @@
     const control = button?.closest?.("[data-ask]");
     if (!control || !button.matches("[data-ask-button]")) return;
     event.preventDefault();
-    const body = new FormData(event.target);
-    if (button.name) body.set(button.name, button.value);
-    ask(control, button.formAction, body);
+    ask(control, button.formAction, new FormData(event.target, button));
   });
 
   // Only while the page is showing: a tab in the background asks for nothing,

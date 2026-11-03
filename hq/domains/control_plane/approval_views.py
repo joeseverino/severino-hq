@@ -5,9 +5,9 @@ from django.shortcuts import redirect
 from django.views import View
 
 from hq.platform.application.approvals import APPROVE, REJECT
-from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.routes import reverse
-from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.security import safe_next
+from hq.platform.application.web_writes import execute_posted, refused
 
 
 class ApprovalDecisionView(View):
@@ -32,13 +32,10 @@ class ApprovalDecisionView(View):
             messages.error(request, "Choose whether to approve or reject.")
             return self._back(request)
         name, payload, done = asked
-        result = execute_capability(name, payload, principal=web_principal(request.user))
-        if result["ok"]:
+        # An approval that cannot be applied says why, on the page, with
+        # the request left as it was.
+        if not refused(request, execute_posted(request, name, payload)):
             messages.success(request, done)
-        else:
-            # An approval that cannot be applied says why, on the page, with
-            # the request left as it was.
-            messages.error(request, result["error"]["message"])
         return self._back(request)
 
     @staticmethod

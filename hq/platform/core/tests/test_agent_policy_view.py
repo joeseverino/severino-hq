@@ -21,6 +21,7 @@ from hq.platform.application.capability_policy import (
 )
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, web_principal
 from hq.platform.application.tests.markup import text, with_class
+from hq.platform.application.tests.writers import form_keyed, keyed
 from hq.platform.core.models import AuditLog
 
 
@@ -72,7 +73,7 @@ class PolicyWriteTests(TestCase):
         self.field = field_name(Scope.SURFACE, "mcp", "project.delete")
 
     def save(self, rule):
-        return self.client.post(reverse("agent_policy"), {self.field: rule}, follow=True)
+        return self.client.post(reverse("agent_policy"), form_keyed({self.field: rule}), follow=True)
 
     def denials(self) -> int:
         return AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=SET_POLICY).count()
@@ -87,7 +88,7 @@ class PolicyWriteTests(TestCase):
 
     def test_an_operator_without_the_grant_is_refused_on_the_page(self):
         lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.GOVERN_AGENTS})
-        with patch("hq.platform.core.views.web_principal", return_value=lacking):
+        with patch("hq.platform.application.web_writes.web_principal", return_value=lacking):
             response = self.save(Rule.APPROVE)
 
         self.assertIn("govern_agents", text(response))
@@ -103,7 +104,7 @@ class PolicyWriteTests(TestCase):
             cli_principal(),
         ):
             with self.subTest(interface=principal.interface):
-                result = execute_capability(SET_POLICY, {"rules": [cell]}, principal=principal)
+                result = execute_capability(SET_POLICY, keyed({"rules": [cell]}), principal=principal)
 
                 self.assertEqual(result["error"]["code"], "forbidden")
         self.assertFalse(CapabilityRule.objects.exists())
@@ -112,7 +113,7 @@ class PolicyWriteTests(TestCase):
     def test_rules_that_are_not_cells_are_invalid(self):
         for rules in ("project.delete", [{"scope": Scope.SURFACE}]):
             with self.subTest(rules=rules):
-                result = execute_capability(SET_POLICY, {"rules": rules}, principal=web_principal(self.user))
+                result = execute_capability(SET_POLICY, keyed({"rules": rules}), principal=web_principal(self.user))
 
                 self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertFalse(CapabilityRule.objects.exists())

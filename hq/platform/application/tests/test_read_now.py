@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
 from hq.platform.application.tests.markup import text
+from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.models import AuditLog
 
 from ..action_links import read_now_link, read_now_payload
@@ -179,7 +180,7 @@ class WebTests(TestCase):
     def test_the_link_posts_what_it_names_and_returns_with_the_result(self):
         link = read_now_link(cli_principal(), connection_ref="example-tailnet")
 
-        response = self.client.post(link.url, {"next": reverse("control_plane:connections")}, follow=True)
+        response = self.client.post(link.url, form_keyed({"next": reverse("control_plane:connections")}), follow=True)
 
         self.assertEqual(link.method, "POST")
         self.assertEqual(ReadRequest.objects.get().connection_ref, "example-tailnet")
@@ -187,7 +188,7 @@ class WebTests(TestCase):
 
     def test_a_refusal_is_said_on_the_page_it_came_from(self):
         response = self.client.post(
-            reverse("control_plane:read_now"), {"connection_ref": "no-such-connection"}, follow=True
+            reverse("control_plane:read_now"), form_keyed({"connection_ref": "no-such-connection"}), follow=True
         )
 
         self.assertContains(response, "connection_ref is not one of the allowed choices.")

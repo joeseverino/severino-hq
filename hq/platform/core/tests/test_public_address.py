@@ -15,6 +15,7 @@ from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, 
 from hq.platform.application.tests.markup import select, text
 from hq.platform.application.tests.test_lookup import AN_ADDRESS, AN_ALLOCATION, GLOBAL as ADDRESS
 from hq.platform.application.tests.test_request_connection import A_TAILNET_ADDRESS, a_device, a_request, a_tailnet
+from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.models import AuditLog
 
 STORED = {
@@ -48,7 +49,7 @@ class PublicAddressViewTests(TestCase):
         self.url = reverse("tool_public_address")
 
     def look_up(self, address):
-        return self.client.post(self.url, {"address": address}, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        return self.client.post(self.url, form_keyed({"address": address}), HTTP_X_REQUESTED_WITH="XMLHttpRequest")
 
     def test_a_get_serves_the_stored_reading_and_asks_nobody(self):
         AddressReading.objects.create(address=ADDRESS, reading=STORED, observed_at=timezone.now())
@@ -80,6 +81,17 @@ class PublicAddressViewTests(TestCase):
 
         self.assertContains(response, "That is not an IP address.")
 
+    def test_a_get_without_the_grant_is_refused_and_recorded(self):
+        AddressReading.objects.create(address=ADDRESS, reading=STORED, observed_at=timezone.now())
+        lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.LOOK_UP_PUBLIC_RECORDS})
+        with patch("hq.platform.core.views.web_principal", return_value=lacking):
+            response = self.client.get(self.url, {"address": ADDRESS})
+
+        self.assertIn(Capability.LOOK_UP_PUBLIC_RECORDS.value, text(response))
+        self.assertNotIn("host.example.net", text(response))
+        denied = AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=LOOK_UP_ADDRESS)
+        self.assertEqual(denied.count(), 1)
+
     def test_a_post_looks_the_address_up_again_and_keeps_what_it_found(self):
         AddressReading.objects.create(address=ADDRESS, reading=STORED, observed_at=timezone.now())
         with (
@@ -102,7 +114,7 @@ class PublicAddressViewTests(TestCase):
     def test_an_operator_without_the_grant_is_refused_in_the_fragment(self):
         lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.LOOK_UP_PUBLIC_RECORDS})
         resolver, registry = nobody_asked()
-        with resolver, registry, patch("hq.platform.core.views.web_principal", return_value=lacking):
+        with resolver, registry, patch("hq.platform.application.web_writes.web_principal", return_value=lacking):
             response = self.look_up(ADDRESS)
 
         self.assertIn("look_up_public_records", text(response))
@@ -113,7 +125,7 @@ class PublicAddressViewTests(TestCase):
     def test_a_form_post_without_script_returns_to_the_connection_page(self):
         resolver, registry = nobody_asked()
         with resolver, registry:
-            response = self.client.post(self.url, {"address": ADDRESS})
+            response = self.client.post(self.url, form_keyed({"address": ADDRESS}))
 
         self.assertRedirects(response, reverse("connection"), fetch_redirect_response=False)
         self.assertFalse(AddressReading.objects.exists())

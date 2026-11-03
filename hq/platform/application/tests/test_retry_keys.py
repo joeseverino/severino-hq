@@ -11,7 +11,7 @@ from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest, ReadRequest
 from hq.domains.projects.models import Project
-from hq.platform.api.models import IdempotencyRecord
+from hq.platform.core.models import IdempotencyRecord
 
 from ..adoption_testing import managing_everything
 from ..capabilities import capability_registry, describe_capabilities, execute_capability
@@ -106,12 +106,12 @@ class RefreshTests(TestCase):
 
         self.assertTrue(self.ask(every_connection=True, idempotency_key="refresh-once")["ok"])
 
-    def test_a_malformed_key_is_invalid_input(self):
-        for key in ("", "has a space", "x" * 129, 7):
+    def test_a_malformed_key_is_refused_and_asks_for_nothing(self):
+        for key in ("has a space", "x" * 129, 7):
             with self.subTest(key=key):
                 result = self.ask(every_connection=True, idempotency_key=key)
 
-                self.assertEqual(result["error"]["code"], "invalid_input")
+                self.assertEqual(result["error"]["code"], "invalid_idempotency_key")
         self.assertFalse(ReadRequest.objects.exists())
 
     def test_a_field_the_command_does_not_have_is_still_refused(self):

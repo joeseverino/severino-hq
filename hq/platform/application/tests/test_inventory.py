@@ -15,7 +15,9 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
+from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.models import AuditLog
+from hq.platform.core.tests import audit_rows
 
 from ..adoption import (
     AdoptCommand,
@@ -329,7 +331,9 @@ class AdoptionWebTests(TestCase):
         self.assertTrue(ManagedResource.objects.filter(kind="adguard.rewrite").exists())
 
     def test_adopting_from_the_page_creates_the_declaration(self):
-        response = self.client.post(reverse("control_plane:adopt", kwargs={"hostname": "app.example.com"}))
+        response = self.client.post(
+            reverse("control_plane:adopt", kwargs={"hostname": "app.example.com"}), form_keyed()
+        )
 
         resource = ManagedResource.objects.get(kind="adguard.rewrite")
         self.assertRedirects(
@@ -341,7 +345,9 @@ class AdoptionWebTests(TestCase):
     def test_adopting_requires_a_signed_in_operator(self):
         self.client.logout()
 
-        response = self.client.post(reverse("control_plane:adopt", kwargs={"hostname": "app.example.com"}))
+        response = self.client.post(
+            reverse("control_plane:adopt", kwargs={"hostname": "app.example.com"}), form_keyed()
+        )
 
         self.assertEqual(response.status_code, 302)
         self.assertIn("/accounts/login/", response["Location"])
@@ -930,14 +936,14 @@ class ObservationIsNotAnEventTests(TestCase):
     def setUp(self):
         self.principal = cli_principal()
         self.resource = ManagedResource.objects.create(key="watched", kind="adguard.rewrite", spec=dict(A_REWRITE))
-        AuditLog.objects.all().delete()
+        self.before = audit_rows.mark()
 
     def sweep(self, record=None):
         record_sweep(a_sweep(**{"adguard.rewrite": [record or A_REWRITE]}), principal=self.principal)
         self.resource.refresh_from_db()
 
     def updates(self):
-        return AuditLog.objects.filter(object_type="Managed resource", action=AuditLog.Action.UPDATED)
+        return audit_rows.since(self.before).filter(object_type="Managed resource", action=AuditLog.Action.UPDATED)
 
     def test_confirming_an_unchanged_declaration_writes_the_stamp_and_no_audit_row(self):
         """Silencing the event must not silence the fact it records."""
@@ -946,7 +952,7 @@ class ObservationIsNotAnEventTests(TestCase):
         # changes only the stamp, and those are the thousands of rows.
         self.sweep()
         first = self.resource.last_observed_at
-        AuditLog.objects.all().delete()
+        self.before = audit_rows.mark()
         for _ in range(5):
             self.sweep()
         self.assertIsNotNone(first)
@@ -955,7 +961,7 @@ class ObservationIsNotAnEventTests(TestCase):
 
     def test_a_sweep_that_finds_something_different_is_still_an_event(self):
         self.sweep()
-        AuditLog.objects.all().delete()
+        self.before = audit_rows.mark()
         self.sweep()
         self.assertEqual(self.updates().count(), 0, "a quiet sweep is not an event")
         ManagedResource.objects.filter(pk=self.resource.pk).update(spec={**A_REWRITE, "answer": "10.0.0.99"})

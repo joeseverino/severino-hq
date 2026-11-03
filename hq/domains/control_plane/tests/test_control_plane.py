@@ -35,6 +35,7 @@ from hq.platform.application.resource_operations import (
 )
 from hq.platform.application.security import cli_principal, mcp_principal
 from hq.platform.application.tests.markup import actions, hrefs, select, text
+from hq.platform.application.tests.writers import form_keyed
 from hq.platform.application.topology_model import TopologyNode
 
 from ..desired_state import advance_dependents
@@ -594,6 +595,7 @@ class InfrastructureWebTests(TestCase):
                 "addresses": "100.64.0.9",
                 "enabled": "on",
                 "show_on_dashboard": "on",
+                **form_keyed(),
             },
         )
 
@@ -719,7 +721,7 @@ class OperationPolicyTests(TestCase):
 
         response = self.client.post(
             reverse("control_plane:reconcile", kwargs={"key": self.resource.key}),
-            {"next": "/infrastructure/machines/a-host/"},
+            form_keyed({"next": "/infrastructure/machines/a-host/"}),
         )
 
         self.assertRedirects(
@@ -736,7 +738,7 @@ class OperationPolicyTests(TestCase):
 
         response = self.client.post(
             reverse("control_plane:reconcile", kwargs={"key": self.resource.key}),
-            {"next": "https://example.test/somewhere"},
+            form_keyed({"next": "https://example.test/somewhere"}),
         )
 
         self.assertRedirects(
@@ -894,7 +896,7 @@ class OperationPolicyTests(TestCase):
             )
         self.assertEqual(OperationRequest.objects.count(), 1)
 
-    @override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=False)
+    @override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=False)
     def test_mcp_infrastructure_is_fail_closed(self):
         result = execute_capability(
             "certificate.renew",

@@ -10,8 +10,8 @@ part, so only a panel that changed is replaced and an open one stays open.
   once when the page is showing. Asking by hand is in each panel's popover,
   and posts through the first.
   {% endcomment %}
-  <form id="glance-refresh" method="post" action="{% url 'dashboard_glance' %}" data-fragment-target data-fragment-failure="Could not read it." hidden>{% csrf_token %}</form>
-  {% if dashboard_due %}<form method="post" action="{% url 'dashboard_glance' %}" data-fragment-target data-fragment-auto hidden>{% csrf_token %}<input type="hidden" name="scope" value="stale"></form>{% endif %}
+  <form id="glance-refresh" method="post" action="{% url 'dashboard_glance' %}" data-fragment-target data-fragment-failure="Could not read it." hidden>{% write_token %}</form>
+  {% if dashboard_due %}<form method="post" action="{% url 'dashboard_glance' %}" data-fragment-target data-fragment-auto hidden>{% write_token %}<input type="hidden" name="scope" value="stale"></form>{% endif %}
   <div class="glance-panels">
     {% for panel in dashboard_panels %}
       <details data-fragment-part="{{ panel.id }}" class="glance-panel status-{{ panel.payload.status|default:'neutral' }}{% if panel.due %} is-due{% endif %}{% if panel.outdated %} is-outdated{% endif %}" data-menu{% if panel.refreshing %} data-refreshing{% endif %}>

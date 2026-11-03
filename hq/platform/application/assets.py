@@ -11,11 +11,14 @@ from hq.domains.assets.models import Asset
 from .command_fields import Describe, Names, Refers
 from .entity_links import EntityLink, entity_link
 from .projection import addressable, iso, listing
+from .record_fields import Notes, Slug, TotalCost
 from .record_links import linked
 from .record_saves import Held, Link, linked_saver
 from .security import Principal
 from .upserts import upsert_by_slug
 lazy from . import zones
+
+type AssetName = Annotated[str, Describe("What the asset is called.")]
 
 
 def managed_domain(asset: Asset) -> EntityLink | None:
@@ -33,18 +36,18 @@ def managed_domain(asset: Asset) -> EntityLink | None:
 
 @dataclass(frozen=True, slots=True)
 class AssetCommand:
-    item_name: Annotated[str, Describe("What the asset is called.")]
-    slug: Annotated[str, Describe("Its address in HQ; blank derives one from the name.")] = ""
+    item_name: AssetName
+    slug: Slug = ""
     vendor: Annotated[str, Describe("Who it was bought from.")] = ""
     category: Annotated[str, Describe("What type of asset it is.")] = "other"
     purchase_date: Annotated[date | None, Describe("When it was bought.")] = None
-    total_cost: Annotated[Decimal, Describe("What it cost in all.")] = Decimal("0.00")
+    total_cost: TotalCost = Decimal("0.00")
     business_use_percentage: Annotated[int, Describe("How much of its use is for the business, as a percentage.")] = 100
     payment_method: Annotated[str, Describe("How it was paid for.")] = ""
     serial_number: Annotated[str, Describe("The maker's serial number.")] = ""
     warranty_date: Annotated[date | None, Describe("When its warranty ends.")] = None
     status: Annotated[str, Describe("Whether it is in use, or how it left.")] = Asset.Status.ACTIVE
-    notes: Annotated[str, Describe("Anything else worth keeping.")] = ""
+    notes: Notes = ""
     related_projects: Annotated[tuple[str, ...], Names("projects"), Describe("The projects this asset serves.")] = ()
     infrastructure: Annotated[
         str,
@@ -102,6 +105,7 @@ def upsert_asset(
     *,
     principal: Principal,
     expected_updated_at: str | None = None,
+    sent: frozenset[str] | None = None,
 ) -> dict[str, Any]:
     """Idempotently create or update an asset by its command slug."""
 
@@ -111,4 +115,5 @@ def upsert_asset(
         save_asset,
         principal=principal,
         expected_updated_at=expected_updated_at,
+        sent=sent,
     )

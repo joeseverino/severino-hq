@@ -5,6 +5,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource, NotManaged, ProviderConnection
+from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.models import AuditLog
 
 from ..adoption import AdoptCommand, adopt, unmanaged
@@ -182,7 +183,9 @@ class StopManagingSticksTests(TestCase):
         swept()
         token = find_zone("example.com").adopt_token
 
-        response = self.client.post(reverse("zones:adopt", kwargs={"zone": "example.com"}), {"token": token})
+        response = self.client.post(
+            reverse("zones:adopt", kwargs={"zone": "example.com"}), form_keyed({"token": token})
+        )
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(ManagedResource.objects.filter(kind=ZONE_KIND).exists())

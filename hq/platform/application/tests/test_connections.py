@@ -17,6 +17,7 @@ from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_STACK_KIND
 from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..connection_catalog import AUTHORITY_LABELS, CONTROLLER_CONNECTIONS, connection_catalog
@@ -668,7 +669,7 @@ class AdoptionSafetyTests(TestCase):
         self.assertIs(lead_action(actions), restart)
         self.assertEqual((restart.method, stop.method, stop.danger), ("post", "get", True))
         self.assertContains(self.client.get(stop.url), "Stop probe?")
-        queued = self.client.post(stop.url)
+        queued = self.client.post(stop.url, form_keyed())
         self.assertRedirects(
             queued,
             reverse("control_plane:service", kwargs={"hostname": "probe.invalid"}),
@@ -775,7 +776,7 @@ class OutwardLinkChoiceTests(TestCase):
     def test_choosing_narrows_the_panel(self):
         from ..outward_links import outward_links
 
-        self.client.post(reverse("dashboard_links"), {"href": "https://portainer.example"})
+        self.client.post(reverse("dashboard_links"), form_keyed({"href": "https://portainer.example"}))
         offered, curated = outward_links(self.user)
 
         self.assertTrue(curated)
@@ -787,8 +788,8 @@ class OutwardLinkChoiceTests(TestCase):
 
         from ..outward_links import outward_links
 
-        self.client.post(reverse("dashboard_links"), {"href": "https://portainer.example"})
-        self.client.post(reverse("dashboard_links"), {"href": "/health/ready/"})
+        self.client.post(reverse("dashboard_links"), form_keyed({"href": "https://portainer.example"}))
+        self.client.post(reverse("dashboard_links"), form_keyed({"href": "/health/ready/"}))
         offered, _ = outward_links(self.user)
 
         self.assertEqual([item["href"] for item in offered], ["/health/ready/"])
@@ -798,7 +799,7 @@ class OutwardLinkChoiceTests(TestCase):
 
         from ..outward_links import outward_links
 
-        self.client.post(reverse("dashboard_links"), {"href": "https://elsewhere.test"})
+        self.client.post(reverse("dashboard_links"), form_keyed({"href": "https://elsewhere.test"}))
         offered, curated = outward_links(self.user)
 
         self.assertFalse(curated)

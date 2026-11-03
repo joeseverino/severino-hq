@@ -20,7 +20,7 @@ from django.test import RequestFactory, SimpleTestCase, TestCase, modify_setting
 from django.urls import include, path, reverse
 from django.utils import timezone
 
-from hq.config.urls import urlpatterns as host_urlpatterns
+from hq.config.urls import urlpatterns as root_urlpatterns
 from hq.domains.jobs import runner
 from hq.domains.jobs.models import Job
 from hq.platform.application import outbound_work, scheduled_work
@@ -29,6 +29,7 @@ from hq.platform.application.integration_specs import requested
 from hq.platform.application.outbound_work import OutboundWork, capability_for, due, validate
 from hq.platform.application.plugins import PluginIntegration, clear_plugin_composition_cache
 from hq.platform.application.security import Principal, cli_principal, internal_principal
+from hq.platform.application.tests.writers import form_keyed, keyed
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import serving
 from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_grow
@@ -48,7 +49,7 @@ def calls_out(request):
 
 
 urlpatterns = [
-    *host_urlpatterns,
+    *root_urlpatterns,
     path("examples/notes/", include(f"{EXAMPLE}.urls")),
     path("examples/inline/", calls_out),
 ]
@@ -102,7 +103,7 @@ class ComposedExample(TestCase):
         self.route = reverse("jobs:ask", args=[example.LOOKUP])
 
     def press(self, subject="first-note", **extra):
-        return self.client.post(self.route, {"subject": subject}, **extra)
+        return self.client.post(self.route, form_keyed({"subject": subject}), **extra)
 
 
 class AnExtensionActionAnswersAtOnceTests(ComposedExample):
@@ -132,12 +133,12 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
         page = self.client.get(self.page)
         self.assertContains(page, "alpha, beta")
         self.assertNotContains(page, "data-ask-status")
-        ended = AuditLog.objects.filter(operation_id=str(job.pk), action=AuditLog.Action.IMPORTED).get()
-        self.assertEqual((ended.user, ended.metadata["kind"]), (self.user, example.LOOKUP))
+        ended = AuditLog.objects.filter(operation_id=str(job.pk), action=AuditLog.Action.DONE).get()
+        self.assertEqual((ended.user, ended.metadata["operation"]), (self.user, example.LOOKUP))
 
     def test_without_script_the_post_returns_to_the_page_that_asked(self):
         with held_jobs():
-            response = self.client.post(self.route, {"subject": "first-note", "next": self.page})
+            response = self.client.post(self.route, form_keyed({"subject": "first-note", "next": self.page}))
 
         self.assertRedirects(response, self.page, fetch_redirect_response=False)
         self.assertEqual(Job.objects.get().state, "queued")
@@ -219,14 +220,14 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
 
     def test_an_operator_without_the_capability_is_refused(self):
         nobody = Principal("operator", "web", frozenset())
-        with held_jobs(), mock.patch("hq.platform.application.security.web_principal", return_value=nobody):
+        with held_jobs(), mock.patch("hq.platform.application.web_writes.web_principal", return_value=nobody):
             response = self.press(headers=SCRIPT)
 
         self.assertEqual(response.status_code, 403)
         self.assertFalse(Job.objects.exists())
 
     def test_work_nobody_declared_has_no_route(self):
-        response = self.client.post(reverse("jobs:ask", args=["example.undeclared"]))
+        response = self.client.post(reverse("jobs:ask", args=["example.undeclared"]), form_keyed())
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(self.client.get(self.route).status_code, 405)
@@ -242,7 +243,7 @@ class TheCapabilityIsDerivedTests(ComposedExample):
     def test_a_machine_caller_is_answered_at_once(self):
         caller = Principal("example-agent", "api", frozenset({"notes.write"}))
         with held_jobs() as held:
-            result = execute_capability(example.LOOKUP, {}, principal=caller, target="first-note")
+            result = execute_capability(example.LOOKUP, keyed(), principal=caller, target="first-note")
 
             self.assertEqual((result["ok"], result["started"]), (True, True))
             self.assertEqual(Job.objects.get(pk=result["job"]).actor, "example-agent")
@@ -492,5 +493,5 @@ class JobWordingTests(ComposedExample):
         for label in labels:
             with self.subTest(label):
                 job = runner.run("example.wording", label, lambda progress: {})
-                ended = AuditLog.objects.get(operation_id=str(job.pk), action=AuditLog.Action.IMPORTED)
-                self.assertTrue(ended.message.startswith(f"{label}: "), ended.message)
+                ended = AuditLog.objects.get(operation_id=str(job.pk), action=AuditLog.Action.DONE)
+                self.assertEqual(ended.object_repr, label)

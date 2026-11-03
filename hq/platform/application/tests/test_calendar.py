@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.calendars.models import Entry, Preference
+from hq.platform.application.tests.writers import form_keyed, keyed
 from hq.platform.core.models import AuditLog
 
 from ..calendar import (
@@ -312,10 +313,10 @@ class WriteTests(TestCase):
         self.assertFalse(Entry.objects.exists())
 
     def test_an_agent_has_the_calendar_only_on_its_own_switch(self):
-        with override_settings(SEVERINO_MCP_ENABLE_CALENDAR=False, SEVERINO_MCP_ENABLE_WRITES=True):
+        with override_settings(SEVERINO_AGENT_ENABLE_CALENDAR=False, SEVERINO_AGENT_ENABLE_WRITES=True):
             self.assertFalse(mcp_principal().permits(Capability.READ_CALENDAR))
             self.assertFalse(mcp_principal().permits(Capability.WRITE_CALENDAR))
-        with override_settings(SEVERINO_MCP_ENABLE_CALENDAR=True, SEVERINO_MCP_ENABLE_WRITES=False):
+        with override_settings(SEVERINO_AGENT_ENABLE_CALENDAR=True, SEVERINO_AGENT_ENABLE_WRITES=False):
             agent = mcp_principal()
             self.assertTrue(agent.permits(Capability.WRITE_CALENDAR))
             self.assertFalse(agent.permits("write_expenses"))
@@ -326,13 +327,17 @@ class WriteTests(TestCase):
         other = get_user_model().objects.create_user("calendar-other")
         principal = web_principal(user)
 
-        chosen = execute_capability(CHOOSE_SOURCE, {"source": "history.deploys", "shown": True}, principal=principal)
+        chosen = execute_capability(
+            CHOOSE_SOURCE, keyed({"source": "history.deploys", "shown": True}), principal=principal
+        )
 
         self.assertEqual(chosen["choices"], {"history.deploys": True})
         self.assertEqual((calendar_choices(user), calendar_choices(other)), ({"history.deploys": True}, {}))
-        unknown = execute_capability(CHOOSE_SOURCE, {"source": "no.such", "shown": False}, principal=principal)
+        unknown = execute_capability(CHOOSE_SOURCE, keyed({"source": "no.such", "shown": False}), principal=principal)
         self.assertEqual(unknown["error"]["code"], "not_found")
-        invalid = execute_capability(CHOOSE_SOURCE, {"source": "history.deploys", "shown": "x"}, principal=principal)
+        invalid = execute_capability(
+            CHOOSE_SOURCE, keyed({"source": "history.deploys", "shown": "x"}), principal=principal
+        )
         self.assertEqual(invalid["error"]["code"], "invalid_input")
 
     def test_a_credential_keeps_no_calendar_choices(self):
@@ -485,26 +490,29 @@ class PageTests(TestCase):
 
     def test_checking_a_source_returns_to_the_month_it_was_chosen_on(self):
         here = f"{reverse('calendar:month')}?month=2026-10"
-        response = self.client.post(reverse("calendar:source", args=["history.deploys"]), {"shown": "1", "next": here})
+        response = self.client.post(
+            reverse("calendar:source", args=["history.deploys"]), form_keyed({"shown": "1", "next": here})
+        )
         self.assertRedirects(response, here, fetch_redirect_response=False)
         response = self.client.post(
-            reverse("calendar:source", args=["history.deploys"]), {"shown": "1", "next": "https://evil.example/"}
+            reverse("calendar:source", args=["history.deploys"]),
+            form_keyed({"shown": "1", "next": "https://evil.example/"}),
         )
         self.assertRedirects(response, reverse("calendar:month"), fetch_redirect_response=False)
         self.assertEqual(
-            self.client.post(reverse("calendar:source", args=["no.such"]), {"shown": "1"}).status_code, 404
+            self.client.post(reverse("calendar:source", args=["no.such"]), form_keyed({"shown": "1"})).status_code, 404
         )
 
     def test_the_form_writes_through_the_command(self):
         response = self.client.post(
             reverse("calendar:entry_new"),
-            {"title": "Haircut", "starts_on": "2026-10-17", "repeat": "", "interval": 1},
+            form_keyed({"title": "Haircut", "starts_on": "2026-10-17", "repeat": "", "interval": 1}),
         )
         entry = Entry.objects.get(title="Haircut")
         self.assertRedirects(response, entry.get_absolute_url(), fetch_redirect_response=False)
         response = self.client.post(
             reverse("calendar:entry_new"),
-            {"title": "Bad", "starts_on": "2026-10-17", "weekdays": ["1"], "repeat": "", "interval": 1},
+            form_keyed({"title": "Bad", "starts_on": "2026-10-17", "weekdays": ["1"], "repeat": "", "interval": 1}),
         )
         self.assertContains(response, "Only a weekly entry names its days.")
 

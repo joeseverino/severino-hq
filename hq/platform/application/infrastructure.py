@@ -23,38 +23,43 @@ from hq.domains.control_plane.providers import (
     spec_withheld,
     validate_spec,
 )
-from hq.platform.core.audit import operation_context
+from hq.platform.core.audit import audit_operation
 lazy from hq.domains.control_plane.provider_spec import ProviderResolutionContext
 
 from .adoption import OBSERVES_ONLY, observes_only
 from .approvals import consent_gap
 from .command_fields import Choices, Describe
-from .projection import matched, page_size, read_once
+from .integration_specs import Kept, keeps
+from .projection import keyset_page, read_once
 from .record_errors import PolicyError
-from .record_saves import Held, held
+from .record_saves import Held, as_sent, found, held, written
 from .security import Principal
 lazy from .delivery_progress import deploying_label
 lazy from .locate import names_by_connection
 lazy from .resource_capabilities import kind_converges
 lazy from .resource_operations import queue_reconcile
 
+# Each field a managed record is created and updated by, said once for both.
+type ManagedResourceKey = Annotated[str, Describe("The key the record is stored under.")]
+type ManagedResourceKind = Annotated[
+    str,
+    # The registry's kinds, the only ones validate_spec accepts.
+    Choices((kind, registry_label(kind)) for kind in PROVIDERS),
+    Describe("What type of record it is."),
+]
+type ManagedResourceSpec = Annotated[dict[str, Any], Describe("What HQ expects of it, in the shape its type takes.")]
+
 
 @dataclass(frozen=True, slots=True)
 class ManagedResourceCommand:
-    key: Annotated[str, Describe("The key the record is stored under.")]
-    kind: Annotated[
-        str,
-        # The registry's kinds, the only ones validate_spec accepts.
-        Choices((kind, registry_label(kind)) for kind in PROVIDERS),
-        Describe("What type of record it is."),
-    ]
-    spec: Annotated[dict[str, Any], Describe("What HQ expects of it, in the shape its type takes.")]
+    key: ManagedResourceKey
+    kind: ManagedResourceKind
+    spec: ManagedResourceSpec
     enabled: Annotated[bool, Describe("Whether HQ keeps the live record as it expects.")] = True
 
 
 def list_managed_resources(*, limit: int = 50, kind: str | None = None, kinds: str | None = None) -> dict[str, Any]:
-    """List canonical public infrastructure state without provider credentials."""
-    # The shared bound, so this module follows it when it moves.
+    """List canonical public infrastructure state without provider credentials, by kind then key."""
     resources = ManagedResource.objects.all()
     if kind and kinds:
         raise ValueError("Choose either kind or kinds, not both.")
@@ -62,9 +67,8 @@ def list_managed_resources(*, limit: int = 50, kind: str | None = None, kinds: s
         resources = resources.filter(kind=kind)
     elif kinds:
         resources = resources.filter(kind__in=kinds.split(","))
-    page = list(resources[: page_size(limit)])
-    items = [serialize_resource(resource) for resource in page]
-    return {"items": items, "count": len(items), "total": matched(resources, page, limit)}
+    page = keyset_page(resources, ("kind", "key"), limit)
+    return {**page, "items": [serialize_resource(resource) for resource in page["items"]]}
 
 
 def enabled_resources() -> tuple[ManagedResource, ...]:
@@ -341,14 +345,12 @@ def _can_change_the_public_internet(kind: str) -> bool:
     return any(action_kind == kind for action_kind, _ in enabled_controller_actions())
 
 
-def _refuse_withheld(kind: str, current_key: str | None) -> None:
+def _refuse_withheld(kind: str, held_kind: str) -> None:
     """A withheld kind is written only by the domain that owns it, under its
-    own capability: this writer would echo its spec back to the caller."""
+    own capability: this writer would echo its spec back to the caller. Asked
+    of the kind to be written and of the record's kind as it is locked."""
 
-    current = (
-        ManagedResource.objects.filter(key=current_key).values_list("kind", flat=True).first() if current_key else None
-    )
-    if spec_withheld(kind) or (current is not None and spec_withheld(current)):
+    if spec_withheld(kind) or spec_withheld(held_kind):
         raise PolicyError("This record is changed from its own page, not here.")
 
 
@@ -388,6 +390,11 @@ def _refuse_authored(command: ManagedResourceCommand, validated_spec: dict[str, 
         raise PolicyError(OBSERVES_ONLY)
 
 
+def _stored(key: str) -> dict[str, Any]:
+    return as_sent(found(ManagedResource, MANAGED_RECORD, {"key": key}), ManagedResourceCommand, {})
+
+
+@keeps(Kept(_stored))
 @transaction.atomic
 def save_managed_resource(
     command: ManagedResourceCommand,
@@ -396,8 +403,15 @@ def save_managed_resource(
     current_key: str | None = None,
     expected_updated_at: str | None = None,
     copied_from_live: bool = False,
+    sent: frozenset[str] | None = None,
 ) -> dict[str, Any]:
     """Write one declaration, for a caller the capability runner or HQ itself authorized.
+
+    An update writes the fields it was ``sent`` over the record as locked, and
+    the spec is validated and judged as it will be written. A field not sent
+    is the locked row's, never the read made before the lock; a caller that
+    must not write over a change since its read sends ``expected_updated_at``,
+    which refuses the write instead.
 
     ``copied_from_live`` says the spec was read from the provider moments ago
     rather than authored, which exempts it from ``_refuse_authored``: refusing
@@ -405,20 +419,23 @@ def save_managed_resource(
     leave every public record unadopted.
     """
 
-    _refuse_withheld(command.kind, current_key)
-    validated_spec = validate_spec(command.kind, command.spec)
-    if not copied_from_live:
-        _refuse_authored(command, validated_spec, principal=principal)
-    provider = PROVIDERS[command.kind]
-
     operation = "infrastructure.resource.create" if current_key is None else "infrastructure.resource.update"
-    with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
+    with audit_operation(operation=operation, principal=principal):
         created = current_key is None
         resource = (
             ManagedResource()
             if created
             else held(ManagedResource, MANAGED_RECORD, {"key": current_key}, expected_updated_at)
         )
+        if not created:
+            command = ManagedResourceCommand(
+                **{**as_sent(resource, ManagedResourceCommand, {}), **written(command, sent)}
+            )
+        _refuse_withheld(command.kind, resource.kind)
+        validated_spec = validate_spec(command.kind, command.spec)
+        if not copied_from_live:
+            _refuse_authored(command, validated_spec, principal=principal)
+        provider = PROVIDERS[command.kind]
         changed = (
             created
             or resource.key != command.key

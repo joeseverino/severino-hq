@@ -10,6 +10,7 @@ from django.urls import reverse
 
 from hq.platform.application.documentation import MAX_MANIFEST_ITEMS, SYNC
 from hq.platform.application.security import Capability, Principal
+from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.models import AuditLog
 
 from ..models import DocumentationRecord
@@ -35,7 +36,9 @@ class ManifestImportViewTests(TestCase):
 
     def post(self, data, **extra):
         return self.client.post(
-            reverse("docs_index:import"), {"manifest_file": _file(data), "update_existing": "on", **extra}, follow=True
+            reverse("docs_index:import"),
+            form_keyed({"manifest_file": _file(data), "update_existing": "on", **extra}),
+            follow=True,
         )
 
     def test_a_valid_manifest_is_imported_and_audited_as_the_operator(self):
@@ -54,10 +57,9 @@ class ManifestImportViewTests(TestCase):
 
     def test_a_principal_that_may_not_sync_is_refused_and_recorded(self):
         lacking = Principal("op", "web", frozenset({Capability.READ}))
-        with patch("hq.domains.docs_index.views.web_principal", return_value=lacking):
+        with patch("hq.platform.application.web_writes.web_principal", return_value=lacking):
             response = self.post([ENTRY])
 
-        self.assertContains(response, "Nothing was imported")
         self.assertContains(response, Capability.SYNC_DOCUMENTATION.value)
         self.assertFalse(DocumentationRecord.objects.exists())
         self.assertTrue(AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=SYNC).exists())
@@ -67,7 +69,6 @@ class ManifestImportViewTests(TestCase):
             with self.subTest(data=data):
                 response = self.post(data)
 
-                self.assertContains(response, "Nothing was imported")
                 self.assertContains(response, "manifest")
         self.assertFalse(DocumentationRecord.objects.exists())
 
@@ -81,6 +82,6 @@ class ManifestImportViewTests(TestCase):
         response = self.post([ENTRY] * (MAX_MANIFEST_ITEMS + 1))
 
         # The page sets the figure apart, so the sentence is read around it.
-        self.assertContains(response, "Nothing was imported: Manifest exceeds the")
+        self.assertContains(response, "Manifest exceeds the")
         self.assertContains(response, "safety limit.")
         self.assertFalse(DocumentationRecord.objects.exists())

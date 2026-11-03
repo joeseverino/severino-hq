@@ -19,7 +19,7 @@ from django.views import View
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.asks import APPLIES_SHORTLY
-from hq.platform.application.capabilities import capability_words, execute_capability
+from hq.platform.application.capabilities import capability_words
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.inventory import inventory_state
 from hq.platform.application.mail_policy import (
@@ -39,6 +39,7 @@ from hq.platform.application.resource_capabilities import UPDATE_CAPABILITY, pub
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.ui import counted
+from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.application.zones import (
     ADOPT_ZONE,
     RECORD_KIND,
@@ -184,7 +185,8 @@ class ZoneMailView(View):
             messages.error(request, f"HQ does not manage a {what} record for this domain.")
             return redirect("zones:mail", zone=zone.zone)
         resource = ManagedResource.objects.get(key=record.resource_key)
-        result = execute_capability(
+        result = execute_posted(
+            request,
             "infrastructure.resource.update",
             {
                 "key": resource.key,
@@ -192,11 +194,9 @@ class ZoneMailView(View):
                 "spec": {**resource.spec, "content": f'"{value}"'},
                 "enabled": resource.enabled,
             },
-            principal=web_principal(request.user),
             target=resource.key,
         )
-        if not result["ok"]:
-            messages.error(request, result["error"]["message"])
+        if refused(request, result):
             return redirect("zones:mail", zone=zone.zone)
         messages.success(request, f"{what} saved. {APPLIES_SHORTLY}")
         return redirect("zones:mail", zone=zone.zone)
@@ -241,9 +241,7 @@ class ZonePinView(View):
         name = normalized_hostname(zone)
         if not name:
             raise Http404("No such domain.")
-        result = execute_capability(PIN, {"kind": DOMAIN, "key": name}, principal=web_principal(request.user))
-        if not result["ok"]:
-            messages.error(request, result["error"]["message"])
+        refused(request, execute_posted(request, PIN, {"kind": DOMAIN, "key": name}))
         # Checked, not trusted: a destination arriving in a form post is a
         # request, and an unchecked one redirects wherever it likes.
         return redirect(safe_next(request) or reverse("zones:index"))
@@ -344,13 +342,8 @@ class ZoneAdoptView(View):
     """
 
     def post(self, request, zone):
-        result = execute_capability(
-            ADOPT_ZONE,
-            {"zone": zone, "token": request.POST.get("token", "")},
-            principal=web_principal(request.user),
-        )
-        if not result["ok"]:
-            messages.error(request, result["error"]["message"])
+        result = execute_posted(request, ADOPT_ZONE, {"zone": zone, "token": request.POST.get("token", "")})
+        if refused(request, result):
             return redirect("zones:detail", zone=zone)
         adopted = len(result["adopted"])
 

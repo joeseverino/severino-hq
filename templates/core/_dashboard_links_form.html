@@ -1,5 +1,5 @@
 <form method="post" action="{% url 'dashboard_links' %}" data-fragment-target="dashboard-links" data-fragment-busy="Saving…" data-fragment-failure="Could not save.">
-  {% csrf_token %}
+  {% write_token %}
   <input type="hidden" name="next" value="{% url 'dashboard' %}">
   <ul class="ext-choices">
     {% for choice in external_choices %}

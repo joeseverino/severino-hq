@@ -6,7 +6,7 @@ is the same audited write as one added on the page.
 
 import calendar as month_lengths
 from collections.abc import Iterator
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from itertools import count
 from typing import Annotated, Any, Literal
@@ -15,17 +15,22 @@ from django.db import transaction
 from django.db.models import Q
 from django.db.models.functions import Coalesce
 from django.utils import timezone
+from pydantic import Field
 
-from hq.domains.calendars.models import Entry, Preference
+from hq.domains.calendars.models import INTERVAL_MAXIMUM, INTERVAL_MINIMUM, Entry, Preference
+from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
-from hq.platform.core.audit import operation_context
+from hq.platform.core.audit import audit_operation
 
 from .calendar import CalendarEvent, CalendarSource, gather
 from .command_fields import Describe, Refers
 from .derivations import derivation
+from .integration_specs import Kept, keeps
 from .moments import when_day
+from .projection import window
 from .record_errors import RecordNotFound
-from .record_saves import Held, held
+from .record_fields import Notes
+from .record_saves import Held, as_sent, found, held, written
 from .security import Capability, Principal, person
 from .ui import counted
 lazy from . import calendar
@@ -160,7 +165,7 @@ def occurrence(entry: Entry, day: date) -> CalendarEvent:
         title=entry.title,
         starts=starts,
         ends=ends,
-        detail=" · ".join(part for part in (entry.location, repeat_label(entry)) if part),
+        detail=dotted(entry.location, repeat_label(entry)),
         url=f"{reverse('calendar:month')}?day={day.isoformat()}&entry={entry.uid}",
     )
 
@@ -185,21 +190,30 @@ def repeat_label(entry: Entry) -> str:
 # ----- Writing ----------------------------------------------------------------
 
 
+# The fields an entry is added and changed by that take no default, said once for both.
+type CalendarEntryTitle = Annotated[str, Describe("What the entry is.")]
+type CalendarEntryStartsOn = Annotated[date, Describe("The day it starts.")]
+
+
 @dataclass(frozen=True, slots=True)
 class EntryCommand:
     """One entry, as every surface states it."""
 
-    title: Annotated[str, Describe("What the entry is.")]
-    starts_on: Annotated[date, Describe("The day it starts.")]
+    title: CalendarEntryTitle
+    starts_on: CalendarEntryStartsOn
     ends_on: Annotated[date | None, Describe("The day it ends, for one that spans days.")] = None
     starts_at: Annotated[time | None, Describe("The time it starts; blank for all day.")] = None
     ends_at: Annotated[time | None, Describe("The time it ends.")] = None
     location: Annotated[str, Describe("Where it happens.")] = ""
-    notes: Annotated[str, Describe("Anything else worth keeping.")] = ""
+    notes: Notes = ""
     repeat: Annotated[
         Literal["", "daily", "weekly", "monthly", "yearly"], Describe("How often it repeats; blank for once.")
     ] = ""
-    interval: Annotated[int, Describe("Every how many days, weeks, months or years it repeats.")] = 1
+    interval: Annotated[
+        int,
+        Field(ge=INTERVAL_MINIMUM, le=INTERVAL_MAXIMUM),
+        Describe("Every how many days, weeks, months or years it repeats."),
+    ] = 1
     weekdays: Annotated[tuple[int, ...], Describe("The days of the week a weekly entry falls on, Monday as 0.")] = ()
     repeat_until: Annotated[date | None, Describe("The last day it repeats.")] = None
     about: Annotated[str, Refers(Entry, "about"), Describe("What the entry is about, as type:identity.")] = ""
@@ -226,13 +240,14 @@ def serialize_entry(entry: Entry) -> dict[str, Any]:
     }
 
 
-def _entry(uid: str) -> Entry:
-    try:
-        return Entry.objects.get(uid=uid)
-    except (Entry.DoesNotExist, ValueError) as exc:
-        raise RecordNotFound("That calendar event was not found.") from exc
+def _stored(uid: str) -> dict[str, Any]:
+    """An entry as its command sends it: its weekdays as numbers."""
+
+    entry = found(Entry, _ENTRY, {"uid": uid})
+    return {**as_sent(entry, EntryCommand, {}), "weekdays": entry.weekday_numbers}
 
 
+@keeps(Kept(_stored))
 @transaction.atomic
 def save_entry(
     command: EntryCommand,
@@ -240,17 +255,20 @@ def save_entry(
     principal: Principal,
     current_key: str | None = None,
     expected_updated_at: str | None = None,
+    sent: frozenset[str] | None = None,
 ) -> dict[str, Any]:
     principal.require(Capability.WRITE_CALENDAR)
     operation = "calendar.entry.create" if current_key is None else "calendar.entry.update"
-    with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
+    with audit_operation(operation=operation, principal=principal):
         if current_key is None:
             entry, created = Entry(), True
         else:
             entry, created = held(Entry, _ENTRY, {"uid": current_key}, expected_updated_at), False
-        values = asdict(command)
-        values["title"] = values["title"].strip()
-        values["weekdays"] = ",".join(str(day) for day in sorted(set(values["weekdays"])))
+        values = written(command, None if created else sent)
+        if "title" in values:
+            values["title"] = values["title"].strip()
+        if "weekdays" in values:
+            values["weekdays"] = ",".join(str(day) for day in sorted(set(values["weekdays"])))
         for name, value in values.items():
             setattr(entry, name, value)
         entry.full_clean()
@@ -303,6 +321,8 @@ def attention() -> tuple[Any, ...]:
 # The longest window one read covers: two months is a planning horizon, and a
 # caller wanting more asks twice rather than walking every source over a year.
 AGENDA_DAYS = 62
+# A span's events are read whole and placed in order, so a page may hold more than an API page.
+AGENDA_PAGE = 500
 
 
 def list_agenda(*, start: date | None = None, days: int = 14, limit: int = 200) -> dict[str, Any]:
@@ -319,6 +339,7 @@ def list_agenda(*, start: date | None = None, days: int = 14, limit: int = 200) 
         placed,
         key=lambda item: (item.event.first_day, item.event.timed, str(item.event.starts), item.event.title),
     )
+    page, paged = window(items, limit, maximum=AGENDA_PAGE)
     shown = [
         {
             "source": item.source.id,
@@ -331,19 +352,13 @@ def list_agenda(*, start: date | None = None, days: int = 14, limit: int = 200) 
             "detail": item.event.detail,
             "url": item.event.url,
         }
-        for item in items[:limit]
+        for item in page
     ]
-    return {
-        "start": first.isoformat(),
-        "end": last.isoformat(),
-        "items": shown,
-        "count": len(shown),
-        "truncated": len(items) > limit,
-    }
+    return {**paged, "start": first.isoformat(), "end": last.isoformat(), "items": shown}
 
 
 def get_entry(uid: str) -> dict[str, Any]:
-    return serialize_entry(_entry(uid))
+    return serialize_entry(found(Entry, _ENTRY, {"uid": uid}))
 
 
 def entry_command(values: dict[str, Any]) -> EntryCommand:
@@ -387,8 +402,8 @@ def when_label(entry: Entry) -> str:
     if entry.starts_at is None:
         return days
     if entry.ends_at is None:
-        return f"{days} · {_clock(entry.starts_at)} {_meridiem(entry.starts_at)}"
+        return dotted(days, f"{_clock(entry.starts_at)} {_meridiem(entry.starts_at)}")
     start = _clock(entry.starts_at)
     if _meridiem(entry.starts_at) != _meridiem(entry.ends_at):
         start += f" {_meridiem(entry.starts_at)}"
-    return f"{days} · {start}–{_clock(entry.ends_at)} {_meridiem(entry.ends_at)}"
+    return dotted(days, f"{start}–{_clock(entry.ends_at)} {_meridiem(entry.ends_at)}")

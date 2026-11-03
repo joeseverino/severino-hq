@@ -8,6 +8,7 @@ from django.template import Context, Template
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
+from hq.platform.application.tests.writers import form_keyed, keyed
 from hq.platform.core.context_processors import appearance
 from hq.platform.core.models import Appearance, AuditLog
 
@@ -45,7 +46,7 @@ class ThemeServiceTests(TestCase):
         self.person = web_principal(self.user)
 
     def choose(self, theme, principal=None):
-        return execute_capability(SET_THEME, {"theme": theme}, principal=principal or self.person)
+        return execute_capability(SET_THEME, keyed({"theme": theme}), principal=principal or self.person)
 
     def test_nobody_has_chosen_until_they_choose(self):
         self.assertEqual(theme_for(self.user), "system")
@@ -106,7 +107,7 @@ class ThemeSwitchTests(TestCase):
         self.client.force_login(self.user)
 
     def choose(self, theme, **extra):
-        return self.client.post(reverse("theme"), {"theme": theme, "next": reverse("dashboard")}, **extra)
+        return self.client.post(reverse("theme"), form_keyed({"theme": theme, "next": reverse("dashboard")}), **extra)
 
     def test_a_choice_is_drawn_on_the_next_page_server_side(self):
         for theme, meta in (("dark", "dark"), ("light", "light")):
@@ -134,12 +135,12 @@ class ThemeSwitchTests(TestCase):
                 refused = self.choose(theme)
                 self.assertEqual(refused.status_code, 400)
                 self.assertEqual(refused.content, b"Choose system, light or dark.")
-        self.assertEqual(self.client.post(reverse("theme")).status_code, 400)
+        self.assertEqual(self.client.post(reverse("theme"), form_keyed()).status_code, 400)
         self.assertEqual(theme_for(self.user), "dark")
 
     def test_an_operator_without_the_grant_is_refused_with_the_reason(self):
         lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.SET_PREFERENCES})
-        with mock.patch("hq.platform.core.views.web_principal", return_value=lacking):
+        with mock.patch("hq.platform.application.web_writes.web_principal", return_value=lacking):
             refused = self.choose("dark")
 
         self.assertEqual(refused.status_code, 403)
@@ -152,7 +153,7 @@ class ThemeSwitchTests(TestCase):
         self.assertEqual(theme_for(self.user), "system")
 
     def test_it_returns_only_to_this_site(self):
-        response = self.client.post(reverse("theme"), {"theme": "dark", "next": "https://example.net/"})
+        response = self.client.post(reverse("theme"), form_keyed({"theme": "dark", "next": "https://example.net/"}))
         self.assertRedirects(response, reverse("dashboard"), fetch_redirect_response=False)
 
     def test_anybody_signed_out_is_sent_to_sign_in_and_changes_nothing(self):
@@ -175,7 +176,7 @@ class ThemeSwitchTests(TestCase):
 
         client = Client(enforce_csrf_checks=True)
         client.force_login(self.user)
-        response = client.post(reverse("theme"), {"theme": "dark"})
+        response = client.post(reverse("theme"), form_keyed({"theme": "dark"}))
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(theme_for(self.user), "system")

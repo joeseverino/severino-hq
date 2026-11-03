@@ -16,6 +16,7 @@ from ..integration_specs import capability_schema
 from ..projects import DEPENDENCY_UPDATES
 from ..security import Capability, Principal
 from .markup import select, text
+from .writers import keyed
 
 # What a Python dump of a dict or a list leaves in the text.
 DUMPED = ("{", "[", "'")
@@ -44,18 +45,20 @@ def _sample(schema: dict[str, Any]) -> Any:
     return {"name": "example", "nested": {"value": 1}}
 
 
-@override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
+@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class HeldRequestWordsTests(TestCase):
     def setUp(self):
         CapabilityRule.objects.create(scope="surface", subject="mcp", capability="documentation.sync", rule="approve")
         agent = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.SYNC_DOCUMENTATION}))
         held = execute_capability(
             "documentation.sync",
-            {
-                "manifest": [{"doc_id": f"rb-example-{index}", "title": "Example"} for index in range(4)],
-                "prune_orphans": True,
-                "confirm_prune": True,
-            },
+            keyed(
+                {
+                    "manifest": [{"doc_id": f"rb-example-{index}", "title": "Example"} for index in range(4)],
+                    "prune_orphans": True,
+                    "confirm_prune": True,
+                }
+            ),
             principal=agent,
         )
         self.held = ApprovalRequest.objects.get(pk=held["approval"]["id"])

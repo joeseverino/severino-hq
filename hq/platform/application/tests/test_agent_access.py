@@ -7,6 +7,7 @@ from django.db import DatabaseError
 from django.test import TestCase
 from django.urls import reverse
 
+from hq.platform.application.tests.writers import form_keyed, keyed
 from hq.platform.core.models import AgentAccess, AuditLog
 
 from ..agent_access import SET_AGENT_ACCESS, AgentAccessCommand, agents_paused, set_agents_paused
@@ -44,7 +45,7 @@ class WhoMayPullItTests(TestCase):
             cli_principal(),
         ):
             with self.subTest(interface=credential.interface):
-                result = execute_capability(SET_AGENT_ACCESS, {"paused": True}, principal=credential)
+                result = execute_capability(SET_AGENT_ACCESS, keyed({"paused": True}), principal=credential)
 
                 self.assertEqual(result["error"]["code"], "forbidden")
 
@@ -55,7 +56,7 @@ class WhoMayPullItTests(TestCase):
     def test_a_state_that_is_not_a_yes_or_no_is_invalid(self):
         for payload in ({}, {"paused": "sometimes"}):
             with self.subTest(payload=payload):
-                result = execute_capability(SET_AGENT_ACCESS, payload, principal=web_principal(self.user))
+                result = execute_capability(SET_AGENT_ACCESS, keyed(payload), principal=web_principal(self.user))
 
                 self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertFalse(agents_paused())
@@ -76,7 +77,7 @@ class SwitchTests(TestCase):
         self.client.force_login(self.user)
 
     def _set(self, paused: str):
-        return self.client.post(reverse("agent_access"), {"paused": paused})
+        return self.client.post(reverse("agent_access"), form_keyed({"paused": paused}))
 
     def test_pausing_holds_and_is_attributed(self):
         self._set("1")
@@ -89,7 +90,7 @@ class SwitchTests(TestCase):
 
     def test_an_operator_without_the_grant_is_refused_with_the_reason(self):
         lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.GOVERN_AGENTS})
-        with mock.patch("hq.platform.core.views.web_principal", return_value=lacking):
+        with mock.patch("hq.platform.application.web_writes.web_principal", return_value=lacking):
             refused = self._set("1")
 
         self.assertEqual(refused.status_code, 403)

@@ -24,12 +24,14 @@ from hq.platform.application.attention import waiting_for_approval
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.capability_policy import agents_may_hold
 from hq.platform.application.glance import DASHBOARD_MACHINE
-from hq.platform.application.integration_specs import CapabilitySpec, command_schema
+from hq.platform.application.integration_specs import CapabilitySpec, command_schema, kept_by
 from hq.platform.application.integrations import integration_graph, override_integration_graph
 from hq.platform.application.plugins import plugin_capability_specs
 from hq.platform.application.projects import DEPENDENCY_UPDATES
-from hq.platform.application.security import Capability
+from hq.platform.application.security import Capability, could_hold
 from hq.platform.application.tests.markup import select, with_class, within
+from hq.platform.application.tests.writers import drawn_key
+from hq.platform.application.web_writes import RETRY_KEY_FIELD
 from hq.platform.core.models import AgentAccess
 from hq_sdk.capabilities import StrictCommand
 
@@ -87,6 +89,10 @@ class EveryCommandPageTests(TestCase):
             with self.subTest(command=spec.name):
                 page = self.page(spec.name)
 
+                if not could_hold("web", spec.required_capabilities):
+                    # Only HQ itself runs it, so not even an operator is offered its form.
+                    self.assertEqual(page.status_code, 403)
+                    continue
                 self.assertEqual(page.status_code, 200)
                 self.assertTrue(stated(page, spec.effect), f"{spec.effect} is not said on the page")
                 if pressed_as_words(spec):
@@ -119,13 +125,16 @@ class EveryCommandPageTests(TestCase):
                 if not select(self.page(spec.name), "data-command-blanks"):
                     continue
                 warned.add(spec.name)
-                # It acts on a record, opens without its values, and takes a
-                # field it may be sent without.
+                # It acts on a record, opens without its values, takes a field
+                # it may be sent without, and writes a default for one left out.
                 self.assertTrue(spec.target_kind)
                 self.assertFalse(spec.target_initial_fields)
                 self.assertTrue(optional_fields(schema))
-        # The warning is still drawn where it is true.
-        self.assertIn("project.update", warned)
+                self.assertIsNone(kept_by(spec))
+        # A record's update and a message's review keep a field left blank,
+        # so they warn of nothing.
+        self.assertNotIn("project.update", warned)
+        self.assertNotIn("contact.submission.review", warned)
 
 
 class EveryHeldRequestTests(TestCase):
@@ -205,7 +214,7 @@ class SwitchPageTests(TestCase):
             command_url(DEPENDENCY_UPDATES),
             {
                 "__target": "example-on",
-                "__execution_key": form.initial["__execution_key"],
+                RETRY_KEY_FIELD: drawn_key(page, "data-command-form"),
                 "__expected_updated_at": form.initial["__expected_updated_at"],
                 "dependency_updates": "false",
             },
@@ -304,10 +313,10 @@ class WordlessSwitchTests(TestCase):
     def test_it_sets_what_the_checkbox_holds(self):
         for posted, value in (({"reminders": "on"}, True), ({}, False)):
             with self.subTest(value=value):
-                form = self.client.get(command_url(WORDLESS.name)).context["form"]
+                page = self.client.get(command_url(WORDLESS.name))
                 response = self.client.post(
                     command_url(WORDLESS.name),
-                    {"__execution_key": form.initial["__execution_key"], **posted},
+                    {RETRY_KEY_FIELD: drawn_key(page, "data-command-form"), **posted},
                 )
 
                 self.assertEqual(response.status_code, 302)

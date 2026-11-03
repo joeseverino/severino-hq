@@ -101,7 +101,7 @@
               Read
               {{ reading.observed_at|when }}
               <form method="post" class="inline-form">
-                {% csrf_token %}
+                {% write_token %}
                 <input type="hidden" name="tab" value="dns">
                 <input type="hidden" name="address" value="{{ asked|dictkey:'lookup.address' }}">
                 <button type="submit" class="btn ghost compact">{% words "lookup.address" %}</button>

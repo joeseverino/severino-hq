@@ -25,6 +25,7 @@ from hq.platform.application.contact_submissions import (
 from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.source import parsed
+from hq.platform.application.tests.writers import form_keyed, keyed
 from hq.platform.core.models import AuditLog
 
 from .. import inbox
@@ -168,7 +169,7 @@ class ContactViewTests(TestCase):
         _manages()
         response = self.client.post(
             reverse("contacts:set_status", args=[1]),
-            {"status": "read", "next": reverse("contacts:list") + "?status=unread"},
+            form_keyed({"status": "read", "next": reverse("contacts:list") + "?status=unread"}),
         )
         self.assertRedirects(response, reverse("contacts:list") + "?status=unread", fetch_redirect_response=False)
         self.assertEqual(ManagedResource.objects.get(kind=inbox.DECLARATION).spec["reviews"][0]["status"], "read")
@@ -180,13 +181,13 @@ class ContactViewTests(TestCase):
 
     def test_set_status_rejects_unknown_status(self):
         _manages()
-        self.client.post(reverse("contacts:set_status", args=[1]), {"status": "bogus"})
+        self.client.post(reverse("contacts:set_status", args=[1]), form_keyed({"status": "bogus"}))
         self.assertFalse(ManagedResource.objects.filter(kind=inbox.DECLARATION).exists())
 
     def test_set_status_ignores_offsite_next(self):
         _manages()
         response = self.client.post(
-            reverse("contacts:set_status", args=[1]), {"status": "read", "next": "https://evil.example/"}
+            reverse("contacts:set_status", args=[1]), form_keyed({"status": "read", "next": "https://evil.example/"})
         )
         self.assertRedirects(response, reverse("contacts:list"), fetch_redirect_response=False)
 
@@ -197,8 +198,8 @@ class ContactViewTests(TestCase):
             (reverse("contacts:set_status", args=[1]), {"status": "read"}),
             (reverse("contacts:delete", args=[1]), {}),
         ):
-            with self.subTest(url=url), patch("hq.domains.contacts.views.web_principal", return_value=lacking):
-                response = self.client.post(url, data, follow=True)
+            with self.subTest(url=url), patch("hq.platform.application.web_writes.web_principal", return_value=lacking):
+                response = self.client.post(url, form_keyed(data), follow=True)
 
                 self.assertContains(response, "manage_contacts")
         self.assertFalse(ManagedResource.objects.filter(kind=inbox.DECLARATION).exists())
@@ -210,7 +211,8 @@ class ContactViewTests(TestCase):
     def test_the_detail_form_saves_through_the_review_capability(self):
         _manages()
         response = self.client.post(
-            reverse("contacts:detail", args=[1]), {"status": "replied", "assigned_to": "ada", "admin_notes": "done"}
+            reverse("contacts:detail", args=[1]),
+            form_keyed({"status": "replied", "assigned_to": "ada", "admin_notes": "done"}),
         )
         self.assertRedirects(response, reverse("contacts:detail", args=[1]), fetch_redirect_response=False)
         review = ManagedResource.objects.get(kind=inbox.DECLARATION).spec["reviews"][0]
@@ -223,7 +225,7 @@ class ContactViewTests(TestCase):
 
     def test_delete_post_queues_and_redirects(self):
         _manages()
-        response = self.client.post(reverse("contacts:delete", args=[1]))
+        response = self.client.post(reverse("contacts:delete", args=[1]), form_keyed())
         self.assertRedirects(response, reverse("contacts:list"), fetch_redirect_response=False)
         self.assertEqual(ManagedResource.objects.get(kind=inbox.DECLARATION).spec["deletions"], [1])
         self.assertTrue(
@@ -235,7 +237,9 @@ class ContactViewTests(TestCase):
     def test_a_refused_change_is_said_and_queues_nothing(self):
         _manages(manages=False)
 
-        response = self.client.post(reverse("contacts:set_status", args=[1]), {"status": "read"}, follow=True)
+        response = self.client.post(
+            reverse("contacts:set_status", args=[1]), form_keyed({"status": "read"}), follow=True
+        )
 
         self.assertContains(response, "D1 Write (account)")
         self.assertFalse(ManagedResource.objects.filter(kind=inbox.DECLARATION).exists())
@@ -300,7 +304,7 @@ class QueuedChangeTests(TestCase):
             (DELETE, {"confirm": "1"}),
         ):
             with self.subTest(payload=payload):
-                result = execute_capability(name, payload, principal=OPERATOR, target=2)
+                result = execute_capability(name, keyed(payload), principal=OPERATOR, target=2)
 
                 self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertFalse(ManagedResource.objects.exists())
@@ -368,7 +372,7 @@ class WithheldSpecTests(TestCase):
 
     def test_the_resources_api_with_read_shows_no_spec(self):
         from hq.platform.api.testing import ContractClient
-        from hq.platform.api.tests.test_api import ISSUER, RESOURCE, _serving, _token
+        from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
 
         client = ContractClient()
         with override_settings(OIDC_ISSUER=ISSUER, SEVERINO_API_RESOURCE=RESOURCE), _serving():

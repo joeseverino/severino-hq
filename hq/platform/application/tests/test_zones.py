@@ -29,6 +29,7 @@ from hq.domains.control_plane.providers import (
     PROVIDERS,
     validate_spec,
 )
+from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..adoption import (
@@ -1225,6 +1226,7 @@ class PublishAServiceTests(TestCase):
                 "kind": "adguard.rewrite",
                 "domain": "new.example.com",
                 "answer": "10.0.0.7",
+                **form_keyed(),
             },
         )
 
@@ -1554,8 +1556,6 @@ class NewVerbReadinessTests(TestCase):
         )
 
     def test_the_routes_carry_the_verb_rather_than_the_class(self):
-        from hq.platform.application.adoption_testing import managing_everything
-
         managing_everything()
         user = get_user_model().objects.create_user("op", password="x" * 20)
         self.client.force_login(user)
@@ -1567,7 +1567,7 @@ class NewVerbReadinessTests(TestCase):
             generation=1,
         )
 
-        response = self.client.post(reverse("control_plane:reconcile", kwargs={"key": "a-rewrite"}))
+        response = self.client.post(reverse("control_plane:reconcile", kwargs={"key": "a-rewrite"}), form_keyed())
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(OperationRequest.objects.filter(action=OperationRequest.Action.RECONCILE).exists())

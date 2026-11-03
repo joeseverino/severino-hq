@@ -10,10 +10,11 @@ model's own ``full_clean``, so a rule on the model holds on every path.
 from collections.abc import Callable
 from typing import Any
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import transaction
 from django.forms import ModelForm
 
-from hq.platform.core.audit import operation_context
+from hq.platform.core.audit import audit_operation
 
 from .deletion import DeleteCommand, delete_record
 from .domains import Records, host_records, load, records_of
@@ -26,6 +27,8 @@ from .ui import ended
 _TARGET_NAMES = {"slug": "slug", "integer": "ID", "doc_id": "ID", "key": "key"}
 # The commands every record domain gets.
 _VERBS = frozenset({"create", "upsert", "update", "delete"})
+# What an update says of a field its caller leaves out (``record_saves.written``).
+KEPT = "A field left out keeps its value."
 
 
 def deleter(resource: str) -> Callable[..., dict[str, Any]]:
@@ -90,7 +93,34 @@ def as_its_model_declares(command_type: type, schema: dict[str, Any]) -> dict[st
     return {**schema, "properties": properties}
 
 
+def as_an_update_declares(schema: dict[str, Any], always_sent: frozenset[str] = frozenset()) -> dict[str, Any]:
+    """A command's schema as an update on a record that exists takes it: a
+    field left out keeps what the record holds, so none has a default and only
+    one the record cannot give back (``always_sent``) is required."""
+
+    properties = {
+        name: {key: value for key, value in declared.items() if key != "default"}
+        for name, declared in schema.get("properties", {}).items()
+    }
+    updated = {**schema, "properties": properties}
+    required = [name for name in schema.get("required", ()) if name in always_sent]
+    if required:
+        updated["required"] = required
+    else:
+        updated.pop("required", None)
+    return updated
+
+
+def _bounds(field: Any) -> dict[str, Any]:
+    """The tightest bounds a model field's validators hold a number to, as JSON Schema says them."""
+
+    lows = [v.limit_value for v in field.validators if isinstance(v, MinValueValidator)]
+    highs = [v.limit_value for v in field.validators if isinstance(v, MaxValueValidator)]
+    return {**({"minimum": max(lows)} if lows else {}), **({"maximum": min(highs)} if highs else {})}
+
+
 def _as_field_declares(field: Any, declared: dict[str, Any]) -> dict[str, Any]:
+    declared = {**declared, **_bounds(field)}
     if field.choices:
         allowed = [{"const": value, "title": str(label)} for value, label in field.flatchoices]
         if field.blank and all(choice["const"] != "" for choice in allowed):
@@ -133,11 +163,7 @@ def save_form(form: ModelForm[Any], *, principal: Principal) -> Any:
     records = records_for(type(instance))
     principal.require(records.write)
     verb = "create" if instance._state.adding else "update"
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation=f"{records.noun}.{verb}",
-    ):
+    with audit_operation(operation=f"{records.noun}.{verb}", principal=principal):
         instance.full_clean()
         return form.save()
 
@@ -181,7 +207,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             records.write,
             command,
             records.upsert,
-            f"Add a new {title}, or update it if it already exists.",
+            f"Add a new {title}, or update it if it already exists. On one that exists, {lower_first(KEPT)}",
             f"Create or update {title}",
             False,
         ),
@@ -213,7 +239,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
     return tuple(
         CapabilitySpec(
             f"{records.noun}.{verb}",
-            wording.get(verb, ("", ""))[0] or summary,
+            _keeping(verb, wording.get(verb, ("", ""))[0] or summary),
             effect,
             permission,
             command_type,
@@ -230,6 +256,13 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
         for verb, declared, effect, permission, command_type, handler, summary, label, targeted in verbs
         if declared
     )
+
+
+def _keeping(verb: str, summary: str) -> str:
+    """An update's summary, which says what it does with a field left out,
+    whatever its domain's own wording says first."""
+
+    return f"{summary} {KEPT}" if verb == "update" else summary
 
 
 def _wants(label: str, title: str, *, targeted: bool) -> str:

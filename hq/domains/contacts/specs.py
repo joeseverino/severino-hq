@@ -1,5 +1,8 @@
 """Contact submissions' commands and resource, declared on their domain in application/domains.py."""
 
+from pydantic import Field
+
+from hq.domains.control_plane.provider_adapters.cloudflare import ContactStatus
 from hq.platform.application import contact_submissions
 from hq.platform.application.contact_submissions import (
     ContactDeleteCommand,
@@ -10,13 +13,13 @@ from hq.platform.application.contact_submissions import (
     execute_contact_review,
 )
 from hq.platform.application.integration_specs import CapabilitySpec, ResourceSpec
-from hq.platform.application.resources import BoundedQuery
+from hq.platform.application.resources import STATUS_FILTER, TEXT_FILTER, BoundedQuery
 from hq.platform.application.security import Capability
 
 
 class ContactSubmissionQuery(BoundedQuery):
-    status: str = ""
-    query: str = ""
+    status: ContactStatus | None = Field(default=None, description=STATUS_FILTER)
+    query: str = Field(default="", description=TEXT_FILTER)
 
 
 def capabilities() -> tuple[CapabilitySpec, ...]:
@@ -38,7 +41,9 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
         ),
         CapabilitySpec(
             contact_submissions.REVIEW,
-            "Mark one message read, replied, archived or spam, and keep a note on it.",
+            # Its last sentence is records.KEPT, which test_record_updates_told holds it to.
+            "Mark one message read, replied, archived or spam, and keep a note on it. "
+            "A field left out keeps its value.",
             "remote_write",
             Capability.MANAGE_CONTACTS,
             ContactReviewCommand,
@@ -80,7 +85,7 @@ def resources() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             "contact.submissions",
             "Contact submissions",
-            "Contact requests held in Cloudflare D1, as the controller last read them, and reviewed through HQ.",
+            "The messages sent through the site's contact form, as HQ last read them, each with its review.",
             Capability.MANAGE_CONTACTS,
             contact_submissions.list_contact_submissions,
             ContactSubmissionQuery,

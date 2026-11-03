@@ -11,7 +11,8 @@ from django.views.generic import DetailView, ListView, View
 
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableSort
-lazy from hq.platform.application import capabilities, outbound_work, security
+from hq.platform.application.web_writes import execute_posted
+lazy from hq.platform.application import outbound_work
 lazy from hq.platform.application.asks import FAILED, Standing, answer, job_standing
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
 lazy from hq.platform.application.scheduled_work import job_names
@@ -151,12 +152,7 @@ class WorkAskView(View):
         if work is None:
             raise Http404("No such work is declared.")
         subject = request.POST.get(SUBJECT_FIELD, "")
-        result = capabilities.execute_capability(
-            name,
-            {},
-            principal=security.web_principal(request.user),
-            target=subject if work.takes_subject else None,
-        )
+        result = execute_posted(request, name, {}, target=subject if work.takes_subject else None)
         back = reverse("jobs:list")
         if not result.get("ok"):
             error = result.get("error", {})
