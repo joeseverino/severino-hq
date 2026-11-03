@@ -44,6 +44,15 @@ query-filters:
   # module or a new callable a test registers, as Ruff's PLW0108 finds too.
   - exclude:
       id: py/unnecessary-lambda
+  # py/unused-global-variable reads a name used only in a `type` statement's
+  # value (PEP 695) as unused. The query counts a use the definition reaches
+  # in control flow or from another scope, and CodeQL gives a type alias's
+  # lazily evaluated value neither (AstExtended.qll: "`TypeAlias`es should
+  # define their own scopes"). The Literal each shared field's alias names is
+  # such a name. vulture (`mise run audit:dead`) finds a global nothing
+  # reads, and it reads `type` statements.
+  - exclude:
+      id: py/unused-global-variable
 
 # The type checker's settings shim, for the host's mypy and each extension's.
 # django-stubs reads a settings module's names statically, so it re-exports
