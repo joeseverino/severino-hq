@@ -1,0 +1,26 @@
+# The caller's address is the one ForwardedCaller resolved, read through
+# hq.platform.core.network.client_ip, so every door judges and records the
+# same address. A read of the META key of its own is one more place for the
+# brake, the limits and the audit row to disagree about who called.
+id: caller-address-read-through-client-ip
+language: python
+severity: error
+message: The caller's address is read from META outside hq.platform.core.network.
+note: Call client_ip(request), or socket_peer(request) for the peer that opened the socket.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  - "hq/platform/core/network.py"
+rule:
+  kind: string
+  regex: ^["']REMOTE_ADDR["']$
+  any:
+    - inside:
+        kind: subscript
+    - inside:
+        kind: argument_list

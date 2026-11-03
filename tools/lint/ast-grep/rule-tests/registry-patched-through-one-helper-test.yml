@@ -1,0 +1,9 @@
+id: registry-patched-through-one-helper
+valid:
+  - 'with served(with_kind(example_kind())) as server: pass'
+  - 'registry = resource_registry()'
+  - 'patch("hq.platform.mcp.binding.sync_to_async", return_value=execute)'
+invalid:
+  - 'mock.patch("hq.platform.application.resources.resource_registry", return_value=registry)'
+  - "patch('hq.platform.mcp.contract.resource_registry', return_value=served)"
+  - 'mock.patch.object(resources, "resource_registry", return_value=registry)'

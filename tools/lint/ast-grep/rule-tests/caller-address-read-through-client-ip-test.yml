@@ -1,0 +1,8 @@
+id: caller-address-read-through-client-ip
+valid:
+  - 'source = client_ip(request)'
+  - 'REQUEST = {"REMOTE_ADDR": "192.0.2.10"}'
+invalid:
+  - 'source = request.META.get("REMOTE_ADDR", "")'
+  - "source = request.META['REMOTE_ADDR']"
+  - 'source = str(arrived.META.get("REMOTE_ADDR") or "")'

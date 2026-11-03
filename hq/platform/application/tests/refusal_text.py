@@ -443,7 +443,8 @@ class Checker:
     def _refusal(self, call: ast.Call, place: Place) -> None:
         self.refusals_built += 1
         given = [*call.args, *(k.value for k in call.keywords if k.arg == "reason")]
-        whole = len(given) == 1 and len(call.args) + len(call.keywords) == 1
+        # ``details`` rides beside the sentence (record_errors.HostRefusal) and is never shown as text.
+        whole = len(given) == 1 and len(call.args) + len([k for k in call.keywords if k.arg != "details"]) == 1
         if not (whole and self.reader.sentence(given[0], place)):
             self._fail(place, call, f"builds its {called(call)} from something other than a sentence")
 

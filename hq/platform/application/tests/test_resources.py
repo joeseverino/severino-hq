@@ -30,8 +30,7 @@ class ResourceExecutionTests(TestCase):
     def test_one_spec_drives_discovery_list_and_detail(self):
         project = Project.objects.create(name="Resource registry")
 
-        described = describe_resources()
-        spec = next(item for item in described["resources"] if item["name"] == "projects")
+        (spec,) = describe_resources(name="projects")["resources"]
         listed = list_resource("projects", {"query": "registry", "limit": 10}, principal=READ)
 
         self.assertEqual(spec["operations"]["get"]["identifier"], "slug")

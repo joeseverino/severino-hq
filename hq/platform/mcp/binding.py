@@ -1,15 +1,26 @@
-"""Bind documented MCP arguments to the declared application adapters."""
+"""Bind the declared MCP tools to their application adapters."""
 
+import asyncio
+import logging
 from collections.abc import Callable, Mapping
-from copy import deepcopy
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Any
 
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from pydantic import BaseModel
 
-from .contract import resource_contract
-from .declarations import HANDLERS, argument_model
+from hq.platform.application import agent_admission
+from hq.platform.application.refusal_status import refuse
+
+from .contract import served_resources
+from .declarations import HANDLERS, argument_model, tool_contract
+from .identity import caller_address, current_principal
+
+logger = logging.getLogger("severino.mcp")
+
+CALL_TIMED_OUT = "call_timed_out"
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,50 +29,78 @@ class Tool:
 
     name: str
     description: str
-    # The document's schema, generated from ``arguments``; `mise run lint`
-    # holds the written document to that source.
+    # Generated from ``arguments``; the API document carries the same, and
+    # `mise run lint` holds its written copy to it.
     input_schema: Mapping[str, Any]
-    # The protocol's tool annotations, as the document states them.
+    # The protocol's tool annotations: the behavior hints.
     annotations: Mapping[str, bool]
     arguments: type[BaseModel]
     handler: Callable[..., Any]
+    # What a client shows a person for the tool.
+    title: str = ""
+    # What its structuredContent meets, success and refusal alike.
+    output_schema: Mapping[str, Any] | None = None
     execute: Callable[..., Any] = field(init=False)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "execute", sync_to_async(self.handler, thread_sensitive=True))
-
-    @property
-    def output_schema(self) -> dict[str, Any]:
-        # Every handler answers with one JSON object.
-        return {"additionalProperties": True, "title": f"{self.name}DictOutput", "type": "object"}
+        object.__setattr__(self, "execute", sync_to_async(partial(_held, self.handler), thread_sensitive=True))
 
     async def call(self, arguments: Mapping[str, Any]) -> Any:
         """The handler's answer, once the arguments pass its model, whose
-        refusal never quotes the input."""
+        refusal never quotes the input, or the refusal for one that ran too long."""
 
         bound = self.arguments.model_validate(dict(arguments))
-        return await self.execute(**{name: getattr(bound, name) for name in type(bound).model_fields})
+        seconds = settings.SEVERINO_AGENT_CALL_TIMEOUT_SECONDS
+        deadline = asyncio.timeout(seconds)
+        try:
+            async with deadline:
+                return await self.execute(**{name: getattr(bound, name) for name in type(bound).model_fields})
+        except TimeoutError:
+            if not deadline.expired():
+                raise
+        logger.warning(
+            "MCP tool %s ran past %s seconds; answered, and its thread runs on",
+            self.name,
+            seconds,
+            extra={"event": "mcp.call.timed_out", "tool": self.name, "actor": current_principal().actor},
+        )
+        return refuse(
+            CALL_TIMED_OUT,
+            f"HQ stopped waiting for this call after {seconds} seconds. It may still finish: read "
+            "before repeating it, and repeat a change with the same idempotency_key.",
+        )
 
 
-def bind_tools(document: dict[str, Any]) -> dict[str, Tool]:
-    """One tool for each declared handler the document describes."""
+def _held(handler: Callable[..., Any], **arguments: Any) -> Any:
+    """``handler``'s answer, run while it holds one of its agent's calls at once, on the request's thread.
 
-    entries = document.get("x-hq-mcp-tools")
-    if not isinstance(entries, dict) or set(entries) != {handler.__name__ for handler in HANDLERS}:
-        raise ValueError("The document must describe exactly the declared MCP handlers.")
-    resources = resource_contract(document)
+    The call is given back when the handler returns, so one that outlived its
+    timeout still counts against its agent until it ends.
+    """
+
+    with agent_admission.at_once(current_principal(), source=caller_address()) as busy:
+        if busy is not None:
+            return busy.refusal.answer()
+        return handler(**arguments)
+
+
+def bind_tools() -> dict[str, Tool]:
+    """One tool for each declared handler, as ``tool_contract`` states it."""
+
+    resources = served_resources()
+    entries = tool_contract()
     tools: dict[str, Tool] = {}
     for handler in HANDLERS:
         name = handler.__name__
         entry = entries[name]
-        description = entry["description"]
-        if not isinstance(description, str) or not description:
-            raise ValueError(f"MCP tool {name!r} must have a description.")
-        annotations = entry.get("annotations")
-        if not isinstance(annotations, dict) or not all(isinstance(value, bool) for value in annotations.values()):
-            raise ValueError(f"MCP tool {name!r} must state its annotations.")
-        arguments = argument_model(handler, resources)
         tools[name] = Tool(
-            name, description, deepcopy(entry["inputSchema"]), frozendict(annotations), arguments, handler
+            name,
+            entry["description"],
+            entry["inputSchema"],
+            frozendict(entry["annotations"]),
+            argument_model(handler, resources),
+            handler,
+            title=entry["title"],
+            output_schema=entry["outputSchema"],
         )
     return tools

@@ -13,17 +13,19 @@ from hq.domains.projects.models import Project
 from hq.platform.application import projection
 from hq.platform.application.plugin_testing import offering
 from hq.platform.application.record_errors import RecordNotFound
-from hq.platform.application.security import Capability, Principal, is_interactive
+from hq.platform.application.resources import InvalidResourceInput
+from hq.platform.application.security import AuthorizationError, Capability, Principal, is_interactive
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.application.tests.sentinel import (
     CONNECTION as SENTINEL_CONNECTION,
     READING as SENTINEL_READING,
+    RESOURCE as SENTINEL_RESOURCE,
     SentinelMixin,
     plant_credentials,
 )
 
 from .. import services
-from ..security import MCPBoundary
+from ..security import MCPBoundary, TailnetGate
 from ..server import mcp
 
 TOKEN = "a" * 48
@@ -73,11 +75,10 @@ TOOLS = {
     "describe_resources": True,
     "documentation_status": True,
     "execute_capability": False,
-    "export_year_summary": True,
+    "export_year_summary": False,
     "get_findings": True,
     "get_resource": True,
     "get_topology": True,
-    "list_connections": True,
     "list_resource": True,
     "recent_activity": True,
     "system_health": True,
@@ -94,10 +95,9 @@ class ServiceTests(SentinelMixin, TestCase):
     def setUp(self):
         from hq.platform.application.security import mcp_principal
 
-        from ..identity import reset_principal, set_principal
+        from ..identity import set_principal
 
-        bound = set_principal(mcp_principal())
-        self.addCleanup(reset_principal, bound)
+        self.enterContext(set_principal(mcp_principal()))
 
     def test_registered_tools_are_async_safe(self):
         async def call_health():
@@ -134,10 +134,9 @@ class ServiceTests(SentinelMixin, TestCase):
     def test_a_caller_that_may_read_nothing_is_answered_by_no_read_tool(self):
         from hq.platform.application.security import AuthorizationError
 
-        from ..identity import reset_principal, set_principal
+        from ..identity import set_principal
 
-        bound = set_principal(Principal("example-writer", "mcp", frozenset({"write_projects"})))
-        self.addCleanup(reset_principal, bound)
+        self.enterContext(set_principal(Principal("example-writer", "mcp", frozenset({"write_projects"}))))
         for tool in (services.audit_registry, services.documentation_status, services.system_health):
             with self.subTest(tool=tool.__name__), self.assertRaises(AuthorizationError):
                 tool()
@@ -168,9 +167,11 @@ class ServiceTests(SentinelMixin, TestCase):
         for number in range(105):
             Project.objects.create(name=f"Project {number:03d}")
 
-        result = services.list_resource("projects", {"limit": 500})
+        result = services.list_resource("projects", {"limit": projection.MAX_PAGE_SIZE})
 
         self.assertEqual(result["count"], projection.MAX_PAGE_SIZE)
+        with self.assertRaises(InvalidResourceInput):
+            services.list_resource("projects", {"limit": projection.MAX_PAGE_SIZE + 1})
 
     def test_a_missing_record_is_not_found_and_names_nothing_sent(self):
         sent = "sent-by-the-caller-7f3a"
@@ -188,23 +189,18 @@ class ServiceTests(SentinelMixin, TestCase):
 
         result = services.audit_registry()
 
-        self.assertTrue(result["ok"])
         self.assertEqual(result["orphan_projects"], ["unreferenced"])
 
-    def test_resource_kinds_are_derived_from_the_live_document(self):
-        from hq.platform.api.openapi import document
+    def test_resource_kinds_are_the_ones_the_registry_serves(self):
+        from ..contract import served_resources
 
-        from ..contract import catalog, resource_contract
-
-        contract = resource_contract(document())
+        contract = served_resources()
         listable = [resource.name for resource in contract.listable]
         addressable = [resource.name for resource in contract.addressable]
         tools = {tool.name: tool for tool in mcp.tools.values()}
 
         self.assertEqual(tools["list_resource"].input_schema["properties"]["name"]["enum"], listable)
         self.assertEqual(tools["get_resource"].input_schema["properties"]["name"]["enum"], addressable)
-        self.assertIn(catalog(contract.listable), tools["list_resource"].description)
-        self.assertIn(catalog(contract.addressable), tools["get_resource"].description)
 
     def test_each_tool_is_served_once_and_only_execute_writes(self):
         from hq.platform.mcp.server import mcp as served
@@ -238,18 +234,15 @@ class ServiceTests(SentinelMixin, TestCase):
         self.assertEqual(detail["slug"], project.slug)
 
     def test_no_read_tool_answers_with_a_credential_a_controller_reported(self):
-        from hq.platform.api.openapi import document
-
-        from ..contract import resource_contract
+        from ..contract import served_resources
 
         plant_credentials()
         with host_only():
-            listable = [resource.name for resource in resource_contract(document()).listable]
+            listable = [resource.name for resource in served_resources().listable]
             answers = {
                 "describe_connections": services.describe_connections(),
-                "list_connections": services.list_connections(),
                 "get_findings": services.get_findings(),
-                "get_topology": services.get_topology(),
+                "get_topology": services.get_topology(focus=f"resource:{SENTINEL_RESOURCE}", depth=5),
                 "dashboard_snapshot": services.dashboard_snapshot(),
                 "system_health": services.system_health(),
                 "get_resource readings": services.get_resource("readings", SENTINEL_READING),
@@ -269,7 +262,7 @@ class ServiceTests(SentinelMixin, TestCase):
             with self.subTest(name):
                 self.assertNoSentinel(answer)
         # The planted connection was served: the absence is not vacuous.
-        self.assertIn(SENTINEL_CONNECTION, json.dumps(answers["list_connections"], default=str))
+        self.assertIn(SENTINEL_CONNECTION, json.dumps(answers["list_resource connection.standing"], default=str))
 
     def readable(self, read, *args):
         from hq.platform.application.security import AuthorizationError
@@ -304,27 +297,22 @@ class ServiceTests(SentinelMixin, TestCase):
             whole = services.get_topology()
             narrowed = services.get_topology(lens="unobserved-resources")
         self.assertEqual(narrowed["lens"], "unobserved-resources")
-        self.assertTrue(narrowed["lenses"])
+        self.assertIn("unobserved-resources", {lens["name"] for lens in whole["lenses"]})
         self.assertIn("resource:mcp-lonely", {n["id"] for n in narrowed["nodes"]})
         self.assertLess(narrowed["summary"]["nodes"], whole["summary"]["nodes"])
-
-    def test_findings_name_every_rule(self):
-        with host_only():
-            found = services.get_findings()
-        self.assertTrue(found["ok"])
-        self.assertTrue(found["rules"])
 
     def test_an_unknown_payload_field_is_named_to_the_agent(self):
         from django.test import override_settings
 
         from hq.platform.application.security import mcp_principal
 
-        from ..identity import reset_principal, set_principal
+        from ..identity import set_principal
 
-        with override_settings(SEVERINO_MCP_ENABLE_DOC_SYNC=True):
-            bound = set_principal(mcp_principal())
-            self.addCleanup(reset_principal, bound)
-            result = services.execute_capability("hq.sync", {"manifest": [], "manifets": []})
+        with override_settings(SEVERINO_AGENT_ENABLE_DOC_SYNC=True):
+            self.enterContext(set_principal(mcp_principal()))
+            result = services.execute_capability(
+                "hq.sync", {"manifest": [], "manifets": [], "idempotency_key": "example-key"}
+            )
 
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "invalid_input")
@@ -335,12 +323,13 @@ class ServiceTests(SentinelMixin, TestCase):
 
         from hq.platform.application.security import mcp_principal
 
-        from ..identity import reset_principal, set_principal
+        from ..identity import set_principal
 
-        with override_settings(SEVERINO_MCP_ENABLE_DOC_SYNC=True):
-            bound = set_principal(mcp_principal())
-            self.addCleanup(reset_principal, bound)
-            result = services.execute_capability("hq.sync", {"manifest": "hunter2-not-for-logs"})
+        with override_settings(SEVERINO_AGENT_ENABLE_DOC_SYNC=True):
+            self.enterContext(set_principal(mcp_principal()))
+            result = services.execute_capability(
+                "hq.sync", {"manifest": "hunter2-not-for-logs", "idempotency_key": "example-key"}
+            )
 
         self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertEqual(result["error"]["message"], "hq.sync: manifest must be a valid list.")
@@ -397,24 +386,25 @@ class ServiceTests(SentinelMixin, TestCase):
         self.assertIn("truncated", found["summary"])
 
     def test_connection_state_is_filtered_by_the_mcp_principal(self):
-        from hq.platform.application.connections import ConnectionSpec
+        from hq.platform.application.connections import ConnectionInstance, ConnectionSpec
 
-        provider = mock.Mock(return_value=())
+        instance = ConnectionInstance("example-infra", "Example infrastructure", "example", "good", "healthy")
         spec = ConnectionSpec(
             "example.infrastructure",
             "Infrastructure authority",
             "Requires infrastructure management.",
             Capability.MANAGE_INFRASTRUCTURE,
-            provider,
+            lambda: (instance,),
         )
         with offering(spec, alone=True):
-            listed = services.list_connections()
+            listed = services.list_resource("connection.standing")
 
-        self.assertNotIn("example.infrastructure", [group["name"] for group in listed["groups"]])
-        provider.assert_not_called()
+        self.assertNotIn("example.infrastructure", [item["family"] for item in listed["items"]])
+        self.assertNotIn(instance.id, [item["id"] for item in listed["items"]])
 
 
 _NO_VERIFIER = object()
+RESOURCE = "https://hq.example.test/api"
 
 
 def _accept_the_example_token(bearer):
@@ -423,6 +413,29 @@ def _accept_the_example_token(bearer):
     if bearer != TOKEN:
         raise ValueError("not a token this provider issued")
     return Principal("example-agent", "mcp", frozenset({Capability.READ}))
+
+
+def admitting(verifier, seen=None):
+    """HQ's admission, reduced to ``verifier``: a principal, or why there is none.
+
+    Each bearer and the source it came from are kept in ``seen``.
+    """
+
+    from hq.platform.application.agent_admission import MISSING, Unadmitted
+
+    async def admit(bearer, source):
+        if seen is not None:
+            seen.append((bearer, source))
+        if not bearer:
+            return MISSING
+        try:
+            return verifier(bearer)
+        except AuthorizationError as exc:
+            return Unadmitted(exc.code, exc.reason, verified=True)
+        except ValueError:
+            return Unadmitted("invalid_token", "The access token was not accepted.", verified=False)
+
+    return admit
 
 
 class MCPBoundaryTests(TestCase):
@@ -446,13 +459,15 @@ class MCPBoundaryTests(TestCase):
         origin: str | None = None,
         forwarded_for: str | None = None,
         allowed_hosts: tuple[str, ...] = ("a-docker-host",),
+        allowed_origins: tuple[str, ...] = (),
         verifier=_accept_the_example_token,
         app=None,
-        gate=None,
-        on_denied=None,
-        observer=None,
+        seen=None,
+        headers_seen=None,
+        extra_headers=(),
+        admit=None,
     ) -> tuple[int, dict]:
-        headers = [(b"host", host.encode())]
+        headers = [(b"host", host.encode()), *extra_headers]
         if token is not None:
             headers.append((b"authorization", f"Bearer {token}".encode()))
         if origin:
@@ -482,15 +497,19 @@ class MCPBoundaryTests(TestCase):
 
         boundary = MCPBoundary(
             app or self._allowed_app,
-            allowed_hosts=allowed_hosts,
-            allowed_networks=("100.64.0.0/10", "fd7a:115c:a1e0::/48"),
-            verifier=None if verifier is _NO_VERIFIER else verifier,
-            gate=gate,
-            on_denied=on_denied,
-            observer=observer,
+            gate=TailnetGate(
+                allowed_hosts=allowed_hosts,
+                allowed_networks=("100.64.0.0/10", "fd7a:115c:a1e0::/48"),
+                allowed_origins=allowed_origins,
+            ),
+            resource=RESOURCE,
+            admit=admit or (None if verifier is _NO_VERIFIER else admitting(verifier, seen)),
         )
         async_to_sync(boundary)(scope, receive, send)
-        status = next(message["status"] for message in sent if "status" in message)
+        start = next(message for message in sent if "status" in message)
+        if headers_seen is not None:
+            headers_seen.update((name.decode(), value.decode()) for name, value in start.get("headers", []))
+        status = start["status"]
         body = b"".join(message.get("body", b"") for message in sent)
         return status, json.loads(body) if body else {}
 
@@ -501,15 +520,14 @@ class MCPBoundaryTests(TestCase):
 
         from asgiref.sync import sync_to_async
 
-        from hq.platform.api.openapi import document
         from hq.platform.application.security import AuthorizationError
 
-        from ..contract import resource_contract
+        from ..contract import served_resources
 
         listable, failed = [], {}
 
         def read_every_resource():
-            listable.extend(resource.name for resource in resource_contract(document()).listable)
+            listable.extend(resource.name for resource in served_resources().listable)
             for name in listable:
                 try:
                     services.list_resource(name)
@@ -578,7 +596,7 @@ class MCPBoundaryTests(TestCase):
             with self.subTest(token=token):
                 status, body = self._request(token=token)
                 self.assertEqual(status, 401)
-                self.assertEqual(body["error"], "unauthorized")
+                self.assertEqual(body["error"], "invalid_token")
 
     def test_disables_endpoint_without_a_verifier_or_allowed_hosts(self):
         """No way to authenticate is off, not open to a weaker way in."""
@@ -665,7 +683,7 @@ class AgentIdentityTests(MCPBoundaryTests):
         status, body = self._request(token="s" * 48, verifier=only_jwts)
 
         self.assertEqual(status, 401)
-        self.assertEqual(body["error"], "unauthorized")
+        self.assertEqual(body["error"], "invalid_token")
 
     def test_a_rejected_token_ends_the_request(self):
         """A failed verification is a refusal; there is nothing to fall back to."""
@@ -676,7 +694,7 @@ class AgentIdentityTests(MCPBoundaryTests):
         status, body = self._request(token=self.A_JWT, verifier=refuse)
 
         self.assertEqual(status, 401)
-        self.assertEqual(body["error"], "unauthorized")
+        self.assertEqual(body["error"], "invalid_token")
 
     def test_a_verifier_alone_is_enough_to_serve(self):
         """A deployment can retire the shared secret entirely."""
@@ -701,96 +719,6 @@ class AgentIdentityTests(MCPBoundaryTests):
         # Nothing is left bound, and nothing is filled in for it.
         with self.assertRaises(AuthorizationError):
             current_principal()
-
-
-class AgentBrakeTests(MCPBoundaryTests):
-    A_JWT = "header.payload.signature"
-
-    @staticmethod
-    def _gate(*, allowed):
-        async def gate():
-            return allowed
-
-        return gate
-
-    def _agent(self):
-        agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
-        return lambda bearer: agent
-
-    def test_a_paused_agent_is_refused_before_anything_is_dispatched(self):
-        reached = []
-
-        async def app(scope, receive, send):
-            reached.append(True)
-            await self._allowed_app(scope, receive, send)
-
-        status, body = self._request(token=self.A_JWT, verifier=self._agent(), gate=self._gate(allowed=False), app=app)
-
-        self.assertEqual(status, 403)
-        self.assertEqual(body["error"], "agents_paused")
-        self.assertEqual(reached, [], "a paused agent must not reach a tool, or the tool list")
-
-    def test_the_default_agent_is_paused_too(self):
-        status, body = self._request(gate=self._gate(allowed=False))
-
-        self.assertEqual(status, 403)
-        self.assertEqual(body["error"], "agents_paused")
-
-    def test_an_unreadable_switch_refuses(self):
-        async def broken():
-            raise RuntimeError("database locked")
-
-        status, body = self._request(token=self.A_JWT, verifier=self._agent(), gate=broken)
-
-        self.assertEqual(status, 403)
-        self.assertEqual(body["error"], "agents_paused")
-
-    def test_only_an_authenticated_caller_learns_agents_are_paused(self):
-        status, body = self._request(token="wrong", gate=self._gate(allowed=False))
-
-        self.assertEqual(status, 401)
-        self.assertEqual(body["error"], "unauthorized")
-
-    def test_allowed_agents_pass(self):
-        status, _ = self._request(token=self.A_JWT, verifier=self._agent(), gate=self._gate(allowed=True))
-
-        self.assertEqual(status, 204)
-
-
-class GrantCeilingTests(TestCase):
-    def _claims(self, *scopes):
-        return {"client_id": "example-agent", "scope": " ".join(scopes)}
-
-    def test_a_grant_the_deployment_withholds_is_not_held(self):
-        from django.test import override_settings
-
-        from ..identity import token_principal
-
-        with override_settings(SEVERINO_MCP_ENABLE_WRITES=False):
-            agent = token_principal(self._claims("read", "write_projects"))
-
-        self.assertTrue(agent.permits(Capability.READ))
-        self.assertFalse(agent.permits("write_projects"))
-
-    def test_a_grant_the_deployment_allows_is_held(self):
-        from django.test import override_settings
-
-        from ..identity import token_principal
-
-        with override_settings(SEVERINO_MCP_ENABLE_WRITES=True):
-            agent = token_principal(self._claims("read", "write_projects"))
-
-        self.assertTrue(agent.permits("write_projects"))
-
-    def test_the_ceiling_never_widens_a_grant(self):
-        from django.test import override_settings
-
-        from ..identity import token_principal
-
-        with override_settings(SEVERINO_MCP_ENABLE_WRITES=True):
-            agent = token_principal(self._claims("read"))
-
-        self.assertFalse(agent.permits("write_projects"))
 
 
 class TheCallerReachesTheToolTests(TestCase):
@@ -824,9 +752,8 @@ class TheCallerReachesTheToolTests(TestCase):
                     "/mcp",
                     app=MCPBoundary(
                         served.application,
-                        allowed_hosts=("testserver",),
-                        allowed_networks=("100.64.0.0/10",),
-                        verifier=lambda bearer: agent,
+                        gate=TailnetGate(allowed_hosts=("testserver",), allowed_networks=("100.64.0.0/10",)),
+                        admit=admitting(lambda bearer: agent),
                     ),
                 )
             ],
@@ -854,11 +781,11 @@ class TheCallerReachesTheToolTests(TestCase):
                         "jsonrpc": "2.0",
                         "id": 1,
                         "method": "tools/call",
-                        "params": {"name": "list_connections", "arguments": {}},
+                        "params": {"name": "describe_connections", "arguments": {}},
                     },
                 )
 
-        with mock.patch("hq.platform.mcp.services.list_application_connections", side_effect=capture):
+        with mock.patch("hq.platform.mcp.services.describe_application_connections", side_effect=capture):
             response = async_to_sync(call)()
 
         self.assertEqual(response.status_code, 200, response.text)
@@ -866,80 +793,13 @@ class TheCallerReachesTheToolTests(TestCase):
         self.assertEqual(seen.get("actor"), "example-agent")
 
 
-class ResourceContractTests(SimpleTestCase):
-    def _document(self):
-        return {
-            "paths": {
-                "/resources/{name}/": {"get": {"operationId": "resourceListV2"}},
-                "/resources/example.notes/": {
-                    "get": {"x-hq-resource": "example.notes", "description": "Synthetic notes."}
-                },
-                "/resources/example.notes/{identifier}/": {
-                    "parameters": [{"$ref": "#/components/parameters/Identifier"}],
-                    "get": {
-                        "x-hq-resource": "example.notes",
-                        "description": "Synthetic notes.",
-                        "x-hq-identifier": "slug",
-                    },
-                },
-                "/resources/example.events/": {"get": {"x-hq-resource": "example.events", "description": "Events."}},
-                "/resources/example.single/{identifier}/": {
-                    "get": {
-                        "x-hq-resource": "example.single",
-                        "description": "Single record.",
-                        "parameters": [{"name": "identifier", "in": "path"}],
-                        "x-hq-identifier": "id",
-                    }
-                },
-            },
-            "components": {"parameters": {"Identifier": {"name": "identifier", "in": "path"}}},
-        }
+class InstructionsTests(SimpleTestCase):
+    def test_the_instructions_name_each_refusal_an_agent_retries(self):
+        from hq.platform.application.agent_access import AGENTS_PAUSED
+        from hq.platform.application.refusal_status import LATER_CODES
 
-    def test_an_injected_document_owns_the_catalog(self):
-        from ..contract import catalog, resource_contract
+        from ..binding import CALL_TIMED_OUT
 
-        with mock.patch(
-            "hq.platform.application.resources.resource_registry", side_effect=AssertionError("registry walk")
-        ):
-            contract = resource_contract(self._document())
-        self.assertEqual([r.name for r in contract.listable], ["example.events", "example.notes"])
-        self.assertEqual([r.name for r in contract.addressable], ["example.notes", "example.single"])
-        self.assertIn("`example.notes`: Synthetic notes. Identifier: `slug`.", catalog(contract.addressable))
-
-    def test_altering_the_document_changes_the_catalog(self):
-        from ..contract import resource_contract
-
-        document = self._document()
-        operation = document["paths"]["/resources/example.events/"]["get"]
-        operation["x-hq-resource"] = "example.changed"
-        operation["description"] = "Changed summary."
-        contract = resource_contract(document)
-        self.assertEqual(contract.listable[0].name, "example.changed")
-        self.assertEqual(contract.listable[0].summary, "Changed summary.")
-
-    def test_missing_metadata_and_duplicate_operations_fail_closed(self):
-        from ..contract import resource_contract
-
-        for field in ("description", "x-hq-identifier"):
-            document = self._document()
-            del document["paths"]["/resources/example.notes/{identifier}/"]["get"][field]
-            with self.subTest(field=field), self.assertRaises(ValueError):
-                resource_contract(document)
-        for name in ("", 7):
-            document = self._document()
-            document["paths"]["/resources/example.events/"]["get"]["x-hq-resource"] = name
-            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "name and description"):
-                resource_contract(document)
-        document = self._document()
-        document["paths"]["/duplicate/"] = document["paths"]["/resources/example.events/"]
-        with self.assertRaisesRegex(ValueError, "same operation twice"):
-            resource_contract(document)
-
-    def test_external_and_recursive_parameter_references_are_refused(self):
-        from ..contract import resource_contract
-
-        for reference in ("https://example.com/parameter", "#/components/parameters/Identifier"):
-            document = self._document()
-            document["components"]["parameters"]["Identifier"] = {"$ref": reference}
-            with self.subTest(reference=reference), self.assertRaises(ValueError):
-                resource_contract(document)
+        for code in (AGENTS_PAUSED.code, *LATER_CODES, CALL_TIMED_OUT):
+            with self.subTest(code=code):
+                self.assertIn(code, mcp.server.instructions or "")
