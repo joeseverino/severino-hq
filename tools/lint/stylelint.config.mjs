@@ -3,6 +3,7 @@
 // (hq/platform/application/tests/test_architecture.py), with its reason.
 
 const tokens = "../../static/css/app/tokens.css";
+const cuts = "../../static/css/app/cuts.css";
 const reference = "../../static/css/api-reference.css";
 
 // CSS Color 4's system colors. color-named knows only the named colors, and
@@ -33,6 +34,17 @@ const systemColor = {
 };
 
 const colorFunctions = "rgba?|hsla?|hwb|lab|lch|oklab|oklch|color";
+
+// Text is cut in one sheet, with its ellipsis or its clamp, where the browser
+// gate's cut checks read every cut a page draws (docs/Design.md); every other
+// text wraps. A box that clips something other than text (a frame's corners,
+// a scroll region) says why beside its declaration, in a disable comment the
+// config requires a reason for.
+const cutText = {
+  "/^overflow(-x|-y|-inline|-block)?$/": ["/\\b(hidden|clip)\\b/"],
+  "text-overflow": ["/./"],
+  "/^(-webkit-)?line-clamp$/": ["/./"],
+};
 
 // Text a stylesheet draws is read aloud as text unless it says otherwise, so
 // a mark drawn for the eye (a disclosure's chevron, a separator, an arrow)
@@ -79,6 +91,10 @@ export default {
   // The app sheets share one set of tokens, so a property one sheet reads may
   // be defined in another.
   referenceFiles: ["../../static/css/app/*.css"],
+  // A rule switched off says why, and one that no longer needs switching off
+  // is found.
+  reportDescriptionlessDisables: true,
+  reportNeedlessDisables: true,
   rules: {
     "hq/faded-text": fadedText,
     // CSS resolves an undefined custom property to an invalid value without
@@ -97,6 +113,7 @@ export default {
       ...spacingLiteral,
       ...systemColor,
       ...unspokenContent,
+      ...cutText,
     },
     // A face that arrives late and is swapped in moves every line it sets, so
     // each is shown only if it is ready for the first paint. Its file is
@@ -117,7 +134,14 @@ export default {
         "color-no-hex": null,
         "color-named": null,
         "function-disallowed-list": null,
-        "declaration-property-value-disallowed-list": { ...literalFontSize, ...spacingLiteral, ...unspokenContent },
+        "declaration-property-value-disallowed-list": { ...literalFontSize, ...spacingLiteral, ...unspokenContent, ...cutText },
+      },
+    },
+    {
+      // The one sheet that cuts text.
+      files: [cuts],
+      rules: {
+        "declaration-property-value-disallowed-list": { ...literalFontSize, ...spacingLiteral, ...systemColor, ...unspokenContent },
       },
     },
     {
@@ -132,6 +156,7 @@ export default {
           ...spacingLiteral,
           ...systemColor,
           ...unspokenContent,
+          ...cutText,
         },
       },
     },

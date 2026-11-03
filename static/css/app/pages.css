@@ -19,6 +19,7 @@
 
 .topology-workspace {
   background: var(--surface-2);
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the canvas clips the drawing it pans, not text */
   overflow: clip;
 }
 .topology-toolbar {
@@ -177,15 +178,6 @@
   grid-area: 1 / 2 / 2 / 4; font-size: var(--text-3xs); text-transform: uppercase;
   letter-spacing: .055em; color: var(--muted);
 }
-.topology-relation-other {
-  grid-area: 2 / 2 / 3 / 3; overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; color: var(--ink);
-}
-.topology-relation-kind {
-  grid-area: 2 / 3 / 3 / 4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: var(--text-3xs); color: var(--muted-2);
-  font-family: var(--font-mono);
-}
 .topology-relation .pill { flex: 0 0 auto; }
 .btn.compact { min-height: 30px; padding: var(--space-2) var(--space-4); font-size: var(--text-xs); }
 .topology-node:has(> [aria-current]) { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
@@ -295,10 +287,6 @@
 .bar-track {
   position: absolute; inset: 0 auto 0 0; inline-size: var(--at, 0%);
   background: var(--bg-tint); border-radius: 4px; min-inline-size: 2px;
-}
-.bar-label {
-  position: relative; flex: 1 1 auto; min-inline-size: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .bar-value { position: relative; flex: none; font-feature-settings: "tnum"; font-weight: 650; }
 

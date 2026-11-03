@@ -80,8 +80,11 @@ def argument_model(handler: Callable[..., Any], resources: ResourceContract) -> 
     """The handler's parameters as the one model its arguments are validated by
     and its published schema is generated from, built once for the contract
     both read. A resource tool's ``name`` is one of the resources the registry
-    serves for it, and a parameter its tool declares choices for is one of them."""
+    serves for it. A read that declares its query model is validated by that
+    model itself."""
 
+    if (query := declared(handler).arguments) is not None:
+        return query
     parameters = inspect.signature(handler, eval_str=True).parameters
     fields: dict[str, Any] = {
         name: (
@@ -90,15 +93,11 @@ def argument_model(handler: Callable[..., Any], resources: ResourceContract) -> 
         )
         for name, parameter in parameters.items()
     }
-    choices = {name: values() for name, values in declared(handler).choices.items()}
-    if (kinds := _kinds(handler, resources)) is not None:
-        choices["name"] = [resource.name for resource in kinds]
-    for name, values in choices.items():
-        # A Literal needs one value; with none to name, the service refuses every value.
-        if values := tuple(values):
-            default = parameters[name].default
-            chosen: Any = Literal[values]
-            fields[name] = (chosen, ...) if default is inspect.Parameter.empty else (chosen | None, default)
+    # A Literal needs one value; with none to name, the service refuses every value.
+    if (kinds := _kinds(handler, resources)) is not None and (names := tuple(resource.name for resource in kinds)):
+        default = parameters["name"].default
+        chosen: Any = Literal[names]
+        fields["name"] = (chosen, ...) if default is inspect.Parameter.empty else (chosen | None, default)
     return create_model(f"{handler.__name__}Arguments", __config__=_ARGUMENTS, **fields)
 
 

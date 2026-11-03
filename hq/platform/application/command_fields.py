@@ -16,6 +16,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+# Lazy: it loads pydantic, which declaring a command does not.
+lazy from .json_schemas import choices
+
 if TYPE_CHECKING:
     from django.db.models import Model
     from pydantic import GetJsonSchemaHandler
@@ -69,7 +72,7 @@ class Choices:
         object.__setattr__(self, "options", tuple((str(value), str(label)) for value, label in options))
 
     def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
-        return {**handler(schema), "oneOf": [{"const": value, "title": label} for value, label in self.options]}
+        return {**handler(schema), **choices(self.options)}
 
 
 @dataclass(frozen=True, slots=True, init=False)

@@ -11,7 +11,9 @@ from .test_findings_choices import session
 
 
 def _enum(properties, name):
-    return next(option["enum"] for option in properties[name]["anyOf"] if "enum" in option)
+    """The values ``name`` takes, whether or not it may also be null."""
+
+    return next(option["enum"] for option in (properties[name], *properties[name].get("anyOf", ())) if "enum" in option)
 
 
 class TopologyChoicesTests(TestCase):

@@ -9,7 +9,9 @@ mutation that could drift from the thing it claims to represent.
 
 import re
 from dataclasses import asdict, dataclass, replace
-from typing import Any
+from typing import Annotated, Any, Literal
+
+from pydantic import Field, StringConstraints, create_model
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.models import ManagedResource
@@ -36,7 +38,7 @@ from .derived_inputs import ESTATE_READS, estate_variant
 from .entity_links import entity_link, kind_label, node_name, record_name
 from .infrastructure import RESOURCE_TONES, is_drifted, resource_health
 from .integration_validation import required_capability_names
-from .projection import QueryRefusal, projection_scope
+from .projection import QUERY, QueryRefusal, projection_scope
 from .resource_capabilities import REMOVAL_CAPABILITY, removals_pending, resource_capabilities
 from .resource_context import record_summary, shared_names
 from .security import Capability, Principal
@@ -635,27 +637,27 @@ def _governs_edges(groups, resources, edges: dict[str, TopologyEdge]) -> None:
 
 
 class InvalidTopologyQuery(QueryRefusal):
-    """A narrowing input the topology cannot be read by; ``reason`` says which and what would."""
+    """A focus the topology holds no node for; ``reason`` says where ids come from."""
 
 
-def _depth(depth: int) -> int:
-    """The hops a trace was asked to follow, refusing a count outside 1 to ``MAX_TRACE_DEPTH``."""
+# Built from the declarations, so a type checker reads each as a value.
+_LENS: Any = Literal[tuple(lens.name for lens in TOPOLOGY_LENSES)]
+_DIRECTION: Any = Literal[TRACE_DIRECTIONS]
 
-    if not 1 <= depth <= MAX_TRACE_DEPTH:
-        raise InvalidTopologyQuery(f"topology: depth is a whole number from 1 to {MAX_TRACE_DEPTH}.")
-    return depth
-
-
-def _lens(name: str) -> TopologyLens | None:
-    """The lens ``name`` asks for, none when it asks for none, refusing a name no lens has."""
-
-    if not name:
-        return None
-    selected = lens_for(name)
-    if selected is None:
-        names = ", ".join(item.name for item in TOPOLOGY_LENSES)
-        raise InvalidTopologyQuery(f"topology: lens must be one of {names}.")
-    return selected
+# The API's query and get_topology's arguments are both this model, so the
+# two doors publish one schema and refuse one input in one sentence.
+TopologyQuery = create_model(
+    "TopologyQuery",
+    __config__=QUERY,
+    __doc__="What a topology read is narrowed by.",
+    lens=(_LENS | None, Field(None, description="A question the graph is narrowed to, such as what has a problem.")),
+    focus=(
+        Annotated[str, StringConstraints(strip_whitespace=True)],
+        Field("", description="A node's id, whose neighborhood a trace follows."),
+    ),
+    direction=(_DIRECTION, Field("both", description="Which way a trace from focus follows the edges.")),
+    depth=(int, Field(2, ge=1, le=MAX_TRACE_DEPTH, description="How many hops a trace from focus follows.")),
+)
 
 
 def _counts(topology: Topology) -> TopologySummary:
@@ -690,29 +692,20 @@ def serialize_topology(
     }
 
 
-def topology(
-    *,
-    principal: Principal,
-    lens: str = "",
-    focus: str = "",
-    direction: str = "both",
-    depth: int = 2,
-) -> TopologyAnswer:
+def topology(*, principal: Principal, **narrowing: object) -> TopologyAnswer:
     """The shared serialized projection for machine delivery adapters.
 
     Nodes come with a lens or a focus. Asked for neither, it answers what the
     estate holds and the lenses that would narrow it, since the whole graph is
-    more than a client can read. An input that names nothing is refused with
-    the choices that would.
+    more than a client can read. ``narrowing`` is judged by ``TopologyQuery``
+    once the caller may read, and one that names nothing is refused with the
+    choices that would.
     """
 
     principal.require(Capability.READ)
-    selected = _lens(lens)
-    # An adapter sends an empty value for a parameter it was not given.
-    direction = direction or "both"
-    if direction not in TRACE_DIRECTIONS:
-        raise InvalidTopologyQuery(f"topology: direction must be one of {', '.join(TRACE_DIRECTIONS)}.")
-    hops = _depth(depth)
+    query = TopologyQuery.model_validate(narrowing).model_dump()
+    selected: TopologyLens | None = lens_for(query["lens"]) if query["lens"] else None
+    focus: str = query["focus"]
     projection = derive_topology(principal=principal)
     if not selected and not focus:
         return {
@@ -728,5 +721,5 @@ def topology(
         raise InvalidTopologyQuery(
             "topology: focus names no node here; it is a node's id, as a lens's answer gives each one."
         )
-    projection, trace = apply_trace(projection, focus, direction=direction, depth=hops)
+    projection, trace = apply_trace(projection, focus, direction=query["direction"], depth=query["depth"])
     return serialize_topology(projection, lens=selected, trace=trace)

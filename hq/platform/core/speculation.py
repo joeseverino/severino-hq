@@ -77,7 +77,13 @@ def _withheld(reason: str) -> HttpResponse:
 
 
 def sessionless() -> tuple[str, ...]:
-    """Every route that answers without a session, as a URL pattern.
+    """Every route that answers without a session, as a URL pattern."""
+
+    return tuple(sorted({route for route, _view in sessionless_views()}))
+
+
+def sessionless_views() -> tuple[tuple[str, Callable[..., Any]], ...]:
+    """Every route that answers without a session, as its URL pattern and its view.
 
     Read from the URL configuration in force: the routes marked ``login_not_required``.
     """
@@ -89,16 +95,16 @@ def sessionless() -> tuple[str, ...]:
 # URLconf changes (ROOT_URLCONF, clear_url_caches), so no path that changes it
 # can leave this answering for the old one.
 @lru_cache(maxsize=1)
-def _sessionless(_in_force: URLResolver) -> tuple[str, ...]:
-    found: set[str] = set()
+def _sessionless(_in_force: URLResolver) -> tuple[tuple[str, Callable[..., Any]], ...]:
+    found: list[tuple[str, Callable[..., Any]]] = []
     for each in routed():
         pattern = each.pattern
         if getattr(pattern.callback, "login_required", True):
             continue
         prefix = "".join(str(mount.pattern) for mount in each.mounts if isinstance(mount.pattern, RoutePattern))
         route = str(pattern.pattern) if isinstance(pattern.pattern, RoutePattern) else "*"
-        found.add("/" + re.sub(r"<[^>]+>", "*", prefix + route))
-    return tuple(sorted(found))
+        found.append(("/" + re.sub(r"<[^>]+>", "*", prefix + route), pattern.callback))
+    return tuple(found)
 
 
 def rules() -> dict[str, Any]:

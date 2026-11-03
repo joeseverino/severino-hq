@@ -92,6 +92,16 @@ class PublicAddressViewTests(TestCase):
         denied = AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=LOOK_UP_ADDRESS)
         self.assertEqual(denied.count(), 1)
 
+    def test_repeated_refused_gets_are_each_refused_and_recorded_once_a_minute(self):
+        lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.LOOK_UP_PUBLIC_RECORDS})
+        with patch("hq.platform.core.views.web_principal", return_value=lacking):
+            responses = [self.client.get(self.url, {"address": f"192.0.2.{n}"}) for n in range(1, 21)]
+
+        for response in responses:
+            self.assertIn(Capability.LOOK_UP_PUBLIC_RECORDS.value, text(response))
+        denied = AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=LOOK_UP_ADDRESS)
+        self.assertEqual(denied.count(), 1)
+
     def test_a_post_looks_the_address_up_again_and_keeps_what_it_found(self):
         AddressReading.objects.create(address=ADDRESS, reading=STORED, observed_at=timezone.now())
         with (

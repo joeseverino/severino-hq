@@ -122,21 +122,6 @@ _RECEIPT_FILE_NOTES = (
 
 CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
-        VISIT_REFRESH,
-        "Ask again for the readings one page is made of, where they are due.",
-        "infrastructure_change",
-        Capability.MANAGE_INFRASTRUCTURE,
-        VisitRefreshCommand,
-        request_visit_refresh,
-        execution_notes=(
-            "Find what the page is made of from what it is about; the request names no reading or connection.",
-            "Ask only for what is due, read on a schedule, and read without logging in to a machine.",
-            "Ask nothing while no controller is arriving to read it.",
-        ),
-        label="Read a page again",
-        reached_from="control_plane:connections",
-    ),
-    CapabilitySpec(
         "hq.sync",
         "Bring HQ's list of docs up to date from the vault.",
         "remote_write",
@@ -312,7 +297,6 @@ CORE_CAPABILITY_SPECS = (
         label=OperationRequest.Action.RECONCILE.label,
         wants="apply HQ's settings to {target}",
     ),
-    CONTROLLER_REFRESH,
     CapabilitySpec(
         SIGN_OUT,
         "Sign a person out of every HQ session, when Pocket ID signs them out.",
@@ -384,23 +368,6 @@ CORE_CAPABILITY_SPECS = (
         action_items.restore,
         label="Bring back",
         reached_from="action_items",
-    ),
-    CapabilitySpec(
-        PROFILE_READ_NOW,
-        "Ask the controller to read a signed-in person's GitHub profile now.",
-        "infrastructure_change",
-        # A public lookup that spends GitHub's allowance, and a wake of the
-        # controller, as Refresh is.
-        (Capability.LOOK_UP_PUBLIC_RECORDS, Capability.MANAGE_INFRASTRUCTURE),
-        ProfileReadCommand,
-        request_profile_read,
-        execution_notes=(
-            "Refuse a login no sign-in names.",
-            "Ask for the profile reading now; the controller reads GitHub with its own credentials.",
-        ),
-        label="Read a GitHub profile now",
-        reached_from="watching",
-        verb=CONTROLLER_REFRESH.words(),
     ),
     CapabilitySpec(
         ACTION_CAPABILITY[OperationRequest.Action.DELETE],
@@ -728,67 +695,125 @@ CORE_CAPABILITY_SPECS = (
         ),
         label="Set agent policy",
     ),
-    CapabilitySpec(
-        DASHBOARD_REFRESH,
-        "Ask for a fresh reading of every dashboard panel a controller can read.",
-        "infrastructure_change",
-        Capability.MANAGE_INFRASTRUCTURE,
-        DashboardRefreshCommand,
-        request_dashboard_refresh,
-        execution_notes=("Ask only for panels a controller has a way to read.",),
-        label="Refresh the dashboard",
-    ),
-    CapabilitySpec(
-        DASHBOARD_REFRESH_STALE,
-        "Ask again for the dashboard panels whose reading is due.",
-        "infrastructure_change",
-        Capability.MANAGE_INFRASTRUCTURE,
-        DashboardRefreshCommand,
-        request_stale_panel_refresh,
-        execution_notes=("Ask once for each panel that is due, readable and not already asked for.",),
-        label="Refresh due readings",
-    ),
-    # Capabilities that read something HQ does not hold. Both are `read`, so
-    # neither takes an idempotency key and neither writes: asking a
-    # registry the same question twice is the same question twice.
-    CapabilitySpec(
-        "lookup.name",
-        "Ask a public resolver what the internet returns for a hostname.",
-        "read",
-        Capability.LOOK_UP_PUBLIC_RECORDS,
-        NameCommand,
-        look_up_name,
-        execution_notes=(
-            "Validate the hostname before anything leaves this machine.",
-            (
-                "Ask one resolver outside this network, so internal rewrites cannot "
-                "answer a question about the public internet."
-            ),
-            (
-                "Return the records as the resolver gave them, with no TTL: this "
-                "resolver reports a constant, which is not a measurement."
-            ),
-        ),
-        label="Look up a name",
-    ),
-    CapabilitySpec(
-        LOOK_UP_ADDRESS,
-        "Ask what name and which allocation a public address belongs to.",
-        "read",
-        Capability.LOOK_UP_PUBLIC_RECORDS,
-        AddressCommand,
-        look_up_address,
-        execution_notes=(
-            (
-                "Refuse a private address locally; nothing outside can describe it, "
-                "and asking would disclose it for no answer."
-            ),
-            "Read reverse DNS, which the address holder publishes and which usually carries a brand name.",
-            (
-                "Read the RDAP allocation, which the registry publishes and which "
-                "carries the company. Either registry may fail without the other."
-            ),
-        ),
-        label="Look up an address",
-    ),
 )
+
+
+# A host domain's own commands, kept here beside the rest of the host's: each
+# domain's declaration names its function (``domains.HOST_DOMAINS``), so what
+# reads a domain's commands finds these under it.
+
+
+def dashboard() -> tuple[CapabilitySpec, ...]:
+    return (
+        CapabilitySpec(
+            DASHBOARD_REFRESH,
+            "Ask for a fresh reading of every dashboard panel a controller can read.",
+            "infrastructure_change",
+            Capability.MANAGE_INFRASTRUCTURE,
+            DashboardRefreshCommand,
+            request_dashboard_refresh,
+            execution_notes=("Ask only for panels a controller has a way to read.",),
+            label="Refresh the dashboard",
+        ),
+        CapabilitySpec(
+            DASHBOARD_REFRESH_STALE,
+            "Ask again for the dashboard panels whose reading is due.",
+            "infrastructure_change",
+            Capability.MANAGE_INFRASTRUCTURE,
+            DashboardRefreshCommand,
+            request_stale_panel_refresh,
+            execution_notes=("Ask once for each panel that is due, readable and not already asked for.",),
+            label="Refresh due readings",
+        ),
+    )
+
+
+def watching() -> tuple[CapabilitySpec, ...]:
+    return (
+        CapabilitySpec(
+            PROFILE_READ_NOW,
+            "Ask the controller to read a signed-in person's GitHub profile now.",
+            "infrastructure_change",
+            # A public lookup that spends GitHub's allowance, and a wake of the
+            # controller, as Refresh is.
+            (Capability.LOOK_UP_PUBLIC_RECORDS, Capability.MANAGE_INFRASTRUCTURE),
+            ProfileReadCommand,
+            request_profile_read,
+            execution_notes=(
+                "Refuse a login no sign-in names.",
+                "Ask for the profile reading now; the controller reads GitHub with its own credentials.",
+            ),
+            label="Read a GitHub profile now",
+            reached_from="watching",
+            verb=CONTROLLER_REFRESH.words(),
+        ),
+    )
+
+
+def tools() -> tuple[CapabilitySpec, ...]:
+    return (
+        # Capabilities that read something HQ does not hold. Both are `read`, so
+        # neither takes an idempotency key and neither writes: asking a
+        # registry the same question twice is the same question twice.
+        CapabilitySpec(
+            "lookup.name",
+            "Ask a public resolver what the internet returns for a hostname.",
+            "read",
+            Capability.LOOK_UP_PUBLIC_RECORDS,
+            NameCommand,
+            look_up_name,
+            execution_notes=(
+                "Validate the hostname before anything leaves this machine.",
+                (
+                    "Ask one resolver outside this network, so internal rewrites cannot "
+                    "answer a question about the public internet."
+                ),
+                (
+                    "Return the records as the resolver gave them, with no TTL: this "
+                    "resolver reports a constant, which is not a measurement."
+                ),
+            ),
+            label="Look up a name",
+        ),
+        CapabilitySpec(
+            LOOK_UP_ADDRESS,
+            "Ask what name and which allocation a public address belongs to.",
+            "read",
+            Capability.LOOK_UP_PUBLIC_RECORDS,
+            AddressCommand,
+            look_up_address,
+            execution_notes=(
+                (
+                    "Refuse a private address locally; nothing outside can describe it, "
+                    "and asking would disclose it for no answer."
+                ),
+                "Read reverse DNS, which the address holder publishes and which usually carries a brand name.",
+                (
+                    "Read the RDAP allocation, which the registry publishes and which "
+                    "carries the company. Either registry may fail without the other."
+                ),
+            ),
+            label="Look up an address",
+        ),
+    )
+
+
+def connections() -> tuple[CapabilitySpec, ...]:
+    return (
+        CapabilitySpec(
+            VISIT_REFRESH,
+            "Ask again for the readings one page is made of, where they are due.",
+            "infrastructure_change",
+            Capability.MANAGE_INFRASTRUCTURE,
+            VisitRefreshCommand,
+            request_visit_refresh,
+            execution_notes=(
+                "Find what the page is made of from what it is about; the request names no reading or connection.",
+                "Ask only for what is due, read on a schedule, and read without logging in to a machine.",
+                "Ask nothing while no controller is arriving to read it.",
+            ),
+            label="Read a page again",
+            reached_from="control_plane:connections",
+        ),
+        CONTROLLER_REFRESH,
+    )

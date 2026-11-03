@@ -16,6 +16,7 @@ from typing import Any, TypedDict
 
 from django.conf import settings
 from django.db.models import FETCH_PEERS, FETCH_RAISE, Q, QuerySet
+from pydantic import ConfigDict
 lazy from django.utils import timezone
 
 from .record_errors import RecordNotFound
@@ -56,6 +57,12 @@ class QueryRefusal(ValueError):
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
         self.reason = reason
+
+
+# A read's query model, which every door that serves the read publishes and
+# validates by: an input the read does not take, or one not of its type, is
+# refused rather than dropped or coerced, and the refusal never quotes it.
+QUERY = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True, frozen=True)
 
 
 @contextmanager

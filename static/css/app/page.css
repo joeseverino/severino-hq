@@ -76,6 +76,7 @@
   --tone-line: var(--tone-neutral-line);
 }
 
+/* stylelint-disable-next-line declaration-property-value-disallowed-list -- the page clips what bleeds past its edge, which the layout gate holds to nothing */
 .content { max-width: var(--content-max); margin: 0 auto; padding: var(--content-pad); overflow-x: clip; }
 /* One rhythm for every stacked page section, set in one place. Adjacent sibling
    margins collapse, so a section that already declares its own bottom margin
@@ -169,6 +170,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    starts with a separator. */
 :is(.dot-list, .glance-caption, .project-meta) {
   --dot-gap: calc(2 * var(--space-3) + .4em);
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- clips the dot before a part that opens a line, never a part */
   overflow-x: clip;
 }
 :is(.dot-list > li, .glance-caption > span, .project-meta > *) + *::before {
@@ -189,7 +191,6 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .glance-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5) var(--space-7); margin: 0; }
 .glance-metrics > div { display: grid; gap: 1px; min-width: 0; }
 .glance-metrics dt { color: var(--muted); font-size: var(--text-3xs); font-weight: 500; white-space: nowrap; }
-.glance-metrics dd { margin: 0; overflow: hidden; color: var(--ink); font-size: var(--text-sm); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .glance-metrics dd.glance-metric-detail { color: var(--muted); font-size: var(--text-3xs); font-weight: 400; }
 /* The hours ahead, one column each, scrolling sideways in the popover. */
 /* Every hour in view: as many to a row as the popover holds, the rest on the
@@ -232,6 +233,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   margin: 0;
   padding: 0 var(--space-1);
   overflow-x: auto;
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the nav scrolls sideways; a vertical scroll is clipped, not text */
   overflow-y: clip;
   overscroll-behavior-inline: contain;
   scrollbar-width: none;
@@ -352,33 +354,9 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .action-badge [data-action-count] { position: absolute; inset-block-start: -7px; inset-inline-end: -7px; box-sizing: border-box; min-width: 18px; height: 18px; padding: 0 var(--space-2); border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-size: var(--text-2xs); font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .action-badge:hover { background: var(--bar-control-bg-hover); color: var(--ink); text-decoration: none; }
 .action-badge svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.user-menu > summary {
-  display: flex;
-  flex-flow: row-reverse wrap;
-  align-content: flex-start;
-  justify-content: center;
-  column-gap: var(--space-3);
-  height: var(--control-size);
-  overflow: hidden;
-  padding: 0 var(--space-5);
-  border: 1px solid var(--bar-control-line);
-  border-radius: var(--radius-sm);
-  background: var(--bar-control-bg);
-  color: var(--ink-2);
-  cursor: pointer;
-  font-size: var(--text-sm);
-  font-weight: 500;
-  list-style: none;
-  white-space: nowrap;
-}
 /* Each fills the control's one line exactly, so the line after it starts
    below the control's edge and is not shown. */
 .user-menu > summary > * { flex: none; height: calc(var(--control-size) - 2px); }
-/* The name asks for only a few characters of the line and takes what there
-   is, up to its own length: a long one is cut short beside the mark rather
-   than wrapping away and leaving the control wide and empty. Only when not
-   even those few characters fit does it leave the line. */
-.user-menu .user-name { flex: 1 1 5ch; min-width: 0; max-width: max-content; overflow: hidden; line-height: calc(var(--control-size) - 2px); text-overflow: ellipsis; white-space: nowrap; }
 /* Who the menu belongs to, above what it offers. */
 /* The picture, when there is one, stands beside both lines; the name and
    what the person may do share the first, when they signed in is the second. */
@@ -386,7 +364,6 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .menu-identity > * { grid-column: 2; }
 .menu-identity-picture { grid-column: 1; grid-row: 1 / span 2; width: 36px; height: 36px; margin-right: var(--space-5); border-radius: 50%; object-fit: cover; background: var(--bg-tint); }
 .menu-identity-who { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
-.menu-identity-who strong { overflow: hidden; color: var(--ink); font-size: var(--text-sm); text-overflow: ellipsis; white-space: nowrap; }
 .menu-identity-when { color: var(--muted); font-size: var(--text-2xs); }
 /* What an account may do, said once beside its name. Not a status: it has no
    tone, only the accent, and it never changes while you watch. */
@@ -458,8 +435,6 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    so nothing is centered in one row and pushed to the side in the next. */
 .menu-settings { display: grid; grid-template-columns: 1fr 1fr; }
 .menu-setting { flex-direction: column; align-items: flex-start; gap: var(--space-3); }
-/* What a row's status says in a word, after its mark, and light. */
-.menu-item-note { overflow: hidden; color: var(--muted); font-size: var(--text-2xs); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 /* Where the menu leads, set off from what it sets. */
 .menu-places { display: grid; gap: 1px; padding-top: var(--space-2); border-top: 1px solid var(--line-2); }
 /* One trailing column for counts, connection state and switches. New menu

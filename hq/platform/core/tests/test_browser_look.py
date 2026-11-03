@@ -169,9 +169,14 @@ class _Lens:
 
     with_each_popover = look.Look.with_each_popover
     each_popover_kind = estate.ExampleEstateGate.each_popover_kind
+    # A look given no --eval runs no script.
+    script = ""
 
     def __init__(self, page):
-        self.page, self.shots, self.shot_while_shown = page, [], []
+        self.page, self.shots, self.shot_while_shown, self.evaluated = page, [], [], []
+
+    def evaluate_script(self, _name, _width, state="", shows=""):
+        self.evaluated.append((state, shows, sorted(self.page.shown)))
 
     def settle(self):
         pass
@@ -201,6 +206,19 @@ class PopoverTests(SimpleTestCase):
             ],
         )
         self.assertEqual(page.shown, set())
+
+    def test_an_eval_runs_on_each_popover_while_it_alone_is_shown(self):
+        page = _Popovers(["origin-one", "origin-two"])
+        lens = _Lens(page)
+        lens.script = "() => document.title"
+        lens.with_each_popover("example/one", 820, "survey", [])
+        self.assertEqual(
+            lens.evaluated,
+            [
+                ("popover-origin-one", "with #origin-one shown", ["origin-one"]),
+                ("popover-origin-two", "with #origin-two shown", ["origin-two"]),
+            ],
+        )
 
     def test_against_a_base_a_finding_with_a_popover_shown_is_neither_new_nor_fixed_wherever_its_shot_lies(self):
         def found_shooting_into(folder):

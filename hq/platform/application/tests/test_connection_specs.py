@@ -20,9 +20,10 @@ from ..connections import (
     ConnectionSpec,
     describe_connections,
 )
+from ..field_masks import WHOLE_RECORD
 from ..integrations import integration_graph
 from ..plugin_testing import offering
-from ..resources import WHOLE_RECORD, list_resource
+from ..resources import list_resource
 from ..security import Capability, Principal
 from .host_only import host_only
 from .sentinel import CONNECTION as SENTINEL_CONNECTION, SENTINEL, SentinelMixin, plant_credentials

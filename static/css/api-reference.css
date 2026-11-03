@@ -179,20 +179,24 @@
 .api-reference .scalar-app .operation-title { --font-size: var(--text-xl); }
 
 /* A path in a section's list of operations wraps at the card's edge rather
-   than running under it. */
+   than running under it, ending a line where api-reference.js marks a path
+   may end one. Its parts are lines of one box: as a flex box of its own, the
+   viewer's, each part between two marks would be a box beside the next. */
 .api-reference .scalar-app .endpoints .endpoint { white-space: normal; }
-.api-reference .scalar-app .endpoints .endpoint-path { min-width: 0; overflow-wrap: anywhere; }
+.api-reference .scalar-app .endpoints .endpoint-path { display: block; min-width: 0; overflow-wrap: anywhere; }
 
 /* The viewer cuts a long value to one line behind an ellipsis: a property's
    type and the values it takes, its default and example, an operation's path.
    Each is what a reader came to read, so it wraps at the column's edge and is
-   read whole; a name with no break in it breaks where it meets the edge. */
+   read whole; a name with no break in it breaks where it meets the edge. The
+   box around a property's type clips too, so it is let go with the type. */
 .api-reference .scalar-app :is(
+  .property-detail-truncate,
   .property-detail-truncate > .property-detail-value,
   .property-example-value span,
   .property-default-value span,
   .endpoint-label-path
-) { white-space: normal; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; }
+) { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
 
 /* A code sample keeps its lines but wraps each at the column's edge, so a
    reader on a phone reads the whole request and answer without scrolling

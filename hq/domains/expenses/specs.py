@@ -1,5 +1,7 @@
 """The expenses resource, declared on its domain in application/domains.py."""
 
+from typing import TypedDict
+
 from pydantic import Field, create_model
 
 from hq.platform.application import read_models
@@ -21,6 +23,30 @@ ExpenseQuery = create_model(
 )
 
 
+class ExpenseRow(TypedDict):
+    """One expense; each related record by its slug or id, or null."""
+
+    id: int
+    date: str | None
+    vendor: str
+    item: str
+    category: str
+    # Money, as a decimal string.
+    total_cost: str
+    business_use_percentage: int
+    estimated_deductible_amount: str
+    payment_method: str
+    business_purpose: str
+    notes: str
+    related_project: str | None
+    related_asset: str | None
+    related_content: str | None
+    related_documentation: str | None
+    paid_from: str
+    about: str
+    updated_at: str
+
+
 def resources() -> tuple[ResourceSpec, ...]:
     return (
         ResourceSpec(
@@ -38,5 +64,6 @@ def resources() -> tuple[ResourceSpec, ...]:
                 label="Expenses",
             ),
             web_route="expenses:list",
+            row_type=ExpenseRow,
         ),
     )

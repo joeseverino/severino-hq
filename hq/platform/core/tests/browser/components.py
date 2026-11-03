@@ -1094,9 +1094,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
         title outside a narrow box is the survey's plant."""
 
         self.pages = {**self.pages, "cut-probe": probe(CUT_TABLE)}
-        rows = ("untitled", "titled", "opens", "clamped", "unmarked", "chip")
+        rows = ("untitled", "titled", "opens", "clamped", "inline", "unmarked", "chip")
         for width, expected in {
-            PHONE_SCREEN[0]: {"untitled", "titled", "clamped", "unmarked", "chip"},
+            PHONE_SCREEN[0]: {"untitled", "titled", "clamped", "inline", "unmarked", "chip"},
             1280: {"unmarked"},
         }.items():
             with self.subTest(width=width):

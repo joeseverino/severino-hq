@@ -19,13 +19,17 @@ from hq.platform.application.capabilities import run_capability
 from hq.platform.application.security import internal_principal
 from hq.platform.application.sessions import SIGN_OUT
 
+from .write_bounds import NOTHING, writes
+
 logger = logging.getLogger("severino.auth")
 
 LOGOUT_TOKEN_TYPES = frozenset({"logout+jwt"})
 LOGOUT_EVENT = "http://schemas.openid.net/event/backchannel-logout"
 
 
-# Exempt from CSRF and a session: the provider's server posts it, and the signed token is its credential.
+# Exempt from CSRF and a session: the provider's server posts it, and the signed token is its credential,
+# so a caller without one is refused before anything is written.
+@writes(NOTHING)
 @csrf_exempt
 @login_not_required
 @require_POST

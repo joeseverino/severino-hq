@@ -222,7 +222,8 @@ class DocumentTests(SimpleTestCase):
                 self.assertEqual(tags[tag["parent"]]["kind"], "nav")
         projects = self.document["paths"]["/api/v2/resources/projects/"]["get"]
         self.assertEqual(projects["tags"], ["hq.projects"])
-        self.assertEqual(tags["hq.projects"]["parent"], "nav.projects")
+        self.assertEqual(tags["hq.docs"]["parent"], "hq.projects")
+        self.assertEqual(tags["hq.content"]["parent"], "nav.web")
 
     def test_the_apis_own_section_leads_and_the_rest_stand_in_the_order_of_the_bar(self):
         """The group holding the API's own domain first, that domain first in
@@ -242,17 +243,19 @@ class DocumentTests(SimpleTestCase):
         leading = [name for name in placed if parent[name] == parent[openapi.API_TAG]]
         self.assertEqual(placed[: len(leading)], leading)
         self.assertEqual(leading[1:], sorted(leading[1:], key=bar))
-        self.assertEqual(placed[len(leading) :], sorted(placed[len(leading) :], key=bar))
+        # A domain heading its group stands where the group does, ahead of the domains under it.
+        rest = [name for name in placed[len(leading) :] if name not in parent.values()]
+        self.assertEqual(rest, sorted(rest, key=bar))
         seen: list[str] = []
         for tag in tags:
             if "parent" in tag:
                 self.assertIn(tag["parent"], seen)
             seen.append(tag["name"])
-        groups = [tag["name"] for tag in tags if tag["name"].startswith("nav.")]
         parents = [tag["parent"] for tag in tags if "parent" in tag]
+        groups = [tag["name"] for tag in tags if tag["name"] in parents]
         self.assertEqual(groups, list(dict.fromkeys(parents)))
 
-    def test_what_belongs_to_no_domain_stands_under_the_api_where_the_bar_has_it(self):
+    def test_the_apis_own_routes_stand_under_the_api_where_the_bar_has_it(self):
         tags = {tag["name"]: tag for tag in self.document["tags"]}
         api = next(domain for domain in all_domains() if domain.id == openapi.API_TAG)
         group = next(item.group for item in api.navigation)
@@ -268,14 +271,16 @@ class DocumentTests(SimpleTestCase):
                 self.assertFalse(tag.get("description") and tag["description"] in said)
 
     def test_each_resource_and_capability_is_tagged_with_the_domain_it_belongs_to(self):
-        """Its declaring domain, else the domain of its web page or subject, else the API's own."""
+        """Its declaring domain, else the domain of its page, else of its subject; else none."""
 
         tags = openapi._Tags(resource_registry(), capability_registry())
         self.assertEqual(tags.of_resource("projects"), "hq.projects")
         self.assertEqual(tags.of_resource("services"), "hq.services")
-        self.assertEqual(tags.of_resource("search"), openapi.API_TAG)
+        self.assertEqual(tags.of_resource("search"), "hq.search")
         self.assertEqual(tags.of_capability("project.create"), "hq.projects")
-        self.assertEqual(tags.of_capability("pin.toggle"), openapi.API_TAG)
+        self.assertEqual(tags.of_capability("infrastructure.zone.adopt"), "hq.zones")
+        # Held only in the browser, so never in the document: no domain's to place.
+        self.assertIsNone(tags.of_capability("pin.toggle"))
         declaring = next(domain for domain in all_domains() if domain.integration.capabilities)
         declared = next(iter(declaring.integration.capabilities())).name
         self.assertEqual(tags.of_capability(declared), declaring.id)

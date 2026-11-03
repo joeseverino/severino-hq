@@ -18,7 +18,7 @@ from django.urls import URLPattern, reverse
 
 from hq.platform.application.capabilities import capability_registry, describe_capabilities
 from hq.platform.application.contracts import effect_glossary
-from hq.platform.application.domains import NAVIGATION_GROUPS, Domain, all_domains
+from hq.platform.application.domains import NAVIGATION_GROUPS, Domain, all_domains, domain_navigation
 from hq.platform.application.integration_specs import (
     FIELD_MASK,
     IDEMPOTENCY_FIELD,
@@ -27,6 +27,8 @@ from hq.platform.application.integration_specs import (
     RESERVED_QUERY_FIELD,
 )
 from hq.platform.application.json_schemas import LOCAL, json_schema, json_schemas
+from hq.platform.application.labels import lower_first
+from hq.platform.application.plugins import NavigationItem
 from hq.platform.application.refusal_status import LATER_CODES, REFUSAL_STATUS
 from hq.platform.application.resources import describe_resources, resource_registry
 from hq.platform.application.security import API_INTERFACE, Principal
@@ -46,6 +48,8 @@ HEADERS = "#/components/headers/"
 # The tag for what belongs to the API itself rather than to one domain: the
 # domain whose page this document is drawn on, so it stands where the bar has it.
 API_TAG = "hq.api"
+# What a nav group's own tag is named under, where no domain heads the group.
+_GROUP_PREFIX = "nav."
 VERSION = views.CURRENT_API_VERSION
 _PARAMETER = re.compile(r"<(?:\w+:)?(\w+)>")
 
@@ -53,12 +57,6 @@ _PARAMETER = re.compile(r"<(?:\w+:)?(\w+)>")
 def _camel(name: str) -> str:
     pascal = _pascal(name)
     return pascal[:1].lower() + pascal[1:]
-
-
-def _listed(words: list[str]) -> str:
-    """``["A", "B", "C"]`` as "A, B and C"."""
-
-    return " and ".join([", ".join(words[:-1]), words[-1]] if len(words) > 1 else words)
 
 
 def routes() -> Iterator[tuple[str, URLPattern]]:
@@ -145,10 +143,16 @@ def _declared_resources(domain: Domain) -> list[str]:
 
 
 def _declared_capabilities(domain: Domain) -> list[str]:
-    """The capabilities a domain's integration declares."""
+    """The capabilities a domain declares: its integration's commands, and its
+    outbound work, each piece asked for through the capability of its name."""
 
     integration = domain.integration
-    return [spec.name for spec in integration.capabilities()] if integration.capabilities else []
+    commands = [spec.name for spec in integration.capabilities()] if integration.capabilities else []
+    return [*commands, *(work.name for work in integration.outbound())] if integration.outbound else commands
+
+
+def _bar(item: NavigationItem) -> tuple[int, str]:
+    return item.order, item.label
 
 
 def _first_declarer(domains: Iterable[Domain], declared: Callable[[Domain], list[str]]) -> dict[str, str]:
@@ -162,75 +166,120 @@ def _first_declarer(domains: Iterable[Domain], declared: Callable[[Domain], list
 
 
 class _Tags:
-    """The tag tree: nav groups and their domains in the bar's order, from the domain registry.
-
-    A resource belongs to the domain that declares it (its integration or its
-    records), else to the domain whose nav item is the resource's web page. A
-    capability belongs to the domain that declares it, else to its subject
-    resource's domain. What belongs to none is the API's own.
-    """
+    """The document's sections: the domains of the domain registry under their nav groups, in the bar's order."""
 
     def __init__(self, resources: dict[str, Any], capabilities: dict[str, Any]) -> None:
         self.domains = {domain.id: domain for domain in all_domains()}
         domains = self.domains.values()
+        # What a domain serves stands in its section by one rule, the host's
+        # core and every extension alike: the domain that declares it, else the
+        # domain whose nav item is its page (a resource's web page, a
+        # capability's starting page, a route's `page`), else, for a
+        # capability, the domain of the resource it acts on. What none places
+        # carries no tag, which test_sections refuses; only the API's own
+        # routes, which serve every domain, stand in its section.
+        self.pages = _first_declarer(domains, lambda domain: [item.route for item in domain.navigation])
         self.resource_owner = _first_declarer(domains, _declared_resources)
-        self.capability_owner = _first_declarer(domains, _declared_capabilities)
-        pages = _first_declarer(domains, lambda domain: [item.route for item in domain.navigation])
         for name, resource in resources.items():
-            if name not in self.resource_owner and resource.web_route in pages:
-                self.resource_owner[name] = pages[resource.web_route]
-        for name, capability in capabilities.items():
-            owner = self.resource_owner.get(capability.subject_resource or "")
-            if name not in self.capability_owner and owner:
-                self.capability_owner[name] = owner
+            if name not in self.resource_owner and resource.web_route in self.pages:
+                self.resource_owner[name] = self.pages[resource.web_route]
+        declared = _first_declarer(domains, _declared_capabilities)
+        self.capability_owner = {
+            name: owner
+            for name, capability in capabilities.items()
+            if (
+                owner := declared.get(name)
+                or self.pages.get(capability.reached_from)
+                or self.resource_owner.get(capability.subject_resource or "")
+            )
+        }
+        self.placed = {item.route: item for item in reversed(domain_navigation())}
         self.used: set[str] = set()
 
-    def of_resource(self, name: str) -> str:
-        return self.use(self.resource_owner.get(name, API_TAG))
+    def of_resource(self, name: str) -> str | None:
+        return self.use(self.resource_owner.get(name))
 
-    def of_capability(self, name: str) -> str:
-        return self.use(self.capability_owner.get(name, API_TAG))
+    def of_capability(self, name: str) -> str | None:
+        return self.use(self.capability_owner.get(name))
 
-    def use(self, tag: str) -> str:
-        self.used.add(tag)
+    def of_route(self, page: str) -> str | None:
+        """A route's section: the domain of the page it serves, or the API's own for a route serving every domain."""
+
+        return self.use(self.pages.get(page) if page else API_TAG)
+
+    def use(self, tag: str | None) -> str | None:
+        if tag:
+            self.used.add(tag)
         return tag
 
-    @staticmethod
-    def _group(domain: Domain) -> str:
-        placed = sorted(domain.navigation, key=lambda item: (item.order, item.label))
-        return placed[0].group if placed else ""
+    def _item(self, domain: Domain) -> NavigationItem | None:
+        """A domain's first nav item where the bar draws it: an extension may
+        place a host page in a group of its own (``domain_navigation``)."""
 
-    def render(self) -> list[dict[str, Any]]:
-        # The API's own domain is where a client starts, so it and its group
-        # lead; the rest keep the bar's order.
+        placed = sorted((self.placed.get(item.route, item) for item in domain.navigation), key=_bar)
+        return placed[0] if placed else None
+
+    def _group(self, domain: Domain) -> str:
+        item = self._item(domain)
+        return item.group if item else ""
+
+    def _place(self) -> Callable[[Domain], tuple[bool, bool, int, str]]:
+        """Where a domain stands: the API's own domain is where a client starts,
+        so it and its group lead; the rest keep the bar's order."""
+
         api = self.domains.get(API_TAG)
         leading = self._group(api) if api else ""
 
         def place(domain: Domain) -> tuple[bool, bool, int, str]:
             first = domain.id == API_TAG or (bool(leading) and self._group(domain) == leading)
-            return (not first, domain.id != API_TAG, domain.bar_order, domain.label)
+            item = self._item(domain)
+            return (not first, domain.id != API_TAG, item.order if item else domain.bar_order, domain.label)
 
-        used = sorted((self.domains[tag] for tag in self.used if tag in self.domains), key=place)
-        tags: list[dict[str, Any]] = []
-        # A group stands where its first domain does, and a domain outside
-        # every group keeps its own place among them. A group says what it is
-        # for where the registry declares it, else what it holds.
+        return place
+
+    def _groups(self, place: Callable[[Domain], Any]) -> dict[str, dict[str, Any]]:
+        """Each nav group's tag, by the group's name.
+
+        A group says what it is for as the host or the extension that adds it
+        declares. A domain named as its group is that group's section, so no
+        section reads "Projects > Projects": it heads the group, its siblings
+        under it.
+        """
+
+        purposes = {group.name: group.description for domain in self.domains.values() for group in domain.groups}
+        purposes.update(NAVIGATION_GROUPS)
         groups: dict[str, dict[str, Any]] = {}
-        held: dict[str, list[str]] = {}
-        for domain in used:
+        for domain in sorted(self.domains.values(), key=place):
             group = self._group(domain)
-            if group and group not in groups:
-                groups[group] = {"name": f"nav.{_camel(group)}", "summary": group, "kind": "nav"}
-                tags.append(groups[group])
+            heads = domain.label == group
+            held = groups.get(group)
+            # The first domain named as the group heads it; until one does, the group is its own tag.
+            if not group or (held is not None and not (heads and held["name"].startswith(_GROUP_PREFIX))):
+                continue
+            tag = {"name": domain.id if heads else _GROUP_PREFIX + _camel(group), "summary": group, "kind": "nav"}
+            if said := purposes.get(group) or (domain.description if heads else ""):
+                tag["description"] = said
+            groups[group] = tag
+        return groups
+
+    def render(self) -> list[dict[str, Any]]:
+        place = self._place()
+        groups = self._groups(place)
+        # A group stands where its first domain does, and a domain outside
+        # every group keeps its own place among them.
+        tags: list[dict[str, Any]] = []
+        for domain in sorted((self.domains[tag] for tag in self.used if tag in self.domains), key=place):
+            group = groups.get(self._group(domain))
+            if group is not None and group not in tags:
+                tags.append(group)
+            if group is not None and group["name"] == domain.id:
+                continue
             tag: dict[str, Any] = {"name": domain.id, "summary": domain.label, "kind": "nav"}
             if domain.description:
                 tag["description"] = domain.description
-            if group:
-                tag["parent"] = groups[group]["name"]
-                held.setdefault(group, []).append(domain.label)
+            if group is not None:
+                tag["parent"] = group["name"]
             tags.append(tag)
-        for group, labels in held.items():
-            groups[group]["description"] = NAVIGATION_GROUPS.get(group) or _listed(labels) + "."
         return tags
 
 
@@ -317,11 +366,17 @@ class _Builder:
         self.recordings[name] = {"summary": "Recorded by HQ's test suite.", "dataValue": value}
         return {"recorded": {"$ref": EXAMPLES + name}}
 
-    def _responses(self, view: Any, operation_id: str, codes: Iterable[str]) -> dict[str, Any]:
+    def _responses(
+        self, view: Any, operation_id: str, codes: Iterable[str], answer: tuple[str, dict[str, Any]] | None
+    ) -> dict[str, Any]:
         recorded = self.examples.get(operation_id, {}).get("responses", {})
-        if view.__hq_data__ is None:
+        schema: dict[str, Any]
+        if answer is not None:
+            envelope = self.components.schemas["Success"]
+            schema = {**envelope, "properties": {**envelope["properties"], "data": answer[1]}}
+        elif view.__hq_data__ is None:
             # This document itself.
-            schema: dict[str, Any] = {
+            schema = {
                 "type": "object",
                 "properties": {"openapi": {"type": "string", "pattern": r"^3\.2\.\d+$"}},
                 "required": ["openapi", "info", "paths"],
@@ -336,7 +391,9 @@ class _Builder:
             # Named for the type its data is, which every view answering it shares.
             kind = view.__hq_data__
             name = (
-                f"{_pascal(view.__name__)}Success"
+                f"{answer[0]}Success"
+                if answer is not None
+                else f"{_pascal(view.__name__)}Success"
                 if kind is None
                 else f"{kind.__name__}Success"
                 if isinstance(kind, (type, TypeAliasType))
@@ -424,11 +481,13 @@ class _Builder:
         method: str,
         view: Any,
         operation_id: str,
-        tag: str,
+        tag: str | None,
         **fields: Any,
     ) -> None:
-        # An expansion's concrete operation can refuse with fewer codes than its view declares.
+        # An expansion's concrete operation can refuse with fewer codes than its view declares,
+        # and answer a narrower type: its name and the schema of its data.
         codes = fields.pop("codes", view.__hq_codes__)
+        answer = fields.pop("answer", None)
         operation_id += f"V{VERSION}"
         if operation_id in self.operation_ids:
             raise OpenAPIError(f"Operation id {operation_id!r} is derived twice.")
@@ -448,9 +507,9 @@ class _Builder:
         operation: dict[str, Any] = {
             "operationId": operation_id,
             "summary": summary,
-            "tags": [tag],
+            **({"tags": [tag]} if tag else {}),
             **fields,
-            "responses": self._responses(view, operation_id, codes),
+            "responses": self._responses(view, operation_id, codes, answer),
         }
         self.paths.setdefault(path, {})[method.lower()] = operation
 
@@ -472,7 +531,7 @@ class _Builder:
                 method,
                 view,
                 _camel(view.__name__),
-                self.tags.use(API_TAG),
+                self.tags.of_route(view.__hq_page__),
                 **({"parameters": query} if query else {}),
                 **(
                     {"description": "Also served to the signed-in operator's web session."}
@@ -515,6 +574,20 @@ class _Builder:
             spec["name"]: self.retry_key(self.components.hoist(views.request_schema(spec)))
             for spec in self.capabilities
         }
+        # A target several capabilities take in the same words is written once,
+        # as the component named for the first of them.
+        targets: dict[str, list[str]] = {}
+        for name, request in requests.items():
+            if "target" in request["properties"]:
+                targets.setdefault(json.dumps(request["properties"]["target"], sort_keys=True), []).append(name)
+        for said, takers in targets.items():
+            if len(takers) > 1:
+                shared = {"$ref": self.components.add(f"{_pascal(takers[0])}Target", json.loads(said))}
+                for name in takers:
+                    requests[name] = {
+                        **requests[name],
+                        "properties": {**requests[name]["properties"], "target": shared},
+                    }
         # A command several capabilities take in one shape is the component
         # named for its type; one taken in a shape of its own (an update's
         # shows no defaults) stays in its body.
@@ -578,16 +651,44 @@ class _Builder:
                 view,
                 f"list{_pascal(name)}",
                 self.tags.of_resource(name),
-                # Titled by what it holds, as the API's own reads are (Connections, Findings).
-                summary=spec["label"],
+                # Titled by what it does, so it never reads as its section's name.
+                summary=f"List {lower_first(spec['label'])}",
                 description=spec["summary"],
                 # Emit usable client filters and retain the whole strict query contract.
                 parameters=[
                     self.filter(query, field, required=field in required) for field in query.get("properties", {})
                 ]
                 + [_FIELDS],
+                answer=self.page_of(self.resource_specs[name].row_type),
                 **{"x-hq-resource": name},
             )
+
+    def typed(self, kind: type) -> dict[str, Any]:
+        """The ``$ref`` to a resource's row or record, kept as the component of its name.
+
+        A caller's field mask may keep any of its fields, so the component
+        names each field's type and promises none of them.
+        """
+
+        name = kind.__name__
+        if name not in self.components.schemas:
+            self.components.typed({name: kind})
+            self.components.schemas[name].pop("required", None)
+        return {"$ref": SCHEMAS + name}
+
+    def page_of(self, row: type | None) -> tuple[str, dict[str, Any]] | None:
+        """A list's answer whose items are ``row``: every list's page, its items narrowed to it."""
+
+        if row is None:
+            return None
+        page = self.data[views.resource_list.__name__]
+        items = {"type": "array", "items": self.typed(row)}
+        return f"{row.__name__}Page", {"allOf": [page], "properties": {"items": items}}
+
+    def record_of(self, record: type | None) -> tuple[str, dict[str, Any]] | None:
+        """A read of one record's answer, where its kind types it; else the view's object."""
+
+        return None if record is None else (record.__name__, self.typed(record))
 
     def filter(self, query: dict[str, Any], field: str, *, required: bool) -> dict[str, Any]:
         """The query parameter for ``field`` of a list's query schema.
@@ -667,6 +768,7 @@ class _Builder:
                     ),
                     _FIELDS,
                 ],
+                answer=self.record_of(self.resource_specs[name].record_type),
                 **{"x-hq-resource": name, "x-hq-identifier": field},
             )
 

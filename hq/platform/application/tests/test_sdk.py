@@ -98,7 +98,8 @@ class SdkContractTests(SimpleTestCase):
 
         self.assertEqual(fields["note"]["description"], "What to write down.")
         self.assertEqual(fields["project"]["x-hq-records"], {"resource": "example.projects", "key": "slug"})
-        self.assertEqual(fields["tone"]["oneOf"], [{"const": "plain", "title": "Plain"}])
+        self.assertEqual(fields["tone"]["enum"], ["plain"])
+        self.assertEqual(fields["tone"]["x-enumDescriptions"], {"plain": "Plain"})
         self.assertEqual(fields["about"]["x-hq-reference"], {"model": "calendars.entry", "field": "about"})
 
     def test_plugin_source_can_use_only_the_sdk(self):

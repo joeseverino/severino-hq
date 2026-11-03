@@ -107,9 +107,10 @@ CUTS = (
     TEXT_SHOWN
     + r"""
 const cutRange = document.createRange();
-// The boxes a line clamp takes hold in: a `-webkit-box`, which Chromium
-// computes a clamped one to be a `flow-root`.
-const CLAMPS = /^(-webkit-box|-webkit-inline-box|flow-root)$/;
+// The boxes a line clamp takes hold in: a `-webkit-box` or
+// `-webkit-inline-box`, which Chromium computes, clamped, to be a `flow-root`
+// or an `inline-block`.
+const CLAMPS = /^(-webkit-box|-webkit-inline-box|flow-root|inline-block)$/;
 const cutsIn = (root, unseen) => {
   const found = [];
   const clips = (value) => value === 'hidden' || value === 'clip';

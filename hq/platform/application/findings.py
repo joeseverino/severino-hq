@@ -13,11 +13,11 @@ from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from functools import cache
 from pathlib import Path
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 from urllib.parse import urlencode
 
 from django.conf import settings
-from pydantic import ConfigDict, WithJsonSchema, with_config
+from pydantic import ConfigDict, Field, WithJsonSchema, create_model, with_config
 
 from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions
 lazy from hq.domains.control_plane.models import OperationRequest
@@ -63,7 +63,7 @@ from .first_seen import recorded
 from .integration_validation import required_capability_names
 from .integrations import IntegrationGraph, integration_graph
 from .json_schemas import Written
-from .projection import QueryRefusal, shape_version
+from .projection import QUERY, shape_version
 from .security import Capability, Principal
 from .topology import derive_topology
 from .topology_model import (
@@ -664,18 +664,30 @@ def serialize_finding(finding: Finding) -> SerializedFinding:
     }
 
 
-class InvalidFindingsQuery(QueryRefusal):
-    """A narrowing input the findings cannot be read by; ``reason`` says which."""
+# Built from the declarations, so a type checker reads each as a value.
+_RULE: Any = Literal[tuple(rule.name for rule in RULES)]
+_SEVERITY: Any = Literal[SEVERITIES]
 
-
-def _narrowing(severity: str, limit: int | None) -> int:
-    """The rank a floor of ``severity`` admits up to, refusing what names nothing."""
-
-    if severity and severity not in SEVERITIES:
-        raise InvalidFindingsQuery(f"findings: severity must be one of {', '.join(SEVERITIES)}.")
-    if limit is not None and limit < 1:
-        raise InvalidFindingsQuery("findings: limit must be at least 1.")
-    return SEVERITIES.index(severity) if severity else len(SEVERITIES)
+# The API's query and get_findings' arguments are both this model, so the two
+# doors publish one schema and refuse one input in one sentence.
+FindingsQuery = create_model(
+    "FindingsQuery",
+    __config__=QUERY,
+    __doc__="What a read of the open problems is narrowed by.",
+    rule=(_RULE | None, Field(None, description="Only this rule's problems; absent, every rule's.")),
+    severity=(
+        _SEVERITY | None,
+        Field(None, description="The least severe finding to return: `attention` also returns `serious`."),
+    ),
+    limit=(
+        int | None,
+        Field(
+            None,
+            ge=1,
+            description="How many problems to return, most severe first; the summary still counts every one.",
+        ),
+    ),
+)
 
 
 # The shape findings answers in; it moves when that shape does.
@@ -702,9 +714,10 @@ class Findings(TypedDict):
     findings: list[SerializedFinding]
 
 
-def findings(*, principal: Principal, rule: str = "", severity: str = "", limit: int | None = None) -> Findings:
+def findings(*, principal: Principal, **narrowing: object) -> Findings:
     """The serialized claims, for machine delivery adapters.
 
+    ``narrowing`` is judged by ``FindingsQuery`` once the caller may read.
     ``severity`` is a floor (``attention`` also returns ``serious``) and
     ``limit`` bounds how many are returned, most severe first. The summary
     still counts every finding, and says how many came back and whether the
@@ -712,10 +725,10 @@ def findings(*, principal: Principal, rule: str = "", severity: str = "", limit:
     """
 
     principal.require(Capability.READ)
-    floor = _narrowing(severity, limit)
-    if rule and rule_for(rule) is None:
-        names = ", ".join(item.name for item in RULES)
-        raise InvalidFindingsQuery(f"findings: rule must be one of {names}.")
+    query = FindingsQuery.model_validate(narrowing).model_dump()
+    rule: str = query["rule"] or ""
+    limit: int | None = query["limit"]
+    floor = SEVERITIES.index(query["severity"]) if query["severity"] else len(SEVERITIES)
     raised = estate_findings(principal=principal, rule=rule)
     counts: dict[str, int] = {}
     for finding in raised:

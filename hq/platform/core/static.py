@@ -17,6 +17,8 @@ lazy from django.contrib.auth.decorators import login_not_required
 lazy from django.http import HttpResponsePermanentRedirect
 lazy from django.templatetags.static import static
 
+lazy from .write_bounds import NOTHING, writes
+
 # A quoted string (kept whole, so a "/*" in one is not a comment) or a comment.
 # A comment that opens "/*!" is a license, and is kept.
 _CSS_STRING_OR_COMMENT = re.compile(r"""("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|/\*(?!!).*?\*/""", re.DOTALL)
@@ -183,6 +185,7 @@ def root_icon(name: str):
     redirect to the collected file, so each client asks once. Open before sign
     in, since a browser asks on the sign-in page too."""
 
+    @writes(NOTHING)
     @login_not_required
     def view(_request):
         return HttpResponsePermanentRedirect(static(name))

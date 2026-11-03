@@ -1,5 +1,7 @@
 """The receipts resource, declared on its domain in application/domains.py."""
 
+from typing import TypedDict
+
 from pydantic import Field
 
 from hq.platform.application import read_models
@@ -15,6 +17,25 @@ class ReceiptQuery(BoundedQuery):
     unmatched_only: bool = Field(
         default=False, description="True for only the receipts matched to no expense and no asset."
     )
+
+
+class ReceiptRow(TypedDict):
+    """One receipt's metadata; never its file, path or address."""
+
+    id: int
+    original_filename: str
+    content_type: str
+    size_bytes: int
+    vendor: str
+    date: str | None
+    # Money, as a decimal string.
+    amount: str
+    notes: str
+    # The expense's id and the asset's slug it is matched to, or null.
+    related_expense: int | None
+    related_asset: str | None
+    uploaded_at: str
+    updated_at: str
 
 
 def resources() -> tuple[ResourceSpec, ...]:
@@ -34,5 +55,6 @@ def resources() -> tuple[ResourceSpec, ...]:
                 label="Receipts",
             ),
             web_route="receipts:list",
+            row_type=ReceiptRow,
         ),
     )

@@ -967,6 +967,22 @@ cannot read a setting of a shape it was not handed. A vendor's base URL is the
 `servers` entry of its vendored description, generated as a constant. The
 document itself is in [Secrets](Secrets.md#where-each-secret-lives).
 
+**No secret reaches a log or a report.** Two mechanisms hold it, so no message
+has to be worded around a credential:
+
+- Each generated settings type with a secret setting prints and logs with that
+  setting redacted (`String`, `Format`, `LogValue`). The generator emits these
+  methods from the `secret` tag, so a new secret setting gets them too.
+- Each binary learns every secret value where it enters the process
+  (`controller/internal/mask`): a connection's secret settings, a sealed value
+  opened, a token minted or sent in a request header, the Connect token, a
+  concealed field and each application variable the renderer reads, a
+  hand-off's token. Every form of a
+  learned value (plain, quoted, JSON, URL and base64 encoded) is then struck
+  from each log line (`mask.Logger`, the only logger a binary builds), from
+  clipped text such as a report's failure (`runtime.Clip`), and from every
+  payload the bridge sends HQ.
+
 **The run.** `hq-host controller` (the units are in
 [Deployment](Deployment.md#units)) starts a disposable container from the image
 HQ runs. It drops every capability and sets `no-new-privileges`. Its

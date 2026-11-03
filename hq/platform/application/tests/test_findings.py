@@ -4,12 +4,13 @@ from datetime import timedelta
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
+from pydantic import ValidationError
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 from hq.platform.application.tests.writers import form_keyed
 
 from ..action_links import ActionLink
-from ..findings import FINDINGS_SCHEMA_VERSION, InvalidFindingsQuery, derive_findings, finding_rules, findings, rule_for
+from ..findings import FINDINGS_SCHEMA_VERSION, derive_findings, finding_rules, findings, rule_for
 from ..plugin_testing import offering
 from ..reach import TAILNET
 from ..security import Capability, Principal
@@ -710,9 +711,9 @@ class FindingsTests(SentinelMixin, TestCase):
 
     def test_a_severity_off_the_ladder_or_a_limit_below_one_is_refused(self):
         for narrowing in ({"severity": "critical"}, {"limit": 0}):
-            with self.subTest(**narrowing), self.assertRaises(InvalidFindingsQuery) as refused:
+            with self.subTest(**narrowing), self.assertRaises(ValidationError) as refused:
                 findings(principal=MANAGE, **narrowing)
-            self.assertIn(next(iter(narrowing)), refused.exception.reason)
+            self.assertEqual([error["loc"] for error in refused.exception.errors()], [tuple(narrowing)])
 
     def test_an_unknown_rule_name_does_not_resolve(self):
         self.assertIsNone(rule_for("not-a-rule"))

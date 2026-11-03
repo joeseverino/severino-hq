@@ -3,6 +3,8 @@
 from hq.platform.application.resources import (
     ResourceQuery,
     ResourceSpec,
+    StatusFilter,
+    TextFilter,
     TopQuery,
     describe_resources,
     get_resource,
@@ -12,6 +14,8 @@ from hq.platform.application.resources import (
 __all__ = [
     "ResourceQuery",
     "ResourceSpec",
+    "StatusFilter",
+    "TextFilter",
     "TopQuery",
     "describe_resources",
     "get_resource",

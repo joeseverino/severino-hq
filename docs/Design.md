@@ -193,6 +193,15 @@ a table out. `tables.js` asks only whether a value is cut (`data-cut`), which
 shows a toggle in a gutter already kept, and holds the columns still while a
 row is open or the rows are refreshed.
 
+Text is cut in one sheet, `css/app/cuts.css`, in one of two ways that each
+show the reader there is more: on its line with an ellipsis, or at its last
+line by a clamp. A value that may be cut has its whole rule there, so it is
+styled in one place. Every other text wraps. A box that
+clips something other than text (a frame's corners, a scroll region) says why
+beside its declaration.
+*Gate:* `lint:css` (`cutText` in `tools/lint/stylelint.config.mjs`), and the
+layout survey's `cut and closed`, `cut when open` and `cut with room`.
+
 A long identifier is one line, cut with an ellipsis at a share of its region's
 width (`--identifier-max`, in container units between a floor and a ceiling).
 Its whole value is in its title and in the open row.

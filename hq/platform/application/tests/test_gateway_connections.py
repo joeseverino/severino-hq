@@ -13,8 +13,9 @@ from hq.domains.control_plane.models import (
 from hq.domains.projects.models import Project
 
 from ..capabilities import capability_registry, execute_capability
+from ..field_masks import WHOLE_RECORD
 from ..integrations import integration_graph
-from ..resources import WHOLE_RECORD, list_resource
+from ..resources import list_resource
 from ..security import Capability, Principal
 from .writers import keyed
 

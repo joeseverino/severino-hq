@@ -15,6 +15,7 @@ SHEETS: tuple[str, ...] = tuple(
     for name in (
         "tokens",
         "base",
+        "cuts",
         "page",
         "figures",
         "tables",

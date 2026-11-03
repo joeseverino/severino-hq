@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/secrets/connect"
 	"github.com/joeseverino/severino-hq/controller/secrets/connectapi"
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
@@ -252,6 +253,7 @@ func (r *Runner) read(ctx context.Context, client *connect.Client, id string) (c
 				stable = false
 				break
 			}
+			learnConcealed(item)
 			items = append(items, item)
 		}
 		after, err := client.Vault(ctx, id)
@@ -264,6 +266,19 @@ func (r *Runner) read(ctx context.Context, client *connect.Client, id string) (c
 		}
 	}
 	return connectapi.Vault{}, nil, ErrChanging
+}
+
+// learnConcealed learns the value of each field 1Password conceals, so no
+// log line of the renderer carries one (mask.Learn).
+func learnConcealed(item connectapi.FullItem) {
+	if item.Fields == nil {
+		return
+	}
+	for _, field := range *item.Fields {
+		if field.Value != nil && (field.Type == connectapi.CONCEALED || field.Type == connectapi.OTP) {
+			mask.Learn(*field.Value)
+		}
+	}
 }
 
 func (r *Runner) inputs(salt string, registry []byte) string {

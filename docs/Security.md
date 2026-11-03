@@ -87,6 +87,12 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   `login_not_required`: the machine API, which refuses a token by its grant;
   health; sign-in and the identity provider's callbacks, the back-channel
   logout checking its signed token; CSP reports; the icons. A new one has to carry its own refusal.
+- What a caller who has not signed in can make HQ write is declared where the
+  code that writes is, with `hq.platform.core.write_bounds.writes`: each such
+  route, and each of HQ's middleware, as writing nothing or under a named
+  `Bound` (the sign-in throttle, the refused-credential coalescing, the
+  handshake's session expiry, the arrivals reading, the policy-report cap).
+  `test_write_bounds.py` fails on one that declares nothing.
 - A link to a page is offered only to a person who may open it: the nav, a
   page's head actions and trail, and a remedy each ask `pages.offered`, which
   asks the same rule. `test_offered_links.py` holds every nav item and every
@@ -166,9 +172,11 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   `'strict-dynamic'` with no inline code or `eval`, and fetches nothing
   off-origin.
 - Violations are reported back. The policy carries `report-to` and `report-uri`
-  pointing at `/csp-report/`, which records the directive, the blocked URI and
-  the reporting address to the audit log: bounded body size, truncated fields,
-  and one row per distinct complaint per hour. It is the only way HQ learns
+  pointing at `/csp-report/`, which records the directive, what was blocked and
+  the reporting address to the audit log. A directive is recorded only when
+  HQ's policy governs it, what was blocked is kept as an origin or a CSP
+  keyword (`inline`, `eval`, `data`), the same complaint writes one row an
+  hour, and every complaint together writes at most `CSP_REPORTS.rows` an hour. It is the only way HQ learns
   that a directive enforced in someone else's browser has stopped holding.
 - HQ keeps Django's default `SIGNED_COOKIE_LEGACY_SALT_FALLBACK = False`, so a
   signed cookie made with the older, ambiguous salt derivation is refused.

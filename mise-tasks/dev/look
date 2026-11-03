@@ -13,7 +13,7 @@
 #USAGE flag "--perf" negate="--no-perf" help="Then measure the estate pages asked with mise run perf, beside --base's; on by default with --base"
 #USAGE flag "--seed <name>" default="showcase" help="The data set the estate pages are drawn on, by its name in hq.platform.core.seeds"
 #USAGE flag "--columns" help="Also print each table's column widths as drawn, at min-content and at max-content"
-#USAGE flag "--eval <file>" help="Run the function in <file> on each page at each width and print what it returns: after --open and --expand have opened what they open and the page has drawn it, before the screenshot, so it reads what the screenshot shows and what it changes is shot"
+#USAGE flag "--eval <file>" help="Run the function in <file> on each shot the look takes, at each width, and print what it returns beside the shot: the page once --expand has opened its rows, each tag --open opens, each popover and each dialog, so it reads what each shot shows"
 #USAGE flag "--dialog <ids>" help="Also shoot each page with these dialogs open, comma-separated ids or all; --rule runs again inside each"
 #USAGE flag "--engine <engine>" default="webkit" help="The browser engine to draw in, installed first" {
 #USAGE   choices "webkit" "chromium" "firefox"

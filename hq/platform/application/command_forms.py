@@ -14,7 +14,7 @@ from .command_fields import named_records, referred
 from .command_targets import CommandTargetOption
 from .forms import LinesField
 from .integration_specs import IDEMPOTENCY_FIELD, capability_schema, command_schema
-from .json_schemas import fields as whole_fields
+from .json_schemas import fields as whole_fields, labeled_choices
 from .labels import field_label
 from .records import as_its_model_declares
 from .references import keeping_held, leave_off_unoffered
@@ -106,15 +106,9 @@ def _field_for_schema(
     if offered is not None:
         return _record_choice(effective, offered, options)
 
-    labeled = schema.get("oneOf")
-    if labeled and all("const" in choice for choice in labeled):
-        return forms.ChoiceField(
-            choices=[(choice["const"], choice.get("title", str(choice["const"]))) for choice in labeled],
-            **options,
-        )
-    choices = effective.get("enum")
+    choices = labeled_choices(effective)
     if choices:
-        return forms.ChoiceField(choices=[(value, str(value)) for value in choices], **options)
+        return forms.ChoiceField(choices=choices, **options)
     if kind == "boolean":
         return forms.BooleanField(**{**options, "required": False})
     if kind == "integer":

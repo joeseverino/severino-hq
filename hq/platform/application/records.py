@@ -19,6 +19,7 @@ from hq.platform.core.audit import audit_operation
 from .deletion import DeleteCommand, delete_record
 from .domains import Records, host_records, load, records_of
 from .integration_specs import TARGET, TARGET_KINDS, CapabilitySpec
+from .json_schemas import choices
 from .labels import lower_first
 from .security import Principal
 from .ui import ended
@@ -76,7 +77,7 @@ def as_its_model_declares(command_type: type, schema: dict[str, Any]) -> dict[st
     """A record command's schema with what its model says of each field.
 
     A field the model limits to choices lists them, each value with its label
-    (``oneOf`` of ``const`` and ``title``), and one it holds as long text is
+    (``json_schemas.choices``), and one it holds as long text is
     ``format: textarea``. The model is the one declaration: its ``full_clean``
     refuses any other value on every path, so the schema only says so. Any
     other command's schema is returned as it is.
@@ -122,10 +123,10 @@ def _bounds(field: Any) -> dict[str, Any]:
 def _as_field_declares(field: Any, declared: dict[str, Any]) -> dict[str, Any]:
     declared = {**declared, **_bounds(field)}
     if field.choices:
-        allowed = [{"const": value, "title": str(label)} for value, label in field.flatchoices]
-        if field.blank and all(choice["const"] != "" for choice in allowed):
-            allowed.insert(0, {"const": "", "title": "Not set"})
-        return {**declared, "oneOf": allowed}
+        allowed = [(value, str(label)) for value, label in field.flatchoices]
+        if field.blank and all(value != "" for value, _label in allowed):
+            allowed.insert(0, ("", "Not set"))
+        return {**declared, **choices(allowed)}
     if field.get_internal_type() == "TextField":
         return {**declared, "format": "textarea"}
     return declared

@@ -2,10 +2,8 @@
 
 import hashlib
 import json
-import re
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
-from typing import Annotated, Any, Literal, NoReturn, NotRequired, TypedDict, override
+from typing import Annotated, Any, Literal, NotRequired, TypedDict, override
 
 from django.core import signing
 from django.db.models import Model
@@ -38,6 +36,7 @@ from . import (
     tailnet_context,
 )
 from .contracts import DOTTED_NAME
+from .field_masks import FieldMaskRefusal, Fields, asks_whole, selected
 from .input_errors import pydantic_refusal
 from .integration_specs import PAGE_FIELD, ResourceSpec
 from .integration_validation import required_capability_names
@@ -46,6 +45,34 @@ from .json_schemas import json_schema
 from .projection import MAX_PAGE_SIZE, CursorRefusal, NextPage, PageScope, page_size, paging, shape_version
 from .record_errors import HostRefusal, RecordNotFound
 from .refusal_status import next_call
+from .resource_records import (
+    ActionItemRow,
+    ConnectionStandingRecord,
+    ConnectionStandingRow,
+    ContainerRecord,
+    ContainerRow,
+    CredentialRecord,
+    CredentialRow,
+    DomainRecord,
+    DomainRow,
+    EstateFigure,
+    HopRow,
+    MachineRecord,
+    MachineRow,
+    ManagedResourceRecord,
+    ManagedResourceRow,
+    Match,
+    PathRecord,
+    Problem,
+    ReadingRecord,
+    ReadingRow,
+    RelationshipsRecord,
+    ServiceRecord,
+    ServiceRow,
+    Tailnet,
+    UpgradeRecord,
+    UpgradeRow,
+)
 from .search_contracts import SearchDefinition, search_lines
 from .security import Capability, Principal, require_all
 lazy from .domains import all_domains
@@ -75,7 +102,9 @@ class ResourceQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-def _limit_words(most: int, *, paged: bool) -> str:
+def limit_words(most: int, *, paged: bool) -> str:
+    """What a list query's ``limit`` says, its bound from the value it is checked by."""
+
     return (
         f"How many records a page holds, 1 to {most}; next.cursor reads the page after."
         if paged
@@ -83,16 +112,11 @@ def _limit_words(most: int, *, paged: bool) -> str:
     )
 
 
-def limit_field(default: int, most: int = MAX_PAGE_SIZE, *, paged: bool = True) -> Any:
-    """A list query's ``limit``: ``default`` when absent and ``most`` at most,
-    its description saying the bound from the same value."""
-
-    return Field(default=default, ge=1, le=most, description=_limit_words(most, paged=paged))
-
-
-# The fields every paged list takes, each a named alias so the API document
-# writes it once for all of them.
-type PageLimit = Annotated[int, Field(ge=1, le=MAX_PAGE_SIZE, description=_limit_words(MAX_PAGE_SIZE, paged=True))]
+# Each list's ``limit`` is a named alias, so the API document writes it once
+# for every query that takes it; a query whose default differs takes an alias
+# of its own, since the parameter the document writes carries the default.
+# The fields every paged list takes:
+type PageLimit = Annotated[int, Field(ge=1, le=MAX_PAGE_SIZE, description=limit_words(MAX_PAGE_SIZE, paged=True))]
 type Cursor = Annotated[
     str | None,
     Field(
@@ -110,14 +134,22 @@ STATUS_FILTER = "Only the records in this status; absent, every status."
 TEXT_FILTER = "Only the records whose text holds this, ignoring case; absent, every record."
 # A list's ``query`` where it may be left out.
 type TextFilter = Annotated[str | None, Field(description=TEXT_FILTER)]
+# A list's ``status`` where it may be left out and its statuses are not
+# declared as a choice; one that declares them types the field by ``one_of``.
+type StatusFilter = Annotated[str | None, Field(description=STATUS_FILTER)]
+# A ranked list's ``limit``: the deployment-wide ceiling, declared so a caller
+# reads it in the schema and a page past it is refused rather than quietly cut.
+type TopLimit = Annotated[int, Field(ge=1, le=MAX_PAGE_SIZE, description=limit_words(MAX_PAGE_SIZE, paged=False))]
+# Search's, which answers fewer unless asked for more.
+type SearchLimit = Annotated[
+    int, Field(ge=1, le=MAX_PAGE_SIZE, description=f"How many matches to return, 1 to {MAX_PAGE_SIZE}, best first.")
+]
 
 
 class TopQuery(ResourceQuery):
     """A list's first ``limit`` by its own ranking, which a read narrows rather than pages past."""
 
-    # The deployment-wide ceiling, declared so a caller reads it in the schema
-    # and a page past it is refused rather than quietly cut.
-    limit: int = limit_field(50, paged=False)
+    limit: TopLimit = 50
 
 
 class BoundedQuery(TopQuery):
@@ -216,7 +248,7 @@ class SearchQuery(TopQuery):
         max_length=200,
         description="What to look for in names and records' text; blank finds nothing.",
     )
-    limit: int = limit_field(20, paged=False)
+    limit: SearchLimit = 20
 
 
 def core_resource_specs() -> tuple[ResourceSpec, ...]:
@@ -269,7 +301,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
                 snippet_field="search_summary",
             ),
             web_route="control_plane:list",
-            list_fields=("key", "kind", "enabled", "in_sync", "health", "public_effect", "last_observed_at"),
+            row_type=ManagedResourceRow,
+            record_type=ManagedResourceRecord,
         ),
         ResourceSpec(
             "services",
@@ -281,7 +314,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             service_list.get_service,
             "hostname",
             web_route="control_plane:services",
-            list_fields=("hostname", "status", "status_label", "origin", "project", "faults"),
+            row_type=ServiceRow,
+            record_type=ServiceRecord,
         ),
         ResourceSpec(
             "estate",
@@ -292,17 +326,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             EmptyQuery,
             web_route="dashboard",
             pass_principal=True,
-        ),
-        ResourceSpec(
-            "action.items",
-            "Needs you",
-            "The composed action queue: what needs doing, from every domain.",
-            Capability.READ,
-            derived_reads.list_action_items,
-            action_item_query(),
-            web_route="action_items",
-            list_fields=("status", "source", "label", "detail", "action", "url", "since"),
-            pass_principal=True,
+            row_type=EstateFigure,
         ),
         ResourceSpec(
             "machines",
@@ -314,7 +338,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             derived_reads.get_machine,
             "name",
             web_route="control_plane:machines",
-            list_fields=("name", "url", "state", "role", "roles", "addresses", "hostnames", "runs_hq"),
+            row_type=MachineRow,
+            record_type=MachineRecord,
         ),
         ResourceSpec(
             "containers",
@@ -328,7 +353,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             container_reads.get_container,
             "address",
             web_route="control_plane:containers",
-            list_fields=("address", "machine", "name", "compose_project", "url", "state", "status", "serves"),
+            row_type=ContainerRow,
+            record_type=ContainerRecord,
         ),
         ResourceSpec(
             "upgrades",
@@ -342,7 +368,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             container_reads.get_upgrade,
             "address",
             web_route="control_plane:containers",
-            list_fields=("address", "viable", "risk", "change", "from", "to", "blockers"),
+            row_type=UpgradeRow,
+            record_type=UpgradeRecord,
         ),
         ResourceSpec(
             "domains",
@@ -354,6 +381,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             derived_reads.get_domain,
             "name",
             web_route="zones:index",
+            row_type=DomainRow,
+            record_type=DomainRecord,
         ),
         ResourceSpec(
             "relationships",
@@ -364,6 +393,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             identifier="node",
             web_route="control_plane:topology",
             pass_principal=True,
+            record_type=RelationshipsRecord,
         ),
         ResourceSpec(
             "paths",
@@ -373,16 +403,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             detail_handler=derived_reads.get_path,
             identifier="hostname",
             web_route="control_plane:services",
-        ),
-        ResourceSpec(
-            "request.path",
-            "Request path",
-            "How the calling request reached HQ: HQ's own path hop by hop, each hop "
-            "checked against what the request shows, with the admission layers decided there.",
-            Capability.READ,
-            derived_reads.list_request_path,
-            EmptyQuery,
-            web_route="connection",
+            record_type=PathRecord,
         ),
         ResourceSpec(
             "hq",
@@ -394,6 +415,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             EmptyQuery,
             web_route="hq_self",
             pass_principal=True,
+            row_type=Problem,
         ),
         ResourceSpec(
             "readings",
@@ -405,7 +427,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             derived_reads.get_reading,
             "kind",
             web_route="control_plane:connections",
-            list_fields=("kind", "label", "provider", "state", "records", "observed_at", "error"),
+            row_type=ReadingRow,
+            record_type=ReadingRecord,
         ),
         ResourceSpec(
             "credentials",
@@ -417,7 +440,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             derived_reads.get_credential,
             "provider",
             web_route="control_plane:connections",
-            list_fields=("provider", "label", "credential_refusal", "tally"),
+            row_type=CredentialRow,
+            record_type=CredentialRecord,
         ),
         ResourceSpec(
             "tailnet",
@@ -429,6 +453,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             EmptyQuery,
             web_route="control_plane:tailnet",
             pass_principal=True,
+            row_type=Tailnet,
         ),
         ResourceSpec(
             "connection.standing",
@@ -441,20 +466,51 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             connection_context.get_connection_standing,
             "connection_ref",
             web_route="control_plane:connections",
-            list_fields=(
-                "id",
-                "connection_ref",
-                "label",
-                "kind",
-                "family",
-                "status",
-                "status_label",
-                "detail",
-                "observed_at",
-                "open_problems",
-            ),
             pass_principal=True,
+            row_type=ConnectionStandingRow,
+            record_type=ConnectionStandingRecord,
         ),
+    )
+
+
+# A host domain's own resources, kept here beside the rest of the host's: each
+# domain's declaration names its function (``domains.HOST_DOMAINS``).
+
+
+def dashboard() -> tuple[ResourceSpec, ...]:
+    return (
+        ResourceSpec(
+            "action.items",
+            "Needs you",
+            "The composed action queue: what needs doing, from every domain.",
+            Capability.READ,
+            derived_reads.list_action_items,
+            action_item_query(),
+            web_route="action_items",
+            pass_principal=True,
+            row_type=ActionItemRow,
+        ),
+    )
+
+
+def connections() -> tuple[ResourceSpec, ...]:
+    return (
+        ResourceSpec(
+            "request.path",
+            "Request path",
+            "How the calling request reached HQ: HQ's own path hop by hop, each hop "
+            "checked against what the request shows, with the admission layers decided there.",
+            Capability.READ,
+            derived_reads.list_request_path,
+            EmptyQuery,
+            web_route="connection",
+            row_type=HopRow,
+        ),
+    )
+
+
+def search() -> tuple[ResourceSpec, ...]:
+    return (
         ResourceSpec(
             "search",
             "Search",
@@ -464,6 +520,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             SearchQuery,
             web_route="search",
             pass_principal=True,
+            row_type=Match,
         ),
     )
 
@@ -660,124 +717,6 @@ def _caller(spec: ResourceSpec, principal: Principal) -> dict[str, Principal]:
     return {"principal": principal} if spec.pass_principal else {}
 
 
-Fields = list[str] | tuple[str, ...]
-# The one field mask that keeps every field (AIP-157), a list read's way past its kind's list_fields.
-WHOLE_RECORD = "*"
-# A field mask (AIP-161): each name keeps its whole value, or the names under
-# it keep only those parts. ``None`` is a whole value.
-type Mask = dict[str, Mask | None]
-_FIELD_PATH = re.compile(r"[^.]+(?:\.[^.]+)*")
-
-
-@dataclass(frozen=True, slots=True)
-class _Selection:
-    resource: str
-    mask: Mask
-    # The first field that names each path, so a refusal points at it.
-    origin: dict[tuple[str, ...], int]
-
-    def refuse(self, path: tuple[str, ...], error_type: str, msg: str, *, at: tuple[str, ...] = ()) -> NoReturn:
-        loc = ["fields", self.origin[path], *at]
-        raise InvalidResourceInput(self.resource, [{"type": error_type, "loc": loc, "msg": msg}])
-
-
-def _selection(name: str, fields: Fields) -> _Selection:
-    """The paths as one mask: shared prefixes merge, and a whole value wins."""
-
-    if not fields:
-        raise InvalidResourceInput(
-            name, [{"type": "too_short", "loc": ["fields"], "msg": "List should have at least 1 item"}]
-        )
-    if malformed := [index for index, field in enumerate(fields) if not _FIELD_PATH.fullmatch(field)]:
-        raise InvalidResourceInput(
-            name,
-            [
-                {"type": "string_pattern_mismatch", "loc": ["fields", index], "msg": "String should match 'name.name'"}
-                for index in malformed
-            ],
-        )
-    mask: Mask = {}
-    origin: dict[tuple[str, ...], int] = {}
-    for index, field in enumerate(fields):
-        segments = field.split(".")
-        for depth in range(len(segments)):
-            origin.setdefault(tuple(segments[: depth + 1]), index)
-        _merge(mask, segments)
-    return _Selection(name, mask, origin)
-
-
-def _merge(mask: Mask, segments: list[str]) -> None:
-    *parents, leaf = segments
-    node = mask
-    for segment in parents:
-        if segment in node and node[segment] is None:
-            return  # The whole value is already kept.
-        child = node.get(segment)
-        if child is None:
-            child = node[segment] = {}
-        node = child
-    node[leaf] = None
-
-
-def _cut(selection: _Selection, records: list[dict[str, Any]], mask: Mask, at: tuple[str, ...]) -> list[dict[str, Any]]:
-    """``records`` cut to ``mask``, every record at this depth checked together.
-
-    A name no record here carries is refused with the names there are, so a
-    typo is never answered with records that silently lack it. With no records
-    there is nothing to name a key against.
-    """
-
-    known = list(dict.fromkeys(key for record in records for key in record))
-    if records and (unknown := [key for key in mask if key not in known]):
-        choices = ", ".join(f"'{key}'" for key in known)
-        selection.refuse((*at, unknown[0]), "literal_error", f"Input should be {choices}")
-    cut = [{key: value for key, value in record.items() if key in mask and mask[key] is None} for record in records]
-    for key, inner in mask.items():
-        if inner is not None:
-            _cut_within(selection, records, cut, key, inner, (*at, key))
-    return [{key: out[key] for key in record if key in out} for record, out in zip(records, cut, strict=True)]
-
-
-def _cut_within(
-    selection: _Selection,
-    records: list[dict[str, Any]],
-    cut: list[dict[str, Any]],
-    key: str,
-    inner: Mask,
-    path: tuple[str, ...],
-) -> None:
-    """Cut the objects under ``key``, one object or each element of a list."""
-
-    elements: list[dict[str, Any]] = []
-    for record in records:
-        value = record.get(key)
-        if isinstance(value, dict):
-            elements.append(value)
-        elif isinstance(value, list) and all(isinstance(element, dict) for element in value):
-            elements.extend(value)
-        elif key in record and value is not None:
-            selection.refuse(path, "dict_type", "Input should be a valid dictionary", at=path)
-    # The cut elements, put back where each came from.
-    shaped = iter(_cut(selection, elements, inner, path))
-    for record, out in zip(records, cut, strict=True):
-        value = record.get(key)
-        if isinstance(value, dict):
-            out[key] = next(shaped)
-        elif isinstance(value, list):
-            out[key] = [next(shaped) for _ in value]
-        elif key in record:
-            out[key] = None
-
-
-def _selected(name: str, records: list[Any], fields: Fields) -> list[dict[str, Any]]:
-    """Each record cut to the field mask ``fields`` names, in its own order."""
-
-    if any(not isinstance(record, dict) for record in records):
-        raise TypeError(f"Resource {name!r} returned a record that is not an object.")
-    selection = _selection(name, fields)
-    return _cut(selection, records, selection.mask, ())
-
-
 def list_resource(
     name: str,
     query: dict[str, Any] | None = None,
@@ -820,9 +759,9 @@ def list_resource(
     page: ResourceCollection = {**handled, **_page(spec, parsed, handled, scope, bound)}
     if fields is None:
         return {**page, "items": _listed_fields(spec, page["items"])}
-    if _whole(fields):
+    if asks_whole(fields):
         return page
-    return {**page, "items": _selected(name, page["items"], fields)}
+    return {**page, "items": _masked(name, page["items"], fields)}
 
 
 def _listed_fields(spec: ResourceSpec, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -836,12 +775,6 @@ def _listed_fields(spec: ResourceSpec, items: list[dict[str, Any]]) -> list[dict
     if not spec.list_fields:
         return items
     return [{key: item[key] for key in item if key in spec.list_fields} for item in items]
-
-
-def _whole(fields: Fields) -> bool:
-    """Whether the caller asked for every field: AIP-157's ``*``, alone."""
-
-    return list(fields) == [WHOLE_RECORD]
 
 
 class PagePosition(TypedDict):
@@ -936,6 +869,15 @@ def _cursor_refused(name: str, reason: str) -> InvalidResourceInput:
     return InvalidResourceInput(name, [{"type": "value_error", "loc": [PAGE_FIELD], "msg": reason}])
 
 
+def _masked(name: str, records: list[Any], fields: Fields) -> list[dict[str, Any]]:
+    if any(not isinstance(record, dict) for record in records):
+        raise TypeError(f"Resource {name!r} returned a record that is not an object.")
+    try:
+        return selected(records, fields)
+    except FieldMaskRefusal as exc:
+        raise InvalidResourceInput(name, exc.errors) from exc
+
+
 def get_resource(
     name: str,
     identifier: object,
@@ -972,6 +914,6 @@ def get_resource(
         raise RecordNotFound("No record matches the requested identifier." + FOUND_BY, details=_found_by(spec)) from exc
     if not isinstance(result, dict):
         raise TypeError(f"Resource {name!r} detail handler returned a non-object.")
-    if fields is None or _whole(fields):
+    if fields is None or asks_whole(fields):
         return result
-    return _selected(name, [result], fields)[0]
+    return _masked(name, [result], fields)[0]

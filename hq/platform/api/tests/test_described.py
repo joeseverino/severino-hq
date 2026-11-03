@@ -5,6 +5,8 @@ import re
 from django.test import SimpleTestCase
 
 from hq.platform.application.contracts import EFFECTS
+from hq.platform.application.plugin_testing import installed, sibling
+from hq.platform.application.plugins import NavigationGroup, NavigationItem
 
 from .. import openapi
 
@@ -37,7 +39,7 @@ class DescribedTests(SimpleTestCase):
             with self.subTest(tag["name"]):
                 self.assertTrue(tag.get("description", "").strip())
 
-    def test_a_host_group_says_what_it_is_for_rather_than_listing_its_domains(self):
+    def test_a_group_says_what_it_is_for_rather_than_listing_its_domains(self):
         tags = self.document["tags"]
         for group in tags:
             held = [tag["summary"] for tag in tags if tag.get("parent") == group["name"]]
@@ -57,3 +59,20 @@ class DescribedTests(SimpleTestCase):
             if parameter["name"] == "name" and parameter["in"] == "path":
                 with self.subTest(where):
                     self.assertTrue(parameter["schema"].get("enum"))
+
+
+class AnExtensionSaysWhatItHoldsTests(SimpleTestCase):
+    def test_its_domain_and_the_group_it_adds_say_what_its_manifest_declares(self):
+        group = NavigationGroup("Outdoors", "Time spent outside, and what it took.")
+        extension = sibling(
+            description="Walks and climbs.",
+            navigation=(NavigationItem("Alpha", "alpha:home", "alpha", 40, group.name),),
+            navigation_groups=(group,),
+        )
+        with installed(extension, alone=True):
+            tags = openapi._Tags({}, {})
+            tags.use("example.alpha")
+            rendered = {tag["name"]: tag for tag in tags.render()}
+        domain = rendered["example.alpha"]
+        self.assertEqual(domain["description"], "Walks and climbs.")
+        self.assertEqual(rendered[domain["parent"]]["description"], group.description)

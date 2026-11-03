@@ -1,0 +1,13 @@
+id: live-objects-walked-in-one-place
+valid:
+  - 'from hq.platform.core.live_objects import live'
+  - 'signals = live(Signal)'
+  - 'gc.collect()'
+  - 'from gc import collect'
+invalid:
+  - 'gc.get_objects()'
+  - 'objects = gc.get_objects(generation=2)'
+  - 'found = [thing for thing in gc.get_objects() if isinstance(thing, Signal)]'
+  - 'from gc import get_objects'
+  - 'from gc import collect, get_objects'
+  - 'from gc import get_objects as walk'

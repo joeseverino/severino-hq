@@ -1,5 +1,7 @@
 """The analytics resource, declared on its domain in application/domains.py."""
 
+from typing import TypedDict
+
 from pydantic import Field, create_model
 
 from hq.platform.application import analytics
@@ -24,6 +26,15 @@ AnalyticsQuery = create_model(
 )
 
 
+class Breakdown(TypedDict):
+    """One value of a breakdown and what it was asked for."""
+
+    dimension: str
+    value: str
+    visits: int
+    pageviews: int
+
+
 def resources() -> tuple[ResourceSpec, ...]:
     return (
         ResourceSpec(
@@ -34,5 +45,6 @@ def resources() -> tuple[ResourceSpec, ...]:
             analytics.list_analytics,
             AnalyticsQuery,
             web_route="analytics:overview",
+            row_type=Breakdown,
         ),
     )

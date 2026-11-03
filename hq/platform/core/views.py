@@ -19,6 +19,7 @@ from hq.platform.application.agent_access import SET_AGENT_ACCESS, SET_AGENT_BLO
 from hq.platform.application.appearance import SET_THEME
 from hq.platform.application.avatars import avatar_of
 from hq.platform.application.command_center import command_center
+from hq.platform.application.denials import COALESCE_WINDOW, LABEL as DENIAL_LABEL
 from hq.platform.application.own_devices import SET_OWN_DEVICE, devices_of
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import projection_scope
@@ -38,11 +39,18 @@ lazy from hq.platform.mcp import listing
 from .audit import record_event
 from .middleware import DEMO_SESSION_KEY
 from .models import AuditLog
+from .write_bounds import Bound, RowCap, writes
 lazy from .network import client_ip
 lazy from .oidc import SSO_FAILURE_SESSION_KEY, sso_only
 lazy from .throttle import lockout
 
+SIGN_IN_THROTTLE = Bound(
+    "sign-in throttle",
+    "one row a failed sign-in, until enough from one account or one source close the form for a while",
+)
 
+
+@writes(SIGN_IN_THROTTLE)
 class ThrottledLoginView(LoginView):
     """The password form, with a cost attached to guessing at it."""
 
@@ -454,6 +462,18 @@ class HQView(PageMixin, TemplateView):
         return context
 
 
+# A refused GET is recorded, and the fragment is drawn on every connection page
+# a person without the grant opens: one row per person a minute says it.
+ADDRESS_DENIALS = RowCap(
+    "address denials",
+    "one refusal row per person a minute",
+    action=AuditLog.Action.DENIED,
+    type_label=DENIAL_LABEL,
+    rows=1,
+    window=COALESCE_WINDOW,
+)
+
+
 class PublicAddressView(View):
     """What the public internet says about one address, as a fragment.
 
@@ -470,7 +490,8 @@ class PublicAddressView(View):
         try:
             context["reading"] = stored_address(AddressCommand(address=address), principal=principal)
         except Exception as error:  # noqa: BLE001 - every failure is said in the one refusal shape, a denial recorded
-            context["failure"] = refusal_of(error, name=LOOK_UP_ADDRESS, principal=principal).message
+            recorded = principal if ADDRESS_DENIALS.admits(actor=principal.actor, capability=LOOK_UP_ADDRESS) else None
+            context["failure"] = refusal_of(error, name=LOOK_UP_ADDRESS, principal=recorded).message
         return render(request, self.template_name, context)
 
     def post(self, request):

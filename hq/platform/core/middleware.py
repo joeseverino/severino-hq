@@ -19,12 +19,13 @@ from django.urls import Resolver404, resolve
 
 import hq.platform.core.logging as request_logging
 from hq.platform.application import request_context
-from hq.platform.application.arrivals import note as note_arrival
+from hq.platform.application.arrivals import ARRIVALS, note as note_arrival
 from hq.platform.application.cadence import note_activity
 from hq.platform.application.demo import demo_scope
 from hq.platform.core import speculation
 from hq.platform.core.attribution import operation_context
 from hq.platform.core.outbound import serving
+from hq.platform.core.write_bounds import NOTHING, Bound, writes
 lazy from hq.platform.api.urls import app_name as API_APP
 lazy from hq.platform.application import hq_self
 lazy from hq.platform.application.pages import authorizes_itself, page_refusal
@@ -40,6 +41,7 @@ DEMO_SESSION_KEY = "showing_demo"
 _request_logger = logging.getLogger("severino.request")
 
 
+@writes(NOTHING)
 class DemoModeMiddleware:
     """Enter the substituting scope for a request whose session asked for it.
 
@@ -97,6 +99,12 @@ def request_operation(path: str, *, operation_id: str) -> AbstractContextManager
     )
 
 
+# One file's modification time (``cadence.note_activity``), touched at most once
+# every SEVERINO_ACTIVITY_THROTTLE_SECONDS.
+ACTIVITY = Bound("activity marker", "one file, touched at most once an interval")
+
+
+@writes(ACTIVITY, ARRIVALS)
 class RequestContextMiddleware:
     """Attach a server-generated correlation ID, the operation every audit row
     of the request belongs to, the time taken, and one bounded access log."""
@@ -176,6 +184,7 @@ class RequestContextMiddleware:
         return speculation.on_exception(exception)
 
 
+@writes(NOTHING)
 class LoginRequiredMiddleware(auth_middleware.LoginRequiredMiddleware):
     """Django's sign-in gate: every view needs a session unless it is marked
     ``@login_not_required`` where it is defined.
@@ -204,6 +213,7 @@ class LoginRequiredMiddleware(auth_middleware.LoginRequiredMiddleware):
         return None
 
 
+@writes(NOTHING)
 class ProjectionMiddleware:
     """One read projection per page request, seeded with where it arrived.
 

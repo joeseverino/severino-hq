@@ -1,6 +1,7 @@
 """The API document writes each described fragment once, and each named
 alias it defines says what it is."""
 
+import json
 import sys
 from dataclasses import dataclass
 from typing import Annotated, TypeAliasType
@@ -9,9 +10,10 @@ from django.test import SimpleTestCase
 from pydantic import Field, WithJsonSchema
 
 from hq.platform.application.command_fields import Describe
-from hq.platform.application.integration_specs import CapabilitySpec
+from hq.platform.application.integration_specs import CapabilitySpec, ResourceSpec
 from hq.platform.application.integrations import compile_integration_graph, override_integration_graph
 from hq.platform.application.json_schemas import json_schemas
+from hq.platform.application.resources import TopQuery
 from hq_sdk.capabilities import StrictCommand
 
 from .. import openapi
@@ -44,7 +46,15 @@ class ExampleCommand(StrictCommand):
     value: int = 0
 
 
+class ExampleNoteCommand(StrictCommand):
+    note: str = ""
+
+
 def _example_write(command: ExampleCommand, *, principal) -> dict:
+    return {"ok": True}
+
+
+def _example_targeted(command: StrictCommand, *, principal, current_key: str) -> dict:
     return {"ok": True}
 
 
@@ -90,6 +100,56 @@ class DescribedOnceTests(SimpleTestCase):
         )
         with override_integration_graph(compile_integration_graph(capabilities=(spec,), resources=(), connections=())):
             described_once(openapi.document())
+
+    def test_a_target_two_capabilities_take_in_the_same_words_is_written_once(self):
+        # Two commands of their own, so only the target is shared.
+        specs = tuple(
+            CapabilitySpec(
+                f"example.vehicle.{verb}",
+                f"Example {verb}.",
+                "remote_write",
+                "example.write",
+                command,
+                _example_targeted,
+                "key",
+                target_help="The vehicle's key",
+            )
+            for verb, command in (("recall", ExampleCommand), ("refresh", ExampleNoteCommand))
+        )
+        with override_integration_graph(compile_integration_graph(capabilities=specs, resources=(), connections=())):
+            document = openapi.document()
+
+        described_once(document)
+        schemas = document["components"]["schemas"]
+        targets = {
+            json.dumps(schemas[f"ExampleVehicle{verb}Request"]["properties"]["target"])
+            for verb in ("Recall", "Refresh")
+        }
+        self.assertEqual(len(targets), 1)
+        self.assertIn("$ref", json.loads(targets.pop()))
+
+    def test_lists_inheriting_one_query_write_its_shared_parameters_once(self):
+        # Two lists the way extensions declare them, each with a query that
+        # inherits the ranked list's limit.
+        class ExampleNoteQuery(TopQuery):
+            pass
+
+        class ExampleTaskQuery(TopQuery):
+            pass
+
+        def rows(*, limit: int = 50) -> dict:
+            return {"items": [], "count": 0}
+
+        specs = tuple(
+            ResourceSpec(f"example.{kind}", kind.title(), f"Example {kind}.", "example.read", rows, query)
+            for kind, query in (("notes", ExampleNoteQuery), ("tasks", ExampleTaskQuery))
+        )
+        composed = compile_integration_graph(capabilities=(), resources=specs, connections=())
+        with override_integration_graph(composed):
+            document = openapi.document()
+
+        self.assertIn("/api/v2/resources/example.tasks/", document["paths"])
+        described_once(document)
 
     def test_every_named_alias_the_document_defines_says_what_it_is(self):
         schemas = openapi.document()["components"]["schemas"]

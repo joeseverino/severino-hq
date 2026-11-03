@@ -1,28 +1,65 @@
-"""Every command that writes to a record it targets, with a command a create
-also takes, is told which fields its caller sent, says what it keeps, and so
+"""Every command that writes to a record it targets, with fields a create also
+takes, is told which fields its caller sent, says what it keeps, and so
 requires none of the fields it keeps."""
 
+from unittest import mock
+
 from django.test import SimpleTestCase
+from pydantic import BaseModel
 
 from ..capabilities import capability_registry
 from ..domains import host_records
-from ..integration_specs import capability_schema, kept_by, takes_sent_fields
+from ..integration_specs import CapabilitySpec, capability_schema, command_schema, kept_by, takes_sent_fields
 from ..records import KEPT
 
 
 def _keeping_specs():
-    """Every command that writes to a record it targets and shares its command
+    """Every command that writes to a record it targets and shares its fields
     with one that creates: each record domain's update and upsert, and any
-    other targeted command whose command a create also takes."""
+    other targeted command whose command a create also takes. A command with
+    no fields has nothing to reset, whatever else takes it."""
 
     registry = capability_registry()
-    creating = {spec.command_type for spec in registry.values() if not spec.target_kind}
+    creating = {
+        spec.command_type
+        for spec in registry.values()
+        if not spec.target_kind and command_schema(spec.command_type).get("properties")
+    }
     names = {f"{records.noun}.{verb}" for records in host_records() for verb in ("update", "upsert")}
     return [
         spec
         for spec in registry.values()
         if spec.name in names or (spec.target_kind and spec.command_type in creating and spec.effect != "read")
     ]
+
+
+class _Nothing(BaseModel):
+    pass
+
+
+class _Named(BaseModel):
+    name: str = ""
+
+
+def _spec(name: str, command_type: type, target_kind: str | None) -> CapabilitySpec:
+    return CapabilitySpec(name, name, "write", "example.write", command_type, lambda _command: {}, target_kind)
+
+
+class KeepingSelectionTests(SimpleTestCase):
+    def test_a_targeted_command_is_held_only_when_it_shares_fields_a_create_takes(self):
+        registry = {
+            spec.name: spec
+            for spec in (
+                _spec("example.thing.start", _Nothing, None),
+                _spec("example.thing.stop", _Nothing, "key"),
+                _spec("example.thing.add", _Named, None),
+                _spec("example.thing.rename", _Named, "key"),
+            )
+        }
+        with mock.patch(f"{__name__}.capability_registry", return_value=registry):
+            held = {spec.name for spec in _keeping_specs()}
+        self.assertIn("example.thing.rename", held)
+        self.assertNotIn("example.thing.stop", held)
 
 
 class EveryUpdateIsToldWhatWasSentTests(SimpleTestCase):

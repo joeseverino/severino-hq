@@ -16,9 +16,9 @@ from hq.domains.control_plane.models import ProviderConnection, ProviderInventor
 from hq.platform.application.tests.writers import form_keyed
 
 from ..connection_context import ConnectionsContext, connections_context
+from ..field_masks import WHOLE_RECORD
 from ..record_errors import RecordNotFound
 from ..resources import (
-    WHOLE_RECORD,
     InvalidResourceInput,
     get_resource,
     list_resource,

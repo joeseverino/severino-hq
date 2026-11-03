@@ -20,6 +20,8 @@ lazy from hq.platform.core.audit import record_event
 lazy from hq.platform.core.models import AuditLog
 lazy from hq.platform.core.outbound import allowed
 
+from .write_bounds import Bound
+
 logger = logging.getLogger("severino.auth")
 
 
@@ -31,6 +33,13 @@ SSO_FAILURE_SESSION_KEY = "oidc_failure"
 # provider every few minutes and each renewal is a login to Django, so the
 # account's last login says only that the session is alive.
 SIGNED_IN_SESSION_KEY = "signed_in_at"
+
+# A stranger who starts a handshake, or answers one HQ did not start, gets a
+# session row; a refused sign-in's audit row needs the provider's own answer.
+HANDSHAKE = Bound(
+    "sign-in handshake",
+    "one session row a handshake, deleted each day once it has expired",
+)
 
 
 def sso_only() -> bool:

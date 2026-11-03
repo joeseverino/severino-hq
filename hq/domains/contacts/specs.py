@@ -1,5 +1,7 @@
 """Contact submissions' commands and resource, declared on their domain in application/domains.py."""
 
+from typing import NotRequired, TypedDict
+
 from pydantic import Field
 
 from hq.domains.control_plane.provider_adapters.cloudflare import ContactStatus
@@ -20,6 +22,38 @@ from hq.platform.application.security import Capability
 class ContactSubmissionQuery(BoundedQuery):
     status: ContactStatus | None = Field(default=None, description=STATUS_FILTER)
     query: str = Field(default="", description=TEXT_FILTER)
+
+
+class ContactSubmissionRow(TypedDict):
+    """One message as HQ last read it from the form's table, with a review it asked for laid over.
+
+    A field the table left empty may be absent; the message's own fields are
+    the contact form's, its metadata the visitor's browser's.
+    """
+
+    id: int
+    connection_ref: NotRequired[str]
+    account_id: NotRequired[str]
+    database_id: NotRequired[str]
+    database: NotRequired[str]
+    created_at: NotRequired[str | None]
+    updated_at: NotRequired[str | None]
+    name: NotRequired[str]
+    email: NotRequired[str]
+    message: NotRequired[str]
+    status: NotRequired[str]
+    assigned_to: NotRequired[str]
+    admin_notes: NotRequired[str]
+    country: NotRequired[str]
+    ip_address: NotRequired[str]
+    browser: NotRequired[str]
+    device: NotRequired[str]
+    user_agent: NotRequired[str]
+    source_url: NotRequired[str]
+    turnstile: NotRequired[str]
+    # Whether a review HQ asked for is not in the table yet.
+    pending: bool
+    message_preview: str
 
 
 def capabilities() -> tuple[CapabilitySpec, ...]:
@@ -93,5 +127,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "id",
             int,
             web_route="contacts:list",
+            row_type=ContactSubmissionRow,
+            record_type=ContactSubmissionRow,
         ),
     )

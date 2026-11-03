@@ -7,6 +7,7 @@
 /* `:is`, not `:where`: a cell that is also a surface has its shadow cleared by the frame rule, and this rule has to win that. */
 :is(.kpi-grid, .insight-grid, .machine-telemetry-metrics, .service-band, .fact-band, .control-summary, .connection-control-grid, .sweep-grid) {
   gap: 0;
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the band clips its cells' outer rim, not their text */
   overflow: clip;
   & > * {
     box-shadow: -1px 0 0 var(--line-2), 0 -1px 0 var(--line-2);
@@ -101,42 +102,12 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 .zone-value { font-family: var(--font-mono); font-size: var(--text-xs); }
 /* A status pill is a label: wrapped it grows its row, so it stays whole until its table is tight (tables.css). */
 .data-table .pill { white-space: nowrap; }
-/* A name or `.cell-line` in a cell takes two lines at most, breaking where it must so its column can narrow; a link of code is clamped by its code (tables.css), since clamped again it would count the strut's unseen lines. */
-.data-table td [data-entity]:not(:has(> code)),
-.data-table td .cell-line {
-  display: -webkit-inline-box;
-  max-width: 100%;
-  overflow: hidden;
-  vertical-align: top;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-}
-/* The row's own name tells it from the next, and names share prefixes, so it is never cut: it wraps at its hyphens and the names beside it give way. */
-.data-table td strong > [data-entity],
-.data-table td strong > .cell-line { display: inline; overflow: visible; -webkit-line-clamp: none; line-clamp: none; }
 /* A service's hostname is one token, never broken: cut on the link itself where its row has no more room, holding out for a few characters (`--cut-floor`, tables.css) with a pixel of slack as code's chip has. */
 .data-table td .service-name strong { display: grid; grid-template-columns: minmax(0, max-content); min-width: var(--cut-floor); }
-.data-table td .service-name strong > [data-entity] { min-width: 0; padding-inline-end: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* A clamped name shows two lines whatever its width, so it asks no more than its column's share (`--hold`, tables.css); a name the cell cuts asks for its whole length, and its longest word is its least so the table never counts as fitting while a word breaks. */
 .data-table td :is([data-entity], .cell-line):not(strong > *, .row-gutter > *, :has(> code), :has(> .token[data-sole] > .cut), :has(> .cut)) {
   max-width: var(--hold); min-width: min-content;
   .row-detail & { min-width: 0; }
-}
-/* Any other one-token name, and a `.cell-line`, is cut inside a hyphenated part rather than broken there: a grid track asks for its whole length and holds out for none, down to `--cut-floor` (tables.css), cut by the box inside it (`.cut`, value_tags._token, value_tags.cell_line); an external link's arrow is a column of its own. */
-.data-table td :is(
-  [data-entity]:not(strong > *, .row-gutter > *):has(> .token[data-sole] > .cut),
-  :is(.token[data-sole]:not([data-entity] *, .cell-line *), .cell-line:not(strong > *)):has(> .cut)
-):not(code *, td > strong:first-child *, td > a:first-child > strong *, .cell-data *) {
-  display: inline-grid; grid-template-columns: minmax(0, max-content); grid-auto-flow: column; grid-auto-columns: max-content;
-  min-width: var(--cut-floor); vertical-align: baseline;
-  & > :is(.token[data-sole], .cut) {
-    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--cut-lines); line-clamp: var(--cut-lines); overflow: hidden; text-overflow: ellipsis;
-    /* It cuts what overruns its line, so nothing in it needs breaking where no seam is; Chromium would otherwise break a held part at an element's edge. */
-    overflow-wrap: normal;
-  }
-  /* A part longer than the track is cut inside itself, so the name keeps the lines its seams give it rather than losing every part after the cut. */
-  & > :is(.token[data-sole], .cut) .whole { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
 }
 .data-table td [data-entity]:has(> .token[data-sole] > .cut)::after { align-self: end; }
 /* Links one to a line in a cell are a target apart (`--target-min`): each line that tall, and the link's box with it. */
@@ -147,22 +118,6 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 :is(td, th) [data-entity] > .token > .cut > .whole { display: contents; }
 /* A hyphenated part in a cell is held to one line and cut, never broken at a hyphen ("example-" over "worker" reads as two names); a row's own name and free text (`cell-data`) wrap at their hyphens instead. */
 .data-table td .whole:not(td > strong:first-child *, td > a:first-child > strong *, .attention-title *, strong > [data-entity] *, .row-gutter > [data-entity] *, code *, .cell-data *) { white-space: nowrap; }
-/* In a phrase a part is a box (`.part`, value_tags._whole) in a track that asks for its whole length and holds out for none: it moves whole, is cut only where longer than its cell, and never widens the table; an opened row (surfaces.css) and screen-reader text (cadence.css) make it text again. */
-.data-table td .token:not([data-sole]) > .whole:not(td > strong:first-child *, td > a:first-child > strong *, .attention-title *, code *, [data-entity] *, .cell-data *, .cut *, .btn *, .attention-detail *, .table-clamp *, tr.is-expanded *, .visually-hidden *) {
-  display: inline-grid; grid-template-columns: minmax(0, max-content); vertical-align: top;
-  & > .part { overflow: hidden; text-overflow: ellipsis; }
-  /* An engine may measure a part's max-content a fraction short of the text it draws (WebKit on Linux), so a float of no height asks the track for a pixel more and a part with room is never cut. */
-  & > .part::before { content: ""; float: inline-end; inline-size: 1px; }
-}
-/* A control's label is the control's to cut, as one line at its end; a part longer than the control is held to it and cut there, set on the line by its top since a box that clips takes its bottom edge as its baseline. */
-.data-table td .btn > .token:not([data-sole]) {
-  max-width: 100%;
-  & > .whole { overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
-}
-/* A line clamped to a preview (`.table-clamp`) is cut by its clamp, and WebKit draws a grid on a line past the clamp, so there a part is an inline box held to its column's share. */
-.data-table td :is(.attention-detail, .table-clamp) .token:not([data-sole]) > .whole:not(code *, [data-entity] *, .cut *) {
-  display: inline-block; max-width: var(--hold); overflow: hidden; text-overflow: ellipsis; vertical-align: top;
-}
 /* There a part is text, wrapping at its hyphens with the words around it. */
 .data-table td :is(td > strong:first-child, td > a:first-child > strong, .attention-title, .cell-data) .whole { display: contents; }
 /* Outside a narrow box the wrapping columns give way first; a name of plain parts holds out for its whole length up to its column's share (`--name-hold`, tables.css), and a name in a context line (`.muted`) holds out for nothing. */
@@ -186,12 +141,8 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 /* Never more than its column's share (`--share`, tables.css, plus half for the name), so the columns that keep their line still fit beside it. */
 .data-table td:has(> strong:first-child) { min-width: min(11rem, 40cqi, 1.5 * var(--share)); }
 /* A name in the muted line under the row's name is context the row shares with its neighbors: one line, cut at the cell's edge, holding out for none of it (`--cut-floor`). */
-.data-table td .muted [data-entity] { -webkit-line-clamp: 1; line-clamp: 1; }
 .data-table td .muted { --cut-lines: 1; --cut-floor: 0px; }
-/* The muted line of plain words under the row's name is one line cut at the column's edge, asking no width of its own (`contain: inline-size`) so the name alone sizes it; `narrow-only` words in it are never cut away. A chip (`code`) is a box of its own, where the line's ellipsis cannot land, so a line holding one is left to the chip's own cut. */
-.data-table td.row-gutter > br + .muted:not(:has([data-entity], .narrow-only, code)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @container style(--box: whole) {
-  .data-table td.row-gutter > br + .muted:not(:has([data-entity], code)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 /* A value quoted in a cell can hold a run with no seam (a link, a digest), so it breaks wherever it must and never widens its column; marked on the cell when the whole cell is such text. */
 .data-table :is(td.cell-data, td .cell-data, :is(td.cell-data, td .cell-data) .token) { overflow-wrap: anywhere; }

@@ -7,7 +7,7 @@ runtime composition receives.
 
 import inspect
 from annotationlib import Format
-from typing import Any
+from typing import Any, is_typeddict
 
 from django.core.exceptions import ImproperlyConfigured
 from pydantic import BaseModel, PydanticUndefinedAnnotation, PydanticUserError, ValidationError
@@ -26,6 +26,7 @@ from .integration_specs import (
     command_schema,
     takes_sent_fields,
     takes_stale_write_token,
+    typed_keys,
 )
 from .search_contracts import SearchDefinition
 from .security import Capability
@@ -204,10 +205,33 @@ def _validate_search_contract(spec: ResourceSpec) -> None:
         raise ImproperlyConfigured(f"Resource {spec.name!r} has invalid web route {spec.web_route!r}.")
 
 
+def _validate_record_types(spec: ResourceSpec) -> None:
+    """A row types a list's items and a record one read's answer, each a
+    TypedDict, and the row's keys are the list's fields. A record usually
+    extends its row, but a read of one may answer the item beside what it
+    is read with (a service and its path), so that is not required."""
+
+    for kind, operation, served in (
+        (spec.row_type, "list", spec.list_handler),
+        (spec.record_type, "detail", spec.detail_handler),
+    ):
+        if kind is None:
+            continue
+        if not is_typeddict(kind):
+            raise ImproperlyConfigured(f"Resource {spec.name!r} must type its {operation} read with a TypedDict.")
+        if not served:
+            raise ImproperlyConfigured(f"Resource {spec.name!r} types a {operation} read it does not serve.")
+    if spec.row_type is not None and spec.list_fields != typed_keys(spec.row_type):
+        raise ImproperlyConfigured(
+            f"Resource {spec.name!r} list_fields are its row_type's keys; declare the row and leave them out."
+        )
+
+
 def validate_resource_spec(spec: ResourceSpec) -> None:
     _validate_resource_identity(spec)
     _validate_list_contract(spec)
     _validate_detail_contract(spec)
+    _validate_record_types(spec)
     _validate_search_contract(spec)
 
 

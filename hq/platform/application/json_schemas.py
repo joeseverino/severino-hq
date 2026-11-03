@@ -2,10 +2,14 @@
 
 Every schema HQ hands a client (the API document, the capability and resource
 catalogs, the MCP tools, the control plane's specs) comes from here, so all of
-them say a thing the same way. A title is written only where a declaration
-gives one: the one Pydantic would derive from a field's name or a class's is
-only that name, and every reader labels a field from its name through
-``labels.field_label`` instead. A TypedDict's keys are all of its keys, as
+them say a thing the same way. A schema carries only the titles a declaration
+gives, and a named alias is declared by its name: the title Pydantic would
+derive from a field's name or a class's is only that name, and every reader
+labels a field from its name through ``labels.field_label`` instead, while an
+alias that names a bare composition (``type TotalCost = Annotated[Decimal,
+...]``, a number or a string) is titled from its name by that same labeler, so
+a viewer offering its branches says what it is rather than the name it is
+filed under. A TypedDict's keys are all of its keys, as
 the strict API reads them; an object open to any key says so by saying
 nothing, JSON Schema's default.
 
@@ -15,12 +19,15 @@ named for the alias, and each use as a ``$ref`` to it beside what that use
 adds (its ``default``). ``fields`` reads a schema's fields whole again.
 """
 
-from collections.abc import Mapping
+import re
+from collections.abc import Iterable, Mapping
 from typing import Any, override
 
 from pydantic import GetCoreSchemaHandler, TypeAdapter
 from pydantic.json_schema import DEFAULT_REF_TEMPLATE, GenerateJsonSchema, JsonSchemaMode, JsonSchemaValue
 from pydantic_core import core_schema
+
+from .labels import field_label
 
 # Where a schema's own definitions are, as Pydantic refers to them.
 LOCAL = "#/$defs/"
@@ -32,6 +39,18 @@ class PublishedSchema(GenerateJsonSchema):
     # Whether a TypedDict that says nothing of other keys is closed: the API
     # reads every one strictly, so its document closes each.
     closes_typed_dicts = True
+
+    @override
+    def generate(self, schema: core_schema.CoreSchema, mode: JsonSchemaMode = "validation") -> JsonSchemaValue:
+        value = super().generate(schema, mode)
+        _title_compositions(value.get("$defs", {}))
+        return value
+
+    @override
+    def generate_definitions(self, inputs: Any) -> tuple[dict[Any, JsonSchemaValue], dict[Any, JsonSchemaValue]]:
+        refs, definitions = super().generate_definitions(inputs)
+        _title_compositions(definitions)
+        return refs, definitions
 
     @override
     def field_title_should_be_set(self, schema: Any) -> bool:
@@ -75,6 +94,22 @@ class AnswerSchema(PublishedSchema):
         if (schema.get("metadata") or {}).get(_WRITTEN):
             return {"type": "object"}
         return super().generate_inner(schema)
+
+
+def _title_compositions(definitions: Mapping[str, JsonSchemaValue]) -> None:
+    # A definition that is only a choice between shapes is an alias's: a class
+    # always says its own shape. Its name is its declaration.
+    for name, definition in definitions.items():
+        if is_bare_composition(definition) and "title" not in definition:
+            definition["title"] = field_label(re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name).lower())
+
+
+def is_bare_composition(definition: Mapping[str, Any]) -> bool:
+    """Whether ``definition`` says nothing of its shape but a choice between shapes."""
+
+    return any(key in definition for key in ("anyOf", "oneOf")) and not any(
+        key in definition for key in ("type", "properties", "enum", "const", "$ref", "allOf")
+    )
 
 
 def _untitled(value: JsonSchemaValue, cls: Any) -> JsonSchemaValue:
@@ -132,6 +167,31 @@ def json_schemas(
     adapters = [(key, mode, TypeAdapter(kind)) for key, kind in kinds.items()]
     refs, definitions = TypeAdapter.json_schemas(adapters, ref_template=ref_template, schema_generator=PublishedSchema)
     return {key: refs[(key, mode)] for key in kinds}, definitions.get("$defs", {})
+
+
+# Where a value of a fixed set keeps the words a person reads for it, the key
+# OpenAPI viewers (Scalar among them) draw beside each value of an ``enum``.
+LABELS = "x-enumDescriptions"
+
+
+def choices(options: Iterable[tuple[Any, str]]) -> dict[str, Any]:
+    """A value that is one of ``options``' values, each with its label: an
+    ``enum``, which every validator and viewer reads as a set of values, and
+    the labels by value beside it, keyed as JSON keys an object."""
+
+    pairs = tuple(options)
+    return {"enum": [value for value, _label in pairs], LABELS: {str(value): label for value, label in pairs}}
+
+
+def labeled_choices(schema: Mapping[str, Any]) -> list[tuple[Any, str]] | None:
+    """Each value ``schema`` allows with its label, its own name where
+    ``choices`` gave none, or None for a value not limited to a set."""
+
+    values = schema.get("enum")
+    if not values:
+        return None
+    labels = schema.get(LABELS, {})
+    return [(value, labels.get(str(value), str(value))) for value in values]
 
 
 def fields(schema: Mapping[str, Any]) -> dict[str, dict[str, Any]]:

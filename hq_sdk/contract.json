@@ -975,6 +975,16 @@
       }
     },
     "plugin": {
+      "NavigationGroup": {
+        "bases": [],
+        "constructor": [
+          "name",
+          "description"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
       "NavigationItem": {
         "bases": [],
         "constructor": [
@@ -1028,7 +1038,9 @@
           "navigation=",
           "operator_capabilities=",
           "mcp_read_capabilities=",
-          "mcp_write_capabilities="
+          "mcp_write_capabilities=",
+          "description=",
+          "navigation_groups="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -1308,7 +1320,9 @@
           "search=",
           "web_route=",
           "pass_principal=",
-          "list_fields="
+          "list_fields=",
+          "row_type=",
+          "record_type="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -1317,6 +1331,14 @@
             "kind": "property"
           }
         }
+      },
+      "StatusFilter": {
+        "kind": "value",
+        "type": "TypeAliasType"
+      },
+      "TextFilter": {
+        "kind": "value",
+        "type": "TypeAliasType"
       },
       "TopQuery": {
         "bases": [

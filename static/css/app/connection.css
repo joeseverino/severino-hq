@@ -497,6 +497,7 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
 .sweep-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 228px), 1fr));
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the frame's corners clip its items' rings, not their text */
   border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
 }
 .sweep-item {

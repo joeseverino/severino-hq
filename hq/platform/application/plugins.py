@@ -23,6 +23,7 @@ from hq.platform.application.routes import reverse
 from .demo import showing_demo
 from .derivations import derivation, forget
 from .ui import STATUS_VALUES, DomainOverview
+lazy from .domains import NAVIGATION_GROUPS
 lazy from .integrations import clear_integration_graph_cache
 lazy from .outbound_work import clear_outbound_work_cache
 lazy from .plugin_admission import enforce_plugin_admission
@@ -129,6 +130,29 @@ NAVIGATION_CHECKS: tuple[Check, ...] = (
 
 
 @dataclass(frozen=True, slots=True)
+class NavigationGroup:
+    """A nav group an extension adds, and what it is for.
+
+    ``name`` is the ``group`` its items give; ``description`` is the sentence a
+    reader of the machine contract reads under the group's name, as the host's
+    own groups say theirs (``domains.NAVIGATION_GROUPS``).
+    """
+
+    name: str
+    description: str
+
+    def __post_init__(self) -> None:
+        if violations := _violations(self, NAVIGATION_GROUP_CHECKS):
+            raise DeclarationRefused(f"Navigation group {self.name!r}", violations)
+
+
+NAVIGATION_GROUP_CHECKS: tuple[Check, ...] = (
+    ("name", _filled, "is blank"),
+    ("description", _filled, "is blank"),
+)
+
+
+@dataclass(frozen=True, slots=True)
 class PluginIntegration:
     """One extension's complete, lazy executable contribution to HQ."""
 
@@ -176,6 +200,11 @@ class PluginManifest:
     operator_capabilities: tuple[str, ...] = ()
     mcp_read_capabilities: tuple[str, ...] = ()
     mcp_write_capabilities: tuple[str, ...] = ()
+    # What the domain holds, in a sentence a reader of HQ's machine contract
+    # reads under its name, as a host section's ``DomainDescriptor.description``.
+    description: str = ""
+    # What each nav group this manifest's items add is for.
+    navigation_groups: tuple[NavigationGroup, ...] = ()
 
     def __post_init__(self) -> None:
         if violations := _violations(self, MANIFEST_CHECKS):
@@ -217,6 +246,16 @@ MANIFEST_CHECKS: tuple[Check, ...] = (
         "is set with url_prefix, or neither is",
     ),
     ("navigation", lambda items, _: all(item.namespace for item in items), "has an item that names no namespace"),
+    (
+        "navigation_groups",
+        lambda groups, manifest: {group.name for group in groups} <= {item.group for item in manifest.navigation},
+        "says what a group is for that none of its navigation items is in",
+    ),
+    (
+        "navigation_groups",
+        lambda groups, _: _distinct(tuple(group.name for group in groups), _),
+        "says what one group is for twice",
+    ),
     *(
         check
         for name in ("operator_capabilities", "mcp_read_capabilities", "mcp_write_capabilities")
@@ -270,6 +309,11 @@ def _validate_composition(plugins: tuple[PluginManifest, ...]) -> None:
     for label, values in (
         ("distribution", [plugin.distribution for plugin in plugins]),
         ("Django app", [app for plugin in plugins for app in plugin.django_apps]),
+        # A group says what it is for once: the host's, or one extension's.
+        (
+            "navigation group",
+            [*NAVIGATION_GROUPS, *(group.name for plugin in plugins for group in plugin.navigation_groups)],
+        ),
         (
             "URL prefix",
             [plugin.url_prefix for plugin in plugins if plugin.url_prefix],

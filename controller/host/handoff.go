@@ -13,6 +13,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 )
 
 // The controller's one writable place: a directory of each run's, the web
@@ -106,6 +108,8 @@ func parseRun(raw map[string]json.RawMessage) (HandoffRun, error) {
 			return run, fmt.Errorf("%s is not what the contract names", key)
 		}
 	}
+	// Learned before it is checked, so a refused run's token is struck too.
+	mask.Learn(run.Token)
 	if len(run.Owner) > ownerLimit || !githubOwner.MatchString(run.Owner) {
 		return run, errors.New("the owner is not a GitHub account name")
 	}

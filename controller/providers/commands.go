@@ -96,15 +96,6 @@ func (c *Commands) environment(overrides map[string]string) []string {
 	return c.Env.ChildEnvironment(overrides)
 }
 
-func redacted(text string, overrides map[string]string) string {
-	for _, value := range overrides {
-		if value != "" {
-			text = strings.ReplaceAll(text, value, "[redacted]")
-		}
-	}
-	return text
-}
-
 // startFailure names why a process did not run to an exit code, never with
 // its argv or output.
 func startFailure(err error) string {
@@ -137,19 +128,20 @@ func lastLine(stderr string) string {
 }
 
 // Run runs a local command. step names what failed; env is added for this one
-// call and struck out of anything logged.
+// call. A secret it holds is a learned one (runtime.Need), so the logger
+// strikes it from the stderr line a failure logs.
 func (c *Commands) Run(ctx context.Context, argv []string, input []byte, step, subject string, env map[string]string) ([]byte, error) {
 	run := c.Exec
 	if run == nil {
 		run = execProcess
 	}
 	stdout, stderr, exit, err := run(ctx, argv, input, c.environment(env))
-	return c.result(step, subject, env, stdout, stderr, exit, err)
+	return c.result(step, subject, stdout, stderr, exit, err)
 }
 
 // result is a call's output, or the failure Run and SSH both record: a start
 // failure by its kind, a non-zero exit by its code.
-func (c *Commands) result(step, subject string, env map[string]string, stdout, stderr []byte, exit int, err error) ([]byte, error) {
+func (c *Commands) result(step, subject string, stdout, stderr []byte, exit int, err error) ([]byte, error) {
 	if errors.Is(err, errOutputLimit) {
 		c.logger().Warn(fmt.Sprintf("controller step failed: %s (output over limit)", step),
 			slog.String("event", "controller.step.failed"), slog.String("step", step))
@@ -164,7 +156,7 @@ func (c *Commands) result(step, subject string, env map[string]string, stdout, s
 		return nil, &ProviderError{Message: step + ": " + kind}
 	}
 	if exit != 0 {
-		said := lastLine(redacted(string(stderr), env))
+		said := lastLine(string(stderr))
 		suffix := ""
 		if said != "" {
 			suffix = ": " + said
@@ -203,5 +195,5 @@ func (c *Commands) SSH(ctx context.Context, ref, operation string, payload []byt
 		}
 	}
 	stdout, stderr, exit, err := remote(ctx, ref, operation, payload)
-	return c.result("SSH "+operation+" for "+ref, ref, nil, stdout, stderr, exit, err)
+	return c.result("SSH "+operation+" for "+ref, ref, stdout, stderr, exit, err)
 }

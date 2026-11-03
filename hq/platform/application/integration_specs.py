@@ -1,11 +1,12 @@
 """Leaf contracts shared by integration emitters and the graph compiler."""
 
+import annotationlib
 import inspect
 from annotationlib import Format
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import cache
-from typing import Any
+from typing import Any, is_typeddict
 
 from pydantic import BaseModel
 
@@ -305,6 +306,14 @@ FIELD_MASK = (
 PAGE_FIELD = "cursor"
 
 
+def typed_keys(kind: type) -> tuple[str, ...]:
+    """A TypedDict's keys, its own and those it extends, in declared order."""
+
+    # Read as forward references, so a type the annotations name need not be
+    # importable yet when a spec is declared.
+    return tuple(annotationlib.get_annotations(kind, format=Format.FORWARDREF))
+
+
 @dataclass(frozen=True, slots=True)
 class ResourceSpec:
     """One declaration of a readable domain and every operation it supports."""
@@ -331,8 +340,18 @@ class ResourceSpec:
     pass_principal: bool = False
     # The fields each item of a list read keeps when the caller names none, so
     # a page costs what it shows; empty keeps the whole item. The whole record
-    # is the detail read, or a list read's ``fields``.
+    # is the detail read, or a list read's ``fields``. Derived from
+    # ``row_type`` where the spec declares one.
     list_fields: tuple[str, ...] = ()
+    # The TypedDict one item of a list read is, as it keeps ``list_fields``,
+    # and the one a read of one record answers, which extends it. The API
+    # document types each read's answer by them.
+    row_type: type | None = None
+    record_type: type | None = None
+
+    def __post_init__(self) -> None:
+        if self.row_type is not None and not self.list_fields and is_typeddict(self.row_type):
+            object.__setattr__(self, "list_fields", typed_keys(self.row_type))
 
     @property
     def required_capabilities(self) -> tuple[Capability | str, ...]:

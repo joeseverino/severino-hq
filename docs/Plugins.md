@@ -10,7 +10,7 @@ point as a comma-separated `package.module:attribute` list; importable code is
 never discovered and run on its own.
 
 ```python
-from hq_sdk.plugin import NavigationItem, PluginIntegration, PluginManifest
+from hq_sdk.plugin import NavigationGroup, NavigationItem, PluginIntegration, PluginManifest
 
 
 def integration():
@@ -39,12 +39,19 @@ plugin = PluginManifest(
     django_apps=("example_notes",),
     url_prefix="notes/",
     urlconf="example_notes.urls",
-    navigation=(NavigationItem("Notes", "notes:list", "notes"),),
+    navigation=(NavigationItem("Notes", "notes:list", "notes", 40, "Writing"),),
     operator_capabilities=("notes.read", "notes.write"),
     mcp_read_capabilities=("notes.read",),
     mcp_write_capabilities=("notes.write",),
+    description="Notes, each with its author and the records it mentions.",
+    navigation_groups=(NavigationGroup("Writing", "What gets written down, and where it is kept."),),
 )
 ```
+
+`description` says what the domain holds and each `NavigationGroup` what a
+group the extension's items add is for, as a host section and the host's own
+groups (`NAVIGATION_GROUPS` in `hq/platform/application/domains.py`) say
+theirs. The API document reads both under each tag.
 
 Locally, set `SEVERINO_HQ_PLUGINS=example_notes.plugin:plugin`, install the
 package and run its migrations. In production the list is derived from the
@@ -54,9 +61,9 @@ effective inventory as JSON and validates compatibility.
 A manifest is checked where it is built, at the extension's import. One
 `DeclarationRefused` (an `ImproperlyConfigured`) names the plugin by its id and
 lists every field it gets wrong, read from `MANIFEST_CHECKS` in
-`hq/platform/application/plugins.py`. A `NavigationItem` is checked the same
-way when it is built. Nothing pydantic loads for it, since every process
-builds the manifests at start.
+`hq/platform/application/plugins.py`. A `NavigationItem` and a
+`NavigationGroup` are each checked the same way when built. Nothing pydantic
+loads for them, since every process builds the manifests at start.
 
 A manifest must pass these checks:
 
@@ -71,13 +78,16 @@ A manifest must pass these checks:
 - `url_prefix` (`segment/`, never `/segment`) and `urlconf` are both set or
   both empty.
 - Each navigation item has a label, a route and a namespace.
+- Each navigation group has a name and a description, and is one the
+  manifest's own items are in, said once.
 - No capability appears twice in one list, and each MCP capability is also an
   operator capability.
 
 Two checks need the running host, so they run at startup. A plugin's
 capabilities are its own: naming one of the host's fails there. The installed
 set is checked whole: two plugins may not share an id, a distribution, a
-Django app or a URL prefix, and one prefix may not nest inside another.
+Django app or a URL prefix, one prefix may not nest inside another, and a
+navigation group says what it is for once, in the host or one manifest.
 
 Every plugin view needs a session wherever it is mounted. A native or machine
 client uses the versioned [API](API.md), derived from the same command and query
@@ -583,6 +593,9 @@ A search projection that belongs to no resource comes from
 `PluginIntegration.search`. A list that reads its first `limit` rows
 subclasses `hq_sdk.resources.TopQuery` rather than declaring `limit` itself,
 so its schema carries the deployment's maximum and a larger ask is refused.
+A list narrowed by a free-text `query` or a `status` types the field by
+`hq_sdk.resources.TextFilter` or `StatusFilter`, which say what it does in
+the words every list's does, so the API reference writes them once.
 
 | Field | Set it |
 | --- | --- |

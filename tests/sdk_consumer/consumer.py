@@ -454,6 +454,7 @@ def a_manifest() -> None:
     # Every extension builds its navigation positionally, so a manifest class
     # that took keywords alone would break each one.
     item = plugin.NavigationItem("Notes", "example_notes:list", "example_notes", 40, "Example")
+    group = plugin.NavigationGroup("Example", "Notes kept to show how a group is declared.")
     manifest = plugin.PluginManifest(
         id="example.notes",
         name="Example Notes",
@@ -464,13 +465,18 @@ def a_manifest() -> None:
         api_version=plugin.PLUGIN_API_VERSION,
         integration_provider="example_notes.plugin:integration",
         navigation=(item,),
+        description="Notes, each with its author.",
+        navigation_groups=(group,),
     )
     assert_type(manifest.navigation, tuple[plugin.NavigationItem, ...])
+    assert_type(manifest.navigation_groups, tuple[plugin.NavigationGroup, ...])
+    assert_type(manifest.description, str)
     assert_type(manifest.id, str)
 
     manifest.id = "example.other"  # type: ignore[misc]
     plugin.NavigationItem("Notes", "example_notes:list", "example_notes", "40")  # type: ignore[arg-type]
     plugin.PluginManifest(id="example.notes")  # type: ignore[call-arg]
+    plugin.NavigationGroup("Example")  # type: ignore[call-arg]
 
 
 def an_attention_url() -> None:
@@ -522,3 +528,18 @@ def a_list_with_the_deployment_ceiling(rows: Callable[..., dict[str, Any]]) -> N
     resources.ResourceSpec("example.things", "Things", "Example things.", "example.read", rows, Query)
 
     resources.TopQuery(limit="many")  # type: ignore[arg-type]
+
+
+def a_list_narrowed_by_status_and_text(rows: Callable[..., dict[str, Any]]) -> None:
+    # A list's status and text filters say what every list's do; each may be left out.
+    class Query(resources.TopQuery):
+        status: resources.StatusFilter = None
+        query: resources.TextFilter = None
+
+    narrowed = Query(status="open", query="example")
+    assert_type(narrowed.status, str | None)
+    assert_type(narrowed.query, str | None)
+    resources.ResourceSpec("example.things", "Things", "Example things.", "example.read", rows, Query)
+
+    Query(status=1)  # type: ignore[arg-type]
+    Query(query=["example"])  # type: ignore[arg-type]

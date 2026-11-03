@@ -24,4 +24,5 @@ plugin = PluginManifest(
     url_prefix="examples/extension/",
     urlconf="example_extension.urls",
     navigation=(NavigationItem("Example", "example_extension:index", "example_extension"),),
+    description="One page that shows an extension composed into HQ.",
 )

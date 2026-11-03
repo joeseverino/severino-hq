@@ -1,5 +1,7 @@
 """The projects resource, declared on its domain in application/domains.py."""
 
+from typing import NotRequired, TypedDict
+
 from pydantic import Field, create_model
 
 from hq.platform.application import projects
@@ -25,6 +27,50 @@ ProjectQuery = create_model(
 )
 
 
+class UpdateRun(TypedDict):
+    outcome: str
+    started_at: str | None
+    finished_at: str | None
+
+
+class Updates(TypedDict):
+    """What HQ's update run has open in the repository; a count it could not read is null."""
+
+    open_pulls: int | None
+    oldest_pull_days: int | None
+    unmatched_alerts: int | None
+    last_run: UpdateRun | None
+
+
+class ProjectRow(TypedDict):
+    slug: str
+    name: str
+    category: str
+    status: str
+    description: str
+    technologies: list[str]
+    repository_url: str
+    public_url: str
+    last_push_at: str | None
+    dependency_updates: bool
+    updated_at: str
+    # Only for a project whose repository HQ can name.
+    updates: NotRequired[Updates]
+
+
+class ProjectLinks(TypedDict):
+    assets: list[str]
+    content: list[str]
+    documentation: list[str]
+    expense_ids: list[int]
+
+
+class ProjectRecord(ProjectRow):
+    """One project with the records it is linked to."""
+
+    relationships: ProjectLinks
+
+
 def resources() -> tuple[ResourceSpec, ...]:
     return (
         ResourceSpec(
@@ -45,5 +91,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 title_field="name",
             ),
             web_route="projects:list",
+            row_type=ProjectRow,
+            record_type=ProjectRecord,
         ),
     )

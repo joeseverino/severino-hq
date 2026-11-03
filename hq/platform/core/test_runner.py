@@ -9,7 +9,6 @@ against both.
 
 import contextlib
 import faulthandler
-import gc
 import io
 import json
 import multiprocessing
@@ -46,6 +45,7 @@ lazy from django.db.backends.sqlite3.creation import DatabaseCreation
 lazy from django.test import TransactionTestCase
 
 from hq.config.sandbox import sweep_abandoned
+from hq.platform.core.live_objects import live
 lazy from hq.platform.application import agent_limits, plugins, roles
 lazy from hq.platform.application.plugins import clear_plugin_composition_cache
 lazy from hq.platform.core import append_only
@@ -270,8 +270,8 @@ def suspended_greenlets(stream) -> None:
 
     if (greenlet := sys.modules.get("greenlet")) is None:
         return
-    for each in gc.get_objects():
-        if isinstance(each, greenlet.greenlet) and each.gr_frame is not None:
+    for each in live(greenlet.greenlet):
+        if each.gr_frame is not None:
             stream.write(f"--- suspended greenlet {each!r} (most recent call last) ---\n")
             stream.writelines(traceback.format_stack(each.gr_frame))
 

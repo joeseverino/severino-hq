@@ -36,6 +36,7 @@ import (
 	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/host/unit"
 	"github.com/joeseverino/severino-hq/controller/host/upgrade"
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
 
@@ -55,7 +56,10 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, getenv func(string) string, euid int, stdin io.Reader, stdout, stderr io.Writer) int {
-	log := slog.New(slog.NewTextHandler(stderr, nil))
+	// An error is printed as well as logged, so the stream is struck of
+	// every learned secret, not the log alone.
+	stderr = mask.Writer(stderr)
+	log := mask.Logger(stderr)
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, usage)
 		return 2

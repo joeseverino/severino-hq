@@ -152,14 +152,20 @@ would record the redirect as success while importing nothing.
 a vendored viewer (`static/vendor/scalar`, pinned in `UPSTREAM`). It is a
 reference, not a client:
 
-- **Structure** is the document's own tags, nothing page-specific. What no
-  domain declares, the API's own routes among it, is the API domain's
-  (`hq.api`, System > API). It is where a client starts, so its group leads
-  and it leads its group. The rest stand in the order of HQ's navigation: a
-  group (`kind: nav`) where its first domain is, each domain under it by
-  `parent`, a domain outside every group in its own place. A group's
-  description names the domains it holds. `info.version` and the paths say
-  the version, so no tag repeats it.
+- **Structure** is the document's own tags, nothing page-specific. Each
+  operation stands in the section of the domain that serves it, the host's
+  core and every extension alike: the domain that declares it, else the
+  domain whose nav item is its page, else, for a command, the domain of the
+  resource it acts on (`_Tags` in `openapi.py`). Only the API's own routes,
+  which serve every domain (the root, the catalogs, this document and the
+  generic `{name}` forms), are the API domain's (`hq.api`, System > API). It
+  is where a client starts, so its group leads and it leads its group. The
+  rest stand in the order of HQ's navigation, each domain in the group the bar
+  draws its page in (an extension may place a host page in its own group): a
+  group (`kind: nav`) where its first domain is, each domain under it by `parent`, a domain outside every
+  group in its own place. A domain named as its group is that group's
+  section, with the others under it. A group says what it is for.
+  `info.version` and the paths say the version, so no tag repeats it.
 - **Appearance** is HQ's tokens, handed to the viewer's theme variables by
   `static/css/api-reference.css`. That sheet holds no color, size or face of
   its own, and both of the viewer's modes take the same tokens, so the page
@@ -585,10 +591,13 @@ as a `Literal` read from where they are declared, a model's choices or a
 registry. The schema then lists them as its enum. `limit` declares the most a
 page may ask for (`MAX_PAGE_SIZE`, unless its kind declares another).
 A value outside them is a refusal naming the field, through either door.
-A tool's other text parameter that takes only some values names them through
-`shapes.tool`'s `choices` (`get_findings`' `rule` from the rule registry, and
-its `severity`, and `get_topology`'s `lens` and `direction` from
-`topology_lenses`), which its argument model makes the parameter's enum.
+`get_topology` and `get_findings` take their read's query model
+(`TopologyQuery`, `FindingsQuery`) as their argument model, the one
+`/api/v2/topology/` and `/api/v2/findings/` read their query string by and
+the document lists as their parameters: a choice (a lens, a direction, a
+rule, a severity) is a `Literal` read from where it is declared, and a bound
+(`depth`, `limit`) is the model's, so both doors publish one schema and refuse
+one input in one sentence.
 
 Unknown arguments, mistyped values and stringified JSON objects are rejected.
 Validation errors do not include rejected input values. Authorization and
@@ -597,8 +606,8 @@ thread-sensitive execution remain on the shared service path.
 HQ serves these tools on the SDK's low-level server
 (`hq/platform/mcp/server.py`). It lists those schemas and dispatches
 to `hq/platform/mcp/binding.py`, which validates and calls the handler. Each
-argument model is built from the handler's signature
-(`hq/platform/mcp/declarations.py`). So nothing depends on the SDK's
+argument model is built from the handler's signature, or is the query model
+its tool declares (`hq/platform/mcp/declarations.py`). So nothing depends on the SDK's
 internals, and an upgrade is held by the registration and validation tests.
 
 Each tool's entry carries a `title` for a person, declared beside its handler

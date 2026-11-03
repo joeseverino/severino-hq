@@ -17,12 +17,7 @@ from hq.platform.application.connections import (
 )
 from hq.platform.application.contracts import effect_glossary
 from hq.platform.application.dashboard import OperatingSnapshot, operating_snapshot
-from hq.platform.application.findings import (
-    RULES,
-    SEVERITIES,
-    Findings,
-    findings as application_findings,
-)
+from hq.platform.application.findings import Findings, FindingsQuery, findings as application_findings
 from hq.platform.application.held_answer import HeldCall
 from hq.platform.application.integration_specs import FIELD_MASK
 from hq.platform.application.read_models import DocumentationStatus, RecentActivity, SystemHealth
@@ -39,14 +34,10 @@ from hq.platform.application.resources import (
     get_resource as get_application_resource,
     list_resource as list_application_resource,
 )
+from hq.platform.application.topology import TopologyQuery, topology as application_topology
 from hq.platform.application.topology_answer import TopologyAnswer
 from hq.platform.mcp.identity import current_principal
 from hq.platform.mcp.shapes import tool
-lazy from hq.platform.application.topology import topology as application_topology
-
-# Where the lenses and directions are declared, apart from the graph that
-# derives them, so the tool list names them without loading the graph.
-lazy from hq.platform.application.topology_lenses import TOPOLOGY_LENSES, TRACE_DIRECTIONS
 
 
 @tool("Capability catalog")
@@ -119,11 +110,8 @@ def describe_connections() -> ConnectionCatalog:
     return describe_application_connections(principal=current_principal())
 
 
-@tool(
-    "Open findings",
-    choices={"rule": lambda: (rule.name for rule in RULES), "severity": lambda: SEVERITIES},
-)
-def get_findings(rule: str | None = None, severity: str | None = None, limit: int | None = None) -> Findings:
+@tool("Open findings", arguments=FindingsQuery)
+def get_findings(**narrowing: Any) -> Findings:
     """What HQ currently claims is wrong, with evidence and suggested remedies.
 
     Pick it for the open problems themselves; `system_health` says only whether
@@ -136,19 +124,11 @@ def get_findings(rule: str | None = None, severity: str | None = None, limit: in
     counts them all and says whether any were held back.
     """
 
-    return application_findings(principal=current_principal(), rule=rule or "", severity=severity or "", limit=limit)
+    return application_findings(principal=current_principal(), **narrowing)
 
 
-@tool(
-    "Infrastructure topology",
-    choices={"lens": lambda: (lens.name for lens in TOPOLOGY_LENSES), "direction": lambda: TRACE_DIRECTIONS},
-)
-def get_topology(
-    lens: str | None = None,
-    focus: str = "",
-    direction: str = "both",
-    depth: int = 2,
-) -> TopologyAnswer:
+@tool("Infrastructure topology", arguments=TopologyQuery)
+def get_topology(**narrowing: Any) -> TopologyAnswer:
     """Return the live infrastructure graph with safe canonical actions.
 
     With no lens and no focus it answers the counts by kind and the lenses
@@ -158,13 +138,7 @@ def get_topology(
     Every node retains its canonical safe actions.
     """
 
-    return application_topology(
-        principal=current_principal(),
-        lens=lens or "",
-        focus=focus.strip(),
-        direction=direction or "both",
-        depth=depth,
-    )
+    return application_topology(principal=current_principal(), **narrowing)
 
 
 @tool("List records")

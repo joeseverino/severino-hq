@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/internal/sealing"
 )
 
@@ -56,7 +57,8 @@ func NewOpener(dir string) (*Opener, error) {
 }
 
 // Open is the plaintext of a sealed value, which opens only for the resource
-// and slot it was sealed for.
+// and slot it was sealed for. The plaintext is learned (mask.Learn): no log or
+// report of this process carries it.
 func (o *Opener) Open(sealed, resourceKey, slot string) ([]byte, error) {
 	id, ciphertext, err := sealing.Header(sealed)
 	if err != nil {
@@ -66,5 +68,9 @@ func (o *Opener) Open(sealed, resourceKey, slot string) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("no sealing key %s was lent to this run", id)
 	}
-	return key.Open(ciphertext, resourceKey, slot)
+	plaintext, err := key.Open(ciphertext, resourceKey, slot)
+	if err == nil {
+		mask.Learn(string(plaintext))
+	}
+	return plaintext, err
 }

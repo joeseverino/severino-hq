@@ -1,14 +1,16 @@
 """What each MCP tool declares beside its handler: the title a person reads
-it by, and the choices its text parameters take. What it answers is its
+it by, and the query model of a read the API serves too. What it answers is its
 handler's return annotation, the type the application returns, listed as its
 ``outputSchema`` (docs/API.md says why every one is ``anyOf`` its success and
 ``REFUSED``).
 """
 
 import inspect
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
+
+from pydantic import BaseModel
 
 from hq.platform.application.json_schemas import LOCAL, AnswerSchema, json_schema
 from hq.platform.application.refusal_status import RefusalEnvelope
@@ -98,26 +100,24 @@ def output_schema(success: Schema) -> Schema:
     return {"type": "object", "anyOf": [success, REFUSED]}
 
 
-type Choices = Mapping[str, Callable[[], Iterable[str]]]
-
-
 @dataclass(frozen=True, slots=True)
 class Declared:
     title: str
-    # Each text parameter that takes only some values, and where they are declared.
-    choices: Choices
+    # The read's own query model, which the API's query is read by too.
+    arguments: type[BaseModel] | None = None
 
 
 _DECLARED: dict[Handler, Declared] = {}
 
 
-def tool[F: Handler](title: str, *, choices: Choices | None = None) -> Callable[[F], F]:
+def tool[F: Handler](title: str, *, arguments: type[BaseModel] | None = None) -> Callable[[F], F]:
     """Declare a handler a tool: ``title`` is what a client shows a person for
-    it, and ``choices`` the values each named parameter may take, read from
-    where they are declared."""
+    it. A read the API serves too names its query model as ``arguments``, which
+    validates its arguments in place of its signature and calls the handler
+    with them field by field."""
 
     def declare(handler: F) -> F:
-        _DECLARED[handler] = Declared(title, choices or {})
+        _DECLARED[handler] = Declared(title, arguments)
         return handler
 
     return declare

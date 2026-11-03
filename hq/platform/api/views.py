@@ -6,10 +6,8 @@ path, not a header, so a Shortcut not opened in months never meets a URL that
 quietly changed meaning.
 """
 
-import inspect
 import json
 import re
-from annotationlib import Format
 from collections.abc import Callable, Iterable, Mapping
 from typing import Annotated, Any, Concatenate, Literal, TypedDict, cast
 
@@ -20,10 +18,9 @@ from django.http import HttpRequest, HttpResponse
 from django.urls import URLPattern, reverse
 from django.views.decorators.csrf import csrf_exempt
 from pydantic import (
+    BaseModel,
     Field,
     GetPydanticSchema,
-    StrictInt,
-    TypeAdapter,
     ValidationError as PydanticValidationError,
 )
 
@@ -39,7 +36,7 @@ from hq.platform.application.capabilities import (
     run_capability,
 )
 from hq.platform.application.connections import ConnectionCatalog, describe_connections
-from hq.platform.application.findings import RULES, SEVERITIES, Findings, findings as application_findings
+from hq.platform.application.findings import Findings, FindingsQuery, findings as application_findings
 from hq.platform.application.held_answer import AwaitingApproval
 from hq.platform.application.integration_specs import (
     CURRENT_API_VERSION,
@@ -47,6 +44,7 @@ from hq.platform.application.integration_specs import (
     RESERVED_QUERY_FIELD,
     CapabilitySpec,
 )
+from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.pages import page_refusal
 from hq.platform.application.projection import QueryRefusal
 from hq.platform.application.refusal_status import (
@@ -67,9 +65,8 @@ from hq.platform.application.resources import (
 )
 from hq.platform.application.security import API_INTERFACE, Principal, web_principal
 from hq.platform.application.tokens import is_configured
-from hq.platform.application.topology import topology as application_topology
+from hq.platform.application.topology import TopologyQuery, topology as application_topology
 from hq.platform.application.topology_answer import TopologyAnswer
-from hq.platform.application.topology_lenses import MAX_TRACE_DEPTH, TRACE_DIRECTIONS, topology_lenses
 from hq.platform.core import strict_json
 from hq.platform.core.network import client_ip
 
@@ -346,13 +343,15 @@ def _endpoint(
     data: Any,
     codes: Iterable[str] = (),
     operator_session: bool = False,
+    page: str = "",
 ) -> Callable[[APIView], View]:
     """Authenticate, then put every failure in the same envelope.
 
     Every argument is the endpoint's declaration, which ``openapi.py`` reads:
     ``data`` is what a success carries under ``data`` (None: not enveloped),
-    ``codes`` the error codes it answers beside ENDPOINT_CODES, and ``title``
-    the operation in a few words.
+    ``codes`` the error codes it answers beside ENDPOINT_CODES, ``title``
+    the operation in a few words, and ``page`` the route of the web page that
+    shows what it answers, for one that serves a single domain.
     """
 
     # ``operator_session`` lets a signed-in operator's session read a GET view
@@ -394,6 +393,7 @@ def _endpoint(
             __hq_data__=data,
             __hq_codes__=answered,
             __hq_operator_session__=operator_session,
+            __hq_page__=page,
         )
         return wrapper
 
@@ -496,7 +496,23 @@ resources.__dict__.update(__hq_query_fields__=RESOURCE_QUERY)
 
 
 QueryFields = Mapping[str, Mapping[str, Any]]
-_STRING: Mapping[str, Any] = {"type": "string"}
+_NULL: Mapping[str, Any] = {"type": "null"}
+
+
+def query_fields(model: type[BaseModel]) -> dict[str, dict[str, Any]]:
+    """Each input ``model`` takes, as the schema of its query parameter: one
+    not sent is absent, so a ``null`` the model allows is no value it can be."""
+
+    fields: dict[str, dict[str, Any]] = {}
+    for name, schema in json_schema(model)["properties"].items():
+        said = {key: value for key, value in schema.items() if key != "anyOf" and (key, value) != ("default", None)}
+        branches = [branch for branch in schema.get("anyOf", ()) if branch != _NULL]
+        if len(branches) == 1:
+            said = {**branches[0], **said}
+        elif branches:
+            said["anyOf"] = branches
+        fields[name] = said
+    return fields
 
 
 class _UnreadableQuery(QueryRefusal):
@@ -507,133 +523,95 @@ class _UnreadableQuery(QueryRefusal):
 # int() never meets its digit limit; a plus, a space, an underscore or another
 # script's digits stays text.
 _COUNT = re.compile(r"-?[0-9]{1,18}")
-_INTEGERS = TypeAdapter(dict[str, StrictInt])
 
 
 def _narrowing(request: APIRequest, query_fields: QueryFields) -> dict[str, Any]:
-    """The declared query parameters, each sent at most once, an integer one read as an integer.
+    """The declared query parameters, each sent at most once, an integer one in digits read as that integer.
 
-    An absent integer is left out, so the application's own default applies.
-    Anything but a count stays the text it was, which the strict integer
-    refuses in the words MCP's argument model uses for the same input.
+    Text sent empty is absent, as a form leaves it, so the read's own default
+    applies. Anything but a count stays the text it was, which the read's
+    strict model refuses in the words MCP's argument model uses for the same
+    input.
     """
 
     values: dict[str, Any] = {}
-    integers: dict[str, int | str] = {}
     for field, schema in query_fields.items():
         sent = request.GET.getlist(field)
         if len(sent) > 1:
             raise _UnreadableQuery(f"Query field {field!r} may appear only once.")
-        raw = sent[0] if sent else None
-        if schema["type"] != "integer":
-            values[field] = (raw or "").strip()
-        elif raw is not None:
-            integers[field] = int(raw) if _COUNT.fullmatch(raw) else raw
-    return values | _INTEGERS.validate_python(integers)
+        if not sent:
+            continue
+        (raw,) = sent
+        if schema.get("type") == "integer":
+            values[field] = int(raw) if _COUNT.fullmatch(raw) else raw
+        elif text := raw.strip():
+            values[field] = text
+    return values
 
 
 def _projection(
     serve: Callable[..., Any],
     answers: Any,
-    query_fields: QueryFields,
+    query: type[BaseModel],
     name: str,
     subject: str,
     title: str,
     doc: str,
+    page: str,
 ) -> View:
-    """One principal-scoped projection, served with declared narrowing inputs.
+    """One principal-scoped projection, served with its query model's inputs.
 
     `topology` and `findings` are the same adapter, so it is written once.
-    ``answers`` is the type ``serve`` returns, and ``query_fields`` maps each parameter to its JSON schema, which the OpenAPI
-    document declares as is. ``subject`` opens the refusal of a parameter that
-    is not of its type: the read's MCP tool name, so both doors say it alike.
+    ``answers`` is the type ``serve`` returns, and ``query`` the model ``serve``
+    judges its narrowing by, which MCP's tool takes as its arguments.
+    ``subject`` opens the refusal of an input the model refuses: the read's MCP
+    tool name, so both doors say it alike.
     """
 
-    # A value that cannot narrow (a repeat, an application QueryRefusal) is
-    # answered as invalid_input with its ``reason``, HQ's own text and never
-    # the value sent; one not of its type, as MCP answers it.
+    fields = query_fields(query)
 
     def view(request: APIRequest) -> HttpResponse:
+        # A repeat, or a focus that names nothing, is answered as
+        # invalid_input in HQ's own words, never the value sent.
+        narrowing = _narrowing(request, fields)
         try:
-            narrowing = _narrowing(request, query_fields)
+            return _ok(serve(principal=request.principal, **narrowing))
         except PydanticValidationError as exc:
             return _answer(refusal_of(exc, name=subject))
-        return _ok(serve(principal=request.principal, **narrowing))
 
     # Named explicitly: `_endpoint` copies these onto its wrapper, and the
     # route-walking security test reads them.
     view.__name__ = name
     view.__doc__ = doc
-    served = _endpoint(("GET",), title=title, data=answers, codes=("invalid_input",))(view)
+    served = _endpoint(("GET",), title=title, data=answers, codes=("invalid_input",), page=page)(view)
     # The narrowing inputs, for the OpenAPI document's query parameters.
-    served.__dict__.update(__hq_query_fields__=query_fields)
+    served.__dict__.update(__hq_query_fields__=fields)
     return served
-
-
-def _default(serve: Callable[..., Any], name: str) -> Any:
-    """What ``serve`` takes for ``name`` when a caller sends none, read from its signature."""
-
-    return inspect.signature(serve, annotation_format=Format.STRING).parameters[name].default
 
 
 topology: View = _projection(
     application_topology,
     TopologyAnswer,
-    {
-        "lens": {
-            **_STRING,
-            "enum": [lens.name for lens in topology_lenses()],
-            "description": "A standing question the graph is narrowed to.",
-        },
-        "focus": {**_STRING, "description": "A node's id, whose neighborhood a trace follows."},
-        "direction": {
-            **_STRING,
-            "enum": list(TRACE_DIRECTIONS),
-            "default": _default(application_topology, "direction"),
-            "description": "Which way a trace from focus follows the edges.",
-        },
-        "depth": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": MAX_TRACE_DEPTH,
-            "default": _default(application_topology, "depth"),
-            "description": "How many hops a trace from focus follows.",
-        },
-    },
+    TopologyQuery,
     "topology",
     "get_topology",
-    "Topology",
+    "Read the topology",
     """The live permitted infrastructure graph and its canonical actions.
 
     `?lens=` narrows to a standing question. `?focus=`, `direction`, and
     bounded `depth` trace a dependency neighborhood inside that projection.
     With neither a lens nor a focus it answers the counts and the lenses.
     """,
+    "control_plane:topology",
 )
 
 findings: View = _projection(
     application_findings,
     Findings,
-    {
-        "rule": {
-            **_STRING,
-            "enum": [rule.name for rule in RULES],
-            "description": "Only the findings of this rule; absent, every rule's.",
-        },
-        "severity": {
-            **_STRING,
-            "enum": list(SEVERITIES),
-            "description": "The least severe finding to return: `attention` also returns `serious`.",
-        },
-        "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "description": "How many findings to return, most severe first; the summary still counts every one.",
-        },
-    },
+    FindingsQuery,
     "findings",
     "get_findings",
-    "Findings",
+    "List findings",
     """What HQ currently claims is wrong, with the evidence and a remedy.
 
     Derived from the same projection as the topology and narrowed the same way,
@@ -642,10 +620,11 @@ findings: View = _projection(
     `?severity=` is a floor and `?limit=` caps how many are returned, most
     severe first; the summary still counts every finding.
     """,
+    "control_plane:findings",
 )
 
 
-@_endpoint(("GET",), title="Connections", data=ConnectionCatalog)
+@_endpoint(("GET",), title="List connections", data=ConnectionCatalog, page="control_plane:connections")
 def connections(request: APIRequest) -> HttpResponse:
     """Connection contracts and whether this token is permitted each.
 

@@ -1,0 +1,22 @@
+# A walk of every live object that asks isinstance of each builds every lazy
+# object it passes (Django's answer isinstance through __class__), so what it
+# reads depends on whether it passed the lazy one first: a storage built
+# mid-walk connects a receiver to a signal read later in the same walk. The
+# order is the collector's, so the reading changes between machines with no
+# code changed. hq/platform/core/live_objects.py walks by type(), and is the
+# one place that walks.
+id: live-objects-walked-in-one-place
+language: python
+severity: error
+message: Every live object is walked outside the one helper, which finds them without building a lazy one.
+note: >-
+  Call live(cls) from hq.platform.core.live_objects for the live objects of a class.
+ignores:
+  - "hq/platform/core/live_objects.py"
+rule:
+  any:
+    - pattern: $GC.get_objects($$$)
+    - kind: import_from_statement
+      all:
+        - has: { field: module_name, regex: ^gc$ }
+        - has: { any: [{ kind: dotted_name }, { kind: aliased_import }], regex: ^get_objects(\s+as\s+\w+)?$ }

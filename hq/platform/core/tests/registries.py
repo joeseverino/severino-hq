@@ -8,7 +8,6 @@ waiting (some break an import cycle, so nothing boots with none). Under lazy imp
 effect made is missing, which test_lazy_imports.py reads as a difference.
 """
 
-import gc
 import json
 import sys
 import weakref
@@ -39,9 +38,11 @@ def _receivers(signals=None) -> list[str]:
     from django.apps import apps
     from django.dispatch import Signal
 
+    from hq.platform.core.live_objects import live
+
     senders = {id(model): model._meta.label for model in apps.get_models()} | {id(None): "any sender"}
     found: list[str] = []
-    for signal in signals or (thing for thing in gc.get_objects() if isinstance(thing, Signal)):
+    for signal in signals or live(Signal):
         for (_receiver, sender), reference, *_ in signal.receivers:
             receiver = reference() if isinstance(reference, weakref.ref) else reference
             found.append(f"{_named(receiver)} from {senders.get(sender, 'a sender')}")

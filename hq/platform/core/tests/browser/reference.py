@@ -371,6 +371,64 @@ _REFERENCE_SIDEWAYS = (
 }"""
 )
 
+# Each word with a "/" in it (a path, a URL) that the viewer draws over more
+# than one line and starts a line other than at a "/", ".", "-", "?" or "&",
+# where Scalar breaks the path in an operation's heading and api-reference.js
+# breaks one everywhere else, or just after a query's "?", where both engines
+# break one themselves; each line of it shown. A word is the characters
+# between two spaces in one box's lines: a box of its own (a flex item, a
+# block) starts a new one. Where a line ends is where the next character
+# drawn starts below the last.
+_REFERENCE_PATH_BREAKS = (
+    "([root, unseen]) => {"
+    + TEXT_SHOWN
+    + r"""
+  const viewer = document.querySelector(root);
+  const boxes = new Map();
+  const boxOf = (el) => {
+    if (!boxes.has(el)) {
+      const display = getComputedStyle(el).display;
+      boxes.set(el, ['inline', 'contents'].includes(display) && el.parentElement ? boxOf(el.parentElement) : el);
+    }
+    return boxes.get(el);
+  };
+  const range = document.createRange();
+  const found = [];
+  let word = [];
+  const close = () => {
+    if (word.some(([node, at]) => node.data[at] === '/')) {
+      const lines = [''];
+      let last = null;
+      for (const [node, at] of word) {
+        range.setStart(node, at);
+        range.setEnd(node, at + 1);
+        const drawn = range.getBoundingClientRect();
+        if (!drawn.width && !drawn.height) continue;
+        if (last && drawn.top >= last.bottom - 1) lines.push('');
+        lines[lines.length - 1] += node.data[at];
+        last = drawn;
+      }
+      const atMark = (line, i) => /^[/.?&-]/.test(line) || lines[i].endsWith('?');
+      if (lines.slice(1).some((line, i) => !atMark(line, i))) found.push(lines.join(' | '));
+    }
+    word = [];
+  };
+  let box = null;
+  const walker = document.createTreeWalker(viewer, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!textShown(node) || node.parentElement.closest(unseen)) continue;
+    const holder = boxOf(node.parentElement);
+    if (holder !== box) { close(); box = holder; }
+    for (let at = 0; at < node.data.length; at += 1) {
+      if (/\s/.test(node.data[at])) close();
+      else word.push([node, at]);
+    }
+  }
+  close();
+  return [...new Set(found)];
+}"""
+)
+
 # Each run of text the viewer draws, whole and trimmed.
 _REFERENCE_WORDS = (
     "(root) => {"
@@ -423,6 +481,18 @@ _REFERENCE_CONTROLS = (
 )
 
 _REFERENCE_OPEN_MENU = "(root) => document.querySelector(root).querySelector('header button').click()"
+
+
+def _strings(value):
+    """Every string ``value`` holds, at any depth."""
+
+    if isinstance(value, str):
+        return {value}
+    if isinstance(value, dict):
+        value = list(value.values())
+    if isinstance(value, list):
+        return set().union(*map(_strings, value)) if value else set()
+    return set()
 
 
 def reference_outline(document):
@@ -607,47 +677,72 @@ class ReferenceBrowserTests(BrowserGate):
         self.assertEqual([url for url in self.requests if not url.startswith(ORIGIN)], [])
         self.assertEqual(self.refused, [])
 
-    def test_every_path_sample_and_value_reads_whole(self):
-        """With every tag opened, no text the viewer draws is cut short, marked
-        with an ellipsis or not, at any width: a path, a sample's line and a
-        property's type, default or example each read in full."""
+    def assert_read_whole(self):
+        """No text the viewer draws is cut short, marked with an ellipsis or
+        not, nothing scrolls sideways, and a path starts a new line only at a
+        "/", "." or "-" (or a query's mark), in each palette."""
 
-        for width in WIDTHS:
-            with self.subTest(width=width):
-                self.visit(width)
-                self.assertEqual(open_tag(self.page, every_tag(self.document)), [])
+        for palette in ("light", "dark"):
+            with self.subTest(palette=palette):
+                self.in_scheme(palette)
                 self.settle()
-                cut = self.page.evaluate(_REFERENCE_CUTS, [SELECTORS["reference"], SELECTORS["unseen"]])
+                cut, sideways, broken = self.read(
+                    [
+                        (_REFERENCE_CUTS, [SELECTORS["reference"], SELECTORS["unseen"]]),
+                        (_REFERENCE_SIDEWAYS, SELECTORS["reference"]),
+                        (_REFERENCE_PATH_BREAKS, [SELECTORS["reference"], SELECTORS["unseen"]]),
+                    ]
+                )
                 self.assertEqual(cut, [])
-                self.assertEqual(self.page.evaluate(_REFERENCE_SIDEWAYS, SELECTORS["reference"]), [])
+                self.assertEqual(sideways, [])
+                self.assertEqual(broken, [])
 
-    def test_a_field_reads_by_its_type(self):
+    def assert_fields_read_by_type(self):
         """A field, a body and an answer say their type ("string", "object"),
         never the name of the schema they refer to: the schemas are not drawn
-        on their own, so a name would point at nothing a reader can open."""
+        on their own, so a name would point at nothing a reader can open. A
+        name the document also says as text (an operation's title) is that
+        text."""
 
-        named = set(self.document["components"]["schemas"])
-        first = opened_walk(self.document)[0]
-        self.assertTrue(first.parts)
-        self.visit(WIDE)
-        self.assertEqual(open_tag(self.page, first), [])
+        said = _strings(self.document["paths"]) | _strings(self.document["tags"])
+        named = set(self.document["components"]["schemas"]) - said
         drawn = set(self.page.evaluate(_REFERENCE_WORDS, SELECTORS["reference"]))
         self.assertTrue(drawn)
         self.assertEqual(sorted(named & drawn), [])
 
-    def test_the_viewer_draws_its_own_controls(self):
+    def assert_own_controls(self):
         """No element rule of HQ's (a button's raised box, a field's height, a
         link's color) reaches a button, field or link the viewer draws: with
-        every one of those rules taken out of HQ's sheets, every control in
-        the opened reference is drawn as it was."""
+        every one of those rules taken out of HQ's sheets, every control is
+        drawn as it was. It takes HQ's rules out of the page, so it is read
+        last."""
 
-        self.visit(REFERENCE_PHONE)
-        self.assertEqual(open_tag(self.page, every_tag(self.document)), [])
-        self.settle()
         own = static("css/api-reference.css")
         reached = self.page.evaluate(_REFERENCE_CONTROLS, [SELECTORS["reference"], list(_CONTROLS), own])
         self.assertGreater(reached["controls"], 100)
         self.assertEqual(reached["changed"], [])
+
+    def test_the_reference_opened_whole_reads_whole(self):
+        """The reference opened once, every tag as a reader opens it, read at
+        each width: whole in both palettes, at the widest each field by its
+        type, and last, at the phone, the viewer's controls its own."""
+
+        opened = every_tag(self.document)
+        self.visit(WIDTHS[0])
+        for width in WIDTHS:
+            with self.subTest(width=width):
+                self.page.set_viewport_size({"width": width, "height": 900})
+                # What a width draws that the last did not is opened too; what
+                # is open already stays open.
+                self.assertEqual(open_tag(self.page, opened), [])
+                self.assert_read_whole()
+                if width == WIDE:
+                    with self.subTest(check="a field reads by its type"):
+                        self.assert_fields_read_by_type()
+        with self.subTest(check="the viewer draws its own controls"):
+            self.page.set_viewport_size({"width": REFERENCE_PHONE, "height": 900})
+            self.settle()
+            self.assert_own_controls()
 
     def test_a_link_to_an_operation_survives_a_reload(self):
         """The page lands on the entry followed last, however quickly a reader

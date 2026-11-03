@@ -1,5 +1,7 @@
 """The content resource, declared on its domain in application/domains.py."""
 
+from typing import TypedDict
+
 from pydantic import Field, create_model
 
 from hq.platform.application import content
@@ -16,6 +18,19 @@ ContentQuery = create_model(
     status=(one_of(ContentItem.Status.values) | None, Field(default=None, description=STATUS_FILTER)),
     query=(TextFilter, None),
 )
+
+
+class ContentRow(TypedDict):
+    slug: str
+    title: str
+    content_type: str
+    status: str
+    topic: str
+    tags: list[str]
+    published_url: str
+    published_at: str | None
+    notes: str
+    updated_at: str
 
 
 def resources() -> tuple[ResourceSpec, ...]:
@@ -36,5 +51,6 @@ def resources() -> tuple[ResourceSpec, ...]:
                 title_field="title",
             ),
             web_route="content:list",
+            row_type=ContentRow,
         ),
     )

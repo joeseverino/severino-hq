@@ -18,6 +18,7 @@ from django.utils import timezone
 
 from hq.platform.core.audit import Unattributed, emit_line, record_event
 from hq.platform.core.models import AuditLog
+from hq.platform.core.write_bounds import Bound
 
 from .ui import ended
 lazy from .capabilities import capability_title
@@ -32,6 +33,11 @@ COALESCE_WINDOW = timedelta(seconds=60)
 # denied row change these and nothing else.
 COUNT = "count"
 LAST_AT = "last_at"
+
+REFUSED_CREDENTIALS = Bound(
+    "refused credentials",
+    "one row per surface, source and reason a minute, counting the rest",
+)
 
 
 def record_denial(

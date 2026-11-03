@@ -107,9 +107,6 @@
    a td drops it out of table layout and stacks the row into one column. */
 .connection-table .muted,
 .connection-table code { font-size: var(--text-2xs); }
-/* Here the name is one line, like the endpoint under it: the name leads five
-   more facts in the same cell. */
-.connection-table td > strong > [data-entity] { display: -webkit-inline-box; overflow: hidden; -webkit-line-clamp: 1; line-clamp: 1; }
 /* An ability line's text track is minmax(0, 1fr), which reports no width of
    its own to the table: without a length here the column is squeezed until
    its words break, and the spare width goes to the columns with sentences. */

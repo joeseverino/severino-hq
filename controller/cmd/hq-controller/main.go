@@ -27,6 +27,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/providers"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -38,16 +39,19 @@ func main() {
 	if len(os.Args) > 1 {
 		mode = os.Args[1]
 	}
+	// What a pass prints is its launcher's account of it, so it is struck of
+	// every learned secret as its log is.
+	stdout := mask.Writer(os.Stdout)
 	switch mode {
 	case "job":
-		code = job(ctx, os.Args[2:], os.Getenv(BridgeSocket), os.Stdout)
+		code = job(ctx, os.Args[2:], os.Getenv(BridgeSocket), stdout)
 	case "ready":
-		code = ready(ctx, os.Args[2:], os.Stdout)
+		code = ready(ctx, os.Args[2:], stdout)
 	default:
 		if env, supplied, err := load(os.Environ()); err != nil {
-			_ = json.NewEncoder(os.Stdout).Encode(failure{Message: err.Error()})
+			_ = json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
 		} else {
-			code = run(ctx, os.Args[1:], env, supplied, os.Stdout, os.Stderr)
+			code = run(ctx, os.Args[1:], env, supplied, stdout, os.Stderr)
 		}
 	}
 	stop()
@@ -153,7 +157,7 @@ func run(ctx context.Context, args []string, env runtime.Environment, supplied r
 		fmt.Fprintln(stderr, "--apply and --glance are separate passes")
 		return 2
 	}
-	log := slog.New(slog.NewTextHandler(stderr, nil))
+	log := mask.Logger(stderr)
 	slog.SetDefault(log)
 
 	fail := func(err error) int {

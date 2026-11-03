@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/internal/clock"
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/secrets/connectapi"
 )
 
@@ -43,7 +44,7 @@ const (
 // the request header reads it.
 type Token struct{ value string }
 
-const redacted = "[redacted]"
+const redacted = mask.Redacted
 
 var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
@@ -56,6 +57,7 @@ func NewToken(raw []byte) (Token, error) {
 	if !tokenPattern.MatchString(value) {
 		return Token{}, errors.New("malformed Connect token")
 	}
+	mask.Learn(value)
 	return Token{value: value}, nil
 }
 

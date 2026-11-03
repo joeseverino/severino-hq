@@ -12,12 +12,13 @@ from .capabilities import CapabilitySpec
 from .command_fields import named_records, referred
 from .contracts import route_url
 from .entity_links import kind_label
+from .field_masks import WHOLE_RECORD
 from .integration_specs import ON_ITS_PAGE
 from .integrations import integration_graph
 from .json_schemas import fields
 from .projection import MAX_PAGE_SIZE
 from .record_errors import RecordNotFound
-from .resources import WHOLE_RECORD, ResourceError, get_resource, list_resource
+from .resources import ResourceError, get_resource, list_resource
 from .security import AuthorizationError, Principal
 lazy from . import references
 lazy from .domains import domain_navigation

@@ -753,9 +753,11 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         found = []
         for (label, slug), alike in self.each_popover_kind():
             self.settle()
+            named = f"{label} and {alike} like it" if alike else label
+            if self.script:
+                self.evaluate_script(name, width, f"popover-{slug}", f"with {named} shown")
             shot = self.shoot_popover(name, width, slug)
             said = self.judged(name, width, rule)
-            named = f"{label} and {alike} like it" if alike else label
             self.shots.append((shot, f"with {named} shown"))
             # A finding names what was shown and leaves the path to the shot
             # line beside it, since a base's shots lie elsewhere and a finding
@@ -778,6 +780,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             undrawn = open_tag(self.page, opened)
             self.settle()
             shows = f"with {opened.label} opened"
+            if self.script:
+                self.evaluate_script(name, width, f"open-{opened.name}", shows)
             self.screenshot(name, width, f"open-{opened.name}", shows)
             said = [f"the viewer drew nothing for {', '.join(undrawn)}"] if undrawn else []
             said += self.judged(name, width, rule) if rule else []
@@ -814,7 +818,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
                 continue
             self.shoot_dialog(name, width, dialog)
             if self.script:
-                self.evaluate_script(name, width, dialog)
+                self.evaluate_script(name, width, f"dialog-{dialog}", f"with #modal-{dialog} open")
             if rule:
                 said = self.judged(name, width, rule)
                 found += [f"with #modal-{dialog} open: {line}" for line in unmatched(said, beneath)]
@@ -1007,20 +1011,20 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.measured.setdefault((name, width), {})["columns"] = said
         print(self.beside_base(name, width, "columns", said), flush=True)
 
-    def evaluate_script(self, name, width, dialog=""):
-        """What ``--eval``'s script returns here, with ``dialog`` open if one
-        is named, printed and kept beside its screenshot (``.eval.txt``): a
-        computed style or an ancestor chain read in one command. One that
-        throws says so and the look goes on."""
+    def evaluate_script(self, name, width, state="", shows=""):
+        """What ``--eval``'s script returns on the page as one shot shows it,
+        ``state`` that shot's suffix and ``shows`` what it shows, printed and
+        kept beside it (``.eval.txt``): a computed style or an ancestor chain
+        read in one command. One that throws says so and the look goes on."""
 
-        where = f"{name} with #modal-{dialog} open" if dialog else name
+        where = f"{name} {shows}" if shows else name
         try:
             said = _evaluated(where, width, self.page.evaluate(self.script))
         except BrowserError as threw:
             said = f"{where} at {width}: --eval threw ({str(threw).splitlines()[0]})"
-        shot = _shot(name, width, f"dialog-{dialog}" if dialog else "")
+        shot = _shot(name, width, state)
         shot.with_name(shot.stem + ".eval.txt").write_text(said + "\n", encoding="utf-8")
-        kind = f"eval dialog-{dialog}" if dialog else "eval"
+        kind = f"eval {state}" if state else "eval"
         self.measured.setdefault((name, width), {})[kind] = said
         print(self.beside_base(name, width, kind, said), flush=True)
 

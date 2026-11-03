@@ -238,14 +238,7 @@
   color: inherit;
 }
 .command-center-copy { display: grid; gap: var(--space-1); min-width: 0; }
-.command-center-copy > .muted {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--text-xs);
-}
 .command-center-title { display: flex; align-items: baseline; gap: var(--space-4); min-width: 0; }
-.command-center-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .command-center-title code { color: var(--muted-2); font-size: var(--text-3xs); overflow-wrap: anywhere; }
 .command-center-evidence {
   display: flex;
@@ -285,8 +278,7 @@
   .command-center-modal { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
   .command-center-modal .modal-panel { padding: var(--space-7) var(--space-6) var(--space-5); }
   .command-center-option { grid-template-columns: minmax(0, 1fr) 14px; }
-  .command-center-evidence { grid-column: 1; justify-content: flex-start; overflow: hidden; }
-  .command-center-copy > .muted { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .command-center-evidence { grid-column: 1; flex-wrap: wrap; justify-content: flex-start; }
   .command-center-arrow { grid-column: 2; grid-row: 1; }
   .command-center-footer { justify-content: center; }
   .command-center-footer span:nth-child(2) { display: none; }
@@ -400,7 +392,6 @@ a.discovery-link:hover strong { color: var(--accent); }
    not fit, cut only where it alone is longer than the cell (figures.css);
    with none, the words are one line, cut as any context line's are. */
 .connection-reach { display: flex; flex-wrap: wrap; gap: 0 .3em; width: 0; min-width: 100%; white-space: nowrap; }
-.connection-reach:not(:has([data-entity])) { display: block; overflow: hidden; text-overflow: ellipsis; }
 /* Its own section under the table, not a second compartment of a card around it. */
 /* How to connect each provider not yet connected: one row each, opened for its steps. */
 .connection-setup { margin-top: var(--stack-gap); }
@@ -480,6 +471,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 }
 .connection-sight-never_swept .connection-sight-state,
 .connection-sight-not_connected .connection-sight-state { color: var(--muted); }
+/* stylelint-disable-next-line declaration-property-value-disallowed-list -- the panel's corners clip its summary's fill, not its text */
 .connection-security-advanced { margin-top: calc(var(--layout-gap) * 1.5); padding: 0; overflow: hidden; }
 .connection-security-advanced > summary {
   display: flex;

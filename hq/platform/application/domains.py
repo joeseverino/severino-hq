@@ -18,6 +18,7 @@ from .derivations import derivation
 from .derived_inputs import DASHBOARD_READS, QUEUE_READS, composed_variant, estate_variant
 from .plugins import (
     DERIVED_PROVIDERS,
+    NavigationGroup,
     NavigationItem,
     PluginIntegration,
     answered_by,
@@ -132,8 +133,11 @@ class Domain:
     navigation: tuple[NavigationItem, ...]
     integration: PluginIntegration = PluginIntegration()
     records: Records | None = None
-    # A host section's ``DomainDescriptor.description``; an extension's manifest declares none.
+    # A host section's ``DomainDescriptor.description``, or an extension manifest's.
     description: str = ""
+    # What each nav group an extension's manifest adds is for; the host's own
+    # say theirs in ``NAVIGATION_GROUPS``.
+    groups: tuple[NavigationGroup, ...] = ()
 
     @property
     def bar_order(self) -> int:
@@ -213,7 +217,7 @@ def reader_variant(principal: Principal) -> tuple[Any, ...]:
 # purpose is ``NAVIGATION_GROUPS``.
 
 # What each nav group is for, by the name its items give it; a group an
-# extension adds says what it holds instead.
+# extension adds says so in its manifest (``PluginManifest.navigation_groups``).
 NAVIGATION_GROUPS = {
     "Projects": "What gets made: the projects, their documentation and the repositories behind them.",
     "Web": "The public site and what it publishes, the messages it receives and how it is read.",
@@ -231,7 +235,11 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # The one inline entry: no group, so it renders as a bare link at the
         # head of the bar rather than a dropdown of one.
         navigation=(NavigationItem("Dashboard", "dashboard", "", 0, ""),),
-        integration=PluginIntegration(connections=_provider("hq.platform.application.glance:connection_specs")),
+        integration=PluginIntegration(
+            capabilities=_provider("hq.platform.application.core_capabilities:dashboard"),
+            resources=_provider("hq.platform.application.resources:dashboard"),
+            connections=_provider("hq.platform.application.glance:connection_specs"),
+        ),
     ),
     DomainDescriptor(
         id="hq.calendar",
@@ -284,7 +292,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Starred repos",
         description="Repositories starred on GitHub, and what changed in them.",
         navigation=(NavigationItem("Starred repos", "watching", "", 102, "Projects"),),
-        integration=PluginIntegration(dashboard=_provider("hq.platform.application.sections:watching")),
+        integration=PluginIntegration(
+            capabilities=_provider("hq.platform.application.core_capabilities:watching"),
+            dashboard=_provider("hq.platform.application.sections:watching"),
+        ),
     ),
     DomainDescriptor(
         id="hq.posture",
@@ -572,12 +583,15 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
-        integration=PluginIntegration(connections=_provider("hq.domains.control_plane.dns_lookup:connection_specs")),
+        integration=PluginIntegration(
+            capabilities=_provider("hq.platform.application.core_capabilities:tools"),
+            connections=_provider("hq.domains.control_plane.dns_lookup:connection_specs"),
+        ),
     ),
     DomainDescriptor(
         id="hq.machines",
         label="Machines",
-        description="Every machine anything reported, its roles, addresses and what runs on it.",
+        description="The machines the estate runs on, as the services and agents on them report them.",
         # Between the things HQ manages and the credentials it manages them
         # with, because that is what a machine is: the thing both halves are
         # about.
@@ -642,7 +656,11 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
-        integration=PluginIntegration(connections=_provider("hq.platform.application.connections:connection_specs")),
+        integration=PluginIntegration(
+            capabilities=_provider("hq.platform.application.core_capabilities:connections"),
+            resources=_provider("hq.platform.application.resources:connections"),
+            connections=_provider("hq.platform.application.connections:connection_specs"),
+        ),
     ),
     DomainDescriptor(
         id="hq.jobs",
@@ -680,9 +698,16 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         integration=PluginIntegration(calendars=_provider("hq.platform.application.calendar_sources:history_sources")),
     ),
     DomainDescriptor(
+        id="hq.search",
+        label="Search",
+        description="One query across every domain, answered with what the reader may read.",
+        # No nav item: the bar's own search field opens its page.
+        integration=PluginIntegration(resources=_provider("hq.platform.application.resources:search")),
+    ),
+    DomainDescriptor(
         id="hq.self",
         label="HQ",
-        description="HQ itself: its release, where it runs, its background jobs and its open problems.",
+        description="How HQ itself is doing, read as its own page shows it.",
         # HQ itself, after what configures it: the page that says how it is doing.
         navigation=(NavigationItem("HQ", "hq_self", "", HOST_ORDER_MACHINERY + 3, "System"),),
     ),
@@ -695,7 +720,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
     DomainDescriptor(
         id="hq.api",
         label="API",
-        description="The API's own routes, and every command and read no other section owns.",
+        description="The routes every domain is reached through: the root, the catalogs of commands and reads, this "
+        "document, and the generic form of each command and read.",
         # Beside Agents: the machine API is what an agent's token reaches.
         navigation=(
             NavigationItem(
@@ -760,6 +786,8 @@ def extension_domains() -> tuple[Domain, ...]:
             origin="extension",
             navigation=plugin.navigation,
             integration=integration,
+            description=plugin.description,
+            groups=plugin.navigation_groups,
         )
         for plugin, integration in installed_integrations()
     )

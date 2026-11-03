@@ -52,8 +52,7 @@ const spendKey = (body, response) => {
   if (!(body instanceof FormData) || response.status >= 500) return;
   const sent = body.get(RETRY_KEY);
   if (!sent) return;
-  const bytes = window.crypto.getRandomValues(new Uint8Array(24));
-  const fresh = `web:${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  const fresh = `web:${window.crypto.getRandomValues(new Uint8Array(24)).toHex()}`;
   document.querySelectorAll(`input[name="${RETRY_KEY}"]`).forEach((field) => {
     if (field.value === sent) field.value = fresh;
   });

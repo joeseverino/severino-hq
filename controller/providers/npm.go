@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/providers/npmapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -92,6 +93,7 @@ func (r *Registry) npmSession(ctx context.Context, ref string) (string, map[stri
 	if err := json.Unmarshal(raw, &token); err != nil {
 		return "", nil, err
 	}
+	mask.Learn(token)
 	return base.String(), map[string]string{"Authorization": "Bearer " + token}, nil
 }
 

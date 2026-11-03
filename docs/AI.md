@@ -108,11 +108,12 @@ business rule" ([API](API.md)).
 
 ### Reads and one write
 
-HQ's MCP server offers fifteen tools (`HANDLERS` in
-`hq/platform/mcp/declarations.py`). Fourteen read what HQ already holds:
+HQ's MCP server offers one tool for each handler in `HANDLERS`
+(`hq/platform/mcp/declarations.py`). All but one read what HQ already holds:
 capabilities, resources, connections, topology, findings, recent activity and
-health. One, `execute_capability`, can change anything, and it runs a
-capability the same way the API's `POST /api/v2/capabilities/<name>/` does.
+health, and `export_year_summary` also records its export in the audit log.
+One, `execute_capability`, can change anything, and it runs a capability the
+same way the API's `POST /api/v2/capabilities/<name>/` does.
 Every derived read is one `ResourceSpec` that serves the API, MCP, the CLI and
 the SDK alike ([What each surface exposes](API.md#what-each-surface-exposes)).
 

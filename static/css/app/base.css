@@ -288,7 +288,6 @@ pre ::selection { color: var(--code-ink); }
 }
 .global-search:hover { background: var(--bar-control-bg-hover); color: var(--ink-2); text-decoration: none; }
 .search-icon { flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
-.search-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .search-key { padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--muted-2); font: inherit; font-size: var(--text-3xs); line-height: 1.6; }
 
 @media (max-width: 1280px) {

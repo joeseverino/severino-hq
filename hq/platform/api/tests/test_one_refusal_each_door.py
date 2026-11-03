@@ -37,6 +37,13 @@ READS = (
     ("topology", "get_topology", "depth", ("abc", "2 ", "5_0", "", True, 1.0, 9, -1), {"focus": FOCUS}),
     ("findings", "get_findings", "limit", ("many", "+3", "1.0", "", False, 0, -3), {}),
 )
+# A text narrowing that names none of its choices, on each read.
+CHOICES = (
+    ("topology", "get_topology", {"lens": "example-unknown"}),
+    ("topology", "get_topology", {"focus": FOCUS, "direction": "sideways"}),
+    ("findings", "get_findings", {"rule": "example-unknown"}),
+    ("findings", "get_findings", {"severity": "critical"}),
+)
 
 
 def _query_text(value):
@@ -82,6 +89,17 @@ class OneRefusalEachDoorTests(TestCase):
                         with self.subTest(door=door):
                             self.assertFalse(answer["ok"])
                             self.assertEqual(answer["error"], refusal)
+
+    def test_a_choice_none_declares_is_refused_alike_on_every_door(self):
+        for path, tool, arguments in CHOICES:
+            with self.subTest(path=path, arguments=arguments):
+                api = self._api(urlencode(arguments), path)
+                with host_only():
+                    over_mcp = self._mcp(tool, arguments)
+
+                self.assertEqual(api.status_code, 400, api.content)
+                self.assertFalse(over_mcp["ok"])
+                self.assertEqual(over_mcp["error"], api.json()["error"])
 
     def test_a_count_in_digits_reads_as_one(self):
         response = self._api("depth=1")

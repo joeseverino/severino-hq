@@ -15,6 +15,7 @@ from django.http import JsonResponse
 
 from hq.platform.application.plugins import plugin_health
 from hq.platform.core.static import collected
+from hq.platform.core.write_bounds import NOTHING, writes
 
 
 def shipped_migrations() -> set[tuple[str, str]]:
@@ -40,6 +41,7 @@ def shipped_migrations() -> set[tuple[str, str]]:
     return shipped
 
 
+@writes(NOTHING)
 @login_not_required
 def health_live(_request):
     """Minimal process liveness probe; never touches an external dependency."""
@@ -47,6 +49,7 @@ def health_live(_request):
     return JsonResponse({"status": "ok"})
 
 
+@writes(NOTHING)
 @login_not_required
 def health_ready(request):
     """Prove HQ can safely serve traffic without disclosing configuration."""

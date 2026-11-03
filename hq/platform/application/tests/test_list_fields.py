@@ -10,6 +10,7 @@ from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 
 from ..integrations import integration_graph
+from ..plugins import plugin_resource_specs
 from ..resources import EmptyQuery, ResourceSpec, describe_resources, get_resource, list_resource, resource_registry
 from ..security import Capability, Principal
 
@@ -36,8 +37,10 @@ class ListFieldTests(TestCase):
                 held = {key for item in page["items"] for key in item}
 
                 self.assertLessEqual(held, set(spec.list_fields))
+                # A row's NotRequired field may be absent from every item.
+                required = spec.row_type.__required_keys__ if spec.row_type else set(spec.list_fields)
                 if page["items"]:
-                    self.assertEqual(held, set(spec.list_fields), "a declared field no item holds")
+                    self.assertLessEqual(required, held, "a required field no item holds")
 
     def test_a_star_keeps_every_field(self):
         for name, spec in _declaring().items():
@@ -48,8 +51,9 @@ class ListFieldTests(TestCase):
                     [{key: item[key] for key in item if key in spec.list_fields} for item in whole["items"]],
                     page["items"],
                 )
-                if spec.detail_handler and page["items"]:
-                    identifier = page["items"][0][spec.identifier]
+                # A kind whose rows are not its records may list none by its identifier.
+                if spec.detail_handler and whole["items"] and spec.identifier in whole["items"][0]:
+                    identifier = whole["items"][0][spec.identifier]
                     self.assertEqual(
                         get_resource(name, identifier, principal=OPERATOR, fields=["*"]),
                         get_resource(name, identifier, principal=OPERATOR),
@@ -69,7 +73,14 @@ class ListFieldTests(TestCase):
         for name, spec in _declaring().items():
             with self.subTest(name=name):
                 self.assertEqual(described[name]["operations"]["list"]["fields"], list(spec.list_fields))
-        self.assertNotIn("fields", described["estate"]["operations"]["list"])
+
+    def test_the_catalog_names_no_fields_for_a_kind_that_declares_none(self):
+        whole = ResourceSpec("example.records", "Records", "Example records.", "example.read", _rows, EmptyQuery)
+        installed = plugin_resource_specs()
+        with mock.patch("hq.platform.application.plugins.plugin_resource_specs", return_value=(*installed, whole)):
+            described = {entry["name"]: entry for entry in describe_resources()["resources"]}
+
+        self.assertNotIn("fields", described["example.records"]["operations"]["list"])
 
 
 def _rows(**_):

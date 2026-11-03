@@ -960,16 +960,21 @@ class TransportTests(SentinelMixin, TestCase):
                 self.assertNotIn(value.split("=")[1], response.json()["error"]["message"])
 
     def test_a_refusal_answers_with_the_reason_the_application_gave(self):
-        from hq.platform.application.findings import InvalidFindingsQuery, findings
+        from pydantic import ValidationError
+
+        from hq.platform.application.findings import findings
+        from hq.platform.application.refusal_status import refusal_of
         from hq.platform.application.security import cli_principal
 
-        with self.assertRaises(InvalidFindingsQuery) as refused:
+        with self.assertRaises(ValidationError) as refused:
             findings(principal=cli_principal(), limit=0)
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
         with _serving(), host_only():
             response = self.client.get("/api/v2/findings/?limit=0", **headers)
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["error"]["message"], refused.exception.reason)
+        self.assertEqual(
+            response.json()["error"]["message"], refusal_of(refused.exception, name="get_findings").message
+        )
 
     def test_resource_read_requires_its_declared_grant(self):
         with _serving():

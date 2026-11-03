@@ -22,8 +22,66 @@ const STOCK_SENTENCES = [
   "formatPassword", "formatBase64", "formatBinary",
 ];
 
+// Where a line may end inside a path: before each "/", "." or "-", the
+// places Scalar's own path text takes (`ScalarWrappingText`'s `path` preset,
+// static/vendor/scalar/standalone.js line 964), and before a query's "?" and
+// "&"; never after a space, a ":" or another of them, so "https://" and
+// "../" stay whole.
+const PATH_BREAK = /(?<=[^\s/.?&:-])[/.?&-]/g;
+
+// A path is a word with a "/" in it. Neither browser engine ends a line
+// inside one but where any character may end it (`overflow-wrap`), which
+// reads as a word cut in two ("refresh.reque" over "st/"), and CSS has no way
+// to name the characters a line may end at. A <wbr> is the platform's place
+// to end one, and is never copied. Scalar draws an operation's heading with
+// one before each such character, and its list of a section's operations
+// and its samples as plain text, so each text node holding a path is split at
+// each such place with a <wbr> between, as it is drawn. The viewer keeps its
+// own node, the first part, and may write a new path into it later, so the
+// parts split off after it are kept to be taken out then.
+const splitOff = new WeakMap();
+const markPaths = (node) => {
+  if (!node.isConnected || !node.data.includes("/")) return;
+  const places = [];
+  for (const word of node.data.matchAll(/\S*\/\S*/g)) {
+    for (const at of word[0].matchAll(PATH_BREAK)) places.push(word.index + at.index);
+  }
+  const parts = [];
+  for (const place of places.reverse()) {
+    const rest = node.splitText(place);
+    const wbr = document.createElement("wbr");
+    rest.before(wbr);
+    parts.push(wbr, rest);
+  }
+  if (parts.length) splitOff.set(node, parts);
+};
+const remarkPaths = (node) => {
+  splitOff.get(node)?.forEach((part) => part.remove());
+  splitOff.delete(node);
+  markPaths(node);
+};
+const markPathsIn = (added) => {
+  if (added.nodeType === Node.TEXT_NODE) { markPaths(added); return; }
+  if (added.nodeType !== Node.ELEMENT_NODE) return;
+  const walker = document.createTreeWalker(added, NodeFilter.SHOW_TEXT);
+  const found = [];
+  for (let text = walker.nextNode(); text; text = walker.nextNode()) found.push(text);
+  found.forEach(markPaths);
+};
+
 document.addEventListener("DOMContentLoaded", () => {
   const root = document.getElementById("api-reference-root");
+  // Each path is split as the viewer draws it, in the same task, so no line
+  // is drawn first and moved after. What the splitting itself changes is
+  // dropped unread.
+  const drawn = new MutationObserver((records) => {
+    for (const record of records) {
+      if (record.type === "characterData") remarkPaths(record.target);
+      else record.addedNodes.forEach(markPathsIn);
+    }
+    drawn.takeRecords();
+  });
+  drawn.observe(root, { childList: true, characterData: true, subtree: true });
   // Scalar scrolls an entry to just below what it is told stands over the
   // page, so HQ's header is named to it. Where its bars stick is the
   // stylesheet's (static/css/api-reference.css).

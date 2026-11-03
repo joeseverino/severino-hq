@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 )
 
 // SocketBridge keeps Django as the transaction and persistence owner. It
@@ -70,6 +72,14 @@ func (b *SocketBridge) call(ctx context.Context, payload, result any, request se
 		encoded, err := json.Marshal(payload)
 		if err != nil {
 			return fmt.Errorf("encode bridge payload: %w", err)
+		}
+		// Everything this process reports reaches HQ here, so every learned
+		// secret is struck here, in its JSON form among the others.
+		encoded = []byte(mask.Text(string(encoded)))
+		if !json.Valid(encoded) {
+			// Only a secret that spans the payload's own quotes or braces
+			// strikes JSON apart; such a payload is not sent.
+			return &BridgeError{"bridge payload could not be sent without a secret it holds"}
 		}
 		if len(encoded) > MaxBridgeOutput {
 			return &BridgeError{"bridge payload is too large"}

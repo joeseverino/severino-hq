@@ -5,6 +5,7 @@ declarations without a central list naming the calendar.
 """
 
 from datetime import date
+from typing import Annotated, TypedDict
 
 from pydantic import Field
 
@@ -15,9 +16,15 @@ from .calendar_entries import CHOOSE_SOURCE, EntryCommand, SourceChoiceCommand, 
 from .deletion import DeleteCommand, delete_calendar_entry
 from .integration_specs import CapabilitySpec, ResourceSpec
 from .records import KEPT
-from .resources import BoundedQuery, limit_field
+from .resources import BoundedQuery, limit_words
 from .search_contracts import SearchDefinition
 from .security import Capability
+
+# The agenda's page, bounded by how many entries a span may hold.
+type AgendaLimit = Annotated[
+    int,
+    Field(ge=1, le=calendar_entries.AGENDA_PAGE, description=limit_words(calendar_entries.AGENDA_PAGE, paged=True)),
+]
 
 
 class AgendaQuery(BoundedQuery):
@@ -25,7 +32,42 @@ class AgendaQuery(BoundedQuery):
     days: int = Field(
         default=14, ge=1, le=calendar_entries.AGENDA_DAYS, description="How many days the span covers, from start."
     )
-    limit: int = limit_field(200, calendar_entries.AGENDA_PAGE)
+    limit: AgendaLimit = 200
+
+
+class AgendaItem(TypedDict):
+    """One thing on the calendar in the span, from whichever source holds it."""
+
+    source: str
+    calendar: str
+    title: str
+    starts: str
+    ends: str | None
+    all_day: bool
+    state: str | None
+    detail: str
+    url: str
+
+
+class EntryRecord(TypedDict):
+    """One of your own events, as its command writes it."""
+
+    uid: str
+    title: str
+    starts_on: str
+    ends_on: str | None
+    starts_at: str | None
+    ends_at: str | None
+    location: str
+    notes: str
+    repeat: str
+    repeat_label: str
+    interval: int
+    weekdays: list[int]
+    repeat_until: str | None
+    about: str
+    url: str
+    updated_at: str
 
 
 def capabilities() -> tuple[CapabilitySpec, ...]:
@@ -104,5 +146,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 title_field="title",
             ),
             web_route="calendar:month",
+            row_type=AgendaItem,
+            record_type=EntryRecord,
         ),
     )

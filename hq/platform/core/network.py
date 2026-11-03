@@ -13,6 +13,8 @@ from django.conf import settings
 from django.http import HttpResponseForbidden
 lazy from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
+from .write_bounds import NOTHING, writes
+
 
 @cache
 def _networks(cidrs: tuple[str, ...]) -> tuple:
@@ -197,6 +199,7 @@ class TrustedNetworkASGI:
         await self.app(scope, receive, send)
 
 
+@writes(NOTHING)
 class TrustedNetworkMiddleware:
     """Refuse anything arriving from outside the LAN, the tailnet or loopback.
 

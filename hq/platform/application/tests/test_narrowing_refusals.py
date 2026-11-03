@@ -3,11 +3,13 @@ choices that would narrow it, and a read with no narrowing answers what the
 estate holds rather than all of it."""
 
 from django.test import TestCase
+from pydantic import ValidationError
 
 from hq.domains.control_plane.models import ManagedResource
 
 from ..findings import finding_rules, findings
 from ..projection import QueryRefusal
+from ..refusal_status import refusal_of
 from ..security import AuthorizationError, Capability, Principal
 from ..topology import derive_topology, topology
 from ..topology_lenses import TRACE_DIRECTIONS, topology_lenses
@@ -26,9 +28,11 @@ class TopologyNarrowingTests(TestCase):
         )
 
     def refusal(self, **narrowing) -> str:
-        with host_only(), self.assertRaises(QueryRefusal) as refused:
+        """What either door answers for ``narrowing``, which names get_topology."""
+
+        with host_only(), self.assertRaises((QueryRefusal, ValidationError)) as refused:
             topology(principal=READ, **narrowing)
-        return refused.exception.reason
+        return refusal_of(refused.exception, name="get_topology").message
 
     def test_no_narrowing_answers_the_counts_and_the_lenses_without_nodes(self):
         with host_only():
@@ -93,12 +97,13 @@ class TopologyNarrowingTests(TestCase):
 
 class FindingsNarrowingTests(TestCase):
     def test_an_unknown_rule_is_refused_with_every_rule_name(self):
-        with host_only(), self.assertRaises(QueryRefusal) as refused:
+        with host_only(), self.assertRaises(ValidationError) as refused:
             findings(principal=READ, rule="not-a-rule")
+        reason = refusal_of(refused.exception, name="get_findings").message
 
         for rule in finding_rules():
-            self.assertIn(rule.name, refused.exception.reason)
-        self.assertNotIn("not-a-rule", refused.exception.reason)
+            self.assertIn(rule.name, reason)
+        self.assertNotIn("not-a-rule", reason)
 
     def test_a_known_rule_narrows_to_it(self):
         rule = finding_rules()[0].name

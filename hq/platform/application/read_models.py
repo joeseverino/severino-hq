@@ -1,6 +1,6 @@
 """Canonical, non-mutating HQ projections shared by delivery adapters."""
 
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, cast
 
 from django.db.models import FETCH_RAISE, Count
 from django.utils import timezone
@@ -13,6 +13,7 @@ from . import history, records
 from .expenses import serialize_expense
 from .projection import NextPage, listing, page_size
 from .receipts import serialize_receipt
+from .resource_records import DocumentationRow
 from .routes import reverse
 from .sensitivity import safe_records
 lazy from .resources import list_resource
@@ -44,7 +45,7 @@ class DocumentationStatus(TypedDict):
     by_status: dict[str, int]
     by_type: dict[str, int]
     # The first page of the documentation list, as it reads it.
-    records: list[dict[str, Any]]
+    records: list[DocumentationRow]
     next: NextPage | None
 
 
@@ -64,7 +65,8 @@ def documentation_status(*, principal: Principal) -> DocumentationStatus:
             row["doc_type"]: row["count"]
             for row in safe.values("doc_type").annotate(count=Count("id")).order_by("doc_type")
         },
-        "records": page["items"],
+        # The list cuts each item to its row, as its kind declares it.
+        "records": cast("list[DocumentationRow]", page["items"]),
         "next": page["next"],
     }
 

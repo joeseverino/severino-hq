@@ -37,6 +37,12 @@ linters:
         - pattern: ^json\.Decoder\.DisallowUnknownFields$
           pkg: ^encoding/json$
           msg: decode strict JSON with jsonv2.Unmarshal(data, &v, jsonv2.RejectUnknownMembers(true))
+        # A log a binary writes strikes every secret the process has learned,
+        # which only mask.Logger's writer does; a handler built anywhere else
+        # writes them as they are.
+        - pattern: ^slog\.(New|NewTextHandler|NewJSONHandler)$
+          pkg: ^log/slog$
+          msg: build the logger with mask.Logger (controller/internal/mask)
     govet:
       settings:
         # A subtest that stops its parent (t.Fatal, FailNow or Skip on the t
@@ -69,6 +75,11 @@ linters:
       # name that stutters, still holds.
       - linters: [revive]
         text: "exported (.+) should have comment( \\(or a comment on this block\\))? or be unexported"
+      # mask.Logger is the one place a logger is built; a test builds its own
+      # to read what a value prints.
+      - linters: [forbidigo]
+        path: (^internal/mask/mask\.go$|_test\.go$)
+        text: mask\.Logger
 
 issues:
   max-issues-per-linter: 0

@@ -382,7 +382,8 @@ ROW_TOGGLE_TABLES = """
 
 # A table of cut values, each the word its row is probed by then more: one
 # with no title, one carrying its whole text as a title, one titled in a row
-# that opens, one past the line a clamp ends with an ellipsis, and two cut
+# that opens, two past the line a clamp ends with an ellipsis (a block and a
+# link set in its line, as a cell's name is), and two cut
 # where no ellipsis can land: a box of words around a
 # box of its own, and a name's chip in the muted line under a row's name, as
 # a unit's page drew one. A note wider than a phone puts the table in a
@@ -409,6 +410,9 @@ CUT_TABLE = (
     + '<tr><td class="row-gutter">Clamped</td><td><div style="display: -webkit-box; -webkit-box-orient: vertical; '
     '-webkit-line-clamp: 1; overflow: hidden; max-width: 80px">clamped value far too long to fit on its one line'
     f"</div></td>{_NOTE}</tr>"
+    + '<tr><td class="row-gutter">Inline</td><td><a href="#" style="display: -webkit-inline-box; -webkit-box-orient: '
+    'vertical; -webkit-line-clamp: 1; overflow: hidden; max-width: 80px">inline value far too long to fit on its one '
+    f"line</a></td>{_NOTE}</tr>"
     + '<tr><td class="row-gutter">Unmarked</td><td><div style="max-width: 40px; overflow: hidden; '
     'text-overflow: ellipsis; white-space: nowrap"><span style="display: inline-block">unmarked value far too long '
     f"to fit</span></div></td>{_NOTE}</tr>"
