@@ -220,8 +220,6 @@ ignore = [
 "urllib.request".msg = "urllib carries every header across a redirect, to any origin and to http://; read over HTTP with hq.platform.application.http_read."
 
 [tool.ruff.lint.per-file-ignores]
-# Development and CI code imports its own package.
-"tools/**" = ["TID251"]
 # A synthetic extension standing in for a separate package, outside the host's product code.
 "tests/fixtures/example_hq_plugin/registry.py" = ["TID251"]
 # vulture's whitelist is attribute reads that do nothing, which vulture counts as uses.

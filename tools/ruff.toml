@@ -1,0 +1,9 @@
+# Development and CI code imports its own package, so tools/ keeps every ban
+# the host's pyproject.toml declares but the one on importing tools
+# (tools/tests/test_ruff_bans.py holds the two lists together).
+extend = "../pyproject.toml"
+# The repository root, where isort finds hq and tools as first-party.
+src = [".."]
+
+[lint.flake8-tidy-imports]
+banned-api = { "urllib.request".msg = "urllib carries every header across a redirect, to any origin and to http://; read over HTTP with hq.platform.application.http_read." }
