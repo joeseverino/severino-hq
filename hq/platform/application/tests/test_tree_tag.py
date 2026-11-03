@@ -2,7 +2,7 @@
 
 No import leads from a changed module to a test that finds it by walking a
 directory, so ``mise run fast`` runs every ``tree`` test on any change to a
-module under hq/ or hq_sdk/. A walk is ``rglob``, ``os.walk`` or ``git
+module of a package the suite lives in (``tree.SUITE``). A walk is ``rglob``, ``os.walk`` or ``git
 ls-files``, in the test, its class's setup, or any function or value of this
 checkout it reaches by name. A test that patches the ROOT of the code it drives,
 itself or in its class's setup, walks a fixture rather than this checkout, so it

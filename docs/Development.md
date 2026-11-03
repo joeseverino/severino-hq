@@ -184,8 +184,8 @@ The tests it selects are:
 - every test that reads the tasks, when a task definition or a file a task's
   run names changed;
 - the architecture tests;
-- every test tagged `tree`, when a module under `hq/` or `hq_sdk/` changed.
-  Such a test finds its files by walking this checkout, which no import shows
+- every test tagged `tree`, when a module under `hq/`, `hq_sdk/`, `tools/` or
+  `tests/` changed, the packages the suite lives in. Such a test finds its files by walking this checkout, which no import shows
   (`test_tree_tag.py` holds the tag to the walks; a test that patches the
   `ROOT` of the code it drives walks a fixture and carries none);
 - the extensions' suites, composed, when `mise.local.toml` names a set and the
