@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/host"
+	"github.com/joeseverino/severino-hq/controller/internal/clock"
 	"github.com/joeseverino/severino-hq/controller/secrets"
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
@@ -117,17 +118,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 	}
 	runner := &secrets.Runner{
 		Config: config, Mounts: install.SystemMounts, PortFloor: portFloor, Web: secrets.UnitWeb{Unit: host.WebUnit, Container: container},
-		Log: log, Now: time.Now,
-		Sleep: func(ctx context.Context, d time.Duration) error {
-			timer := time.NewTimer(d)
-			defer timer.Stop()
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-timer.C:
-				return nil
-			}
-		},
+		Log: log, Now: time.Now, Sleep: clock.Sleep,
 	}
 	if _, err := runner.Run(ctx); err != nil {
 		return fail(err)

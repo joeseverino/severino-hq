@@ -2,7 +2,6 @@ package providers
 
 import (
 	"bytes"
-	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -11,12 +10,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"golang.org/x/crypto/acme"
@@ -33,16 +34,15 @@ type issuance struct {
 	dns       *dnsFake
 	authority *acmeFake
 	acmeDir   string
-	slept     []time.Duration
 }
 
 // newIssuance is a Registry whose DNS connection reaches a stateful Cloudflare
 // fake and whose ACME connection reaches a fake authority, both through the
-// controller's real HTTP clients.
+// controller's real HTTP clients over the test's in-memory network.
 func newIssuance(t *testing.T) *issuance {
 	t.Helper()
 	pki := newTestPKI(t)
-	dns, dnsURL := newDNSFake(t)
+	dns, dnsURL, reachDNS := newDNSFake(t)
 	authority := newACMEFake(t, pki, dns)
 	env := tlsEnv(t)
 	if err := os.MkdirAll(env.ACMEDir, 0o700); err != nil {
@@ -52,14 +52,14 @@ func newIssuance(t *testing.T) *issuance {
 	if err != nil {
 		t.Fatal(err)
 	}
+	reachDNS(client.Transport.(*http.Transport))
 	r := New(env, supplied(
 		apiTokenConnection(runtime.ConnectionProviderCloudflareDNS, "cloudflare_dns", dnsURL, "synthetic"),
 		acmeConnection("acme", "ops@example.test", authority.directory()),
 	), client)
 	r.Now = func() time.Time { return tlsNow }
-	fixture := &issuance{r: r, dns: dns, authority: authority, acmeDir: env.ACMEDir}
-	r.Sleep = func(_ context.Context, d time.Duration) error { fixture.slept = append(fixture.slept, d); return nil }
-	return fixture
+	authority.serve(t, r)
+	return &issuance{r: r, dns: dns, authority: authority, acmeDir: env.ACMEDir}
 }
 
 func (f *issuance) lineageDir(t *testing.T) string {
@@ -98,82 +98,87 @@ func (f *issuance) stagedLeftovers(t *testing.T) []string {
 }
 
 func TestIssuanceSavesALineageAndRemovesItsChallenges(t *testing.T) {
-	f := newIssuance(t)
-	oldChain, oldKey, _ := newTestPKI(t).leaf(2, tlsNow.AddDate(0, 0, 5), "a.example", "*.a.example")
-	f.certbotLineage(t, oldChain, oldKey)
+	synctest.Test(t, func(t *testing.T) {
+		f := newIssuance(t)
+		oldChain, oldKey, _ := newTestPKI(t).leaf(2, tlsNow.AddDate(0, 0, 5), "a.example", "*.a.example")
+		f.certbotLineage(t, oldChain, oldKey)
 
-	fullchain, privateKey, err := f.r.issueCertificate(t.Context(), issuanceSpec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := validateCertificate(fullchain, privateKey, issuanceSpec.Domains); err != nil {
-		t.Fatalf("issued: %v", err)
-	}
-	savedChain, savedKey, err := readLineage(f.lineageDir(t))
-	if err != nil || !bytes.Equal(savedChain, fullchain) || !bytes.Equal(savedKey, privateKey) {
-		t.Fatalf("the lineage is not what was issued: %v", err)
-	}
-	entries, _ := os.ReadDir(f.lineageDir(t))
-	modes := map[string]os.FileMode{}
-	for _, entry := range entries {
-		info, _ := entry.Info()
-		modes[entry.Name()] = info.Mode()
-	}
-	if len(modes) != 2 || modes["fullchain.pem"] != 0o644 || modes["privkey.pem"] != 0o600 {
-		t.Fatalf("lineage files: %v", modes)
-	}
-	if left := f.stagedLeftovers(t); len(left) != 0 {
-		t.Fatalf("left beside the lineage: %v", left)
-	}
-	// A name and its wildcard are proved by two records under one name, given one wait.
-	if len(f.dns.created) != 2 || !slices.Equal(f.dns.created, f.dns.deleted) || f.dns.remaining() != 0 {
-		t.Fatalf("challenge records: created %v, deleted %v", f.dns.created, f.dns.deleted)
-	}
-	if !slices.Equal(f.slept, []time.Duration{30 * time.Second}) {
-		t.Fatalf("propagation waits: %v", f.slept)
-	}
-	// No credential is written to the ACME state.
-	_ = filepath.WalkDir(f.acmeDir, func(path string, _ os.DirEntry, _ error) error {
-		if data, err := os.ReadFile(path); err == nil && bytes.Contains(data, []byte("synthetic")) {
-			t.Fatalf("%s holds the DNS token", path)
+		start := time.Now()
+		fullchain, privateKey, err := f.r.issueCertificate(t.Context(), issuanceSpec)
+		if err != nil {
+			t.Fatal(err)
 		}
-		return nil
+		if _, err := validateCertificate(fullchain, privateKey, issuanceSpec.Domains); err != nil {
+			t.Fatalf("issued: %v", err)
+		}
+		savedChain, savedKey, err := readLineage(f.lineageDir(t))
+		if err != nil || !bytes.Equal(savedChain, fullchain) || !bytes.Equal(savedKey, privateKey) {
+			t.Fatalf("the lineage is not what was issued: %v", err)
+		}
+		entries, _ := os.ReadDir(f.lineageDir(t))
+		modes := map[string]os.FileMode{}
+		for _, entry := range entries {
+			info, _ := entry.Info()
+			modes[entry.Name()] = info.Mode()
+		}
+		if len(modes) != 2 || modes["fullchain.pem"] != 0o644 || modes["privkey.pem"] != 0o600 {
+			t.Fatalf("lineage files: %v", modes)
+		}
+		if left := f.stagedLeftovers(t); len(left) != 0 {
+			t.Fatalf("left beside the lineage: %v", left)
+		}
+		// A name and its wildcard are proved by two records under one name, given one wait.
+		if len(f.dns.created) != 2 || !slices.Equal(f.dns.created, f.dns.deleted) || f.dns.remaining() != 0 {
+			t.Fatalf("challenge records: created %v, deleted %v", f.dns.created, f.dns.deleted)
+		}
+		if waited := time.Since(start); waited != 30*time.Second {
+			t.Fatalf("propagation wait: %v", waited)
+		}
+		// No credential is written to the ACME state.
+		_ = filepath.WalkDir(f.acmeDir, func(path string, _ os.DirEntry, _ error) error {
+			if data, err := os.ReadFile(path); err == nil && bytes.Contains(data, []byte("synthetic")) {
+				t.Fatalf("%s holds the DNS token", path)
+			}
+			return nil
+		})
 	})
 }
 
 func TestIssuanceRegistersANewAccountOnce(t *testing.T) {
-	f := newIssuance(t)
-	if _, _, err := f.r.issueCertificate(t.Context(), issuanceSpec); err != nil {
-		t.Fatal(err)
-	}
-	registrations := f.authority.registrations
-	if len(registrations) != 1 || !slices.Equal(registrations[0].contact, []string{"mailto:ops@example.test"}) || !registrations[0].terms {
-		t.Fatalf("registrations: %+v", registrations)
-	}
-	path := accountKeyPath(f.acmeDir, f.authority.directory())
-	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("account key: %v %v", info, err)
-	}
-	data, _ := os.ReadFile(path)
-	key, err := firstPrivateKey(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := key.(*ecdsa.PrivateKey); !ok {
-		t.Fatalf("account key is %T", key)
-	}
-	thumbprint, _ := acme.JWKThumbprint(key.Public())
-	if registrations[0].thumbprint != thumbprint {
-		t.Fatal("the account registered is not the key saved")
-	}
-	// The next issuance signs in with the saved key: no second account.
-	if _, _, err := f.r.issueCertificate(t.Context(), issuanceSpec); err != nil {
-		t.Fatal(err)
-	}
-	if len(f.authority.registrations) != 1 || f.authority.lookups[len(f.authority.lookups)-1] != thumbprint {
-		t.Fatalf("second issuance registered again: %+v", f.authority.registrations)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		f := newIssuance(t)
+		if _, _, err := f.r.issueCertificate(t.Context(), issuanceSpec); err != nil {
+			t.Fatal(err)
+		}
+		registrations := f.authority.registrations
+		if len(registrations) != 1 || !slices.Equal(registrations[0].contact, []string{"mailto:ops@example.test"}) || !registrations[0].terms {
+			t.Fatalf("registrations: %+v", registrations)
+		}
+		path := accountKeyPath(f.acmeDir, f.authority.directory())
+		info, err := os.Stat(path)
+		if err != nil || info.Mode().Perm() != 0o600 {
+			t.Fatalf("account key: %v %v", info, err)
+		}
+		data, _ := os.ReadFile(path)
+		key, err := firstPrivateKey(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := key.(*ecdsa.PrivateKey); !ok {
+			t.Fatalf("account key is %T", key)
+		}
+		thumbprint, _ := acme.JWKThumbprint(key.Public())
+		if registrations[0].thumbprint != thumbprint {
+			t.Fatal("the account registered is not the key saved")
+		}
+		// The next issuance signs in with the saved key: no second account.
+		if _, _, err := f.r.issueCertificate(t.Context(), issuanceSpec); err != nil {
+			t.Fatal(err)
+		}
+		if len(f.authority.registrations) != 1 || f.authority.lookups[len(f.authority.lookups)-1] != thumbprint {
+			t.Fatalf("second issuance registered again: %+v", f.authority.registrations)
+		}
+	})
 }
 
 // rsaJWKJSON is a private RSA key as certbot's private_key.json holds it.
@@ -189,31 +194,33 @@ func rsaJWKJSON(key *rsa.PrivateKey) []byte {
 }
 
 func TestIssuanceKeepsCertbotsAccount(t *testing.T) {
-	f := newIssuance(t)
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
-	directory, _ := url.Parse(f.authority.directory())
-	accountDir := filepath.Join(f.acmeDir, "config", "accounts", directory.Host, "directory", "3f2a9c")
-	_ = os.MkdirAll(accountDir, 0o700)
-	if err := os.WriteFile(filepath.Join(accountDir, "private_key.json"), rsaJWKJSON(key), 0o400); err != nil {
-		t.Fatal(err)
-	}
-	thumbprint, _ := acme.JWKThumbprint(&key.PublicKey)
-	f.authority.knownAccount(thumbprint)
+	synctest.Test(t, func(t *testing.T) {
+		f := newIssuance(t)
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			t.Fatal(err)
+		}
+		directory, _ := url.Parse(f.authority.directory())
+		accountDir := filepath.Join(f.acmeDir, "config", "accounts", directory.Host, "directory", "3f2a9c")
+		_ = os.MkdirAll(accountDir, 0o700)
+		if err := os.WriteFile(filepath.Join(accountDir, "private_key.json"), rsaJWKJSON(key), 0o400); err != nil {
+			t.Fatal(err)
+		}
+		thumbprint, _ := acme.JWKThumbprint(&key.PublicKey)
+		f.authority.knownAccount(thumbprint)
 
-	if _, _, err := f.r.issueCertificate(t.Context(), issuanceSpec); err != nil {
-		t.Fatal(err)
-	}
-	if len(f.authority.registrations) != 0 || !slices.Contains(f.authority.lookups, thumbprint) {
-		t.Fatalf("certbot's account was not the one used: registrations %+v", f.authority.registrations)
-	}
-	data, _ := os.ReadFile(accountKeyPath(f.acmeDir, f.authority.directory()))
-	saved, err := firstPrivateKey(data)
-	if err != nil || !key.PublicKey.Equal(saved.Public()) {
-		t.Fatalf("the controller did not keep certbot's key: %v", err)
-	}
+		if _, _, err := f.r.issueCertificate(t.Context(), issuanceSpec); err != nil {
+			t.Fatal(err)
+		}
+		if len(f.authority.registrations) != 0 || !slices.Contains(f.authority.lookups, thumbprint) {
+			t.Fatalf("certbot's account was not the one used: registrations %+v", f.authority.registrations)
+		}
+		data, _ := os.ReadFile(accountKeyPath(f.acmeDir, f.authority.directory()))
+		saved, err := firstPrivateKey(data)
+		if err != nil || !key.PublicKey.Equal(saved.Public()) {
+			t.Fatalf("the controller did not keep certbot's key: %v", err)
+		}
+	})
 }
 
 func TestCertbotsAccountIsUsedOnlyWhenThereIsOne(t *testing.T) {
@@ -282,29 +289,31 @@ func TestFailedIssuanceLeavesNoPartialLineage(t *testing.T) {
 	for _, c := range cases {
 		for _, existing := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/existing=%v", c.name, existing), func(t *testing.T) {
-				f := newIssuance(t)
-				oldChain, oldKey, _ := newTestPKI(t).leaf(2, tlsNow.AddDate(0, 0, 5), "a.example", "*.a.example")
-				if existing {
-					f.certbotLineage(t, oldChain, oldKey)
-				}
-				c.prepare(f)
-				_, _, err := f.r.issueCertificate(t.Context(), issuanceSpec)
-				if err == nil || !strings.Contains(err.Error(), c.want) {
-					t.Fatalf("error: %v", err)
-				}
-				if len(f.dns.created) != c.records || !slices.Equal(f.dns.created, f.dns.deleted) || f.dns.remaining() != 0 {
-					t.Fatalf("challenge records: created %v, deleted %v", f.dns.created, f.dns.deleted)
-				}
-				chain, key, readErr := readLineage(f.lineageDir(t))
-				if existing && (readErr != nil || !bytes.Equal(chain, oldChain) || !bytes.Equal(key, oldKey)) {
-					t.Fatalf("the previous lineage changed: %v", readErr)
-				}
-				if !existing && !os.IsNotExist(readErr) {
-					t.Fatalf("a lineage appeared: %v", readErr)
-				}
-				if left := f.stagedLeftovers(t); len(left) != 0 {
-					t.Fatalf("left beside the lineage: %v", left)
-				}
+				synctest.Test(t, func(t *testing.T) {
+					f := newIssuance(t)
+					oldChain, oldKey, _ := newTestPKI(t).leaf(2, tlsNow.AddDate(0, 0, 5), "a.example", "*.a.example")
+					if existing {
+						f.certbotLineage(t, oldChain, oldKey)
+					}
+					c.prepare(f)
+					_, _, err := f.r.issueCertificate(t.Context(), issuanceSpec)
+					if err == nil || !strings.Contains(err.Error(), c.want) {
+						t.Fatalf("error: %v", err)
+					}
+					if len(f.dns.created) != c.records || !slices.Equal(f.dns.created, f.dns.deleted) || f.dns.remaining() != 0 {
+						t.Fatalf("challenge records: created %v, deleted %v", f.dns.created, f.dns.deleted)
+					}
+					chain, key, readErr := readLineage(f.lineageDir(t))
+					if existing && (readErr != nil || !bytes.Equal(chain, oldChain) || !bytes.Equal(key, oldKey)) {
+						t.Fatalf("the previous lineage changed: %v", readErr)
+					}
+					if !existing && !os.IsNotExist(readErr) {
+						t.Fatalf("a lineage appeared: %v", readErr)
+					}
+					if left := f.stagedLeftovers(t); len(left) != 0 {
+						t.Fatalf("left beside the lineage: %v", left)
+					}
+				})
 			})
 		}
 	}
@@ -331,40 +340,45 @@ func TestIssuedCertificateIsCheckedBeforeItIsSaved(t *testing.T) {
 // certificate is kept and the failure is still reported: the next renewal
 // resumes from the saved lineage.
 func TestIssuanceKeepsTheCertificateWhenCleanupFails(t *testing.T) {
-	f := newIssuance(t)
-	f.dns.refuseDelete = true
-	_, _, err := f.r.issueCertificate(t.Context(), issuanceSpec)
-	if err == nil || !strings.Contains(err.Error(), "the challenge record _acme-challenge.a.example could not be removed") {
-		t.Fatalf("error: %v", err)
-	}
-	chain, key, readErr := readLineage(f.lineageDir(t))
-	if readErr != nil {
-		t.Fatal(readErr)
-	}
-	if _, err := validateCertificate(chain, key, issuanceSpec.Domains); err != nil {
-		t.Fatal(err)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		f := newIssuance(t)
+		f.dns.refuseDelete = true
+		_, _, err := f.r.issueCertificate(t.Context(), issuanceSpec)
+		if err == nil || !strings.Contains(err.Error(), "the challenge record _acme-challenge.a.example could not be removed") {
+			t.Fatalf("error: %v", err)
+		}
+		chain, key, readErr := readLineage(f.lineageDir(t))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if _, err := validateCertificate(chain, key, issuanceSpec.Domains); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestIssuanceRefusesAnUnreadablePropagationSetting(t *testing.T) {
-	for _, value := range []string{"soon", "-1", "3601"} {
+	synctest.Test(t, func(t *testing.T) {
+		for _, value := range []string{"soon", "-1", "3601"} {
+			f := newIssuance(t)
+			f.r.Env.ACMEPropagationSeconds = value
+			if _, _, err := f.r.issueCertificate(t.Context(), issuanceSpec); err == nil || !strings.Contains(err.Error(), "ACME_PROPAGATION_SECONDS") {
+				t.Fatalf("%q: %v", value, err)
+			}
+			if len(f.authority.lookups)+len(f.dns.created) != 0 {
+				t.Fatalf("%q: something was asked before the setting was read", value)
+			}
+		}
 		f := newIssuance(t)
-		f.r.Env.ACMEPropagationSeconds = value
-		if _, _, err := f.r.issueCertificate(t.Context(), issuanceSpec); err == nil || !strings.Contains(err.Error(), "ACME_PROPAGATION_SECONDS") {
-			t.Fatalf("%q: %v", value, err)
+		f.r.Env.ACMEPropagationSeconds = "0"
+		start := time.Now()
+		if _, _, err := f.r.issueCertificate(t.Context(), issuanceSpec); err != nil {
+			t.Fatal(err)
 		}
-		if len(f.authority.lookups)+len(f.dns.created) != 0 {
-			t.Fatalf("%q: something was asked before the setting was read", value)
+		if waited := time.Since(start); waited != 0 {
+			t.Fatalf("waited %v", waited)
 		}
-	}
-	f := newIssuance(t)
-	f.r.Env.ACMEPropagationSeconds = "0"
-	if _, _, err := f.r.issueCertificate(t.Context(), issuanceSpec); err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(f.slept, []time.Duration{0}) {
-		t.Fatalf("waits: %v", f.slept)
-	}
+	})
 }
 
 // State the controller cannot write stops issuance before the authority is asked.

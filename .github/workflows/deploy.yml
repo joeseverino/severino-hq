@@ -11,7 +11,10 @@ name: Deploy
 #            root's hq-host, which verifies its signature, refuses one that
 #            drops an extension, recreates, waits for health, rolls back if
 #            it fails
-#   Report   sets the deployment's status: live, failed or not deployed
+#   Report   sets the deployment's status to the outcome deploy/outcomes.json
+#            declares for the deploy's exit: live, live with a check after it
+#            failed, not deployed, a rollback that failed, interrupted after
+#            hq-host began, or not approved
 #
 # The deployment is GitHub's own record of where a commit stands: on the
 # commit, the merged pull request and the environment's page. It is created
@@ -46,6 +49,7 @@ jobs:
       packages: read
     outputs:
       image: ${{ steps.find.outputs.image }}
+      commit: ${{ steps.find.outputs.commit }}
       deployment: ${{ steps.record.outputs.deployment }}
     steps:
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
@@ -125,7 +129,11 @@ jobs:
     # time and it is the newest: a later run takes this group and the older
     # wait is cancelled, so the queue holds the build that includes everything
     # and a superseded release ends as cancelled, not as a refusal. Cancelling
-    # a wait changes nothing on the host; the deploy itself is never cancelled.
+    # a wait changes nothing on the host. The Deploy job can still be
+    # cancelled: pending in its group behind a newer one, before it begins; by
+    # a person cancelling the run or its own timeout, once hq-host is running.
+    # A lost runner fails it. Report tells these apart by whether the deploy
+    # step began.
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     # The environment's reviewers hold this job; the deployment it would
@@ -157,10 +165,11 @@ jobs:
     # connects in. Only this job runs there, only for main, and it holds no
     # key of HQ's app.
     runs-on: [self-hosted, severino-hq]
-    timeout-minutes: 30
+    # Allows for the release's rehearsal, bounded in controller/host/rehearse.go.
+    timeout-minutes: 40
     # Approved in the job before this one, which is what holds the
-    # environment's protection. One deploy at a time, and one that has
-    # started always finishes.
+    # environment's protection. One deploy at a time: a newer one waits for
+    # one that has started rather than cancelling it.
     concurrency:
       group: deploy-production
       cancel-in-progress: false
@@ -168,8 +177,12 @@ jobs:
     # nowhere on this machine.
     permissions:
       packages: read
+    # Kept when the step fails, so Report can say whether the release stands.
+    outputs:
+      status: ${{ steps.deploy.outputs.status }}
     steps:
       - name: Deploy exact image with health rollback
+        id: deploy
         # Same deploy path and rollback as a host release: it pulls, recreates,
         # waits for health, activates the controller, and restores the previous
         # image if any step fails.
@@ -185,14 +198,20 @@ jobs:
         # The registry token goes over stdin, not as an argument: arguments are
         # readable in the process table while the command runs. Root writes it
         # to a directory of this deploy's alone and removes it after.
+        #
+        # hq-host's exit status is the deploy's outcome, as deploy/outcomes.json
+        # declares each; Report reads it there. The step fails on any but live.
         env:
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY_USER: ${{ github.actor }}
           IMAGE: ${{ needs.resolve.outputs.image }}
         run: |
           set -euo pipefail
+          status=0
           printf '%s\n%s\n' "$REGISTRY_USER" "$REGISTRY_TOKEN" \
-            | sudo /usr/local/lib/severino-hq/deploy/bin/hq-host deploy "$IMAGE"
+            | sudo /usr/local/lib/severino-hq/deploy/bin/hq-host deploy "$IMAGE" || status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
 
   report:
     name: Report
@@ -202,30 +221,101 @@ jobs:
     if: always() && needs.resolve.outputs.deployment != ''
     runs-on: ubuntu-26.04
     timeout-minutes: 5
-    permissions: {}
+    # actions: read, to see whether the deploy step began.
+    permissions:
+      actions: read
+      contents: read
     steps:
       - *deployments-token
+      # The deploy outcomes, and the module that reads which release
+      # production ran before, and nothing else.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            deploy
+            tools/pipeline
       - name: Set the deployment's status
         env:
           GH_TOKEN: ${{ steps.deployments.outputs.token }}
+          GH_REPO: ${{ github.repository }}
           DEPLOYMENT: ${{ needs.resolve.outputs.deployment }}
+          COMMIT: ${{ needs.resolve.outputs.commit }}
+          IMAGE: ${{ needs.resolve.outputs.image }}
+          STATUS: ${{ needs.deploy.outputs.status }}
           RESULT: ${{ needs.deploy.result }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        # A failed deploy changed nothing that stays: hq-host refuses before it
-        # recreates, or restores the previous image.
+          ACTIONS_TOKEN: ${{ github.token }}
+          # The Deploy job and its hq-host step, as GitHub's record of the run names them.
+          DEPLOY_JOB: Deploy
+          DEPLOY_STEP: Deploy exact image with health rollback
+        # The outcome is the one deploy/outcomes.json declares for hq-host's
+        # exit status, or not-deployed for a status it names nowhere. With no
+        # status, hq-host never answered: not-approved for a deploy job that
+        # never ran or was cancelled before its step began, not-deployed for
+        # one that failed before it began, and interrupted for one whose step
+        # began, since hq-host may have stopped, rolled back or still be
+        # running. Whether the step began is GitHub's record of the run's
+        # steps, which the runner reports as each starts and which outlives a
+        # lost runner, where a job's outputs are evaluated on the runner at its
+        # end. Unread, it is taken to have begun, so no deployment claims the
+        # previous image on a guess. A release that went live is a success
+        # whatever failed after it, since GitHub, release:report and HQ read
+        # the newest success as what production runs; its description says a
+        # check failed. The summary is public, so it names no host: an image,
+        # commits and links.
         run: |
           set -euo pipefail
-          case "$RESULT" in
-            success) state=success description="Live: passed its health check" ;;
-            failure) state=failure description="Not deployed: production still runs the previous image" ;;
-            *) state=inactive description="Not approved or superseded: production still runs the previous image" ;;
-          esac
+          began=""
+          if [ -z "$STATUS" ] && [ "$RESULT" != skipped ]; then
+            if jobs=$(GH_TOKEN="$ACTIONS_TOKEN" gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" --paginate --slurp); then
+              began=$(jq -r --arg job "$DEPLOY_JOB" --arg step "$DEPLOY_STEP" '
+                [.[].jobs[] | select(.name == $job) | .steps[]?
+                 | select(.name == $step and .started_at != null and .conclusion != "skipped")]
+                | length > 0' <<<"$jobs") || began=""
+            fi
+            if [ -z "$began" ]; then
+              echo "::warning title=Deploy step not read::Whether hq-host began was not read, so the deploy is reported as interrupted."
+            fi
+          fi
+          outcome=$(jq -c --arg status "$STATUS" --arg result "$RESULT" --arg began "$began" '
+            .outcomes as $declared
+            | if $status != "" then ([$declared[] | select(.exit == ($status | tonumber))][0] // $declared["not-deployed"])
+              elif $result == "skipped" then $declared["not-approved"]
+              elif $began == "false" then (if $result == "failure" then $declared["not-deployed"] else $declared["not-approved"] end)
+              else $declared["interrupted"] end' deploy/outcomes.json)
+          state=$(jq -r .state <<<"$outcome")
+          description=$(jq -r .description <<<"$outcome")
+          production=$(jq -r .production <<<"$outcome")
+          check_failed=$(jq -r .check_failed <<<"$outcome")
           jq -n --arg state "$state" --arg log "$RUN_URL" --arg description "$description" \
             '{state: $state, log_url: $log, description: $description}' \
             | gh api "repos/$GITHUB_REPOSITORY/deployments/$DEPLOYMENT/statuses" --input - --silent
           {
             echo "### $description"
-            if [ "$RESULT" = failure ]; then
+            if [ "$production" = release ]; then
+              echo
+              if previous=$(python3 -m tools.pipeline.production previous "$COMMIT"); then
+                if [ -n "$previous" ]; then
+                  echo "Changes since the release production ran before: [${previous:0:12}...${COMMIT:0:12}]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/$previous...$COMMIT)"
+                else
+                  echo "No earlier release was live, so there is nothing to compare."
+                fi
+              else
+                echo "The release production ran before was not read; this step's log says why."
+              fi
+              echo
+              echo "To verify the image production runs was signed by Compose on main:"
+              echo
+              echo '```sh'
+              echo "cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/compose.yml@refs/heads/main $IMAGE"
+              echo '```'
+            fi
+            if [ "$production" = unknown ]; then
+              echo
+              echo "Read what production runs with \`hq-host verify\` on the deploy host before deploying again."
+            fi
+            if [ "$production" != release ] && { [ "$check_failed" = true ] || [ "$production" = unknown ]; }; then
               echo
               echo "What the deploy, sync and installer printed is in /var/log/severino-hq on the deploy host."
             fi

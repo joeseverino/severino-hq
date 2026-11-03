@@ -34,6 +34,9 @@ type Environment struct {
 	// ACMEDir is the certificate lineage directory.
 	ACMEDir                string `env:"HQ_ACME_DIR"`
 	ACMEPropagationSeconds string `env:"ACME_PROPAGATION_SECONDS"`
+	// SealKeyDir holds the private keys HQ's web seals to (NewOpener),
+	// mounted read-only.
+	SealKeyDir string `env:"HQ_SEAL_DIR"`
 	// Run is this run's nonce, which labels its own container.
 	Run string `env:"HQ_CONTROLLER_RUN"`
 	// Image is the image this run was started from, and SourceRepository the

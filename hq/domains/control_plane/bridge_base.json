@@ -153,7 +153,7 @@
     "/material": {
       "post": {
         "operationId": "material",
-        "summary": "Certificate material for one resource.",
+        "summary": "Certificate material for one resource, its key sealed.",
         "x-bridge-action": "material",
         "parameters": [
           {
@@ -910,25 +910,31 @@
         "type": "object",
         "properties": {
           "fullchain": {
-            "type": "string"
-          },
-          "private_key": {
-            "type": "string"
+            "type": "string",
+            "description": "The certificate and its chain, PEM-encoded, which are public."
           },
           "domains": {
             "type": "array",
             "items": {
               "type": "string"
             }
+          },
+          "slots": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^hq2\\."
+            },
+            "description": "Each secret the resource holds, by slot, sealed to the controller: only the controller opens one, and only for this resource and slot."
           }
         },
         "additionalProperties": false,
         "required": [
           "fullchain",
-          "private_key",
-          "domains"
+          "domains",
+          "slots"
         ],
-        "description": "A stored certificate's material, released only to the controller applying it."
+        "description": "A stored certificate's material, released only to the controller applying it. Its secrets cross sealed."
       },
       "Condition": {
         "type": "object",

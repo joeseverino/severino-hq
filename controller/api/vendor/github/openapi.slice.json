@@ -1959,6 +1959,18 @@
       "description": "The name of the check.",
       "example": "test-coverage",
       "type": "string"
+     },
+     "check_suite": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "id"
+      ],
+      "nullable": true
      }
     },
     "required": [
@@ -1966,7 +1978,8 @@
      "name",
      "status",
      "conclusion",
-     "started_at"
+     "started_at",
+     "check_suite"
     ]
    },
    "code-scanning-alert-items": {
@@ -2459,6 +2472,12 @@
       "example": "success",
       "type": "string"
      },
+     "description": {
+      "description": "A short description of the status.",
+      "type": "string",
+      "maxLength": 140,
+      "example": "Deployment finished successfully."
+     },
      "target_url": {
       "description": "Closing down notice: the URL to associate with this status.",
       "type": "string",
@@ -2472,6 +2491,7 @@
     },
     "required": [
      "state",
+     "description",
      "target_url"
     ]
    },
@@ -3976,6 +3996,11 @@
       "description": "The name of the workflow run.",
       "nullable": true,
       "example": "Build"
+     },
+     "check_suite_id": {
+      "type": "integer",
+      "description": "The ID of the associated check suite.",
+      "example": 42
      },
      "head_branch": {
       "type": "string",

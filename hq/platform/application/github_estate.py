@@ -20,6 +20,7 @@ from hq.domains.control_plane.observations.github import (
     REPOSITORY_KIND,
     RepositoryRecord,
 )
+from hq.platform.application.labels import dotted
 
 from .containers import SERIOUS
 from .derivations import reached, whole
@@ -101,7 +102,7 @@ def workflow_run(run: Mapping[str, Any]) -> WorkflowRun:
     branch = str(run.get("branch") or "")
     created = moment(str(run.get("created_at") or ""))
     age = ago(created) if created else ""
-    where = " · ".join(part for part in (branch, str(run.get("sha") or "")[:7], age) if part)
+    where = dotted(branch, str(run.get("sha") or "")[:7], age)
     return WorkflowRun(
         name=str(run.get("name") or "Workflow"),
         url=web_url(run.get("url")),
@@ -309,7 +310,10 @@ class Repository:
 
         if not self.production:
             return ""
-        return _DEPLOY_TONES.get(self.production.get("state"), "attention")
+        tone = _DEPLOY_TONES.get(self.production.get("state"), "attention")
+        # Live, with a check after the deploy failed: the controller reads it
+        # from the outcome the deployment's status declares.
+        return "attention" if tone == "good" and self.production.get("check_failed") else tone
 
     @property
     def verified_tone(self) -> str:
@@ -554,7 +558,7 @@ def _waiting(repo: Repository) -> list[tuple[Insight, str]]:
             key=f"github-waiting:{repo.name}:{run.get('id')}",
             value=f"{hours}h",
             title=f"{name} waits for your approval to deploy to {where}",
-            body=f"{repo.short} · {run.get('sha', '')[:7]}",
+            body=dotted(repo.short, run.get("sha", "")[:7]),
             action="Review deployment",
             url=web_url(run.get("url")) or repo.url,
             workflow=cannot_help(

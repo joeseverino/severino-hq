@@ -9,7 +9,7 @@ rules:
       deny:
         - actions/cache
   # jactionlint, at the newest release mise offers, refuses a `$/` reference, and
-  # the two uses of the host's uv action under ./host/ name the host checked
+  # the uses of the host's host-tool action under ./host/ name the host checked
   # out at the commit the job resolved, which the running workflow's own commit
   # need not be.
   self-repository:

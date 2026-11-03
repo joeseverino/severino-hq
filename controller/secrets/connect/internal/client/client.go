@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/internal/clock"
 	"github.com/joeseverino/severino-hq/controller/secrets/connectapi"
 )
 
@@ -177,7 +178,10 @@ type Client struct {
 	// and in no field, so nothing that prints a Client can reach it.
 	authorize func(*http.Request)
 	http      *http.Client
-	// Sleep waits between readiness attempts; tests replace it.
+	// Sleep waits between readiness attempts. It is clock.Sleep unless set; it
+	// stays a field because the client's tests and the renderer's reach Connect
+	// over real loopback, the only network the port rule dials, which a
+	// synctest bubble's fake clock cannot hold.
 	Sleep func(context.Context, time.Duration) error
 }
 
@@ -213,7 +217,7 @@ func New(endpoint string, token Token, ports Ports) (*Client, error) {
 	if token.value == "" {
 		return nil, errors.New("empty Connect token")
 	}
-	return &Client{endpoint: endpoint, authorize: bearer(token), http: newHTTPClient(ports), Sleep: sleep}, nil
+	return &Client{endpoint: endpoint, authorize: bearer(token), http: newHTTPClient(ports), Sleep: clock.Sleep}, nil
 }
 
 func bearer(token Token) func(*http.Request) {
@@ -225,17 +229,6 @@ func (c Client) String() string             { return "connect.Client(" + c.endpo
 func (c Client) GoString() string           { return c.String() }
 func (c Client) Format(f fmt.State, _ rune) { _, _ = io.WriteString(f, c.String()) }
 func (c Client) LogValue() slog.Value       { return slog.StringValue(c.String()) }
-
-func sleep(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
 
 // get performs one bounded GET and decodes its JSON answer into out.
 func (c *Client) get(ctx context.Context, op, path string, authenticated bool, out any) error {

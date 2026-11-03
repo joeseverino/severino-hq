@@ -49,6 +49,31 @@ func TestARefusedUnitRequestIsAnError(t *testing.T) {
 	}
 }
 
+// An answer two readers could read differently is no result: a name given
+// twice, a name in another case, or data after the result.
+func TestAnAmbiguousUnitAnswerIsRefused(t *testing.T) {
+	for name, answer := range map[string]string{
+		"a name given twice":     `{"outcome":"refused","outcome":"done"}`,
+		"a name in another case": `{"Outcome":"done"}`,
+		"trailing data":          `{"outcome":"done"}]`,
+		"a second result":        `{"outcome":"done"}{"outcome":"refused"}`,
+	} {
+		dial := func(context.Context, string) (net.Conn, error) {
+			client, server := net.Pipe()
+			go func() {
+				defer server.Close()
+				_, _ = bufio.NewReader(server).ReadString('\n')
+				_, _ = server.Write([]byte(answer))
+			}()
+			return client, nil
+		}
+		socket := unitSocket{path: "/run/example.sock", machine: "hq-node", dial: dial}
+		if err := socket.Act(t.Context(), "hq-node", "stop", "web.service"); err == nil {
+			t.Errorf("%s was read as a result", name)
+		}
+	}
+}
+
 func TestTheUnitSocketReachesOnlyTheControllersMachine(t *testing.T) {
 	r := New(runtime.Environment{UnitSocket: "/run/example.sock"}, supplied(), &fakeHTTP{})
 	r.ControllerID = "hq-node"

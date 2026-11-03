@@ -69,7 +69,12 @@ func (call sshCall) session(ctx context.Context, operation string, payload []byt
 	if err != nil {
 		return sshFailed, "the identity is not a usable private key"
 	}
+	// The package's defaults still carry algorithms it names insecure; its
+	// supported lists leave them out, in its own preference order.
+	supported := ssh.SupportedAlgorithms()
 	config := &ssh.ClientConfig{
+		KeyExchanges:      supported.KeyExchanges,
+		MACs:              supported.MACs,
 		User:              call.target.User,
 		Auth:              []ssh.AuthMethod{ssh.PublicKeys(signer)},
 		HostKeyCallback:   pinned,

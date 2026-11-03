@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/internal/clock"
 	"github.com/joeseverino/severino-hq/controller/secrets/connecttest"
 )
 
@@ -80,7 +81,7 @@ func TestOnlyAPrivilegedPortIsDialedOutsideATest(t *testing.T) {
 	if _, err := inner.Get(fake.Server.URL + "/v1/vaults"); !errors.Is(err, ErrPort) {
 		t.Fatalf("a high port was dialed: %v", err)
 	}
-	rigged := &Client{endpoint: fake.Server.URL, authorize: bearer(token(t)), http: newHTTPClient(Privileged), Sleep: sleep}
+	rigged := &Client{endpoint: fake.Server.URL, authorize: bearer(token(t)), http: newHTTPClient(Privileged), Sleep: clock.Sleep}
 	if _, err := rigged.Vaults(context.Background()); !errors.Is(err, ErrPort) {
 		t.Fatalf("a client past its endpoint check read a high port: %v", err)
 	}
@@ -416,7 +417,7 @@ func TestDenialIsFinalAndUnavailabilityIsRetriedUnderTheDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 	c = client(t, fake)
-	c.Sleep = sleep
+	c.Sleep = clock.Sleep
 	started := time.Now()
 	if _, _, err := c.WaitReady(ctx); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("an unavailable Connect was not reported as one: %v", err)

@@ -124,6 +124,25 @@ type Providers interface {
 	BeginSnapshot() func()
 }
 
+// OpenedMaterial is Material with each sealed slot opened: what the worker
+// sets as the spec's "material" for the one action that needs it.
+type OpenedMaterial struct {
+	Fullchain string            `json:"fullchain"`
+	Domains   []string          `json:"domains"`
+	Secrets   map[string]string `json:"secrets"`
+}
+
+// Unsealer opens a value HQ sealed to this controller: an *Opener, or
+// Unopenable when the run's keys could not be read.
+type Unsealer interface {
+	Open(sealed, resourceKey, slot string) ([]byte, error)
+}
+
+// Unopenable opens nothing, and says why with Err.
+type Unopenable struct{ Err error }
+
+func (u Unopenable) Open(string, string, string) ([]byte, error) { return nil, u.Err }
+
 func isNetworkFailure(c ConnectionRecord) bool { return !c.OK && c.Failure == FailureClassNetwork }
 
 func planHealth(connections []ConnectionRecord) (bool, []string) {

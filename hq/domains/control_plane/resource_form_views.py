@@ -9,7 +9,6 @@ from django.views import View
 
 from hq.platform.application.adoption import ADOPT, ADOPT_SERVICE
 from hq.platform.application.asks import APPLIES_SHORTLY
-from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.certificates import UPLOAD
 from hq.platform.application.entity_links import kind_label
 from hq.platform.application.glance import DASHBOARD_MACHINE, dashboard_machine_selected
@@ -23,8 +22,9 @@ from hq.platform.application.provider_forms import (
     spec_form_class,
 )
 from hq.platform.application.routes import reverse
-from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.security import safe_next
 from hq.platform.application.ui import ended
+from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.core import secrets
 
 from .models import ManagedResource, OperationRequest
@@ -164,8 +164,8 @@ class ResourceFormView(View):
     def _declare(self, request, kind, resource, identity, spec, material):
         """Declare it, then act on the answer: a redirect, or None to re-render."""
 
-        principal = web_principal(request.user)
-        result = execute_capability(
+        result = execute_posted(
+            request,
             "infrastructure.resource.update" if resource else "infrastructure.resource.create",
             {
                 # The identifier is never asked for again once a resource
@@ -176,27 +176,23 @@ class ResourceFormView(View):
                 # A thing being created is a thing you want applied.
                 "enabled": identity.cleaned_data["enabled"] if identity else True,
             },
-            principal=principal,
             target=resource.key if resource else None,
         )
-        if not result["ok"]:
-            spec.add_error(None, result["error"]["message"])
+        if refused(request, result, form=spec):
             return None
         saved = result["resource"]["key"]
         if resource and kind == MACHINE_KIND:
-            shown = execute_capability(
-                DASHBOARD_MACHINE, {"selected": "show_on_dashboard" in request.POST}, principal=principal, target=saved
+            shown = execute_posted(
+                request, DASHBOARD_MACHINE, {"selected": "show_on_dashboard" in request.POST}, target=saved
             )
-            if not shown["ok"]:
-                messages.error(request, shown["error"]["message"])
+            refused(request, shown)
         if material is not None:
-            stored = execute_capability(
-                PROVIDERS[kind].material_capability, dict(material.cleaned_data), principal=principal, target=saved
+            stored = execute_posted(
+                request, PROVIDERS[kind].material_capability, dict(material.cleaned_data), target=saved
             )
-            if not stored["ok"]:
-                # The declaration exists and the material does not, so
-                # say which half landed rather than reporting success.
-                messages.error(request, stored["error"]["message"])
+            # The declaration exists and the material does not, so
+            # say which half landed rather than reporting success.
+            if refused(request, stored):
                 return redirect("control_plane:upload_certificate", key=saved)
         messages.success(
             request,
@@ -400,9 +396,8 @@ class AdoptView(View):
     """
 
     def post(self, request, hostname):
-        result = execute_capability(ADOPT_SERVICE, {"hostname": hostname}, principal=web_principal(request.user))
-        if not result["ok"]:
-            messages.error(request, result["error"]["message"])
+        result = execute_posted(request, ADOPT_SERVICE, {"hostname": hostname})
+        if refused(request, result):
             return redirect("control_plane:services")
         adopted = ", ".join(result["adopted"])
         messages.success(
@@ -433,7 +428,7 @@ class CertificateUploadView(View):
             {
                 "resource": resource,
                 "form": CertificateUploadForm(),
-                "store_ready": secrets.available(),
+                "store_ready": secrets.sealing_available(),
                 "material": getattr(resource, "material", None),
                 **self._page(resource),
             },
@@ -443,12 +438,8 @@ class CertificateUploadView(View):
         resource = get_object_or_404(ManagedResource, key=key)
         form = CertificateUploadForm(request.POST)
         if form.is_valid():
-            stored = execute_capability(
-                UPLOAD, dict(form.cleaned_data), principal=web_principal(request.user), target=resource.key
-            )
-            if not stored["ok"]:
-                form.add_error(None, stored["error"]["message"])
-            else:
+            stored = execute_posted(request, UPLOAD, dict(form.cleaned_data), target=resource.key)
+            if not refused(request, stored, form=form):
                 messages.success(
                     request,
                     f"Stored a certificate for {ended(', '.join(stored['domains']))} {APPLIES_SHORTLY}",
@@ -460,7 +451,7 @@ class CertificateUploadView(View):
             {
                 "resource": resource,
                 "form": form,
-                "store_ready": secrets.available(),
+                "store_ready": secrets.sealing_available(),
                 "material": getattr(resource, "material", None),
                 **self._page(resource),
             },
@@ -476,10 +467,8 @@ class AdoptRecordView(View):
     """
 
     def post(self, request, kind, token):
-        result = execute_capability(ADOPT, {"kind": kind, "token": token}, principal=web_principal(request.user))
-        if not result["ok"]:
-            messages.error(request, result["error"]["message"])
-        else:
+        result = execute_posted(request, ADOPT, {"kind": kind, "token": token})
+        if not refused(request, result):
             messages.success(
                 request,
                 f"HQ now manages “{result['resource']['key']}”. Nothing live was changed.",

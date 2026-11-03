@@ -75,8 +75,8 @@ def _export(parameters: Parameters, payload: Any) -> Any:
 
 def _material(parameters: Parameters, payload: Any) -> Any:
     # Its own action rather than a field on the contract: `export` answers
-    # with a contract, and a stored private key is read only by the call that
-    # asks for it by name.
+    # with a contract, and a stored private key, sealed to the controller, is
+    # read only by the call that asks for it by name.
     del payload
     try:
         return material_for(parameters["resource"])

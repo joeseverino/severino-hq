@@ -160,8 +160,9 @@ func run(ctx context.Context, args []string, env runtime.Environment, supplied r
 		_ = json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
 		return 1
 	}
-	// The bridge carries no credential in either direction: HQ persists, it
-	// does not reach providers, and the socket itself is the authorization.
+	// The bridge carries no credential in either direction, and a secret
+	// only sealed to this controller: HQ persists, it does not reach
+	// providers, and the socket itself is the authorization.
 	bridge, err := runtime.NewSocketBridge(env.BridgeSocket)
 	if err != nil {
 		return fail(err)
@@ -187,6 +188,14 @@ func run(ctx context.Context, args []string, env runtime.Environment, supplied r
 			slog.String("actions", strings.Join(uncovered, ", ")))
 	}
 	worker := runtime.Worker{ID: *controllerID, Bridge: bridge, Providers: controller, Output: stdout, Log: log}
+	// Keys that cannot be read refuse each action that needs one, with the
+	// reason, and leave the rest of the pass to run.
+	if opener, err := runtime.NewOpener(env.SealKeyDir); err != nil {
+		log.Warn("sealing keys unreadable", slog.String("event", "controller.seal_keys"), slog.Any("error", err))
+		worker.Opener = runtime.Unopenable{Err: err}
+	} else {
+		worker.Opener = opener
+	}
 	var code int
 	if *glance {
 		code, err = worker.Glances(ctx)

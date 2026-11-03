@@ -21,8 +21,9 @@ import (
 type portainerAPI struct {
 	t      *testing.T
 	mu     sync.Mutex
-	routes map[string]string // path?query -> JSON body
-	status map[string]int    // path?query -> non-2xx status
+	routes map[string]string   // path?query -> JSON body
+	status map[string]int      // path?query -> non-2xx status
+	turns  map[string][]string // path?query -> bodies answered in turn, the last repeated
 	writes []portainerWrite
 }
 
@@ -62,6 +63,12 @@ func (a *portainerAPI) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	answer, ok := a.routes[key]
+	if bodies := a.turns[key]; len(bodies) > 0 {
+		answer, ok = bodies[0], true
+		if len(bodies) > 1 {
+			a.turns[key] = bodies[1:]
+		}
+	}
 	if !ok {
 		a.t.Errorf("unexpected GET %s", key)
 		w.WriteHeader(http.StatusNotFound)
@@ -403,7 +410,7 @@ func stackRoutes(stackFile, stacks, containers string) map[string]string {
 func TestPortainerStackReconcileDecisions(t *testing.T) {
 	running := `[{"Id":"a1","Names":["/web-app-1"],"Labels":{"com.docker.compose.project":"web"},"State":"running","Ports":[{"IP":"0.0.0.0","PublicPort":8080}]}]`
 	loopback := `[{"Id":"a1","Names":["/web-app-1"],"Labels":{"com.docker.compose.project":"web"},"State":"running","Ports":[{"IP":"127.0.0.1","PublicPort":8080}]}]`
-	existing := `[{"Id":10,"Name":"web","EndpointId":1}]`
+	existing := `[{"Id":10,"Name":"web","EndpointId":1,"Env":[{"name":"A","value":"1"}]}]`
 	port := 8080
 	spec := PortainerStackSpec{ConnectionRef: "portainer-example", Host: "hq-node", Name: "web", Compose: "services: {}",
 		Environment: []portainerEnvVar{{Name: "A", Value: "1"}}, Port: &port}
@@ -450,6 +457,71 @@ func TestPortainerStackReconcileDecisions(t *testing.T) {
 			}
 			if status := res.Status.(PortainerStackStatus); status.Origin != "hq-node:8080" {
 				t.Errorf("origin %q", status.Origin)
+			}
+		})
+	}
+}
+
+// The stack list answers each stack's Env as Portainer's Pair list
+// (portainer.Stack.Env, api/portainer.go at 2.45.3), null when it holds none.
+func TestPortainerStackReconcileComparesTheEnvironment(t *testing.T) {
+	running := `[{"Id":"a1","Names":["/web-app-1"],"Labels":{"com.docker.compose.project":"web"},"State":"running","Ports":[{"IP":"0.0.0.0","PublicPort":8080}]}]`
+	stackWith := func(env string) string { return `[{"Id":10,"Name":"web","EndpointId":1,"Env":` + env + `}]` }
+	wanted := []portainerEnvVar{{Name: "TOKEN", Value: "spec-value-only"}, {Name: "MODE", Value: "on"}}
+	cases := []struct {
+		name    string
+		env     []portainerEnvVar
+		current string
+		apply   bool
+		changed bool
+	}{
+		{"a value changed, applied", wanted, `[{"name":"TOKEN","value":"stack-value-only"},{"name":"MODE","value":"on"}]`, true, true},
+		{"a value changed, planned", wanted, `[{"name":"TOKEN","value":"stack-value-only"},{"name":"MODE","value":"on"}]`, false, true},
+		{"a variable added", wanted, `[{"name":"MODE","value":"on"}]`, true, true},
+		{"a variable removed", nil, `[{"name":"MODE","value":"on"}]`, true, true},
+		{"unchanged", wanted, `[{"name":"TOKEN","value":"spec-value-only"},{"name":"MODE","value":"on"}]`, true, false},
+		{"reordered", wanted, `[{"name":"MODE","value":"on"},{"name":"TOKEN","value":"spec-value-only"}]`, true, false},
+		{"none, answered null", nil, `null`, true, false},
+		{"none, answered empty", []portainerEnvVar{}, `[]`, true, false},
+		{"none in the spec, empty in Portainer", nil, `[]`, true, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			api, server := newPortainerAPI(t, stackRoutes(`{"StackFileContent":"services: {}"}`, stackWith(c.current), running))
+			r := portainerRegistry(t, server.URL, runtime.Environment{})
+			spec := PortainerStackSpec{ConnectionRef: "portainer-example", Host: "hq-node", Name: "web", Compose: "services: {}", Environment: c.env}
+			res, err := r.portainerReconcile(t.Context(), spec, struct{}{}, c.apply)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Changed != c.changed {
+				t.Fatalf("changed %v, want %v: %+v", res.Changed, c.changed, res)
+			}
+			writes := api.written()
+			if !c.changed || !c.apply {
+				if len(writes) != 0 {
+					t.Fatalf("nothing to apply, yet wrote %v", writes)
+				}
+			} else {
+				if len(writes) != 1 || writes[0].method+" "+writes[0].path != "PUT /api/stacks/10?endpointId=1" {
+					t.Fatalf("writes %v, want one update", writes)
+				}
+				want := []any{}
+				for _, v := range c.env {
+					want = append(want, map[string]any{"name": v.Name, "value": v.Value})
+				}
+				if body := writes[0].body; !reflect.DeepEqual(body["Env"], want) || body["PullImage"] != false {
+					t.Errorf("update %v, want Env %v without a pull", body, want)
+				}
+			}
+			reported, err := json.Marshal(res)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, value := range []string{"spec-value-only", "stack-value-only"} {
+				if strings.Contains(string(reported), value) {
+					t.Errorf("the result carries an environment value: %s", reported)
+				}
 			}
 		})
 	}

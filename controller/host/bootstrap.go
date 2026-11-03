@@ -1,9 +1,8 @@
 package host
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -53,9 +52,7 @@ var (
 // Connect that is not on loopback is refused.
 func ReadConfig(data []byte) (Config, error) {
 	var config Config
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&config); err != nil {
+	if err := jsonv2.Unmarshal(data, &config, jsonv2.RejectUnknownMembers(true)); err != nil {
 		return Config{}, fmt.Errorf("the host configuration is not readable: %w", err)
 	}
 	for name, value := range map[string]string{"vault": config.Vault, "env_item": config.EnvItem} {

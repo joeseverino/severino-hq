@@ -758,3 +758,21 @@ func TestThePinIsAddedWhereverTheOverrideLacksIt(t *testing.T) {
 		t.Error("a flow-style services was edited")
 	}
 }
+
+// A repository is a reference less its tag and digest; a registry's port
+// stays part of it.
+func TestARepositoryKeepsARegistryPort(t *testing.T) {
+	digest := "@sha256:" + strings.Repeat("a", 64)
+	for ref, want := range map[string]string{
+		"registry.example.com:5000/example/app:1.2.0":    "registry.example.com:5000/example/app",
+		"registry.example.com:5000/example/app" + digest: "registry.example.com:5000/example/app",
+		"registry.example.com:5000/example/app":          "registry.example.com:5000/example/app",
+		"ghcr.io/example/app:1.2.0" + digest:             "ghcr.io/example/app",
+		"app:1.2.0":                                      "app",
+		"app":                                            "app",
+	} {
+		if got := repository(ref); got != want {
+			t.Errorf("repository(%q) = %q, want %q", ref, got, want)
+		}
+	}
+}

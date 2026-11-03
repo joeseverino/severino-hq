@@ -123,10 +123,6 @@ type Registry struct {
 	Now      func() time.Time
 	Commands *Commands
 	TLS      TLSDialer
-	// Monotonic times a verification deadline, apart from the wall clock.
-	Monotonic func() time.Time
-	// Sleep waits between verification attempts; injected in tests.
-	Sleep func(context.Context, time.Duration) error
 	// Resolve returns a name's IPv4 address; nil resolves through DNS.
 	Resolve func(host string) (string, error)
 	// Dial reports whether a TCP connection to address:port is accepted.
@@ -176,8 +172,7 @@ type cachedRead struct {
 
 func New(env runtime.Environment, held runtime.Connections, transport Transport) *Registry {
 	r := &Registry{
-		Env: env, Supplied: held, HTTP: transport, Commands: &Commands{Env: env, Supplied: held}, TLS: NetTLSDialer{CAFile: env.CAFile},
-		Now: time.Now, Monotonic: time.Now, Sleep: sleepContext,
+		Env: env, Supplied: held, HTTP: transport, Commands: &Commands{Env: env, Supplied: held}, TLS: NetTLSDialer{CAFile: env.CAFile}, Now: time.Now,
 		actions: map[actionKey]Action{}, readers: map[string]Reader{}, held: map[string]heldSource{}, probes: map[runtime.ConnectionProvider]Probe{}, zoneIDs: map[string]string{},
 	}
 	r.admitAdGuard()
@@ -333,17 +328,6 @@ func refuseAt(ctx context.Context, part runtime.ReadingPartName, ref, scope, add
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
 	ledger.entries = append(ledger.entries, runtime.RefusedPart{Part: part, ConnectionRef: ref, Scope: scope, Refusal: failure, Reason: runtime.Clip(err.Error(), runtime.ReasonLimit), Address: address})
-}
-
-func sleepContext(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
 }
 
 // decodePayload decodes a resource's opaque spec or observed payload into its kind's type.

@@ -2,7 +2,6 @@ package host
 
 import (
 	"archive/tar"
-	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -14,11 +13,18 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"filippo.io/age"
 )
 
+// sealProof is the sealing seed the fake host's controller holds.
+const sealProof = "0a1b2c3d.seed"
+
 // volumes gives the fake host HQ's volumes with a database holding a proof,
-// an upload and an export, and returns the backup directory the settings name.
-func (f *fakeHost) volumes(t *testing.T) map[string]string {
+// an upload and an export, and its controller a sealing seed, and returns settings that name the backup
+// directory and one freshly generated post-quantum recipient, with the
+// identity that reads what is encrypted to it.
+func (f *fakeHost) volumes(t *testing.T) (map[string]string, *age.HybridIdentity) {
 	t.Helper()
 	volume := func(name string) string { return filepath.Join(f.root, "volumes", "severino-hq_severino_"+name) }
 	for _, name := range []string{"data", "media/receipts", "exports"} {
@@ -40,7 +46,26 @@ func (f *fakeHost) volumes(t *testing.T) map[string]string {
 	if err := os.WriteFile(filepath.Join(volume("exports"), "report.txt"), []byte("export-proof\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return map[string]string{"SEVERINO_BACKUP_DIR": filepath.Join(f.root, "backups")}
+	if err := os.MkdirAll(f.machine.Seal, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(f.machine.Seal, sealProof), []byte("seed-proof"), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	identity := hybridIdentity(t)
+	return map[string]string{
+		"SEVERINO_BACKUP_DIR":            filepath.Join(f.root, "backups"),
+		"SEVERINO_BACKUP_AGE_RECIPIENTS": identity.Recipient().String(),
+	}, identity
+}
+
+func hybridIdentity(t *testing.T) *age.HybridIdentity {
+	t.Helper()
+	identity, err := age.GenerateHybridIdentity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return identity
 }
 
 func (f *fakeHost) backup(t *testing.T, settings map[string]string) error {
@@ -52,6 +77,24 @@ func archives(t *testing.T, dir string) []string {
 	t.Helper()
 	found, _ := filepath.Glob(filepath.Join(dir, "*"))
 	return found
+}
+
+// decrypt reads the one archive in dir with identity, as `age -d -i` does.
+func decrypt(t *testing.T, dir string, identity age.Identity) io.Reader {
+	t.Helper()
+	found := archives(t, dir)
+	if len(found) != 1 || !strings.HasSuffix(found[0], ".tar.gz.age") {
+		t.Fatalf("archives %v", found)
+	}
+	sealed, err := os.ReadFile(found[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := age.Decrypt(bytes.NewReader(sealed), identity)
+	if err != nil {
+		t.Fatalf("the archive does not decrypt: %v", err)
+	}
+	return plain
 }
 
 // restore extracts an archive the way docs/Backup.md does, with tar.
@@ -66,24 +109,21 @@ func restore(t *testing.T, archive io.Reader) string {
 	return into
 }
 
+// The restore drill: what the backup wrote decrypts with the recipient's
+// identity and extracts into a database that answers, beside the files.
 func TestABackupRestoresIntoAFreshDatabase(t *testing.T) {
 	f := newFakeHost(t)
-	settings := f.volumes(t)
+	settings, identity := f.volumes(t)
 
 	if err := f.backup(t, settings); err != nil {
 		t.Fatal(err)
 	}
 
-	found := archives(t, settings["SEVERINO_BACKUP_DIR"])
-	if len(found) != 1 || !strings.HasSuffix(found[0], ".tar.gz") {
-		t.Fatalf("archives %v", found)
-	}
-	if info, _ := os.Stat(found[0]); info.Mode().Perm() != 0o600 {
+	dir := settings["SEVERINO_BACKUP_DIR"]
+	if info, _ := os.Stat(archives(t, dir)[0]); info.Mode().Perm() != 0o600 {
 		t.Errorf("the archive is %v, readable beyond root", info.Mode().Perm())
 	}
-	archive, _ := os.Open(found[0])
-	defer archive.Close()
-	restored := restore(t, archive)
+	restored := restore(t, decrypt(t, dir, identity))
 	value, err := exec.Command("sqlite3", filepath.Join(restored, Database), "SELECT value FROM proof;").Output()
 	if err != nil || strings.TrimSpace(string(value)) != "restorable" {
 		t.Errorf("the restored database answers %q, %v", value, err)
@@ -92,70 +132,101 @@ func TestABackupRestoresIntoAFreshDatabase(t *testing.T) {
 		"media/receipts/receipt.txt": "receipt-proof\n",
 		"media/receipts/latest":      "receipt-proof\n",
 		"exports/report.txt":         "export-proof\n",
+		"seal/" + sealProof:          "seed-proof",
 	} {
 		if body, _ := os.ReadFile(filepath.Join(restored, path)); string(body) != want {
 			t.Errorf("%s restored as %q", path, body)
 		}
+	}
+	if info, err := os.Stat(filepath.Join(restored, "seal", sealProof)); err != nil || info.Mode().Perm() != 0o400 {
+		t.Errorf("the sealing seed restored as %v, %v", info, err)
 	}
 	if link, _ := os.Readlink(filepath.Join(restored, "media", "receipts", "latest")); link != "receipt.txt" {
 		t.Errorf("a link was archived as %q, not as itself", link)
 	}
 }
 
-func TestWithRecipientsOnlyAgesOutputReachesTheDisk(t *testing.T) {
+func TestEveryRecipientCanReadTheArchiveAndNoPlaintextReachesTheDisk(t *testing.T) {
 	f := newFakeHost(t)
-	settings := f.volumes(t)
-	settings["SEVERINO_BACKUP_AGE_RECIPIENTS"] = "age1first, age1second"
-	settings["SEVERINO_BACKUP_REQUIRE_ENCRYPTION"] = "1"
+	settings, first := f.volumes(t)
+	second := hybridIdentity(t)
+	settings["SEVERINO_BACKUP_AGE_RECIPIENTS"] = first.Recipient().String() + ", " + second.Recipient().String()
 
 	if err := f.backup(t, settings); err != nil {
 		t.Fatal(err)
 	}
 
-	found := archives(t, settings["SEVERINO_BACKUP_DIR"])
-	if len(found) != 1 || !strings.HasSuffix(found[0], ".tar.gz.age") {
-		t.Fatalf("archives %v", found)
+	dir := settings["SEVERINO_BACKUP_DIR"]
+	sealed, _ := os.ReadFile(archives(t, dir)[0])
+	if !bytes.HasPrefix(sealed, []byte("age-encryption.org/v1\n")) {
+		t.Errorf("the archive on disk is not an age file: %q", sealed[:min(len(sealed), 32)])
 	}
-	archive, _ := os.Open(found[0])
-	defer archive.Close()
-	read := bufio.NewReader(archive)
-	header, _ := read.ReadString('\n')
-	if header != "age -r age1first -r age1second\n" {
-		t.Fatalf("the archive did not go through age for both recipients: %q", header)
+	for _, identity := range []*age.HybridIdentity{first, second} {
+		if _, err := os.Stat(filepath.Join(restore(t, decrypt(t, dir, identity)), Database)); err != nil {
+			t.Error("the decrypted archive does not hold the database")
+		}
 	}
-	if _, err := os.Stat(filepath.Join(restore(t, read), Database)); err != nil {
-		t.Error("the encrypted archive does not hold the database")
+	if _, err := age.Decrypt(bytes.NewReader(sealed), hybridIdentity(t)); err == nil {
+		t.Error("an identity the unit does not name read the archive")
 	}
 }
 
+// A setting the backup cannot honor is refused, naming what is wrong, before
+// the database is touched or a file is written.
 func TestABackupThatCannotBeWhatTheUnitAsksWritesNothing(t *testing.T) {
-	for name, change := range map[string]map[string]string{
-		"encryption required, no recipients": {"SEVERINO_BACKUP_REQUIRE_ENCRYPTION": "1"},
-		"retention not a number of days":     {"SEVERINO_BACKUP_RETENTION_DAYS": "-1"},
+	classic, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hybrid := hybridIdentity(t).Recipient().String()
+	for name, refusal := range map[string]struct {
+		change map[string]string
+		names  string
+	}{
+		"no recipient":            {map[string]string{"SEVERINO_BACKUP_AGE_RECIPIENTS": " , "}, "SEVERINO_BACKUP_AGE_RECIPIENTS"},
+		"a classic recipient":     {map[string]string{"SEVERINO_BACKUP_AGE_RECIPIENTS": classic.Recipient().String()}, classic.Recipient().String()},
+		"a classic beside one pq": {map[string]string{"SEVERINO_BACKUP_AGE_RECIPIENTS": hybrid + "," + classic.Recipient().String()}, classic.Recipient().String()},
+		"not a recipient":         {map[string]string{"SEVERINO_BACKUP_AGE_RECIPIENTS": "ssh-ed25519 AAAAexample"}, "ssh-ed25519 AAAAexample"},
+		"retention not days":      {map[string]string{"SEVERINO_BACKUP_RETENTION_DAYS": "-1"}, "SEVERINO_BACKUP_RETENTION_DAYS"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newFakeHost(t)
-			settings := f.volumes(t)
-			maps.Copy(settings, change)
+			settings, _ := f.volumes(t)
+			maps.Copy(settings, refusal.change)
 
-			if err := f.backup(t, settings); err == nil {
+			err := f.backup(t, settings)
+			if err == nil {
 				t.Fatal("the backup ran")
 			}
-			if found := archives(t, settings["SEVERINO_BACKUP_DIR"]); len(found) != 0 {
-				t.Errorf("wrote %v", found)
+			if !strings.Contains(err.Error(), refusal.names) {
+				t.Errorf("the refusal does not name %s: %v", refusal.names, err)
+			}
+			if _, statErr := os.Stat(settings["SEVERINO_BACKUP_DIR"]); statErr == nil {
+				t.Errorf("wrote %v", archives(t, settings["SEVERINO_BACKUP_DIR"]))
+			}
+			for _, call := range f.log {
+				if strings.HasPrefix(call, "sqlite3 ") {
+					t.Errorf("the database was snapshotted before the refusal: %s", call)
+				}
 			}
 		})
 	}
 }
 
-func TestAFailedEncryptionLeavesNoArchive(t *testing.T) {
+// An archive that cannot be assembled whole leaves nothing behind.
+func TestAFailedArchiveLeavesNoArchive(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("run as root, every file is readable")
+	}
 	f := newFakeHost(t)
-	settings := f.volumes(t)
-	settings["SEVERINO_BACKUP_AGE_RECIPIENTS"] = "age1example"
-	f.fail = []string{"age "}
+	settings, _ := f.volumes(t)
+	unreadable := filepath.Join(f.root, "volumes", "severino-hq_severino_exports", "report.txt")
+	if err := os.Chmod(unreadable, 0); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := f.backup(t, settings); err == nil {
-		t.Fatal("a refused encryption read as a backup")
+		t.Fatal("an archive missing a file read as a backup")
 	}
 	if found := archives(t, settings["SEVERINO_BACKUP_DIR"]); len(found) != 0 {
 		t.Errorf("left %v", found)
@@ -165,7 +236,10 @@ func TestAFailedEncryptionLeavesNoArchive(t *testing.T) {
 func TestNoDatabaseNoBackup(t *testing.T) {
 	f := newFakeHost(t)
 
-	err := f.backup(t, map[string]string{"SEVERINO_BACKUP_DIR": filepath.Join(f.root, "backups")})
+	err := f.backup(t, map[string]string{
+		"SEVERINO_BACKUP_DIR":            filepath.Join(f.root, "backups"),
+		"SEVERINO_BACKUP_AGE_RECIPIENTS": hybridIdentity(t).Recipient().String(),
+	})
 
 	if err == nil || !strings.Contains(err.Error(), "no database") {
 		t.Fatalf("got %v", err)
@@ -176,12 +250,11 @@ func TestRetentionRemovesOldArchivesAndNothingElse(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
 	ages := map[string]time.Duration{
-		"severino-hq-old.tar.gz":      31 * 24 * time.Hour,
-		"severino-hq-old.tar.gz.age":  31 * 24 * time.Hour,
-		"severino-hq-new.tar.gz.age":  29 * 24 * time.Hour,
-		"someone-elses.tar.gz":        90 * 24 * time.Hour,
-		"severino-hq-notes.txt":       90 * 24 * time.Hour,
-		".severino-hq-x.tar.gz.12345": 90 * 24 * time.Hour,
+		"severino-hq-old.tar.gz.age":      31 * 24 * time.Hour,
+		"severino-hq-new.tar.gz.age":      29 * 24 * time.Hour,
+		"someone-elses.tar.gz.age":        90 * 24 * time.Hour,
+		"severino-hq-notes.txt":           90 * 24 * time.Hour,
+		".severino-hq-x.tar.gz.age.12345": 90 * 24 * time.Hour,
 	}
 	for name, age := range ages {
 		path := filepath.Join(dir, name)
@@ -205,17 +278,15 @@ func TestRetentionRemovesOldArchivesAndNothingElse(t *testing.T) {
 	}
 }
 
-// The archive is a plain gzipped tar: what `tar -xzf` reads, entries rooted
-// at the names the restore runbook copies.
+// Decrypted, the archive is a gzipped tar: what `tar -xzf` reads, entries
+// rooted at the names the restore runbook copies.
 func TestTheArchiveIsRootedAtTheRunbooksNames(t *testing.T) {
 	f := newFakeHost(t)
-	settings := f.volumes(t)
+	settings, identity := f.volumes(t)
 	if err := f.backup(t, settings); err != nil {
 		t.Fatal(err)
 	}
-	archive, _ := os.Open(archives(t, settings["SEVERINO_BACKUP_DIR"])[0])
-	defer archive.Close()
-	unzipped, err := gzip.NewReader(archive)
+	unzipped, err := gzip.NewReader(decrypt(t, settings["SEVERINO_BACKUP_DIR"], identity))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,8 +302,23 @@ func TestTheArchiveIsRootedAtTheRunbooksNames(t *testing.T) {
 		top, _, _ := strings.Cut(header.Name, "/")
 		tops[top] = true
 	}
-	if len(tops) != 3 || !tops[Database] || !tops["media"] || !tops["exports"] {
+	if len(tops) != 4 || !tops[Database] || !tops["media"] || !tops["exports"] || !tops["seal"] {
 		t.Errorf("top-level entries %v", tops)
+	}
+}
+
+func TestAHostWithNoSealingKeyStillBacksUp(t *testing.T) {
+	f := newFakeHost(t)
+	settings, identity := f.volumes(t)
+	if err := os.RemoveAll(f.machine.Seal); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.backup(t, settings); err != nil {
+		t.Fatalf("a host with no sealing key yet fails its backup: %v", err)
+	}
+	restored := restore(t, decrypt(t, settings["SEVERINO_BACKUP_DIR"], identity))
+	if _, err := os.Stat(filepath.Join(restored, Database)); err != nil {
+		t.Error("the database was not archived")
 	}
 }
 

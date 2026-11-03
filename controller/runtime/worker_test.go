@@ -442,3 +442,66 @@ func TestPassOutputKeysAreTheContracts(t *testing.T) {
 		t.Errorf("an empty plan must print null: %s", raw)
 	}
 }
+
+// sealedPending is a claimed action on the vector's resource, whose kind
+// needs material carrying the vector's sealed value.
+func sealedPending(t *testing.T) (*Worker, *fakeBridge, *fakeProviders, vector) {
+	t.Helper()
+	v := readVector(t)
+	w, b, p := newWorker()
+	p.Material = true
+	claimed := pending("first")
+	claimed.Resource.Key = v.ResourceKey
+	b.Pending = []Pending{claimed}
+	b.Responses["material"] = Material{Fullchain: "example chain", Domains: []string{"a.example"}, Slots: map[string]string{v.Slot: v.Sealed}}
+	return w, b, p, v
+}
+
+// The run's keys open each sealed slot, and the action is handed the
+// plaintext with the public parts of its material.
+func TestMaterialIsOpenedForTheActionThatNeedsIt(t *testing.T) {
+	w, _, p, v := sealedPending(t)
+	w.Opener = vectorOpener(t)
+
+	if _, success, err := w.applyOne(t.Context()); err != nil || !success {
+		t.Fatalf("%v %v", success, err)
+	}
+	opened, ok := p.Executed[0].Spec["material"].(OpenedMaterial)
+	if !ok || opened.Secrets[v.Slot] != v.Plaintext || opened.Fullchain != "example chain" || !slices.Equal(opened.Domains, []string{"a.example"}) {
+		t.Fatalf("the action was handed %#v", p.Executed[0].Spec["material"])
+	}
+}
+
+// A sealed value this run cannot open refuses its action, says which slot,
+// and the pass goes on to sweep.
+func TestASealedValueThatDoesNotOpenFailsOnlyItsAction(t *testing.T) {
+	empty, err := NewOpener(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, opener := range map[string]Unsealer{
+		"no seed for its key": empty,
+		"no keys lent":        nil,
+		"keys unreadable":     Unopenable{Err: errors.New("the sealing keys could not be read")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w, b, p, v := sealedPending(t)
+			w.Opener = opener
+
+			code, err := w.Run(t.Context(), true)
+
+			if err != nil || code != 1 || len(p.Executed) != 0 {
+				t.Fatalf("%d %v executed %d", code, err, len(p.Executed))
+			}
+			reported := false
+			for _, call := range b.Calls {
+				if report, ok := call.Payload.(ControllerReport); ok && call.Action == "report" {
+					reported = !report.Success && strings.Contains(report.Message, v.Slot)
+				}
+			}
+			if !reported || !slices.Contains(b.actions(), "schedule") {
+				t.Fatalf("calls %v", b.Calls)
+			}
+		})
+	}
+}

@@ -129,6 +129,15 @@ func TestTheGlanceUnitIsGivenNoMoreThanTheControllers(t *testing.T) {
 	}
 }
 
+func TestTheControllerUnitMayWriteWhatAPassPrepares(t *testing.T) {
+	writable := strings.Fields(unitValue(t, filepath.Join("..", "..", "deploy", "systemd", ControllerUnit), "ReadWritePaths"))
+	for _, path := range []string{ACMEDir, SealDir, filepath.Dir(SealPublicKey)} {
+		if !slices.Contains(writable, path) {
+			t.Errorf("a pass prepares %s, which its unit may not write", path)
+		}
+	}
+}
+
 func TestTheUnitSocketIsWhereTheLayoutSays(t *testing.T) {
 	systemd := filepath.Join("..", "..", "deploy", "systemd")
 	if got := unitValue(t, filepath.Join(systemd, "severino-hq-unit.socket"), "ListenStream"); got != UnitSocket {

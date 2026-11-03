@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -53,7 +54,7 @@ func execProcess(ctx context.Context, argv []string, stdin []byte, env []string)
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Stdin = bytes.NewReader(stdin)
 	cmd.Env = env
-	cmd.WaitDelay = runtime.ProcessWaitDelay
+	cmd.WaitDelay = host.ProcessWaitDelay
 	stdout, stderr := runtime.BoundedBuffer{Limit: CommandOutputLimit}, runtime.BoundedBuffer{Limit: CommandOutputLimit}
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()

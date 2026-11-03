@@ -1,2 +1,4 @@
 # Vendored bytes stay byte-for-byte upstream (see each UPSTREAM file).
 static/vendor/** -whitespace linguist-vendored
+# A test sealing seed is 32 raw bytes, so a diff names it and never prints it.
+controller/runtime/testdata/seal/*.seed binary

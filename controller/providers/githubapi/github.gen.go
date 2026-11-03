@@ -1075,6 +1075,10 @@ type Artifact struct {
 
 // CheckRun A check performed on the code of a given code change
 type CheckRun struct {
+	CheckSuite struct {
+		ID int `json:"id"`
+	} `json:"check_suite"`
+
 	// Conclusion Example: neutral
 	Conclusion CheckRunConclusion `json:"conclusion"`
 
@@ -1298,6 +1302,11 @@ type DeploymentReviewerType string
 
 // DeploymentStatus The status of a deployment.
 type DeploymentStatus struct {
+	// Description A short description of the status.
+	//
+	// Example: Deployment finished successfully.
+	Description string `json:"description"`
+
 	// LogURL The URL to associate with this status.
 	//
 	// Example: https://example.com/deployment/42/output
@@ -1990,6 +1999,11 @@ type WorkflowState string
 
 // WorkflowRun An invocation of a workflow
 type WorkflowRun struct {
+	// CheckSuiteID The ID of the associated check suite.
+	//
+	// Example: 42
+	CheckSuiteID int `json:"check_suite_id,omitempty"`
+
 	// Conclusion Example: neutral
 	Conclusion string `json:"conclusion"`
 	CreatedAt  string `json:"created_at"`

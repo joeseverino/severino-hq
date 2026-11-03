@@ -7,6 +7,7 @@ package secrets
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"io"
@@ -109,7 +110,10 @@ type Runner struct {
 	Web    Web
 	Log    *slog.Logger
 	Now    func() time.Time
-	// Sleep waits between attempts; tests replace it.
+	// Sleep waits between attempts, and hands the Connect client its wait. It
+	// is clock.Sleep outside a test; it stays a field because the render tests
+	// reach the Connect fake over real loopback, which a synctest bubble's
+	// fake clock cannot hold.
 	Sleep func(context.Context, time.Duration) error
 	// PortFloor reads the lowest port any account may listen on
 	// (net.ipv4.ip_unprivileged_port_start). The endpoint's port must be below
@@ -472,10 +476,7 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *secrets
 
 	// Read every installed file back: the state records what is there, not
 	// what was meant to be.
-	salt, err := newSalt()
-	if err != nil {
-		return result, errors.New("no randomness for the render state")
-	}
+	salt := rand.Text()
 	next := state{SchemaVersion: stateSchemaVersion, RenderedAt: r.Now().UTC(), VaultID: *vault.Id,
 		AttributeVersion: read.AttributeVersion, Salt: salt, Inputs: r.inputs(salt, registryBytes),
 		Counts: secretstatus.Counts{ItemsRead: len(items), Connections: len(out.Document.Connections), AppVariables: out.AppVariables,

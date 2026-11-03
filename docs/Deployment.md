@@ -17,7 +17,7 @@ waits on a schedule.
 
 | Workflow | Started by | Does |
 | :--- | :--- | :--- |
-| **CI** (`ci.yml`) | every pull request and push to `main` | Lint, Test, Browser, Scan and Build (build, boot healthy, publish and sign the host image, and attest its SBOM), each running the task of its name; on a pull request Build verify and the composition beside them, then **Ready**, which passes only when every job did; on `main`, **Release**, which starts Compose |
+| **CI** (`ci.yml`) | every pull request and push to `main` | Lint, Test, Browser, Scan and Build (build, boot healthy, publish and sign the host image, and attest its SBOM), each running the task of its name. On a pull request, Build verify and the composition run beside them, then **Ready**, which passes only when every job did. On `main`, **Release**, which starts Compose |
 | **Compose** (`compose.yml`) | CI on a pull request (verify only); CI's Release on `main`; an extension's admission; a person | the host image plus every admitted extension, verified as one application; on `main`, published and signed, and its SBOM attested |
 | **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits for approval in the `production` environment, then deploys on the self-hosted runner |
 
@@ -32,8 +32,8 @@ commit it runs.
 
 Each image CI or Compose signs also carries a signed CycloneDX SBOM, Trivy's
 list of its Debian packages, Python distributions (the composition's include
-the extensions) and Go binaries' modules, attested by the same workflow
-identity and stored beside the image. To read the host image's:
+the extensions) and Go binaries' modules. The SBOM is attested by the same
+workflow identity and stored beside the image. To read the host image's:
 
 ```sh
 cosign verify-attestation --type cyclonedx \
@@ -60,9 +60,9 @@ that commit instead, which composes the extensions admitted now onto that host
 commit.
 
 A release that fails is undone whole. Its boot keeps a copy of the database
-before migrating it (`manage.py boot_migrate`, at the path `hq-host run-web`
-names), and the rollback stops HQ, puts that copy back and starts the previous
-image on the schema it was built with; what the failed release wrote is lost
+before migrating it (`manage.py boot`, at the path `hq-host run-web`
+names). The rollback stops HQ, puts that copy back and starts the previous
+image on the schema it was built with. What the failed release wrote is lost
 with it. A rollback by hand, to a release that already stood, keeps the
 schema the newer release left: nothing unapplies a migration. So a migration is
 one the release before it can run on (add a table or a column with a default,
@@ -88,23 +88,48 @@ GitHub's own records say it:
   its summary lists each job's result.
 - A **deployment** to the `production` environment, on the commit Deploy was
   handed: *queued* while it waits for approval, *in progress* once approved,
-  then *success* when it passed its health check, *failure* when it did not
-  (production still runs the previous image), or *inactive* when it was not
-  approved or a newer release took its place. GitHub shows it on the commit,
-  the merged pull request and the environment's page. Resolve records it
-  itself: the environment's job sets `deployment: false`, since the
-  deployment GitHub would record names the commit `main` was at when the run
-  started and succeeds once approved.
+  then its outcome ([Deployment outcomes](#deployment-outcomes)). GitHub shows
+  it on the commit, the merged pull request and the environment's page.
 - **Severino HQ · Production** on an extension's commit: opened by its
   admission and moved on by HQ's controller, through HQ's GitHub App, until
   production runs it, when its connection manages `github.delivery`. That is
   HQ reporting on what it runs, not a CI verdict.
 
+### Deployment outcomes
+
+A deployment's outcome is the one `deploy/outcomes.json` declares for
+`hq-host deploy`'s exit status, each with its state, description and what
+production runs after it. hq-host's statuses are generated from that file and
+Report reads it, so it is the one place an outcome changes.
+
+| Outcome | When | Production runs |
+| --- | --- | --- |
+| *success* | the release went live, even if a check after it then failed: its description then says a check failed, which HQ shows as needing attention, beside a red Deploy job | the release |
+| *failure* | the release never went live | the previous image |
+| *error* | the release never went live and putting the previous image back failed too | unknown until someone looks at the host |
+
+A deploy hq-host never answered is told apart by whether GitHub's record of
+the run shows the deploy step began:
+
+| Outcome | When | Production runs |
+| --- | --- | --- |
+| *inactive* or *failure* | the step never began: not approved, superseded, or cancelled while it waited | the previous image |
+| *error*, interrupted | the step began, then a person or the job's timeout cancelled it, or its runner was lost; or the record was not read | unknown until `hq-host verify` reads the host |
+
+A live release's run summary links the changes since the release production
+ran before (`python3 -m tools.pipeline.production previous COMMIT`, the same
+reading `mise run release:report` takes). It gives the `cosign verify` command
+for the image it deployed.
+
+Resolve records the deployment itself: the environment's job sets
+`deployment: false`, since the deployment GitHub would record names the
+commit `main` was at when the run started and succeeds once approved.
+
 ### When a run fails
 
 `mise run annotations RUN_ID` prints the annotations of each failed job, one
 per line (level, `path:line`, message): they appear as soon as a step fails,
-before its log can be read. `mise run ci:timings RUN_ID` prints where a run's
+before its log can be read. `mise run audit:ci-timings RUN_ID` prints where a run's
 time went: each job's and step's seconds, and the jobs on its critical path.
 
 Every log is public, so each failure is reported at two levels:
@@ -170,7 +195,8 @@ fingerprint, then delete the old key on GitHub.
 | `/run/severino-hq-unit/` | the unit socket, in a directory only the controller's account and root may enter, mounted into the controller's container alone | `deploy/tmpfiles/severino-hq.conf`, `severino-hq-unit.socket` |
 | `/run/severino-hq-renovate/` | root-only: a validated dependency handoff waiting to run, and each run's environment files, removed when it ends | `hq-host controller`, `hq-host renovate` |
 | `/var/lib/severino-hq/renovate/dependency-run.json` | the last dependency run's outcome, given read-only to the next controller pass | `hq-host renovate` |
-| `/opt/apps/severino-hq/secrets/` | the renderer's lock and the controller's ACME state | `hq-secrets`, the controller |
+| `/opt/apps/severino-hq/secrets/` | the renderer's lock, the controller's ACME state, and in `seal/` the controller's sealing seed, its account's, mode 0400, lent to a pass read-only ([Secrets](Secrets.md#sealing-to-the-controller)) | `hq-secrets`, the controller, `hq-host controller` and `hq-host release` |
+| `/var/lib/severino-hq/seal/public.key` | root's copy of the sealing key's public half, bound read-only into the web container | `hq-host controller` and `hq-host release` |
 | docker volumes `severino-hq_severino_{data,media,exports,bridge}` | the database, uploads, exports and the bridge socket | HQ |
 | `/var/log/severino-hq/` | output a deploy keeps off the public log, `extensions.log`: which extensions a refused deploy would have dropped, and `renovate.log`: every dependency run's own output | `hq-host` |
 
@@ -182,18 +208,18 @@ from the tree, and every unit and the deploy call it.
 | Command | Does |
 | :--- | :--- |
 | `run-web` | runs the web container (`severino-hq-web.service`); waits for the rendered environment, notifies systemd once HQ is healthy |
-| `controller [--apply \| --glance]` | one controller pass: plan, claim and apply queued work, or (`--glance`) read only the dashboard panels HQ is waiting on. A glance's container is given the Portainer and SSH connections from the connections document and their identities, the host's roots and the bridge, and nothing else a controller pass is given: no certificate state, unit socket, host reading or out directory. An applying pass A pass may leave a dependency handoff in its own out directory; root opens it without following links, validates it (each owner's repositories by GitHub's naming rules, a token that expires within the hour, no other key) and moves it to `/run/severino-hq-renovate/`, or logs and drops it |
-| `renovate` | runs the spooled handoff: Renovate once per owner, in a container with no capability, a read-only root, no host path but `deploy/renovate/config.json`, and the token in an environment file; records each owner's outcome for the next pass. The container reaches public IPv4 addresses and nothing else: not the host, the LAN, the tailnet, link-local, multicast or another container. It runs on its own bridge, `severino-hq-renovate` (10.231.0.0/24, interface `hq-renovate0`, no IPv6), made if absent and refused unless it is exactly that, with public resolvers; before each run root loads the nftables table `inet severino_hq_renovate` (`controller/host/egress.go`) in one transaction, dropping everything the bridge sends to a private, reserved or IPv6 destination and everything it sends to the host itself. A run that cannot load the table never starts |
+| `controller [--apply \| --glance]` | one controller pass: plan, claim and apply queued work, or (`--glance`) read only the dashboard panels HQ is waiting on. A glance's container is given the Portainer and SSH connections from the connections document and their identities, the host's roots and the bridge, and nothing else a controller pass is given. It gets no certificate state, unit socket, host reading or out directory. An applying pass may leave a dependency handoff in its own out directory. Root opens it without following links, validates it (each owner's repositories by GitHub's naming rules, a token that expires within the hour, no other key) and moves it to `/run/severino-hq-renovate/`, or logs and drops it |
+| `renovate` | runs the spooled handoff: Renovate once per owner, in a container with no capability, a read-only root, no host path but `deploy/renovate/config.json`, and the token in an environment file; records each owner's outcome for the next pass. The container reaches public IPv4 addresses and nothing else: not the host, the LAN, the tailnet, link-local, multicast or another container. It runs on its own bridge, `severino-hq-renovate` (10.231.0.0/24, interface `hq-renovate0`, no IPv6), made if absent and refused unless it is exactly that, with public resolvers. Before each run root loads the nftables table `inet severino_hq_renovate` (`controller/host/egress.go`) in one transaction. The table drops everything the bridge sends to a private, reserved or IPv6 destination and everything it sends to the host itself. A run that cannot load the table never starts |
 | `deploy IMAGE` | verifies the signature, refuses an image that drops an extension production runs, pulls, and hands over to the image's own `hq-host release` |
-| `release IMAGE` | syncs the tree, installs the web unit, restarts HQ on the image, then `install`; rolls back on any failure, the database with it when the release migrated it. Once the release stands it runs `severino-hq-script-drift.service`, so the release is verified at once; drift fails the deploy without rolling it back, since what verify finds is the host's, and `journalctl -u severino-hq-script-drift.service` there names it |
+| `release IMAGE` | syncs the tree, installs the web unit, restarts HQ on the image, then `install`; rolls back on any failure, the database with it when the release migrated it. Once the release stands it runs `severino-hq-script-drift.service`, so the release is verified at once. Drift fails the deploy without rolling it back, since what verify finds is the host's, and `journalctl -u severino-hq-script-drift.service` there names it |
 | `install` | installs every shipped unit, renders secrets, preflights the controller and the content index, enables every timer and path |
 | `sync IMAGE` | replaces the tree with the image's, refusing a unit that names a path the tree lacks |
-| `verify` | reports where the host differs from its release: tree, units, anything retired, and the Actions runner's sudo rules (one runner unit, not root, its NOPASSWD rule for `hq-host deploy *`, no unrestricted rule, and no command `sudo -l` lists that HQ does not render; a failure names the command and the grep that finds its file). Root alone can list another account's rules, so the rules are checked here (`severino-hq-script-drift.timer`, daily) |
+| `verify` | reports where the host differs from its release: tree, units, anything retired, and the Actions runner's sudo rules. It holds them to one runner unit, not root, with its NOPASSWD rule for `hq-host deploy *`, no unrestricted rule, and no command `sudo -l` lists that HQ does not render. A failure names the command and the grep that finds its file. Root alone can list another account's rules, so the rules are checked here (`severino-hq-script-drift.timer`, daily) |
 | `bootstrap` | renders the drop-ins and sudo rule `host.json` decides |
 | `backup` | snapshots and archives HQ's volumes, where docker says they are ([Backup](Backup.md)) |
 | `upgrade ARGS` | moves one compose service to a pinned image, through its own sudo rule ([Container upgrades](#container-upgrades)) |
 | `unit --serve` | answers one request on the unit socket: stops, starts or restarts the systemd unit a container names in its `severino-hq.unit` label, once that unit's own start commands are found to run the container ([Architecture](Architecture.md#a-container-its-unit-runs)) |
-| `check` | the host's half of `mise run check --release`, as any account and read-only: `verify`, the runner's sudo rules with it (or, where sudo asks for a password, the drift unit's run since the release was installed), every program a sudo rule names is root's alone, the established units, free disk, and, where sudo lets it read nftables, that a loaded Renovate egress table is the one `hq-host` renders (an absent one waits for the next run, which loads it). `mise run check:host`, which `check --release` runs, builds it from HEAD for the host's platform and runs it from a temporary directory over SSH on `SEVERINO_HQ_DEPLOY_HOST`, so the release being checked is the one checking. Exits 0 ready, 1 a fault, 3 unverified |
+| `check` | the host's half of `mise run check --release`, as any account and read-only. It runs `verify`, and with it the runner's sudo rules (or, where sudo asks for a password, the drift unit's run since the release was installed). It checks the established units, free disk, and that every program a sudo rule names is root's alone. Where sudo lets it read nftables, it checks that a loaded Renovate egress table is the one `hq-host` renders (an absent one waits for the next run, which loads it). `mise run check:host`, which `check --release` runs, builds it from HEAD for the host's platform and runs it from a temporary directory over SSH on `SEVERINO_HQ_DEPLOY_HOST`, so the release being checked is the one checking. Exits 0 ready, 1 a fault, 3 unverified |
 
 ### Units
 
@@ -269,18 +295,48 @@ nothing. `hq-host deploy`:
    says how many; `/var/log/severino-hq/extensions.log` says which.
 4. Copies the image's own `hq-host` out, so every step after the pull is the
    new release's code.
-5. Stops every active timer and path the tree ships and waits up to three
+5. Rehearses the release on a copy of production's data, touching nothing
+   live (`Rehearsal` in `controller/host/rehearse.go`, which states its
+   security properties). It renders no secrets.
+   - The database is copied read-only, as HQ's account, into a scratch volume.
+   - The image's web process boots on the copy with no network. It is checked
+     for readiness, its bridge socket, the copy's integrity, scheduled work
+     over the socket and memory kills.
+   - The image's controller plans on copies of the connections, identities and
+     certificate state.
+   - The live web unit and container must not have restarted meanwhile.
+
+   The public log gets one verdict line,
+   `Rehearsal: result=pass ready=yes socket=ok ...`, and
+   `/var/log/severino-hq/rehearsal.log` each step's output. A failed check, or
+   too little free space for the copy, refuses the release as not deployed,
+   before anything below runs.
+6. Stops every active timer and path the tree ships and waits up to three
    minutes for a controller run or secret render already in flight.
-6. Replaces the tree with the image's, installs its web unit, records the
+7. Replaces the tree with the image's, installs its web unit, records the
    image and restarts `severino-hq-web.service`, which returns once HQ is
    healthy on it.
-7. Runs the new tree's `hq-host install`: the controller preflight is the
+8. Runs the new tree's `hq-host install`: the controller preflight is the
    release's first pass against the new bridge.
-8. Starts what step 5 stopped.
+9. Starts what step 6 stopped.
 
-A failure at any step puts back the previous image, tree and units, then
+A failure from step 6 on puts back the previous image, tree and units, then
 restarts what was held. A unit that was not active before the deploy is not
-started by it.
+started by it. A failure of that rollback ends the deploy with a status of its
+own, so its deployment says production's state is unknown.
+
+### After a release
+
+Once the Deploy job is green, `mise run release:report` on a checkout of the
+released commit writes `var/release/<commit>.md` and prints its path. The
+report holds `perf all` beside the release production ran before it (the
+previous deployment GitHub records as live, or `--base <ref>`), and the
+production container's memory and CPU. It also holds the host's drift verdict,
+its failed units and the last run of the controller and glance units. It reads the host over SSH on
+`SEVERINO_HQ_DEPLOY_HOST` as the operator account, with no sudo and no docker
+group: the container is found through the cgroup of the process serving HQ,
+whose files any account can read. A reading that fails is a row saying so; the
+task exits 1 then, or when the release was never marked live.
 
 ### The bridge
 
@@ -319,7 +375,7 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `DJANGO_SECRET_KEY` | installer | signs sessions; required, HQ will not start without it |
 | `DJANGO_ALLOWED_HOSTS` | installer | every hostname browsers and clients use, comma-separated; required, anything else gets 400 |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | installer | each full origin the browser uses, such as `https://hq.example.com`; sign-in through a proxy fails without it |
-| `DJANGO_BEHIND_TLS_PROXY` | installer | `1`: trust the proxy's `X-Forwarded-Proto` and redirect plain HTTP to `SEVERINO_SITE_HOST` |
+| `DJANGO_BEHIND_TLS_PROXY` | installer | `1`: redirect a request that did not arrive over HTTPS to `SEVERINO_SITE_HOST`; the scheme is the one a proxy in `SEVERINO_TRUSTED_PROXIES` names in `X-Forwarded-Proto` |
 | `DJANGO_DEBUG` | installer | `0` in production; `1` turns on development's defaults |
 | `DJANGO_SESSION_COOKIE_SECURE` | installer | the session cookie only over HTTPS; on unless `DJANGO_DEBUG` |
 | `DJANGO_CSRF_COOKIE_SECURE` | installer | the CSRF cookie only over HTTPS; on unless `DJANGO_DEBUG` |
@@ -328,24 +384,24 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `SEVERINO_SITE_NAME` | installer | the name in page titles and the header |
 | `SEVERINO_SITE_HOST` | installer | the canonical host for printed pages, exports and the HTTPS redirect; derived from the two lists above when unset |
 | `SEVERINO_TRUSTED_NETWORKS` | installer | who may reach HQ at all, as CIDR ranges; loopback and Tailscale's ranges by default |
-| `SEVERINO_TRUSTED_PROXIES` | installer | the proxy's exact address, the only source whose `X-Forwarded-For` HQ believes; loopback by default |
-| `SEVERINO_SECRET_STORE_KEY`, `SEVERINO_SECRET_STORE_KEY_FILE` | installer | 32 characters or more; seals the secrets an operator hands HQ ([Secrets](Secrets.md#severino_secret_store_key)); unset, HQ holds none |
+| `SEVERINO_TRUSTED_PROXIES` | installer | the proxy's exact address, the only source whose `X-Forwarded-For` and `X-Forwarded-Proto` HQ believes; loopback by default |
+| `SEVERINO_SEAL_PUBLIC_KEY`, `SEVERINO_SEAL_PUBLIC_KEY_FILE` | platform | the controller's public sealing key, which `hq-host run-web` binds from root's file ([Secrets](Secrets.md#sealing-to-the-controller)); seals the secrets an operator hands HQ; unset, HQ holds none |
 | `SEVERINO_POSTURE` | installer | `advanced` lists each unmet check of HQ's standard in Needs you ([Posture](Posture.md)) |
 | `SEVERINO_OIDC_ENABLED` | installer | `1` signs in through the identity provider and closes the password form |
 | `SEVERINO_OIDC_ISSUER` | installer | the identity provider's issuer URL |
 | `SEVERINO_OIDC_CLIENT_ID` | installer | HQ's client at the identity provider |
 | `SEVERINO_OIDC_CLIENT_SECRET` | installer | that client's secret |
-| `SEVERINO_OIDC_ALLOWED_GROUPS` | installer | the groups whose members may sign in, comma-separated |
-| `SEVERINO_OIDC_ALLOWED_EMAILS` | installer | addresses that may sign in, honored only when the provider marks them verified; setting it requests the `email` scope |
+| `SEVERINO_OIDC_ROLE_GROUPS` | installer | the identity provider's groups whose members may sign in, each with the role it gives, comma-separated: `admins=operator,family=viewer`; a person in several holds the highest ([Security](Security.md#roles)) |
+| `SEVERINO_OIDC_ALLOWED_EMAILS` | installer | addresses that may sign in, honored only when the provider marks them verified, each with an optional `=role` (`viewer` when it names none) |
 | `SEVERINO_OIDC_CREATE_USER` | installer | whether a first sign-in creates the account; on by default |
 | `SEVERINO_PASSWORD_LOGIN_ENABLED` | installer | break-glass: `1` reopens the password form beside SSO; follows `SEVERINO_OIDC_ENABLED` when unset |
 | `SEVERINO_API_RESOURCE` | installer | the identity provider's API audience; empty disables the machine API and MCP |
-| `SEVERINO_MCP_ALLOWED_HOSTS` | installer | the host names MCP clients connect to; empty disables MCP |
+| `SEVERINO_MCP_ALLOWED_HOSTS` | installer | the host name the proxy serves HQ at, which MCP clients connect to; empty disables MCP |
 | `SEVERINO_MCP_ALLOWED_NETWORKS` | installer | the networks MCP answers; Tailscale's ranges by default |
 | `SEVERINO_MCP_ALLOWED_ORIGINS` | installer | browser origins MCP accepts; none by default |
-| `SEVERINO_MCP_ENABLE_WRITES` | installer | `1` lets an agent make ordinary writes |
-| `SEVERINO_MCP_ENABLE_DOC_SYNC` | installer | `1` lets an agent mirror the documentation index, without other writes |
-| `SEVERINO_MCP_ENABLE_INFRASTRUCTURE` | installer | `1` lets an agent declare infrastructure |
+| `SEVERINO_AGENT_ENABLE_WRITES` | installer | `1` lets an agent make ordinary writes, on MCP and the machine API |
+| `SEVERINO_AGENT_ENABLE_DOC_SYNC` | installer | `1` lets an agent mirror the documentation index, without other writes |
+| `SEVERINO_AGENT_ENABLE_INFRASTRUCTURE` | installer | `1` lets an agent declare infrastructure |
 | `SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS` | installer | `1` lets public DNS declarations reconcile |
 | `SEVERINO_DASHBOARD_LINKS` | installer | extra dashboard links, as a JSON list of `{"label", "sub", "href"}` |
 | `HQ_CONTROLLER_ID` | installer | the installation a sweep files its findings under; the machine's name when unset |
@@ -386,13 +442,15 @@ that variable names. `test_settings_env.py` holds this table to the code.
 
 ## Network exposure
 
-The container uses host networking and Uvicorn binds port 8000, so `/mcp/`
-sees the real tailnet peer rather than Docker's bridge gateway. A co-located
-reverse proxy terminates TLS and forwards the browser UI to `127.0.0.1:8000`;
-its address is the only entry in `SEVERINO_TRUSTED_PROXIES`. MCP clients
-connect to the host's tailnet address on port 8000 directly. Limit host
-ingress for 443 and 8000 to the tailnet interface and loopback, and forward
-neither port from a router.
+The container uses host networking and Uvicorn binds `127.0.0.1:8000`, so
+port 8000 answers only loopback. A co-located reverse proxy terminates TLS and
+forwards everything to it, the browser UI, `/api/mcp/` and
+`/.well-known/oauth-protected-resource/api` alike. Its address is the only entry
+in `SEVERINO_TRUSTED_PROXIES`, the one source whose forwarded address and
+scheme HQ believes, so `/api/mcp/` sees the tailnet caller the proxy saw. MCP
+clients connect to `https://<hq-host>/api/mcp/`, and `SEVERINO_MCP_ALLOWED_HOSTS`
+names that host. Limit host ingress for 443 to the tailnet interface and
+loopback, and forward it from no router.
 
 With Nginx Proxy Manager, attach an access list whose client rules allow
 exactly the tailnet ranges in `SEVERINO_TRUSTED_NETWORKS`, in that order, and
@@ -426,9 +484,9 @@ account, so it trusts nothing that account passes beyond naming the upgrade:
   writable directory mount outside the stack is refused.
 
 For one compose service it pulls the target, stops the service and snapshots
-its data, proves the target against a copy of the data with no network, pins
-the digest in the stack's compose override, recreates the service and
-verifies it stays up for a settle window. Any failure restores the override
+its data, and proves the target against a copy of the data with no network. It
+then pins the digest in the stack's compose override, recreates the service
+and verifies it stays up for a settle window. Any failure restores the override
 and the data. It is idempotent by operation id and prints one JSON result:
 exit 0 kept, 3 rolled back, 2 refused or unchanged, 1 failed and not put back.
 It needs Docker Compose 2.24.4 or later, `tar`, and Linux.
@@ -465,10 +523,10 @@ you sign in; the audit log records the sign-in.
 | :--- | :--- |
 | 502 from the proxy | HQ is not answering on `127.0.0.1:8000`: `journalctl -u severino-hq-web.service` |
 | the web unit stays `activating` | the environment has not rendered: `journalctl -u severino-hq-secrets.service` |
-| CSRF errors on sign-in | `DJANGO_CSRF_TRUSTED_ORIGINS` lacks the full origin, scheme and host, or `DJANGO_BEHIND_TLS_PROXY` is not `1` |
+| CSRF errors on sign-in | `DJANGO_CSRF_TRUSTED_ORIGINS` lacks the full origin, scheme and host, or the proxy's address is not in `SEVERINO_TRUSTED_PROXIES`, so HQ does not believe its `X-Forwarded-Proto` |
 | Compose fails in "Resolve the host image" | CI for that commit failed, so the host image was never published |
 | an extension merged and nothing deployed | its admission did not dispatch Compose, or found nothing new: run Compose |
-| the Deploy step failed | production still runs the previous image; the detail is in `/var/log/severino-hq/` on the host |
+| the Deploy step failed | the deployment's description says what production runs: the previous image, the release with a check failed, or unknown when the rollback failed too or the deploy was interrupted after hq-host began; the detail is in `/var/log/severino-hq/` on the host |
 | a deploy refuses an image that drops an extension | the composition does not say it was meant: name the extension in `retired` in `COMPOSITION_EXTENSIONS` and run Compose, or restore it to the set |
 | a push says `permission_denied: write_package` | the package does not give this repository write: in its settings, under Manage Actions access, give it the Write role |
 | minting HQ's token says `Bad credentials` or `could not create installation access token` | the key or client ID in the secrets is not the app's: run `mise run wire-github-app` |

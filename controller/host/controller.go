@@ -3,7 +3,6 @@ package host
 import (
 	"context"
 	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -25,6 +24,7 @@ const (
 	controllerSSH         = "/run/secrets/controller-ssh"
 	controllerCA          = "/run/secrets/severino_controller_ca.pem"
 	controllerACME        = "/var/lib/severino-hq/acme"
+	controllerSeal        = "/var/lib/severino-hq/seal"
 )
 
 // Controller runs one controller pass in a short-lived container made from
@@ -54,9 +54,6 @@ type Controller struct {
 	// Lock holds the renderer's identity lock shared until the returned
 	// function is called, so a copy holds one generation.
 	Lock func(ctx context.Context) (func(), error)
-	// Owner gives name, beneath root, to the controller's account. Every path
-	// is resolved beneath root, so a link cannot carry a change outside it.
-	Owner func(root *os.Root, name string) error
 	// LookPath finds a host program to lend the container.
 	LookPath func(name string) (string, error)
 	Now      func() time.Time
@@ -99,6 +96,9 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 		if err := c.prepareACME(); err != nil {
 			return err
 		}
+		if err := c.prepareSeal(); err != nil {
+			return err
+		}
 	}
 	c.pruneRuns()
 	run, err := os.MkdirTemp(c.SecretDir, "run.")
@@ -114,10 +114,7 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 	if err != nil {
 		return err
 	}
-	nonce := make([]byte, 16)
-	if _, err := rand.Read(nonce); err != nil {
-		return errors.New("no randomness for the run nonce")
-	}
+	nonce := rand.Text()
 	role := "controller"
 	if pass == Glance {
 		role = "glance"
@@ -128,8 +125,8 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 		// A nonce the pass is handed too, so it can tell which container it
 		// finds is itself: a fixed label any container could set.
 		"--label", "severino-hq.role=" + role,
-		"--label", "severino-hq.run=" + hex.EncodeToString(nonce),
-		"--env", "HQ_CONTROLLER_RUN=" + hex.EncodeToString(nonce),
+		"--label", "severino-hq.run=" + nonce,
+		"--env", "HQ_CONTROLLER_RUN=" + nonce,
 		"--security-opt", "no-new-privileges:true",
 		"--tmpfs", "/tmp:size=64m,noexec,nosuid,nodev",
 		"--entrypoint", "/usr/local/bin/hq-controller",
@@ -150,9 +147,11 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 		}
 		args = append(args,
 			"--mount", "type=bind,source="+c.ACME+",target="+controllerACME,
+			"--mount", readOnly(c.Seal, controllerSeal),
 			"--mount", "type=bind,source="+filepath.Join(run, "out")+",target="+controllerOut,
 			"--env", controllerOutEnv+"="+controllerOut,
 			"--env", "HQ_ACME_DIR="+controllerACME,
+			"--env", "HQ_SEAL_DIR="+controllerSeal,
 			"--env", "HQ_CONTROLLER_IMAGE="+image,
 			"--env", "SEVERINO_HQ_SOURCE_REPOSITORY="+source,
 		)
@@ -224,7 +223,7 @@ func (c *Controller) prepareACME() error {
 }
 
 // ownTree gives dir and everything beneath it to the controller's account.
-func (c *Controller) ownTree(dir string) error {
+func (m *Machine) ownTree(dir string) error {
 	root, err := os.OpenRoot(dir)
 	if err != nil {
 		return err
@@ -234,7 +233,7 @@ func (c *Controller) ownTree(dir string) error {
 		if err != nil {
 			return err
 		}
-		return c.Owner(root, name)
+		return m.Owner(root, name)
 	})
 }
 

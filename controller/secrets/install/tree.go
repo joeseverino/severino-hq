@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"io"
 	"io/fs"
@@ -266,11 +265,7 @@ func (t *Tree) NewStage() (*Stage, error) {
 			}
 		}
 	}
-	random := make([]byte, 8)
-	if _, err := rand.Read(random); err != nil {
-		return nil, hostError("No randomness for the staging directory.")
-	}
-	name := stagePrefix + hex.EncodeToString(random)
+	name := stagePrefix + rand.Text()
 	if err := t.runtime.Mkdir(name, 0o700); err != nil {
 		return nil, hostError("The staging directory could not be created.")
 	}
@@ -375,11 +370,7 @@ func InPlace(root *os.Root, name string, data []byte, uid, gid int, mode fs.File
 	}
 	if current == nil {
 		// A fresh destination: written beside it, then renamed into place.
-		random := make([]byte, 8)
-		if _, err := rand.Read(random); err != nil {
-			return false, hostError("No randomness for a temporary name.")
-		}
-		temporary := "." + name + "." + hex.EncodeToString(random)
+		temporary := "." + name + "." + rand.Text()
 		file, err := root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0o600)
 		if err != nil {
 			return false, hostError("Could not create ", name, ".")

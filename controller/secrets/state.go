@@ -51,14 +51,6 @@ type installed struct {
 	Digest string      `json:"digest"`
 }
 
-func newSalt() (string, error) {
-	random := make([]byte, 16)
-	if _, err := rand.Read(random); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(random), nil
-}
-
 func digest(salt string, parts ...[]byte) string {
 	hash := sha256.New()
 	hash.Write([]byte(salt))
@@ -188,10 +180,7 @@ func (r *Runner) pendingUnreadable(tree *install.Tree) bool {
 }
 
 func (r *Runner) markPending(tree *install.Tree, environment []byte) error {
-	salt, err := newSalt()
-	if err != nil {
-		return errors.New("no randomness for the restart mark")
-	}
+	salt := rand.Text()
 	data, err := json.Marshal(pendingMark{Salt: salt, Digest: digest(salt, environment)})
 	if err != nil {
 		return err

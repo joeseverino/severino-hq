@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/joeseverino/severino-hq/controller/host"
 )
 
 func TestARunStagesWhereItsUnitMayWrite(t *testing.T) {
@@ -38,5 +42,27 @@ func TestAUnitRequestIsAnsweredInJSONAsAnyAccount(t *testing.T) {
 	code := run(context.Background(), []string{"unit", "--serve"}, func(string) string { return "" }, 1000, strings.NewReader("stop example.service\n"), &stdout, io.Discard)
 	if code != 0 || !strings.Contains(stdout.String(), `"outcome":"refused"`) {
 		t.Errorf("exited %d with %q", code, stdout.String())
+	}
+}
+
+type ended struct {
+	error
+	outcome host.DeployOutcome
+}
+
+func (e ended) Outcome() host.DeployOutcome { return e.outcome }
+
+// The Deploy workflow tells what production runs by this status alone, so a
+// deploy's error exits with the status its outcome declares however it is
+// wrapped, and every other failure exits 1.
+func TestADeployExitsWithItsOutcomesStatus(t *testing.T) {
+	for _, outcome := range []host.DeployOutcome{host.DeployLiveCheckFailed, host.DeployRollbackFailed} {
+		err := fmt.Errorf("deploy: %w", ended{errors.New("a check failed"), outcome})
+		if got := exitStatus(err); got != outcome.Exit || got == 1 || got == 2 {
+			t.Errorf("%s exited %d, want a status of its own", outcome.Name, got)
+		}
+	}
+	if got := exitStatus(errors.New("the new image did not become healthy")); got != 1 {
+		t.Errorf("a release that did not go live exited %d, want 1", got)
 	}
 }

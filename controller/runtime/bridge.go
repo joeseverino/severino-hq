@@ -104,10 +104,12 @@ func (b *SocketBridge) call(ctx context.Context, payload, result any, request se
 		result = new(any)
 	}
 	// Strict: a field the contract does not declare is drift, refused here
-	// rather than dropped.
+	// rather than dropped. This stays on v1 because the generated types hold
+	// `any` and map fields whose numbers must stay exact, and v2 has no
+	// UseNumber.
 	decoder := json.NewDecoder(bytes.NewReader(answer))
 	decoder.UseNumber()
-	decoder.DisallowUnknownFields()
+	decoder.DisallowUnknownFields() //nolint:forbidigo // UseNumber is v1's alone; see above.
 	if err := decoder.Decode(result); err != nil {
 		return &BridgeError{"bridge answer does not match the contract: " + err.Error()}
 	}

@@ -28,6 +28,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	deployed "github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/providers/githubapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -438,6 +439,28 @@ func readRepository(t *testing.T, h *githubHarness) (GitHubRepositoryRecord, []r
 	return report.Records[0].(GitHubRepositoryRecord), report.RefusedParts
 }
 
+// A release live with a check after its deploy failed is a success on GitHub,
+// told apart from one that passed by the description deploy/outcomes.json
+// declares for it; another repository's own description is no outcome.
+func TestADeploymentLiveWithACheckFailedSaysSo(t *testing.T) {
+	for _, c := range []struct {
+		state, description string
+		want               bool
+	}{
+		{deployed.DeployLiveCheckFailed.State, deployed.DeployLiveCheckFailed.Description, true},
+		{deployed.DeployLive.State, deployed.DeployLive.Description, false},
+		{"success", "Deployment finished successfully.", false},
+	} {
+		routes := githubRepositoryRoutes()
+		status, _ := json.Marshal([]map[string]string{{"state": c.state, "description": c.description, "log_url": "", "target_url": ""}})
+		routes[githubFakeAPI+" /repos/example/app/deployments/21/statuses?per_page=1"] = string(status)
+		record, _ := readRepository(t, newGitHubHarness(t, routes, runtime.Environment{}))
+		if len(record.Deployments) != 1 || record.Deployments[0].CheckFailed != c.want {
+			t.Errorf("%q: read %+v, want check_failed %v", c.description, record.Deployments, c.want)
+		}
+	}
+}
+
 func TestGitHubRepositoryReading(t *testing.T) {
 	routes := githubRepositoryRoutes()
 	h := newGitHubHarness(t, routes, runtime.Environment{})
@@ -462,7 +485,7 @@ func TestGitHubRepositoryReading(t *testing.T) {
 		{"each workflow that exists now once, under its name now", record.Runs, `[{"id":3,"name":"CI","status":"waiting","conclusion":"","event":"push","branch":"main","sha":"aaaa","url":"https://github.com/example/app/actions/runs/3","created_at":"2030-01-03T00:00:00Z"}]`},
 		{"waiting", record.Waiting[0].Environments, `["production"]`},
 		{"release", record.Release, `{"tag":"v1.2.0","url":"https://github.com/example/app/releases/v1.2.0","published_at":"2030-01-01T00:00:00Z"}`},
-		{"the newest deployment to each environment, with what its job verified", record.Deployments, `[{"environment":"production","sha":"aaaa","created_at":"2030-01-02T00:00:00Z","state":"success","url":"https://github.com/example/app/actions/runs/3/job/77?pr=1","verified":[{"name":"Verify signature","conclusion":"success"}]}]`},
+		{"the newest deployment to each environment, with what its job verified", record.Deployments, `[{"environment":"production","sha":"aaaa","created_at":"2030-01-02T00:00:00Z","state":"success","url":"https://github.com/example/app/actions/runs/3/job/77?pr=1","verified":[{"name":"Verify signature","conclusion":"success"}],"check_failed":false}]`},
 		{"alerts by severity; a refused kind is absent, not zero", record.Alerts, `{"code_scanning":{"high":1,"warning":1},"dependabot":{"critical":1,"high":1}}`},
 		{"live artifacts, soonest first", record.Artifacts, `[{"name":"soon","expires_at":"2030-02-01T00:00:00Z","sha":"aaaa"},{"name":"late","expires_at":"2030-03-01T00:00:00Z","sha":"aaaa"}]`},
 		{"rules", record.Rules, `{"pull_request":true,"reviews":2,"required_checks":["lint","test"],"blocks_force_push":true,"blocks_deletion":true}`},
@@ -505,6 +528,32 @@ func TestGitHubRepositoryReading(t *testing.T) {
 	}
 	if resolved != 1 {
 		t.Errorf("a tag is resolved once per repository, resolved %d times", resolved)
+	}
+}
+
+// A check run in the suite of one of GitHub's own dynamic runs (the
+// dependency graph's) fails no commit: no workflow of the repository owns it.
+func TestGitHubsOwnRunsFailNoCommit(t *testing.T) {
+	api := func(path string) string { return githubFakeAPI + " /repos/example/app" + path }
+	routes := githubRepositoryRoutes()
+	routes[api("/actions/runs?per_page=50")] = `{"workflow_runs":[
+		{"id":2,"name":"CI","workflow_id":11,"check_suite_id":20,"status":"completed","conclusion":"success","event":"push","head_branch":"main","head_sha":"aaaa000000000000000000000000000000000000","created_at":"2030-01-02T00:00:00Z"},
+		{"id":4,"name":"Graph Update: uv in /packages/example","workflow_id":12,"check_suite_id":40,"status":"completed","conclusion":"failure","event":"dynamic","head_branch":"main","head_sha":"aaaa000000000000000000000000000000000000","created_at":"2030-01-04T00:00:00Z"},
+		{"id":5,"name":"Graph Update: uv in /packages/example","workflow_id":12,"check_suite_id":50,"status":"completed","conclusion":"failure","event":"dynamic","head_branch":"renovate/example-lib-2.x","head_sha":"eeee","created_at":"2030-01-04T00:00:00Z"}]}`
+	routes[api("/commits/aaaa000000000000000000000000000000000000/check-runs?per_page=100")] = `{"check_runs":[
+		{"id":1,"name":"test","status":"completed","conclusion":"success","started_at":"2030-01-02T00:00:00Z","check_suite":{"id":20}},
+		{"id":2,"name":"update-uv-graph","status":"completed","conclusion":"failure","started_at":"2030-01-04T00:00:00Z","check_suite":{"id":40}}]}`
+	routes[api("/commits/eeee/check-runs?per_page=100")] = `{"check_runs":[
+		{"id":9,"name":"build","status":"completed","conclusion":"success","check_suite":{"id":90}},
+		{"id":10,"name":"update-uv-graph","status":"completed","conclusion":"failure","check_suite":{"id":50}}]}`
+	record, _ := readRepository(t, newGitHubHarness(t, routes, runtime.Environment{}))
+
+	if record.Checks.State != "success" || slices.Contains(record.Checks.Names, "update-uv-graph") {
+		t.Errorf("head commit checks %+v", record.Checks)
+	}
+	pull := record.PullRequests[0].Checks
+	if pull == nil || pull.State != "success" || slices.Contains(record.PullRequestChecks, "update-uv-graph") {
+		t.Errorf("pull request checks %+v, names %v", pull, record.PullRequestChecks)
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/providers/githubapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -157,6 +158,9 @@ type GitHubDeployment struct {
 	State       string               `json:"state"`
 	URL         string               `json:"url"`
 	Verified    []GitHubVerification `json:"verified"`
+	// CheckFailed is whether its status is an outcome deploy/outcomes.json
+	// declares with a check failed, as a release live with one failed is.
+	CheckFailed bool `json:"check_failed"`
 }
 
 type GitHubVerification struct {
@@ -281,7 +285,8 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	if uses, ok := part(ctx, g, runtime.PartWorkflowPins, func() (githubUsesFound, error) { return g.workflowUses(ctx, branch) }); ok {
 		record.Pins, record.CalledWorkflows = uses.pins, uses.called
 	}
-	if record.Checks, err = g.checks(ctx, commit.Sha); err != nil {
+	githubs := githubOwnSuites(runs.WorkflowRuns)
+	if record.Checks, err = g.checks(ctx, commit.Sha, githubs); err != nil {
 		return record, err
 	}
 	pulls, err := repoGet[[]githubapi.PullRequestSimple](ctx, g, "/pulls?state=open&per_page="+strconv.Itoa(githubPullsPage))
@@ -289,7 +294,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 		return record, err
 	}
 	record.PullRequests = githubPulls(pulls)
-	if record.PullRequestChecks, err = g.pullChecks(ctx, record.PullRequests); err != nil {
+	if record.PullRequestChecks, err = g.pullChecks(ctx, record.PullRequests, githubs); err != nil {
 		return record, err
 	}
 	workflows, err := repoGet[struct {
@@ -385,22 +390,39 @@ func githubHead(commit githubapi.Commit) GitHubHead {
 	}
 }
 
+// githubOwnSuites is the check suites of GitHub's own dynamic runs (the
+// dependency graph's, Copilot's), which no workflow file of the repository
+// owns, so their checks are not the repository's.
+func githubOwnSuites(runs []githubapi.WorkflowRun) map[int]bool {
+	suites := map[int]bool{}
+	for _, run := range runs {
+		if run.Event == "dynamic" && run.CheckSuiteID != 0 {
+			suites[run.CheckSuiteID] = true
+		}
+	}
+	return suites
+}
+
 // checks is a commit's check runs, each standing as its last run did: a rerun
-// that passed is what the commit's state is.
-func (g *githubRepository) checks(ctx context.Context, sha string) (GitHubChecks, error) {
+// that passed is what the commit's state is. A check in a suite githubs holds
+// is GitHub's own, and left out.
+func (g *githubRepository) checks(ctx context.Context, sha string, githubs map[int]bool) (GitHubChecks, error) {
 	if sha == "" {
-		return summarizeChecks(nil), nil
+		return summarizeChecks(nil, githubs), nil
 	}
 	found, err := repoGet[struct {
 		CheckRuns []githubapi.CheckRun `json:"check_runs"`
 	}](ctx, g, "/commits/"+sha+"/check-runs?per_page="+strconv.Itoa(githubListPage))
-	return summarizeChecks(found.CheckRuns), err
+	return summarizeChecks(found.CheckRuns, githubs), err
 }
 
-func summarizeChecks(runs []githubapi.CheckRun) GitHubChecks {
+func summarizeChecks(runs []githubapi.CheckRun, githubs map[int]bool) GitHubChecks {
 	latest := map[string]githubapi.CheckRun{}
 	order := []string{}
 	for _, run := range runs {
+		if githubs[run.CheckSuite.ID] {
+			continue
+		}
 		previous, seen := latest[run.Name]
 		if !seen {
 			order = append(order, run.Name)
@@ -454,12 +476,12 @@ func githubPulls(pulls []githubapi.PullRequestSimple) []GitHubPull {
 // pullChecks reads the checks of every update's pull request onto it, and
 // answers the check names the newest pull request runs: what a pull request
 // is checked by, for the rules to require.
-func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubPull) ([]string, error) {
+func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubPull, githubs map[int]bool) ([]string, error) {
 	for i := range pulls {
 		if pulls[i].Head == "" || !strings.HasPrefix(pulls[i].Branch, githubUpdateBranch) {
 			continue
 		}
-		checks, err := g.checks(ctx, pulls[i].Head)
+		checks, err := g.checks(ctx, pulls[i].Head, githubs)
 		if err != nil {
 			return nil, err
 		}
@@ -471,7 +493,7 @@ func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubPull) (
 	if pulls[0].Checks != nil {
 		return pulls[0].Checks.Names, nil
 	}
-	checks, err := g.checks(ctx, pulls[0].Head)
+	checks, err := g.checks(ctx, pulls[0].Head, githubs)
 	return checks.Names, err
 }
 
@@ -558,6 +580,8 @@ func (g *githubRepository) deployments(ctx context.Context) ([]GitHubDeployment,
 		record := GitHubDeployment{Environment: deployment.Environment, SHA: deployment.Sha, CreatedAt: deployment.CreatedAt, Verified: []GitHubVerification{}}
 		if len(statuses) > 0 {
 			record.State, record.URL = string(statuses[0].State), orDefault(statuses[0].LogURL, statuses[0].TargetURL)
+			outcome, declared := host.ReportedOutcome(record.State, statuses[0].Description)
+			record.CheckFailed = declared && outcome.CheckFailed
 		}
 		if record.Verified, err = g.verifications(ctx, record.URL); err != nil {
 			return nil, err

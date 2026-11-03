@@ -30,7 +30,9 @@ func othersWrite(path string, info fs.FileInfo) bool {
 // unmoved is whether a path resolves to itself: no symlink anywhere along it,
 // so what root is about to read or replace is the path that was checked, not
 // one another writer in the stack swapped in since. Asked when the mounts are
-// read and again right before each snapshot and each restore.
+// read, and again right before tar reaches a directory mount by its path; a
+// file is opened through openUnmoved, which refuses the swap at the open
+// itself.
 func unmoved(path string) bool {
 	if path == "" || path == "/" || strings.HasSuffix(path, "/") || !filepath.IsAbs(path) {
 		return false
@@ -45,7 +47,7 @@ func unmoved(path string) bool {
 
 // copyFile writes source's bytes, mode, owner and times into target, in
 // place when it exists, as `cp -p` does. Neither end is followed through a
-// symlink.
+// symlink at any component of its path.
 func copyFile(source, target string) error {
 	return copyFileOwned(source, target, nil)
 }
@@ -53,7 +55,7 @@ func copyFile(source, target string) error {
 // copyFileOwned is copyFile with target owned as owner is, or as source is
 // when owner is nil.
 func copyFileOwned(source, target string, owner fs.FileInfo) (err error) {
-	in, err := os.OpenFile(source, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	in, err := openUnmoved(source, os.O_RDONLY, 0)
 	if err != nil {
 		return err
 	}
@@ -65,7 +67,7 @@ func copyFileOwned(source, target string, owner fs.FileInfo) (err error) {
 	if !info.Mode().IsRegular() {
 		return errors.New(source + " is not a file")
 	}
-	out, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_NOFOLLOW, info.Mode().Perm())
+	out, err := openUnmoved(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode().Perm())
 	if err != nil {
 		return err
 	}

@@ -94,9 +94,6 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 		return answer(filepath.Join(f.root, "volumes", args[len(args)-1])+"\n", 0)
 	case name == "sqlite3":
 		return exec.CommandContext(ctx, "sqlite3", args...)
-	case name == "age":
-		// Its output says it went through age, and for whom, then the input.
-		return exec.CommandContext(ctx, "/bin/sh", append([]string{"-c", `echo "age $*"; cat`, "sh"}, args...)...)
 	case strings.HasPrefix(call, "docker image inspect"):
 		return answer(imageID+"\n", 0)
 	case strings.HasPrefix(call, "docker cp"):
@@ -130,17 +127,20 @@ func newFakeHost(t *testing.T) *fakeHost {
 	f := &fakeHost{t: t, root: root, image: filepath.Join(root, "image", "app")}
 	lib := filepath.Join(root, "lib")
 	f.machine = &Machine{
-		Lib:      lib,
-		Systemd:  filepath.Join(root, "systemd"),
-		Tmpfiles: filepath.Join(root, "tmpfiles.d"),
-		LogDir:   filepath.Join(root, "log"),
-		State:    filepath.Join(root, "state"),
-		Sbin:     filepath.Join(root, "sbin"),
-		Runtime:  filepath.Join(root, "run"),
-		Out:      &f.out,
+		Lib:        lib,
+		Systemd:    filepath.Join(root, "systemd"),
+		Tmpfiles:   filepath.Join(root, "tmpfiles.d"),
+		LogDir:     filepath.Join(root, "log"),
+		State:      filepath.Join(root, "state"),
+		Seal:       filepath.Join(root, "seal"),
+		SealPublic: filepath.Join(root, "state", "seal", "public.key"),
+		Sbin:       filepath.Join(root, "sbin"),
+		Runtime:    filepath.Join(root, "run"),
+		Out:        &f.out,
 	}
 	f.machine.Command = f.program
 	f.machine.Own = func(string) error { return nil }
+	f.machine.Owner = func(*os.Root, string) error { return nil }
 	f.machine.Verifier = func(context.Context) error { return nil }
 	f.machine.Sudoers = filepath.Join(root, "sudoers.d")
 	f.runners, f.runnerUser = []string{"actions.runner.example.service"}, "deployer"

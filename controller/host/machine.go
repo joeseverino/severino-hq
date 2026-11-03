@@ -7,7 +7,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 )
+
+// ProcessWaitDelay bounds how long a killed child's pipes are waited on, so a
+// grandchild holding them open cannot outlive the deadline.
+const ProcessWaitDelay = 5 * time.Second
 
 // Machine is where an install or a deploy acts, and how it runs a command
 // there. Every path is a field so a test can relocate the whole host.
@@ -21,6 +26,9 @@ type Machine struct {
 	LogDir string
 	// State holds the release record.
 	State string
+	// Seal holds the controller's sealing keys (SealDir on a host), and
+	// SealPublic the public half the web seals with (SealPublicKey).
+	Seal, SealPublic string
 	// Sbin held programs earlier releases installed; none is installed now.
 	Sbin string
 	// Runtime is /run, where the deploy stages what it must not leave behind.
@@ -33,6 +41,9 @@ type Machine struct {
 	Command func(ctx context.Context, name string, args ...string) *exec.Cmd
 	// Own makes a path in the tree root's; a test, run unprivileged, does not.
 	Own func(path string) error
+	// Owner gives name, beneath root, to the controller's account. Every path
+	// is resolved beneath root, so a link cannot carry a change outside it.
+	Owner func(root *os.Root, name string) error
 	// Out is the public log: one line per step, nothing a host is made of.
 	Out io.Writer
 }
@@ -83,6 +94,7 @@ func (m *Machine) private(ctx context.Context, label, log, name string, args ...
 // nothing of this process's but where to find programs and docker.
 func Command(ctx context.Context, name string, args ...string) *exec.Cmd {
 	command := exec.CommandContext(ctx, name, args...)
+	command.WaitDelay = ProcessWaitDelay
 	command.Env = []string{}
 	for _, variable := range []string{"PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG"} {
 		if value, ok := os.LookupEnv(variable); ok {

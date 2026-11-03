@@ -1,6 +1,6 @@
 #!/bin/sh
 # The mise a checkout runs: the min_version its mise.toml ($1) declares. Both
-# the toolchain and the uv action read it here; a missing key fails rather
+# the toolchain and the host-tool action read it here; a missing key fails rather
 # than letting mise-action install whatever release is newest.
 set -eu
 

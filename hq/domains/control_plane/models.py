@@ -10,6 +10,7 @@ from django.db.models.functions import Coalesce, Lower, NullIf, Trim
 from django.utils import timezone
 
 from hq.domains.jobs.models import JobState
+from hq.platform.application.labels import dotted
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule, one_of, singleton
 lazy from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
@@ -129,8 +130,12 @@ class ManagedResource(TimestampedModel):
     def search_summary(self) -> str:
         """The provider's readout as one line, else the kind's label."""
 
-        rows = " · ".join(
-            f"{label}: {desired or observed}" for label, desired, observed in readout_rows(self) if desired or observed
+        rows = dotted(
+            *(
+                f"{label}: {desired or observed}"
+                for label, desired, observed in readout_rows(self)
+                if desired or observed
+            )
         )
         return rows or self.kind_label
 
@@ -337,12 +342,9 @@ class CertificateMaterial(TimestampedModel):
     """
 
     resource = models.OneToOneField(ManagedResource, on_delete=models.CASCADE, related_name="material")
-    # Sealed with a key that is not in this database (``core.secrets``) and
-    # never returned by any serializer. The controller reads it through its own
-    # bridge command, so it stays out of the contract every other resource's
-    # export prints.
-    sealed_fullchain = models.TextField()
-    sealed_private_key = models.TextField()
+    # The certificate and its chain, which every client of the service is sent.
+    # Its private key is a SealedSecret on the same resource.
+    fullchain = models.TextField()
     # Held in the clear because they are printed, not protected: an operator has
     # to see which certificate this is and when it stops working, and both are
     # readable by anyone who can already connect to the service it secures.
@@ -358,6 +360,33 @@ class CertificateMaterial(TimestampedModel):
     @override
     def __str__(self) -> str:
         return f"material for {self.resource_id}"
+
+
+class SealedSecret(models.Model):
+    """A secret an operator handed HQ for one resource, sealed to the controller.
+
+    HQ holds only the controller's public key, so the web writes this and never
+    reads it back: the controller is given ``sealed`` over the bridge and opens
+    it itself. Sealing binds the value to its resource and slot, so a value
+    copied to another row does not open. ``sealed_secrets.set_secret`` is its
+    one writer.
+    """
+
+    resource = models.ForeignKey(ManagedResource, on_delete=models.CASCADE, related_name="sealed_secrets")
+    # Where the value goes on the resource, such as "certificate:private_key".
+    slot = models.CharField(max_length=200)
+    sealed = models.TextField()
+    # How many times the slot has been set, so a replacement is told apart.
+    version = models.PositiveIntegerField(default=1)
+    set_at = models.DateTimeField()
+    set_by = models.CharField(max_length=160)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("resource", "slot"), name="one_sealed_secret_per_slot")]
+
+    @override
+    def __str__(self) -> str:
+        return f"{self.slot} for {self.resource_id}"
 
 
 class OperationState(models.TextChoices):
@@ -523,12 +552,14 @@ class ApprovalRequest(TimestampedModel):
             models.Index(fields=("resource_key", "state")),
         ]
         constraints = [
-            # One row per identical outstanding request. A caller that asks the
-            # same thing fifty times is told about the one request fifty times;
-            # it does not fill a person's queue with fifty decisions that are
-            # all the same decision.
+            # One row per identical outstanding request from one caller. A
+            # caller that asks the same thing fifty times is told about the one
+            # request fifty times; it does not fill a person's queue with fifty
+            # decisions that are all the same decision. The asker is in the key
+            # because a request is its asker's: another caller asking the same
+            # change gets its own, approved as itself.
             models.UniqueConstraint(
-                fields=("capability", "target", "content_fingerprint"),
+                fields=("capability", "target", "content_fingerprint", "requested_actor", "requested_interface"),
                 condition=models.Q(state="pending"),
                 name="one_pending_approval_per_requested_change",
             ),
