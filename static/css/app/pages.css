@@ -439,8 +439,7 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
   --reading: 11rem;
   /* Half a row for an even count; an odd one goes from one row to one a line. */
   --half: calc(50% - var(--space-5));
-  position: relative; z-index: 2; display: grid; align-items: start; justify-content: end;
-  container: readings / inline-size;
+  display: grid; align-items: start; justify-content: end;
   /* Asks for a whole row before it settles beside the greeting. */
   flex: 1 1 calc(var(--readings) * var(--reading)); min-width: 0;
   /* Each track is a whole row's share; where that is under a reading's width,

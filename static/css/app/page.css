@@ -140,19 +140,27 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .dashboard-glance { display: contents; }
 .page-head:has(.dashboard-glance) { align-items: center; }
 .glance-panels { display: contents; }
-.glance-panel { position: relative; min-width: 0; }
+.glance-panel { min-width: 0; }
+/* A reading is the button that opens it, drawn as the reading and not as a
+   button: the text's own face and color, the whole width of its place. */
 .glance-panel-head {
   display: grid;
   grid-template-columns: 22px minmax(0, auto);
   align-items: center;
   gap: 0 var(--space-5);
+  inline-size: 100%;
+  min-height: 0;
   padding: var(--space-3) var(--space-7);
-  cursor: pointer;
-  list-style: none;
+  border: 0;
   border-radius: var(--radius);
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
 }
-.glance-panel-head:hover, .glance-panel[open] > .glance-panel-head { background: var(--bg-tint); }
-.glance-panel-head::marker { content: ""; }
+.glance-panel-head:hover, .glance-panel-head:has(+ :popover-open) { background: var(--bg-tint); }
 .glance-panel-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .glance-symbol { grid-row: 1 / span 3; align-self: center; color: var(--muted-2); }
 .glance-symbol .icon { width: 22px; height: 22px; }
@@ -183,7 +191,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .glance-freshness { color: var(--warn); font-size: var(--text-3xs); }
 .glance-freshness .reading-age { white-space: normal; }
 .glance-panel[data-refreshing] .glance-freshness { color: var(--muted-2); }
-.glance-expanded { position: absolute; top: calc(100% + 6px); right: 0; z-index: 5; display: grid; gap: var(--space-6); width: min(340px, calc(100vw - 32px)); padding: var(--space-6) var(--space-7); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.glance-expanded { display: grid; gap: var(--space-6); width: min(340px, calc(100vw - 32px)); padding: var(--space-6) var(--space-7); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
 .glance-expanded-head { display: grid; gap: 1px; font-size: var(--text-xs); color: var(--muted); }
 .glance-expanded-head strong { color: var(--ink); font-size: var(--text-sm); }
 .glance-expanded-head time { color: var(--muted-2); font-size: var(--text-3xs); }
@@ -325,13 +333,13 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 }
 @media (pointer: coarse) {
   :is(.month-mark, .month-span),
-  main summary:not(.glance-panel-head) { position: relative; }
+  main summary { position: relative; }
   :is(.table-sort-link, .subtle-link, .pagination a, .month-date, .pin-toggle, a.kpi-dot, .kpi a.value, .posture-meter, .month-mark, .month-span)::after {
     content: ""; position: absolute;
     inset: min(calc(-1 * var(--space-5)), calc(50% - var(--target-min) / 2)) min(calc(-1 * var(--space-3)), calc(50% - var(--target-min) / 2));
   }
   /* A disclosure's whole line is its target, above and below. */
-  main summary:not(.glance-panel-head) { padding-block: var(--space-3); margin-block: calc(-1 * var(--space-3)); }
+  main summary { padding-block: var(--space-3); margin-block: calc(-1 * var(--space-3)); }
   input[type=checkbox], input[type=radio] { inline-size: 20px; block-size: 20px; }
 }
 

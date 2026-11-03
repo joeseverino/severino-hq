@@ -324,7 +324,8 @@ class DemoSiteTests(unittest.TestCase):
             self.assertEqual(page.locator("#content > .messages").count(), 0, "said once, in the row")
             page.goto(self.origin + "/", wait_until="networkidle")
             refresh = page.locator(".glance-refresh").first
-            refresh.locator("xpath=ancestor::details[1]/summary").click()
+            panel = refresh.locator("xpath=ancestor::*[@popover][1]")
+            page.locator(f'[popovertarget="{panel.get_attribute("id")}"]').click()
             refresh.click()
             said = page.locator("#content > .messages")
             said.wait_for()

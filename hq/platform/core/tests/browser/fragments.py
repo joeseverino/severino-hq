@@ -15,14 +15,15 @@ from hq.platform.core.tests.browser.probes.settle import SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN
 
-# A region that polls and names its parts, a placeholder behind a closed
-# disclosure, and one whose address answers a whole page.
+# A region that polls and names its parts, a disclosure and a menu, a
+# placeholder behind a closed disclosure, and one whose address answers a
+# whole page.
 _FRAGMENT_PROBE = f"""<!doctype html><html><head><title>Probe</title>
 <script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
 </head><body><main>
 <section data-fragment="/probe-strip/" data-fragment-poll="1">
 <details data-fragment-part="first"><summary>First</summary>as drawn</details>
-<details data-fragment-part="second"><summary>Second</summary>as drawn</details>
+<div data-fragment-part="second" data-menu><button popovertarget="second-panel">Second</button><div id="second-panel" popover>as drawn</div></div>
 </section>
 <details data-probe="fold"><summary>More</summary>
 <div data-fragment="/probe-slot/" data-fragment-load data-fragment-failure="Could not be read.">waiting</div>
@@ -32,7 +33,7 @@ _FRAGMENT_PROBE = f"""<!doctype html><html><head><title>Probe</title>
 
 _PROBE_STRIP = """<section data-fragment="/probe-strip/"{poll}>
 <details data-fragment-part="first"><summary>First</summary>as drawn</details>
-<details data-fragment-part="second"><summary>Second</summary>read again</details>
+<div data-fragment-part="second" data-menu><button popovertarget="second-panel">Second</button><div id="second-panel" popover>read again</div></div>
 </section>"""
 
 # A form answered in place whose submitting button shares a field's name,
@@ -78,6 +79,7 @@ _PROBE_STATE = """(failure) => ({
   first: document.querySelector('[data-fragment-part="first"]').kept === true,
   firstOpen: document.querySelector('[data-fragment-part="first"]').open,
   second: document.querySelector('[data-fragment-part="second"]').textContent,
+  secondOpen: document.querySelector('[data-fragment-part="second"] [popover]').matches(':popover-open'),
   polling: document.querySelector('[data-fragment-poll]') !== null,
   slot: document.querySelector('[data-probe="fold"]').textContent,
   page: [...document.querySelectorAll(failure)].map((line) => line.textContent),
@@ -150,7 +152,8 @@ class FragmentBrowserTests(BrowserGate):
         self.page.goto(f"{ORIGIN}/probe/", wait_until="load")
         self.page.evaluate(
             "() => { const first = document.querySelector('[data-fragment-part=\"first\"]');"
-            " first.kept = true; first.open = true; }"
+            " first.kept = true; first.open = true;"
+            " document.querySelector('[data-fragment-part=\"second\"] [popovertarget]').click(); }"
         )
         # Its first turn reads it again and keeps polling; the second is told to stop.
         self.page.clock.run_for(1000)
@@ -162,10 +165,11 @@ class FragmentBrowserTests(BrowserGate):
         state = self.page.evaluate(_PROBE_STATE, SELECTORS["fragment_failure"])
 
         # The part that did not change is the same node, still open; the one
-        # that did was replaced.
+        # that did was replaced, its menu open as the reader left it.
         self.assertTrue(state["first"])
         self.assertTrue(state["firstOpen"])
         self.assertEqual(state["second"].strip(), "Secondread again")
+        self.assertTrue(state["secondOpen"])
         asked = self.asked.count(("/probe-strip/", ""))
         self.page.clock.run_for(5000)
         # A request after those turns is answered after any they made.

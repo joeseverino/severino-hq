@@ -582,15 +582,6 @@ td > .subtle-link:not(:only-child) { display: inline-block; }
 .address-list span { color: var(--muted); }
 .eyebrow { display: block; margin-bottom: var(--space-1); color: var(--muted-2); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 
-/* While half the readings is narrower than a popover (340px), one hung from a
-   panel in the left half would run off the page, so a popover hangs from the
-   readings' right edge, which is the page's. Wider, every panel's right edge
-   leaves a popover room, whether the readings are one row or two halves. */
-@container readings (width < 680px) {
-  .glance-panel { position: static; }
-  .glance-expanded { right: 0; width: min(340px, 100%); }
-}
-
 @media (max-width: 640px) {
   .glance-panel-head { column-gap: var(--space-3); }
 }

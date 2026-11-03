@@ -588,7 +588,7 @@ const hqFragment = (() => {
     controls.forEach((control) => control.setAttribute("aria-disabled", "true"));
     if (status) status.textContent = form.dataset.fragmentBusy || "";
     // Asked before the swap: afterwards the region is another element.
-    const box = form.closest("dialog, details[data-menu]");
+    const box = form.closest("dialog");
     const done = box && !box.contains(region) ? box : null;
     try {
       await swap(region, {
@@ -598,10 +598,8 @@ const hqFragment = (() => {
         history: region.dataset.fragmentHistory,
       });
       if (status) status.textContent = "";
-      // A form that saved from inside a dialog or a menu has nothing more to
-      // say there.
-      if (done instanceof HTMLDialogElement) done.close();
-      else done?.removeAttribute("open");
+      // A form that saved from inside a dialog has nothing more to say there.
+      done?.close();
     } catch (error) {
       if (error.name === "AbortError") return;
       if (!posting || error.signIn) {
