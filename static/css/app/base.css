@@ -228,8 +228,8 @@ pre ::selection { color: var(--code-ink); }
   flex-wrap: nowrap;
   gap: var(--space-1);
   /* Never squeezed below its own content, which its track gives it, and
-     `overflow` stays visible: an overflow scroll container clips absolutely
-     positioned descendants, the group dropdowns included. */
+     `overflow` stays visible: the popover's own `overflow: auto` would make
+     the bar a scroll container. */
   overflow: visible;
 }
 .primary-nav a {
@@ -238,36 +238,12 @@ pre ::selection { color: var(--code-ink); }
   white-space: nowrap;
   transition: background .12s ease, color .12s ease;
 }
-.primary-nav > a, .nav-group > summary { color: var(--muted); font-weight: 500; font-size: var(--text-sm); padding: var(--space-2) var(--space-5); border-radius: 6px; white-space: nowrap; }
+.primary-nav > a { color: var(--muted); font-weight: 500; font-size: var(--text-sm); padding: var(--space-2) var(--space-5); border-radius: 6px; white-space: nowrap; }
 .primary-nav a:hover { color: var(--ink); background: var(--bg-tint); text-decoration: none; }
 .primary-nav a[aria-current] { color: var(--ink); background: var(--bg-tint); }
 
-/* Grouped sections. A <details> dropdown keeps the bar to a fixed number of
-   controls as sections are added, instead of overflowing behind a hidden
-   scrollbar where the tail becomes unreachable. */
-.nav-group { position: relative; }
-/* Safari stops toggling <details> when `display` on <summary> is changed away
-   from list-item, so the summary keeps its default display and an inner span
-   does the layout. Chromium toggles either way, so this has to be checked in
-   Safari rather than assumed. */
-.nav-group > summary {
-  display: list-item; list-style: none;
-  cursor: pointer; user-select: none;
-  transition: background .12s ease, color .12s ease;
-}
-.nav-group > summary::marker { content: ""; }
 .nav-group-label { display: inline-flex; align-items: center; gap: var(--space-2); }
-.nav-group > summary:hover, .nav-group[open] > summary { color: var(--ink); background: var(--bg-tint); }
-.nav-group > summary[aria-current] { color: var(--ink); background: var(--bg-tint); }
 .nav-caret { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
-.nav-group[open] .nav-caret { transform: rotate(180deg); }
-.nav-group-panel {
-  position: absolute; z-index: 40; top: calc(100% + 6px); left: 0;
-  min-width: 176px; display: flex; flex-direction: column; gap: 1px;
-  padding: var(--space-2); background: var(--surface);
-  border: 1px solid var(--line); border-radius: var(--radius);
-  box-shadow: var(--shadow);
-}
 .nav-group-panel a { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); font-size: var(--text-sm); }
 
 /* Gives way before the sections do: below the breakpoint it is an icon. */

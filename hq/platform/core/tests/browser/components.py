@@ -1034,17 +1034,16 @@ class ComponentLayoutTests(LayoutBrowserTests):
             }
             return p;
           };
-          const menu = document.createElement('details');
+          const menu = document.createElement('div');
           menu.dataset.menu = '';
-          menu.open = true;
-          const summary = document.createElement('summary');
-          summary.textContent = 'menu';
           const panel = document.createElement('div');
+          panel.popover = 'manual';
           panel.append(line('example covering', '300px', '40px'), line('example first', '400px', '40px'), line('example second', '400px', '40px'));
-          menu.append(summary, panel);
+          menu.append(panel);
           const main = document.querySelector('main');
           main.append(line('example covered', '300px', '40px'), menu, line('example clashed', '500px', '40px'));
           main.append(line('example under', '500px', '40px'));
+          panel.showPopover();
         }""")
         found = self.page.evaluate(OVERLAPPING_TEXT, SELECTORS["floating"])
         pairs = {tuple(sorted(part.split('"')[1] for part in finding.split(" over "))) for finding in found}

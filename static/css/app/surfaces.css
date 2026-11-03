@@ -142,20 +142,19 @@
 
 
   /* ── Disclosure: one marker for everything that opens in place ─────────
-     Every details that is not a menu shows the same mark, turned when open,
-     so "this opens" looks the same everywhere: a folded section, raw
-     readings, a list behind "+5 more", a table's own row toggle. Menus carry
-     data-menu and dress their summary as a control instead. A connection's
-     hops and layers show their state with their own tick, in a fixed grid
-     an extra mark would shift, so they carry none. */
-  main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary { list-style: none; cursor: pointer; }
-  main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary::before {
+     Every details shows the same mark, turned when open, so "this opens"
+     looks the same everywhere: a folded section, raw readings, a list behind
+     "+5 more", a table's own row toggle. A connection's hops and layers show
+     their state with their own tick, in a fixed grid an extra mark would
+     shift, so they carry none. */
+  main details:not([data-connection-layer]):not([data-connection-hop]) > summary { list-style: none; cursor: pointer; }
+  main details:not([data-connection-layer]):not([data-connection-hop]) > summary::before {
     content: "\203A" / ""; display: inline-block; width: 1em; margin-inline-end: var(--space-1);
     color: var(--muted); font-size: 1.05em; line-height: 1; text-align: center;
     transition: transform .12s ease;
   }
-  main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop])[open] > summary::before { transform: rotate(90deg); }
-  @media (prefers-reduced-motion: reduce) { main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary::before { transition: none; } }
+  main details:not([data-connection-layer]):not([data-connection-hop])[open] > summary::before { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { main details:not([data-connection-layer]):not([data-connection-hop]) > summary::before { transition: none; } }
 
   /* A section that folds: its heading is the toggle. */
   .section-fold > summary { display: flex; align-items: baseline; }

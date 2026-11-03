@@ -364,6 +364,33 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 /* Each panel says how it is laid out open; closed, it is not drawn. */
 [data-menu] > [popover]:not(:popover-open) { display: none; }
 
+/* Grouped sections: a menu per group keeps the bar to a fixed number of
+   controls as sections are added, instead of overflowing behind a hidden
+   scrollbar where the tail becomes unreachable. A group's button reads as
+   the bar's links do, and its panel hangs from its left edge. */
+.nav-group > button {
+  min-height: 0;
+  padding: var(--space-2) var(--space-5);
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  box-shadow: none;
+  color: var(--muted);
+  line-height: inherit;
+  white-space: nowrap;
+  user-select: none;
+  transition: background .12s ease, color .12s ease;
+}
+.nav-group > button:is(:hover, [aria-current], :has(+ :popover-open)) { color: var(--ink); background: var(--bg-tint); }
+.nav-group > button:has(+ :popover-open) .nav-caret { transform: rotate(180deg); }
+.nav-group > .nav-group-panel {
+  position-area: block-end span-inline-end;
+  min-width: 176px; display: flex; flex-direction: column; gap: 1px;
+  padding: var(--space-2); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
 /* ── User menu ────────────────────────────────────────────────────
    This whole component lives after the generic button primitive in the same
    layer. A POST row and a link row therefore share `.menu-item`; their HTML

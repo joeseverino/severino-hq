@@ -651,17 +651,48 @@ class ExampleEstateControlTests(BrowserGate):
 
     def test_a_category_opened_in_the_phone_drawer_keeps_the_drawer_open(self):
         """A category's menu lives inside the drawer that holds it, so pressing
-        it opens the category and leaves the drawer open around it."""
+        it opens the category beside the drawer and leaves the drawer open
+        around it; Escape closes the category alone, then the drawer."""
 
         self.visit(reverse("expenses:list"), PHONE_SCREEN[0])
-        self.page.locator(SELECTORS["nav_toggle"]).click()
+        toggle = self.page.locator(SELECTORS["nav_toggle"])
+        toggle.click()
         drawer = self.page.locator(SELECTORS["nav_drawer"])
         self.assertTrue(drawer.is_visible())
-        menu = self.page.locator(SELECTORS["nav_menu"]).first
-        menu.locator("summary").click()
-        self.assertTrue(menu.evaluate("(menu) => menu.open"))
-        self.assertTrue(menu.locator("a").first.is_visible())
+        handle = self.page.locator(SELECTORS["nav_menu"]).first
+        links = self.page.locator(SELECTORS["nav_menu_panel"]).first.get_by_role("link")
+        handle.click()
+        self.assertTrue(links.first.is_visible())
         self.assertTrue(drawer.is_visible())
+        # Beside the drawer, inside the screen, so it covers no section of the list.
+        beside = self.page.evaluate(
+            "([drawer, panel]) => [document.querySelector(drawer), document.querySelector(panel)]"
+            ".map((box) => box.getBoundingClientRect().toJSON())",
+            [SELECTORS["nav_drawer"], f"{SELECTORS['nav_menu_panel']}:popover-open"],
+        )
+        self.assertLessEqual(beside[1]["right"], beside[0]["left"])
+        self.assertGreaterEqual(beside[1]["left"], 0)
+        self.page.keyboard.press("Escape")
+        self.assertFalse(links.first.is_visible())
+        self.assertTrue(drawer.is_visible())
+        self.page.keyboard.press("Escape")
+        self.assertFalse(drawer.is_visible())
+
+    def test_the_header_menus_work_with_no_script_one_at_a_time(self):
+        """Each header menu is the browser's own: it opens on its button with no
+        script, and opening one closes the one open before it."""
+
+        self.start(java_script_enabled=False)
+        self.page.set_viewport_size(viewport(WIDE))
+        self.page.goto(f"{ORIGIN}{reverse('expenses:list')}", wait_until="load")
+        handles = self.page.locator(SELECTORS["nav_menu"])
+        panels = self.page.locator(SELECTORS["nav_menu_panel"])
+        self.assertGreater(handles.count(), 1)
+        handles.nth(0).click()
+        self.assertTrue(panels.nth(0).get_by_role("link").first.is_visible())
+        handles.nth(1).click()
+        self.assertFalse(panels.nth(0).is_visible())
+        self.assertTrue(panels.nth(1).get_by_role("link").first.is_visible())
 
     def test_the_phone_drawer_opens_closes_and_hands_focus_back(self):
         """The drawer opens from its button by a press or a key, says it is
@@ -688,8 +719,10 @@ class ExampleEstateControlTests(BrowserGate):
         self.page.keyboard.press("Enter")
         self.assertTrue(drawer.is_visible())
         # Its sections follow the button in the tab order, and it is not
-        # modal, so nothing outside it is made inert while it is open.
-        self.page.keyboard.press("Tab")
+        # modal, so nothing outside it is made inert while it is open. Its
+        # sections are links and buttons, which WebKit reaches by Option-Tab,
+        # as Safari has it.
+        self.page.keyboard.press("Alt+Tab" if self.browser.browser_type.name == "webkit" else "Tab")
         self.assertTrue(drawer.evaluate("(drawer) => drawer.contains(document.activeElement)"))
         self.assertFalse(drawer.evaluate("(drawer) => drawer.matches(':modal')"))
         self.page.keyboard.press("Escape")
@@ -726,47 +759,32 @@ class ExampleEstateControlTests(BrowserGate):
         self.page.wait_for_function(_FOUND_OPEN, arg=[SELECTORS["row_detail"], word])
 
     def test_a_menu_opens_and_closes_on_escape_and_a_press_outside(self):
-        # The page's clock stands still, so a press lands while the hover delay
-        # its pointer started is still pending, as a quick hand's does. A
-        # dismissal is read once every delay has run out: it has to hold.
-        # A menu is pressed by its handle: a filter's button, whose panel is a
-        # popover, or a disclosure's summary.
+        """A menu is pressed by its button, whose panel is a popover: a filter's,
+        a section's in the bar. Escape closes it and hands focus back to the
+        button; so does a press outside, and opening one menu closes another."""
+
         def is_open(handle):
-            return handle.evaluate(
-                "(handle) => handle.popoverTargetElement?.matches(':popover-open') ?? handle.closest('details').open"
-            )
+            return handle.evaluate("(handle) => handle.popoverTargetElement.matches(':popover-open')")
 
-        def every_delay_later():
-            self.page.clock.run_for(1000)
-
-        self.page.clock.install()
         for width in PRESSED_AT:
             with self.subTest(width=width):
-                self.page.clock.resume()
                 self.visit(reverse("expenses:list"), width)
-                self.page.clock.pause_at(self.page.evaluate("() => Date.now() / 1000 + 1"))
                 handles = [self.page.locator(SELECTORS["table_filter"]).first]
                 if width >= WIDE:
-                    handles.append(self.page.locator(SELECTORS["nav_menu"]).first.locator("summary"))
+                    handles.append(self.page.locator(SELECTORS["nav_menu"]).first)
                 for handle in handles:
-                    handle.click()
+                    handle.focus()
+                    self.page.keyboard.press("Enter")
                     self.assertTrue(is_open(handle))
                     self.page.keyboard.press("Escape")
-                    every_delay_later()
                     self.assertFalse(is_open(handle))
+                    self.assertTrue(handle.evaluate("(handle) => handle === document.activeElement"))
                     handle.click()
                     self.assertTrue(is_open(handle))
                     self.page.locator(SELECTORS["page_title"]).click()
-                    every_delay_later()
                     self.assertFalse(is_open(handle))
-                if width < WIDE:
-                    # A phone's menus are in a drawer, which Escape closes whole.
-                    self.page.locator(SELECTORS["nav_toggle"]).click()
-                    menu = self.page.locator(SELECTORS["nav_menu"]).first
-                    menu.locator("summary").click()
-                    self.assertTrue(is_open(menu))
-                    self.assertTrue(menu.locator("a").first.is_visible())
-                    self.page.keyboard.press("Escape")
-                    every_delay_later()
-                    self.assertFalse(is_open(menu))
-                    self.assertFalse(menu.is_visible())
+                handles[0].click()
+                if width >= WIDE:
+                    handles[1].click()
+                    self.assertFalse(is_open(handles[0]))
+                    self.assertTrue(is_open(handles[1]))

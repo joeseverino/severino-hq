@@ -371,10 +371,21 @@ button that opens over the navigation, then the sections move behind the
 toggle. The navigation never shrinks below its own content, and the bar's
 controls all take their size from `--control-size`.
 
-**One menu.** `.overflow-menu` for "more actions", the nav dropdown for
-navigation. A dropdown that is a `details` carries `data-menu`, which gives it
-the shared dismissal (outside click, Escape). Inside a menu every control is a
-plain row; a destructive one is only its color.
+**One menu.** `.overflow-menu` for "more actions", a section group's
+dropdown in the header, the user menu and a dashboard reading's panel are one
+primitive: a `[data-menu]` holding a button and the `popover` it names with
+`popovertarget`. The browser opens the panel in the top layer, closes it on
+Escape, a press outside or another menu opening (a menu inside another, a
+section's links in the open sections drawer, leaves the outer one open), and
+hands focus back to the button, with no script. The panel hangs from its own
+button by anchor positioning (`anchor-scope: --menu`, page.css "Menus"):
+below it from its right edge, or from its left where that would cross the
+screen (`position-try-fallbacks: flip-inline`, decided against the viewport);
+a section's links open from its left edge, and in the drawer beside the list.
+A menu opens on a press, never on hover: WebKit has no `interestfor`, and in
+Chromium the press that follows a hover would close the menu it opened.
+Inside a menu every control is a plain row; a destructive one is only its
+color.
 
 **A table's filter is a popover.** Its button names its panel with
 `popovertarget`. The panel (`popover`, its id `table-filter-<name>`) opens in
@@ -392,7 +403,7 @@ what the account may do, and how long ago they signed in, in hours or days.
 Then what can be set: the two switches share a line, names over tracks, and
 the theme has its row. Then where the menu leads.
 
-**One disclosure.** Every `details` that is not a menu shows the same mark,
+**One disclosure.** Every `details` shows the same mark,
 turned when open. A section that folds (`section-fold`) uses its heading as the
 toggle, with its count beside it; never a separate "Show all".
 
