@@ -10,7 +10,7 @@ since a stored copy could disagree with the declarations.
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from functools import cached_property
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.db import transaction
 lazy from django.core.exceptions import ValidationError
@@ -30,6 +30,7 @@ from .command_fields import Describe
 from .entity_links import entity_link
 from .infrastructure import enabled_resources, resource_health
 from .record_errors import PolicyError, RecordNotFound
+from .resource_records import ManagedResourceItem
 from .security import Principal
 from .ui import ListRow
 lazy from . import adoption, plugins
@@ -589,7 +590,17 @@ class AdoptZoneCommand:
     token: Annotated[str, Describe("The token HQ gave the live domain when it read it.")]
 
 
-def adopt_zone(command: AdoptZoneCommand, *, principal: Principal) -> dict[str, Any]:
+class ZoneAdopted(TypedDict):
+    """A domain taken under HQ's management, and the records in it taken on with it."""
+
+    ok: Literal[True]
+    resource: ManagedResourceItem
+    adopted: Annotated[
+        list[str], Describe("The keys of the domain's records adopted with it; empty when none could be.")
+    ]
+
+
+def adopt_zone(command: AdoptZoneCommand, *, principal: Principal) -> ZoneAdopted:
     """Take on a domain, then every record in it HQ can, exactly as they are.
 
     Declaring the domain is the decision, so it stands whatever happens to its

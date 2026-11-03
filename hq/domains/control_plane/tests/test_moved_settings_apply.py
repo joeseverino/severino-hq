@@ -8,6 +8,7 @@ forgot to queue its own reconcile would otherwise wait for the floor.
 import tempfile
 from datetime import timedelta
 from pathlib import Path
+from unittest import mock
 
 from django.db import connection
 from django.db.models import F
@@ -22,10 +23,10 @@ from hq.platform.application.certificates import UploadCertificateCommand, store
 from hq.platform.application.controller import schedule_automatic_operations
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.security import cli_principal
-from hq.platform.application.tests.test_certificates import A_KEY, a_certificate
+from hq.platform.application.tests.test_certificates import SEAL_PUBLIC_KEY, a_certificate
 
 from ..models import ManagedResource, OperationRequest, ProviderInventory
-from .test_control_plane import certificate_spec, declare_targets
+from .certificate_cases import certificate_spec, declare_targets
 
 PROXY = {
     "domain_names": ["app.example.com"],
@@ -44,7 +45,7 @@ class _Estate(TestCase):
             override_settings(
                 SEVERINO_CONTROLLER_DOORBELL=str(self.doorbell),
                 SEVERINO_ACTIVITY_MARKER=str(directory / "activity"),
-                SEVERINO_SECRET_STORE_KEY=A_KEY,
+                SEVERINO_SEAL_PUBLIC_KEY=SEAL_PUBLIC_KEY,
             )
         )
         managing_everything()
@@ -254,8 +255,11 @@ class AWriteStartsAPassAtOnceTests(_Estate):
         self.unqueue()
         self.assertTrue(cadence.pass_due())
 
-        with self.captureOnCommitCallbacks(execute=True):
-            result = execute_capability("contact.submissions.list", {}, principal=cli_principal())
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            mock.patch("hq.platform.application.lookup.resolve", return_value={"server": {}, "records": []}),
+        ):
+            result = execute_capability("lookup.name.read", {"name": "example.test"}, principal=cli_principal())
 
         self.assertTrue(result["ok"], result)
         self.assertFalse(self.doorbell.exists())

@@ -17,7 +17,7 @@ lazy from hq.platform.application import action_items, asks, decisions
 lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.capabilities import capability_words
 lazy from hq.platform.application.dashboard import queue_item
-lazy from hq.platform.application.pages import PageAction
+lazy from hq.platform.application.pages import PageAction, offered_now
 lazy from hq.platform.core.templatetags.value_tags import breakable, is_this_page
 
 register = template.Library()
@@ -82,16 +82,24 @@ def workflow_action(action):
 def remedies(context, actions):
     """``{% remedies actions as shown %}``: the actions a page draws, each as a
     page action. A remedy is a way somewhere else, so one that leads only to
-    the view it is drawn on is left out; a post still acts there. A box that
-    holds remedies asks this first, so it is drawn only around a control."""
+    the view it is drawn on is left out; a post still acts there. One its
+    reader may not open is left out too (``pages.offered``). A box that holds
+    remedies asks this first, so it is drawn only around a control."""
 
     shown = (workflow_action(action) for action in actions or ())
-    return [action for action in shown if action.method == "post" or not is_this_page(context, action.url)]
+    return [
+        action
+        for action in shown
+        if (action.method == "post" or not is_this_page(context, action.url)) and offered_now(action.url)
+    ]
 
 
 @register.simple_tag
 def post_button(label, url, *, name="action", value="", css="btn", title="", disabled=False):
-    attributes = {"name": name, "value": value, "title": title, "aria-label": title}
+    # A button of words is named by them, so its title only describes it; a
+    # glyph (an arrow, a star) says nothing aloud and is named by its title.
+    glyph = not any(character.isalnum() for character in str(label))
+    attributes = {"name": name, "value": value, "title": title, "aria-label": title if glyph else ""}
     return format_html(
         '<button type="submit" form="{}" formaction="{}" class="{}"{}{}>{}</button>',
         POST_FORM_ID,
@@ -121,14 +129,6 @@ def _ranked(actions):
             key=lambda pair: (pair[1].danger, pair[1].disabled, not pair[1].primary, pair[0]),
         )
     ]
-
-
-@register.filter
-def lead_action(actions):
-    """The control a head draws first beside its title."""
-
-    ranked = _ranked(tuple(actions or ()))
-    return ranked[0] if ranked else None
 
 
 @register.filter

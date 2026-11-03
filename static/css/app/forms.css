@@ -44,6 +44,7 @@
 /* A list box is as wide as its field, so a long option wraps inside it
    rather than running under its edge where no one can scroll to it. */
 .field select:is([multiple], [size]) option { white-space: normal; overflow-wrap: anywhere; padding-block: var(--space-1); }
+/* Never shorter than a few lines, however little is in it (`field-sizing`). */
 .field textarea { resize: vertical; min-height: 80px; }
 /* A field that is the form's subject (a title, a note) takes the whole row. */
 .form .field.is-wide { flex-basis: 100%; }
@@ -232,19 +233,12 @@
   color: inherit;
   text-decoration: none;
 }
-.command-center-option.is-active {
+.command-center-option[aria-selected="true"] {
   background: var(--accent-tint);
   color: inherit;
 }
 .command-center-copy { display: grid; gap: var(--space-1); min-width: 0; }
-.command-center-copy > .muted {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--text-xs);
-}
 .command-center-title { display: flex; align-items: baseline; gap: var(--space-4); min-width: 0; }
-.command-center-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .command-center-title code { color: var(--muted-2); font-size: var(--text-3xs); overflow-wrap: anywhere; }
 .command-center-evidence {
   display: flex;
@@ -256,7 +250,7 @@
 .command-center-evidence .scope-chip { padding: var(--space-1) var(--space-3); font-size: var(--text-3xs); white-space: nowrap; }
 .command-center-destination { color: var(--muted); font-size: var(--text-3xs); white-space: nowrap; }
 .command-center-arrow { color: var(--muted-2); opacity: 0; transform: translateX(-3px); transition: 100ms ease; }
-.command-center-option.is-active .command-center-arrow { opacity: 1; transform: none; }
+.command-center-option[aria-selected="true"] .command-center-arrow { opacity: 1; transform: none; }
 .command-center-empty {
   display: grid;
   place-items: center;
@@ -278,14 +272,13 @@
 }
 .command-center-footer span { white-space: nowrap; }
 .command-center-footer kbd { margin-right: var(--space-1); }
-.command-center-palette.has-active-option .command-center-enter-hint { display: none; }
+.command-center-palette:has([aria-selected="true"]) .command-center-enter-hint { display: none; }
 
 @media (max-width: 640px) {
   .command-center-modal { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
   .command-center-modal .modal-panel { padding: var(--space-7) var(--space-6) var(--space-5); }
   .command-center-option { grid-template-columns: minmax(0, 1fr) 14px; }
-  .command-center-evidence { grid-column: 1; justify-content: flex-start; overflow: hidden; }
-  .command-center-copy > .muted { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .command-center-evidence { grid-column: 1; flex-wrap: wrap; justify-content: flex-start; }
   .command-center-arrow { grid-column: 2; grid-row: 1; }
   .command-center-footer { justify-content: center; }
   .command-center-footer span:nth-child(2) { display: none; }
@@ -393,13 +386,12 @@ a.discovery-link:hover strong { color: var(--accent); }
 /* A line of its own size: inline after a <br>, its links would align to the
    cell's larger line and sit above the words beside them. */
 .connection-row-meta { display: block; color: var(--muted); font-size: var(--text-2xs); }
-/* Where a connection is reached from is one line. Sized to nothing and
-   stretched to the cell, it never widens its column. With a machine, its
-   words keep their length and the machine's name, a name in a context line,
-   is cut at the cell's edge (figures.css); with none, the words are, as any
-   context line's are. */
-.connection-reach { display: flex; gap: .3em; width: 0; min-width: 100%; white-space: nowrap; }
-.connection-reach:not(:has([data-entity])) { display: block; overflow: hidden; text-overflow: ellipsis; }
+/* Where a connection is reached from. Sized to nothing and stretched to the
+   cell, it never widens its column. With a machine, its words keep their
+   length and the machine's name moves to a line of its own where the two do
+   not fit, cut only where it alone is longer than the cell (figures.css);
+   with none, the words are one line, cut as any context line's are. */
+.connection-reach { display: flex; flex-wrap: wrap; gap: 0 .3em; width: 0; min-width: 100%; white-space: nowrap; }
 /* Its own section under the table, not a second compartment of a card around it. */
 /* How to connect each provider not yet connected: one row each, opened for its steps. */
 .connection-setup { margin-top: var(--stack-gap); }
@@ -462,8 +454,8 @@ a.discovery-link:hover strong { color: var(--accent); }
 /* A command and its copy button, which sits in its corner rather than on a
    line of its own; the command leaves room for it. */
 .command { position: relative; width: fit-content; max-width: 100%; min-width: 0; }
-.command > .command-copy { position: absolute; inset-block: 0; margin-block: auto; height: fit-content; inset-inline-end: var(--space-2); min-height: 0; padding: var(--space-1) var(--space-3); font-size: var(--text-2xs); color: var(--code-ink); border-color: transparent; background: transparent; opacity: .7; }
-.command > .command-copy:is(:hover, :focus-visible) { opacity: 1; }
+.command > .command-copy { position: absolute; inset-block: 0; margin-block: auto; height: fit-content; inset-inline-end: var(--space-2); min-height: 0; padding: var(--space-1) var(--space-3); font-size: var(--text-2xs); color: var(--code-muted); border-color: transparent; background: transparent; }
+.command > .command-copy:is(:hover, :focus-visible) { color: var(--code-ink); }
 .command > .operator-command { margin: 0; padding-inline-end: 4.5rem; }
 /* A command wraps rather than scrolling: selecting it copies it whole. It
    breaks where `|breakable` lets it, a word only when nothing else fits. */
@@ -479,6 +471,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 }
 .connection-sight-never_swept .connection-sight-state,
 .connection-sight-not_connected .connection-sight-state { color: var(--muted); }
+/* stylelint-disable-next-line declaration-property-value-disallowed-list -- the panel's corners clip its summary's fill, not its text */
 .connection-security-advanced { margin-top: calc(var(--layout-gap) * 1.5); padding: 0; overflow: hidden; }
 .connection-security-advanced > summary {
   display: flex;

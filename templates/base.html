@@ -11,7 +11,7 @@
   {% comment %}
   A page names only itself; the site name is appended once, here, so no title
   omits it or hardcodes the string `SEVERINO_SITE_NAME` is allowed to change.
-  `application/tests/test_architecture.py` fails if a title block names it again.
+  `application/tests/test_architecture_pages.py` fails if a title block names it again.
   {% endcomment %}
   <title>{% block title %}{% endblock %} · {{ SITE_NAME }}</title>
   <link rel="icon" href="{% static 'img/favicon.ico' %}" sizes="any">
@@ -60,45 +60,30 @@
   nothing.
   {% endcomment %}
   <a class="skip-link" href="#content">Skip to content</a>
-  <header class="site-header" id="sections">
+  <header class="site-header">
     <a class="brand" href="{% url 'dashboard' %}">{{ SITE_NAME|breakable }}</a>
     {% if user.is_authenticated %}
       {% comment %}
-      The sections menu is a link and an `:target` rule, not a scripted or
-      `details`-based one. It fails safe: nothing hides the nav by default, so
-      a stylesheet that does not load, or a browser that disagrees about how a
-      widget hides its own content, leaves the links plainly visible.
+      The sections menu is a popover its button opens, declared in the HTML,
+      so it works with no script: the browser opens and closes it, tells
+      assistive technology whether it is open, closes it on Escape or a press
+      outside, and returns focus to the button. On a wide screen the
+      stylesheet sets the nav in the header's row and the button is hidden.
       {% endcomment %}
-      {% comment %}
-      Two links in one place, swapped by `:target`: closed, the control points
-      at the menu; open, it points back out. One link cannot do both, because
-      CSS can style an anchor but not rewrite where it goes, and a control
-      that only ever opens is a control that appears broken on the second tap.
-      {% endcomment %}
-      <a class="nav-toggle nav-toggle-open" href="#sections" aria-label="Menu" aria-controls="primary-navigation" aria-expanded="false">
+      <button type="button" class="nav-toggle" popovertarget="primary-navigation" aria-label="Menu">
         <svg viewBox="0 0 16 12" width="15" height="12" aria-hidden="true" fill="currentColor">
           <rect x="0" y="0" width="16" height="2" rx="1"/>
           <rect x="0" y="5" width="16" height="2" rx="1"/>
           <rect x="0" y="10" width="16" height="2" rx="1"/>
         </svg>
-      </a>
-      {% comment %}
-      Both halves carry the state, because only one of them is ever on screen.
-      {% endcomment %}
-      <a class="nav-toggle nav-toggle-close" href="#" aria-label="Close menu" aria-controls="primary-navigation" aria-expanded="true">
-        <svg viewBox="0 0 16 12" width="15" height="12" aria-hidden="true" fill="currentColor">
-          <rect x="0" y="0" width="16" height="2" rx="1"/>
-          <rect x="0" y="5" width="16" height="2" rx="1"/>
-          <rect x="0" y="10" width="16" height="2" rx="1"/>
-        </svg>
-      </a>
-      <nav class="primary-nav" id="primary-navigation">
+      </button>
+      <nav class="primary-nav" id="primary-navigation" aria-label="Sections" popover>
         {% for entry in nav_entries %}
           {% if entry.kind == "group" %}
             {% comment %}Shared name makes the groups a native exclusive
             accordion, so only one panel is open even before JS loads.{% endcomment %}
             <details class="nav-group" name="nav-group" data-menu>
-              <summary{% if entry.active %} class="active"{% endif %}>
+              <summary{% if entry.active %} aria-current="true"{% endif %}>
                 <span class="nav-group-label">
                   {{ entry.label|breakable }}
                   <svg class="nav-caret" viewBox="0 0 10 6" width="9" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4"/></svg>
@@ -106,12 +91,12 @@
               </summary>
               <div class="nav-group-panel">
                 {% for item in entry.items %}
-                  <a href="{% url item.url %}"{% if item.active %} class="active"{% endif %}>{{ item.label|breakable }}</a>
+                  <a href="{% url item.url %}"{% if item.active %} aria-current="page"{% endif %}>{{ item.label|breakable }}</a>
                 {% endfor %}
               </div>
             </details>
           {% else %}
-            <a href="{% url entry.url %}"{% if entry.active %} class="active"{% endif %}>{{ entry.label|breakable }}</a>
+            <a href="{% url entry.url %}"{% if entry.active %} aria-current="page"{% endif %}>{{ entry.label|breakable }}</a>
           {% endif %}
         {% endfor %}
       </nav>
@@ -127,13 +112,13 @@
       is a link to the search page. With nothing to type into here there is no
       focus to return to it and nothing to expand over its neighbors.
       {% endcomment %}
-      <a class="global-search" href="{% url 'search' %}" data-command-center-open aria-haspopup="dialog" aria-controls="modal-command-center">
+      <a class="global-search" href="{% url 'search' %}" aria-labelledby="search-label search-key" data-command-center-open aria-haspopup="dialog" aria-controls="modal-command-center">
         <svg class="search-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
           <circle cx="11" cy="11" r="6"></circle>
           <line x1="15.5" y1="15.5" x2="20" y2="20"></line>
         </svg>
-        <span class="search-label">Find anything</span>
-        <kbd class="search-key keyboard-only" aria-hidden="true">⌘K</kbd>
+        <span class="search-label" id="search-label">Find anything</span>
+        <kbd class="search-key keyboard-only" id="search-key" aria-hidden="true">⌘K</kbd>
       </a>
       <a class="action-badge" href="{% url 'action_items' %}" title="Needs you">
         <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>
@@ -155,7 +140,7 @@
         served by HQ (`application/avatars.py`).
         {% endcomment %}
         {% with avatar=request.session.avatar %}
-        <summary>
+        <summary aria-labelledby="user-name">
           {% if avatar %}
           <img class="user-avatar" src="{% url 'avatar' avatar %}" alt="" width="22" height="22" decoding="async">
           {% else %}
@@ -164,7 +149,7 @@
             <path d="M5.4 19.4c0-3.7 3-5.9 6.6-5.9s6.6 2.2 6.6 5.9"/>
           </svg>
           {% endif %}
-          <span class="user-name">{{ user.get_username|breakable }}</span>
+          <span class="user-name" id="user-name">{{ user.get_username|breakable }}</span>
         </summary>
         <div class="user-menu-panel">
           {% comment %}
@@ -192,7 +177,7 @@
           {% endcomment %}
           <div class="menu-settings">
             <form action="{% url 'demo_mode' %}" method="post">
-              {% csrf_token %}
+              {% write_token %}
               <input type="hidden" name="next" value="{{ request.get_full_path }}">
               <button type="submit" class="menu-item menu-setting" role="switch" aria-checked="{% if request.showing_demo %}true{% else %}false{% endif %}">
                 <span>Demo data</span>
@@ -200,7 +185,7 @@
               </button>
             </form>
             <form action="{% url 'agent_access' %}" method="post">
-              {% csrf_token %}
+              {% write_token %}
               <input type="hidden" name="next" value="{{ request.get_full_path }}">
               <input type="hidden" name="paused" value="{% if agents_paused %}0{% else %}1{% endif %}">
               <button type="submit" class="menu-item menu-setting" role="switch" aria-checked="{% if agents_paused %}false{% else %}true{% endif %}">
@@ -214,7 +199,7 @@
           the choice it names. System follows the operating system.
           {% endcomment %}
           <form action="{% url 'theme' %}" method="post" class="menu-theme">
-            {% csrf_token %}
+            {% write_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
             <span class="menu-theme-label" id="menu-theme-label">Theme</span>
             <span class="menu-theme-options" role="group" aria-labelledby="menu-theme-label">
@@ -239,7 +224,7 @@
               <span class="menu-item-status"><span class="conn-dot" aria-hidden="true"></span><span class="menu-item-note">{{ CONNECTION_CHANNEL.label|breakable }}</span></span>
             </a>
             <form action="{% url 'logout' %}" method="post">
-              {% csrf_token %}
+              {% write_token %}
               <button type="submit" class="menu-item">Sign out</button>
             </form>
           </div>
@@ -247,13 +232,6 @@
       </details>
     {% endif %}
   </header>
-    {% comment %}
-    Everything outside the panel, clickable only while the menu is open, so
-    tapping away closes it. A sibling rather than a child of the header: the
-    header sets `backdrop-filter`, which establishes a containing block, and a
-    fixed-position child of it is confined to the header's own box.
-    {% endcomment %}
-    <a class="nav-backdrop" href="#" tabindex="-1" aria-hidden="true"></a>
 
   <main class="content" id="content" tabindex="-1">
     {% if messages %}
@@ -289,7 +267,7 @@
     The one form every post_button submits. Outside everything else on the
     page, so a button inside another form still posts only what it names.
     {% endcomment %}
-    <form id="hq-post" method="post" hidden>{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"></form>
+    <form id="hq-post" method="post" hidden>{% write_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"></form>
     {% include "partials/_modal.html" with id="command-center" title="Search" body_template="core/_command_center_modal.html" modal_class="command-center-modal" %}
     {% comment %}
     Empty until opened. The panel behind it reads the tailnet inventory and

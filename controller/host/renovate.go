@@ -3,7 +3,6 @@ package host
 import (
 	"context"
 	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -162,7 +161,7 @@ func (r *Renovator) runOwner(ctx context.Context, work, envName, image string, l
 		fmt.Fprintf(log, "%s %s: %v\n", r.Now().UTC().Format(time.RFC3339), run.Owner, err)
 		return result
 	}
-	name := "severino-hq-renovate-" + nonce()
+	name := "severino-hq-renovate-" + rand.Text()
 	runCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	fmt.Fprintf(log, "%s %s: %d repositories\n", r.Now().UTC().Format(time.RFC3339), run.Owner, len(run.Repositories))
@@ -229,12 +228,6 @@ func RenovateArgs(name, image, envFile, config, owner string) []string {
 // owner's repositories is never mounted into another's run.
 func RenovateCacheVolume(owner string) string {
 	return "severino-hq-renovate-cache-" + strings.ToLower(owner)
-}
-
-func nonce() string {
-	b := make([]byte, 8)
-	rand.Read(b)
-	return hex.EncodeToString(b)
 }
 
 // openLog is Renovate's log, root's alone and kept on the host: it names

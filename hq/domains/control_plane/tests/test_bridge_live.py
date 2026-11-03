@@ -38,7 +38,7 @@ from hq.platform.application.resource_operations import OperationCommand, reques
 from hq.platform.application.security import cli_principal
 from hq.platform.core.tests.unix_serving import post, served, socket_directory
 
-from .test_control_plane import certificate_spec, declare_targets
+from .certificate_cases import certificate_spec, declare_targets
 
 CONTROLLER_SOURCE = Path(settings.BASE_DIR) / "controller"
 # The binary the image ships, where the suite runs inside the image.
@@ -271,7 +271,8 @@ class ControllerPassTests(TransactionTestCase):
         try:
             self.assertTrue(self.bridge.reached.wait(120), "the pass never reached its sweep")
 
-            execute_capability(DASHBOARD_REFRESH, {}, principal=cli_principal())
+            answer = execute_capability(DASHBOARD_REFRESH, {}, principal=cli_principal())
+            self.assertTrue(answer["ok"], answer)
             code, lines = self.run_pass("--glance")
 
             self.assertEqual(code, 0, lines)

@@ -67,7 +67,9 @@ class BrowserGateTaskTests(SimpleTestCase):
 
         self.assertTrue(classes)
         unnamed = sorted(name for name, module in classes.items() if name not in labels and module not in labels)
-        self.assertEqual(unnamed, [], "no browser:* task runs these")
+        self.assertEqual(
+            unnamed, [], "no browser:* task runs these: name each in one leg's vars.classes in mise-tasks/browser.toml"
+        )
         # Once per engine: a WebKit leg names its classes, and a leg in
         # another engine runs a WebKit leg rather than naming any.
         named = Counter(
@@ -84,15 +86,13 @@ class BrowserGateTaskTests(SimpleTestCase):
         self.assertEqual({leg: run[leg] for leg in legs}, dict.fromkeys(legs, 1), "Chromium runs each layout leg once")
 
     def test_a_browser_gate_s_template_restates_django_s_env(self):
-        """A template extends none, so each Django gate template carries the
-        env of ``django`` itself, beside its heavy turn's bound: a gate never
+        """A template extends none, so the browser gate template carries the
+        env of ``django`` itself: a gate never
         opens the developer's database."""
 
         templates = tomllib.loads((ROOT / "mise.toml").read_text())["task_templates"]
         django = templates["django"]["env"]
-        for name in ("django-heavy", "django-browser"):
-            with self.subTest(template=name):
-                self.assertEqual({key: templates[name]["env"].get(key) for key in django}, django)
+        self.assertEqual({key: templates["django-browser"]["env"].get(key) for key in django}, django)
 
 
 @tag("source")

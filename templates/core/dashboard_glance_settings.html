@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
 <form method="post" action="{% url 'dashboard_glance_settings' %}" class="form">
-  {% csrf_token %}
+  {% write_token %}
   <div class="field">
     <label for="glance-infrastructure-label">Name for the machine card</label>
     <input id="glance-infrastructure-label" name="infrastructure_label" maxlength="40" value="{{ settings.infrastructure_label }}">

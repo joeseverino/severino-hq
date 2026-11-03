@@ -12,7 +12,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from ipaddress import ip_address
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, NotRequired, TypedDict
 
 from django.utils.timezone import now
 
@@ -21,6 +21,7 @@ from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.core.outbound import allowed
 lazy from hq.domains.control_plane.models import AddressReading
 
+from .answer_fields import ObservedAt
 from .command_fields import Describe
 from .projection import iso
 from .reach import is_documentation, is_public, network_of
@@ -42,7 +43,8 @@ HOSTNAME = re.compile(
 # with no records. Fixing the set here means that cannot happen.
 RECORD_TYPES = ("A", "AAAA", "CNAME", "MX", "TXT", "NS", "SOA", "CAA")
 
-LOOK_UP_ADDRESS = "lookup.address"
+LOOK_UP_NAME = "lookup.name.read"
+LOOK_UP_ADDRESS = "lookup.address.read"
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,7 +122,19 @@ def _registrant(payload: dict) -> str:
     return entity_name(payload, "registrant")
 
 
-def allocation_of(held: dict) -> dict[str, Any]:
+class Allocation(TypedDict, total=False):
+    """Who an address was allocated to, as the registry that allocated it says; empty when it could not be read."""
+
+    organization: Annotated[str, Describe("The organization it was allocated to.")]
+    name: Annotated[str, Describe("The registry's name for the allocation.")]
+    handle: Annotated[str, Describe("The registry's handle for the allocation.")]
+    country: Annotated[str, Describe("The country the registry files it under, as a two-letter code.")]
+    type: Annotated[str, Describe("The type of allocation, as the registry says it.")]
+    range: Annotated[str, Describe("The first and last address of the allocation.")]
+    prefixes: Annotated[list[str], Describe("The allocation as CIDR prefixes.")]
+
+
+def allocation_of(held: dict) -> Allocation:
     """An RDAP address answer as the fields HQ keeps."""
 
     prefixes = [
@@ -146,12 +160,30 @@ def allocation_of(held: dict) -> dict[str, Any]:
     }
 
 
+class NameAnswer(TypedDict):
+    """One record a resolver returned for a name."""
+
+    type: Annotated[str, Describe("The record's type, such as `A` or `MX`.")]
+    name: Annotated[str, Describe("The name the record is for.")]
+    value: Annotated[str, Describe("What the record holds, in one line.")]
+
+
+class NameLookedUp(TypedDict):
+    """What a resolver outside this network returns for a name."""
+
+    ok: Literal[True]
+    name: Annotated[str, Describe("The hostname asked about, as HQ normalized it.")]
+    resolver: Annotated[str, Describe("The public resolver that answered.")]
+    answers: Annotated[list[NameAnswer], Describe("Each record the resolver returned.")]
+    resolves: Annotated[bool, Describe("Whether the name has any record at all.")]
+
+
 def look_up_name(
     command: NameCommand,
     *,
     principal: Principal,
     resolver: Callable[..., dict] | None = None,
-) -> dict[str, Any]:
+) -> NameLookedUp:
     """What a resolver outside this network returns for a name."""
 
     del principal
@@ -165,7 +197,7 @@ def look_up_name(
         payload = resolver("api/dns", {"domain": wanted, "types": ",".join(RECORD_TYPES)})
     records = payload.get("records")
     server = payload.get("server")
-    answers = [
+    answers: list[NameAnswer] = [
         {
             "type": str(item.get("type", "")),
             "name": str(item.get("name", "")),
@@ -233,13 +265,32 @@ def stored_address(command: AddressCommand, *, principal: Principal) -> dict[str
     return _address_answer(command, principal=principal)[1]
 
 
+class AddressLookedUp(TypedDict):
+    """What the public internet says about one address, or HQ where it is not public."""
+
+    ok: Literal[True]
+    address: Annotated[str, Describe("The address asked about, as HQ normalized it.")]
+    version: Annotated[int, Describe("Which IP version it is, 4 or 6.")]
+    hostnames: Annotated[list[str], Describe("The names its reverse DNS gives it.")]
+    note: Annotated[
+        str,
+        Describe("What HQ or a registry says beside the answer, such as that no PTR record exists; empty for none."),
+    ]
+    arpa: NotRequired[Annotated[str, Describe("Its reverse DNS name; absent when that could not be read.")]]
+    resolver: NotRequired[
+        Annotated[str, Describe("The resolver that answered for its reverse DNS; absent when that could not be read.")]
+    ]
+    allocation: NotRequired[Allocation]
+    observed_at: NotRequired[ObservedAt]
+
+
 def look_up_address(
     command: AddressCommand,
     *,
     principal: Principal,
     resolver: Callable[..., dict] | None = None,
     allocations: Callable[..., dict] | None = None,
-) -> dict[str, Any]:
+) -> AddressLookedUp:
     """What the public internet says about one address.
 
     Two registries, because they answer differently: reverse DNS is published
@@ -256,7 +307,7 @@ def look_up_address(
     allocations = allocations or registry
     if known is not None and (not command.refresh or not is_public(str(parsed))):
         return known
-    reading: dict[str, Any] = {
+    reading: AddressLookedUp = {
         "ok": True,
         "address": str(parsed),
         "version": parsed.version,
@@ -298,4 +349,4 @@ def look_up_address(
         address=str(parsed),
         defaults={"reading": reading, "observed_at": now()},
     )
-    return {**reading, "observed_at": iso(now())}
+    return {**reading, "observed_at": now().isoformat()}

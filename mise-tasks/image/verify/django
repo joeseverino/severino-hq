@@ -1,15 +1,16 @@
 #!/bin/sh
 #MISE description="Its Django is the parts HQ loads: they import whole, pass the system checks, and nothing else of Django's apps, backends or catalogs ships"
-#MISE env={SEVERINO_HEAVY_BOUND="30m"}
+#MISE lock="heavy"
+#MISE timeout="30m"
 #MISE hide=true
 #MISE depends=["image:build"]
+#MISE depends_post=["image:docker stop"]
 set -eu
-# shellcheck source=tools/lib/heavy-turn.sh
-. ./tools/lib/heavy-turn.sh
-
 # The build stage deletes what HQ never loads (Dockerfile). Every module of
 # what stays is imported, so one that reaches for a deleted part fails here
 # rather than on a request, and whatever stays without being loaded is named.
+# Imports run as written (hq.config.imports.eagerly), since a lazy process
+# loads only what its own run used.
 docker run --rm -i \
     --env DJANGO_SECRET_KEY=ci-only-container-key-0123456789abcdef0123456789abcdef \
     --env DJANGO_ALLOWED_HOSTS=127.0.0.1 \
@@ -18,6 +19,10 @@ import importlib
 import pkgutil
 import sys
 from pathlib import Path
+
+from hq.config.imports import eagerly
+
+eagerly()
 
 import django
 from django.conf import settings

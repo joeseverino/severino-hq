@@ -17,7 +17,7 @@ from hq.domains.expenses.models import Expense
 from hq.platform.application import derivations
 from hq.platform.application.cadence import recently_used
 from hq.platform.application.demo import demo_scope, showing_demo
-from hq.platform.application.derivation_testing import frozen
+from hq.platform.application.derivation_testing import frozen, uncached
 from hq.platform.application.derivations import counting, derive_ahead
 from hq.platform.application.projection import projection_scope, read_once, seeded
 from hq.platform.core import ahead
@@ -205,7 +205,7 @@ class AskedAgainTests(Remembering):
     def test_a_measurement_with_the_store_bypassed_is_not_remembered(self):
         with declared("test.ahead.uncached", reads=(READING,)) as (register, _calls):
             read = register(_readings)
-            with projection_scope(), derivations.uncached():
+            with projection_scope(), uncached():
                 read()
 
         self.assertNotIn("test.ahead.uncached", derivations._ASKS)

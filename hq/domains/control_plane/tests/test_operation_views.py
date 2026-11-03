@@ -13,6 +13,7 @@ from hq.platform.application.capabilities import capability_registry, execute_ca
 from hq.platform.application.capability_policy import Rule, Scope
 from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal, web_principal
+from hq.platform.application.tests.writers import form_keyed, keyed
 from hq.platform.core.models import AuditLog
 
 CONTAINER = {"connection_ref": "example-portainer", "host": "example-host", "name": "example-web"}
@@ -33,7 +34,7 @@ class LifecycleVerbTests(TestCase):
         self.client.force_login(self.user)
 
     def press(self, action, **data):
-        return self.client.post(reverse(f"control_plane:{action}", kwargs={"key": "example-web"}), data)
+        return self.client.post(reverse(f"control_plane:{action}", kwargs={"key": "example-web"}), form_keyed(data))
 
     def test_each_verb_queues_its_operation_under_the_operator(self):
         for action in LIFECYCLE:
@@ -61,7 +62,9 @@ class LifecycleVerbTests(TestCase):
         reader = Principal("example-agent", "mcp", frozenset({Capability.READ}))
         for action in LIFECYCLE:
             with self.subTest(action=action):
-                result = execute_capability(ACTION_CAPABILITY[action], {}, principal=reader, target="example-web")
+                result = execute_capability(
+                    ACTION_CAPABILITY[action], keyed({}), principal=reader, target="example-web"
+                )
 
                 self.assertEqual(result["error"]["code"], "forbidden")
         self.assertFalse(OperationRequest.objects.exists())
@@ -70,7 +73,7 @@ class LifecycleVerbTests(TestCase):
     def test_input_the_command_does_not_take_is_refused(self):
         result = execute_capability(
             ACTION_CAPABILITY[OperationRequest.Action.RESTART],
-            {"reason": "Example.", "action": "delete"},
+            keyed({"reason": "Example.", "action": "delete"}),
             principal=Principal("operator", "web", frozenset({Capability.MANAGE_INFRASTRUCTURE})),
             target="example-web",
         )
@@ -88,7 +91,9 @@ class RemovalVerbTests(TestCase):
         self.client.force_login(get_user_model().objects.create_user(username="operator", password="x" * 20))
 
     def test_removal_is_queued_and_audited_under_the_operator(self):
-        response = self.client.post(reverse("control_plane:remove", kwargs={"key": "example-dns"}), {"reason": "Gone."})
+        response = self.client.post(
+            reverse("control_plane:remove", kwargs={"key": "example-dns"}), form_keyed({"reason": "Gone."})
+        )
 
         self.assertRedirects(response, reverse("control_plane:detail", kwargs={"key": "example-dns"}))
         operation = OperationRequest.objects.get(action=OperationRequest.Action.DELETE)
@@ -108,7 +113,7 @@ class AgentStopTests(TestCase):
         self.operator = web_principal(get_user_model().objects.create_user(username="operator", password="x" * 20))
 
     def stop(self, principal):
-        return execute_capability(STOP, {"reason": "Example."}, principal=principal, target="example-web")
+        return execute_capability(STOP, keyed({"reason": "Example."}), principal=principal, target="example-web")
 
     def test_an_agents_stop_waits_for_a_person_on_either_surface(self):
         for interface in ("mcp", "api"):
@@ -125,7 +130,7 @@ class AgentStopTests(TestCase):
         shown = preview(waiting)
         # The act is the whole of it, said by its sentence.
         self.assertEqual((shown.rows, shown.lines), ((), ()))
-        self.assertEqual(str(asked(waiting)), "example-agent wants to stop example-web")
+        self.assertEqual(str(asked(waiting)), "example-agent wants to stop the container example-web")
 
         approve(ApproveCommand(held["approval"]["id"]), principal=self.operator)
 

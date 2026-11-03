@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -31,7 +32,10 @@ type WebRunner struct {
 	// the unit tries again.
 	Poll, Await time.Duration
 	// StartPeriod is the container's health start period (Web.StartPeriod).
-	StartPeriod    time.Duration
+	StartPeriod time.Duration
+	// SealPublic is where a controller pass writes the public sealing key
+	// (SealPublicKey on a host), given to HQ when it is there.
+	SealPublic     string
 	Stdout, Stderr io.Writer
 	Log            *slog.Logger
 }
@@ -60,7 +64,11 @@ func (r *WebRunner) Run(ctx context.Context) error {
 	_ = r.Docker(ctx, "rm", "--force", Container).Run()
 
 	// Not ctx: cancelling it would kill the client; the stop below ends HQ.
-	container := r.Docker(context.WithoutCancel(ctx), Web{Image: image, StartPeriod: r.StartPeriod}.Args()...)
+	web := Web{Image: image, StartPeriod: r.StartPeriod}
+	if r.sealPublic() {
+		web.SealPublic = r.SealPublic
+	}
+	container := r.Docker(context.WithoutCancel(ctx), web.Args()...)
 	container.Stdout, container.Stderr = r.Stdout, r.Stderr
 	if err := container.Start(); err != nil {
 		return fmt.Errorf("docker could not start the container: %w", err)
@@ -107,6 +115,26 @@ func (r *WebRunner) supervise(ctx context.Context, exited <-chan error) error {
 			}
 		}
 	}
+}
+
+// sealPublic is whether HQ is given the public sealing key: only root's file,
+// in root's directory, that no other account can write, so the account HQ
+// shares with the controller cannot choose the key HQ seals to. Anything
+// else, a host whose first pass has not written it included, leaves HQ
+// holding no sealed secret rather than not starting.
+func (r *WebRunner) sealPublic() bool {
+	for _, path := range []string{filepath.Dir(r.SealPublic), r.SealPublic} {
+		info, err := os.Lstat(path)
+		if err != nil {
+			return false
+		}
+		uid, _, ok := Ownership(info)
+		if !ok || uid != r.RootUID || info.Mode().Perm()&0o022 != 0 {
+			return false
+		}
+	}
+	info, err := os.Lstat(r.SealPublic)
+	return err == nil && info.Mode().IsRegular()
 }
 
 func (r *WebRunner) image() (string, error) {

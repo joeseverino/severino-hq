@@ -42,6 +42,21 @@ func TestTheHostConfigurationIsReadStrictly(t *testing.T) {
 	}
 }
 
+// A configuration two readers could read differently is refused: a name
+// given twice, a name in another case, or a second document after it.
+func TestAnAmbiguousHostConfigurationIsRefused(t *testing.T) {
+	for name, text := range map[string]string{
+		"a name given twice":   strings.Replace(hostJSON, `"vault"`, `"vault": "Other Vault", "vault"`, 1),
+		"a name in other case": strings.Replace(hostJSON, `"vault"`, `"Vault"`, 1),
+		"trailing data":        hostJSON + `]`,
+		"a second document":    hostJSON + hostJSON,
+	} {
+		if _, err := ReadConfig([]byte(text)); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+}
+
 func TestBootstrapWritesWhatOnlyTheHostKnows(t *testing.T) {
 	f := newFakeHost(t)
 	config, _ := ReadConfig([]byte(hostJSON))

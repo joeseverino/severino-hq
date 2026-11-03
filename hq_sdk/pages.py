@@ -6,7 +6,7 @@ extends ``page.html``, which draws its actions and their dialogs; a list extends
 contract). ``built_from`` links an extension's overview to its project.
 """
 
-from hq.platform.application.pages import Page, PageAction, PageDialog, PageMixin, page_context
+from hq.platform.application.pages import Crumb, Page, PageAction, PageDialog, PageMixin, page_context
 from hq.platform.application.projects import built_from
 
-__all__ = ["Page", "PageAction", "PageDialog", "PageMixin", "built_from", "page_context"]
+__all__ = ["Crumb", "Page", "PageAction", "PageDialog", "PageMixin", "built_from", "page_context"]

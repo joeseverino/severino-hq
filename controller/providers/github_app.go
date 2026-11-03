@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/providers/githubapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -145,6 +146,7 @@ func MintGitHubToken(ctx context.Context, transport Transport, now time.Time, ap
 	if token.Token == "" {
 		return githubapi.InstallationToken{}, &ProviderError{Message: "GitHub did not issue an installation token"}
 	}
+	mask.Learn(token.Token)
 	return token, nil
 }
 

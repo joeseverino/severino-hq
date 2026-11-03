@@ -33,14 +33,17 @@ type portainerSnapshot struct {
 	ContainerCount        *int64 `json:"ContainerCount"`
 }
 
-// portainerStack is one stack from GET /stacks.
+// portainerStack is one stack from GET /stacks, which answers each stack whole,
+// its Env included, so reconcile compares the environment without a request of
+// its own.
 type portainerStack struct {
-	ID          int64  `json:"Id"`
-	Name        string `json:"Name"`
-	EndpointID  int64  `json:"EndpointId"`
-	Status      int    `json:"Status"`
-	EntryPoint  string `json:"EntryPoint"`
-	ProjectPath string `json:"ProjectPath"`
+	ID          int64             `json:"Id"`
+	Name        string            `json:"Name"`
+	EndpointID  int64             `json:"EndpointId"`
+	Status      int               `json:"Status"`
+	EntryPoint  string            `json:"EntryPoint"`
+	ProjectPath string            `json:"ProjectPath"`
+	Env         []portainerEnvVar `json:"Env"`
 }
 
 // portainerStackFile is GET /stacks/{id}/file.
@@ -189,25 +192,24 @@ type dockerDiskUsage struct {
 	} `json:"BuildCache"`
 }
 
-// dockerStats is one GET /containers/{id}/stats?stream=false sample.
+// dockerStats is one GET /containers/{id}/stats?stream=false&one-shot=true
+// sample. A one-shot sample leaves precpu_stats empty, so its CPU counter is
+// only a share across two samples (cpuShare), and the type names no other.
 type dockerStats struct {
+	// When the daemon took the sample.
+	Read        string `json:"read"`
 	MemoryStats struct {
 		Usage int64 `json:"usage"`
-		Stats struct {
-			InactiveFile int64 `json:"inactive_file"`
-		} `json:"stats"`
+		// The cgroup's memory.stat: anon and inactive_file on cgroup v2,
+		// total_inactive_file on v1.
+		Stats map[string]int64 `json:"stats"`
 	} `json:"memory_stats"`
-	CPUStats    dockerCPUStats `json:"cpu_stats"`
-	PreCPUStats dockerCPUStats `json:"precpu_stats"`
-}
-
-type dockerCPUStats struct {
-	CPUUsage struct {
-		TotalUsage  uint64   `json:"total_usage"`
-		PercpuUsage []uint64 `json:"percpu_usage"`
-	} `json:"cpu_usage"`
-	SystemUsage uint64 `json:"system_cpu_usage"`
-	OnlineCPUs  int    `json:"online_cpus"`
+	CPUStats struct {
+		CPUUsage struct {
+			// Nanoseconds of CPU since the container started.
+			TotalUsage uint64 `json:"total_usage"`
+		} `json:"cpu_usage"`
+	} `json:"cpu_stats"`
 }
 
 // decodeAnswer decodes one provider answer into its wire type. An empty or null

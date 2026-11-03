@@ -20,7 +20,9 @@ extends = "django-browser"
 vars.classes = """\
   hq.platform.core.tests.browser.sweeps.ScriptedSparseLayoutTests \
   hq.platform.core.tests.browser.components.ComponentLayoutTests \
-  hq.platform.core.tests.browser.heads.HeadLayoutTests \
+  hq.platform.core.tests.browser.folds.FoldBrowserTests \
+  hq.platform.core.tests.browser.catalog.CatalogLayoutTests \
+  hq.platform.core.tests.browser.accessibility.AccessibilityBrowserTests \
   hq.platform.core.tests.browser.sweeps.UnscriptedDenseLayoutTests"""
 
 ["browser:layout-2"]
@@ -32,13 +34,14 @@ vars.classes = """\
   hq.platform.core.tests.browser.sweeps.ScriptedDenseSecondLayoutTests \
   hq.platform.core.tests.browser.sweeps.UnscriptedSparseLayoutTests \
   hq.platform.core.tests.browser.sweeps.LongestValueLayoutTests \
-  hq.platform.core.tests.browser.page_errors.PageErrorBrowserTests"""
+  hq.platform.core.tests.browser.page_errors.PageErrorBrowserTests \
+  hq.platform.core.tests.browser.planted.PlantedBrowserTests"""
 
 # The layout legs in Chromium, so a break WebKit happens not to show still
 # fails. CI runs them as legs of their own; `mise run browser` leaves them out,
 # since HQ is read in Safari. Each runs its WebKit leg, so the two name one set
-# of classes, and installs Chromium as a step rather than as a dependency,
-# which a skipped task would still run.
+# of classes, and installs Chromium and the lint tools as steps rather than as
+# dependencies, which a skipped task would still run.
 ["browser:layout-chromium-1"]
 description = "browser:layout-1 in Chromium: a CI leg, which mise run browser leaves out"
 hide = true
@@ -47,6 +50,7 @@ run = [
   { task = "setup:browser", args = [
     "chromium",
   ] },
+  { task = "setup:lint-tools" },
   "mise run --skip-deps browser:layout-1",
 ]
 
@@ -58,6 +62,7 @@ run = [
   { task = "setup:browser", args = [
     "chromium",
   ] },
+  { task = "setup:lint-tools" },
   "mise run --skip-deps browser:layout-2",
 ]
 
@@ -70,4 +75,5 @@ vars.classes = """\
   hq.platform.core.tests.browser.estate.ExampleEstateControlTests \
   hq.platform.core.tests.browser.reference.ReferenceBrowserTests \
   hq.platform.core.tests.browser.fragments.FragmentBrowserTests \
+  hq.platform.core.tests.browser.current_state.CurrentStateBrowserTests \
   hq.platform.core.tests.browser.command_forms.CommandFormBrowserTests"""

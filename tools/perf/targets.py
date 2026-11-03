@@ -18,7 +18,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from hq.platform.core.tests.task import PREFIX
+from hq.platform.core.tests.task import PREFIX, trusted_mise
 from tools.perf import parse
 lazy from hq.platform.core import seeds
 
@@ -33,6 +33,12 @@ def shown_under(seed: str) -> dict[str, str]:
 
 
 PROBE = Path(__file__).with_name("queries_probe.py")
+# What each target's memory counts. A footprint is dirty, compressed and swapped memory, no clean
+# page of a file. An image's is its cgroup's anon, as release:report reads production's: docker
+# stats adds the page cache charged to the container, which is whatever files it read first, not
+# anything the code holds.
+SCRATCH_MEMORY = "footprint of the serving process"
+IMAGE_MEMORY = "the container's anonymous memory"
 MARKER = "perf-queries "
 # A first boot migrates and seeds a new database; a later one finds it made.
 FIRST_BOOT_S = 900
@@ -132,13 +138,18 @@ def probe_counts(output: str) -> dict[str, int | None]:
 # gitignored mise.local.toml, and the two variables that file sets.
 LOCAL = "mise.local.toml"
 _LOCAL_SET = ("HQ_LOCAL_PLUGINS", "HQ_LOCAL_PYTHONPATH")
+# Where mise keeps what a run in a worktree records, in the folder worktree() gives it beside the tree.
+MISE_STATE = "mise-state"
 
 
 def scratch_env(tree: Path, *, trusted: bool, alone: bool) -> dict[str, str]:
     """What a tree's scratch tasks run under: alone, mise reads no mise.local.toml there and the
     extension set it names is not inherited either, so the server composes the host alone."""
 
-    env = clean_env(**({"MISE_TRUSTED_CONFIG_PATHS": str(tree)} if trusted else {}))
+    env = clean_env(**(trusted_mise(tree, tree.parent / MISE_STATE) if trusted else {}))
+    # dev:scratch runs with DEBUG on, which compiles every template on every request; perf measures
+    # what production serves, so its servers cache templates as production does.
+    env["DJANGO_TEMPLATE_CACHE"] = "1"
     if alone:
         env = {name: value for name, value in env.items() if name not in _LOCAL_SET}
         env["MISE_IGNORED_CONFIG_PATHS"] = str(tree / LOCAL)
@@ -148,13 +159,14 @@ def scratch_env(tree: Path, *, trusted: bool, alone: bool) -> dict[str, str]:
 class Scratch:
     """`mise run dev:scratch --seed <seed>` in ``tree``, on a port of its own."""
 
+    measured = SCRATCH_MEMORY
+
     def __init__(self, tree: Path, log: Path, seed: str, *, trusted: bool = False, alone: bool = False) -> None:
         self.tree, self.log, self.seed = tree, log, seed
         self.env = scratch_env(tree, trusted=trusted, alone=alone)
         self.port = free_port()
         self.url = f"http://127.0.0.1:{self.port}"
         self.server: subprocess.Popen | None = None
-        self.measured = "footprint of the serving process"
 
     def _mise(self, *args: str) -> list[str]:
         return ["mise", "-C", str(self.tree), "run", *args]
@@ -256,12 +268,13 @@ def _group_alive(group: int) -> bool:
 class Image:
     """A built image, run as image:verify:healthy runs it, seeded with a named data set."""
 
+    measured = IMAGE_MEMORY
+
     def __init__(self, image: str, log: Path, seed: str) -> None:
         self.image, self.log, self.seed = image, log, seed
         self.name = f"severino-hq-perf-{os.getpid()}-{int(time.time())}"
         self.url = ""
         self.started = False
-        self.measured = "the container's memory"
 
     def _docker(self, *args: str) -> str:
         return run(["docker", *args])
@@ -352,7 +365,7 @@ class Image:
         return probe_counts(self._manage("shell", "--no-imports", "-c", code, env=env))
 
     def memory(self) -> int:
-        return parse.docker_memory_bytes(self._docker("stats", "--no-stream", "--format", "{{.MemUsage}}", self.name))
+        return parse.container_anon_bytes(self._docker("exec", self.name, "cat", "/sys/fs/cgroup/memory.stat"))
 
     def cold_start(self) -> float:
         """Milliseconds from starting the stopped container again to ready."""

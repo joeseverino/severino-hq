@@ -7,7 +7,6 @@ from hq.platform.application.connections import (
     ConnectionLink,
     ConnectionSpec,
     describe_connections,
-    list_connections,
 )
 
 __all__ = [
@@ -17,5 +16,4 @@ __all__ = [
     "ConnectionLink",
     "ConnectionSpec",
     "describe_connections",
-    "list_connections",
 ]

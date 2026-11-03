@@ -120,17 +120,21 @@ class RefusalTests(TestCase):
         with patch.object(bridge_application, "max_body_bytes", return_value=8):
             self.refused(500, "larger than the bridge sends", "/registry")
 
-    def test_an_action_that_fails_says_what_failed_and_no_more(self):
+    def test_an_action_that_fails_says_which_and_leaves_why_to_the_log(self):
         with (
-            patch("hq.domains.control_plane.bridge_actions.controller_registry", side_effect=RuntimeError("x" * 2000)),
-            self.assertLogs("severino.bridge", "ERROR"),
+            patch(
+                "hq.domains.control_plane.bridge_actions.controller_registry",
+                side_effect=RuntimeError("no such table: example_inside_detail"),
+            ),
+            self.assertLogs("severino.bridge", "ERROR") as logged,
         ):
             answer = bridge_client.request("/registry")
         self.assertEqual(answer.status, 500)
         detail = answer.json()["detail"]
-        self.assertTrue(detail.startswith("RuntimeError: x"))
-        self.assertEqual(len(detail), bridge_application.DETAIL_LIMIT)
-        self.assertNotIn("Traceback", detail)
+        self.assertIn("registry", detail)
+        self.assertNotIn("example_inside_detail", detail)
+        self.assertNotIn("RuntimeError", detail)
+        self.assertIn("example_inside_detail", "\n".join(logged.output))
 
     def test_the_limit_is_the_contracts(self):
         self.assertEqual(max_body_bytes(), 64 * 1024 * 1024)
@@ -430,8 +434,15 @@ class ReportAttributionTests(TestCase):
         self.assertEqual(len(ProviderInventory.objects.get(kind="adguard.rewrite").records), 1)
         adopted = ManagedResource.objects.get(kind="adguard.rewrite")
         attributed = {
-            (metadata["interface"], metadata["actor"])
-            for metadata in AuditLog.objects.filter(object_id=str(adopted.pk)).values_list("metadata", flat=True)
-            if "actor" in metadata
+            (action, metadata["interface"], metadata["actor"])
+            for action, metadata in AuditLog.objects.filter(object_id=str(adopted.pk)).values_list("action", "metadata")
         }
-        self.assertEqual(attributed, {("internal", "controller")})
+        # Adopted by HQ itself, for the controller; what else the sweep moved
+        # is the controller's own report, through its door.
+        self.assertEqual(
+            attributed,
+            {
+                (AuditLog.Action.CREATED, "internal", "controller"),
+                (AuditLog.Action.UPDATED, "controller", "controller"),
+            },
+        )

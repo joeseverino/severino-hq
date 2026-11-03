@@ -114,7 +114,7 @@ class UnreportedRowsTests(TestCase):
 
     def test_the_estate_counts_them_as_a_problem(self):
         with projection_scope():
-            card = {card["id"]: card for card in cards()}["hq.estate.connections"]
+            card = {card["id"]: card for card in cards(principal=cli_principal())}["hq.estate.connections"]
 
         self.assertEqual(card["detail"], "example-dns no longer reported")
         self.assertEqual(card["status"], "attention")

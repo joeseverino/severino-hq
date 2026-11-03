@@ -124,61 +124,70 @@ class ContentSyncTests(TestCase):
         CF_ACCESS_CLIENT_SECRET="client-secret",
     )
     def test_the_access_token_never_follows_a_redirect_to_another_origin(self):
-        import threading
-        from http.server import BaseHTTPRequestHandler, HTTPServer
-
         seen = []
 
-        class Elsewhere(BaseHTTPRequestHandler):
-            def do_GET(self):
-                seen.append(dict(self.headers))
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"{}")
+        def elsewhere(handler):
+            seen.append(dict(handler.headers))
+            handler.send_response(200)
+            handler.end_headers()
+            handler.wfile.write(b"{}")
 
-            def log_message(self, *_args):
-                pass
+        other = network.local_origin(self, elsewhere)
 
-        elsewhere = HTTPServer(("127.0.0.1", 0), Elsewhere)
-
-        class Index(Elsewhere):
-            def do_GET(self):
-                self.send_response(302)
-                self.send_header("Location", f"http://127.0.0.1:{elsewhere.server_port}/steal")
-                self.end_headers()
-
-        index = HTTPServer(("127.0.0.1", 0), Index)
-        for server in (index, elsewhere):
-            threading.Thread(target=server.serve_forever, daemon=True).start()
-            self.addCleanup(server.server_close)
-            self.addCleanup(server.shutdown)
+        def index(handler):
+            handler.send_response(302)
+            handler.send_header("Location", f"{other}/steal")
+            handler.end_headers()
 
         with self.assertRaises(ContentSyncError):
-            fetch_content_index(f"http://127.0.0.1:{index.server_port}/content-index.json")
+            fetch_content_index(f"{network.local_origin(self, index)}/content-index.json")
 
         self.assertEqual(seen, [])
 
+    def moved_to(self, location):
+        """Each request a fetch makes when the index moves to ``location``,
+        with the Access secret it carried, and whether the fetch read the index."""
+
+        asked = []
+
+        def site(request):
+            asked.append((str(request.url), request.headers.get("CF-Access-Client-Secret")))
+            return network.moved(location) if len(asked) == 1 else network.Response(_payload())
+
+        with network.answering(site):
+            try:
+                fetch_content_index("https://example.test/content-index.json")
+            except ContentSyncError:
+                return asked, False
+        return asked, True
+
+    @override_settings(
+        CF_ACCESS_CLIENT_ID="client-id",
+        CF_ACCESS_CLIENT_SECRET="client-secret",
+    )
+    def test_a_redirect_is_followed_only_within_the_origin_asked(self):
+        first = ("https://example.test/content-index.json", "client-secret")
+        same = "https://example.test/v2/content-index.json"
+        self.assertEqual(self.moved_to(same), ([first, (same, "client-secret")], True))
+        for location in ("http://example.test/v2/content-index.json", "https://elsewhere.example/content-index.json"):
+            with self.subTest(location=location):
+                self.assertEqual(self.moved_to(location), ([first], False))
+
     def test_an_index_larger_than_an_index_is_refused_unread(self):
-        class Response:
-            requested = None
+        sent = []
 
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_args):
-                return False
-
-            def read(self, limit=-1):
-                Response.requested = limit
-                return b" " * (limit if limit > 0 else 64 * 1024 * 1024)
+        def endless():
+            while True:
+                sent.append(1)
+                yield b" " * 65536
 
         with (
-            network.answering(lambda _request, _timeout: Response()),
+            network.answering(lambda _request: network.Response(content=endless())),
             self.assertRaisesMessage(ContentSyncError, "larger than an index"),
         ):
             fetch_content_index("https://example.test/content-index.json")
 
-        self.assertGreater(Response.requested, 0)
+        self.assertLess(len(sent), 1000)
 
     def test_missing_items_list_raises(self):
         with self.assertRaises(ContentSyncError):
@@ -191,7 +200,7 @@ class ContentSyncTests(TestCase):
     def test_fetch_identifies_hq_and_sends_access_credentials(self):
         requests = []
 
-        def answer(request, _timeout):
+        def answer(request):
             requests.append(request)
             return network.Response(_payload())
 
@@ -199,13 +208,13 @@ class ContentSyncTests(TestCase):
             payload = fetch_content_index("https://example.test/content-index.json")
 
         (request,) = requests
-        self.assertEqual(request.get_header("Accept"), "application/json")
+        self.assertEqual(request.headers["Accept"], "application/json")
         self.assertEqual(
-            request.get_header("User-agent"),
+            request.headers["User-Agent"],
             "Severino-HQ/1.0 (+https://github.com/joeseverino/severino-hq)",
         )
-        self.assertEqual(request.get_header("Cf-access-client-id"), "client-id")
-        self.assertEqual(request.get_header("Cf-access-client-secret"), "client-secret")
+        self.assertEqual(request.headers["CF-Access-Client-Id"], "client-id")
+        self.assertEqual(request.headers["CF-Access-Client-Secret"], "client-secret")
         self.assertEqual(payload["count"], 2)
 
 

@@ -6,6 +6,7 @@ from typing import override
 from django.db import models
 from django.urls import reverse
 
+from hq.platform.application.labels import dotted
 from hq.platform.core.models import TimestampedModel
 
 from .storage import PrivateReceiptStorage, receipt_upload_path
@@ -57,7 +58,7 @@ class Receipt(TimestampedModel):
     @override
     def __str__(self) -> str:
         label = self.original_filename or (self.file.name if self.file else "receipt")
-        return f"{self.vendor or 'Receipt'} · {label}"
+        return dotted(self.vendor or "Receipt", label)
 
     @property
     def label(self) -> str:

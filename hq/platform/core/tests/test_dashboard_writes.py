@@ -20,6 +20,7 @@ from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.glance import DASHBOARD_REFRESH, DASHBOARD_REFRESH_STALE, DASHBOARD_SETTINGS
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
 from hq.platform.application.tests.markup import text
+from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.models import AuditLog
 
 GRANTED = frozenset(Capability)
@@ -37,7 +38,7 @@ def without(username: str, capability: Capability):
     """The view's operator, lacking ``capability``."""
 
     return patch(
-        "hq.platform.core.dashboard_views.web_principal",
+        "hq.platform.application.web_writes.web_principal",
         return_value=Principal(username, "web", OPERATOR_CAPABILITIES - {capability}),
     )
 
@@ -49,7 +50,7 @@ class DashboardSettingsTests(TestCase):
 
     def save(self, **fields):
         return self.client.post(
-            self.url, {"weather_label": "Outside", "infrastructure_label": "Lab", **fields}, follow=True
+            self.url, form_keyed({"weather_label": "Outside", "infrastructure_label": "Lab", **fields}), follow=True
         )
 
     def test_saved_settings_are_kept_and_recorded_under_the_operator(self):
@@ -115,7 +116,7 @@ class DashboardRefreshTests(TestCase):
 
     def refresh(self, **fields):
         with patch("hq.platform.application.glance.ring_glance_doorbell"):
-            return self.client.post(reverse("dashboard_glance"), fields)
+            return self.client.post(reverse("dashboard_glance"), form_keyed(fields))
 
     def test_each_refresh_asks_for_the_machine_and_is_recorded(self):
         for name, fields in ((DASHBOARD_REFRESH, {}), (DASHBOARD_REFRESH_STALE, {"scope": "stale"})):
@@ -126,7 +127,7 @@ class DashboardRefreshTests(TestCase):
 
                 self.assertEqual(response.status_code, 202)
                 self.assertEqual(list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)), [self.panel])
-                asked = AuditLog.objects.filter(object_type="Dashboard", metadata__operation=name).get()
+                asked = AuditLog.objects.filter(object_type="Read request", metadata__operation=name).get()
                 self.assertEqual((asked.metadata["actor"], asked.metadata["panels"]), ("op", [self.panel]))
 
     def test_an_operator_without_the_grant_is_refused_and_asks_for_nothing(self):

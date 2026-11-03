@@ -27,6 +27,8 @@ dependencies = [
     "rjsmin==1.3.0",
     # Imported directly: the ASGI application, its static mount and the bridge.
     "starlette==1.10.0",
+    # Django's answers compressed as they are sent, in brotli (core.compression).
+    "starlette-compress==2.0.0",
     "tblib==3.2.2",
     "uvicorn==0.54.0",
     "whitenoise==6.12.0",
@@ -51,6 +53,10 @@ DEP002 = [
 # Transitive dependencies host code imports, each where its version belongs to
 # the dependency that installs it.
 DEP003 = [
+    # The SDK's own types, pinned exactly by mcp: mcp_types.version names the
+    # protocol revisions an extension's result may be sent on, which mcp does
+    # not re-export.
+    "mcp_types",
     # pydantic's core, pinned exactly by pydantic: core_schema is where pydantic
     # keeps the schema and error types it does not re-export. A pin of our own
     # would stop the weekly update whenever pydantic-core releases first.
@@ -80,6 +86,23 @@ name = "The workflow contracts are a leaf: they import nothing of HQ"
 type = "forbidden"
 source_modules = ["hq.platform.application.workflow_contracts"]
 forbidden_modules = ["hq.**"]
+# The field description marker, a leaf held to importing nothing of HQ below.
+# The shared answer fields are one too, and join this list when a field here
+# takes one.
+ignore_imports = ["hq.platform.application.workflow_contracts -> hq.platform.application.describe"]
+
+[[tool.importlinter.contracts]]
+name = "The field description marker is a leaf: it imports nothing of HQ"
+type = "forbidden"
+source_modules = ["hq.platform.application.describe"]
+forbidden_modules = ["hq.**"]
+
+[[tool.importlinter.contracts]]
+name = "The shared answer fields import nothing of HQ but the description marker"
+type = "forbidden"
+source_modules = ["hq.platform.application.answer_fields"]
+forbidden_modules = ["hq.**"]
+ignore_imports = ["hq.platform.application.answer_fields -> hq.platform.application.describe"]
 
 [[tool.importlinter.contracts]]
 name = "The UI primitives never reach the workflow engine"
@@ -92,6 +115,24 @@ name = "The workflow engine never reaches the command links"
 type = "forbidden"
 source_modules = ["hq.platform.application.workflows"]
 forbidden_modules = ["hq.platform.application.action_links"]
+
+[[tool.importlinter.contracts]]
+name = "The application sits under its delivery adapters: it never imports the machine API or MCP"
+type = "forbidden"
+source_modules = ["hq.platform.application"]
+forbidden_modules = ["hq.platform.api", "hq.platform.mcp"]
+# The application's tests drive a call through the doors end to end.
+ignore_imports = ["hq.platform.application.tests.** -> hq.**"]
+
+# audit:dead: a read in a test does not keep a name alive. A function a
+# decorator hands to a caller outside HQ is called: a signal receiver, a system
+# check, an exit hook, a Pydantic validator, and an @override, which its base
+# class calls. Django calls an app's AppConfig by finding it in apps.py, and a
+# form's clean_<field> by building the name.
+[tool.vulture]
+exclude = ["*/tests/*"]
+ignore_decorators = ["@receiver", "@register", "@checks.register", "@atexit.register", "@field_validator", "@model_validator", "@override"]
+ignore_names = ["*Config", "clean_*"]
 
 [tool.uv]
 package = false
@@ -112,17 +153,19 @@ tools = [
     # Writes the served font from its source (tools/fonts), and the font tests read it.
     "fonttools==4.68.0",
     "hypothesis==6.170.14",
-    # Holds the layering contracts in [tool.importlinter] (lint:imports).
+    # Holds the layering contracts in [tool.importlinter] (lint:imports); its
+    # graph, grimp, counts the imports between the layers (audit:layers).
     "import-linter==2.15",
     "mypy==2.4.1",
-    "openapi-spec-validator==0.9.0",
     # The pipeline tests read the workflows through it.
     "pyyaml==6.0.3",
     "ruff==0.17.3",
-    "schemathesis==4.32.7",
+    "schemathesis==4.33.0",
     # Holds the clock still while the API examples are recorded (fix:api-examples).
     "time-machine==3.6.0",
     "types-jsonschema==4.26.0.20261006",
+    # Lists the names nothing outside tests reads (audit:dead, [tool.vulture]).
+    "vulture==2.16",
 ]
 browser = [
     "playwright==1.64.1",
@@ -146,6 +189,8 @@ extend-include = ["deploy/targets/severino-hq-cpanel-controller"]
 "tools/gate/check.py" = "py312"
 "tools/gate/host.py" = "py312"
 "tools/gate/verdict.py" = "py312"
+# The deploy host's python3, sent there over SSH by release:report.
+"tools/pipeline/release_readings.py" = "py312"
 "deploy/targets/severino-hq-cpanel-controller" = "py37"
 
 [tool.ruff.lint]
@@ -172,10 +217,15 @@ ignore = [
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "tools".msg = "tools/ is development and CI code the image does not ship; a test of it lives under tools/."
+"urllib.request".msg = "urllib carries every header across a redirect, to any origin and to http://; read over HTTP with hq.platform.application.http_read."
 
 [tool.ruff.lint.per-file-ignores]
 # Development and CI code imports its own package.
 "tools/**" = ["TID251"]
+# A synthetic extension standing in for a separate package, outside the host's product code.
+"tests/fixtures/example_hq_plugin/registry.py" = ["TID251"]
+# vulture's whitelist is attribute reads that do nothing, which vulture counts as uses.
+"tools/lint/vulture-whitelist.py" = ["B018"]
 # Django's declarative class bodies: Meta options, form fields and migration operations are lists by contract.
 # Django's RunPython calls a migration function with (apps, schema_editor).
 "**/migrations/*.py" = ["RUF012", "PLC0415", "ARG001"]
@@ -261,8 +311,8 @@ ignore = [".claude/worktrees"]
 
 [tool.mypy]
 # The interpreter it runs on is the one requires-python admits. Every module
-# below but the browser test package (its override says why) is held to the
-# strict flags; an import they follow is read for its types and never
+# below but the browser gate's package and dev:look's modules (their override
+# says why) is held to the strict flags; an import they follow is read for its types and never
 # reported, so the flags reach nothing else. Every other source module is
 # held to its reach alone, by tools/lint/mypy-reach.toml's pass.
 files = [
@@ -297,10 +347,15 @@ files = [
     "tests/sdk_consumer",
     "tools/credentials.py",
     "hq/platform/core/tests/browser",
+    "hq/platform/core/tests/look.py",
+    "hq/platform/core/tests/look_records.py",
+    "hq/platform/core/tests/look_report.py",
+    "hq/platform/core/tests/look_tables.py",
 ]
 exclude = "(^|/)(tests\\.py|test_[^/]*\\.py|migrations/)"
 follow_imports = "silent"
-plugins = ["mypy_django_plugin.main"]
+# django-stubs' plugin, with its cache keyed on what it adds (its docstring).
+plugins = ["tools/lint/mypy_django.py"]
 warn_unused_configs = true
 warn_redundant_casts = true
 warn_unused_ignores = true
@@ -314,10 +369,18 @@ disallow_untyped_decorators = true
 disallow_any_generics = true
 warn_return_any = true
 
-# The browser gate's package is held to calls that exist: its bodies are
-# checked as written, without the annotations the seams above must carry.
+# The browser gate's package, and dev:look's modules built on it, are held to
+# calls that exist and to overrides that say so: their bodies are checked as
+# written, without the annotations the seams above must carry. mypy matches
+# a module pattern only by whole names (`.*`), so each of dev:look's is named.
 [[tool.mypy.overrides]]
-module = ["hq.platform.core.tests.browser.*"]
+module = [
+    "hq.platform.core.tests.browser.*",
+    "hq.platform.core.tests.look",
+    "hq.platform.core.tests.look_records",
+    "hq.platform.core.tests.look_report",
+    "hq.platform.core.tests.look_tables",
+]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 disallow_untyped_decorators = false

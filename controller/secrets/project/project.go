@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/secrets/connectapi"
 )
 
@@ -137,6 +138,9 @@ func appEnvironment(input Input) ([]byte, int, error) {
 			return nil, 0, refuse("Refusing: an application variable is set twice.")
 		}
 		seen[label] = true
+		// Whatever the field's type, the web reads it as its configuration,
+		// which holds its secrets: no log line of the renderer carries one.
+		mask.Learn(value)
 		out.WriteString(label + "='" + strings.ReplaceAll(value, "'", `'\''`) + "'\n")
 		count++
 	}

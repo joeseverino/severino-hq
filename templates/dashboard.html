@@ -161,10 +161,14 @@ is said here, over the ones most recently changed, and nowhere else on the page.
   <ul class="ext-links" id="dashboard-links" data-fragment data-fragment-name="links">
     {% for l in external_links %}
       <li>
+        {% if l.where == "hq" %}
+        <a href="{{ l.href }}" title="{{ l.sub }}"><span class="ext-label">{{ l.label|breakable }}</span></a>
+        {% else %}
         {% outside_link url=l.href title=l.sub %}
           <span class="ext-label">{{ l.label|breakable }}</span>
           <span class="ext-arrow" aria-hidden="true">↗</span>
         {% endoutside_link %}
+        {% endif %}
       </li>
     {% endfor %}
   </ul>

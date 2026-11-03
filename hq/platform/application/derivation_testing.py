@@ -1,12 +1,14 @@
-"""Holding the clock every derivation reads, for a test."""
+"""Holding the clock every derivation reads, or its cache, for a test."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import Token
 from datetime import datetime
 
 from django.utils import timezone
 
 from . import derivations
+from .derivations import _UNCACHED
 
 
 @contextmanager
@@ -25,3 +27,13 @@ def frozen(moment: datetime | None = None) -> Iterator[datetime]:
         yield at
     finally:
         derivations.clock = held
+
+
+def uncached() -> Token[bool]:
+    """Derive inside ``with uncached():``, reading and storing nothing.
+
+    For measuring what a derivation itself costs: a budget on its queries, a
+    profile of its work.
+    """
+
+    return _UNCACHED.set(True)

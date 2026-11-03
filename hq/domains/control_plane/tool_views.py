@@ -9,7 +9,9 @@ from django.views.generic import TemplateView
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.timestamps import moment
-lazy from hq.platform.application import capabilities, security
+from hq.platform.application.web_writes import execute_posted, refused
+lazy from hq.platform.application import security
+lazy from hq.platform.application.lookup import LOOK_UP_ADDRESS
 lazy from hq.platform.application.toolkit import tab_named, tabs_for
 
 
@@ -39,10 +41,10 @@ class ToolsView(PageMixin, TemplateView):
 
         # Only what this tab offers, and only what was actually asked. An empty
         # field is not a lookup of the empty string.
-        asked = {name: self.request.GET.get(name.rpartition(".")[2], "").strip() for name in current.capabilities}
+        asked = {name: self.request.GET.get(field, "").strip() for name, field in current.capabilities.items()}
         context["asked"] = asked
         context["results"] = {
-            name: capabilities.execute_capability(name, {name.rpartition(".")[2]: value}, principal=principal)
+            name: execute_posted(self.request, name, {current.capabilities[name]: value})
             for name, value in asked.items()
             if value
         }
@@ -65,10 +67,6 @@ class ToolsView(PageMixin, TemplateView):
 
         address = request.POST.get("address", "").strip()
         if address:
-            capabilities.execute_capability(
-                "lookup.address",
-                {"address": address, "refresh": True},
-                principal=security.web_principal(request.user),
-            )
+            refused(request, execute_posted(request, LOOK_UP_ADDRESS, {"address": address, "refresh": True}))
         query = urlencode({"tab": request.POST.get("tab", ""), "address": address})
         return redirect(f"{reverse('control_plane:tools')}?{query}")

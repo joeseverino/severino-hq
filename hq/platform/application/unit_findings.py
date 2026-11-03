@@ -36,8 +36,17 @@ UNIT_STATE = "unit-state"
 # ``UnitFileState`` when the file is there and nothing starts it at boot.
 LOADED = "loaded"
 NOT_ENABLED = frozenset({"disabled", "masked", "masked-runtime", "invalid", "bad"})
-# The unit types that start work on their own and so must be active to do it.
-STARTERS = (".timer", ".path")
+# The unit types that start another unit on their own. A socket is active
+# while it listens ("listening") or while its service holds the connection
+# ("running"); inactive, nothing answers it.
+STARTERS = (".timer", ".path", ".socket")
+# The unit types that do their work only while active: each starter, and a
+# mount, whose files are not there while it is inactive.
+KEPT_ACTIVE = (*STARTERS, ".mount")
+# The unit types that run when started and rest inactive between runs.
+RUN_WHEN_STARTED = (".service",)
+# ``test_unit_findings`` holds every unit type deploy/systemd ships to one of
+# the two.
 # How far behind its own next elapse a waiting timer may be when it is read.
 # Above every RandomizedDelaySec shipped, which systemd adds after that instant.
 OVERDUE_AFTER = timedelta(hours=2)
@@ -76,6 +85,21 @@ class UnitState(FactRow):
     read_at: str = ""
     # Set when the reading itself failed; such a row names no unit.
     reason: str = ""
+    # What the unit is, in its unit file's words; "" when systemd gave none.
+    title: str = ""
+
+    @property
+    def label(self) -> str:
+        """The unit as a person reads it: its title, else its name."""
+
+        return self.title or self.unit
+
+    @property
+    def named(self) -> str:
+        """The unit in a sentence: its title quoted, since a unit file's title
+        reads as a phrase of its own, else its name."""
+
+        return f"“{self.title}”" if self.title else self.unit
 
     @property
     def failed(self) -> bool:
@@ -90,6 +114,10 @@ class UnitState(FactRow):
         return self.unit.endswith(STARTERS)
 
     @property
+    def kept_active(self) -> bool:
+        return self.unit.endswith(KEPT_ACTIVE)
+
+    @property
     def absent(self) -> str:
         """Why the unit cannot do its work, or "" when nothing says so."""
 
@@ -97,7 +125,7 @@ class UnitState(FactRow):
             return "Not installed"
         if self.file_state in NOT_ENABLED:
             return "Switched off"
-        if self.starter and self.active not in ("active", "failed"):
+        if self.kept_active and self.active not in ("active", "failed"):
             return "Not started"
         return ""
 
@@ -132,6 +160,7 @@ def unit_state(record: dict[str, Any]) -> UnitState:
         next_elapse_at=said("next_elapse_at"),
         activates=said("activates"),
         read_at=said("read_at"),
+        title=said("title"),
     )
 
 
@@ -186,7 +215,7 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
         failed = tuple(unit for unit in units if unit.failed and unit.unit not in said)
         if not failed:
             continue
-        # A unit a timer or path starts runs again on its own; one nothing
+        # A unit a timer, path or socket starts runs again on its own; one nothing
         # starts again stays down until someone does.
         scheduled = {unit.activates for unit in units if unit.starter}
         found.append(
@@ -195,7 +224,7 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
                 subject=node.id,
                 scope=UNIT_KIND,
                 title=(
-                    f"{failed[0].unit} failed on {node.label}"
+                    f"{failed[0].named} failed on {node.label}"
                     if len(failed) == 1
                     else f"{counted(len(failed), 'background job', 'background jobs')} failed on {node.label}"
                 ),
@@ -214,9 +243,9 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
                     step
                     for unit in failed
                     for step in (
-                        *journal_step(f"See why {unit.unit} failed", node.label, unit.unit),
+                        *journal_step(f"See why {unit.named} failed", node.label, unit.unit),
                         *machine_step(
-                            f"Start {unit.unit} again",
+                            f"Start {unit.named} again",
                             node.label,
                             f"systemctl restart {shlex.quote(unit.unit)}",
                         ),
@@ -230,7 +259,8 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
 
 def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
     """A shipped unit the machine does not have, has disabled, or has not
-    started: a timer or path that is not active starts nothing."""
+    started: a timer, path or socket that is not active starts nothing, and a
+    mount that is not active holds nothing."""
 
     found = []
     for node, units in _units(estate):
@@ -243,7 +273,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                 subject=node.id,
                 scope=UNIT_KIND,
                 title=(
-                    f"{absent[0].unit} is not set up on {node.label}"
+                    f"{absent[0].named} is not set up on {node.label}"
                     if len(absent) == 1
                     else f"{counted(len(absent), 'background job', 'background jobs')} are not set up on {node.label}"
                 ),
@@ -257,9 +287,9 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                 steps=tuple(
                     step
                     for unit in absent
-                    if unit.installed and unit.starter
+                    if unit.installed and unit.kept_active
                     for step in machine_step(
-                        f"Turn on {unit.unit}",
+                        f"Turn on {unit.named}",
                         node.label,
                         f"systemctl enable --now {shlex.quote(unit.unit)}",
                     )
@@ -282,9 +312,9 @@ def _stall(timer: UnitState, started: UnitState | None) -> str:
     # systemd answers "no" for a unit it has not started since boot, with no
     # time: only a condition it checked was not met.
     if started.condition == "no" and started.condition_at:
-        return f"{started.unit} was skipped because a condition it needs was not met"
+        return f"{started.named} was skipped because a condition it needs was not met"
     if started.active == "activating" and started.behind(started.started_at, STARTING_TOO_LONG):
-        return f"{started.unit} had been starting for more than {duration(STARTING_TOO_LONG)}"
+        return f"{started.named} had been starting for more than {duration(STARTING_TOO_LONG)}"
     return ""
 
 
@@ -326,7 +356,7 @@ def _stalled_finding(
         subject=node.id,
         scope=UNIT_KIND,
         title=(
-            f"{timers[0].unit} on {node.label} is on but its job is not running"
+            f"{timers[0].named} on {node.label} is on but its job is not running"
             if len(timers) == 1
             else f"{counted(len(timers), 'timer')} on {node.label} are on but their jobs are not running"
         ),
@@ -350,12 +380,12 @@ def _stalled_finding(
             for timer in timers
             for step in (
                 *machine_step(
-                    f"See when {timer.unit} last ran and is next due",
+                    f"See when {timer.named} last ran and is next due",
                     node.label,
                     f"systemctl list-timers {shlex.quote(timer.unit)}",
                 ),
                 *(
-                    journal_step(f"See what {timer.activates} last did", node.label, timer.activates)
+                    journal_step("See what the job it starts last did", node.label, timer.activates)
                     if timer.activates
                     else ()
                 ),

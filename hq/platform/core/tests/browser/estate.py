@@ -20,7 +20,7 @@ from functools import cache
 from html import unescape
 from types import MappingProxyType
 from typing import Any, override
-from urllib.parse import parse_qsl, urljoin, urlsplit
+from urllib.parse import parse_qsl, quote, urljoin, urlsplit
 
 from django.conf import settings
 from django.test import Client
@@ -30,16 +30,19 @@ lazy from django.db import transaction
 from hq.platform.core.tests.browser.gate import BrowserGate, answered
 from hq.platform.core.tests.browser.in_flight import InFlight
 from hq.platform.core.tests.browser.probes.boxes import SIDEWAYS
+from hq.platform.core.tests.browser.probes.describe import TEXT_SHOWN
 from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, FONTS_READY, SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
+from hq.platform.core.tests.browser.survey import geometry_probes
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, WIDE_TABLES, WIDTHS, viewport
+lazy from hq.platform.application import fragments
 lazy from hq.platform.application.domains import domain_navigation
 lazy from hq.platform.core import seeds
-lazy from hq.platform.core.example_estate import REQUEST, SSO
+lazy from hq.platform.core.example_estate import REQUEST
 lazy from hq.platform.core.example_estate.names import MACHINE, SERVICES
 lazy from hq.platform.core.example_estate.network import ZONE_KEY
-lazy from hq.platform.core.example_estate.testing import as_production
+lazy from hq.platform.core.example_estate.testing import as_production, sign_in
 
 # The gate's widths, a wide desktop and the laptop windows where a wide table
 # has the least room: the example estate is the homelab as a person reads it,
@@ -52,27 +55,48 @@ _NOT_HQS_MARKUP = {"api_reference:reference"}
 # Reached from the header on every page rather than from the navigation.
 _HEADER = ("action_items",)
 _REDIRECTS = frozenset({301, 302, 303, 307, 308})
-_REGION = re.compile(r'<[^>]*\sdata-fragment="([^"]+)"[^>]*>')
-_NAME = re.compile(r'\sdata-fragment-name="([^"]*)"')
+# Each popover's kind: its classes and the table and column it sits in. Popovers
+# of one kind are drawn by one partial in one place, so one of them stands for
+# all, and a pass over them costs a run per kind rather than per record.
+POPOVER_KINDS = """() => {
+  const tables = [...document.querySelectorAll('table')];
+  return [...document.querySelectorAll('[popover]')].map((popover) => {
+    const table = popover.closest('table');
+    return [popover.className, tables.indexOf(table), popover.closest('td, th')?.cellIndex ?? -1].join(' ');
+  });
+}"""
+# The popover at a place in the page shown, what names it in a finding and
+# what names its shot; nothing for one that will not show.
+SHOW_POPOVER = """(place) => {
+  const popover = document.querySelectorAll('[popover]')[place];
+  try {
+    popover.showPopover();
+  } catch {
+    return null;
+  }
+  return popover.id ? [`#${popover.id}`, popover.id] : [`popover ${place + 1}`, `${place + 1}`];
+}"""
+HIDE_POPOVER = "(place) => document.querySelectorAll('[popover]')[place].hidePopover()"
+# The checks a shown popover's own boxes and lines are held to: its rows are
+# laid out by the same primitives as the page's, over whatever lies beneath.
+_IN_A_POPOVER = ("overlaps", "overlapping text")
 
 
-def _fragments(client, page, answers, ask):
-    """Every part a page fetches into itself, and the parts inside those, by
-    address and part name, as the server answers them."""
+def fragments_of(client, address, page, answers, ask):
+    """Every part the page at ``address`` fetches into itself, and the parts
+    inside those, by address and part name, as the server answers them."""
 
-    pending = [page]
+    pending = [(address, page)]
     while pending:
-        for region in _REGION.finditer(pending.pop()):
-            url = unescape(region.group(1))
-            named = _NAME.search(region.group(0))
-            name = unescape(named.group(1)) if named else ""
+        at, body = pending.pop()
+        for url, name in fragments.regions(body, at):
             if (url, name) in answers:
                 continue
             headers = {"HTTP_X_REQUESTED_WITH": "XMLHttpRequest", **({"HTTP_X_FRAGMENT": name} if name else {})}
             response = ask(client, url, **headers)
             if response.status_code == 200:
                 answers[url, name] = answered(response)
-                pending.append(answers[url, name])
+                pending.append((url, answers[url, name]))
 
 
 def navigation():
@@ -123,7 +147,7 @@ def owner_client(seed: str = "showcase") -> Iterator[Client]:
 
     with transaction.atomic(), as_production(), seeds.built(seed) as owner:
         client = Client()
-        client.force_login(owner, backend=SSO)
+        sign_in(client, owner)
         yield client
         transaction.set_rollback(True)
 
@@ -161,7 +185,7 @@ def render_estate():
             if response.status_code != 200:
                 raise AssertionError(f"{path} answered {response.status_code}")
             answers[path, ""] = answered(response)
-            _fragments(client, answers[path, ""], answers, ask)
+            fragments_of(client, path, answers[path, ""], answers, ask)
     return paths, answers
 
 
@@ -210,8 +234,30 @@ class ExampleEstateGate(BrowserGate):
         elif parts.path.startswith(settings.STATIC_URL):
             super().answer(route)
         else:
-            self.unanswered.append(f"{address} {part}".strip())
+            # The estate holds each (address, part) fragments.regions found on a
+            # page it rendered, so a miss means it never found that region there.
+            self.unanswered.append(
+                f"{address} {part}".strip() + ": never pre-rendered; fragments.regions found no such region"
+            )
             route.fulfill(status=404, body="Not in the example estate")
+
+    def each_popover_kind(self):
+        """Each kind of popover on the page shown on its own in turn, as a
+        reader shows one: what names it in a finding and in a shot, and how
+        many more of its kind it stands for. Shown all at once they would lie
+        over one another, which no reader sees, and where each lands would
+        hang on which drew last."""
+
+        kinds = self.page.evaluate(POPOVER_KINDS)
+        judged = set()
+        for place, kind in enumerate(kinds):
+            if kind in judged or (shown := self.page.evaluate(SHOW_POPOVER, place)) is None:
+                continue
+            judged.add(kind)
+            try:
+                yield shown, kinds.count(kind) - 1
+            finally:
+                self.page.evaluate(HIDE_POPOVER, place)
 
     def visit(self, path, width):
         self.page.set_viewport_size(viewport(width))
@@ -223,15 +269,21 @@ class ExampleEstateGate(BrowserGate):
 class ExampleEstateBrowserTests(ExampleEstateGate):
     """Every navigation page of the example estate keeps the layout rules."""
 
-    def opened(self):
-        """What holds once every disclosure on the page is open."""
+    def opened(self, path, width):
+        """What holds once every disclosure on the page is open, and inside
+        each kind of popover shown."""
 
         self.page.evaluate(
             "(disclosure) => document.querySelectorAll(disclosure).forEach((d) => { d.open = true; })",
             SELECTORS["disclosure"],
         )
         self.page.evaluate(SETTLE)
-        return {"sideways, opened": self.page.evaluate(SIDEWAYS, SELECTORS["sideways"])}
+        found = {"sideways, opened": self.page.evaluate(SIDEWAYS, SELECTORS["sideways"])}
+        probes = {check: probe for check, probe in geometry_probes(path, width).items() if check in _IN_A_POPOVER}
+        for (label, _slug), _alike in self.each_popover_kind():
+            self.page.evaluate(SETTLE)
+            found |= {f"{check}, with {label} shown": said for check, said in self.checked(probes).items()}
+        return found
 
     def test_every_navigation_page_keeps_the_layout_rules(self):
         self.assertGreater(len(self.navigation), 10, "the navigation led almost nowhere")
@@ -246,7 +298,7 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
                         self.page.evaluate(SETTLE)
                         self.page.evaluate(FINISH_TRANSITIONS)
                         found |= {f"{check} ({theme})": said for check, said in self.palette().items()}
-                    found |= self.opened()
+                    found |= self.opened(path, width)
                     found["unanswered"], self.unanswered = self.unanswered, []
                     found["refused"] = self.refusals_so_far()
                     failed = {check: said for check, said in found.items() if said}
@@ -278,8 +330,75 @@ _ASKED = """([name, value]) => new URLSearchParams(location.search).getAll(name)
   && !document.querySelector('main[aria-busy]')"""
 _LET_GO = """([name, value]) => !new URLSearchParams(location.search).getAll(name).includes(value)
   && !document.querySelector('main[aria-busy]')"""
+# The places of the headings a list's table has dropped, and those places as
+# each frame draws them from now on.
+_DROPPED = """(region) => [...document.querySelector(region + ' > .data-table').tHead.rows[0].cells]
+  .flatMap((heading, place) => heading.hasAttribute('data-dropped') ? [place] : [])"""
+_WATCH_DROPPED = (
+    """(region) => {
+  window.droppedFrames = [];
+  const look = () => {
+    window.droppedFrames.push(("""
+    + _DROPPED
+    + """)(region));
+    requestAnimationFrame(look);
+  };
+  requestAnimationFrame(look);
+}"""
+)
 _FIRST_COLUMN = """(rows) => [...document.querySelectorAll(rows)]
   .map((row) => row.cells[0].innerText.trim().split('\\n')[0])"""
+# A word in a closed row's line beneath that nothing else find could reach
+# holds: no text drawn on the page, and no other line beneath a row.
+_HELD_BACK_WORD = (
+    "(details) => {"
+    + TEXT_SHOWN
+    + """
+  const lines = [...document.querySelectorAll(details)];
+  const reachable = (node) => textShown(node) || lines.some((line) => line.contains(node));
+  const texts = (root) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const found = [];
+    while (walker.nextNode()) found.push(walker.currentNode);
+    return found;
+  };
+  for (const line of lines) {
+    if (line.previousElementSibling?.classList.contains('is-expanded')) continue;
+    const shown = (node) => {
+      for (let el = node.parentElement; el && el !== line; el = el.parentElement) {
+        if (getComputedStyle(el).display === 'none') return false;
+      }
+      return true;
+    };
+    const elsewhere = texts(document.body)
+      .filter((node) => !line.contains(node) && reachable(node))
+      .map((node) => node.data.toLowerCase()).join(' ');
+    for (const node of texts(line).filter(shown)) {
+      for (const word of node.data.split(/[^A-Za-z]+/)) {
+        if (word.length > 4 && !elsewhere.includes(word.toLowerCase())) return word;
+      }
+    }
+  }
+  return null;
+}"""
+)
+# How tall each table holding a closed row's line is drawn, then with every
+# such line left out of the page.
+_CLOSED_LINES_ROOM = """(details) => {
+  const lines = [...document.querySelectorAll(details)]
+    .filter((line) => !line.previousElementSibling.classList.contains('is-expanded'));
+  const tables = [...new Set(lines.map((line) => line.closest('table')))];
+  const heights = () => tables.map((table) => table.getBoundingClientRect().height);
+  const drawn = heights();
+  lines.forEach((line) => line.style.setProperty('display', 'none'));
+  const without = heights();
+  lines.forEach((line) => line.style.removeProperty('display'));
+  return [drawn, without];
+}"""
+# The line holding the word is open beneath its row.
+_FOUND_OPEN = """([details, word]) => [...document.querySelectorAll(details)].some((line) =>
+  line.textContent.includes(word) && line.checkVisibility()
+  && line.previousElementSibling.classList.contains('is-expanded'))"""
 
 
 class ExampleEstateControlTests(BrowserGate):
@@ -302,7 +421,7 @@ class ExampleEstateControlTests(BrowserGate):
         answers = {}
         with transaction.atomic(), as_production(), seeds.built("showcase") as owner:
             client = Client()
-            client.force_login(owner, backend=SSO)
+            sign_in(client, owner)
 
             def ask(address):
                 response = client.get(address, secure=True, follow=True, **REQUEST)
@@ -388,16 +507,18 @@ class ExampleEstateControlTests(BrowserGate):
         for width in PRESSED_AT:
             with self.subTest(width=width):
                 self.visit(path, width)
+                # Every answer below is drawn on this page, never by loading another.
+                self.page.evaluate("() => { window.kept = true; }")
                 every = self.rows()
-                menu = self.page.locator(SELECTORS["table_filter"]).first
-                menu.locator("summary").click()
+                self.page.locator(SELECTORS["table_filter"]).first.click()
+                menu = self.page.locator(SELECTORS["table_filter_panel"]).first
                 box = menu.locator(SELECTORS["table_filter_box"]).first
                 asked = [box.get_attribute("name"), box.get_attribute("value")]
                 box.check()
                 self.page.wait_for_function(_ASKED, arg=asked)
                 self.assertLess(self.rows(), every)
                 # The answer's menu is open where the reader left it, the box ticked.
-                self.assertTrue(menu.evaluate("(menu) => menu.open"))
+                self.assertTrue(menu.evaluate("(menu) => menu.matches(':popover-open')"))
                 self.assertTrue(box.is_checked())
                 box.uncheck()
                 self.page.wait_for_function(_LET_GO, arg=asked)
@@ -415,11 +536,17 @@ class ExampleEstateControlTests(BrowserGate):
                 self.assertEqual(self.rows(), every)
                 self.assertFalse(self.page.locator(SELECTORS["table_empty"]).count())
 
-                # Back is the list as it was, the address and the box agreeing.
+                # Back is the list as it was, the address and the box agreeing,
+                # and Forward the list after it.
                 self.page.go_back()
                 self.page.wait_for_function(_ASKED, arg=asked)
                 self.assertEqual(self.rows(), 0)
                 self.assertTrue(toggle.is_checked())
+                self.page.go_forward()
+                self.page.wait_for_function(_LET_GO, arg=asked)
+                self.assertEqual(self.rows(), every)
+                self.assertFalse(toggle.is_checked())
+                self.assertTrue(self.page.evaluate("() => window.kept === true"))
 
     def test_a_search_narrows_its_list_and_clearing_it_brings_every_row_back(self):
         path = reverse("projects:list")
@@ -427,12 +554,14 @@ class ExampleEstateControlTests(BrowserGate):
         for width in PRESSED_AT:
             with self.subTest(width=width):
                 self.visit(path, width)
+                self.page.evaluate("() => { window.kept = true; }")
                 every = self.rows()
                 search = self.page.locator(SELECTORS["table_search"])
                 search.fill(word)
                 self.page.wait_for_function(_ASKED, arg=["q", word])
                 found = self.page.locator(SELECTORS["table_rows"]).all_inner_texts()
-                self.assertTrue(0 < len(found) < every)
+                self.assertGreater(len(found), 0)
+                self.assertLess(len(found), every)
                 self.assertEqual([row for row in found if word.lower() not in row.lower()], [])
                 # Typing carries on in the box: the answer did not take it away.
                 self.assertTrue(search.evaluate("(box) => box === document.activeElement"))
@@ -443,11 +572,12 @@ class ExampleEstateControlTests(BrowserGate):
                 search.fill("")
                 self.page.wait_for_function(_LET_GO, arg=["q", _NOTHING])
                 self.assertEqual(self.rows(), every)
+                self.assertTrue(self.page.evaluate("() => window.kept === true"), "a search loaded another page")
 
     def test_a_list_sorted_in_place_still_fits_a_window_that_narrows(self):
-        """A sort swaps the table in pinned to the widths it had, and lets go
-        once it is in, so a narrower window drops a column rather than
-        holding the table at its old width past its region."""
+        """A sort swaps the table in to be laid out around its own rows, so a
+        narrower window drops a column rather than holding the table at its
+        old width past its region."""
 
         self.visit(reverse("projects:list"), 1360)
         link = self.page.locator(SELECTORS["sort_link"]).first
@@ -462,11 +592,29 @@ class ExampleEstateControlTests(BrowserGate):
         }"""
         self.page.wait_for_function(fits, arg=SELECTORS["table_scroll"], timeout=5_000)
 
+    def test_a_list_sorted_on_a_phone_draws_no_column_it_had_dropped(self):
+        """The table a sort swaps in is fitted before its first frame, so no
+        column the list had dropped is drawn and then dropped again."""
+
+        self.visit(reverse("projects:list"), PHONE_SCREEN[0])
+        before = self.page.evaluate(_DROPPED, SELECTORS["table_scroll"])
+        self.assertTrue(before, "a phone's list dropped no column, so the sort has nothing to keep")
+        self.page.evaluate(_WATCH_DROPPED, SELECTORS["table_scroll"])
+        link = self.page.locator(SELECTORS["sort_link"]).first
+        asked = dict(parse_qsl(urlsplit(link.get_attribute("href")).query))["sort"]
+        link.click()
+        self.page.wait_for_function(_ASKED, arg=["sort", asked])
+        self.page.evaluate(SETTLE)
+        frames = self.page.evaluate("() => window.droppedFrames")
+        self.assertTrue(frames, "no frame was drawn")
+        self.assertEqual([frame for frame in frames if frame != before], [])
+
     def test_a_sort_heading_orders_its_list_and_says_which_way(self):
         path = reverse("projects:list")
         for width in PRESSED_AT:
             with self.subTest(width=width):
                 self.visit(path, width)
+                self.page.evaluate("() => { window.kept = true; }")
                 link = self.page.locator(SELECTORS["sort_link"]).first
                 sorted_by = "(link) => link.closest('th').getAttribute('aria-sort')"
                 self.assertEqual(link.evaluate(sorted_by), "none")
@@ -477,6 +625,7 @@ class ExampleEstateControlTests(BrowserGate):
                     self.assertEqual(link.evaluate(sorted_by), direction)
                     names = self.page.evaluate(_FIRST_COLUMN, SELECTORS["table_rows"])
                     self.assertEqual(names, sorted(names, key=str.lower, reverse=direction == "descending"))
+                self.assertTrue(self.page.evaluate("() => window.kept === true"), "a sort loaded another page")
 
     def test_the_queue_keeps_only_the_urgency_it_is_asked_for(self):
         for width in PRESSED_AT:
@@ -494,7 +643,9 @@ class ExampleEstateControlTests(BrowserGate):
                 self.assertIn(("status", chosen), parse_qsl(urlsplit(self.page.url).query))
                 self.assertEqual(urgency.input_value(), chosen)
                 rows = self.page.locator(SELECTORS["decisions"])
-                self.assertTrue(0 < rows.count() <= every)
+                shown = rows.count()
+                self.assertGreater(shown, 0)
+                self.assertLessEqual(shown, every)
                 marks = rows.locator(".pill").evaluate_all("(pills) => pills.map((pill) => [...pill.classList])")
                 self.assertEqual([mark for mark in marks if f"pill-{chosen}" not in mark], [])
 
@@ -503,21 +654,87 @@ class ExampleEstateControlTests(BrowserGate):
         it opens the category and leaves the drawer open around it."""
 
         self.visit(reverse("expenses:list"), PHONE_SCREEN[0])
-        self.page.locator(SELECTORS["nav_open"]).click()
-        drawer_open = self.page.locator(SELECTORS["nav_close"])
-        self.assertTrue(drawer_open.is_visible())
+        self.page.locator(SELECTORS["nav_toggle"]).click()
+        drawer = self.page.locator(SELECTORS["nav_drawer"])
+        self.assertTrue(drawer.is_visible())
         menu = self.page.locator(SELECTORS["nav_menu"]).first
         menu.locator("summary").click()
         self.assertTrue(menu.evaluate("(menu) => menu.open"))
         self.assertTrue(menu.locator("a").first.is_visible())
-        self.assertTrue(drawer_open.is_visible())
+        self.assertTrue(drawer.is_visible())
+
+    def test_the_phone_drawer_opens_closes_and_hands_focus_back(self):
+        """The drawer opens from its button by a press or a key, says it is
+        open, holds no focus captive, and closes on its button, Escape or a
+        press outside, Escape handing focus back to the button."""
+
+        self.visit(reverse("expenses:list"), PHONE_SCREEN[0])
+        toggle = self.page.locator(SELECTORS["nav_toggle"])
+        drawer = self.page.locator(SELECTORS["nav_drawer"])
+        self.assertFalse(drawer.is_visible())
+        toggle.click()
+        self.assertTrue(drawer.is_visible())
+        # The button is the drawer's invoker, which is how the browser tells
+        # assistive technology the button is expanded; Playwright's role
+        # locator reads only an `aria-expanded` attribute, so it is asked here.
+        self.assertTrue(toggle.evaluate("(toggle) => toggle.popoverTargetElement.matches(':popover-open')"))
+        toggle.click()
+        self.assertFalse(drawer.is_visible())
+        toggle.click()
+        self.page.locator(SELECTORS["page_title"]).click()
+        self.assertFalse(drawer.is_visible())
+
+        toggle.focus()
+        self.page.keyboard.press("Enter")
+        self.assertTrue(drawer.is_visible())
+        # Its sections follow the button in the tab order, and it is not
+        # modal, so nothing outside it is made inert while it is open.
+        self.page.keyboard.press("Tab")
+        self.assertTrue(drawer.evaluate("(drawer) => drawer.contains(document.activeElement)"))
+        self.assertFalse(drawer.evaluate("(drawer) => drawer.matches(':modal')"))
+        self.page.keyboard.press("Escape")
+        self.assertFalse(drawer.is_visible())
+        self.assertTrue(toggle.evaluate("(toggle) => toggle === document.activeElement"))
+
+    def test_the_phone_drawer_opens_and_closes_with_no_script(self):
+        self.start(java_script_enabled=False)
+        self.page.set_viewport_size(viewport(PHONE_SCREEN[0]))
+        self.page.goto(f"{ORIGIN}{reverse('expenses:list')}", wait_until="load")
+        toggle = self.page.locator(SELECTORS["nav_toggle"])
+        drawer = self.page.locator(SELECTORS["nav_drawer"])
+        self.assertFalse(drawer.is_visible())
+        toggle.click()
+        self.assertTrue(drawer.is_visible())
+        self.assertTrue(drawer.get_by_role("link").first.is_visible())
+        toggle.click()
+        self.assertFalse(drawer.is_visible())
+
+    def test_find_in_page_opens_the_closed_row_that_holds_the_match(self):
+        """A word only a closed row's line beneath holds is found, as the
+        browser's find finds it (a text fragment), and the row opens on it."""
+
+        self.visit(reverse("expenses:list"), PHONE_SCREEN[0])
+        word = self.page.evaluate(_HELD_BACK_WORD, SELECTORS["row_detail"])
+        self.assertTrue(word, "no closed row holds back a word of its own")
+        # Reachable by find, a closed row's line still takes no room. Left out,
+        # a line under the last row would leave that row its rule, which the
+        # last row never draws, so a table may be a rule shorter drawn.
+        drawn, without = self.page.evaluate(_CLOSED_LINES_ROOM, SELECTORS["row_detail"])
+        for tall, room in zip(drawn, without, strict=True):
+            self.assertLessEqual(tall, room)
+        self.page.goto(f"{ORIGIN}{reverse('expenses:list')}#:~:text={quote(word)}", wait_until="load")
+        self.page.wait_for_function(_FOUND_OPEN, arg=[SELECTORS["row_detail"], word])
 
     def test_a_menu_opens_and_closes_on_escape_and_a_press_outside(self):
         # The page's clock stands still, so a press lands while the hover delay
         # its pointer started is still pending, as a quick hand's does. A
         # dismissal is read once every delay has run out: it has to hold.
-        def is_open(menu):
-            return menu.evaluate("(menu) => menu.open")
+        # A menu is pressed by its handle: a filter's button, whose panel is a
+        # popover, or a disclosure's summary.
+        def is_open(handle):
+            return handle.evaluate(
+                "(handle) => handle.popoverTargetElement?.matches(':popover-open') ?? handle.closest('details').open"
+            )
 
         def every_delay_later():
             self.page.clock.run_for(1000)
@@ -528,23 +745,23 @@ class ExampleEstateControlTests(BrowserGate):
                 self.page.clock.resume()
                 self.visit(reverse("expenses:list"), width)
                 self.page.clock.pause_at(self.page.evaluate("() => Date.now() / 1000 + 1"))
-                menus = [self.page.locator(SELECTORS["table_filter"]).first]
+                handles = [self.page.locator(SELECTORS["table_filter"]).first]
                 if width >= WIDE:
-                    menus.append(self.page.locator(SELECTORS["nav_menu"]).first)
-                for menu in menus:
-                    menu.locator("summary").click()
-                    self.assertTrue(is_open(menu))
+                    handles.append(self.page.locator(SELECTORS["nav_menu"]).first.locator("summary"))
+                for handle in handles:
+                    handle.click()
+                    self.assertTrue(is_open(handle))
                     self.page.keyboard.press("Escape")
                     every_delay_later()
-                    self.assertFalse(is_open(menu))
-                    menu.locator("summary").click()
-                    self.assertTrue(is_open(menu))
+                    self.assertFalse(is_open(handle))
+                    handle.click()
+                    self.assertTrue(is_open(handle))
                     self.page.locator(SELECTORS["page_title"]).click()
                     every_delay_later()
-                    self.assertFalse(is_open(menu))
+                    self.assertFalse(is_open(handle))
                 if width < WIDE:
                     # A phone's menus are in a drawer, which Escape closes whole.
-                    self.page.locator(SELECTORS["nav_open"]).click()
+                    self.page.locator(SELECTORS["nav_toggle"]).click()
                     menu = self.page.locator(SELECTORS["nav_menu"]).first
                     menu.locator("summary").click()
                     self.assertTrue(is_open(menu))

@@ -17,6 +17,7 @@ from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.resource_capabilities import LIFECYCLE_VERBS, resource_capabilities
 from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal
+from hq.platform.application.tests.writers import form_keyed, keyed
 
 HQ_MACHINE, HQ_ADDRESS = "example-host", "192.0.2.10"
 OTHER_MACHINE = "example-edge"
@@ -77,7 +78,7 @@ class UnitLifecycleTests(TestCase):
         return resource_capabilities(ManagedResource.objects.get(key=key)).actions
 
     def press(self, key, verb):
-        return self.client.post(reverse(f"control_plane:{verb}", kwargs={"key": key}))
+        return self.client.post(reverse(f"control_plane:{verb}", kwargs={"key": key}), form_keyed())
 
     def test_on_hqs_machine_a_stop_names_the_unit_and_is_offered(self):
         stop = self.offered(SUPERVISED_HERE)["stop"]
@@ -102,7 +103,7 @@ class UnitLifecycleTests(TestCase):
         self.assertIn(reason, detail.content.decode())
         self.press(SUPERVISED_THERE, "stop")
         operator = Principal("example-agent", "mcp", frozenset(Capability))
-        result = execute_capability(ACTION_CAPABILITY["restart"], {}, principal=operator, target=SUPERVISED_THERE)
+        result = execute_capability(ACTION_CAPABILITY["restart"], keyed(), principal=operator, target=SUPERVISED_THERE)
         # The refusal says what the page said.
         self.assertEqual(result["error"]["message"], reason)
         self.assertFalse(OperationRequest.objects.filter(resource__key=SUPERVISED_THERE).exists())

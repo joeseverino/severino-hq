@@ -10,15 +10,17 @@ model's own ``full_clean``, so a rule on the model holds on every path.
 from collections.abc import Callable
 from typing import Any
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import transaction
 from django.forms import ModelForm
 
-from hq.platform.core.audit import operation_context
+from hq.platform.core.audit import audit_operation
 
-from .deletion import DeleteCommand, delete_record
+from .deletion import DeleteCommand, RecordDeleted, delete_record
 from .domains import Records, host_records, load, records_of
-from .integration_specs import TARGET, TARGET_KINDS, CapabilitySpec
-from .labels import lower_first
+from .integration_specs import TARGET_KINDS, CapabilitySpec
+from .json_schemas import choices
+from .labels import lower_first, one
 from .security import Principal
 from .ui import ended
 
@@ -26,9 +28,11 @@ from .ui import ended
 _TARGET_NAMES = {"slug": "slug", "integer": "ID", "doc_id": "ID", "key": "key"}
 # The commands every record domain gets.
 _VERBS = frozenset({"create", "upsert", "update", "delete"})
+# What an update says of a field its caller leaves out (``record_saves.written``).
+KEPT = "A field left out keeps its value."
 
 
-def deleter(resource: str) -> Callable[..., dict[str, Any]]:
+def deleter(resource: str) -> Callable[..., RecordDeleted]:
     """The confirmed delete for one record domain, in the host call contract."""
 
     def delete(
@@ -37,7 +41,7 @@ def deleter(resource: str) -> Callable[..., dict[str, Any]]:
         principal: Principal,
         expected_updated_at: str | None = None,
         **target: Any,
-    ) -> dict[str, Any]:
+    ) -> RecordDeleted:
         records = records_of(resource)
         keyword = TARGET_KINDS[records.target].keyword
         if set(target) != {keyword}:
@@ -73,7 +77,7 @@ def as_its_model_declares(command_type: type, schema: dict[str, Any]) -> dict[st
     """A record command's schema with what its model says of each field.
 
     A field the model limits to choices lists them, each value with its label
-    (``oneOf`` of ``const`` and ``title``), and one it holds as long text is
+    (``json_schemas.choices``), and one it holds as long text is
     ``format: textarea``. The model is the one declaration: its ``full_clean``
     refuses any other value on every path, so the schema only says so. Any
     other command's schema is returned as it is.
@@ -90,12 +94,39 @@ def as_its_model_declares(command_type: type, schema: dict[str, Any]) -> dict[st
     return {**schema, "properties": properties}
 
 
+def as_an_update_declares(schema: dict[str, Any], always_sent: frozenset[str] = frozenset()) -> dict[str, Any]:
+    """A command's schema as an update on a record that exists takes it: a
+    field left out keeps what the record holds, so none has a default and only
+    one the record cannot give back (``always_sent``) is required."""
+
+    properties = {
+        name: {key: value for key, value in declared.items() if key != "default"}
+        for name, declared in schema.get("properties", {}).items()
+    }
+    updated = {**schema, "properties": properties}
+    required = [name for name in schema.get("required", ()) if name in always_sent]
+    if required:
+        updated["required"] = required
+    else:
+        updated.pop("required", None)
+    return updated
+
+
+def _bounds(field: Any) -> dict[str, Any]:
+    """The tightest bounds a model field's validators hold a number to, as JSON Schema says them."""
+
+    lows = [v.limit_value for v in field.validators if isinstance(v, MinValueValidator)]
+    highs = [v.limit_value for v in field.validators if isinstance(v, MaxValueValidator)]
+    return {**({"minimum": max(lows)} if lows else {}), **({"maximum": min(highs)} if highs else {})}
+
+
 def _as_field_declares(field: Any, declared: dict[str, Any]) -> dict[str, Any]:
+    declared = {**declared, **_bounds(field)}
     if field.choices:
-        allowed = [{"const": value, "title": str(label)} for value, label in field.flatchoices]
-        if field.blank and all(choice["const"] != "" for choice in allowed):
-            allowed.insert(0, {"const": "", "title": "Not set"})
-        return {**declared, "oneOf": allowed}
+        allowed = [(value, str(label)) for value, label in field.flatchoices]
+        if field.blank and all(value != "" for value, _label in allowed):
+            allowed.insert(0, ("", "Not set"))
+        return {**declared, **choices(allowed)}
     if field.get_internal_type() == "TextField":
         return {**declared, "format": "textarea"}
     return declared
@@ -133,16 +164,12 @@ def save_form(form: ModelForm[Any], *, principal: Principal) -> Any:
     records = records_for(type(instance))
     principal.require(records.write)
     verb = "create" if instance._state.adding else "update"
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation=f"{records.noun}.{verb}",
-    ):
+    with audit_operation(operation=f"{records.noun}.{verb}", principal=principal):
         instance.full_clean()
         return form.save()
 
 
-def delete_instance(instance: Any, *, principal: Principal) -> dict[str, Any]:
+def delete_instance(instance: Any, *, principal: Principal) -> RecordDeleted:
     """Delete one record the web already holds, through its declared deleter.
 
     The person confirmed on the page, so the confirmation is the record's own
@@ -171,7 +198,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             command,
             records.save,
             ended(f"Add a new {title}"),
-            f"Create {title}",
+            f"Create {one(title)}",
             False,
         ),
         (
@@ -181,8 +208,8 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             records.write,
             command,
             records.upsert,
-            f"Add a new {title}, or update it if it already exists.",
-            f"Create or update {title}",
+            f"Add a new {title}, or update it if it already exists. On one that exists, {lower_first(KEPT)}",
+            f"Create or update {one(title)}",
             False,
         ),
         (
@@ -193,7 +220,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             command,
             records.save,
             ended(f"Change one {title}"),
-            f"Update {title}",
+            f"Update {one(title)}",
             True,
         ),
         (
@@ -204,7 +231,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             DeleteCommand,
             deleter(records.resource),
             ended(f"Delete one {title}"),
-            f"Delete {title}",
+            f"Delete {one(title)}",
             True,
         ),
     )
@@ -213,7 +240,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
     return tuple(
         CapabilitySpec(
             f"{records.noun}.{verb}",
-            wording.get(verb, ("", ""))[0] or summary,
+            _keeping(verb, wording.get(verb, ("", ""))[0] or summary),
             effect,
             permission,
             command_type,
@@ -225,25 +252,17 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             label=wording.get(verb, ("", ""))[1] or label,
             # Every record's form is opened by the same word.
             verb="Edit" if verb == "update" else "",
-            wants=_wants(wording.get(verb, ("", ""))[1] or label, title, targeted=targeted),
         )
         for verb, declared, effect, permission, command_type, handler, summary, label, targeted in verbs
         if declared
     )
 
 
-def _wants(label: str, title: str, *, targeted: bool) -> str:
-    """What asking for a record command wants done, from its name: "delete
-    the asset {target}" from "Delete asset", "create an asset" from "Create
-    asset". "" for a name that does not end in the record's own word."""
+def _keeping(verb: str, summary: str) -> str:
+    """An update's summary, which says what it does with a field left out,
+    whatever its domain's own wording says first."""
 
-    said = lower_first(label)
-    if not said.endswith(f" {title}"):
-        return ""
-    if targeted:
-        return f"{said.removesuffix(title)}the {title} {TARGET}"
-    article = "an" if title[:1] in "aeiou" else "a"
-    return f"{said.removesuffix(title)}{article} {title}"
+    return f"{summary} {KEPT}" if verb == "update" else summary
 
 
 def capability_specs() -> tuple[CapabilitySpec, ...]:

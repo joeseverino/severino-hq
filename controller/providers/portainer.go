@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -506,6 +507,20 @@ func stackPayload(spec PortainerStackSpec) portainerStackPayload {
 	return portainerStackPayload{Name: spec.Name, StackFileContent: spec.Compose, Env: env}
 }
 
+// sameEnvironment is whether two Env lists set the same variables, in any
+// order. Portainer answers a stack with no variables as null or [] alike, and
+// either deploys with none, so the two are equal.
+func sameEnvironment(a, b []portainerEnvVar) bool {
+	sorted := func(env []portainerEnvVar) []portainerEnvVar {
+		out := slices.Clone(env)
+		slices.SortFunc(out, func(x, y portainerEnvVar) int {
+			return cmp.Or(strings.Compare(x.Name, y.Name), strings.Compare(x.Value, y.Value))
+		})
+		return out
+	}
+	return slices.Equal(sorted(a), sorted(b))
+}
+
 func (r *Registry) portainerReconcile(ctx context.Context, spec PortainerStackSpec, _ struct{}, apply bool) (Result, error) {
 	ref := spec.ConnectionRef
 	environment, err := r.portainerEnvironmentFor(ctx, spec.Host, ref)
@@ -530,7 +545,7 @@ func (r *Registry) portainerReconcile(ctx context.Context, spec PortainerStackSp
 		if err != nil {
 			return Result{}, err
 		}
-		if current.StackFileContent == spec.Compose {
+		if current.StackFileContent == spec.Compose && sameEnvironment(existing[0].Env, spec.Environment) {
 			changed = false
 		} else if apply {
 			payload := stackPayload(spec)

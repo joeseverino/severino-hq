@@ -593,3 +593,24 @@ class FrontDoorTests(TestCase):
             self.assertEqual(front_door_names(self.item(ports=(9000,))), frozenset())
             self.assertEqual(front_door_names(self.item(network_mode="host", exposed_ports=(53,))), frozenset())
             self.assertEqual(front_door_names(self.item(ports=(443,), machine="other-box")), frozenset())
+
+
+class VulnerabilityWordsTests(TestCase):
+    def standing(self, **fields):
+        from ..containers import ImageStanding
+        from ..images import ImageRef
+
+        return ImageStanding(image=ImageRef("ghcr.io/example/app", "v1.2.0"), tag="v1.2.0", pinned=False, **fields)
+
+    def test_none_known_is_said_only_of_an_image_whose_advisories_or_packages_were_read(self):
+        source = "https://github.com/example/app"
+        refused = "the registry refused an anonymous read (HTTP 401); the image may be private."
+
+        unread = self.standing(source=source, unread=refused)
+        self.assertNotIn("none", unread.vulnerabilities)
+        self.assertEqual(unread.vulnerabilities_note, refused)
+        self.assertFalse(unread.checkable)
+
+        read = self.standing(source=source, upstream_read_at=timezone.now())
+        self.assertEqual(read.vulnerabilities, "none known")
+        self.assertTrue(read.checkable)

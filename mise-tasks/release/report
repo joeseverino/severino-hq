@@ -1,0 +1,10 @@
+#!/bin/sh
+#MISE description="After a Deploy job is green: the release's performance beside the previous one, production's memory and CPU, and the deploy host's health, written to var/release/<commit>.md"
+#MISE env={SEVERINO_HQ_DEPLOY_HOST={required="The deploy host's SSH name, set in mise.local.toml (docs/Development.md, The extension set)"}}
+#USAGE arg "[pages]" var=#true help="The pages perf measures, as it names them; every page the navigation lists when none is given"
+#USAGE flag "--base <ref>" help="The release to compare with; by default the one production ran before this checkout's HEAD, from GitHub's production deployments"
+
+# The composer is tools/pipeline/release_report.py; what it reads on the host, release_readings.py.
+set -eu
+
+exec uv run python -m tools.pipeline.release_report

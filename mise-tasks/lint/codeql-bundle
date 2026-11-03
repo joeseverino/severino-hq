@@ -6,8 +6,13 @@
 # the one the action's commit defaults to (its src/defaults.json).
 set -eu
 
-sha="$(sed -nE 's#^.*github/codeql-action/init@([0-9a-f]{40}) .*$#\1#p' .github/workflows/ci.yml)"
-[ -n "$sha" ] || { echo "No pinned codeql-action/init in ci.yml." >&2; exit 1; }
+workflow=.github/workflows/ci.yml
+path='.jobs[].steps[].uses'
+sha="$(yq "[${path} | select(tag == \"!!str\" and test(\"^github/codeql-action/init@\")) | sub(\"^github/codeql-action/init@\", \"\")] | unique | .[]" "${workflow}")"
+case "${sha}" in
+    *[!0-9a-f]* | '') echo "${workflow}: no one commit pin of github/codeql-action/init in ${path} (read: '${sha}')." >&2; exit 1 ;;
+esac
+[ "${#sha}" -eq 40 ] || { echo "${workflow}: ${path} pins github/codeql-action/init to '${sha}', no full commit." >&2; exit 1; }
 want="$(curl -fsSL --retry 3 "https://raw.githubusercontent.com/github/codeql-action/${sha}/src/defaults.json" | jq -r .cliVersion)"
 have="$(yq -p toml -oy '.tools."github:github/codeql-action".version' mise.toml)"
 if [ "$want" != "$have" ]; then

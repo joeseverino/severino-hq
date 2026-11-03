@@ -41,13 +41,14 @@ from hq.domains.control_plane.observations.public_registry import (
 )
 from hq.domains.projects.models import Project
 from hq.platform.application import readings
-from hq.platform.application.approvals import entry_event
+from hq.platform.application.approvals import entry_event, is_held
 from hq.platform.application.asks import READ_WAITING
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import Capability, Principal, cli_principal
 from hq.platform.application.services import CONTAINER_KIND
+from hq.platform.application.tests.writers import form_keyed, keyed
 from hq.platform.core import seeds
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.browser.gate import answered
@@ -443,7 +444,7 @@ def _asked_on_opening(user):
             SEVERINO_CONTROLLER_DOORBELL=str(markers / "doorbell"),
             SEVERINO_ACTIVITY_MARKER=str(markers / "activity"),
         ):
-            asked = client.post(reverse("control_plane:visit"), {"subject": "page", "name": "dashboard"})
+            asked = client.post(reverse("control_plane:visit"), form_keyed({"subject": "page", "name": "dashboard"}))
             status = asked.json()["status"]
             followed = client.get(status)
     if asked.json()["note"] != READ_WAITING or followed.json()["note"] != READ_WAITING:
@@ -662,19 +663,23 @@ def _held():
     agent = Principal(
         "an-example-agent-with-a-long-name", "mcp", frozenset({Capability.READ, Capability.SYNC_DOCUMENTATION})
     )
-    with override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True):
-        execute_capability(
+    with override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True):
+        answer = execute_capability(
             "documentation.sync",
-            {
-                "manifest": [
-                    {"doc_id": f"rb-an-example-runbook-with-a-long-name-{index}", "title": "An example runbook"}
-                    for index in range(12)
-                ],
-                "prune_orphans": True,
-                "confirm_prune": True,
-            },
+            keyed(
+                {
+                    "manifest": [
+                        {"doc_id": f"rb-an-example-runbook-with-a-long-name-{index}", "title": "An example runbook"}
+                        for index in range(12)
+                    ],
+                    "prune_orphans": True,
+                    "confirm_prune": True,
+                }
+            ),
             principal=agent,
         )
+    if not is_held(answer):
+        raise AssertionError(f"the agent's docs import was answered {answer}, not held for a person")
 
 
 def _starred(user):

@@ -17,6 +17,7 @@ from hq.platform.application.analytics import CONTENT_TRAFFIC_DAYS, attach_traff
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.content import published_on
 from hq.platform.application.documentation import related_documents
+from hq.platform.application.labels import dotted_html
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
@@ -165,7 +166,7 @@ class ContentListView(_ContentSectionView):
     heading = "Content"
 
 
-CONTENT_TRAIL = ("Content", reverse_lazy("content:list"))
+CONTENT_TRAIL = (("Content", reverse_lazy("content:list")),)
 
 
 class ContentPage(PageMixin):
@@ -216,11 +217,9 @@ class ContentDetailView(PageMixin, DetailView):
 
     @override
     def get_page_lede(self):
-        return format_html(
-            '{} · <span class="pill pill-{}">{}</span>',
+        return dotted_html(
             self.object.get_content_type_display(),
-            self.object.status,
-            self.object.get_status_display(),
+            format_html('<span class="pill pill-{}">{}</span>', self.object.status, self.object.get_status_display()),
         )
 
     @override

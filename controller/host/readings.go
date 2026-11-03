@@ -64,9 +64,15 @@ func instance(name string) bool {
 		!strings.Contains(name, "@.") && !strings.HasPrefix(name, "@")
 }
 
+// template is the template an instance starts, or "" for an instance with no
+// unit type, which no template can start.
 func template(instance string) string {
-	name, _, _ := strings.Cut(instance, "@")
-	return name + "@" + instance[strings.LastIndex(instance, "."):]
+	name, argument, _ := strings.Cut(instance, "@")
+	_, unitType, found := strings.CutLast(argument, ".")
+	if !found {
+		return ""
+	}
+	return name + "@." + unitType
 }
 
 // UnitState asks systemd for UnitProperties of each unit, in UTC with

@@ -21,10 +21,9 @@ func (r *Registry) admitTLS() {
 
 const certificateSpecInvalid = "certificate spec is invalid"
 
-// NeedsMaterial says whether an action on kind needs HQ's stored certificate material.
-func (r *Registry) NeedsMaterial(kind runtime.ResourceKind) bool {
-	return kind == runtime.ResourceKindTLSUploadedCertificate
-}
+// uploadedKeySlot is where HQ seals an uploaded certificate's private key
+// (certificates.PRIVATE_KEY_SLOT).
+const uploadedKeySlot = "certificate:private_key"
 
 // cpanelSites is the cPanel sites a consumer installs on, decided before anything is
 // issued: the sites serving its install names, else every site serving a checked name.
@@ -355,11 +354,12 @@ func (r *Registry) tlsRenew(ctx context.Context, spec TLSCertificateSpec, observ
 
 // uploadedReconcile installs a certificate HQ was given rather than one it issued.
 func (r *Registry) uploadedReconcile(ctx context.Context, spec TLSCertificateSpec, observed TLSCertificateObserved, apply bool) (Result, error) {
-	material := runtime.Material{}
+	material := runtime.OpenedMaterial{}
 	if spec.Material != nil {
 		material = *spec.Material
 	}
-	if material.Fullchain == "" || material.PrivateKey == "" {
+	privateKey := material.Secrets[uploadedKeySlot]
+	if material.Fullchain == "" || privateKey == "" {
 		return Result{}, &ProviderError{Message: "HQ did not supply the stored certificate; upload it again"}
 	}
 	domains := append([]string{}, material.Domains...)
@@ -371,7 +371,7 @@ func (r *Registry) uploadedReconcile(ctx context.Context, spec TLSCertificateSpe
 	if err != nil {
 		return Result{}, err
 	}
-	deployment, err := r.deployCertificate(ctx, target, []byte(material.Fullchain), []byte(material.PrivateKey), plan, npmCertificateIDsOf(spec, observed))
+	deployment, err := r.deployCertificate(ctx, target, []byte(material.Fullchain), []byte(privateKey), plan, npmCertificateIDsOf(spec, observed))
 	if err != nil {
 		return Result{}, err
 	}

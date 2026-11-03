@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "_comment": "What a production deploy can end in: the status hq-host deploy exits with (null where hq-host never answered), the state and description the Deploy workflow gives the deployment, what production runs after it (the release, the previous image, or unknown), and whether a check failed. hq-host's exit statuses are generated from it (controller/host/outcomes.gen.go), the Deploy workflow's Report step reads it with jq, and HQ's GitHub reading tells the outcomes apart by its descriptions. A deploy that exits a status named nowhere here is not-deployed.",
+  "outcomes": {
+    "live": {
+      "exit": 0,
+      "state": "success",
+      "production": "release",
+      "check_failed": false,
+      "description": "Live: passed its health check, and the host is its release"
+    },
+    "live-check-failed": {
+      "exit": 3,
+      "state": "success",
+      "production": "release",
+      "check_failed": true,
+      "description": "Live; a check after the deploy failed, named in the Deploy job's log"
+    },
+    "rollback-failed": {
+      "exit": 4,
+      "state": "error",
+      "production": "unknown",
+      "check_failed": true,
+      "description": "Not deployed, and the rollback failed: production's state is unknown; the Deploy job's log names what failed"
+    },
+    "not-deployed": {
+      "exit": 1,
+      "state": "failure",
+      "production": "previous",
+      "check_failed": true,
+      "description": "Not deployed: production still runs the previous image"
+    },
+    "interrupted": {
+      "exit": null,
+      "state": "error",
+      "production": "unknown",
+      "check_failed": false,
+      "description": "Interrupted after hq-host began, before it answered: production's state is unknown until the host is read"
+    },
+    "not-approved": {
+      "exit": null,
+      "state": "inactive",
+      "production": "previous",
+      "check_failed": false,
+      "description": "Not approved or superseded: production still runs the previous image"
+    }
+  }
+}

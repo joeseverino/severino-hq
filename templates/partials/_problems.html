@@ -10,16 +10,14 @@ from, and its title is not a link back to the page it is on.
 
 Only an urgent problem is framed: the queue's own row, in a box above the
 page. Anything less is a line: how urgent, what is wrong, what it means and
-what can be pressed, with its steps under it when it has any. Nothing is
-drawn when nothing is open.
+what can be pressed, with its steps under it when it has any. A page made of
+parts draws a part's lines in that part's card, as `rest`:
+
+    {% include "partials/_problems.html#lines" with rest=part_problems %}
+
+Nothing is drawn when nothing is open.
 {% endcomment %}
-{% with urgent=problems|urgent rest=problems|not_urgent %}
-{% if urgent %}
-{% card css="problems-here tone-serious" id="problems-here" heading="problems-here-heading" %}
-  <h2 class="visually-hidden" id="problems-here-heading">{{ urgent|length|counted:"urgent problem,urgent problems" }}</h2>
-  {% include "partials/_work_queue.html" with items=urgent grouped=True here=True only %}
-{% endcard %}
-{% endif %}
+{% partialdef lines %}
 {% if rest %}
 <ul class="problem-lines">
   {% for entry in rest %}{% with item=entry|decision %}
@@ -34,4 +32,13 @@ drawn when nothing is open.
   {% endwith %}{% endfor %}
 </ul>
 {% endif %}
+{% endpartialdef %}
+{% with urgent=problems|urgent rest=problems|not_urgent %}
+{% if urgent %}
+{% card css="problems-here tone-serious" id="problems-here" heading="problems-here-heading" %}
+  <h2 class="visually-hidden" id="problems-here-heading">{{ urgent|length|counted:"urgent problem,urgent problems" }}</h2>
+  {% include "partials/_work_queue.html" with items=urgent grouped=True here=True only %}
+{% endcard %}
+{% endif %}
+{% partial lines %}
 {% endwith %}

@@ -9,7 +9,6 @@ against both.
 
 import contextlib
 import faulthandler
-import gc
 import io
 import json
 import multiprocessing
@@ -19,16 +18,20 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 import traceback
 import unittest
 import unittest.util
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+# Bound here, so a test that patches time.monotonic moves its own clock and never the stall watch's.
+from time import monotonic
 from typing import override
 
 from django.conf import settings
 from django.db import connections
+from django.db.models.signals import post_save
 from django.test.runner import (
     DiscoverRunner,
     ParallelTestSuite,
@@ -37,11 +40,17 @@ from django.test.runner import (
     _init_worker,
 )
 lazy from django.apps import apps
+lazy from django.contrib.auth import get_user_model
+lazy from django.core.management.base import BaseCommand
 lazy from django.db.backends.sqlite3.creation import DatabaseCreation
+lazy from django.test import TransactionTestCase
 
 from hq.config.sandbox import sweep_abandoned
-lazy from hq.platform.application import plugins
+from hq.platform.core.live_objects import live
+lazy from hq.platform.application import agent_limits, plugins, roles
 lazy from hq.platform.application.plugins import clear_plugin_composition_cache
+lazy from hq.platform.core import append_only
+lazy from hq.platform.core.attribution import bind_this_thread, bound, command_operation, from_the_shell
 
 
 def performance_cores() -> int | None:
@@ -66,11 +75,109 @@ if (cores := performance_cores()) is not None:
     os.environ.setdefault("DJANGO_TEST_PROCESSES", str(cores))
 
 
+# Every user a test makes operates HQ, as every account did before a sign-in
+# resolved roles, so a test of something else need not give one. A test of how
+# a person comes to hold a role, or holds none, makes its users inside
+# ``no_default_role``.
+_default_role = ContextVar("hq_test_default_role", default=True)
+
+
+@contextlib.contextmanager
+def no_default_role():
+    """Users made in the block hold only the role HQ itself gives them."""
+
+    with _default_role.set(False):
+        yield
+
+
+def _operator_by_default(instance, created, *, raw=False, **kwargs):
+    if created and not raw and _default_role.get() and isinstance(instance, get_user_model()):
+        roles.give_operator(instance)
+
+
+def default_people_to_operator() -> None:
+    """In this process, a user a test makes holds the operator role (``no_default_role``)."""
+
+    post_save.connect(_operator_by_default, dispatch_uid="hq.tests.operator_by_default")
+
+
+# The interface of what a test writes outside every door. Named only here and in
+# tests, so no product code can take a test's binding for a door's
+# (``test_door_binding.py``).
+TEST_INTERFACE = "test"
+
+
+def bind_test_arrangement() -> None:
+    """In this process, what a test writes outside a door is the test's own.
+
+    A fixture, a sign-in or a direct call to a service runs on the test's
+    thread outside every door, so this one binding stands for all of them. A
+    door still binds its own inside it, and a thread a door starts inherits
+    none of it, so a door that does not bind is still refused there.
+    """
+
+    bind_this_thread(interface=TEST_INTERFACE, actor="", operation="test")
+
+
+def flush_through_the_audit_guard() -> None:
+    """In this process, a TransactionTestCase's flush empties the audit log
+    with its guard lifted, and installs the guard again after it.
+
+    The flush is a ``DELETE`` of every row, which the guard refuses everywhere
+    else, a production flush included.
+    """
+
+    # Django offers no hook before a test's flush, so the flush itself is wrapped.
+    flush = TransactionTestCase._fixture_teardown  # noqa: SLF001 - the one place a test flushes
+    if getattr(flush, "through_the_audit_guard", False):
+        return
+
+    def _fixture_teardown(self):
+        with contextlib.ExitStack() as lifted:
+            for alias in self._databases_names(include_mirrors=False):
+                lifted.enter_context(append_only.lifted(connections[alias]))
+            flush(self)
+
+    _fixture_teardown.through_the_audit_guard = True
+    TransactionTestCase._fixture_teardown = _fixture_teardown  # noqa: SLF001 - as above
+
+
+def commands_from_the_shell() -> None:
+    """In this process, a management command a test starts runs as ``manage.py``
+    runs it: inside the shell's door, as the local operator.
+
+    So a command that binds someone else inside it is refused here, as it is in
+    production. A command started inside a door that has bound its own (a job,
+    another command) keeps that door's binding, as it does in production.
+    """
+
+    # Django offers no hook before a command runs; call_command and
+    # run_from_argv both pass through BaseCommand.execute, so it is wrapped.
+    execute = BaseCommand.execute
+    if getattr(execute, "from_the_shell", False):
+        return
+
+    def _execute(self, *args, **options):
+        here = bound()
+        if here is None or here.interface != TEST_INTERFACE or here.actor:
+            return execute(self, *args, **options)
+        named = type(self).__module__.rpartition(".")[2]
+        with from_the_shell(command_operation(["manage.py", named])):
+            return execute(self, *args, **options)
+
+    _execute.from_the_shell = True
+    BaseCommand.execute = _execute
+
+
 class _CompositionIsolation:
-    """Make process caches obey the same per-test isolation as the database."""
+    """Make process caches, and the agent limits every request shares, obey the
+    same per-test isolation as the database."""
 
     def startTest(self, test):
         clear_plugin_composition_cache()
+        # A new set rather than an emptied one: a call a test left running gives
+        # its slot back to the set it took it from.
+        agent_limits.LIMITS = agent_limits.Limits()
         return super().startTest(test)
 
 
@@ -191,8 +298,8 @@ def suspended_greenlets(stream) -> None:
 
     if (greenlet := sys.modules.get("greenlet")) is None:
         return
-    for each in gc.get_objects():
-        if isinstance(each, greenlet.greenlet) and each.gr_frame is not None:
+    for each in live(greenlet.greenlet):
+        if each.gr_frame is not None:
             stream.write(f"--- suspended greenlet {each!r} (most recent call last) ---\n")
             stream.writelines(traceback.format_stack(each.gr_frame))
 
@@ -287,7 +394,7 @@ class StallWatch:
             return
         with self._ready:
             self._label = label
-            self._deadline = time.monotonic() + self.seconds
+            self._deadline = monotonic() + self.seconds
             self._marks += 1
             self._ready.notify()
         self._backstop(self.seconds + self.grace)
@@ -358,7 +465,7 @@ class StallWatch:
     def _wait(self) -> None:
         while True:
             with self._ready:
-                while self._deadline is None or (left := self._deadline - time.monotonic()) > 0:
+                while self._deadline is None or (left := self._deadline - monotonic()) > 0:
                     self._ready.wait(None if self._deadline is None else left)
                 label, marks, self._deadline = self._label or "", self._marks, None
             faulthandler.cancel_dump_traceback_later()
@@ -387,7 +494,39 @@ class CompositionTextResult(FailureRecord, _StallMarks, _CompositionIsolation, _
         super().printErrors()
 
 
+@dataclass(frozen=True)
+class SentSubtest:
+    """A failed subtest as a parallel worker sends it to the parent: what the
+    parent's result reads from one, as text.
+
+    A ``_SubTest`` carries its whole test case, so one whose case holds a test
+    client or an open connection does not pickle, and Django's worker then
+    raises rather than report the failure.
+    """
+
+    name: str
+    description: str
+    short_description: str | None
+    failureException: type[BaseException]
+
+    @classmethod
+    def of(cls, subtest: unittest.TestCase) -> SentSubtest:
+        return cls(subtest.id(), str(subtest), subtest.shortDescription(), subtest.failureException)
+
+    def id(self) -> str:
+        return self.name
+
+    def shortDescription(self) -> str | None:
+        return self.short_description
+
+    def __str__(self) -> str:
+        return self.description
+
+
 class CompositionRemoteResult(_StallMarks, _CompositionIsolation, RemoteTestResult):
+    def addSubTest(self, test, subtest, err):
+        super().addSubTest(test, subtest if err is None else SentSubtest.of(subtest), err)
+
     def addClassTime(self, _test, seconds):
         # A worker's result keeps nothing: the parent replays this event
         # against the subsuite's test at that index.
@@ -413,7 +552,7 @@ class ClassTimedSuite(unittest.TestSuite):
     def _handleClassSetUp(self, test, result):
         if type(test) is not getattr(result, "_previousTestClass", None):
             stall_watch.mark(f"{unittest.util.strclass(type(test))} setUpClass")
-            self._timing = (test, time.monotonic())
+            self._timing = (test, monotonic())
         super()._handleClassSetUp(test, result)
 
     def _tearDownPreviousClass(self, test, result):
@@ -424,7 +563,7 @@ class ClassTimedSuite(unittest.TestSuite):
         timing = vars(self).pop("_timing", None) if previous is not type(test) else None
         if timing and (record := getattr(result, "addClassTime", None)):
             first, began = timing
-            record(first, time.monotonic() - began)
+            record(first, monotonic() - began)
 
 
 # Enough to show where a run's wall time went: a parallel run lasts as long as
@@ -480,7 +619,12 @@ def _init_worker_on_file_databases(counter, *args, **kwargs):
 
     DatabaseCreation.setup_worker_connection = _use_the_file_clone
     stall_watch.workers = counter
-    return _init_worker(counter, *args, **kwargs)
+    started = _init_worker(counter, *args, **kwargs)
+    default_people_to_operator()
+    flush_through_the_audit_guard()
+    commands_from_the_shell()
+    bind_test_arrangement()
+    return started
 
 
 class FileClonedParallelSuite(ParallelTestSuite):
@@ -600,6 +744,10 @@ class SeverinoTestRunner(DiscoverRunner):
         settings.CSRF_TRUSTED_ORIGINS = []
         settings.SEVERINO_SITE_HOST = ""
         super().setup_test_environment(**kwargs)
+        default_people_to_operator()
+        flush_through_the_audit_guard()
+        commands_from_the_shell()
+        bind_test_arrangement()
 
     def build_suite(self, test_labels=None, **kwargs):
         # A run with no labels is the whole suite: the host's and every

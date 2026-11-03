@@ -1,0 +1,28 @@
+# Work HQ runs outside Django's request cycle gets what the cycle gives a
+# request through one helper, hq/platform/core/outside_requests.py: a thread of
+# its own, and connections checked before and closed after, never inside an
+# open transaction. A copy of that pattern is one more place to forget the
+# transaction, so code HQ runs names neither half anywhere else.
+id: outside-requests-through-one-helper
+language: python
+severity: error
+message: Connections are checked or closed, or a thread-sensitive context opened, outside the one helper.
+note: >-
+  Enter `connections_of_its_own()` around work on a thread Django did not
+  start, or `async with thread_of_its_own():` around an ASGI handler beside
+  Django, both from hq.platform.core.outside_requests.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  - "hq/platform/core/outside_requests.py"
+rule:
+  any:
+    - kind: identifier
+      regex: ^(close_old_connections|ThreadSensitiveContext)$
+    - pattern: connection.close()
+    - pattern: connections.close_all()

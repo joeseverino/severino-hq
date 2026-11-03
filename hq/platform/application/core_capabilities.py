@@ -14,7 +14,16 @@ from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND, UPL
 
 from . import action_items, pins
 from .adoption import ADOPT, ADOPT_SERVICE, AdoptCommand, AdoptServiceCommand, adopt, adopt_service
-from .agent_access import SET_AGENT_ACCESS, AgentAccessCommand, agents_paused, set_agents_paused
+from .agent_access import (
+    SET_AGENT_ACCESS,
+    SET_AGENT_BLOCK,
+    AgentAccessCommand,
+    AgentBlockCommand,
+    agents_paused,
+    blocked,
+    set_agent_blocked,
+    set_agents_paused,
+)
 from .appearance import SET_THEME, ThemeCommand, set_theme
 from .approvals import APPROVE, DESTRUCTIVE_EFFECT, REJECT, ApproveCommand, RejectCommand, approve, reject
 from .cadence import ControllerSweepCommand, request_controller_sweep
@@ -46,11 +55,13 @@ from .infrastructure import ManagedResourceCommand, save_managed_resource
 from .integration_specs import ON_ITS_PAGE, CapabilitySpec
 from .lookup import (
     LOOK_UP_ADDRESS,
+    LOOK_UP_NAME,
     AddressCommand,
     NameCommand,
     look_up_address,
     look_up_name,
 )
+from .own_devices import SET_OWN_DEVICE, OwnDeviceCommand, set_own_device
 from .policy_fixes import request_empty_groups_removal
 from .projects import (
     DEPENDENCY_UPDATES,
@@ -64,6 +75,7 @@ from .receipts import (
     replace_receipt,
     upload_receipt,
 )
+from .records import KEPT
 from .registry_import import REQUIRED_CAPABILITIES as IMPORT_CAPABILITIES, HQImportCommand, execute_hq_import
 from .resource_operations import (
     ACTION_CAPABILITY,
@@ -79,6 +91,7 @@ from .resource_operations import (
     request_stop,
 )
 from .security import Capability
+from .sessions import SIGN_OUT, SignOutCommand, sign_out
 from .sync import HQSyncCommand, execute_hq_sync
 from .tailnet import POLICY_KIND as TAILNET_POLICY_KIND, TAILNET_KIND
 from .visit_refresh import VISIT_REFRESH, VisitRefreshCommand, request_visit_refresh
@@ -97,9 +110,9 @@ CONTROLLER_REFRESH = CapabilitySpec(
         "Wake the controller. HQ's web process holds no credential for any service.",
         "The controller reads what HQ says is due, with its own credentials.",
     ),
-    label="Refresh",
+    label="Refresh HQ's readings",
+    verb="Refresh",
     variants=(("all", "Refresh all"),),
-    wants="refresh what HQ reads",
 )
 
 _RECEIPT_FILE_NOTES = (
@@ -109,21 +122,6 @@ _RECEIPT_FILE_NOTES = (
 )
 
 CORE_CAPABILITY_SPECS = (
-    CapabilitySpec(
-        VISIT_REFRESH,
-        "Ask again for the readings one page is made of, where they are due.",
-        "infrastructure_change",
-        Capability.MANAGE_INFRASTRUCTURE,
-        VisitRefreshCommand,
-        request_visit_refresh,
-        execution_notes=(
-            "Find what the page is made of from what it is about; the request names no reading or connection.",
-            "Ask only for what is due, read on a schedule, and read without logging in to a machine.",
-            "Ask nothing while no controller is arriving to read it.",
-        ),
-        label="Read a page again",
-        reached_from="control_plane:connections",
-    ),
     CapabilitySpec(
         "hq.sync",
         "Bring HQ's list of docs up to date from the vault.",
@@ -170,7 +168,7 @@ CORE_CAPABILITY_SPECS = (
             "Record the switch and who set it; the next update run reads it.",
         ),
         target_initial_fields=("dependency_updates",),
-        label="Dependency updates",
+        label="Turn dependency updates on or off",
         variants=(("on", "Turn on updates"), ("off", "Turn off updates")),
         wants="turn dependency updates on or off for {target}",
     ),
@@ -208,18 +206,18 @@ CORE_CAPABILITY_SPECS = (
         Capability.MANAGE_INFRASTRUCTURE,
         ManagedResourceCommand,
         save_managed_resource,
-        subject_resource="infrastructure.resources",
+        subject_resource="infrastructure",
         label="Add a record",
     ),
     CapabilitySpec(
         "infrastructure.resource.update",
-        "Change HQ's copy of a record. HQ then applies it to the live system.",
+        f"Change HQ's copy of a record. HQ then applies it to the live system. {KEPT}",
         "remote_write",
         Capability.MANAGE_INFRASTRUCTURE,
         ManagedResourceCommand,
         save_managed_resource,
         "key",
-        "infrastructure.resources",
+        "infrastructure",
         target_label="Record",
         target_help="The record to change.",
         target_initial_fields=("key", "kind", "spec", "enabled"),
@@ -234,12 +232,13 @@ CORE_CAPABILITY_SPECS = (
         Capability.MANAGE_INFRASTRUCTURE,
         AdoptCommand,
         adopt,
-        subject_resource="infrastructure.resources",
+        subject_resource="infrastructure",
         execution_notes=(
             "Read the record again as HQ last found it live, never from the request.",
             "Write HQ's copy equal to it, so applying it changes nothing.",
         ),
-        label="Manage in HQ",
+        label="Manage a record in HQ",
+        verb="Manage in HQ",
         wants="manage a record HQ found live",
         reached_from="control_plane:services",
     ),
@@ -250,7 +249,7 @@ CORE_CAPABILITY_SPECS = (
         Capability.MANAGE_INFRASTRUCTURE,
         AdoptServiceCommand,
         adopt_service,
-        subject_resource="infrastructure.resources",
+        subject_resource="infrastructure",
         execution_notes=(
             "Find the hostname's records that HQ does not manage yet.",
             "Adopt each one through a connection that manages, in one transaction.",
@@ -264,7 +263,7 @@ CORE_CAPABILITY_SPECS = (
         Capability.MANAGE_INFRASTRUCTURE,
         AdoptZoneCommand,
         adopt_zone,
-        subject_resource="infrastructure.resources",
+        subject_resource="infrastructure",
         execution_notes=(
             "Adopt the domain as HQ last found it live.",
             "Adopt every record in it HQ can, in one transaction; the domain stands if none can be.",
@@ -280,7 +279,7 @@ CORE_CAPABILITY_SPECS = (
         OperationCommand,
         accept_observed,
         "key",
-        "infrastructure.resources",
+        "infrastructure",
         target_label="Record",
         target_help="The record whose live version to keep.",
         label="Keep the live version",
@@ -294,13 +293,25 @@ CORE_CAPABILITY_SPECS = (
         OperationCommand,
         request_reconcile,
         "key",
-        "infrastructure.resources",
+        "infrastructure",
         target_label="Record",
         target_help="The record to apply.",
         label=OperationRequest.Action.RECONCILE.label,
         wants="apply HQ's settings to {target}",
     ),
-    CONTROLLER_REFRESH,
+    CapabilitySpec(
+        SIGN_OUT,
+        "Sign a person out of every HQ session, when Pocket ID signs them out.",
+        "remote_write",
+        Capability.END_SESSIONS,
+        SignOutCommand,
+        sign_out,
+        execution_notes=(
+            "Find the person Pocket ID's subject signed in as; a subject nobody signed in as is done.",
+            "End every live session of theirs, leaving the account and any local password alone.",
+        ),
+        label="Sign a person out",
+    ),
     # A person's own arrangement of HQ, held only by that person in the browser
     # (security.HELD_ONLY_AT): none of it reaches a spec or the controller.
     CapabilitySpec(
@@ -311,7 +322,8 @@ CORE_CAPABILITY_SPECS = (
         pins.PinCommand,
         pins.pin,
         execution_notes=("Pin it last among your pins of its type, or unpin it.",),
-        label="Pin",
+        label="Pin or unpin an item",
+        verb="Pin",
         reached_from=ON_ITS_PAGE,
     ),
     CapabilitySpec(
@@ -347,7 +359,8 @@ CORE_CAPABILITY_SPECS = (
             "Set each named row aside as it was drawn.",
             "Set each named item aside as the queue holds it now.",
         ),
-        label="Set aside",
+        label="Set action items aside",
+        verb="Set aside",
         reached_from="action_items",
     ),
     CapabilitySpec(
@@ -357,35 +370,19 @@ CORE_CAPABILITY_SPECS = (
         Capability.SET_ASIDE_ACTION_ITEMS,
         action_items.RestoreCommand,
         action_items.restore,
-        label="Bring back",
+        label="Bring action items back",
+        verb="Bring back",
         reached_from="action_items",
     ),
     CapabilitySpec(
-        PROFILE_READ_NOW,
-        "Ask the controller to read a signed-in person's GitHub profile now.",
-        "infrastructure_change",
-        # A public lookup that spends GitHub's allowance, and a wake of the
-        # controller, as Refresh is.
-        (Capability.LOOK_UP_PUBLIC_RECORDS, Capability.MANAGE_INFRASTRUCTURE),
-        ProfileReadCommand,
-        request_profile_read,
-        execution_notes=(
-            "Refuse a login no sign-in names.",
-            "Ask for the profile reading now; the controller reads GitHub with its own credentials.",
-        ),
-        label="Read a GitHub profile now",
-        reached_from="watching",
-        verb=CONTROLLER_REFRESH.words(),
-    ),
-    CapabilitySpec(
         ACTION_CAPABILITY[OperationRequest.Action.DELETE],
-        "Remove the live thing this record describes, then remove the record from HQ.",
+        "Remove what this record describes from where it runs, then the record from HQ.",
         DESTRUCTIVE_EFFECT,
         Capability.MANAGE_INFRASTRUCTURE,
         OperationCommand,
         request_removal,
         "key",
-        "infrastructure.resources",
+        "infrastructure",
         target_label="Record",
         target_help="The record to remove.",
         label="Remove a record",
@@ -402,7 +399,7 @@ CORE_CAPABILITY_SPECS = (
             OperationCommand,
             handler,
             "key",
-            "infrastructure.resources",
+            "infrastructure",
             target_label="Container",
             target_help="The container to act on.",
             target_query=(("kind", CONTAINER_KIND),),
@@ -410,25 +407,31 @@ CORE_CAPABILITY_SPECS = (
                 "Refuse a container switched off in HQ, or one Portainer cannot do this to.",
                 "Queue it once for the controller, which does it outside this request.",
             ),
-            label=action.label,
+            label=f"{action.label} a container",
+            verb=action.label,
         )
         for action, handler, summary, effect in (
             (
                 OperationRequest.Action.RESTART,
                 request_restart,
-                "Restart the live thing a record names.",
+                "Restart the container through Portainer.",
                 "infrastructure_change",
             ),
             (
                 OperationRequest.Action.START,
                 request_start,
-                "Start the live thing a record names.",
+                "Start the container through Portainer.",
                 "infrastructure_change",
             ),
             # A stop takes the thing away from whoever uses it until someone
             # starts it again: an agent's waits for a person by default, and a
             # person's is confirmed on a page of its own.
-            (OperationRequest.Action.STOP, request_stop, "Stop the live thing a record names.", DESTRUCTIVE_EFFECT),
+            (
+                OperationRequest.Action.STOP,
+                request_stop,
+                "Stop the container through Portainer; it stays down until it is started.",
+                DESTRUCTIVE_EFFECT,
+            ),
         )
     ),
     CapabilitySpec(
@@ -439,7 +442,7 @@ CORE_CAPABILITY_SPECS = (
         OperationCommand,
         request_route_approval,
         "key",
-        "infrastructure.resources",
+        "infrastructure",
         target_label="Device",
         target_help="The tailnet device whose routes to approve.",
         target_query=(("kind", TAILNET_KIND),),
@@ -460,7 +463,7 @@ CORE_CAPABILITY_SPECS = (
         OperationCommand,
         request_reach_allow,
         "key",
-        "infrastructure.resources",
+        "infrastructure",
         target_label="Certificate",
         target_help="The certificate used by a machine the controller could not reach.",
         # Scoped to what it acts on, not to what it changes. The amendment
@@ -485,7 +488,7 @@ CORE_CAPABILITY_SPECS = (
         OperationCommand,
         request_empty_groups_removal,
         "key",
-        "infrastructure.resources",
+        "infrastructure",
         target_label="Tailscale policy",
         target_help="The Tailscale policy to change.",
         target_query=(("kind", TAILNET_POLICY_KIND),),
@@ -508,7 +511,7 @@ CORE_CAPABILITY_SPECS = (
         OperationCommand,
         request_certificate_renewal,
         "key",
-        "infrastructure.resources",
+        "infrastructure",
         target_label="Certificate",
         target_help="The certificate to renew.",
         target_query=(("kind", CERTIFICATE_KIND),),
@@ -517,8 +520,8 @@ CORE_CAPABILITY_SPECS = (
             "Queue one renewal for the controller, which does the work outside this request.",
             "Return what was queued and why, recorded under whoever asked.",
         ),
-        label=OperationRequest.Action.RENEW.label,
-        wants="renew the certificate {target}",
+        label="Renew a certificate",
+        verb=OperationRequest.Action.RENEW.label,
     ),
     CapabilitySpec(
         UPLOAD,
@@ -530,13 +533,13 @@ CORE_CAPABILITY_SPECS = (
         UploadCertificateCommand,
         store_certificate,
         "key",
-        "infrastructure.resources",
+        "infrastructure",
         target_label="Certificate",
         target_help="The uploaded certificate record to hold it for.",
         target_query=(("kind", UPLOADED_CERTIFICATE_KIND),),
         execution_notes=(
             "Refuse a certificate that has expired or a key that does not match it.",
-            "Seal both with the secret store key, refusing when none is configured.",
+            "Seal the key to the controller, refusing when HQ has no sealing key.",
             "Record the names it covers and move the record on, so it is installed.",
         ),
         label="Upload a certificate",
@@ -556,7 +559,7 @@ CORE_CAPABILITY_SPECS = (
     ),
     CapabilitySpec(
         RECEIPT_REPLACE,
-        "Replace a receipt's file, and change its details with it.",
+        f"Replace a receipt's file, and change its details with it. {KEPT}",
         "remote_write",
         (records_of("receipts").write, Capability.UPLOAD_RECEIPT),
         ReceiptUploadCommand,
@@ -578,12 +581,14 @@ CORE_CAPABILITY_SPECS = (
         DashboardMachineCommand,
         select_dashboard_machine,
         "key",
-        "infrastructure.resources",
+        "infrastructure",
         target_label="Machine",
         target_help="The machine whose telemetry to show.",
         target_query=(("kind", MACHINE_KIND),),
         execution_notes=("Refuse a record that is not an enabled machine.",),
-        label="Show on the dashboard",
+        label="Show a machine on the dashboard",
+        verb="Show on the dashboard",
+        wants="show {target} on the dashboard",
         variants=(("on", "Show on the dashboard"), ("off", "Take off the dashboard")),
         state=dashboard_machine_selected,
     ),
@@ -653,6 +658,44 @@ CORE_CAPABILITY_SPECS = (
         state=agents_paused,
     ),
     CapabilitySpec(
+        SET_AGENT_BLOCK,
+        "Block one agent's client on MCP and the machine API, or let it back in.",
+        "remote_write",
+        Capability.GOVERN_AGENTS,
+        AgentBlockCommand,
+        set_agent_blocked,
+        "key",
+        target_label="Client",
+        target_help="The client id of an agent HQ has seen.",
+        execution_notes=(
+            "Refuse a client HQ has never seen.",
+            "Set the state rather than toggle it, so asking twice changes nothing.",
+        ),
+        label="Block or allow an agent",
+        variants=(("on", "Block"), ("off", "Allow")),
+        reached_from="agent_policy",
+        state=blocked,
+    ),
+    CapabilitySpec(
+        SET_OWN_DEVICE,
+        "Register a client as one of your own devices, so its token stands as you, or remove it.",
+        "remote_write",
+        Capability.GOVERN_AGENTS,
+        OwnDeviceCommand,
+        set_own_device,
+        "key",
+        target_label="Client",
+        target_help="The client id Pocket ID registered for your device.",
+        execution_notes=(
+            "Register only for the person asking, never for someone else.",
+            "Refuse a client id Pocket ID could not have registered.",
+            "Set the state rather than toggle it, so asking twice changes nothing.",
+        ),
+        label="Register or remove your device",
+        variants=(("on", "Register"), ("off", "Remove")),
+        reached_from="agent_policy",
+    ),
+    CapabilitySpec(
         SET_POLICY,
         "Set whether an agent's call runs, waits for a person, or is refused, by surface or by agent.",
         "remote_write",
@@ -663,69 +706,127 @@ CORE_CAPABILITY_SPECS = (
             "Change only the rules that differ from what holds, each recorded on its own.",
             "Refuse a rule no agent could hold, approval on a read, and a rule for an agent its grant does not allow.",
         ),
-        label="Set agent policy",
-    ),
-    CapabilitySpec(
-        DASHBOARD_REFRESH,
-        "Ask for a fresh reading of every dashboard panel a controller can read.",
-        "infrastructure_change",
-        Capability.MANAGE_INFRASTRUCTURE,
-        DashboardRefreshCommand,
-        request_dashboard_refresh,
-        execution_notes=("Ask only for panels a controller has a way to read.",),
-        label="Refresh the dashboard",
-    ),
-    CapabilitySpec(
-        DASHBOARD_REFRESH_STALE,
-        "Ask again for the dashboard panels whose reading is due.",
-        "infrastructure_change",
-        Capability.MANAGE_INFRASTRUCTURE,
-        DashboardRefreshCommand,
-        request_stale_panel_refresh,
-        execution_notes=("Ask once for each panel that is due, readable and not already asked for.",),
-        label="Refresh due readings",
-    ),
-    # Capabilities that read something HQ does not hold. Both are `read`, so
-    # neither takes an idempotency key and neither writes: asking a
-    # registry the same question twice is the same question twice.
-    CapabilitySpec(
-        "lookup.name",
-        "Ask a public resolver what the internet returns for a hostname.",
-        "read",
-        Capability.LOOK_UP_PUBLIC_RECORDS,
-        NameCommand,
-        look_up_name,
-        execution_notes=(
-            "Validate the hostname before anything leaves this machine.",
-            (
-                "Ask one resolver outside this network, so internal rewrites cannot "
-                "answer a question about the public internet."
-            ),
-            (
-                "Return the records as the resolver gave them, with no TTL: this "
-                "resolver reports a constant, which is not a measurement."
-            ),
-        ),
-        label="Look up a name",
-    ),
-    CapabilitySpec(
-        LOOK_UP_ADDRESS,
-        "Ask what name and which allocation a public address belongs to.",
-        "read",
-        Capability.LOOK_UP_PUBLIC_RECORDS,
-        AddressCommand,
-        look_up_address,
-        execution_notes=(
-            (
-                "Refuse a private address locally; nothing outside can describe it, "
-                "and asking would disclose it for no answer."
-            ),
-            "Read reverse DNS, which the address holder publishes and which usually carries a brand name.",
-            (
-                "Read the RDAP allocation, which the registry publishes and which "
-                "carries the company. Either registry may fail without the other."
-            ),
-        ),
-        label="Look up an address",
+        label="Set the agent policy",
     ),
 )
+
+
+# A host domain's own commands, kept here beside the rest of the host's: each
+# domain's declaration names its function (``domains.HOST_DOMAINS``), so what
+# reads a domain's commands finds these under it.
+
+
+def dashboard() -> tuple[CapabilitySpec, ...]:
+    return (
+        CapabilitySpec(
+            DASHBOARD_REFRESH,
+            "Ask for a fresh reading of every dashboard panel a controller can read.",
+            "infrastructure_change",
+            Capability.MANAGE_INFRASTRUCTURE,
+            DashboardRefreshCommand,
+            request_dashboard_refresh,
+            execution_notes=("Ask only for panels a controller has a way to read.",),
+            label="Refresh the dashboard",
+        ),
+        CapabilitySpec(
+            DASHBOARD_REFRESH_STALE,
+            "Ask again for the dashboard panels whose reading is due.",
+            "infrastructure_change",
+            Capability.MANAGE_INFRASTRUCTURE,
+            DashboardRefreshCommand,
+            request_stale_panel_refresh,
+            execution_notes=("Ask once for each panel that is due, readable and not already asked for.",),
+            label="Refresh due readings",
+        ),
+    )
+
+
+def watching() -> tuple[CapabilitySpec, ...]:
+    return (
+        CapabilitySpec(
+            PROFILE_READ_NOW,
+            "Ask the controller to read a signed-in person's GitHub profile now.",
+            "infrastructure_change",
+            # A public lookup that spends GitHub's allowance, and a wake of the
+            # controller, as Refresh is.
+            (Capability.LOOK_UP_PUBLIC_RECORDS, Capability.MANAGE_INFRASTRUCTURE),
+            ProfileReadCommand,
+            request_profile_read,
+            execution_notes=(
+                "Refuse a login no sign-in names.",
+                "Ask for the profile reading now; the controller reads GitHub with its own credentials.",
+            ),
+            label="Read a GitHub profile now",
+            reached_from="watching",
+            verb=CONTROLLER_REFRESH.words(),
+        ),
+    )
+
+
+def tools() -> tuple[CapabilitySpec, ...]:
+    return (
+        # Capabilities that read something HQ does not hold. Both are `read`, so
+        # neither takes an idempotency key and neither writes: asking a
+        # registry the same question twice is the same question twice.
+        CapabilitySpec(
+            LOOK_UP_NAME,
+            "Ask a public resolver what the internet returns for a hostname.",
+            "read",
+            Capability.LOOK_UP_PUBLIC_RECORDS,
+            NameCommand,
+            look_up_name,
+            execution_notes=(
+                "Validate the hostname before anything leaves this machine.",
+                (
+                    "Ask one resolver outside this network, so internal rewrites cannot "
+                    "answer a question about the public internet."
+                ),
+                (
+                    "Return the records as the resolver gave them, with no TTL: this "
+                    "resolver reports a constant, which is not a measurement."
+                ),
+            ),
+            label="Look up a name",
+        ),
+        CapabilitySpec(
+            LOOK_UP_ADDRESS,
+            "Ask what name and which allocation a public address belongs to.",
+            "read",
+            Capability.LOOK_UP_PUBLIC_RECORDS,
+            AddressCommand,
+            look_up_address,
+            execution_notes=(
+                (
+                    "Refuse a private address locally; nothing outside can describe it, "
+                    "and asking would disclose it for no answer."
+                ),
+                "Read reverse DNS, which the address holder publishes and which usually carries a brand name.",
+                (
+                    "Read the RDAP allocation, which the registry publishes and which "
+                    "carries the company. Either registry may fail without the other."
+                ),
+            ),
+            label="Look up an address",
+        ),
+    )
+
+
+def connections() -> tuple[CapabilitySpec, ...]:
+    return (
+        CapabilitySpec(
+            VISIT_REFRESH,
+            "Ask again for the readings one page is made of, where they are due.",
+            "infrastructure_change",
+            Capability.MANAGE_INFRASTRUCTURE,
+            VisitRefreshCommand,
+            request_visit_refresh,
+            execution_notes=(
+                "Find what the page is made of from what it is about; the request names no reading or connection.",
+                "Ask only for what is due, read on a schedule, and read without logging in to a machine.",
+                "Ask nothing while no controller is arriving to read it.",
+            ),
+            label="Read a page again",
+            reached_from="control_plane:connections",
+        ),
+        CONTROLLER_REFRESH,
+    )

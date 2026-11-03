@@ -1,10 +1,7 @@
 """What HQ reads for itself: the images its containers run, and the releases
 and advisories GitHub publishes for the repository an image is built from."""
 
-import io
-from email.message import Message
-from urllib.error import HTTPError, URLError
-
+import httpx2
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
@@ -121,11 +118,9 @@ ADVISORIES = [
 def github(releases, advisories):
     """GitHub's API, answering each page with its body, or 404 for None."""
 
-    def answer(request, _timeout):
-        body = releases if "/releases" in request.full_url else advisories
-        if body is None:
-            raise HTTPError(request.full_url, 404, "Not Found", Message(), io.BytesIO())
-        return Response(body)
+    def answer(request):
+        body = releases if "/releases" in request.url.path else advisories
+        return Response({"message": "Not Found"}, status=404) if body is None else Response(body)
 
     return answering(answer)
 
@@ -156,8 +151,8 @@ class ReadUpstreamTests(SimpleTestCase):
             read_upstream("example/gone")
 
     def test_github_out_of_reach_is_unavailable(self):
-        def unreachable(request, _timeout):
-            raise URLError("connection refused")
+        def unreachable(request):
+            raise httpx2.ConnectError("connection refused")
 
         with answering(unreachable), self.assertRaises(LookupUnavailable):
             read_upstream("example/app")

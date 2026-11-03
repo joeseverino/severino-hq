@@ -1,17 +1,15 @@
 #!/bin/sh
 #MISE description="CodeQL, security-and-quality: no alerts"
-#MISE env={SEVERINO_HEAVY_BOUND="30m"}
+#MISE lock="heavy"
+#MISE timeout="30m"
 #MISE hide=true
 
 # What CI's scan job runs, before pushing rather than after merging: the
-# bundle mise.toml pins (lint:codeql-bundle holds it to the action), the
-# security-and-quality suite, and the paths and rules
-# .github/codeql/codeql-config.yml leaves out. It reads an export of the files
+# bundle mise.toml pins (lint:codeql-bundle holds it to the action) and
+# .github/codeql/codeql-config.yml, which names the queries and the paths and
+# rules left out, as the Action reads it. It reads an export of the files
 # git would push, so a local .venv or stray build output is not scanned.
 set -eu
-# shellcheck source=tools/lib/heavy-turn.sh
-. ./tools/lib/heavy-turn.sh
-
 # shellcheck source=tools/lib/export-tree.sh
 . ./tools/lib/export-tree.sh
 
@@ -32,17 +30,14 @@ codeql database create "${work}/codeql-db" \
     --threads=0 --quiet \
     --overwrite >/dev/null
 
-echo "[codeql] analysis (security-and-quality)"
+echo "[codeql] analysis"
+# No query spec: the analysis runs the queries, less the query-filters, of the
+# config the database was created with.
 codeql database analyze "${work}/codeql-db" \
     --format=sarif-latest \
     --output="${work}/codeql.sarif" \
     --sarif-category=/language:python \
-    --threads=0 --quiet \
-    codeql/python-queries:codeql-suites/python-security-and-quality.qls >/dev/null
+    --threads=0 --quiet >/dev/null
 
-# The analysis reports what the config's query filters drop; the report drops
-# the same rules.
-# shellcheck disable=SC2046  # a rule id is one word
-jq -r -f tools/pipeline/codeql_report.jq "${work}/codeql.sarif" \
-    --args $(yq '.query-filters[].exclude.id | select(. != null)' .github/codeql/codeql-config.yml)
+jq -r -f tools/pipeline/codeql_report.jq "${work}/codeql.sarif"
 echo "[codeql] clean"

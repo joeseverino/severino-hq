@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
 <form method="post" class="form">
-  {% csrf_token %}
+  {% write_token %}
   {% include "partials/_form_errors.html" %}
   {{ form }}
   <p class="muted">Deductible estimate = cost × business use. Updated when you save.</p>

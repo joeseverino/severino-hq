@@ -38,23 +38,26 @@ writes around the service.
 A browser submit, an API call, an MCP tool call and a CLI command follow the
 same lifecycle. The adapter parses and steps aside. The service validates,
 authorizes, opens the transaction, guards against stale state, writes, audits
-and returns one result; the adapter only chooses how it looks. A view reaches
-a domain write only through `execute_capability`: `test_view_writes` follows
-every call each view module makes, and an audit row, a refusal or an agent's
-identity observation is not a domain write. A job whose process stopped and an
-approval nobody answered in time are computed by the read that shows them and
-marked by the hourly `due` work.
+and returns one result. The adapter only chooses how it looks.
+
+A view reaches a domain write only through `execute_capability`.
+`test_view_writes` follows every call made from the module of each view the
+URL configuration routes, and of its bases. An audit row, a refusal or an
+agent's identity observation is not a domain write.
+
+A job whose process stopped and an approval nobody answered in time are
+computed by the read that shows them, and marked by the hourly `due` work.
 
 Reads cross the same boundary. `hq.platform.application.resources.ResourceSpec`
-is the registry of readable domains; query projections live in their
+is the registry of readable domains. Query projections live in their
 application services and `hq/platform/application/read_models.py`. Adapters
 filter or render those results; they do not import models or rebuild result
-shapes. Projections declare their `select_related()` plans and read through
-`projection.guarded`: under `DEBUG` and in tests Django's `FETCH_RAISE` mode
-makes an omitted relationship fail at the projection, and in production
-`FETCH_PEERS` fetches it once for the whole page instead of once per row. An
-architecture test rejects
-model access from the MCP service adapter.
+shapes. An architecture test rejects model access from the MCP service adapter.
+
+Projections declare their `select_related()` plans and read through
+`projection.guarded`. Under `DEBUG` and in tests, Django's `FETCH_RAISE` mode
+makes an omitted relationship fail at the projection. In production,
+`FETCH_PEERS` fetches it once for the whole page instead of once per row.
 
 ## Projections
 
@@ -64,11 +67,11 @@ every adapter:
 | Projection | Module | Also served as |
 |---|---|---|
 | Dashboard snapshot: KPIs, priority work, recent records, upstream state, activity | `dashboard.py` | MCP `dashboard_snapshot` |
-| A managed resource's allowed actions, removal mode, machines, services, readout, certificate expiry | `resource_context.py` | `derived` on the `infrastructure.resources` detail |
+| A managed resource's allowed actions, removal mode, machines, services, readout, certificate expiry | `resource_context.py` | `derived` on the `infrastructure` detail |
 | The tailnet page | `tailnet_context.py` | the `tailnet` resource |
-| The connections page | `connection_context.py` | the `connection.standing` resource |
+| The connections page | `connection_context.py` | the `connections` resource |
 | HQ's own page: release, machine and container, units, readings, problems | `hq_context/` (`release`, `work`, `sight`, composed in `__init__`) | the `hq` resource |
-| How HQ reaches a connection: network, machine, tailnet peering | `connection_reach.py` | inside `connection.standing` |
+| How HQ reaches a connection: network, machine, tailnet peering | `connection_reach.py` | inside `connections` |
 | Days left on anything | `expiry.py` | every page that says it |
 
 Each view renders its projection object and nothing beside it. Infrastructure
@@ -86,16 +89,21 @@ the choice lives in `DashboardConfiguration`. Weather is the configured point's
 `WeatherObservation`, edited in the dashboard's Settings popover.
 
 `GET /dashboard/glance/` only reads. A refresh is a CSRF-protected POST to the
-same address: the refresh button asks for every panel, and the dashboard, when
-it opens on a reading older than five minutes (`freshness.GLANCE_EVERY`), asks
-for the due panels only (`scope=stale`). Either way HQ records a
-credential-free `DashboardRefreshRequest` and rings the glance doorbell, which
-starts a glance pass beside any controller pass ([Units](Deployment.md#units));
-the controller derives target and connection from the machine graph. The
-browser follows that one request for a bounded interval and keeps no
-page-lifetime polling loop. An SSH-capable connection yields whole-host
-readings; a Portainer fallback is labeled as container and Docker scope, not
-machine utilization.
+same address:
+
+| Who asks | For what |
+|---|---|
+| The refresh button | every panel |
+| The dashboard, opening on a reading older than five minutes (`freshness.GLANCE_EVERY`) | the due panels only (`scope=stale`) |
+
+Either way HQ records a credential-free `DashboardRefreshRequest` and rings the
+glance doorbell. That starts a glance pass beside any controller pass
+([Units](Deployment.md#units)), and the controller derives target and
+connection from the machine graph. The browser follows that one request for a
+bounded interval and keeps no page-lifetime polling loop.
+
+An SSH-capable connection yields whole-host readings. A Portainer fallback is
+labeled as container and Docker scope, not machine utilization.
 
 Machine and weather readings show their observation time at every width. A
 reading three intervals old (15 minutes) is marked out of date. That is
@@ -104,36 +112,43 @@ refresh keeps the previous reading visible until a new one arrives.
 
 Dashboard cards are grouped by contributing domain. Card providers run once per
 projection scope and are still checked for cross-domain collisions. A
-contributor with several metrics may supply a typed `DomainOverview`. A domain
-holds a highlight card of its own when it has a chart to lead with or at least
-three figures (`dashboard.CARD_FIGURES`); one with fewer reads its figures in
-the compact strip. Below the highlights, each domain's leading chart takes a
-row of its own, and the calendar, recent projects and the rest share the next,
-as many to a row as fit. The host never infers a domain from a card ID or
-invents a contributor's reporting window. The machine snapshot keeps flat
-cards; the grouping is presentation.
+contributor with several metrics may supply a typed `DomainOverview`. The host
+never infers a domain from a card ID or invents a contributor's reporting
+window.
+
+A domain holds a highlight card of its own when it has a chart to lead with or
+at least three figures (`dashboard.CARD_FIGURES`). One with fewer reads its
+figures in the compact strip. Below the highlights, each domain's leading chart
+takes a row of its own. The calendar, recent projects and the rest share the
+next row, as many to a row as fit. The machine snapshot keeps flat cards; the
+grouping is presentation.
 
 ### Priority work
 
 Every domain's `Insight` provider is composed by `domain_attention_items()`.
 The dashboard preview, `/action-items/` and the machine snapshot project that
 one queue. Each flattened item keeps its `action` and JSON-safe `workflow` (or
-`null`) beside its label, evidence, severity, count and URL. The dashboard and
-the full queue share one row partial and one resolution renderer; workflow
-forms keep their action URLs, methods and CSRF protection, and rendering a
-workflow neither runs it nor grants authority. Neutral and good insights stay
-out of the queue; the contributing domain decides whether a reading needs a
-decision.
+`null`) beside its label, evidence, severity, count and URL. Neutral and good
+insights stay out of the queue; the contributing domain decides whether a
+reading needs a decision.
+
+The dashboard and the full queue share one row partial and one resolution
+renderer. Workflow forms keep their action URLs, methods and CSRF protection.
+Rendering a workflow neither runs it nor grants authority.
 
 Every item HQ raises carries help: a remedy HQ runs, the exact command to run,
-or HQ's reason it can offer neither. A finding rule declares `operator_action`
-(carried as `steps`, `OperatorStep`: a label, a command HQ never runs, notes;
-the API returns `operator_steps` beside the remedies) and `no_help_reason`,
-carried whenever there is no remedy and no command. A queue `Insight` keeps
-the SDK's shape: a remedy is one of its `actions`, a command or reason a `run`
-or `cannot` step of its `workflow` (`hq/platform/application/item_help.py`).
+or HQ's reason it can offer neither. A finding rule declares two fields:
+
+| Field | Carried as | When |
+|---|---|---|
+| `operator_action` | `steps`, each an `OperatorStep`: a label, a command HQ never runs, notes; the API returns `operator_steps` beside the remedies | the operator has a command to run |
+| `no_help_reason` | the reason | there is no remedy and no command |
+
+A queue `Insight` keeps the SDK's shape. A remedy is one of its `actions`; a
+command or reason is a `run` or `cannot` step of its `workflow`
+(`hq/platform/application/item_help.py`).
 `hq/platform/application/tests/test_item_help.py` fails on a host provider that
-builds an item without help.
+builds an item without help, read through the `item_help` gauge defined there.
 
 A rule is declared beside the detector that decides it: each module that raises
 findings (`perimeter_findings`, `controller_findings`, `docker_estate`,
@@ -146,41 +161,83 @@ Findings group downstream symptoms under a shared controller when the topology
 proves one, while each exact resource and kind fact stays addressable. The
 frontend renders the subject's already-authorized actions as "what HQ can do
 now"; there is no second action catalog. Focus and dependency-trace links come
-from one canonical topology address (`action_links.topology_url`). A
-stale-controller finding derives the registered controller-refresh capability
-from its node; running it rings the credential-free doorbell, and the
-controller still pulls and decides what is due. "Refresh" is that capability
-with a subject: a stored `ReadRequest` that HQ's `sweep-due` answer turns into
-the kinds read next ([API](API.md#refresh)). Contextual command links carry a
-same-origin return path through Command Center's result screen.
+from one canonical topology address (`action_links.topology_url`). Contextual
+command links carry a same-origin return path through Command Center's result
+screen.
 
-The resolution plan is domain-neutral and exported through `hq_sdk.workflows`:
-a domain emits a stable claim, supporting actions, authorized remedies and its
-own verification; HQ derives the ordered understand, act, verify projection and
-the machine-readable `claim_absent` completion condition. Analytics freshness
-has the same shape: a read site-day is a fact, HQ derives the missing windows,
-and the controller backfills them without a backfill policy of its own.
+A stale-controller finding derives the registered controller-refresh
+capability from its node. Running it rings the credential-free doorbell, and
+the controller still pulls and decides what is due. "Refresh" is that
+capability with a subject: a stored `ReadRequest` that HQ's `sweep-due` answer
+turns into the kinds read next ([API](API.md#refresh)).
+
+The resolution plan is domain-neutral and exported through `hq_sdk.workflows`.
+A domain emits a stable claim, supporting actions, authorized remedies and its
+own verification. HQ derives the ordered understand, act, verify projection and
+the machine-readable `claim_absent` completion condition.
+
+Analytics freshness has the same shape. A read site-day is a fact, HQ derives
+the missing windows, and the controller backfills them without a backfill
+policy of its own.
 
 Large projections run inside
-`hq.platform.application.projection.projection_scope()`: a reading is reused
+`hq.platform.application.projection.projection_scope()`. A reading is reused
 while one answer is assembled and discarded when the scope exits, so no
-process-cached state reaches a later request. The dashboard's contact rows,
-unread total and upstream health come from the controller's
-`cloudflare.contact_submission` reading; pages, the header count and search
-read the stored result, and a review or deletion waits in the
+process-cached state reaches a later request.
+
+The dashboard's contact rows, unread total and upstream health come from the
+controller's `cloudflare.contact_submission` reading. Pages, the header count
+and search read the stored result. A review or deletion waits in the
 `cloudflare.contact_inbox` declaration until the controller applies it.
 
 ## What a request costs
 
+### What a process loads
+
+Every HQ process imports lazily (PEP 810). `manage.py` and the ASGI and WSGI
+applications call `hq.config.imports.lazily()` before anything else. A module
+loads when a name it binds is first used, so a process holds only what its work
+reached.
+
+Registration is therefore never an import's side effect. HQ's lives in each
+app's `ready()` and Django's autodiscovery (apps, URLconfs, template
+libraries), which import by name and so load at once.
+
+A library that registers as it loads, or reads its own namespace as it loads,
+is named in `EAGER` there, and its imports run at once. So does every import of
+another library that loads while it does, so a library an entry pulls in needs
+no entry of its own. The rest of the entry's own library stays lazy.
+
+`test_lazy_imports.py` boots HQ three ways, each eagerly and lazily: through
+the ASGI application, through `manage.py`, and through `manage.py` once a test
+overrides a setting. It fails on:
+
+- any model, URL, check, receiver, lookup, template tag, capability, resource
+  or navigation entry a lazy boot lacks;
+- any receiver that overriding a setting connects;
+- a package that binds a name one of its submodules has (loading the submodule
+  rebinds it).
+
+Some processes judge what HQ reaches by what it loaded: the image checks that
+name a package or a part of Django shipped and never loaded, and the eager boot
+above. Each calls `imports.eagerly()` first, so an entrypoint's `lazily()`
+leaves its imports as written. Lazily, a module-level import its own run never
+used would never load.
+
+Python's `-X lazy_imports` and `PYTHON_LAZY_IMPORTS` only set the mode a
+process starts in, which `lazily()` replaces. The module budgets in
+`test_startup.py` measure the lazy start on purpose.
+
 ### A page
 
-`manage.py bench_pages` builds Django's test database (never the real one),
-fills it with `hq.platform.core.bench.seed` (a few years of one operator's
-records: 4,000 expenses, 3,000 receipts, 300 assets, 6,000 audit rows, a swept
-estate of about 270 managed resources), and requests every route that answers
-a GET as a signed-in operator through the whole middleware stack. It reports
-median and p95 time, the query count, how many queries repeat one already made
-in the request, and the response size.
+`manage.py bench_pages` builds Django's test database, never the real one. It
+fills it with `hq.platform.core.bench.seed`, a few years of one operator's
+records: 4,000 expenses, 3,000 receipts, 300 assets, 6,000 audit rows, and a
+swept estate of about 270 managed resources. Then it requests every route that
+answers a GET as a signed-in operator, through the whole middleware stack.
+
+It reports median and p95 time, the query count, how many queries repeat one
+already made in the request, and the response size.
 
 ```bash
 DJANGO_STATIC_ROOT=/tmp/hq-static mise run manage -- bench_pages
@@ -189,22 +246,28 @@ mise run manage -- bench_pages --scale 0.25 --rounds 10
 ```
 
 `--only` with `--sql` prints one page's queries; `--scale` and `--rounds` make
-a quicker pass. Pages come from the URL configuration. A route with arguments
-is requested with the seeded record `SAMPLES` names for it; one with no sample
-is listed under "Not benched". An empty database hides every cost that grows
-with rows, which is why the bench seeds first. Timings move with the machine;
-query counts do not, so compare two trees back to back and read the counts
-first.
+a quicker pass.
+
+Pages come from the URL configuration. A route with arguments is requested
+with the seeded record `SAMPLES` names for it; one with no sample is listed
+under "Not benched". An empty database hides every cost that grows with rows,
+which is why the bench seeds first.
+
+Timings move with the machine; query counts do not. Compare two trees back to
+back and read the counts first.
 
 ### A page while HQ writes
 
 SQLite has one write lock, so the cost that matters is a page's while
 something else writes. `manage.py bench_contention` seeds the same estate and
-browses every page from several threads twice: alone, then beside the two
-writers production has, the controller's report (`--sweep-every` seconds) and
-an import job run by the runner, batches back to back. It times every
-statement, so it reports the lock waits behind each page, report and batch
-against the busy timeout, what each writes, derivations, and the slowest pages.
+browses every page from several threads twice. First it browses alone. Then it
+browses beside the two writers production has: the controller's report
+(`--sweep-every` seconds), and an import job run by the runner, batches back to
+back.
+
+It times every statement. So it reports the lock waits behind each page, report
+and batch against the busy timeout, what each writes, derivations, and the
+slowest pages.
 
 ```bash
 DJANGO_STATIC_ROOT=/tmp/hq-static mise run manage -- bench_contention
@@ -230,16 +293,20 @@ A running HQ reports the same per request. Every response carries
 `Server-Timing: app;dur=<ms>`, and the access log line (`severino.request`,
 `duration_ms`) is written from the same measurement. A request at or over
 `SLOW_REQUEST_MS` (`hq/platform/core/middleware.py`) logs a warning.
+
 `hq/platform/core/tests/test_page_budgets.py` pins each page's queries against
 the same seed, at two sizes where a per-row read would show.
 
 The first request after a change derives what it needs and stores it, about
 five statements per derivation on top of the reads. One change of the estate
-costs seven derivations in all, whichever pages ask first: the queue, the
-catalog, the relation graph, and the topology and findings once for the
-queue's reader and once for the operator's. `test_page_budgets.py` pins both:
-each stored page's queries at two sizes with no derivation run, and the
-derivations a change costs.
+costs seven derivations in all, whichever pages ask first:
+
+- the queue, the catalog and the relation graph;
+- the topology and findings, once for the queue's reader and once for the
+  operator's.
+
+`test_page_budgets.py` pins both: each stored page's queries at two sizes with
+no derivation run, and the derivations a change costs.
 
 What a stored page still costs is its own reads and its template: the findings
 page renders 700 KB, and the forms that offer every expense as an option (new
@@ -271,28 +338,37 @@ declared that way and computed once per change of those inputs:
 def _derive(principal): ...
 ```
 
-`hq.platform.application.derivations` answers a call from the projection in
-progress, then from the `derived` cache, then by running the function and
-storing the result. The cache is Django's database cache in the same SQLite
-file, so every process reads one copy and a value stored inside a transaction
-commits or rolls back with the rows it came from. The key is the derivation's
-name, what `vary` returns for the arguments, and the revision of every table in
-`reads`, behind the cache's `KEY_PREFIX`: the identity of the running code
-(`hq.platform.application.code_identity`), a digest of the interpreter, the
-installed distributions and the source of the host and every extension. A
-value is pickled, so it is served only to the code that stored it; an edit a
+`hq.platform.application.derivations` answers a call from the first place that
+has it:
+
+1. the projection in progress;
+2. the `derived` cache;
+3. running the function, which stores the result.
+
+The cache is Django's database cache in the same SQLite file. So every process
+reads one copy, and a value stored inside a transaction commits or rolls back
+with the rows it came from.
+
+The key is the derivation's name, what `vary` returns for the arguments, and
+the revision of every table in `reads`. It sits behind the cache's
+`KEY_PREFIX`, the identity of the running code
+(`hq.platform.application.code_identity`): a digest of the interpreter, the
+installed distributions and the source of the host and every extension.
+
+A value is pickled, so it is served only to the code that stored it. An edit a
 development server reloads on, or a deploy that changes any of that code,
 starts from an empty cache.
 
 **Revisions.** `core.Revision` holds one counter per table. Insert, update and
-delete triggers on every model table move it inside the writing statement, so
+delete triggers on every model table move it inside the writing statement. So
 `save()`, `QuerySet.update()`, `bulk_create()`, a cascade and raw SQL all move
 it, and a counter never commits apart from its rows.
+
 `hq.platform.core.revisions.install` restores the triggers after every
-`migrate` (SQLite drops them when a migration rebuilds a table) and creates
-the cache table. Reading the revisions also reads which triggers exist, in one statement; a
-table without its triggers has no revision, and its derivations run on every
-call.
+`migrate`, since SQLite drops them when a migration rebuilds a table. It also
+creates the cache table. Reading the revisions also reads which triggers exist,
+in one statement. A table without its triggers has no revision, and its
+derivations run on every call.
 
 **The clock.** A derivation does not read the clock. It asks `reached`,
 `passed`, `since`, `whole` or `today` (and `expiry.days_until`), and each
@@ -310,13 +386,15 @@ adds the providers composing it. A person's pins and set-aside items are
 applied after the derivation.
 
 **It fails toward deriving.** Unreadable revisions, a missing trigger, an
-unreadable cache or a value that does not load all mean the function runs. A
-table a derivation reads beyond its `reads` is learned and keyed on from then
-on; one derivation that calls another must declare the other's tables or the
+unreadable cache or a value that does not load all mean the function runs.
+
+A table a derivation reads beyond its `reads` is learned and keyed on from then
+on. One derivation that calls another must declare the other's tables, or the
 call raises, unless its own reads are learned. What one derivation reads and
 how long it stands passes to whatever asks it, on every call.
+
 `test_derivations` holds every declared derivation to its `reads` over the
-bench estate, forbids a direct clock read inside one, and writes a row every
+bench estate. It forbids a direct clock read inside one, and writes a row every
 way Django can to show the revision moves.
 
 **An extension's part.** What an extension contributes to a shared composition
@@ -325,44 +403,50 @@ asked through a derivation the host declares as it meets the provider,
 `extension.<plugin id>.<provider>`. It declares no reads: its tables are
 learned from the statements the provider runs, in a projection of its own. It
 varies by whether the reader asked for a demo and by which function answers.
-The host cannot follow an extension to the clock, so the answer is `unseen`: it
+
+The host cannot follow an extension to the clock, so the answer is `unseen`. It
 stands until what it asked of the helpers changes, at most one minute
-(`UNSEEN`), and never past local midnight. A count of days turns at midnight and
-nothing HQ words is finer than a minute, so that bound keeps every statement
-within one unit of the truth. Whatever asks an unseen derivation stands no
-longer than it does. The rules an extension keeps are in
+(`UNSEEN`), and never past local midnight. A count of days turns at midnight,
+and nothing HQ words is finer than a minute. So that bound keeps every
+statement within one unit of the truth. Whatever asks an unseen derivation
+stands no longer than it does. The rules an extension keeps are in
 [Plugins](Plugins.md#derived-reads).
 
 **Asked again when the change lands.** The controller reports every few
-minutes while HQ is in use, and every report moves a revision the estate reads,
-so the first request after each would otherwise derive while a person waits. Every top-level
-question a request asks is remembered with its arguments, context and seeded
-projection. `hq.platform.core.ahead` watches every statement a connection runs;
-one that writes a table a remembered question reads wakes one thread after its
-transaction commits, and `derive_ahead` asks again whatever no longer stands.
-The same thread wakes when the earliest remembered answer's moment comes. It
-runs for the life of the web application (the ASGI lifespan), never inside the
-writing transaction, and a rolled-back write says nothing. Writes that land
-together are one pass, which starts once none has landed for 50 ms and no later
-than 0.5 s after the first; writes during a pass are answered by one more. A
-question is derived at most once per state of its tables, and by one thread
-when two want it. A request never waits on the pass: it derives what it
-does not find stored, and the pass waits between questions while a request is
-deriving. `ahead=` on a derivation is
-how many ways of asking are kept current (eight by default), and a way nobody
-asked for in a day is forgotten. A question asked ahead counts as HQ being in
-use.
+minutes while HQ is in use, and every report moves a revision the estate reads.
+The first request after each would otherwise derive while a person waits.
 
-The declared derivations are `estate.topology`, `estate.relations`,
-`estate.findings`, `estate.services`; `attention.queue` (the host's part of the
-queue), `attention.work` (the composed queue), `attention.count` (how many wait
-on one person) and `attention.by_subject` (the host's open items by the page
-each is about); `dashboard.sections`, `dashboard.highlights`,
-`dashboard.snapshot` and `dashboard.links`; and one per calendar source the
-host owns (`calendar.*`). A new one is a decorator and a line in `SAMPLES` in
-`test_derivations`. `derivations.uncached()` bypasses the store, for budgets on
-what a derivation itself costs and for tests that replace an input no stored
-answer varies by.
+So every top-level question a request asks is remembered, with its arguments,
+context and seeded projection. `hq.platform.core.ahead` watches every
+statement a connection runs. One that writes a table a remembered question
+reads wakes one thread after its transaction commits, and `derive_ahead` asks
+again whatever no longer stands. The same thread wakes when the earliest
+remembered answer's moment comes.
+
+| Of the pass | Rule |
+|---|---|
+| Where it runs | for the life of the web application (the ASGI lifespan), never inside the writing transaction |
+| A rolled-back write | says nothing |
+| Writes that land together | one pass, which starts once none has landed for 50 ms and no later than 0.5 s after the first |
+| Writes during a pass | answered by one more |
+| How often a question is derived | at most once per state of its tables, and by one thread when two want it |
+| A request | never waits on the pass: it derives what it does not find stored, and the pass waits between questions while a request is deriving |
+| `ahead=` on a derivation | how many ways of asking are kept current (eight by default); a way nobody asked for in a day is forgotten |
+| A question asked ahead | counts as HQ being in use |
+
+The declared derivations:
+
+| Group | Derivations |
+|---|---|
+| Estate | `estate.topology`, `estate.relations`, `estate.findings`, `estate.services` |
+| Attention | `attention.queue` (the host's part of the queue), `attention.work` (the composed queue), `attention.count` (how many wait on one person), `attention.by_subject` (the host's open items by the page each is about) |
+| Dashboard | `dashboard.sections`, `dashboard.highlights`, `dashboard.snapshot`, `dashboard.links` |
+| Calendar | one per calendar source the host owns (`calendar.*`) |
+
+A new one is a decorator and a line in `SAMPLES` in `test_derivations`.
+`derivation_testing.uncached()` bypasses the store. It is for budgets on what a
+derivation itself costs, and for tests that replace an input no stored answer
+varies by.
 
 **The header's count** (`/action-items/count/`) is `attention.count`, so
 asking costs the table revisions and one stored number. Its `ETag` names the
@@ -394,24 +478,29 @@ script behavior follows it ([Design](Design.md), "Asked-for work is an ask").
 
 The interpreter holds the rule (`hq/platform/core/outbound.py`). Python raises
 an audit event whenever any library opens a connection, resolves a name,
-starts a process or sleeps; while a request is served, that event raises
-`OutboundInRequest`, so the call never leaves. A place a request must wait is a
-named entry in `ALLOWED` with its reason, entered with `allowed("name")`:
-signing in (bounded by `OIDC_TIMEOUT`) and a public lookup an operator asked
-for by name.
-`RequestNeverWaitsTests` holds the entries to their places.
-The setting `SEVERINO_OUTBOUND_IN_REQUEST = "report"` logs `outbound.in_request` and lets the
-call go, for a composition whose extensions still reach out from a request; an
-extension moves that work to [outbound work](Plugins.md#outbound-work).
+starts a process or sleeps. While a request is served, that event raises
+`OutboundInRequest`, so the call never leaves.
 
-`bench_pages` measures actions too: every route that answers a POST is one,
-`ACTIONS` names what each is posted, and one with no entry is listed under
-"Actions not exercised", with `UNSAFE`'s reason where it cannot be posted
-against a scratch database. An action is posted inside a rolled-back
-transaction, with the doorbell unrung and a job's work held, so the time is the
-request's own. `hq/platform/core/tests/test_action_budgets.py` pins each
-converted action's queries at two estate sizes and asserts it answers before
-the work it asked for.
+A place a request must wait is a named entry in `ALLOWED` with its reason,
+entered with `allowed("name")`. There are two: signing in (bounded by
+`OIDC_TIMEOUT`), and a public lookup an operator asked for by name.
+`RequestNeverWaitsTests` holds the entries to their places.
+
+The setting `SEVERINO_OUTBOUND_IN_REQUEST = "report"` logs
+`outbound.in_request` and lets the call go. It is for a composition whose
+extensions still reach out from a request. An extension moves that work to
+[outbound work](Plugins.md#outbound-work).
+
+`bench_pages` measures actions too. Every route that answers a POST is one, and
+`ACTIONS` names what each is posted. One with no entry is listed under "Actions
+not exercised", with `UNSAFE`'s reason where it cannot be posted against a
+scratch database.
+
+An action is posted inside a rolled-back transaction, with the doorbell unrung
+and a job's work held, so the time is the request's own.
+`hq/platform/core/tests/test_action_budgets.py` pins each converted action's
+queries at two estate sizes, and asserts it answers before the work it asked
+for.
 
 ## Search
 
@@ -429,23 +518,28 @@ with FTS5 `snippet()` extracts as `(text, is_match)` parts, so each renderer
 escapes and marks up independently. Presentation metadata (group label, title
 field, badge, timestamp) lives on the `SearchDefinition` its `ResourceSpec`
 carries. Scopes a principal cannot search are omitted, not rendered empty.
-Contact submissions live in Cloudflare D1, not the local database; the web view
+
+Contact submissions live in Cloudflare D1, not the local database. The web view
 adds the matching rows of the controller's last read (by submitter name) as a
-group beside the registry scopes, and email and message text are searched on
-the contacts page.
+group beside the registry scopes. Email and message text are searched on the
+contacts page.
 
 Ranking is stated once, in the backend: FTS5's `rank` (bm25, lower is better),
-then object id compared as text, numbered per scope with `ROW_NUMBER()`.
-`global_search` asks it about every permitted scope in one query, keeps each
-scope's first hits, and reads their `snippet()` from a second reference to the
+then object id compared as text, numbered per scope with `ROW_NUMBER()`. Equal
+ranks order by object id as text (`10` before `9`), one rule for every scope.
+
+`global_search` asks it about every permitted scope in one query and keeps each
+scope's first hits. It reads their `snippet()` from a second reference to the
 FTS table, because an FTS5 auxiliary function is only valid in the query that
-reads the table with `MATCH`. A scope with no hit costs no record fetch. A
-searched list annotates each row with its position among the hits
-(`_search_rank`, NULL for a non-hit) through a subquery whose ranking is
-materialized once, so the statement has three parameters whether three rows
-match or five thousand. Equal ranks order by object id as text (`10` before
-`9`), one rule for every scope. Without the FTS table there is no rank: the ORM
-fallback matches by substring and a list falls back to primary-key order.
+reads the table with `MATCH`. A scope with no hit costs no record fetch.
+
+A searched list annotates each row with its position among the hits
+(`_search_rank`, NULL for a non-hit). It does so through a subquery whose
+ranking is materialized once, so the statement has three parameters whether
+three rows match or five thousand.
+
+Without the FTS table there is no rank. The ORM fallback matches by substring,
+and a list falls back to primary-key order.
 
 `search_index.SearchDocument` is a derived projection. On SQLite an FTS5
 external-content table indexes it with Unicode tokenization and 2-, 3- and
@@ -474,14 +568,18 @@ Three registries declare everything an adapter offers. What an extension
 declares in each, and the fields it sets, is in [Plugins](Plugins.md#contract-boundary).
 
 **Capabilities.** The allowlisted registry binds each typed command to one
-operation name, effect, required permissions and handler. From it,
-`describe_capabilities` emits deterministic JSON Schemas; `execute_capability`
-validates a JSON object and returns one success or error envelope; the API and
-the MCP endpoint expose that catalog and executor; the Command Center derives
-an authorized form for every capability, extensions' included, with no
-capability-specific view; management commands remain an in-process break-glass
-adapter; and tests derive their contract assertions from the emitted schemas.
-The executor is not generic database access: it runs only registered
+operation name, effect, required permissions and handler. From it:
+
+| Surface | What it derives |
+|---|---|
+| `describe_capabilities` | deterministic JSON Schemas |
+| `execute_capability` | validates a JSON object and returns one success or error envelope |
+| The API and the MCP endpoint | expose that catalog and executor |
+| The Command Center | an authorized form for every capability, extensions' included, with no capability-specific view |
+| Management commands | remain an in-process break-glass adapter |
+| Tests | their contract assertions, from the emitted schemas |
+
+The executor is not generic database access. It runs only registered
 operations, each through the typed principal, the capability check and the
 application transaction.
 
@@ -496,18 +594,22 @@ Command Center keystroke never calls a provider.
 **Connections.** `ConnectionSpec` says which family exists, the abilities and
 provider scopes it can carry, which principal may inspect it, and how to read
 locally cached instances. Static discovery never calls instance providers; the
-Connections workspace and machine list do, after authorization. Instances have
-no secret field; links are local or HTTP(S); URL userinfo, query strings and
-fragments are rejected when controller inventory enters HQ and when an
-extension's instance leaves its provider. A permission is something proven:
-an ability declares how its authority is proven, an instance reports the
-credential observed, and HQ derives per-ability evidence and a per-connection
-lifecycle from the two, failing closed on a missing or rejected grant and
-naming an undeclared one rather than counting it as authorized. The
-controller's connection providers carry their credential model beside the
+Connections workspace and machine list do, after authorization.
+
+Instances have no secret field, and links are local or HTTP(S). URL userinfo,
+query strings and fragments are rejected when controller inventory enters HQ
+and when an extension's instance leaves its provider.
+
+A permission is something proven. An ability declares how its authority is
+proven, and an instance reports the credential observed. HQ derives
+per-ability evidence and a per-connection lifecycle from the two. It fails
+closed on a missing or rejected grant, and names an undeclared one rather than
+counting it as authorized.
+
+The controller's connection providers carry their credential model beside the
 providers, so reach a sweep reports is never mistaken for permission. The
 Connections security posture is a query-free projection over the authorized
-catalog and the current request; it does not claim to attest the router and
+catalog and the current request. It does not claim to attest the router and
 firewall the process cannot observe.
 
 The gateway that owns an endpoint owns its declaration: a host domain attaches
@@ -519,28 +621,37 @@ creating a second kind of integration.
 
 **One graph.** At composition HQ compiles the emitted specs and standalone
 search projections into one frozen `IntegrationGraph`, indexed by name. The
-compiler owns contract validation, uniqueness and every cross-spec edge, and
+compiler owns contract validation, uniqueness and every cross-spec edge. It
 collects every violation in one pass, so a failed composition reports the whole
-repair list; a direct compiler caller gets the same guarantees as runtime
-composition. The graph is memoized for the process, since composition is fixed
-at boot. The one plugin-composition reset clears both plugin identity and the
-graph; the test runner applies it between fixtures, and isolated composition
-proofs use an explicit graph override. Reversible web routes remain a Django
-startup check, because URL resolution belongs to that adapter.
+repair list. A direct compiler caller gets the same guarantees as runtime
+composition.
 
-The Command Center is a projection of that graph. Its resource links come from
-`ResourceSpec.web_route`; `CapabilitySpec.subject_resource` ties an operation
-to its domain. `ConnectionAbility.subject_resource` with `governs_kinds` ties a
-searched ability to the commands that act on those kinds, and
-`ConnectionAbility.capability` names an exact command otherwise. That ability
-is the only authored connection-to-capability edge; capabilities keep no
-reciprocal list, and no command is invented from a credential scope. The form
-is derived from the JSON Schema: unknown and repeated fields are rejected,
-targets use the registered label, and eligible choices come from the authorized
-local `ResourceSpec` query, so opening a command never calls a provider. A
-zero-network preview shows the selected target and reason beside the handler,
-resource, authority, effect and execution notes, then calls
-`execute_capability`. Retry keys are generated and hidden, infrastructure and
+The graph is memoized for the process, since composition is fixed at boot. The
+one plugin-composition reset clears both plugin identity and the graph. The
+test runner applies it between fixtures, and isolated composition proofs use an
+explicit graph override. Reversible web routes remain a Django startup check,
+because URL resolution belongs to that adapter.
+
+The Command Center is a projection of that graph:
+
+| Edge | Declared by |
+|---|---|
+| A resource link | `ResourceSpec.web_route` |
+| An operation to its domain | `CapabilitySpec.subject_resource` |
+| A searched ability to the commands that act on those kinds | `ConnectionAbility.subject_resource` with `governs_kinds` |
+| An ability to an exact command | `ConnectionAbility.capability` |
+
+That ability is the only authored connection-to-capability edge. Capabilities
+keep no reciprocal list, and no command is invented from a credential scope.
+
+The form is derived from the JSON Schema. Unknown and repeated fields are
+rejected, and targets use the registered label. Eligible choices come from the
+authorized local `ResourceSpec` query, so opening a command never calls a
+provider.
+
+A zero-network preview shows the selected target and reason beside the
+handler, resource, authority, effect and execution notes, then calls
+`execute_capability`. Retry keys are generated and hidden. Infrastructure and
 destructive effects require confirmation, and successful writes use
 POST/Redirect/GET.
 
@@ -577,20 +688,21 @@ nothing else is the authority for.
 | Controller actions and automation | Validated controller capability document | Queued operations and observations |
 
 The exception is a certificate an operator generated and asked HQ to install,
-sealed with `SEVERINO_SECRET_STORE_KEY` ([Secrets](Secrets.md#severino_secret_store_key))
-and read only by the controller through its own bridge action. The vault emits
+its key sealed to the controller ([Secrets](Secrets.md#sealing-to-the-controller))
+and opened only there, after its own bridge action hands it over sealed. The vault emits
 a validated manifest; HQ never walks the vault or stores Markdown bodies.
 
 ## Record use cases
 
 Projects, assets, content, expenses and documentation are record domains: each
 declares its model, command and save function once as `records` on its
-`DomainDescriptor` ([New Domain](New-Domain.md)), and the web form, API, MCP
-and CLI all call that save function. Every save validates through the model
-contract, runs in one transaction, locks the row on update, takes an optional
-`expected_updated_at` for stale-write protection, and records the interface,
-actor and operation. `AdapterParityTests` holds the adapters to one result
-shape.
+`DomainDescriptor` ([New Domain](New-Domain.md)). The web form, API, MCP and
+CLI all call that save function.
+
+Every save validates through the model contract, runs in one transaction and
+locks the row on update. It takes an optional `expected_updated_at` for
+stale-write protection, and records the interface, actor and operation.
+`AdapterParityTests` holds the adapters to one result shape.
 
 | Use case | Owner | Its own rule |
 |---|---|---|
@@ -607,23 +719,29 @@ MCP results omit sensitive and restricted documentation identifiers throughout.
 **Documentation sync.** `hq.platform.application.sync.execute_hq_sync()` is the
 one external sync. The local vault MCP emits the manifest and `hq sync` sends
 it as one `hq.sync` capability call, applied in one transaction. The vault
-describes documentation and nothing else; HQ derives the infrastructure. The
-sync is safe to repeat, preflight-validated against the frontmatter contract,
-bounded to 2,000 records (`MAX_MANIFEST_ITEMS`), never imports Markdown
-bodies, and prunes only with `prune_orphans=true` and the separate
-`confirm_prune=true`.
+describes documentation and nothing else; HQ derives the infrastructure.
+
+The sync is safe to repeat and preflight-validated against the frontmatter
+contract. It is bounded to 2,000 records (`MAX_MANIFEST_ITEMS`) and never
+imports Markdown bodies. It prunes only with `prune_orphans=true` and the
+separate `confirm_prune=true`.
 
 ## Security inside the core
 
-The security design is in [Security](Security.md). Inside the core: tools
-expose task-shaped capabilities, never SQL or arbitrary model mutation; a typed
-`Principal` carries explicit capabilities into the service, which authorizes;
-`capability_policy.decide` answers allow, hold or deny before a capability runs;
-services revalidate every input and own their transactional writes; restricted
-documentation is removed from AI-facing results; and every success leaves an
-attributed audit event and every refusal a `Denied` one. The `hq` CLI reaches
-HQ through the authenticated MCP endpoint; in-process management commands are
-break-glass recovery, not a second transport.
+The security design is in [Security](Security.md). Inside the core:
+
+- tools expose task-shaped capabilities, never SQL or arbitrary model mutation;
+- a typed `Principal` carries explicit capabilities into the service, which
+  authorizes;
+- `capability_policy.decide` answers allow, hold or deny before a capability
+  runs;
+- services revalidate every input and own their transactional writes;
+- restricted documentation is removed from AI-facing results;
+- every success leaves an attributed audit event, and every refusal a `Denied`
+  one.
+
+The `hq` CLI reaches HQ through the authenticated MCP endpoint. In-process
+management commands are break-glass recovery, not a second transport.
 
 ## Adding a capability
 
@@ -631,8 +749,8 @@ break-glass recovery, not a second transport.
    record domain declares `records` instead ([New Domain](New-Domain.md)).
 2. Implement validation, authorization, locking, persistence and audit there.
    It refuses with a host refusal from `record_errors.py` (`not_found`,
-   `conflict`, `precondition`, `invalid_material`, `invalid_input`), whose
-   reason every adapter answers with as it stands: a literal, or a `Sentence`
+   `conflict`, `precondition`, `invalid_material`, `invalid_input`). Every
+   adapter answers with its reason as it stands: a literal, or a `Sentence`
    carried from where HQ wrote it, never a request's or a dependency's text
    (`RefusalTextTests` reads every one). Any other exception's text stays
    inside HQ.
@@ -655,10 +773,12 @@ is an architecture regression.
 and what a sweep found, and declared only where nothing can observe it (a
 printer, an offline CA). A certificate states its names and the targets it
 installs on. How a target takes a certificate is stated once on the target,
-because that is a property of the place. Desired state therefore spans two
-resources: saving a target recomputes the desired state of everything installed
-there and advances the generation of whatever resolved differently; otherwise a
-certificate would report itself in sync against a world that moved.
+because that is a property of the place.
+
+Desired state therefore spans two resources. Saving a target recomputes the
+desired state of everything installed there, and advances the generation of
+whatever resolved differently. Otherwise a certificate would report itself in
+sync against a world that moved.
 
 HQ stores typed intent, resource generations, public observations and audited
 operation requests, and no provider credential. Each provider definition owns
@@ -668,13 +788,16 @@ web, MCP, scheduler and controller consume the same resolved output.
 ### Providers
 
 A provider definition also declares how it takes part in the surfaces above it:
-which facet of a service it supplies, how to read hostnames out of a resolved
-spec, how to describe itself in one line, and how to rebuild a spec from a
-record the provider holds. The service view, the generated create and edit
-forms and adoption are written once and name no provider, so a provider added
-to the registry appears on all of them. A container a systemd unit runs is
-stopped, started and restarted through that unit
-([A container its unit runs](#a-container-its-unit-runs)).
+
+- which facet of a service it supplies;
+- how to read hostnames out of a resolved spec;
+- how to describe itself in one line;
+- how to rebuild a spec from a record the provider holds.
+
+The service view, the generated create and edit forms and adoption are written
+once and name no provider, so a provider added to the registry appears on all
+of them. A container a systemd unit runs is stopped, started and restarted
+through that unit ([A container its unit runs](#a-container-its-unit-runs)).
 
 ![Provider registry: one declaration derives the schema, validation, controller contract, forms, service view, and adoption](diagrams/provider-registry.png)
 
@@ -688,57 +811,66 @@ registry. `hq.domains.control_plane.providers.PROVIDERS` is derived from the
 package's closed `ADMITTED` tuple, in its order.
 
 A provider module also declares the connection its credential arrives through
-(`CONNECTIONS`, a `ConnectionKind` per provider name), and
-`hq.domains.control_plane.connection_kinds` gathers them from the admitted set;
-a kind naming a connection provider no admitted module declares fails at
-import. A provider's readings are a module in
+(`CONNECTIONS`, a `ConnectionKind` per provider name).
+`hq.domains.control_plane.connection_kinds` gathers them from the admitted set.
+A kind naming a connection provider no admitted module declares fails at
+import.
+
+A provider's readings are a module in
 `hq/domains/control_plane/observations/`, registered by discovery in name
-order ([Derived Facts](Derived-Facts.md#readings)). Adding a provider is writing
-its modules and adding one name to `ADMITTED`;
+order ([Derived Facts](Derived-Facts.md#readings)). The edges its declarations
+produce are in [Derived Facts](Derived-Facts.md#topology).
+
+Adding a provider is writing its modules and adding one name to `ADMITTED`.
 `hq/domains/control_plane/provider_adapters/tests/test_admission.py` holds that
-to be enough. The edges its declarations produce are in
-[Derived Facts](Derived-Facts.md#topology).
+to be enough.
 
 **One address-to-machine resolver**, `hq/platform/application/locate.py`.
-Every surface that draws a line between two things (a proxy and the box it
-forwards to, a credential and the machine it opens, a service and where it
-runs) asks it; surfaces differ only in the evidence they hand it. Names and
-addresses are separate namespaces, because a machine may be named like an
-address while another answers at it, and one dictionary keeps whichever was
-written last. Endpoints are parsed in one place,
-`hq.platform.core.network.split_host_port`, because splitting at the last colon
-is right for `host:port` and wrong for every IPv6 form. A rendered label is
+Every surface that draws a line between two things asks it: a proxy and the
+box it forwards to, a credential and the machine it opens, a service and where
+it runs. Surfaces differ only in the evidence they hand it. A rendered label is
 never a join key; the resolver joins on declared addresses, sweep readings and
 connection endpoints.
 
+Names and addresses are separate namespaces. A machine may be named like an
+address while another answers at it, and one dictionary keeps whichever was
+written last.
+
+Endpoints are parsed in one place, `hq.platform.core.network.split_host_port`.
+Splitting at the last colon is right for `host:port` and wrong for every IPv6
+form.
+
 **Identity is declared separately from hostnames**, because one name can carry
-several records: a zone apex routinely carries several TXT and CAA records and
+several records. A zone apex routinely carries several TXT and CAA records and
 two MX records. Identified by hostname they would collapse into one, and
-adoption would keep whichever the provider listed first; types that carry
-policy rather than an address declare no hostname and would be invisible to the
-screen that finds unmanaged records. A provider that holds several records per
-name says what makes each itself, and what it serves is answered separately:
-for many record types, nothing.
+adoption would keep whichever the provider listed first. Types that carry
+policy rather than an address declare no hostname, and would be invisible to
+the screen that finds unmanaged records.
+
+A provider that holds several records per name says what makes each itself.
+What it serves is answered separately: for many record types, nothing.
 
 Which surface offers creating a resource is declared too: a kind that only
 makes sense inside something else names that surface, so the generic "what do
 you want to add?" page keeps no list of kinds to leave out.
 
-Three verbs exist beyond reconciliation. **Delete** removes the record at the
-provider and only then lets HQ forget its declaration, because dropping the row
-alone would abandon the record. **Rename** works because the contract carries
-what the provider was last seen holding; without it a changed hostname would
-create a second record beside the one it meant to move. **Adopt** writes a
-record the provider holds into a new declaration with its live settings, so the
-first reconciliation after adopting changes nothing.
+Three verbs exist beyond reconciliation:
 
-Two surfaces read those declarations and store nothing. A **service** is one
-hostname and everything that must be true for it to answer, the question asked
-when something is broken. A **domain** is one zone and everything published in
-it: a DMARC policy, a CAA restriction and an MX record are not services, yet
-getting them wrong stops mail or lets anyone obtain a certificate for the
-domain. Both derive from the same declarations and the last sweep, so they
-cannot disagree, which is why there is no Service model and no Zone model.
+| Verb | What it does | Why |
+|---|---|---|
+| **Delete** | removes the record at the provider, and only then lets HQ forget its declaration | dropping the row alone would abandon the record |
+| **Rename** | works because the contract carries what the provider was last seen holding | without it a changed hostname would create a second record beside the one it meant to move |
+| **Adopt** | writes a record the provider holds into a new declaration with its live settings | the first reconciliation after adopting changes nothing |
+
+Two surfaces read those declarations and store nothing:
+
+| Surface | What it is |
+|---|---|
+| A **service** | one hostname and everything that must be true for it to answer, the question asked when something is broken |
+| A **domain** | one zone and everything published in it. A DMARC policy, a CAA restriction and an MX record are not services, yet getting them wrong stops mail or lets anyone obtain a certificate for the domain |
+
+Both derive from the same declarations and the last sweep, so they cannot
+disagree. That is why there is no Service model and no Zone model.
 
 A domain page states a zone's posture descriptively, not as drift. HQ's DNS
 credential reads and writes records and nothing else, so it cannot change a
@@ -755,12 +887,13 @@ install and hold.
 **A reference is a derived link.** A declaration names another thing in its
 `spec`: the domain a DNS record is in, the connection a record is read and
 changed through. The database derives each into an indexed `GeneratedField` of
-the same name (`ManagedResource.zone`, `ManagedResource.connection_ref`), so a
-filter or join reads a column that cannot differ from the spec. A name that
-matches nothing is allowed, because a declaration may name what HQ only reads;
-the `names-nothing` finding (`hq/platform/application/reference_findings.py`)
-reports a record whose connection no controller has, or whose domain HQ
-neither expects nor has read.
+the same name (`ManagedResource.zone`, `ManagedResource.connection_ref`). So a
+filter or join reads a column that cannot differ from the spec.
+
+A name that matches nothing is allowed, because a declaration may name what HQ
+only reads. The `names-nothing` finding
+(`hq/platform/application/reference_findings.py`) reports a record whose
+connection no controller has, or whose domain HQ neither expects nor has read.
 
 ### The controller
 
@@ -770,75 +903,109 @@ references, runs provider adapters, verifies each declared consumer, and
 reports only public status and conditions. Expired claims return to the queue;
 only one queued or claimed operation may exist per resource and action.
 
-A provider's declaration is Django's; its controller half is Go, in
+A provider's declaration is Django's. Its controller half is Go, in
 `controller/providers/`: one file set per integration, each registering its
 readers, actions and probes in its `admit…` function, which `providers.New`
-calls. The controller asks HQ for its declarations through the bridge's
-`registry` action, claims only declared actions it has a handler for, and
-refuses a locked action with the registry's reason. Vendor responses decode
-into types generated from each vendor's OpenAPI description
-(`controller/api/vendor/`), bridge messages into types generated from
-`controller/api/hq-controller.openapi.json`.
+calls.
 
-**The bridge contract is emitted, and each fact in it has one owner.** What the
-bridge alone defines is written by hand in
-`hq/domains/control_plane/bridge_base.json`: each action's path, parameters and
-payload, and the messages that are not registry facts (claims, reports, sweep
-verdicts, problems). Everything the registry owns is built from its
-declarations by `bridge_registry`: resource kinds, swept kinds, connection
-providers, failure classes, reading parts, the record of every reading (from
-the Pydantic model HQ validates it with), and the values both sides check. A
-module that owns such a value (a Caddyfile token pattern, the `github.delivery`
-defaults, a certificate name) declares it once in `SHARED` and uses the same
-type in its own models. `manage.py bridge_contract` joins the two and writes the
-document; `--check` is a gate, and `go generate` regenerates the controller's
-types under its own no-diff gate. A name both halves state, or a reference to a
-schema neither states, fails the join.
+The controller asks HQ for its declarations through the bridge's `registry`
+action. It claims only declared actions it has a handler for, and refuses a
+locked action with the registry's reason.
+
+Vendor responses decode into types generated from each vendor's OpenAPI
+description (`controller/api/vendor/`). Bridge messages decode into types
+generated from `controller/api/hq-controller.openapi.json`.
+
+**The bridge contract is emitted, and each fact in it has one owner.**
+
+| Half | Written by | Holds |
+|---|---|---|
+| What the bridge alone defines | hand, in `hq/domains/control_plane/bridge_base.json` | each action's path, parameters and payload; the messages that are not registry facts (claims, reports, sweep verdicts, problems) |
+| Everything the registry owns | `bridge_registry`, from the registry's declarations | resource kinds, swept kinds, connection providers, failure classes, reading parts, the record of every reading (from the Pydantic model HQ validates it with), and the values both sides check |
+
+A module that owns such a value (a Caddyfile token pattern, the
+`github.delivery` defaults, a certificate name) declares it once in `SHARED`.
+It uses the same type in its own models.
+
+`manage.py bridge_contract` joins the two and writes the document; `--check` is
+a gate. `go generate` regenerates the controller's types under its own no-diff
+gate. A name both halves state, or a reference to a schema neither states,
+fails the join.
 
 HQ never reads the written file. Its bridge application builds routes and
 parses requests from the same join in memory, so an action, parameter or limit
-exists once. What the Go generator does not emit (a pattern, a default, a bound)
-the controller reads from the copy embedded in its binary
-(`controller/api/contract.go`); a keyword the contract does not state stops the
+exists once.
+
+What the Go generator does not emit (a pattern, a default, a bound) the
+controller reads from the copy embedded in its binary
+(`controller/api/contract.go`). A keyword the contract does not state stops the
 controller at start. A constant's name is a function of the registry name it
 stands for (`bridge_registry.go_name`), so a renamed kind fails the
 controller's build wherever the old constant was used.
 
 **A connection is a typed value.** The shapes a credential arrives in (a login,
 an API token, an OAuth client, an SSH transport) are declared once, in
-`hq/domains/control_plane/connection_shapes.py`, with each setting's name and
-whether it is required or secret; a `ConnectionKind` names its shape. The same
-command emits the renderer's registry (`hq/config/controller-connections.json`)
-and the connections document's schema
-(`controller/api/hq-connections.openapi.json`), from which the Go types the
-renderer and the controller share are generated
-(`controller/connections/document.gen.go`). The controller decodes the document
-once into one typed value per connection and hands a provider its own
-(`runtime.Connections.For`); `runtime.Environment` is a struct of the facts that
-are not connections. No setting is looked up by a name spelled at the call,
-which a test in `controller/providers` holds, so two connections cannot collide
-and a provider cannot read a setting of a shape it was not handed. A vendor's
-base URL is the `servers` entry of its vendored description, generated as a
-constant. The document itself is in [Secrets](Secrets.md#where-each-secret-lives).
+`hq/domains/control_plane/connection_shapes.py`. Each declares its settings'
+names and whether each is required or secret. A `ConnectionKind` names its
+shape.
+
+The same command emits two files from them:
+
+- the renderer's registry (`hq/config/controller-connections.json`);
+- the connections document's schema
+  (`controller/api/hq-connections.openapi.json`), from which the Go types the
+  renderer and the controller share are generated
+  (`controller/connections/document.gen.go`).
+
+The controller decodes the document once into one typed value per connection,
+and hands a provider its own (`runtime.Connections.For`).
+`runtime.Environment` is a struct of the facts that are not connections.
+
+No setting is looked up by a name spelled at the call, which a test in
+`controller/providers` holds. So two connections cannot collide, and a provider
+cannot read a setting of a shape it was not handed. A vendor's base URL is the
+`servers` entry of its vendored description, generated as a constant. The
+document itself is in [Secrets](Secrets.md#where-each-secret-lives).
+
+**No secret reaches a log or a report.** Two mechanisms hold it, so no message
+has to be worded around a credential:
+
+- Each generated settings type with a secret setting prints and logs with that
+  setting redacted (`String`, `Format`, `LogValue`). The generator emits these
+  methods from the `secret` tag, so a new secret setting gets them too.
+- Each binary learns every secret value where it enters the process
+  (`controller/internal/mask`): a connection's secret settings, a sealed value
+  opened, a token minted or sent in a request header, the Connect token, a
+  concealed field and each application variable the renderer reads, a
+  hand-off's token. Every form of a
+  learned value (plain, quoted, JSON, URL and base64 encoded) is then struck
+  from each log line (`mask.Logger`, the only logger a binary builds), from
+  clipped text such as a report's failure (`runtime.Clip`), and from every
+  payload the bridge sends HQ.
 
 **The run.** `hq-host controller` (the units are in
 [Deployment](Deployment.md#units)) starts a disposable container from the image
-HQ runs, with every capability dropped, `no-new-privileges`, and
-`/usr/local/bin/hq-controller` as its entrypoint, the static Go binary the
-image's `controller` stage built, so the host needs no toolchain and cannot
-drift from the deployed application. It runs as the web process's unprivileged
-UID, which is what lets it reach the bridge socket. The launcher copies
-owner-scoped connections and SSH identities into the run; provider variables,
-the ACME lineage and deployment identities enter only that container, and HQ's
-database and application environment never do.
+HQ runs. It drops every capability and sets `no-new-privileges`. Its
+entrypoint is `/usr/local/bin/hq-controller`, the static Go binary the image's
+`controller` stage built, so the host needs no toolchain and cannot drift from
+the deployed application. It runs as the web process's unprivileged UID, which
+is what lets it reach the bridge socket.
+
+| What | Enters |
+|---|---|
+| Owner-scoped connections and SSH identities | copied into the run by the launcher |
+| Provider variables, the ACME lineage and deployment identities | only that container, never HQ's database or application environment |
+| The private keys HQ seals secrets to | only that container: the launcher writes the first one as root and lends the directory read-only; HQ is given only the public half, as root's file ([Secrets](Secrets.md#sealing-to-the-controller)) |
 
 The binary reaches HQ through the bridge: the contract's actions as HTTP on a
 Unix socket HQ's running process serves (`SEVERINO_BRIDGE_SOCKET`). Django is
-already started, so a call costs the work it asks for: with the real Django
-side on a development machine, about a millisecond, and an idle applying pass
-of ten calls about 40 ms. `go test -bench BridgeCall ./runtime` and the pass in
-`hq/domains/control_plane/tests/test_bridge_live.py` reproduce it, and a budget
-in each fails if a call comes to cost a process again.
+already started, so a call costs the work it asks for. With the real Django
+side on a development machine, a call takes about a millisecond, and an idle
+applying pass of ten calls about 40 ms.
+
+`go test -bench BridgeCall ./runtime` and the pass in
+`hq/domains/control_plane/tests/test_bridge_live.py` reproduce it. A budget in
+each fails if a call comes to cost a process again.
 
 - **One listener, one application.**
   `hq/domains/control_plane/bridge_application.py` is an ASGI application of its
@@ -848,11 +1015,14 @@ in each fails if a call comes to cost a process again.
   serves no web route.
 - **The socket is the authorization.** It sits in a directory only the web
   account can enter (a volume mounted read-only into the controller's
-  container), owned by that account with mode 0600, and each side asks the
-  kernel who the other is (`SO_PEERCRED`): HQ drops a connection from any other
-  uid before reading it, and the controller refuses a directory, socket or
-  listener that is not its own account's, a link, or a wider mode. No
-  credential crosses the bridge in either direction.
+  container), owned by that account with mode 0600. Each side asks the kernel
+  who the other is (`SO_PEERCRED`). HQ drops a connection from any other uid
+  before reading it. The controller refuses a directory, socket or listener
+  that is not its own account's, a link, or a wider mode.
+- **No credential or key crosses it.** No provider credential crosses the
+  bridge in either direction, and no key either. The account both sides share
+  means anything the bridge carries has only the web's own integrity, so the
+  public sealing key reaches HQ from root instead.
 - **Bounded.** A request or answer over the contract's `BridgeBody` size is
   refused on both sides, every call has a deadline (`BridgeTimeout`), and a
   refusal is an RFC 9457 problem the controller reports as a `BridgeError`. A
@@ -872,72 +1042,91 @@ in each fails if a call comes to cost a process again.
 - **Scheduled work is one more action.** What the host asks HQ for by name
   (prune routine audit events, delete expired sessions, read the contact inbox,
   pull the content index, read the public registries, read unit state after a
-  failure) is declared once, in `hq/platform/application/scheduled_work.py`. A
-  unit runs `hq-controller job NAME` inside the web container; the running
-  process does the work as a job and answers how it ended, so a failed job is a
-  failed unit and every run has a row. No unit starts a Python process, a test
-  holds the shipped units to the declared names, and HQ starts the same job
-  itself when it learns something is due sooner.
+  failure) is declared once, in `hq/platform/application/scheduled_work.py`.
+- **A unit runs it as a job.** A unit runs `hq-controller job NAME` inside the
+  web container. The running process does the work as a job and answers how it
+  ended, so a failed job is a failed unit and every run has a row. No unit
+  starts a Python process, and a test holds the shipped units to the declared
+  names. HQ starts the same job itself when it learns something is due sooner.
 
 Plan mode authenticates and peeks without leasing work. Apply mode schedules
-due work, then claims only supported kind and action pairs. The validated
-capability document declares which actions are automatic; a generic scheduler
-derives reconciliation for generation and health drift, and the TLS provider
-adds expiry-window renewal. Every declared action dispatches through one
-kind-and-action map. AdGuard and NPM reconcile in apply mode. TLS
-reconciliation reuses the existing lineage without contacting ACME. For NPM,
-one managed certificate is uploaded once and every enabled proxy host its SANs
-cover is found, rebound, reloaded and live-verified. TLS renewal issues through
-DNS-01 only when needed, snapshots the rollback artifact, deploys to every
-consumer, and verifies one fingerprint everywhere before reporting success.
+due work, then claims only supported kind and action pairs.
 
-Issuance is the controller's Go ACME client (`controller/providers/tls_acme.go`). It signs in with one account key per certificate
-authority, kept 0600 under `account/` in the ACME state; the first issuance
-carries over the key certbot registered there, if there is one, so the
-authority sees the same account, and otherwise registers a new P-256 key with
-the ACME connection's email. Each name is proved with a `_acme-challenge` TXT
-record created through the `cloudflare_dns` connection, given
-`ACME_PROPAGATION_SECONDS` (default 30) to propagate, and removed once the
-order ends, whether it succeeded or not. The DNS token is never written to
-disk. The certificate gets a fresh P-256 key, and is saved only after it is
-checked against its names and key: `fullchain.pem` and `privkey.pem` are
-written beside `config/live/<name>/` and exchanged with it in one rename, so a
-reader sees the old pair or the new one.
+The validated capability document declares which actions are automatic. A
+generic scheduler derives reconciliation for generation and health drift, and
+the TLS provider adds expiry-window renewal. Every declared action dispatches
+through one kind-and-action map.
+
+| Provider | In apply mode |
+|---|---|
+| AdGuard | reconciles |
+| NPM | reconciles. One managed certificate is uploaded once, and every enabled proxy host its SANs cover is found, rebound, reloaded and live-verified |
+| TLS reconciliation | reuses the existing lineage without contacting ACME |
+| TLS renewal | issues through DNS-01 only when needed, snapshots the rollback artifact, deploys to every consumer, and verifies one fingerprint everywhere before reporting success |
+
+Issuance is the controller's Go ACME client
+(`controller/providers/tls_acme.go`). It signs in with one account key per
+certificate authority, kept 0600 under `account/` in the ACME state. The first
+issuance carries over the key certbot registered there, if there is one, so the
+authority sees the same account. Otherwise it registers a new P-256 key with
+the ACME connection's email.
+
+Each name is proved with a `_acme-challenge` TXT record created through the
+`cloudflare_dns` connection. The record is given `ACME_PROPAGATION_SECONDS`
+(default 30) to propagate, and removed once the order ends, whether it
+succeeded or not. The DNS token is never written to disk.
+
+The certificate gets a fresh P-256 key, and is saved only after it is checked
+against its names and key. `fullchain.pem` and `privkey.pem` are written beside
+`config/live/<name>/` and exchanged with it in one rename, so a reader sees the
+old pair or the new one.
 
 Public DNS records reconcile and delete; their zone is declaration-only, because
 changing a zone's settings needs a credential the controller does not hold.
-Short-lived NPM tokens stay in memory, and a report carrying a secret-bearing
-key is rejected.
+Short-lived NPM tokens stay in memory. Before an action reads a payload, the
+bridge strikes every secret in it to `[redacted]` and logs where: a string
+shaped like a credential the controller handles, or the value of a member
+named as one where the contract leaves the shape open
+(`hq/domains/control_plane/secret_shapes.py`). It strikes rather than refuses
+because an outsider writes some of those strings, such as a contact form's
+message. A query holding one is refused, since only the controller writes it.
 
 Public DNS is also gated by a deployment switch, which governs acting rather
-than being visible: a declaration whose every action is locked changes nothing,
+than being visible. A declaration whose every action is locked changes nothing,
 so refusing it would only stop an operator recording which domains HQ is
 responsible for.
 
 The contact form's D1 table is reached only by the controller, through the
-`cloudflare_api` connection: its `cloudflare.contact_submission` reading reads
-every database holding the table (D1 Read), and the `cloudflare.contact_inbox`
-declaration carries HQ's reviews and deletions for it to apply (D1 Write, and
-the connection must manage). The web process holds no Cloudflare credential.
+`cloudflare_api` connection. The web process holds no Cloudflare credential.
+DNS-01 uses its own least-privilege connection.
+
+| Part | What it does | Grant |
+|---|---|---|
+| The `cloudflare.contact_submission` reading | reads every database holding the table | D1 Read |
+| The `cloudflare.contact_inbox` declaration | carries HQ's reviews and deletions for the controller to apply | D1 Write, and the connection must manage |
+
 The records are people's names, addresses and messages, so the reading is
-`withheld`: the generic readings resource counts them and lists none, and only
-the contacts capability reads them. The declaration is `withheld` too, because
-reviews carry the operator's notes. The records API, MCP, record pages,
-reports, search and the audit log show its status and never its contents, and
-the generic writer refuses it. DNS-01 uses its own least-privilege connection.
+`withheld`. The generic readings resource counts them and lists none, and only
+the contacts capability reads them.
+
+The declaration is `withheld` too, because reviews carry the operator's notes.
+The records API, MCP, record pages, reports, search and the audit log show its
+status and never its contents, and the generic writer refuses it.
 
 ### A container its unit runs
 
 A container a systemd unit keeps running would be started again by that unit
-after a stop asked of Docker, and a start asked of Docker would skip what the
-unit runs first. Such a container names its unit in the label
-`severino-hq.unit` (`unit.Label`, beside HQ's `severino-hq.run` and
-`severino-hq.role`), and its record carries the unit. Stop, Start and Restart
-on it go through the unit and never through Docker: `portainerCycler` hands
-them to `providers.UnitControl`, and where no unit control reaches the
-container's machine it refuses in a plan and a run alike. HQ shows the same:
-on the machine HQ runs on the verbs name the unit; elsewhere they are disabled
-with the reason, and a request is refused.
+after a stop asked of Docker. A start asked of Docker would skip what the unit
+runs first.
+
+Such a container names its unit in the label `severino-hq.unit` (`unit.Label`,
+beside HQ's `severino-hq.run` and `severino-hq.role`), and its record carries
+the unit. Stop, Start and Restart on it go through the unit and never through
+Docker. `portainerCycler` hands them to `providers.UnitControl`. Where no unit
+control reaches the container's machine, it refuses in a plan and a run alike.
+
+HQ shows the same. On the machine HQ runs on, the verbs name the unit.
+Elsewhere they are disabled with the reason, and a request is refused.
 
 The one unit control is root's `hq-host unit --serve` (`controller/host/unit`),
 behind `severino-hq-unit.socket` on the machine HQ runs on. Each connection
@@ -956,18 +1145,20 @@ request:
   an account, so the socket's peer check (root or that account, by
   `SO_PEERCRED`) is defense in depth.
 - **The label is not trusted alone.** Portainer's credential can create a
-  container with any label, so at least one container on the machine, running
-  or stopped, must name the unit, and the unit's own `ExecStartPre` and
+  container with any label. So at least one container on the machine, running
+  or stopped, must name the unit. And the unit's own `ExecStartPre` and
   `ExecStart`, which are root's, must run docker on every container that names
-  it, read where docker reads a container's name: the container `docker
-  start`, `stop` or `restart` names, the `--name` of `docker run` or `create`,
-  or one `docker compose up`, `create`, `start` or `restart` brings up, named
-  as compose names it from the project's own files (`docker compose config`:
-  a service's `container_name`, or `project-service-N`). The container's
-  creator chooses its name and every other label, so an argument that only
-  spells the name, or a copied `com.docker.compose.project.working_dir`,
-  counts for nothing, and a command with an option the tables do not know
-  names no container.
+  it.
+- **A container is named where docker reads its name.** That is the container
+  `docker start`, `stop` or `restart` names, or the `--name` of `docker run` or
+  `create`. Or it is one that `docker compose up`, `create`, `start` or
+  `restart` brings up, named as compose names it from the project's own files
+  (`docker compose config`: a service's `container_name`, or
+  `project-service-N`).
+- **What the creator chooses counts for nothing.** The container's creator
+  chooses its name and every other label. So an argument that only spells the
+  name, or a copied `com.docker.compose.project.working_dir`, counts for
+  nothing. A command with an option the tables do not know names no container.
 - **The unit is loaded under exactly that name**, so an alias cannot stand in
   for another unit.
 

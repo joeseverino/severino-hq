@@ -96,12 +96,14 @@
 
   /* Posture, led by what is not met: a row per gap with the repositories
      that miss it, then a row per repository with a segment per check. */
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the frame's corners clip its rows' fill, not their text */
   .posture-gaps, .posture-repos { list-style: none; margin: 0 0 var(--space-7); padding: var(--surface-inset, 0); overflow: hidden; }
   .posture-gaps li, .posture-repos li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-6); padding: var(--space-5) var(--space-7); }
   .posture-gaps li + li { border-top: 1px solid var(--line-2); }
   /* A repository's row is short: as many to a line as the frame holds, each
      cell drawing its own hairlines as a band's do, so a wide frame is not a
      column of rows ending halfway across it. */
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the grid clips its cells' outer hairlines, not their text */
   .posture-repos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 32rem), 1fr)); overflow: clip; }
   .posture-repos li { box-shadow: -1px 0 0 var(--line-2), 0 -1px 0 var(--line-2); }
   .posture-gaps li { align-items: flex-start; border-left: 3px solid var(--tone-caution-line); }
@@ -143,8 +145,6 @@
   .project-tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--stack-gap); }
   /* An age or a count that reads wrong split across two lines. */
   .nowrap { white-space: nowrap; }
-  /* A line that is a label, not prose: cut with an ellipsis, whole on hover. */
-  .one-line { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 100%; }
   /* The same mark as a verified certificate: a check in a circle, one color. */
   .gh-verified { display: inline-flex; margin-left: var(--space-3); color: var(--accent-2); font-size: .9em; vertical-align: -.1em; cursor: default; }
   .gh-stats { display: flex; flex-wrap: wrap; gap: var(--space-9); margin: 0; }
@@ -164,7 +164,12 @@
 
   /* A compact list is short labels beside short values: a column each, at
      every width, so a few numbers do not spend a screen stacked label over
-     value. A value too long for its column wraps inside it. */
-  .kv.compact { margin-bottom: 0; grid-template-columns: minmax(5rem, max-content) minmax(0, 1fr); gap: var(--space-2) var(--space-7); padding: var(--surface-inset, var(--space-5) var(--space-6)); align-items: baseline; }
+     value. A value too long for its column wraps inside it. A pair lines up
+     by its top, never its baseline: a value that opens with a wrapped
+     identifier has its baseline on the identifier's last line in WebKit,
+     which has no `baseline-source`, and a row aligned on it is drawn over
+     the rows above. Label and value share one face, so their first lines
+     still meet. */
+  .kv.compact { margin-bottom: 0; grid-template-columns: minmax(5rem, max-content) minmax(0, 1fr); gap: var(--space-2) var(--space-7); padding: var(--surface-inset, var(--space-5) var(--space-6)); align-items: start; }
   .kv.compact dt { margin-top: 0; }
 }

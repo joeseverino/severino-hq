@@ -20,10 +20,10 @@ from ..github_posture import (
     build_attention,
     postures,
 )
-from ..item_help import COMMAND, item_help
 from ..standards import INTENDED, MET, UNAVAILABLE, UNMET
 from .markup import hrefs, within
 from .test_github_estate import store
+from .test_item_help import COMMAND, item_help
 
 # What a well-kept repository reads as: only its owner, one read-only key in
 # use, a read-only token that approves nothing, pinned actions, fixes on.

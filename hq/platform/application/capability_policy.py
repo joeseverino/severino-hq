@@ -8,7 +8,7 @@ Operators are never subject to policy.
 """
 
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Literal, TypedDict
 
 from django.db import transaction
 from django.db.models import Q
@@ -20,7 +20,6 @@ from hq.platform.core.models import AgentIdentity, AuditLog
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .approvals import (
-    AGENT_SURFACES,
     DESTRUCTIVE_EFFECT,
     READ_EFFECT,
     held_by_default,
@@ -28,8 +27,12 @@ from .approvals import (
     may_be_held_by_default,
 )
 from .command_fields import Describe
-from .labels import effect_label
+from .labels import dotted, effect_label
 from .security import (
+    AGENT_SURFACES,
+    API_INTERFACE,
+    INTERNAL_INTERFACE,
+    MCP_INTERFACE,
     AuthorizationError,
     Principal,
     could_hold,
@@ -160,7 +163,7 @@ def set_rule(
         record_event(
             action=AuditLog.Action.SETTINGS_CHANGED,
             type_label=AUDIT_LABEL,
-            message=f"{subject} · {spec.name}: from {_name(before)} to {_name(rule)}",
+            message=dotted(subject, f"{spec.name}: from {_name(before)} to {_name(rule)}"),
             metadata={
                 "scope": scope,
                 "subject": subject,
@@ -183,7 +186,7 @@ def agents_may_hold(spec) -> bool:
 def _held_by_grant(spec, granted) -> bool:
     """Asked through Principal.permits, the one definition of holding a capability."""
 
-    return Principal("grant", "internal", frozenset(granted)).permits(*spec.required_capabilities)
+    return Principal("grant", INTERNAL_INTERFACE, frozenset(granted)).permits(*spec.required_capabilities)
 
 
 # What a rule is called on the page. The stored values keep their names.
@@ -251,10 +254,6 @@ class PolicyCell:
     # Settable, but not in force until the deployment allows it over MCP.
     dormant: bool = False
 
-    @property
-    def rule_label(self) -> str:
-        return _name(self.rule)
-
 
 @dataclass(frozen=True, slots=True)
 class Row:
@@ -264,10 +263,6 @@ class Row:
     effect_label: str
     default: str
     cells: tuple[PolicyCell, ...]
-
-    @property
-    def everyone(self) -> tuple[PolicyCell, ...]:
-        return tuple(cell for cell in self.cells if cell.scope == Scope.SURFACE)
 
     @property
     def agents(self) -> tuple[PolicyCell, ...]:
@@ -300,15 +295,15 @@ def split_by_default(groups: tuple[Group, ...]) -> tuple[tuple[Group, ...], tupl
 
 def columns() -> tuple[Column, ...]:
     surfaces = (
-        Column(Scope.SURFACE, "mcp", "All MCP agents", "MCP"),
-        Column(Scope.SURFACE, "api", "All API clients", "API"),
+        Column(Scope.SURFACE, MCP_INTERFACE, "All MCP agents", "MCP"),
+        Column(Scope.SURFACE, API_INTERFACE, "All API clients", "API"),
     )
     agents = tuple(
         Column(
             Scope.AGENT,
             identity.client_id,
             identity.client_id,
-            " · ".join(identity.interfaces).upper(),
+            dotted(*identity.interfaces).upper(),
             identity,
         )
         for identity in AgentIdentity.objects.all()
@@ -316,13 +311,14 @@ def columns() -> tuple[Column, ...]:
     return surfaces + agents
 
 
-def matrix() -> tuple[tuple[Column, ...], tuple[Group, ...]]:
-    """Every capability against every column, grouped by what it acts on."""
+def matrix(current: dict[tuple[str, str, str], str] | None = None) -> tuple[tuple[Column, ...], tuple[Group, ...]]:
+    """Every capability against every column, grouped by what it acts on; ``current`` is
+    ``rules()`` when the caller has read them already."""
 
     cols = columns()
-    grants = dict(AgentIdentity.objects.values_list("client_id", "granted"))
+    grants = {column.subject: column.identity.granted for column in cols if column.identity is not None}
     ceiling = mcp_principal()
-    current = rules()
+    current = rules() if current is None else current
     grouped: dict[str, list] = {}
     for spec in capabilities.capability_registry().values():
         if spec.effect in EFFECTS and agents_may_hold(spec):
@@ -357,7 +353,7 @@ def _subject_label(subject: str) -> str:
     resource = integration_graph().resources.get(subject)
     if resource is not None:
         return resource.label
-    words = subject.removesuffix(".resources").replace(".", " ").replace("_", " ")
+    words = subject.replace(".", " ").replace("_", " ")
     return words[:1].upper() + words[1:]
 
 
@@ -385,7 +381,7 @@ def _cell(spec, column: Column, current, grants, ceiling) -> PolicyCell:
     field = field_name(column.scope, column.subject, spec.name)
     if column.scope == Scope.AGENT and not _held_by_grant(spec, grants[column.subject]):
         return PolicyCell(field, column.scope, column.label, None, (), "Pocket ID does not allow this")
-    dormant = column.subject == "mcp" and not ceiling.permits(*spec.required_capabilities)
+    dormant = not ceiling.permits(*spec.required_capabilities)
     options = [("", "Default"), (Rule.ALLOW, RULE_LABELS[Rule.ALLOW])]
     if spec.effect != READ_EFFECT:
         options.append((Rule.APPROVE, RULE_LABELS[Rule.APPROVE]))
@@ -400,7 +396,7 @@ def _cell(spec, column: Column, current, grants, ceiling) -> PolicyCell:
     )
 
 
-SET_POLICY = "agents.policy.set"
+SET_POLICY = "agent.policy.set"
 
 
 @dataclass(frozen=True, slots=True)
@@ -420,7 +416,17 @@ class PolicyCommand:
     rules: Annotated[tuple[RuleCell, ...], Describe("The policy cells to set, each one rule.")]
 
 
-def apply_changes(command: PolicyCommand, *, principal: Principal) -> dict[str, Any]:
+class PolicyApplied(TypedDict):
+    """What applying the rules changed, and why any rule was left as it was."""
+
+    ok: Literal[True]
+    changed: Annotated[int, Describe("How many rules changed.")]
+    problems: Annotated[
+        list[str], Describe("Why each rule left as it was could not change, a sentence each; empty when none was.")
+    ]
+
+
+def apply_changes(command: PolicyCommand, *, principal: Principal) -> PolicyApplied:
     """Apply the cells that differ from what holds, each on its own.
 
     ``changed`` counts what moved; ``problems`` says why each refused cell was

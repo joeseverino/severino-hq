@@ -29,6 +29,7 @@ import (
 	"golang.org/x/crypto/acme"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/internal/clock"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -448,7 +449,7 @@ func (r *Registry) authorize(ctx context.Context, client *acme.Client, order *ac
 	if err != nil {
 		return placed, err
 	}
-	if err := r.Sleep(ctx, delay); err != nil {
+	if err := clock.Sleep(ctx, delay); err != nil {
 		return placed, err
 	}
 	for _, item := range pending {

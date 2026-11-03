@@ -13,8 +13,6 @@ SELECTORS = {
     "decisions": "[data-attention-item]",
     # What a page says of the readings it asked for on opening.
     "ask_note": "[data-ask-note]",
-    # Every note a page says beside something: its live regions.
-    "note": "[role=status], [aria-live]",
     # A family's toggle, the row toggle, and a row's own dismiss.
     "decision_family": "[data-queue-family] [data-fold-toggle]",
     "row_toggle": "[data-row-toggle]",
@@ -24,16 +22,32 @@ SELECTORS = {
     "decision_detail": ".attention-detail",
     # What a card's own buttons decide (an approval's change): never cut.
     "decision_whole": ".attention-detail[data-whole]",
+    # Running text, and what an opened row shows beneath it: code in it is
+    # never cut, since only a cell's own identifier is.
+    "running_text": ":is(p, li, .row-detail)",
+    "code": "code",
+    # The boxes that cut a cell's identifier: the token, a part inside it,
+    # the chip.
+    "cut_box": ":is(.token[data-sole], .token[data-sole] .whole, code, code > .token)",
+    # The box a name in a cell is held by.
+    "name_box": "[data-entity], code, .token[data-sole]",
     "decision_actions": ".queue-act .attention-actions",
-    # A list page's controls: its search, a filter's menu and a box in one, a
-    # toggle beside them, a heading that sorts on the server, and the results
-    # they change: the rows, never the line held beneath one, or the empty
-    # state that says nothing matches.
+    # The queue's table, and its cells of what is wrong and of its buttons.
+    "queue_table": ".queue-table",
+    "queue_what": "td.queue-what",
+    "queue_act": "td.queue-act",
+    # A list page's controls: its search, the button that opens a filter's
+    # panel, the panel and a box in one, a toggle beside them, a heading that
+    # sorts on the server, and the results they change: the rows, never the
+    # line held beneath one, or the empty state that says nothing matches.
     "table_search": "[data-table-toolbar] input[type=search]",
-    "table_filter": "[data-table-toolbar] details[data-menu]",
+    "table_filter": "[data-table-toolbar] [popovertarget]",
+    "table_filter_panel": "[data-table-toolbar] [popover]",
     "table_filter_box": "input[type=checkbox][name]",
     "table_toggle": "[data-table-toolbar] .table-toggle input",
     "table_rows": "main .data-table > tbody > tr:not(.row-detail)",
+    # The line beneath a row, with what the row holds back.
+    "row_detail": "main .data-table > tbody > tr.row-detail",
     "table_empty": "main [data-empty-state]",
     "sort_link": "main a.table-sort-link",
     # The queue's own filter: a choice of urgency, applied by its button.
@@ -41,14 +55,19 @@ SELECTORS = {
     "queue_apply": "form.filter-bar button[type=submit]",
     # The header's menus, and on a phone the drawer that holds them.
     "nav_menu": ".primary-nav details[data-menu]",
-    "nav_open": ".nav-toggle-open",
-    "nav_close": ".nav-toggle-close",
+    "nav_drawer": ".primary-nav",
+    "nav_toggle": "[popovertarget=primary-navigation]",
     "highlights": ".dashboard-highlights > .highlight-card",
     # Each reading in the dashboard's row: a mark, then its lines.
     "readings": ".dash-readings .glance-panel-head",
     "patterns": ".dashboard-patterns > .card",
     # A control a reader fills in or picks from, whose edge is what shows it.
     "fillable": "input:not([type=checkbox], [type=radio], [type=hidden], [type=range], [type=color], [type=submit], [type=button], [type=reset], [type=image]), select, textarea",
+    # A link that goes somewhere.
+    "link": "a[href]",
+    # A select; the probes that judge one that opens to its choices leave out a
+    # list box (multiple or sized), which Django's widgets mark, not a template.
+    "dropdown": "select",
     # A control pressed or picked from rather than typed into: a button, a
     # disclosure's handle, a label drawn around a select or a checkbox.
     "pressed": (
@@ -85,6 +104,8 @@ SELECTORS = {
     "disclosure": "main details:not([data-menu])",
     # Where the API reference mounts its viewer.
     "reference": "#api-reference-root",
+    # A block of code the reference's viewer draws: a request or answer.
+    "reference_sample": "#api-reference-root pre",
     # Where a vendored script draws markup HQ does not write: the API
     # reference's viewer, which ReferenceBrowserTests holds to its own rules.
     "vendored": "#api-reference-root",
@@ -97,6 +118,18 @@ SELECTORS = {
     "map": ".topology-map",
     "map_lane": ".topology-lane",
     "map_node": ".topology-node",
+    # A node's select link, the details beside the lanes, a trace's groups of
+    # chips, and a chip.
+    "map_select": "[data-topology-select]",
+    "map_detail": ".topology-detail",
+    "trace_controls": ".topology-trace-controls",
+    "trace_chip": ".scope-chip",
+    # The command center: its field, its options, and the hint Enter's choice hides.
+    "palette_input": "[data-command-center-input]",
+    "palette_option": "[data-command-center-option]",
+    "palette_hint": ".command-center-enter-hint",
+    # The header's sections, an entry or a group's handle.
+    "nav_entry": ".primary-nav > a, .nav-group > summary",
     # A value and the one it changes into, its arrow, and what the arrow points at.
     "change": "main .change",
     # A chip set in a line: an identifier, wherever it is not a block of code, or a tag.
@@ -119,19 +152,21 @@ SELECTORS = {
     # An identifier in a table's cell, and what in a row wraps by design,
     # where one may break (figures.css): the line a row opens, the row's own
     # name, free text, a preview, a context line, a chip that wraps, a
-    # control, and a phrase's word whose hyphenated parts are each cut at the
-    # cell's edge.
+    # control, a phrase's word whose hyphenated parts are each cut at the
+    # cell's edge, and a panel the cell shows, which is laid out as a page.
     "cell_token": "main .data-table > tbody > tr > td .token",
     "wraps_in_a_cell": (
         "tr.row-detail, .row-gutter, td > strong:first-child, td > a:first-child > strong,"
         " .cell-data, .muted, .attention-title, .attention-detail, .table-clamp, code.cell-whole, .btn,"
-        " .token:not([data-sole]):has(> .whole)"
+        " .token:not([data-sole]):has(> .whole), [popover]"
     ),
     # Words said to a reader and never drawn.
     "unseen": ".visually-hidden",
     # A dialog a page declares (partials/_modal.html), and the controls that
     # open one: a link the page's wiring intercepts, or a control that says
     # it opens a dialog and names it.
+    # A section's heading (partials/_section_head.html).
+    "section_head": ".section-head",
     # A fact whose value is a list of names (partials' .code-list, .address-list).
     "fact_list": "main .kv > dd:has(> :is(.code-list, .address-list) > :nth-child(2))",
     # What keeps its line wherever it is drawn: the count of planned days kept
@@ -140,6 +175,10 @@ SELECTORS = {
     # One fact of a band, and the label that names its value.
     "band_fact": ".fact-band > *",
     "band_label": ".band-label",
+    # A tab of a tabbed chart, the radio inside it, and the panels they choose.
+    "chart_tab": ".chart-tablist > .chart-tab",
+    "chart_tab_input": ".chart-tab-input",
+    "chart_panel": ".chart-tabs .chart-panel",
     "dialog": 'dialog.modal[id^="modal-"]',
     "dialog_opener": '[data-modal-open], [aria-haspopup="dialog"][aria-controls]',
 }

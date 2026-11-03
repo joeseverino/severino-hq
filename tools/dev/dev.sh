@@ -162,4 +162,6 @@ fi
 # The environment's own interpreter, which uv has synced by now: `uv run`
 # would stay on as a parent process holding memory of its own.
 python=$(uv run python -c 'import sys; print(sys.executable)')
-exec "$python" -m uvicorn hq.config.asgi:application --host "$host" --port "$port" "$@"
+# --no-proxy-headers, as the image's: the application reads its proxy's
+# forwarded headers itself, after recording the peer they replace.
+exec "$python" -m uvicorn hq.config.asgi:application --host "$host" --port "$port" --no-proxy-headers "$@"

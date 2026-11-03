@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
 <form method="post" enctype="multipart/form-data" class="form">
-  {% csrf_token %}
+  {% write_token %}
   {% include "partials/_form_errors.html" %}
   {% comment %}
   The file field is the whole point of this page, so it gets the target the

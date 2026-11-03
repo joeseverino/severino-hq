@@ -18,12 +18,10 @@ from hq.platform.core.network import strict_host
 _current: ContextVar[Any] = ContextVar("hq_current_request", default=None)
 
 
-def bind(request: Any) -> Token:
+def bind(request: Any) -> Token[Any]:
+    """Carry ``request`` as the one being answered for the length of a ``with`` block."""
+
     return _current.set(request)
-
-
-def unbind(token: Token) -> None:
-    _current.reset(token)
 
 
 def current() -> Any:

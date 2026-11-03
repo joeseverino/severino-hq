@@ -26,8 +26,9 @@ from django.views.generic import (
 )
 
 from hq.domains.expenses.models import Expense
-from hq.platform.application.capabilities import capability_words, execute_capability
+from hq.platform.application.capabilities import capability_words
 from hq.platform.application.deletion import DeleteCommand
+from hq.platform.application.labels import dotted, dotted_html
 from hq.platform.application.moments import when
 from hq.platform.application.money import money
 from hq.platform.application.pages import PageAction, PageMixin
@@ -36,6 +37,7 @@ from hq.platform.application.records import deleter
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import TableColumn, TableListMixin, TableToggle
 from hq.platform.application.ui import ended
+from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 from hq.platform.core.templatetags.value_tags import breakable
@@ -48,7 +50,7 @@ from .validation import (
     is_new_upload,
 )
 
-RECEIPTS_TRAIL = ("Receipts", reverse_lazy("receipts:list"))
+RECEIPTS_TRAIL = (("Receipts", reverse_lazy("receipts:list")),)
 # The details a link keeps as they are, read back as the record's update takes them.
 _DETAILS = ("vendor", "date", "amount", "notes", "related_asset")
 
@@ -107,8 +109,7 @@ class ReceiptDetailView(PageMixin, DetailView):
     @override
     def get_page_lede(self):
         receipt = self.object
-        named = f"{receipt.original_filename} · " if receipt.original_filename else ""
-        return f"{named}uploaded {when(receipt.uploaded_at)}"
+        return dotted(receipt.original_filename, f"uploaded {when(receipt.uploaded_at)}")
 
     @override
     def get_page_actions(self):
@@ -149,10 +150,8 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
     @override
     def get_page_lede(self):
         receipt = self.receipt
-        return format_html(
-            "<strong>{}</strong> · {}",
-            breakable(receipt.vendor or "(Unknown vendor)"),
-            money(receipt.amount),
+        return dotted_html(
+            format_html("<strong>{}</strong>", breakable(receipt.vendor or "(Unknown vendor)")), money(receipt.amount)
         )
 
     @override
@@ -197,17 +196,15 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
 
         if expense_id:
             expense = get_object_or_404(Expense, pk=expense_id)
-            details = serialize_receipt(receipt)
-            result = execute_capability(
+            details = dict(serialize_receipt(receipt))
+            result = execute_posted(
+                request,
                 UPDATE,
                 {field: details[field] for field in _DETAILS} | {"related_expense": expense.id},
-                principal=web_principal(request.user),
                 target=receipt.id,
             )
-            if result["ok"]:
+            if not refused(request, result):
                 messages.success(request, ended(f"Receipt linked to {expense.label}"))
-            else:
-                messages.error(request, result["error"]["message"])
 
         return redirect(receipt.get_absolute_url())
 
@@ -230,14 +227,11 @@ class ReceiptCreateView(ReceiptPage, CreateView):
 
     @override
     def form_valid(self, form):
-        result = execute_capability(
-            UPLOAD,
-            receipt_payload(form.cleaned_data, form.cleaned_data["file"]),
-            principal=web_principal(self.request.user),
-        )
-        if not result["ok"]:
-            form.add_error(None, result["error"]["message"])
-            return self.form_invalid(form)
+        result = execute_posted(self.request, UPLOAD, receipt_payload(form.cleaned_data, form.cleaned_data["file"]))
+        if refusal := refused(self.request, result, form=form):
+            response = self.form_invalid(form)
+            response.status_code = refusal.status
+            return response
         self.object = Receipt.objects.get(pk=result["receipt"]["id"])
         messages.success(self.request, "Receipt uploaded.")
         return redirect(self.object.get_absolute_url())
@@ -254,15 +248,13 @@ class ReceiptUpdateView(ReceiptPage, UpdateView):
         upload = form.cleaned_data.get("file")
         # A new file is the replace capability's; details alone are the record's update.
         name, upload = (REPLACE, upload) if is_new_upload(upload) else (UPDATE, None)
-        result = execute_capability(
-            name,
-            receipt_payload(form.cleaned_data, upload),
-            principal=web_principal(self.request.user),
-            target=self.get_object().pk,
+        result = execute_posted(
+            self.request, name, receipt_payload(form.cleaned_data, upload), target=self.get_object().pk
         )
-        if not result["ok"]:
-            form.add_error(None, result["error"]["message"])
-            return self.form_invalid(form)
+        if refusal := refused(self.request, result, form=form):
+            response = self.form_invalid(form)
+            response.status_code = refusal.status
+            return response
         self.object = Receipt.objects.get(pk=result["receipt"]["id"])
         messages.success(self.request, "Receipt updated.")
         return redirect(self.object.get_absolute_url())

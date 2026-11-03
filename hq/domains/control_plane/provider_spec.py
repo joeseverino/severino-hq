@@ -22,6 +22,8 @@ from pydantic import (
     model_validator,
 )
 
+from hq.platform.application.json_schemas import json_schema
+from hq.platform.application.labels import dotted
 from hq.platform.application.moments import span, when_day
 from hq.platform.application.record_errors import Sentence
 from hq.platform.application.routes import reverse
@@ -589,7 +591,7 @@ class ProviderSpec:
         return self.adoption_gap
 
     def schema(self) -> dict[str, Any]:
-        return adapter(self.spec_type).json_schema()
+        return json_schema(adapter(self.spec_type))
 
     def validate(self, payload: dict[str, Any]) -> Any:
         return adapter(self.spec_type).validate_python(payload)
@@ -643,8 +645,8 @@ def expiry_phrase(stamp: str) -> str:
 
     days = days_until(expires)
     if days < 0:
-        return f"{when_day(expires)} · expired"
-    return f"{when_day(expires)} · {span(days)}"
+        return dotted(when_day(expires), "expired")
+    return dotted(when_day(expires), span(days))
 
 
 def named_page(route: str, resource: Any, field: str) -> str:

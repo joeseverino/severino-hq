@@ -61,8 +61,8 @@ class ProblemsAboutTests(TestCase):
 
     def test_a_problem_is_found_by_the_page_of_what_it_is_about(self):
         with host_only(), projection_scope():
-            found = one(problems_about(self.url))
-            elsewhere = problems_about(entity_link("resource", "other").url)
+            found = one(problems_about(self.url, cli_principal()))
+            elsewhere = problems_about(entity_link("resource", "other").url, cli_principal())
 
         self.assertEqual(found["subject"]["url"], self.url)
         self.assertEqual(found["status"], "serious")
@@ -98,7 +98,7 @@ class ProblemsAboutTests(TestCase):
         broken("other")
 
         with host_only(), projection_scope():
-            counts = problem_counts()
+            counts = problem_counts(cli_principal())
 
         self.assertEqual(counts[self.url], 1)
         self.assertEqual(counts[entity_link("resource", "other").url], 1)
@@ -169,7 +169,7 @@ class FirstSeenTests(TestCase):
                 record_sweep({REWRITE: {"ok": True, "records": []}}, principal=cli_principal())
             with projection_scope():
                 (item,) = [item for item in infrastructure() if item.key.endswith(":resource:app")]
-                card = one(problems_about(entity_link("resource", "app").url))
+                card = one(problems_about(entity_link("resource", "app").url, cli_principal()))
 
         self.assertIsNotNone(item.since)
         self.assertEqual(card["since"], item.since.isoformat())

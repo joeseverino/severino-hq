@@ -16,8 +16,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from hq.platform.core.tests.task import git, usage
-from tools.gate.verdict import Step, close, run
+from hq.platform.core.tests.task import RefError, git, usage
+from tools.gate.verdict import Gate, Step, run
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -179,11 +179,31 @@ class GitHub:
         return ok
 
 
-def github_gates() -> bool:
+def checked_commit() -> str:
+    """The commit GitHub checked for HEAD, or "": HEAD once a remote branch
+    holds it, else its upstream's tip when that tip's tree is HEAD's, as a
+    branch sent up as one commit over the remote's tip leaves it."""
+
     (sha,) = git("rev-parse", "HEAD")
-    if not git("branch", "-r", "--contains", sha):
-        print("HEAD is not pushed, so GitHub has checked nothing of it.", file=sys.stderr)
+    if git("branch", "-r", "--contains", sha):
+        return sha
+    try:
+        (upstream,) = git("rev-parse", "@{upstream}")
+    except RefError:
+        return ""
+    return upstream if git("rev-parse", "HEAD^{tree}") == git("rev-parse", f"{upstream}^{{tree}}") else ""
+
+
+def github_gates() -> bool:
+    sha = checked_commit()
+    if not sha:
+        print(
+            "HEAD is not pushed, and no upstream tip holds its tree, so GitHub has checked nothing of it.",
+            file=sys.stderr,
+        )
         return False
+    if [sha] != git("rev-parse", "HEAD"):
+        print(f"HEAD's tree is the upstream tip's, {sha[:12]}, which GitHub checked.")
     repository = gh("repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner").strip()
     github = GitHub(sha, repository)
     deadline = time.monotonic() + int(os.environ.get("CHECK_REMOTE_TIMEOUT", "3600"))
@@ -195,10 +215,10 @@ def github_gates() -> bool:
 
 
 def main() -> int:
-    started = time.monotonic()
     asked = usage()
     release = asked.switch("release") or asked.switch("skip_host")
     summary = Summary("check-release" if release else "check")
+    gate = Gate(summary.name)
     if release:
         (head,) = git("rev-parse", "--short", "HEAD")
         # A check of uncommitted files proves nothing about the commit that ships.
@@ -212,7 +232,7 @@ def main() -> int:
     else:
         summary.command("every gate CI runs", GATES)
     if not release:
-        return report(summary, started)
+        return report(summary, gate)
     summary.command("the composed suite, as the image runs it", COMPOSED)
 
     destination = os.environ.get("SEVERINO_HQ_DEPLOY_HOST", "")
@@ -228,10 +248,10 @@ def main() -> int:
             summary.add("UNKNOWN", Step(f"{label}: the release it runs is unverified"))
         else:
             summary.add("passed" if status == 0 else "FAILED", Step(label, command=HOST))
-    return report(summary, started, passed=": READY", failed=": NOT READY")
+    return report(summary, gate, passed=": READY", failed=": NOT READY")
 
 
-def report(summary: Summary, started: float, passed: str = "", failed: str = "") -> int:
+def report(summary: Summary, gate: Gate, passed: str = "", failed: str = "") -> int:
     """The summary, then the verdict: 0 passed, 1 a gate failed, 2 the host unverified."""
 
     print(f"\n[{summary.name}] summary")
@@ -239,12 +259,14 @@ def report(summary: Summary, started: float, passed: str = "", failed: str = "")
         print(f"  {status:<8} {step.label}")
     failures = [step for status, step in summary.rows if status == "FAILED"]
     if failures:
-        close(summary.name, started, failures, failed=failed)
+        gate.close(failures, failed=failed)
         return 1
-    if any(status != "passed" for status, _ in summary.rows):
-        print(f"[{summary.name}] HOST NOT VERIFIED. Every other gate passed; this is not a release verdict.")
+    if unverified := [step for status, step in summary.rows if status != "passed"]:
+        gate.close(
+            unverified, failed=". Every other gate passed; this is not a release verdict.", outcome="HOST NOT VERIFIED"
+        )
         return 2
-    close(summary.name, started, [step for _, step in summary.rows], passed=passed)
+    gate.close([step for _, step in summary.rows], passed=passed)
     return 0
 
 

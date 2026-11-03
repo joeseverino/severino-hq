@@ -114,11 +114,10 @@ func (g *githubRepository) workflowUses(ctx context.Context, branch string) (git
 		}
 		for _, match := range githubUses.FindAllStringSubmatch(string(content), -1) {
 			uses := match[1]
-			if strings.HasPrefix(uses, "./") || strings.HasPrefix(uses, "docker://") || !strings.Contains(uses, "@") {
+			action, at, versioned := strings.CutLast(uses, "@")
+			if strings.HasPrefix(uses, "./") || strings.HasPrefix(uses, "docker://") || !versioned {
 				continue
 			}
-			at := uses[strings.LastIndex(uses, "@")+1:]
-			action := uses[:strings.LastIndex(uses, "@")]
 			if githubCalled.MatchString(action) {
 				called[uses] = true
 			}

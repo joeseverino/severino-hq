@@ -8,9 +8,10 @@ built only from ids a record stores.
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
 from urllib.parse import urlsplit
 
+from pydantic import ConfigDict, with_config
 lazy from django.utils.text import slugify
 
 from hq.domains.control_plane.names import LEADS_TO, names_a_host, normalized_hostname
@@ -18,27 +19,33 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS, registry_label
 from hq.platform.application.routes import reverse
 
+from .command_fields import Describe
 lazy from .infrastructure import enabled_resources
 lazy from .projection import read_once
 
 
+# Its own config, so it is written one way under every answer that holds it.
+@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class EntityLink:
     """A name, and the page it opens, when there is one."""
 
-    label: str
-    url: str = ""
-    external: bool = False
-    # The registry kind, and what it is called in a sentence.
-    kind: str = ""
-    kind_label: str = ""
-    # Shown on hover: the other names one link stands for.
-    title: str = ""
-    # What a reading's record is, in a few words, beside its name.
-    detail: str = ""
-    # What the kind's page is addressed by: a record's key, a machine's name.
-    # The label is what a person reads, so nothing matches on it.
-    identity: str = ""
+    label: Annotated[str, Describe("The name a person reads; never matched on, since `identity` is what addresses it.")]
+    url: Annotated[str, Describe("The page the name opens: a path in HQ, or an outside address. Empty for none.")] = ""
+    external: Annotated[bool, Describe("Whether `url` leaves HQ, such as for a service's console.")] = False
+    kind: Annotated[
+        str, Describe("The type of the thing named, such as `machine` or a record's type in the registry.")
+    ] = ""
+    kind_label: Annotated[str, Describe("What that type is called in a sentence.")] = ""
+    title: Annotated[str, Describe("The other names this one link stands for, shown on hover. Empty for none.")] = ""
+    detail: Annotated[str, Describe("What a reading's record is, in a few words beside its name.")] = ""
+    identity: Annotated[
+        str,
+        Describe(
+            "What the type's page is addressed by, and what to match on: a record's key, a machine's name. "
+            "Empty for a reading's record."
+        ),
+    ] = ""
 
     def __str__(self) -> str:
         return self.label

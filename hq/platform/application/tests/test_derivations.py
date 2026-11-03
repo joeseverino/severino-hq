@@ -389,12 +389,8 @@ class DerivationTests(TestCase):
 class ClockTests(SimpleTestCase):
     def _held(self, ask, now=MOMENT):
         frame = derivations._Frame(frozenset())
-        token = derivations._FRAME.set(frame)
-        try:
-            with frozen(now):
-                return ask(), frame.until
-        finally:
-            derivations._FRAME.reset(token)
+        with derivations._FRAME.set(frame), frozen(now):
+            return ask(), frame.until
 
     def test_a_threshold_holds_until_it_is_crossed(self):
         later = MOMENT + timedelta(hours=1)
@@ -467,9 +463,9 @@ SAMPLES = {
     "attention.queue": lambda s: _of("domains", "host_attention")(),
     "attention.by_subject": lambda s: _of("problems", "_by_subject")(),
     "attention.work": lambda s: _of("dashboard", "work_queue")(),
-    "attention.count": lambda s: _of("dashboard", "waiting")(s.user.pk),
-    "dashboard.sections": lambda s: _of("domains", "domain_dashboard_sections")(),
-    "dashboard.highlights": lambda s: _of("dashboard", "dashboard_highlights")(),
+    "attention.count": lambda s: _of("dashboard", "waiting")(web_principal(s.user), s.user.pk),
+    "dashboard.sections": lambda s: _of("domains", "domain_dashboard_sections")(web_principal(s.user)),
+    "dashboard.highlights": lambda s: _of("dashboard", "dashboard_highlights")(web_principal(s.user)),
     "dashboard.snapshot": lambda s: _of("dashboard", "_operating_snapshot")(web_principal(s.user)),
     "dashboard.links": lambda s: _of("outward_links", "offered_links")(),
     "calendar.mine": lambda s: _of("calendar_entries", "entry_events")(*WINDOW),

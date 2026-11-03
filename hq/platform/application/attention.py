@@ -8,7 +8,7 @@ real work and its length is the number of areas needing attention.
 """
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from django.db.models import BooleanField, Count, ExpressionWrapper, Q
@@ -34,12 +34,13 @@ from .labels import lower_first
 from .moments import ago, when_day
 from .projection import read_once
 from .references import dangling
-from .security import cli_principal
+from .security import cli_principal, internal_principal
 from .services import service_catalog
 from .timestamps import moment
 from .ui import Insight, counted, ended
 from .workflow_contracts import ActionLink, WorkflowPlan
-lazy from .approvals import asked, pending, preview
+lazy from .approvals import asked, pending, preview, reads_every_hold
+lazy from .connections import machines_once
 lazy from .tailnet import policy as tailnet_policy
 lazy from .tailnet_presence import tailnet_presence
 
@@ -283,6 +284,13 @@ def _update_body(presence, newest: str) -> str:
     return ended(f"Runs {running}")
 
 
+def _machine_names() -> dict[str, str]:
+    """Each other name a machine is known by, to the name HQ lists it under:
+    the catalog's fold (``same_machine``), shared across the projection."""
+
+    return {alias: machine.name for machine in machines_once() for alias in machine.aliases}
+
+
 def tailnet() -> tuple[Insight, ...]:
     """Tailnet facts with no symptom until somebody needs them.
 
@@ -292,12 +300,15 @@ def tailnet() -> tuple[Insight, ...]:
     it can be configured, documented, believed and dead.
     """
 
-    # The presence table, not the whole machine catalog. Everything shown
-    # here is on the tailnet reading itself, and assembling every machine to
-    # reach it costs the dashboard a query per row for facts it does not use.
-    # Read once, asked twice. The projection has a query budget and this is
-    # the same table both questions are about.
-    presences = sorted(tailnet_presence().items())
+    # Everything shown here is on the tailnet reading itself, read once and
+    # asked twice. Each device goes under the name its machine page uses, so
+    # an item's key, title and links name one machine the way the rest of HQ
+    # does.
+    machine_name = _machine_names()
+    presences = sorted(
+        ((machine_name.get(name, name), presence) for name, presence in tailnet_presence().items()),
+        key=lambda pair: pair[0],
+    )
     newest = _newest_client(presences)
 
     items = []
@@ -355,7 +366,7 @@ def tailnet() -> tuple[Insight, ...]:
             workflow=_sign_key(f"tailnet-locked-out:{name}", name),
             observed_at=read_policy.observed_at,
         )
-        for name in read_policy.locked_out
+        for name in (machine_name.get(name, name) for name in read_policy.locked_out)
     )
     for name, presence in presences:
         if not presence.authorized:
@@ -565,6 +576,8 @@ def finding_insight(finding: Any, findings_url: str) -> Insight:
         workflow=finding_plan(finding, finding_key(finding)),
         facts=finding.evidence,
         links=_dedupe_links((*finding.investigations, *finding.offers)),
+        read_capabilities=finding.read_capabilities,
+        part=finding.part,
     )
 
 
@@ -645,7 +658,7 @@ def _apply_help(resource) -> dict:
     policy = provider.actions.get("reconcile") if provider else None
     link = None
     if policy is None or policy.mode != "locked":
-        link = remedy_link("infrastructure.reconcile", resource.key)
+        link = remedy_link("infrastructure.resource.reconcile", resource.key)
     if link is not None:
         return {"actions": (link,)}
     return {
@@ -656,11 +669,21 @@ def _apply_help(resource) -> dict:
     }
 
 
+def _approval_entry(held) -> str:
+    return reverse("core:approval_entry", kwargs={"approval_id": held.id})
+
+
+def approval_queue() -> str:
+    """The audit log narrowed to the changes still waiting for a person."""
+
+    return f"{reverse('core:audit_list')}?awaiting=1"
+
+
 def waiting_for_approval() -> tuple[Insight, ...]:
     """One item per change an agent asked for. Nothing is written until a person decides."""
 
     items = []
-    for held in pending():
+    for held in pending(principal=internal_principal("action-queue")):
         shown = preview(held)
         sentence = asked(held, shown)
         items.append(
@@ -671,7 +694,7 @@ def waiting_for_approval() -> tuple[Insight, ...]:
                 title=str(sentence),
                 value="1",
                 body="" if sentence.whole else _asked_change(shown),
-                url=reverse("core:approval_entry", kwargs={"approval_id": held.id}),
+                url=_approval_entry(held),
                 since=held.created_at,
                 actions=tuple(
                     ActionLink(
@@ -690,6 +713,28 @@ def waiting_for_approval() -> tuple[Insight, ...]:
             )
         )
     return tuple(items)
+
+
+def readable_by[Item: Mapping[str, Any]](principal, items: list[Item]) -> list[Item]:
+    """The composed queue as ``principal`` may read it.
+
+    The queue is composed once for everybody at the operator's authority, so
+    each door it leaves through to one reader takes out here what that reader
+    may not be told: an item about what only some capabilities may read
+    (``read_capabilities``), and, for a reader that sees only its own held
+    requests (``approvals.reads_every_hold``), every other caller's.
+    """
+
+    items = [item for item in items if principal.permits(*item.get("read_capabilities", ()))]
+    if reads_every_hold(principal):
+        return items
+    own = {held.pk for held in pending(principal=principal, limit=None)}
+    hidden = {
+        _approval_entry(held)
+        for held in pending(principal=internal_principal("action-queue"), limit=None)
+        if held.pk not in own
+    }
+    return [item for item in items if item.get("url") not in hidden]
 
 
 def _asked_change(shown) -> str:

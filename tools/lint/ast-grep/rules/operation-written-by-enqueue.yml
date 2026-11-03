@@ -7,7 +7,14 @@ language: python
 severity: error
 message: An OperationRequest row is written outside resource_operations.enqueue.
 note: Queue it with resource_operations.enqueue.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
 ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
   - "**/platform/application/resource_operations.py"
 rule:
   pattern: OperationRequest.objects.$WRITE($$$)

@@ -177,12 +177,6 @@ class ProviderSight:
         return tuple(sight for sight in self.sights if sight.listed)
 
     @property
-    def empty_count(self) -> int:
-        """How many it reads cleanly and finds nothing in."""
-
-        return len(self.sights) - len(self.listed)
-
-    @property
     def sees(self) -> tuple[str, ...]:
         return tuple(sight.label for sight in self.sights)
 

@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from hq.domains.control_plane.names import normalized_hostname
+from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.projects.models import Project
@@ -186,9 +187,9 @@ def _traffic(service) -> SummaryItem | None:
     # is the best number available and still not a count.
     basis = "counted" if interval <= 1 else f"sampled 1 in {interval}"
     return SummaryItem(
-        f"Traffic · {HOST_TRAFFIC_DAYS} days",
+        dotted("Traffic", f"{HOST_TRAFFIC_DAYS} days"),
         counted(measured["pageviews"], "pageview"),
-        detail=f"{counted(measured['visits'], 'visit')} · {basis}",
+        detail=dotted(counted(measured["visits"], "visit"), basis),
         icon="eye",
     )
 
@@ -250,7 +251,7 @@ def _health_detail(service) -> str:
     running = service.container
     # Not twice: a health check that passes is already the verdict's word.
     check = running.check if running and running.check.lower() != service.health.label.lower() else ""
-    return " · ".join(part for part in (check, service.health.detail) if part)
+    return dotted(check, service.health.detail)
 
 
 def _what(service) -> str:
@@ -304,7 +305,7 @@ def _container_detail(machine: str, container: str) -> str:
         return ""
 
     standing = standings_on(machine).get(container)
-    return f"Container {container} · {standing.summary}" if standing else f"Container {container}"
+    return dotted(f"Container {container}", standing.summary if standing else "")
 
 
 def _certificate(path) -> SummaryItem | None:
@@ -325,7 +326,7 @@ def _certificate(path) -> SummaryItem | None:
         "Certificate",
         certificate.name,
         certificate.link,
-        " · ".join(part for part in (certificate.issuer, certificate.left) if part),
+        dotted(certificate.issuer, certificate.left),
         icon="lock",
     )
 
@@ -345,9 +346,7 @@ def _project(service) -> SummaryItem | None:
         or (_repository_label(project.repository_url) if project and project.repository_url else ""),
         f"pushed {ago(project.last_push_at)}" if project and project.last_push_at else "",
     ]
-    return SummaryItem(
-        "Project", service.project["name"], link, " · ".join(part for part in parts if part), icon="commit"
-    )
+    return SummaryItem("Project", service.project["name"], link, dotted(*parts), icon="commit")
 
 
 def _repository_detail(repo) -> str:
@@ -360,7 +359,7 @@ def _repository_detail(repo) -> str:
         parts.append(counted(len(repo.pull_requests), "open pull request", "open pull requests"))
     if head and deployed and head != deployed:
         parts.append(f"{repo.default_branch} is ahead of production")
-    return " · ".join(parts)
+    return dotted(*parts)
 
 
 @dataclass(frozen=True, slots=True)

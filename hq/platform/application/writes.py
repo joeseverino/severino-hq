@@ -5,11 +5,17 @@ and delete share the same steps (command, service call, reload, announce,
 redirect), so they are declared once and a plugin adding a domain inherits
 them. A view declares only which service, which record and what it is called;
 a plain ``Records`` domain's view names only its form.
+
+Each writes once per drawing of its form (``web_writes.write_once``), and
+answers a resend with what the first post's answer kept, so that answer holds
+everything a replay stands on: the service's result, which ``reload`` is
+handed either way, or the record's identity, a label, the sentence it said.
 """
 
 from collections.abc import Mapping
 from typing import Any, override
 
+from django.apps import apps
 from django.contrib import messages
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.shortcuts import redirect
@@ -21,8 +27,10 @@ from hq.platform.application.routes import reverse
 from .deletion import DeleteCommand
 from .record_errors import RecordConflict, RecordNotFound
 from .records import delete_instance, display_noun, records_for, save_form
+from .refusal_status import refusal_of
 from .security import web_principal
 from .ui import ended
+from .web_writes import posted_answer, refused, write_once
 lazy from .security import Principal
 
 
@@ -46,7 +54,44 @@ class WriteMessages:
     deleted_message = "{noun} “{target}” deleted."
 
 
-class ServiceWriteMixin(WriteMessages):
+class PostedOnce:
+    """A form view whose write acts once per drawing of its form.
+
+    A resend of a post that already wrote is answered from that first answer
+    before the form is validated again, since what the first post wrote can
+    make its own resend invalid (a slug now taken, a record now gone).
+    """
+
+    def post(self, request, *args: Any, **kwargs: Any) -> HttpResponse:
+        answer = posted_answer(request, self._write)
+        if answer is not None:
+            return self._replay(answer)
+        return super().post(request, *args, **kwargs)
+
+    @property
+    def _write(self) -> str:
+        """What the key names: this view's write, wherever its service or ``run`` is declared."""
+
+        return f"{type(self).__module__}.{type(self).__qualname__}"
+
+    def _replay(self, answer: dict[str, Any]) -> HttpResponse:
+        """Where the write's ``answer`` goes, said again: the first post's or a resend's."""
+
+        raise NotImplementedError
+
+    def _refuse(self, form: BaseForm, answer: dict[str, Any]) -> HttpResponse:
+        """The form again, carrying why the write was refused, with the refusal's status."""
+
+        refused(self.request, answer, form=form)
+        response = self.form_invalid(form)
+        response.status_code = refusal_of(answer).status
+        return response
+
+    def _answered(self, form: BaseForm, answer: dict[str, Any]) -> HttpResponse:
+        return self._replay(answer) if answer["ok"] else self._refuse(form, answer)
+
+
+class ServiceWriteMixin(PostedOnce, WriteMessages):
     """Shared spine for a view whose mutation is one service call.
 
     A subclass declares ``service`` (wrapped in ``staticmethod``), ``noun``
@@ -102,18 +147,24 @@ class ServiceWriteMixin(WriteMessages):
     def announce(self, template: str, target: object) -> None:
         announce(self.request, template, self.noun, target)
 
+    def _went_to(self, answer: dict[str, Any], template: str) -> HttpResponse:
+        self.object = self.reload(answer["record"])
+        self.announce(template, self.object)
+        return redirect(self.object.get_absolute_url())
+
 
 class ServiceCreateMixin(ServiceWriteMixin):
     """Create through a service, then go to what was created."""
 
     def form_valid(self, form: BaseForm) -> HttpResponse:
-        result = self.service(
-            self.command_from_cleaned_data(form.cleaned_data),
-            principal=self.write_principal(),
+        command = self.command_from_cleaned_data(form.cleaned_data)
+        ran = write_once(
+            self.request, self._write, lambda: {"record": self.service(command, principal=self.write_principal())}
         )
-        self.object = self.reload(result)
-        self.announce(self.created_message, self.object)
-        return redirect(self.object.get_absolute_url())
+        return self._answered(form, ran.answer)
+
+    def _replay(self, answer: dict[str, Any]) -> HttpResponse:
+        return self._went_to(answer, self.created_message)
 
 
 class ServiceUpdateMixin(ServiceWriteMixin):
@@ -124,14 +175,17 @@ class ServiceUpdateMixin(ServiceWriteMixin):
     """
 
     def form_valid(self, form: BaseForm) -> HttpResponse:
-        result = self.service(
-            self.command_from_cleaned_data(form.cleaned_data),
-            principal=self.write_principal(),
-            **{self.identity_kwarg: self.current_identity()},
+        command = self.command_from_cleaned_data(form.cleaned_data)
+        identity = {self.identity_kwarg: self.current_identity()}
+        ran = write_once(
+            self.request,
+            self._write,
+            lambda: {"record": self.service(command, principal=self.write_principal(), **identity)},
         )
-        self.object = self.reload(result)
-        self.announce(self.updated_message, self.object)
-        return redirect(self.object.get_absolute_url())
+        return self._answered(form, ran.answer)
+
+    def _replay(self, answer: dict[str, Any]) -> HttpResponse:
+        return self._went_to(answer, self.updated_message)
 
 
 class ServiceDeleteMixin(ServiceWriteMixin):
@@ -154,15 +208,36 @@ class ServiceDeleteMixin(ServiceWriteMixin):
         }
         return context
 
-    def form_valid(self, form: BaseForm) -> HttpResponse:  # noqa: ARG002 - Django's FormMixin calls it with the form
+    def form_valid(self, form: BaseForm) -> HttpResponse:
         identity = self.current_identity()
-        result = self.service(
-            DeleteCommand(confirm=str(identity)),
-            principal=self.write_principal(),
-            **{self.identity_kwarg: identity},
+        ran = write_once(
+            self.request,
+            self._write,
+            lambda: _deleted(
+                self.service(
+                    DeleteCommand(confirm=str(identity)),
+                    principal=self.write_principal(),
+                    **{self.identity_kwarg: identity},
+                )
+            ),
         )
-        self.announce(self.deleted_message, result["deleted"]["label"])
+        return self._answered(form, ran.answer)
+
+    def _replay(self, answer: dict[str, Any]) -> HttpResponse:
+        self.announce(self.deleted_message, answer["label"])
         return redirect(self.success_url)
+
+    @override
+    def _refuse(self, form: BaseForm, answer: dict[str, Any]) -> HttpResponse:
+        # The confirmation page draws no form of its own to carry an error.
+        refused(self.request, answer)
+        return super()._refuse(form, answer)
+
+
+def _deleted(result: Mapping[str, Any]) -> dict[str, Any]:
+    """What a resend of a delete says: the label, since the record is gone."""
+
+    return {"label": result["deleted"]["label"]}
 
 
 def _show_on_form(form, error: ValidationError) -> None:
@@ -172,7 +247,7 @@ def _show_on_form(form, error: ValidationError) -> None:
         form.add_error(field if field in form.fields else None, errors)
 
 
-class RecordFormMixin(WriteMessages):
+class RecordFormMixin(PostedOnce, WriteMessages):
     """Create or update a plain record domain's record from its ``ModelForm``.
 
     For ``CreateView`` and ``UpdateView``; saved through
@@ -184,14 +259,28 @@ class RecordFormMixin(WriteMessages):
     def form_valid(self, form: BaseForm) -> HttpResponse:
         adding = form.instance._state.adding
         try:
-            self.object = save_form(form, principal=web_principal(self.request.user))
+            ran = write_once(
+                self.request,
+                self._write,
+                lambda: _saved(save_form(form, principal=web_principal(self.request.user)), adding=adding),
+            )
         except ValidationError as error:
             _show_on_form(form, error)
             return self.form_invalid(form)
-        template = self.created_message if adding else self.updated_message
+        return self._answered(form, ran.answer)
+
+    def _replay(self, answer: dict[str, Any]) -> HttpResponse:
+        self.object = apps.get_model(answer["model"])._default_manager.get(pk=answer["pk"])
+        template = self.created_message if answer["adding"] else self.updated_message
         noun = display_noun(records_for(type(self.object)))
         announce(self.request, template, noun, self.object)
         return redirect(self.object.get_absolute_url())
+
+
+def _saved(instance: Any, *, adding: bool) -> dict[str, Any]:
+    """What a resend of a record's form reloads it from, and whether it was made."""
+
+    return {"model": instance._meta.label, "pk": instance.pk, "adding": adding}
 
 
 class RecordDeleteMixin(ServiceDeleteMixin):
@@ -205,13 +294,23 @@ class RecordDeleteMixin(ServiceDeleteMixin):
     @override
     def form_valid(self, form: BaseForm) -> HttpResponse:
         noun = display_noun(records_for(type(self.object)))
-        result = delete_instance(self.object, principal=web_principal(self.request.user))
-        template = self.deleted_message
-        announce(self.request, template, noun, result["deleted"]["label"])
+        ran = write_once(
+            self.request,
+            self._write,
+            lambda: {
+                **_deleted(delete_instance(self.object, principal=web_principal(self.request.user))),
+                "noun": noun,
+            },
+        )
+        return self._answered(form, ran.answer)
+
+    @override
+    def _replay(self, answer: dict[str, Any]) -> HttpResponse:
+        announce(self.request, self.deleted_message, answer["noun"], answer["label"])
         return redirect(self.success_url)
 
 
-class CommandFormMixin:
+class CommandFormMixin(PostedOnce):
     """A plain form whose submit is one service call: a *command* (adjust a
     threshold, open a period) posted from a page that then shows itself again.
 
@@ -244,13 +343,22 @@ class CommandFormMixin:
 
     def form_valid(self, form: BaseForm) -> HttpResponse:
         try:
-            result = self.run(self.build_command(form))
+            ran = write_once(
+                self.request, self._write, lambda: {"message": self._said(self.run(self.build_command(form)))}
+            )
         except self.domain_errors as error:
             form.add_error(None, str(error))
             return self.form_invalid(form)
-        message = self.get_success_message(result)
-        if message:
-            messages.success(self.request, message)
+        return self._answered(form, ran.answer)
+
+    def _said(self, result: Any) -> str:
+        """What the write says, as text a resend can say again."""
+
+        return str(self.get_success_message(result) or "")
+
+    def _replay(self, answer: dict[str, Any]) -> HttpResponse:
+        if answer["message"]:
+            messages.success(self.request, answer["message"])
         return redirect(self.get_success_url())
 
 

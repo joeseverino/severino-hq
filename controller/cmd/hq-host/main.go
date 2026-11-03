@@ -36,6 +36,7 @@ import (
 	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/host/unit"
 	"github.com/joeseverino/severino-hq/controller/host/upgrade"
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
 
@@ -55,7 +56,10 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, getenv func(string) string, euid int, stdin io.Reader, stdout, stderr io.Writer) int {
-	log := slog.New(slog.NewTextHandler(stderr, nil))
+	// An error is printed as well as logged, so the stream is struck of
+	// every learned secret, not the log alone.
+	stderr = mask.Writer(stderr)
+	log := mask.Logger(stderr)
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, usage)
 		return 2
@@ -136,9 +140,17 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, err)
-		return 1
+		return exitStatus(err)
 	}
 	return 0
+}
+
+// exitStatus is the status deploy/outcomes.json declares for the outcome a
+// deploy's error reports, which the Deploy workflow reads to say what
+// production runs. Any other command's failure carries no outcome, so it
+// exits as not-deployed does, 1.
+func exitStatus(err error) int {
+	return host.OutcomeOf(err).Exit
 }
 
 func runWeb(ctx context.Context, args []string, getenv func(string) string, stdout, stderr io.Writer, log *slog.Logger) error {
@@ -160,6 +172,7 @@ func runWeb(ctx context.Context, args []string, getenv func(string) string, stdo
 		// out and a failed one retried when the unit restarts.
 		Await:       host.RenderBound,
 		StartPeriod: period,
+		SealPublic:  host.SealPublicKey,
 		Stdout:      stdout, Stderr: stderr, Log: log,
 	}
 	return runner.Run(ctx)
@@ -209,16 +222,19 @@ func runtimeDir() string {
 
 func machine(stdout io.Writer) *host.Machine {
 	return &host.Machine{
-		Lib:      host.Lib,
-		Systemd:  "/etc/systemd/system",
-		Tmpfiles: "/etc/tmpfiles.d",
-		LogDir:   "/var/log/severino-hq",
-		State:    host.StateDir,
-		Sbin:     "/usr/local/sbin",
-		Runtime:  runtimeDir(),
-		Sudoers:  "/etc/sudoers.d",
-		Command:  host.Command,
-		Own:      func(path string) error { return os.Lchown(path, 0, 0) },
+		Lib:        host.Lib,
+		Systemd:    "/etc/systemd/system",
+		Tmpfiles:   "/etc/tmpfiles.d",
+		LogDir:     "/var/log/severino-hq",
+		State:      host.StateDir,
+		Seal:       host.SealDir,
+		SealPublic: host.SealPublicKey,
+		Sbin:       "/usr/local/sbin",
+		Runtime:    runtimeDir(),
+		Sudoers:    "/etc/sudoers.d",
+		Command:    host.Command,
+		Own:        func(path string) error { return os.Lchown(path, 0, 0) },
+		Owner:      func(root *os.Root, name string) error { return root.Lchown(name, host.WebUID, host.WebGID) },
 		Verifier: func(ctx context.Context) error {
 			client := &http.Client{Timeout: 3 * time.Minute}
 			return host.InstallVerifier(ctx, client, host.CosignURL, cosign)
@@ -242,7 +258,6 @@ func controller(stdout, stderr io.Writer) *host.Controller {
 		DependencyRun: host.DependencyRunFile,
 		Connections:   requireConnections,
 		Lock:          host.SharedLock(filepath.Join(host.SecretDir, "ssh.lock"), time.Minute),
-		Owner:         func(root *os.Root, name string) error { return root.Lchown(name, host.WebUID, host.WebGID) },
 		LookPath:      exec.LookPath,
 		Now:           time.Now,
 		Stdout:        stdout, Stderr: stderr,
@@ -274,6 +289,10 @@ func deployer(stdout io.Writer) *host.Deployer {
 		FreeBytes: host.DeployFreeBytes,
 		FreeOn:    "/",
 		Free:      host.Free,
+		Rehearsal: host.Rehearsal{
+			SecretDir: host.SecretDir, ACME: host.ACMEDir,
+			LookPath: exec.LookPath, Poll: time.Second,
+		},
 	}
 }
 

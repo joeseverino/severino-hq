@@ -7,7 +7,6 @@ import json
 import re
 import shlex
 import subprocess
-import sys
 from collections import defaultdict
 from functools import cache, cached_property
 from itertools import combinations
@@ -375,17 +374,15 @@ def is_test(unit):
     return bool(TEST.search(unit.path)) or (unit.path.endswith(".py") and unit.name.startswith("test_"))
 
 
-def similar_pairs(root: Path, inspector: Path, pages: list[dict]) -> list[str]:
-    """Every near-duplicate pair outside tests that no classification explains, as baseline lines."""
+def similar_pairs(root: Path, inspector: Path, pages: list[dict]) -> dict[str, str | None]:
+    """Every near-duplicate pair outside tests, as its baseline line, with the
+    classification that explains it, or None for a pair none explains."""
 
     classifier = Classifier(root, inspector)
-    pairs = set()
-    explained = 0
+    pairs: dict[str, str | None] = {}
     for a, b in near_pairs([unit for unit in fingerprints(pages) if not is_test(unit)]):
-        if classifier.pair(a, b):
-            explained += 1
-        else:
-            pairs.add("similar " + " <> ".join(sorted((a.label(), b.label()))))
-    # One line, so a gate's verdict is never pushed out of view by pairs that pass.
-    print(f"{explained} similar pairs explained by a classification", file=sys.stderr)
-    return sorted(pairs)
+        line = "similar " + " <> ".join(sorted((a.label(), b.label())))
+        reason = classifier.pair(a, b)
+        # Two units can share a label; the line is explained only when each is.
+        pairs[line] = reason if pairs.get(line, reason) else None
+    return dict(sorted(pairs.items()))

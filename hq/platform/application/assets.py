@@ -6,16 +6,41 @@ from decimal import Decimal
 from functools import partial
 from typing import Annotated, Any
 
-from hq.domains.assets.models import Asset
+from hq.domains.assets.models import ASSET_CATEGORY_CHOICES, PAYMENT_METHOD_CHOICES, Asset
 
+from .answer_fields import BusinessUseShare
 from .command_fields import Describe, Names, Refers
 from .entity_links import EntityLink, entity_link
 from .projection import addressable, iso, listing
+from .record_fields import Notes, Slug, TotalCost, one_of
 from .record_links import linked
-from .record_saves import Held, Link, linked_saver
+from .record_saves import Held, Link, linked_saver, saved_type
 from .security import Principal
 from .upserts import upsert_by_slug
 lazy from . import zones
+
+# An asset's fields as its command writes them and its row reads them back, each said once.
+type AssetName = Annotated[str, Describe("What the asset is called.")]
+_CATEGORY = one_of(ASSET_CATEGORY_CHOICES)
+_STATUS = one_of(Asset.Status.values)
+_PAYMENT_METHOD = one_of(PAYMENT_METHOD_CHOICES, blank=True)
+type AssetVendor = Annotated[str, Describe("Who it was bought from.", api="Empty when not recorded.")]
+type AssetCategory = Annotated[_CATEGORY, Describe("What type of asset it is.")]
+type AssetStatus = Annotated[_STATUS, Describe("Whether it is in use, or how it left.")]
+type PurchaseDate = Annotated[date | None, Describe("When it was bought.", api="Null when not recorded.")]
+type SerialNumber = Annotated[str, Describe("The maker's serial number.", api="Empty when not recorded.")]
+type WarrantyDate = Annotated[date | None, Describe("When its warranty ends.", api="Null for none recorded.")]
+type AssetProjects = Annotated[tuple[str, ...], Names("projects"), Describe("The projects this asset serves.")]
+type AssetInfrastructure = Annotated[
+    str,
+    Refers(Asset, "infrastructure"),
+    Describe(
+        "The machine, domain or certificate this asset is.",
+        api="A `type:key` reference such as `machine:lab-1`; empty for none.",
+    ),
+]
+# How an asset or an expense was paid, from the one set both choose from.
+type PaymentMethod = Annotated[_PAYMENT_METHOD, Describe("How it was paid for.", api="Empty when not recorded.")]
 
 
 def managed_domain(asset: Asset) -> EntityLink | None:
@@ -33,24 +58,20 @@ def managed_domain(asset: Asset) -> EntityLink | None:
 
 @dataclass(frozen=True, slots=True)
 class AssetCommand:
-    item_name: Annotated[str, Describe("What the asset is called.")]
-    slug: Annotated[str, Describe("Its address in HQ; blank derives one from the name.")] = ""
-    vendor: Annotated[str, Describe("Who it was bought from.")] = ""
-    category: Annotated[str, Describe("What type of asset it is.")] = "other"
-    purchase_date: Annotated[date | None, Describe("When it was bought.")] = None
-    total_cost: Annotated[Decimal, Describe("What it cost in all.")] = Decimal("0.00")
-    business_use_percentage: Annotated[int, Describe("How much of its use is for the business, as a percentage.")] = 100
-    payment_method: Annotated[str, Describe("How it was paid for.")] = ""
-    serial_number: Annotated[str, Describe("The maker's serial number.")] = ""
-    warranty_date: Annotated[date | None, Describe("When its warranty ends.")] = None
-    status: Annotated[str, Describe("Whether it is in use, or how it left.")] = Asset.Status.ACTIVE
-    notes: Annotated[str, Describe("Anything else worth keeping.")] = ""
-    related_projects: Annotated[tuple[str, ...], Names("projects"), Describe("The projects this asset serves.")] = ()
-    infrastructure: Annotated[
-        str,
-        Refers(Asset, "infrastructure"),
-        Describe("The machine, domain or certificate this asset is, as type:identity."),
-    ] = ""
+    item_name: AssetName
+    slug: Slug = ""
+    vendor: AssetVendor = ""
+    category: AssetCategory = "other"
+    purchase_date: PurchaseDate = None
+    total_cost: TotalCost = Decimal("0.00")
+    business_use_percentage: BusinessUseShare = 100
+    payment_method: PaymentMethod = ""
+    serial_number: SerialNumber = ""
+    warranty_date: WarrantyDate = None
+    status: AssetStatus = Asset.Status.ACTIVE
+    notes: Notes = ""
+    related_projects: AssetProjects = ()
+    infrastructure: AssetInfrastructure = ""
 
 
 def serialize_asset(asset: Asset, *, relationships: bool = False) -> dict[str, Any]:
@@ -97,12 +118,17 @@ save_asset = linked_saver(
 )
 
 
+# What an asset's save answers, read off its record type (``saved_type``).
+type AssetSaved = saved_type("assets")
+
+
 def upsert_asset(
     command: AssetCommand,
     *,
     principal: Principal,
     expected_updated_at: str | None = None,
-) -> dict[str, Any]:
+    sent: frozenset[str] | None = None,
+) -> AssetSaved:
     """Idempotently create or update an asset by its command slug."""
 
     return upsert_by_slug(
@@ -111,4 +137,5 @@ def upsert_asset(
         save_asset,
         principal=principal,
         expected_updated_at=expected_updated_at,
+        sent=sent,
     )

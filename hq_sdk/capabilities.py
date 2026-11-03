@@ -18,6 +18,7 @@ from hq.platform.application.security import (
     mcp_principal,
     web_principal,
 )
+from hq.platform.application.web_writes import execute_posted, refusal_response, refused
 
 
 class StrictCommand(BaseModel):
@@ -41,6 +42,9 @@ __all__ = [
     "cli_principal",
     "describe_capabilities",
     "execute_capability",
+    "execute_posted",
     "mcp_principal",
+    "refusal_response",
+    "refused",
     "web_principal",
 ]

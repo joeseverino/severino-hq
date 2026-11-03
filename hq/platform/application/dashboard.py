@@ -6,13 +6,13 @@ model and decides no number.
 """
 
 from dataclasses import asdict
-from typing import Any
+from typing import Any, TypedDict
 
 from django.utils import timezone
 lazy from django.core.exceptions import ImproperlyConfigured
 
 from . import sections
-from .attention import contacts_state
+from .attention import contacts_state, readable_by
 from .derivations import derivation
 from .derived_inputs import DASHBOARD_READS, QUEUE_READS, composed_variant
 from .domains import (
@@ -20,27 +20,30 @@ from .domains import (
     domain_attention_items,
     domain_dashboard_cards,
     domain_dashboard_sections,
+    provided,
+    reader_variant,
 )
 from .projection import projection_scope
-from .read_models import recent_activity
-from .security import Capability
-from .workflows import serialize_workflow
+from .read_models import ActivityEvent, recent_activity
+from .security import Capability, Principal
+from .workflows import WrittenAction, WrittenWorkflow, serialize_workflow
 lazy from .action_items import item_key, item_revision, waiting_count
 lazy from .ui import DomainOverview, Insight
 
 
-@derivation("dashboard.highlights", reads=DASHBOARD_READS, vary=composed_variant)
-def dashboard_highlights() -> dict[str, Any]:
-    """Group headline readings and optional visuals from existing contracts.
+@derivation("dashboard.highlights", reads=DASHBOARD_READS, vary=reader_variant)
+def dashboard_highlights(principal: Principal) -> dict[str, Any]:
+    """Group headline readings and optional visuals from existing contracts, as ``principal`` may read them.
 
-    Derived once per change: each extension's cards and overview are
-    derivations of their own, so this composes what is stored.
+    Derived once per change and set of capabilities: each extension's cards
+    and overview are derivations of their own, so this composes what is
+    stored.
     """
 
     domains = {domain.id: domain for domain in all_domains()}
     highlights, compact = [], []
-    for section in domain_dashboard_sections():
-        overview = _overview(domains[section["id"]]) if len(section["cards"]) > 1 else None
+    for section in domain_dashboard_sections(principal):
+        overview = _overview(domains[section["id"]], principal) if len(section["cards"]) > 1 else None
         if not _holds_a_card(section["cards"], overview):
             compact.extend(section["cards"])
             continue
@@ -53,9 +56,9 @@ def dashboard_highlights() -> dict[str, Any]:
 CARD_FIGURES = 3
 
 
-def _overview(domain) -> DomainOverview | None:
+def _overview(domain, principal: Principal) -> DomainOverview | None:
     provider = domain.integration.overview
-    overview = provider() if provider else None
+    overview = provided(provider, principal) if provider else None
     if overview is not None and not isinstance(overview, DomainOverview):
         raise ImproperlyConfigured("Domain overview must return DomainOverview.")
     return overview
@@ -72,7 +75,7 @@ def _holds_a_card(cards, overview: DomainOverview | None) -> bool:
 
 
 @derivation("attention.work", reads=QUEUE_READS, vary=composed_variant)
-def work_queue() -> list[dict[str, Any]]:
+def work_queue() -> list[QueueItem]:
     """The composed queue, flattened for transport, derived once per change.
 
     Projected from ``domain_attention_items`` rather than assembled here: the
@@ -85,18 +88,45 @@ def work_queue() -> list[dict[str, Any]]:
     return [queue_item(entry["source_id"], entry["source"], entry["item"]) for entry in domain_attention_items()]
 
 
-def _count_variant(user_pk: int) -> tuple[Any, ...]:
-    return (user_pk, *composed_variant())
+def _count_variant(principal: Principal, user_pk: int) -> tuple[Any, ...]:
+    return (user_pk, principal.actor, principal.interface, *reader_variant(principal))
 
 
 @derivation("attention.count", reads=(*QUEUE_READS, "core.ActionItemRead"), vary=_count_variant)
-def waiting(user_pk: int) -> int:
-    """How many items wait on one person: the queue, less what they set aside."""
+def waiting(principal: Principal, user_pk: int) -> int:
+    """How many items wait on one person: the queue as they may read it, less what they set aside."""
 
-    return waiting_count(work_queue(), user_pk)
+    return waiting_count(readable_by(principal, work_queue()), user_pk)
 
 
-def queue_item(source_id: str, source: str, item: Insight) -> dict[str, Any]:
+class QueueItem(TypedDict):
+    """One action item as the queue partial and the machine doors carry it."""
+
+    key: str
+    revision: str
+    source_id: str
+    source: str
+    label: str
+    detail: str
+    count: int
+    status: str
+    url: str
+    action: str
+    workflow: WrittenWorkflow | None
+    actions: list[WrittenAction]
+    subject: WrittenAction | None
+    notice: bool
+    family: str
+    # ISO 8601, or "" when unknown.
+    since: str
+    observed_at: str
+    # Each a label and its value.
+    facts: list[list[str]]
+    links: list[WrittenAction]
+    read_capabilities: list[str]
+
+
+def queue_item(source_id: str, source: str, item: Insight) -> QueueItem:
     """One action item in the shape the queue partial and the API carry."""
 
     return {
@@ -119,14 +149,60 @@ def queue_item(source_id: str, source: str, item: Insight) -> dict[str, Any]:
         "observed_at": item.observed_at.isoformat() if item.observed_at else "",
         "facts": [list(fact) for fact in item.facts],
         "links": [asdict(link) for link in item.links],
+        "read_capabilities": list(item.read_capabilities),
     }
 
 
-def operating_snapshot(*, principal) -> dict[str, Any]:
+class Upstreams(TypedDict):
+    # Whether the last read of the contact form's store reached it.
+    contacts: str
+
+
+class Kpis(TypedDict):
+    active_projects: int
+    projects_needing_output: int
+    draft_content: int
+    published_content: int
+    docs_needing_review: int
+    unread_contacts: int
+    # Money as its decimal text.
+    expenses_total: str
+    expenses_count: int
+    deductible_total: str
+
+
+class _Activity(TypedDict):
+    recent_activity: list[ActivityEvent]
+    # Each part this caller may not read, said, so withheld and empty read apart.
+    unread: list[str]
+
+
+class _Snapshot(_Activity):
+    upstreams: Upstreams
+    year: int
+    kpis: Kpis
+    cards: list[dict[str, Any]]
+    priority: list[QueueItem]
+    priority_count: int
+    active_projects: list[dict[str, Any]]
+    draft_content: list[dict[str, Any]]
+    recent_published: list[dict[str, Any]]
+    docs_needing_review: list[dict[str, Any]]
+
+
+class OperatingSnapshot(_Snapshot):
+    """What ``operating_snapshot`` answers."""
+
+    generated_at: str
+
+
+def operating_snapshot(*, principal) -> OperatingSnapshot:
     """Return the one canonical KPI, work-queue, and activity projection.
 
-    Recent activity is audit data; it is included only for a principal that
-    may read the audit log.
+    Recent activity is audit data, read only for a principal that may read
+    the audit log. For any other, ``recent_activity`` is empty and ``unread``
+    says it was withheld, so withheld and empty read differently; ``unread``
+    is empty when nothing was left out.
     """
     with projection_scope():
         # When it was asked for, not when it was derived.
@@ -159,13 +235,13 @@ _SNAPSHOT_READS: tuple[str, ...] = tuple(
 
 
 @derivation("dashboard.snapshot", reads=_SNAPSHOT_READS, vary=_snapshot_variant)
-def _operating_snapshot(principal) -> dict[str, Any]:
+def _operating_snapshot(principal) -> _Snapshot:
     unread_contacts_count, contacts_status = contacts_state()
     projects = sections.projects_reading()
     content = sections.content_reading()
     documentation = sections.documentation_reading()
     expenses = sections.expenses_reading()
-    priority = work_queue()
+    priority = readable_by(principal, work_queue())
 
     return {
         "upstreams": {"contacts": contacts_status},
@@ -186,7 +262,7 @@ def _operating_snapshot(principal) -> dict[str, Any]:
         # Every domain's headline reading, host and extension alike, already in
         # the order the nav presents them. Carried here so a delivery adapter
         # asks for the dashboard once rather than assembling it from two calls.
-        "cards": list(domain_dashboard_cards()),
+        "cards": list(domain_dashboard_cards(principal)),
         "priority": priority,
         # Items, not the numbers they carry: each item shows its own.
         "priority_count": len(priority),
@@ -194,9 +270,15 @@ def _operating_snapshot(principal) -> dict[str, Any]:
         "draft_content": sections.recent_draft_content(),
         "recent_published": sections.recently_published(),
         "docs_needing_review": sections.docs_awaiting_review(),
-        "recent_activity": (
-            recent_activity(principal=principal, limit=8)["items"]
-            if principal.permits(Capability.READ_AUDIT_LOG)
-            else []
-        ),
+        **_activity(principal),
     }
+
+
+# A part an answer leaves out is said in its ``unread``, as the path reads say it.
+WITHHELD_ACTIVITY = "not read: recent_activity, because this caller may not read the audit log"
+
+
+def _activity(principal) -> _Activity:
+    if principal.permits(Capability.READ_AUDIT_LOG):
+        return {"recent_activity": recent_activity(principal=principal, limit=8)["items"], "unread": []}
+    return {"recent_activity": [], "unread": [WITHHELD_ACTIVITY]}

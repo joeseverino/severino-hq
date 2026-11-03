@@ -5,6 +5,7 @@ of Django, not of any one domain. A surface that accepts several files at once
 should not have to rediscover that ``FileField`` binds exactly one upload.
 """
 
+import base64
 from typing import Any, override
 
 from django import forms
@@ -57,3 +58,24 @@ class LinesField(forms.Field):
         if isinstance(value, (list, tuple)):
             return "\n".join(str(item) for item in value)
         return value
+
+
+def file_as_sent(upload: Any) -> dict[str, str]:
+    """An uploaded file as a command takes one in JSON: its name, its media
+    type, and its bytes base64-encoded (``command_fields.Upload``)."""
+
+    upload.seek(0)
+    return {
+        "name": upload.name or "",
+        "content_type": upload.content_type or "",
+        "content": base64.b64encode(upload.read()).decode("ascii"),
+    }
+
+
+class UploadField(forms.FileField):
+    """A file a person picks, for a command field that takes a file as JSON."""
+
+    @override
+    def clean(self, data: Any, initial: Any = None) -> dict[str, str] | None:
+        upload = super().clean(data, initial)
+        return file_as_sent(upload) if upload else None

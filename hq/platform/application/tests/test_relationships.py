@@ -24,7 +24,7 @@ from ..facts import Subject, readings, unreadable_labels
 from ..projection import projection_scope
 from ..relationships import relationships_for
 from ..security import Capability, Principal
-from ..services import service_or_prospect
+from ..services import prospects
 from ..tailnet import TAILNET_KIND
 from ..topology import relation_graph
 from ..topology_model import READING_RANKS, RELATIONS
@@ -301,7 +301,7 @@ class ManagedCertificatePathTests(TestCase):
         )
 
     def certificates(self):
-        found = service_or_prospect("app.example.com")
+        found = prospects(("app.example.com",))[0]
         facet = next(item for item in found.facets if item.id == "certificate")
         return sorted(claim.resource_key for claim in facet.claims)
 
@@ -522,7 +522,7 @@ class NoRawKindsTests(TestCase):
         declaration = self.client.get(reverse("control_plane:detail", args=["example-host-0-tailnet"]))
 
         for response in (page, declaration):
-            shown = re.sub(r"<pre>.*?</pre>", "", response.content.decode(), flags=re.DOTALL)
+            shown = re.sub(r"<pre\b[^>]*>.*?</pre>", "", response.content.decode(), flags=re.DOTALL)
             self.assertNotIn(TAILNET_KIND, shown)
             self.assertNotIn("cloudflare.dns_record", shown)
         self.assertContains(declaration, kind_label(TAILNET_KIND))
@@ -546,7 +546,7 @@ class DomainCardTests(TestCase):
     """Four cards; parked names, a weaker posture and missing mail policy said plainly."""
 
     def setUp(self):
-        from .test_zones import APEX, record, sweep
+        from .zone_records import APEX, record, sweep
 
         sweep(
             zones=[

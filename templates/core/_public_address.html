@@ -39,7 +39,7 @@
 {% endif %}
 {% if not failure and not reading or reading.observed_at %}
   <form class="conn-row" method="post" action="{% url 'tool_public_address' %}" data-public-address-lookup data-fragment-target>
-    {% csrf_token %}
+    {% write_token %}
     <input type="hidden" name="address" value="{{ address }}">
     <button class="btn" type="submit">{% if reading %}Look up again{% else %}Look up{% endif %}</button>
     {% if reading.observed_at %}<span class="conn-row-note">{% include "partials/_reading_age.html" with at=reading.observed_at only %}</span>{% endif %}

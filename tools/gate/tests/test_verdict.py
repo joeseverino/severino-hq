@@ -1,20 +1,31 @@
 """A gate's closing line names what failed and ends on the command that reruns
-just that, and a gate run under another leaves its failed tests to the outer
-verdict too."""
+just that, a gate run under another leaves its failed tests to the outer
+verdict too, and every gate's first line names the file its verdict is kept in.
 
+A failed command's output read back through a tool that keeps only a head and
+tail of its first part never shows the last line, so the head says where the
+verdict is.
+"""
+
+import io
 import json
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 from django.test import tag
 
-from tools.gate import verdict as gate_verdict
+from hq.platform.core.tests.task import Usage
+from tools.gate import at, check, verdict as gate_verdict
 from tools.gate.tests.base import UNITTEST, GateTestCase
-from tools.gate.tests.test_fast import RUNNER_FAILURES, VERDICT_IN
+from tools.gate.tests.test_at import PROBE, TestAtRefTests
+from tools.gate.tests.test_fast import RUNNER_FAILURES, VERDICT_IN, Recorder, run_main
 
 ROOT = Path(__file__).resolve().parents[3]
+# Past the read-back window of a failed command's output, so its last line is cut.
+LONG = "for n in range(3000): print(f'line {n} ' + '0' * 60)\nraise SystemExit(1)"
 
 # A command that prints the lines it is given, as mise and the runner print
 # theirs, records the tests it is given as the runner records its failures,
@@ -22,6 +33,7 @@ ROOT = Path(__file__).resolve().parents[3]
 SAYS = """
 import json, os, sys
 from pathlib import Path
+from unittest.mock import patch
 lines, *tests = sys.argv[1:]
 if tests:
     records = [{"test": test, "exception": "", "traceback": ""} for test in tests]
@@ -56,6 +68,44 @@ class NestedVerdictTests(GateTestCase):
                 self.assertIn("tests: test_example.Case.test_compares, test_example.Case.test_raises", line)
         outer = Path(kept, "outer.txt").read_text().splitlines()
         self.assertIn("test_example.Case.test_raises: LookupError: no example.invalid record", outer)
+
+
+@tag("source")
+class WaitedForTheTurnTests(GateTestCase):
+    def test_the_closing_line_splits_the_wait_from_the_total_and_a_gate_that_never_waited_says_nothing(self):
+        # As mise 2026.11 prints a wait for a task's lock, under a task and under the turn a task asked for.
+        held = "held by lint:source in ~/example/worktree (pid 4121, for 1m02s)"
+        waited = gate_verdict.Step("waits")
+        for line in (
+            f"[lint:shell] waiting for lock heavy, {held}",
+            "[lint:shell] got lock heavy after 6m40s",
+            f"[test:composed] [turn] waiting for lock heavy, {held}",
+            "[test:composed] [turn] got lock heavy after 9.6s",
+        ):
+            waited.read(line)
+        quiet = gate_verdict.Step("quiet")
+        quiet.read(f"[lint:shell] waiting for lock heavy, {held}")
+        started = gate_verdict.time.monotonic()
+        self.assertRegex(
+            gate_verdict.verdict("g", started, [quiet, waited]), r"passed in [\d.]+s, 410s of it waiting for the turn"
+        )
+        self.assertNotIn("waiting", gate_verdict.verdict("g", started, [quiet]))
+
+    def test_a_run_in_the_turn_fails_as_the_task_that_asked_for_it(self):
+        # As mise 2026.11 prints a failed command a file task ran in the turn, under
+        # an aggregate: the turn's line under the task, then the task's own.
+        step = gate_verdict.Step("check")
+        for line in ("[weighs] [turn] ERROR task failed", "Finished in 23.7ms", "[weighs] ERROR task failed"):
+            step.read(line)
+        self.assertEqual(step.tasks, ["weighs"])
+        # The turn's line alone still names the task it ran for.
+        step = gate_verdict.Step("check")
+        step.read("[test:composed] [turn] ERROR task failed")
+        self.assertEqual(step.tasks, ["test:composed"])
+        # A step that runs the turn itself (fast's tests) is named by the step.
+        step = gate_verdict.Step("tests")
+        step.read("[turn] ERROR task failed")
+        self.assertEqual(step.tasks, [])
 
 
 @tag("source")
@@ -179,3 +229,99 @@ class RerunTests(GateTestCase):
         before = Path(gate_verdict.VERDICTS, "kept.prev.txt").read_text()
         self.assertTrue(latest.startswith("[kept] passed in"), latest)
         self.assertTrue(before.splitlines()[0].endswith("; rerun: mise run lint:ruff"), before)
+
+
+@tag("source")
+class ConcurrentCloseTests(GateTestCase):
+    """Two runs of one gate close at once, as a suite run under sh and dash does."""
+
+    def test_a_verdict_another_run_moved_away_still_closes_and_is_kept(self):
+        kept = Path(gate_verdict.VERDICTS, "raced.txt")
+        seen = Path.exists
+
+        def moved_after_the_look(path: Path, *args: object, **kwargs: object) -> bool:
+            # The other run moves the verdict to .prev between this run's look and its move.
+            return path == kept or seen(path, *args, **kwargs)
+
+        with (
+            patch.object(Path, "exists", moved_after_the_look),
+            patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            gate_verdict.Gate("raced").close([gate_verdict.Step("tests")])
+        self.assertTrue(kept.read_text().startswith("[raced] passed in"))
+        self.assertEqual([path.name for path in kept.parent.glob(".raced.*")], [])
+
+
+class OpeningLineCase(GateTestCase):
+    def assert_opens_on_where_its_verdict_is_kept(self, out: str) -> None:
+        first, *_, last = out.splitlines()
+        path = Path(first.rsplit(" ", 1)[-1])
+        self.assertEqual(path.parent, gate_verdict.VERDICTS, first)
+        self.assertEqual(path.read_text().splitlines()[0], last)
+
+
+def step_said(label: str, cmd: list[str], *args: object, **kwargs: object) -> gate_verdict.Step:
+    """A step that prints before it ends, as every real one does."""
+
+    print("step output", flush=True)
+    return gate_verdict.Step(label)
+
+
+@tag("source", "tree")
+class GateOpeningLineTests(OpeningLineCase):
+    def test_a_long_failing_command_under_the_verdict_opens_on_its_file(self):
+        result = subprocess.run(
+            [sys.executable, "-c", VERDICT_IN, str(gate_verdict.VERDICTS), "example", sys.executable, "-c", LONG],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertGreater(len(result.stdout), 30_000)
+        self.assert_opens_on_where_its_verdict_is_kept(result.stdout)
+
+    def test_fast_opens_on_its_file(self):
+        _, printed = run_main(("hq/example.py",), ("lint:ruff",), Recorder())
+        self.assert_opens_on_where_its_verdict_is_kept("\n".join(printed))
+
+    def test_check_opens_on_its_file_whichever_way_it_ends(self):
+        def git(*args: str) -> list[str]:
+            return ["0123abc"] if args[0] == "rev-parse" else []
+
+        for asked, code in (({}, 0), ({"release": "true", "skip_host": "true"}, 2)):
+            with (
+                self.subTest(asked=asked),
+                patch.object(check, "usage", return_value=Usage(asked)),
+                patch.object(check, "git", side_effect=git),
+                patch.object(check, "run", side_effect=step_said),
+                patch("sys.stdout", new_callable=io.StringIO) as out,
+            ):
+                self.assertEqual(check.main(), code)
+            self.assert_opens_on_where_its_verdict_is_kept(out.getvalue())
+
+    def test_a_test_run_opens_on_its_file(self):
+        with (
+            patch.object(at, "run", side_effect=step_said),
+            patch("sys.stdout", new_callable=io.StringIO) as out,
+        ):
+            at.run_here(["example.tests"])
+        self.assert_opens_on_where_its_verdict_is_kept(out.getvalue())
+
+
+@tag("source")
+class TestAtOpeningLineTests(OpeningLineCase):
+    """`test --at` on the fixture repository its own tests run on."""
+
+    setUp = TestAtRefTests.setUp
+    git = TestAtRefTests.git
+    write = TestAtRefTests.write
+    commit = TestAtRefTests.commit
+    run_main = TestAtRefTests.run_main
+
+    def test_a_run_at_a_ref_opens_on_its_file(self):
+        seen = Path(self.root.parent, "seen.json")
+        with patch.object(at, "UV_RUN", [sys.executable, "-c", f"print('step output')\n{PROBE}"]):
+            code, out = self.run_main(str(seen), "1", at_ref=self.old)
+        self.assertEqual(code, 1)
+        self.assert_opens_on_where_its_verdict_is_kept(out)

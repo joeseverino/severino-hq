@@ -17,20 +17,30 @@ import (
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
+// Each container is sampled twice and its CPU is the share between the two;
+// a one-shot sample's counter alone, all the CPU since the container started,
+// never reads as current.
 func TestEnvironmentGlanceMeasuresRunningContainers(t *testing.T) {
 	docker := "/api/endpoints/1/docker"
-	_, server := newPortainerAPI(t, map[string]string{
+	api, server := newPortainerAPI(t, map[string]string{
 		"/api/endpoints":                      oneLocalEndpoint,
 		docker + "/info":                      `{"NCPU":4,"MemTotal":8589934592}`,
 		docker + glanceDiskUsage:              `{"LayersSize":1073741824,"Volumes":[{"UsageData":{"Size":1073741824}},{"UsageData":{"Size":-1}},{}],"BuildCache":[{"Size":1073741824}]}`,
 		docker + "/containers/json?all=false": `[{"Id":"a"},{"Id":"b"}]`,
-		docker + "/containers/a/stats?stream=false&one-shot=true": `{"memory_stats":{"usage":1073741824,"stats":{"inactive_file":536870912}},
-			"cpu_stats":{"cpu_usage":{"total_usage":300},"system_cpu_usage":1000,"online_cpus":4},
-			"precpu_stats":{"cpu_usage":{"total_usage":100},"system_cpu_usage":600}}`,
-		docker + "/containers/b/stats?stream=false&one-shot=true": `{"memory_stats":{"usage":536870912},
-			"cpu_stats":{"cpu_usage":{"total_usage":50,"percpu_usage":[1,2]},"system_cpu_usage":100},
-			"precpu_stats":{"cpu_usage":{"total_usage":50},"system_cpu_usage":0}}`,
 	})
+	fixture := "docker-stats-one-shot-cgroup2.json"
+	api.turns = map[string][]string{
+		// A core and a half for 200ms, after a lifetime of heavy use.
+		docker + oneShotStats("a"): {
+			statsFixture(t, fixture, "2026-10-31T12:00:00Z", 900_000_000_000),
+			statsFixture(t, fixture, "2026-10-31T12:00:00.2Z", 900_300_000_000),
+		},
+		// Half a core.
+		docker + oneShotStats("b"): {
+			statsFixture(t, fixture, "2026-10-31T12:00:00Z", 5_000_000_000),
+			statsFixture(t, fixture, "2026-10-31T12:00:00.2Z", 5_100_000_000),
+		},
+	}
 	r := portainerRegistry(t, server.URL, runtime.Environment{})
 	machines, err := r.portainerGlance(t.Context(), map[string]bool{"hq-node": true})
 	if err != nil || len(machines) != 1 {
@@ -39,38 +49,11 @@ func TestEnvironmentGlanceMeasuresRunningContainers(t *testing.T) {
 	want := GlanceMachine{Key: "hq-node", Status: "good", Summary: "4 cores · 8.0 GB memory", Metrics: []GlanceMetric{
 		{Label: "Containers", Value: "2", Detail: "running"},
 		{Label: "CPU", Value: "50%", Detail: "of 4 cores"},
-		{Label: "Memory", Value: "12%", Detail: "1.0 GB of 8.0 GB"},
+		{Label: "Memory", Value: "4%", Detail: "292 MB of 8.0 GB"},
 		{Label: "Docker storage", Value: "3.0 GB", Detail: "layers, volumes and build cache"},
 	}}
 	if !reflect.DeepEqual(machines[0], want) {
 		t.Errorf("got  %+v\nwant %+v", machines[0], want)
-	}
-}
-
-func TestContainerCPUPercent(t *testing.T) {
-	sample := func(total, previous, system, previousSystem uint64, online int, percpu int) dockerStats {
-		var s dockerStats
-		s.CPUStats.CPUUsage.TotalUsage, s.PreCPUStats.CPUUsage.TotalUsage = total, previous
-		s.CPUStats.SystemUsage, s.PreCPUStats.SystemUsage = system, previousSystem
-		s.CPUStats.OnlineCPUs = online
-		s.CPUStats.CPUUsage.PercpuUsage = make([]uint64, percpu)
-		return s
-	}
-	cases := []struct {
-		name  string
-		stats dockerStats
-		want  float64
-	}{
-		{"online cpus", sample(300, 100, 1000, 600, 4, 0), 200},
-		{"per-cpu list when online is absent", sample(150, 50, 400, 0, 0, 2), 50},
-		{"one core when neither says", sample(150, 50, 400, 0, 0, 0), 25},
-		{"no progress is idle", sample(100, 100, 1000, 600, 4, 0), 0},
-		{"counter reset is idle", sample(50, 100, 1000, 600, 4, 0), 0},
-	}
-	for _, c := range cases {
-		if got := containerCPUPercent(c.stats); got != c.want {
-			t.Errorf("%s: %v, want %v", c.name, got, c.want)
-		}
 	}
 }
 
@@ -209,19 +192,19 @@ func (k keyed) Request(ctx context.Context, address, method string, headers map[
 func glanceSite(t *testing.T) (*Registry, runtime.GlancePlan) {
 	t.Helper()
 	docker := "/api/endpoints/1/docker"
-	stats := `{"memory_stats":{"usage":1048576},"cpu_stats":{"cpu_usage":{"total_usage":200},"system_cpu_usage":1000,"online_cpus":2},"precpu_stats":{"cpu_usage":{"total_usage":100},"system_cpu_usage":500}}`
+	stats := statsFixture(t, "docker-stats-one-shot-cgroup2.json", "", 0)
 	api, server := newPortainerAPI(t, map[string]string{
 		"/api/endpoints": `[{"Id":1,"Name":"local","URL":"unix:///var/run/docker.sock","Type":1,"Status":1},
 			{"Id":2,"Name":"edge-vps","URL":"tcp://192.0.2.20:9001","Type":2,"Status":1}]`,
-		docker + "/info":                                          `{"NCPU":2,"MemTotal":4294967296}`,
-		docker + glanceDiskUsage:                                  `{"LayersSize":1073741824,"Volumes":[],"BuildCache":[]}`,
-		docker + "/containers/json?all=false":                     `[{"Id":"a"},{"Id":"b"},{"Id":"c"}]`,
-		docker + "/containers/a/stats?stream=false&one-shot=true": stats,
-		docker + "/containers/b/stats?stream=false&one-shot=true": stats,
-		docker + "/containers/c/stats?stream=false&one-shot=true": stats,
-		"/points/40.0000,-75.0000":                                `{"properties":{"forecastHourly":"SERVER/hourly","relativeLocation":{"properties":{"city":"Example","state":"PA"}}}}`,
-		"/hourly":                                                 `{"properties":{"periods":[{"startTime":"2026-07-01T13:00:00-04:00","temperature":70,"shortForecast":"Sunny"}]}}`,
-		"/alerts/active?point=40.0000,-75.0000":                   `{"features":[]}`,
+		docker + "/info":                        `{"NCPU":2,"MemTotal":4294967296}`,
+		docker + glanceDiskUsage:                `{"LayersSize":1073741824,"Volumes":[],"BuildCache":[]}`,
+		docker + "/containers/json?all=false":   `[{"Id":"a"},{"Id":"b"},{"Id":"c"}]`,
+		docker + oneShotStats("a"):              stats,
+		docker + oneShotStats("b"):              stats,
+		docker + oneShotStats("c"):              stats,
+		"/points/40.0000,-75.0000":              `{"properties":{"forecastHourly":"SERVER/hourly","relativeLocation":{"properties":{"city":"Example","state":"PA"}}}}`,
+		"/hourly":                               `{"properties":{"periods":[{"startTime":"2026-07-01T13:00:00-04:00","temperature":70,"shortForecast":"Sunny"}]}}`,
+		"/alerts/active?point=40.0000,-75.0000": `{"features":[]}`,
 	})
 	api.routes["/points/40.0000,-75.0000"] = strings.Replace(api.routes["/points/40.0000,-75.0000"], "SERVER", server.URL, 1)
 	env := runtime.Environment{ID: "hq-node", SSHDir: t.TempDir()}
@@ -358,6 +341,9 @@ func TestHostFirewallReadingIsTyped(t *testing.T) {
 		{"a field HQ does not know", `{"record":"interface-binding","tailnet_only":true}`, "decode host firewall reading"},
 		{"a field of the wrong type", `{"record":"interface-binding","accept_requires_interface":"yes"}`, "decode host firewall reading"},
 		{"no record", `{"interface":"tailscale0"}`, "host firewall reading names no record"},
+		{"a name given twice", `{"record":"interface-binding","accept_requires_interface":false,"accept_requires_interface":true}`, "decode host firewall reading"},
+		{"a name in another case", `{"record":"interface-binding","Accept_Requires_Interface":true}`, "decode host firewall reading"},
+		{"trailing data", `{"record":"interface-binding"}]`, "decode host firewall reading"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

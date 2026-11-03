@@ -31,6 +31,8 @@ type acmeFake struct {
 	notAfter time.Time
 	// issuedDER is the last leaf issued.
 	issuedDER []byte
+	// reach points a transport at the authority.
+	reach func(*http.Transport)
 
 	mu            sync.Mutex
 	accounts      map[string]string // JWK thumbprint -> account URL
@@ -51,10 +53,31 @@ type acmeRegistration struct {
 func newACMEFake(t *testing.T, pki *testPKI, dns *dnsFake) *acmeFake {
 	t.Helper()
 	fake := &acmeFake{t: t, pki: pki, dns: dns, notAfter: tlsNow.AddDate(0, 3, 0), accounts: map[string]string{}, thumbprints: map[string]string{}}
-	server := httptest.NewServer(fake)
-	t.Cleanup(server.Close)
-	fake.base = server.URL
+	fake.base, fake.reach = inMemory(t, fake)
 	return fake
+}
+
+// inMemory serves handler on the in-memory network httptest gives a test, whose
+// connections block durably, so a synctest bubble's clock moves past every
+// wait. The function it returns points any transport the controller builds at
+// the server, keeping that transport's own settings.
+func inMemory(t *testing.T, handler http.Handler) (string, func(*http.Transport)) {
+	t.Helper()
+	server := httptest.NewTestServer(t, handler)
+	dial := server.Client().Transport.(*http.Transport).DialContext
+	return server.URL, func(transport *http.Transport) { transport.DialContext = dial }
+}
+
+// serve makes the authority the one a registry orders from, through the
+// client the controller builds for it.
+func (f *acmeFake) serve(t *testing.T, r *Registry) {
+	t.Helper()
+	client, err := r.acmeHTTP()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.reach(client.Transport.(*http.Transport))
+	r.ACMEHTTP = client
 }
 
 func (f *acmeFake) directory() string { return f.base + "/directory" }
@@ -311,12 +334,11 @@ type dnsFake struct {
 	refuseDelete bool
 }
 
-func newDNSFake(t *testing.T) (*dnsFake, string) {
+func newDNSFake(t *testing.T) (*dnsFake, string, func(*http.Transport)) {
 	t.Helper()
 	fake := &dnsFake{records: map[string][2]string{}, refuseCreate: -1}
-	server := httptest.NewServer(fake)
-	t.Cleanup(server.Close)
-	return fake, server.URL
+	address, reach := inMemory(t, fake)
+	return fake, address, reach
 }
 
 func (f *dnsFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {

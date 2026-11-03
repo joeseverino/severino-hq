@@ -3,7 +3,7 @@
 {% include "partials/_visit_refresh.html" with subject="machine" name=machine.name %}
 {% include "control_plane/_machine_band.html" %}
 
-{% problems_about as problems %}{% include "partials/_problems.html" %}
+{% include "partials/_problems.html" with problems=problems_in.page %}
 
 {% if load_metrics %}
   <section class="machine-telemetry" aria-labelledby="machine-telemetry-heading">
@@ -29,10 +29,12 @@
   Where they are read from, beside the heading, and what they leave behind
   under it. How they stand is the band at the top of the page.
   {% endcomment %}
-  <h2>Containers{% if docker %} <span class="heading-aside">{% if docker.version %}Docker {{ docker.version|breakable }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status|breakable }}{% endif %}{% if docker.connection %}{% dot %}read through {% entity docker.connection %}{% endif %}</span>{% endif %}</h2>
+{% card heading="machine-containers-heading" %}
+  <h2 id="machine-containers-heading">Containers{% if docker %} <span class="heading-aside">{% if docker.version %}Docker {{ docker.version|breakable }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status|breakable }}{% endif %}{% if docker.connection %}{% dot %}read through {% entity docker.connection %}{% endif %}</span>{% endif %}</h2>
   {% if unused_images %}<ul class="dot-list section-facts"><li class="tone-attention">{{ unused_images|length|counted:"unused image,unused images" }}, {{ unused_size|breakable }} can be freed</li></ul>{% endif %}
   {% if unused_images %}{% include "partials/_command.html" with command="ssh "|add:machine.name|add:' "sudo docker image prune -a"' only %}{% endif %}
-  {% if machine.containers %}{% include "control_plane/_container_rows.html" with containers=machine.on_show label="Containers" %}{% endif %}
+  {% include "partials/_problems.html#lines" with rest=problems_in.containers %}
+  {% if machine.containers %}{% include "control_plane/_container_rows.html" with containers=machine.on_show label="Shown containers" %}{% endif %}
   {% if machine.folded %}
     {% comment %}
     Watched exactly like the rest (start, stop and restart all work) just
@@ -44,6 +46,7 @@
       {% include "control_plane/_container_rows.html" with containers=machine.folded label="Hidden containers" %}
     </details>
   {% endif %}
+{% endcard %}
 {% endif %}
 
 {% if machine.presence %}
@@ -57,6 +60,7 @@
       <a class="btn" href="{% url 'control_plane:tailnet' %}?source={{ asked.source|urlencode }}&amp;target={{ asked.target|urlencode }}" data-modal-open="whatif">Policy test</a>
     {% endif %}
   {% endsection_head %}
+  {% include "partials/_problems.html#lines" with rest=problems_in.tailnet %}
   <dl class="kv">
         {% comment %}
         Every address, here and nowhere else. A machine on a tailnet has a LAN

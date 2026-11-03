@@ -7,9 +7,11 @@ is one: a tool in the markup but not the nav is a silent hole, so the strip, the
 routing, the default and the empty state all derive from one tuple.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from .integrations import integration_graph
+from .lookup import LOOK_UP_ADDRESS, LOOK_UP_NAME
 from .security import Principal
 
 
@@ -20,11 +22,12 @@ class ToolTab:
     id: str
     label: str
     summary: str
-    # The capabilities this tab invokes. Named rather than imported so the tab
-    # cannot drift from the registry: a tab pointing at a capability that no
-    # longer exists fails the contract check below rather than rendering a
-    # form that cannot execute.
-    capabilities: tuple[str, ...]
+    # The capabilities this tab invokes, each with the one field of its command
+    # the tab's form asks for. Named rather than imported so the tab cannot
+    # drift from the registry: a tab pointing at a capability that no longer
+    # exists fails the contract check below rather than rendering a form that
+    # cannot execute.
+    capabilities: Mapping[str, str]
     # The partial that draws it. One template per tool, so a tool's markup is
     # not spread through a page that has to know about all of them.
     template: str
@@ -45,7 +48,7 @@ TOOL_TABS: tuple[ToolTab, ...] = (
         id="dns",
         label="DNS",
         summary="Looked up on the public internet, not in AdGuard.",
-        capabilities=("lookup.name", "lookup.address"),
+        capabilities={LOOK_UP_NAME: "name", LOOK_UP_ADDRESS: "address"},
         template="control_plane/_tool_dns.html",
     ),
 )

@@ -1,13 +1,13 @@
 {% extends "page.html" %}
 {% block page %}
-<form method="get" class="filter-bar" role="search">
+<search><form method="get" class="filter-bar">
   <select name="year" aria-label="Year" data-submit-on-change>
     {% for y in available_years %}
       <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
     {% endfor %}
   </select>
   <button class="btn" type="submit">Filter</button>
-</form>
+</form></search>
 
 <section class="kpi-grid">
   <div class="kpi"><span class="label">Expenses {{ year|breakable }}</span><span class="value">{{ expenses_total|money }}</span><span class="muted">{% if expenses_count %}<a href="{{ expenses_url }}">{{ expenses_count|counted:"expense" }}</a>{% else %}{{ expenses_count|counted:"expense" }}{% endif %}</span></div>

@@ -9,6 +9,8 @@ from hq.domains.jobs.testing import held_jobs
 from hq.platform.application.demo import demo_scope
 from hq.platform.application.plugin_testing import (
     ComposedPluginTestCase,
+    form_keyed,
+    holding,
     providers_derived_again,
     sibling,
     undefined_style_classes,
@@ -70,7 +72,9 @@ __all__ = [
     "OutboundInRequest",
     "audit_writer",
     "demo_scope",
+    "form_keyed",
     "held_jobs",
+    "holding",
     "plain",
     "providers_derived_again",
     "reaches_out",

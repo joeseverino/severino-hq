@@ -16,6 +16,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 )
 
 const MaxResponseBytes = 32 << 20
@@ -80,6 +82,24 @@ func (m Multipart) encode() ([]byte, string, error) {
 		return nil, "", err
 	}
 	return body.Bytes(), writer.FormDataContentType(), nil
+}
+
+// learnCredential learns the credential a request header carries: every
+// token this process sends a vendor goes through here, minted or held, so the
+// mask strikes it whatever reached it first.
+func learnCredential(name, value string) {
+	canonical := http.CanonicalHeaderKey(name)
+	switch {
+	case canonical == "Authorization", canonical == "Proxy-Authorization", canonical == "Cookie":
+	case strings.Contains(canonical, "Key"), strings.Contains(canonical, "Token"), strings.Contains(canonical, "Secret"):
+	default:
+		return
+	}
+	mask.Learn(value)
+	// The credential after its scheme: Bearer, Basic, Token.
+	if _, credential, ok := strings.Cut(value, " "); ok {
+		mask.Learn(credential)
+	}
 }
 
 // requestFailure classifies a request that got no answer. The address is
@@ -167,6 +187,7 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 	request.Header.Set("Accept", "application/json")
 	for name, value := range headers {
 		request.Header.Set(name, value)
+		learnCredential(name, value)
 	}
 	if payload != nil && request.Header.Get("Content-Type") == "" {
 		request.Header.Set("Content-Type", contentType)

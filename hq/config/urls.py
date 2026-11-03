@@ -10,8 +10,9 @@ from django.urls import URLPattern, include, path
 lazy from debug_toolbar.toolbar import debug_toolbar_urls
 
 from hq.domains.projects.views import PostureView, WatchingRefreshView, WatchingView
-from hq.platform.application.domains import host_urlpatterns
-from hq.platform.application.plugins import plugin_urlpatterns
+from hq.platform.application.denials import REFUSED_CREDENTIALS
+from hq.platform.application.domains import HOST_DOMAINS
+from hq.platform.application.plugins import installed_plugins
 from hq.platform.core.action_item_views import (
     ActionItemAsideView,
     ActionItemCountView,
@@ -26,24 +27,29 @@ from hq.platform.core.dashboard_views import (
     DashboardView,
 )
 from hq.platform.core.health_views import health_live, health_ready
+from hq.platform.core.oidc import HANDSHAKE
+from hq.platform.core.oidc_logout import backchannel_logout
 from hq.platform.core.speculation import rules_document
 from hq.platform.core.static import root_icon
 from hq.platform.core.views import (
     AgentAccessView,
+    AgentBlockView,
     AgentPolicyView,
     AvatarView,
     ConnectionPageView,
     DemoModeView,
     HQView,
+    OwnDeviceView,
     PublicAddressView,
     SearchView,
     ThemeView,
     ThrottledLoginView,
 )
+from hq.platform.core.write_bounds import NOTHING, Bound, writes
 
 
-def public(urlconf: str):
-    """``include(urlconf)`` with every route in it answering without a session.
+def public(urlconf: str, *bounds: Bound):
+    """``include(urlconf)`` with every route in it answering without a session, and writing under ``bounds``.
 
     For a mount whose views are someone else's (the SSO handshake) or carry
     their own credential (the bearer-token API), where the exemption is a fact
@@ -54,7 +60,7 @@ def public(urlconf: str):
     for pattern in included[0].urlpatterns:
         if not isinstance(pattern, URLPattern):
             raise TypeError(f"{urlconf} nests an include; mark its views instead.")
-        login_not_required(pattern.callback)
+        writes(*bounds)(login_not_required(pattern.callback))
     return included
 
 
@@ -76,10 +82,13 @@ urlpatterns = [
     ),
     path(
         "accounts/logout/",
-        login_not_required(auth_views.LogoutView.as_view()),
+        # Signing out writes only for the session it ends.
+        writes(NOTHING)(login_not_required(auth_views.LogoutView.as_view())),
         name="logout",
     ),
-    path("oidc/", public("mozilla_django_oidc.urls")),
+    path("oidc/", public("mozilla_django_oidc.urls", HANDSHAKE)),
+    # Beside the library's handshake, outside its urlconf: the provider's own server posts here.
+    path("oidc/backchannel-logout/", backchannel_logout, name="oidc_backchannel_logout"),
     path("speculation-rules.json", rules_document, name="speculation_rules"),
     path("favicon.ico", root_icon("img/favicon.ico")),
     path("apple-touch-icon.png", root_icon("img/apple-touch-icon.png")),
@@ -102,6 +111,8 @@ urlpatterns = [
     path("theme/", ThemeView.as_view(), name="theme"),
     path("avatar/<str:digest>/", AvatarView.as_view(), name="avatar"),
     path("agents/", AgentPolicyView.as_view(), name="agent_policy"),
+    path("agents/block/", AgentBlockView.as_view(), name="agent_block"),
+    path("agents/devices/", OwnDeviceView.as_view(), name="own_device"),
     path("connection/", ConnectionPageView.as_view(), name="connection"),
     path("hq/", HQView.as_view(), name="hq_self"),
     path(
@@ -129,12 +140,12 @@ urlpatterns = [
     path("watching/", WatchingView.as_view(), name="watching"),
     path("watching/refresh/", WatchingRefreshView.as_view(), name="watching_refresh"),
     path("posture/", PostureView.as_view(), name="posture"),
-    path("api/", public("hq.platform.api.urls")),
+    path("api/", public("hq.platform.api.urls", REFUSED_CREDENTIALS)),
     # Every host domain's own URL configuration, where its declaration mounts it.
-    *host_urlpatterns(),
+    *(path(mount.prefix, include(mount.urlconf)) for descriptor in HOST_DOMAINS for mount in descriptor.mounts),
+    # Each installed extension's, at the prefix its manifest declares.
+    *(path(plugin.url_prefix, include(plugin.urlconf)) for plugin in installed_plugins() if plugin.urlconf),
 ]
-
-urlpatterns.extend(plugin_urlpatterns())
 
 if settings.SEVERINO_DEBUG_TOOLBAR:
     urlpatterns.extend(debug_toolbar_urls())

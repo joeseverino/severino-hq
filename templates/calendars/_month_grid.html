@@ -2,6 +2,8 @@
 One month of every checked source: the calendar page's grid, and the
 dashboard's. `calendar` is application.calendar.CalendarMonth; `selected` the
 open day, if any. Its links open the calendar, wherever the grid is shown.
+The open day is a class: today's date link holds the grid's one aria-current,
+and a table cell outside a grid takes no aria-selected.
 {% endcomment %}
 <table class="month-grid">
   <caption class="visually-hidden">{{ calendar.month|when:"month" }}</caption>

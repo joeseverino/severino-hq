@@ -17,7 +17,7 @@ from .entity_links import entity_link
 from .facts import in_zone
 from .findings import finding_rules
 from .integrations import integration_graph
-from .labels import effect_label
+from .labels import dotted, effect_label
 from .resources import ResourceSpec
 from .security import Capability, Principal
 from .topology_lenses import topology_lenses
@@ -307,14 +307,10 @@ def _estate_items() -> tuple[DiscoveryItem, ...]:
             kind="machine",
             name=machine.name,
             label=machine.name,
-            summary=" · ".join(
-                part
-                for part in (
-                    ", ".join(role.label for role in machine.roles),
-                    machine.role,
-                    counted(len(machine.hostnames), "service") if machine.hostnames else "",
-                )
-                if part
+            summary=dotted(
+                ", ".join(role.label for role in machine.roles),
+                machine.role,
+                counted(len(machine.hostnames), "service") if machine.hostnames else "",
             ),
             url=machine.url,
             destination_label="Machine",

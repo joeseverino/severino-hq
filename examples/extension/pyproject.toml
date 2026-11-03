@@ -1,0 +1,39 @@
+# A packaged extension the host's own CI checks as an extension's CI does
+# (test:plugin-check), so a host change that breaks the check fails here.
+# Outside the image: Dockerfile.dockerignore admits no examples/.
+[build-system]
+requires = ["uv_build==0.13.6"]
+build-backend = "uv_build"
+
+[project]
+name = "example-extension"
+version = "1.0.0"
+description = "A synthetic HQ extension the host checks its extension contract against"
+requires-python = ">=3.15,<3.16"
+# Django is the host's, installed beside every extension.
+dependencies = []
+
+# The host's own pins, so an update moves both in the one pull request.
+[dependency-groups]
+dev = ["django-stubs==6.1.2", "mypy==2.4.1", "ruff==0.17.3"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "DJ", "SIM", "PTH", "C4", "RUF", "DTZ", "T20"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/**/tests/*.py" = ["S101"]
+
+[tool.mypy]
+strict = true
+plugins = ["mypy_django_plugin.main"]
+files = ["src"]
+exclude = "(^|/)tests/"
+mypy_path = "src"
+explicit_package_bases = true
+follow_imports = "silent"
+
+[tool.django-stubs]
+django_settings_module = "hq.config.settings_typecheck"

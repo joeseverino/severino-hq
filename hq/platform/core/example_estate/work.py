@@ -5,16 +5,20 @@ from datetime import timedelta
 
 from django.utils import timezone
 
+from hq.domains.content.content_sync import sync_content_index
+from hq.domains.content.models import ContentItem
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations.github import DEPENDENCY_RUN_KIND
 from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND
 from hq.domains.control_plane.provider_adapters import github as delivery
+from hq.domains.jobs import runner
 from hq.domains.jobs.models import Job
 from hq.platform.application import scheduled_work
 from hq.platform.application.images import ImageRef
 from hq.platform.application.inventory_testing import store
+from hq.platform.core.audit import stamped
 
-from .names import CONTAINERS, GITHUB, HQ_DIGEST, HQ_REVISION, NEWER, SOURCES, hexed, iso, stamp
+from .names import CONTAINERS, GITHUB, HQ_DIGEST, HQ_REVISION, NEWER, OWNER_NAME, SOURCES, hexed, iso, stamp
 
 # The repositories HQ's GitHub App reads, each kept the way the repo checks ask.
 REPOSITORIES = ("hq", "homelab", "photo-library", "media-server", "git-server", "backups", "dotfiles")
@@ -23,6 +27,16 @@ UPDATED = "photo-library"
 # The scheduled work HQ declares that runs on a clock, and how many runs to show.
 SCHEDULED = tuple((work.name, work.every) for work in scheduled_work.SCHEDULED if work.every is not None)
 RUNS = 3
+CONTENT_SYNC = "content.sync"
+# What the site's index says of each writeup: its description and what it uses.
+DESCRIBED = {
+    "why-a-control-panel": ("One place that knows every host, route and certificate.", ["Django", "Go"]),
+    "photos-off-the-cloud": ("Forty thousand photos moved home, and how they stay backed up.", ["Immich"]),
+    "media-server-on-the-tv": ("A media server the living room finds without a setup screen.", ["Jellyfin"]),
+    "mirroring-private-git": ("A self-hosted git server that mirrors to GitHub on every push.", ["Forgejo"]),
+    "tailnet-only": ("Every service reachable only over the tailnet.", ["Tailscale"]),
+    "restored-backups": ("A backup counts once it has been restored.", ["restic", "Backblaze B2"]),
+}
 # The units deploy/systemd ships: each timer or path and what it starts.
 # When each last started it, and how long until it next does; a path unit
 # starts its service when a file changes, so has no next time.
@@ -34,6 +48,28 @@ STARTERS = (
     ("severino-hq-script-drift.timer", "severino-hq-script-drift.service", timedelta(hours=7), timedelta(hours=17)),
     ("severino-hq-secrets.timer", "severino-hq-secrets.service", timedelta(minutes=22), timedelta(minutes=38)),
 )
+
+
+# What each unit's file under deploy/systemd calls it, as systemd reports it:
+# a template's instance name stands for its %i.
+TITLES = {
+    "run-severino\\x2dhq\\x2dsecrets.mount": "Severino HQ credential tmpfs, kept out of swap",
+    "severino-hq-backup.service": "Create and verify a Severino HQ backup",
+    "severino-hq-backup.timer": "Create a nightly verified Severino HQ backup",
+    "severino-hq-controller.path": "Start the Severino HQ controller when HQ has queued work",
+    "severino-hq-controller.service": "Severino HQ infrastructure controller",
+    "severino-hq-controller.timer": "Run Severino HQ infrastructure controller",
+    "severino-hq-due.timer": "Do the scheduled work whose cadence has come round, the host's and the extensions'",
+    "severino-hq-job@due.service": "Severino HQ scheduled work: due",
+    "severino-hq-script-drift.service": (
+        "Check that the host is its release: the root-owned tree, the units, the runner's sudo rules and nothing else"
+    ),
+    "severino-hq-script-drift.timer": "Daily check for stale root-owned Severino HQ scripts",
+    "severino-hq-secrets.service": "Write Severino HQ secrets from 1Password Connect",
+    "severino-hq-secrets.timer": "Periodically refresh Severino HQ secrets from 1Password",
+    "severino-hq-unit.socket": "Severino HQ's requests to stop, start or restart a container's unit",
+    "severino-hq-web.service": "Severino HQ",
+}
 
 
 def repositories():
@@ -121,7 +157,7 @@ def repositories():
         "github.profile",
         {
             "login": "example",
-            "name": "Example",
+            "name": " ".join(OWNER_NAME),
             "bio": "Runs a small homelab.",
             "url": "https://github.com/example",
             "public_repos": 4,
@@ -212,25 +248,53 @@ def _updates(name):
 
 
 def jobs():
-    """Each piece of scheduled work, done on time and done well, a few times over."""
+    """Each piece of scheduled work, done on time and done well, a few times over.
+    The latest content sync found the site's index describing each writeup."""
 
     for kind, every in SCHEDULED:
         for run in range(RUNS, 0, -1):
-            _ran(kind, every * run - timedelta(minutes=7))
+            work = _described if kind == CONTENT_SYNC and run == 1 else _nothing
+            _ran(kind, every * run - timedelta(minutes=7), work)
 
 
-def _ran(kind, ago):
+def _nothing(_progress):
+    return {}
+
+
+def _described(_progress):
+    """The site's index, each writeup now with its description and what it uses."""
+
+    return sync_content_index(
+        {
+            "items": [
+                {
+                    "slug": item.slug,
+                    "title": item.title,
+                    "url": item.published_url,
+                    "published_at": item.published_at.isoformat(),
+                    "description": DESCRIBED[item.slug][0],
+                    "technologies": DESCRIBED[item.slug][1],
+                }
+                for item in ContentItem.objects.filter(slug__in=DESCRIBED).order_by("published_at")
+            ]
+        }
+    )
+
+
+def _ran(kind, ago, work):
+    """One run the scheduler asked for, ended through the runner so its row in
+    the log is the one a real run writes, and every row its work wrote beneath
+    it, dated to when it finished."""
+
     finished = timezone.now() - ago
-    job = Job.objects.create(
-        kind=kind,
-        label=scheduled_work.named(kind).label,
-        state=Job.State.SUCCEEDED,
-        actor="timer",
+    with stamped(lambda *_: {"created_at": finished}):
+        job = runner.run(kind, scheduled_work.named(kind).label, work, actor=runner.SCHEDULER)
+    Job.objects.filter(pk=job.pk).update(
+        created_at=finished - timedelta(seconds=5),
         started_at=finished - timedelta(seconds=4),
         finished_at=finished,
-        percent=100,
+        heartbeat_at=finished,
     )
-    Job.objects.filter(pk=job.pk).update(created_at=finished - timedelta(seconds=5))
 
 
 def units():
@@ -245,7 +309,24 @@ def units():
             "sub": "running",
             "started_at": stamp(timedelta(days=12)),
             "read_at": stamp(),
-        }
+        },
+        # Units that do their work while active: a socket listening for the
+        # next connection, and the tmpfs the credentials are rendered to.
+        *(
+            {
+                "unit": unit,
+                "load": "loaded",
+                "file_state": "enabled",
+                "active": "active",
+                "sub": sub,
+                "started_at": stamp(timedelta(days=12)),
+                "read_at": stamp(),
+            }
+            for unit, sub in (
+                ("severino-hq-unit.socket", "listening"),
+                ("run-severino\\x2dhq\\x2dsecrets.mount", "mounted"),
+            )
+        ),
     ]
     started = {}
     for starter, service, last, after in STARTERS:
@@ -279,7 +360,7 @@ def units():
         }
         for service, last in started.items()
     )
-    store(UNIT_KIND, *found)
+    store(UNIT_KIND, *({**unit, "title": TITLES[unit["unit"]]} for unit in found))
     store(
         RENDER_STATUS_KIND,
         {

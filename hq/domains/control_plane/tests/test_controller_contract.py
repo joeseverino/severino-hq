@@ -28,7 +28,7 @@ from hq.platform.application.resource_operations import (
 from hq.platform.application.security import cli_principal
 
 from . import bridge_client
-from .test_control_plane import certificate_spec, declare_targets
+from .certificate_cases import certificate_spec, declare_targets
 
 CONTRACT_URI = "urn:hq:controller-bridge"
 CONTRACT = contract()

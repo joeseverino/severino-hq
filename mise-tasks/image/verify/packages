@@ -1,17 +1,18 @@
 #!/bin/sh
 #MISE description="Its Python packages are the ones HQ loads: HQ imports whole, a password hashes and an HTTPS client starts without what the build deletes, and nothing else ships"
-#MISE env={SEVERINO_HEAVY_BOUND="30m"}
+#MISE lock="heavy"
+#MISE timeout="30m"
 #MISE hide=true
 #MISE depends=["image:build"]
+#MISE depends_post=["image:docker stop"]
 set -eu
-# shellcheck source=tools/lib/heavy-turn.sh
-. ./tools/lib/heavy-turn.sh
-
 # The build stage deletes parts of packages HQ never loads (Dockerfile). Every
 # module of hq and hq_sdk is imported, and the paths that load a package only
 # on use are taken, so one that reaches for a deleted part fails here rather
 # than on a request; a top-level module that ships and none of that loads is
-# named, as is a package's own tests or benchmarks.
+# named, as is a package's own tests or benchmarks. Imports run as written
+# (hq.config.imports.eagerly), since a lazy process loads only what its own
+# run used, and that reads a module-level import as unused.
 docker run --rm -i \
     --env DJANGO_SECRET_KEY=ci-only-container-key-0123456789abcdef0123456789abcdef \
     --env DJANGO_ALLOWED_HOSTS=127.0.0.1 \
@@ -21,6 +22,10 @@ import pkgutil
 import sys
 import sysconfig
 from pathlib import Path
+
+from hq.config.imports import eagerly
+
+eagerly()
 
 import django
 

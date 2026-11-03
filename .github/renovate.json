@@ -72,6 +72,17 @@
       }
     },
     {
+      "description": "The host's verifier (controller/host/verifier.gen.go) is generated from mise.lock's cosign entry, so a cosign move locks it and generates the verifier again; lint:controller fails a stale one.",
+      "matchManagers": ["mise"],
+      "matchDepNames": ["cosign"],
+      "postUpgradeTasks": {
+        "commands": ["mise trust mise.toml", "mise lock cosign", "mise exec go yq -- go -C controller generate ./host"],
+        "installTools": { "mise": {} },
+        "fileFilters": ["mise.lock", "controller/host/verifier.gen.go"],
+        "executionMode": "update"
+      }
+    },
+    {
       "description": "mise.toml's go is a template that reads go.mod's toolchain line, which the rule above moves; mise reads go.mod only from controller/ and below, so the template stays, and Renovate would read its text as a version.",
       "matchManagers": ["mise"],
       "matchDepNames": ["go"],

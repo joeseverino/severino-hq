@@ -32,10 +32,10 @@ class HeldJobs:
         if serving:
             raise runner.OutboundInRequest(f"{serving} tried to run the jobs it started.")
         waiting, self.waiting = self.waiting, []
-        # The test's connection is the only one that can see the job.
-        with mock.patch.object(runner, "close_old_connections"), mock.patch.object(runner, "connection"):
-            for job_id, work in waiting:
-                runner.run_job(job_id, work)
+        # On the test's connection, the only one that can see the job; its
+        # open transaction keeps the job's thread from closing it.
+        for job_id, work in waiting:
+            runner.run_job(job_id, work)
 
 
 @contextmanager

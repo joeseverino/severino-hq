@@ -460,16 +460,13 @@ def _compute(declared: Derivation, args: tuple, kwargs: dict) -> tuple[Any, date
     """
 
     frame = _Frame(declared.tables, learns=declared.unseen)
-    token = _FRAME.set(frame)
-    try:
+    with _FRAME.set(frame):
         # What an unseen computation reads is learned from the statements it
         # runs, so it runs in a projection of its own: a read another part of
         # the request already made is made again here, where it is seen.
         apart = projection_scope(seeded(), apart=True) if declared.unseen else nullcontext()
         with apart, connection.execute_wrapper(frame.note):
             value = declared.compute(*args, **kwargs)
-    finally:
-        _FRAME.reset(token)
     COMPUTED[declared.name] += 1
     if declared.unseen:
         local = timezone.localtime(clock())
@@ -677,31 +674,27 @@ def _again(ask: _Ask) -> tuple[bool, str]:
     derive, and the key the answer stands under ("" when none is kept)."""
 
     declared: Derivation = ask.answer.derivation  # type: ignore[attr-defined]  # set by @derivation
-    token = _AHEAD.set(True)
-    try:
-        with projection_scope(ask.seed, apart=True):
-            variant = repr(
-                declared.vary(*ask.args, **ask.kwargs) if declared.vary else (ask.args, sorted(ask.kwargs.items()))
-            )
-            key = _key(declared, variant)
-            if key is None:
-                # Nothing is kept while the revisions are not: deriving ahead
-                # would store nothing a request could be answered from.
-                return False, ""
-            if _standing_stored(key):
-                if ask.until is not None and ask.until <= clock():
-                    # Derived since by a request: learn how long that stands.
-                    ask.until = _stored(key)[1]
-                return False, key
-            ask.answer(*ask.args, **ask.kwargs)
-            kept = _key(declared, variant)
-            answered = read_once("derivation.answered", dict)
-            if kept is None or kept not in answered:
-                raise LookupError(f"The answer of {declared.name} could not be kept.")
-            ask.until = answered[kept]
-            return True, kept
-    finally:
-        _AHEAD.reset(token)
+    with _AHEAD.set(True), projection_scope(ask.seed, apart=True):
+        variant = repr(
+            declared.vary(*ask.args, **ask.kwargs) if declared.vary else (ask.args, sorted(ask.kwargs.items()))
+        )
+        key = _key(declared, variant)
+        if key is None:
+            # Nothing is kept while the revisions are not: deriving ahead
+            # would store nothing a request could be answered from.
+            return False, ""
+        if _standing_stored(key):
+            if ask.until is not None and ask.until <= clock():
+                # Derived since by a request: learn how long that stands.
+                ask.until = _stored(key)[1]
+            return False, key
+        ask.answer(*ask.args, **ask.kwargs)
+        kept = _key(declared, variant)
+        answered = read_once("derivation.answered", dict)
+        if kept is None or kept not in answered:
+            raise LookupError(f"The answer of {declared.name} could not be kept.")
+        ask.until = answered[kept]
+        return True, kept
 
 
 def _standing_stored(key: str) -> bool:
@@ -724,21 +717,6 @@ def next_due() -> datetime | None:
 
     moments = [ask.until for _name, _variant, ask in _remembered() if ask.until is not None]
     return min(moments) if moments else None
-
-
-@contextmanager
-def uncached() -> Iterator[None]:
-    """Derive inside the block, reading and storing nothing.
-
-    For measuring what a derivation itself costs: a budget on its queries, a
-    profile of its work.
-    """
-
-    token = _UNCACHED.set(True)
-    try:
-        yield
-    finally:
-        _UNCACHED.reset(token)
 
 
 @contextmanager

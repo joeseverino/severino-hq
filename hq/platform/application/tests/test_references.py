@@ -25,6 +25,7 @@ from ..calendar_entries import EntryCommand, save_entry
 from ..references import Referable, Reference, ReferenceField, Target
 from ..security import Principal, cli_principal, internal_principal
 from .markup import all_elements, elements, hrefs, links, select, text, texts
+from .writers import form_keyed
 
 
 def one(items):
@@ -246,7 +247,7 @@ class ResolveTests(TestCase):
         links = draw(len(named))
         self.assertEqual(
             [link.label if link else None for link in links],
-            ["A router", "An Example Project", "Example Registrar · Renewal", None],
+            ["A router", "An Example Project", "Example Registrar\xa0· Renewal", None],
         )
 
 
@@ -346,7 +347,9 @@ class PickerTests(TestCase):
 
         response = self.client.post(
             reverse("calendar:entry_new"),
-            {"title": "Replace the fan", "starts_on": "2026-03-01", "interval": "1", "about": "machine:lab-1"},
+            form_keyed(
+                {"title": "Replace the fan", "starts_on": "2026-03-01", "interval": "1", "about": "machine:lab-1"}
+            ),
         )
 
         self.assertEqual(response.status_code, 302)
@@ -358,7 +361,9 @@ class PickerTests(TestCase):
 
         response = self.client.post(
             reverse("calendar:entry_new"),
-            {"title": "Replace the fan", "starts_on": "2026-03-01", "interval": "1", "about": "machine:lab-9"},
+            form_keyed(
+                {"title": "Replace the fan", "starts_on": "2026-03-01", "interval": "1", "about": "machine:lab-9"}
+            ),
         )
 
         self.assertEqual(response.status_code, 200)
@@ -456,7 +461,7 @@ class ReferencedByTests(TestCase):
         self.assertEqual((asset.link.label, asset.link.url), ("A server", self.asset.get_absolute_url()))
         self.assertEqual(asset.note, "Bought Jan\xa05,\xa02025")
         self.assertEqual(found["On the calendar"][0].note, "Mar\xa01")
-        self.assertEqual(found["Expenses"][0].note, "Mar\xa01 · $12.00")
+        self.assertEqual(found["Expenses"][0].note, "Mar\xa01\xa0· $12.00")
 
     def test_a_row_that_names_a_thing_is_listed_by_the_name_it_has_everywhere(self):
         expense = an_expense(about="machine:lab-1")
@@ -569,7 +574,7 @@ class DanglingTests(TestCase):
 
         self.assertIn("A server links to lab-9, which HQ does not have", [item.title for item in assets()])
         self.assertIn(
-            "Example Registrar · Renewal links to lab-9, which HQ does not have",
+            "Example Registrar\xa0· Renewal links to lab-9, which HQ does not have",
             [item.title for item in expenses()],
         )
 

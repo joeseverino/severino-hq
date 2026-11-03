@@ -22,7 +22,7 @@ button named for what it does. How it is built belongs to the API reference.
     {% table_region result_table.label %}
       <table class="data-table command-result-table">
         <caption>{{ result_table.label|breakable }}{% dot %}{{ result_table.rows|length }}</caption>
-        <thead><tr>{% for column in result_table.columns %}{% if forloop.first %}{% table_heading column local_sort=result_table.rows|sortable gutter=True %}{% elif result_table.columns|length > 2 %}{% table_heading column local_sort=result_table.rows|sortable drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=result_table.rows|sortable %}{% endif %}{% endfor %}</tr></thead>
+        <thead><tr>{% for column in result_table.columns %}{% if forloop.first %}{% table_heading column local_sort=result_table.rows|sortable gutter=True %}{% elif forloop.length > 2 %}{% table_heading column local_sort=result_table.rows|sortable drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=result_table.rows|sortable %}{% endif %}{% endfor %}</tr></thead>
         <tbody>
           {% for row in result_table.rows %}<tr>{% for cell in row %}{% if forloop.first %}<td class="row-gutter">{{ cell|breakable }}{% row_toggle %}</td>{% else %}<td>{{ cell|breakable }}</td>{% endif %}{% endfor %}</tr>{% endfor %}
         </tbody>
@@ -31,7 +31,7 @@ button named for what it does. How it is built belongs to the API reference.
   {% endif %}
   <details class="command-result-json"{% if not result_facts and not result_table %} open{% endif %}>
     <summary>Full result, as JSON</summary>
-    <pre><code>{{ result_json|breakable }}</code></pre>
+    <pre tabindex="0"><code>{{ result_json|breakable }}</code></pre>
   </details>
   <div class="form-actions">
     {% if return_url %}<a class="btn" href="{{ return_url }}">Back</a>{% endif %}
@@ -54,9 +54,10 @@ button named for what it does. How it is built belongs to the API reference.
   {% endif %}
 
   {% comment %}
-  A field this command may be sent without is saved as its default, the
-  right contract for API and MCP callers, which send the whole record; a form
-  that does not open holding the record's values says so (`saves_blanks`).
+  A field left out of a call keeps what the record holds when the command
+  is an update, and is saved as its default otherwise, from every door. This
+  form leaves a blank field out, so one that does not open holding the
+  record's values, for a command that saves defaults, says so (`saves_blanks`).
   {% endcomment %}
   {% if saves_blanks %}
     <div class="notice notice-attention" data-command-blanks>
@@ -88,8 +89,8 @@ button named for what it does. How it is built belongs to the API reference.
     </div>
   {% endif %}
 
-  <form method="post" class="form command-form" data-command-form{% if hydrates_target %} data-command-hydrate-target{% endif %} data-submit-busy data-submit-label="Working…">
-    {% csrf_token %}
+  <form method="post"{% if form.is_multipart %} enctype="multipart/form-data"{% endif %} class="form command-form" data-command-form{% if hydrates_target %} data-command-hydrate-target{% endif %} data-submit-busy data-submit-label="Working…">
+    {% write_token %}
     {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
     {% include "partials/_form_errors.html" %}
     {% comment %}A switch on no record says where it stands first.{% endcomment %}
@@ -124,7 +125,7 @@ button named for what it does. How it is built belongs to the API reference.
     {% for field in form.confirmation_fields %}{{ field.as_field_group }}{% endfor %}
     <div class="form-actions">
       {% if switch %}
-        {% for value, words in switch.choices %}<button class="btn{% if switch.choices|length == 1 %} primary{% endif %}" type="submit" name="{{ switch.field }}" value="{{ value }}">{{ words|breakable }}</button>{% endfor %}
+        {% for value, words in switch.choices %}<button class="btn{% if forloop.length == 1 %} primary{% endif %}" type="submit" name="{{ switch.field }}" value="{{ value }}">{{ words|breakable }}</button>{% endfor %}
       {% else %}
         <button class="btn primary" type="submit">{{ command_label|breakable }}</button>
       {% endif %}

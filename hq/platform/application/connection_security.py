@@ -19,6 +19,7 @@ from hq.domains.control_plane.observations.host import FIREWALL_KIND
 from hq.domains.control_plane.provider_adapters.contracts import IngressPolicy
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.labels import dotted
 from hq.platform.core.network import split_host_port
 lazy from hq.domains.control_plane.models import ProviderInventory
 
@@ -224,7 +225,7 @@ def _judged(policy: IngressPolicy, *, reachable: bool, proxy: str) -> SecurityCo
         "edge",
         EDGE_LABEL,
         "good",
-        f"Tailnet ranges · {'implicit ' if implicit else ''}deny all",
+        dotted("Tailnet ranges", f"{'implicit ' if implicit else ''}deny all"),
         f"{proxy} allows tailnet IPv4 and IPv6 addresses for this name and refuses every other source.",
     )
 
@@ -252,7 +253,7 @@ def _tailnet_policy_control(snapshot) -> SecurityControl:
         "tailnet-policy",
         TAILNET_POLICY_LABEL,
         "good",
-        f"{counted(len(grants), 'grant')} · {counted(len(tests), 'test')}",
+        dotted(counted(len(grants), "grant"), counted(len(tests), "test")),
         "HQ read the policy that is active on the tailnet.",
     )
 
@@ -369,7 +370,7 @@ def _admission(request, *, gate: bool) -> _Admission:
             "network",
             "Only your networks can open HQ",
             "good" if gate and channel.private else "serious",
-            f"{channel.label} · {'enforced' if gate else 'not enforced'}",
+            dotted(channel.label, "enforced" if gate else "not enforced"),
             "HQ refuses any address outside its private ranges."
             if gate
             else "HQ is not refusing addresses outside its private ranges.",
@@ -450,14 +451,10 @@ def _custody_control(groups: tuple[ConnectionGroup, ...]) -> SecurityControl:
         "credentials",
         "Keys are kept in a vault",
         "good" if total and not unknown else "neutral",
-        " · ".join(
-            part
-            for part in (
-                *(f"{count} in {store}" for store, count in sorted(stores.items())),
-                f"{keyless} need no key" if keyless else "",
-                f"{unknown} do not say" if unknown else "",
-            )
-            if part
+        dotted(
+            *(f"{count} in {store}" for store, count in sorted(stores.items())),
+            f"{keyless} need no key" if keyless else "",
+            f"{unknown} do not say" if unknown else "",
         )
         or "No connections yet",
         "HQ keeps no secret itself. Each connection names the place that keeps its secret."
@@ -502,17 +499,19 @@ def _scope_control(evidence: Counter, connections: tuple) -> SecurityControl:
         "scope",
         "Tokens hold only the permissions HQ uses",
         state,
-        " · ".join(
-            phrase
-            for count, phrase in (
-                (evidence["verified"], f"{evidence['verified']} checked"),
-                (whole, counted(len(whole), "credential") + " with full account access"),
-                (keyless, f"{keyless} need no key"),
-                (unchecked, f"{unchecked} not checked"),
-                (unknown, f"{unknown} not reported"),
-                (missing, f"{missing} missing"),
+        dotted(
+            *(
+                phrase
+                for count, phrase in (
+                    (evidence["verified"], f"{evidence['verified']} checked"),
+                    (whole, counted(len(whole), "credential") + " with full account access"),
+                    (keyless, f"{keyless} need no key"),
+                    (unchecked, f"{unchecked} not checked"),
+                    (unknown, f"{unknown} not reported"),
+                    (missing, f"{missing} missing"),
+                )
+                if count
             )
-            if count
         )
         or "Nothing to check",
         detail

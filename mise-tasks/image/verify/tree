@@ -1,0 +1,84 @@
+#!/bin/sh
+#MISE description="Its /app holds the paths the composed suite's tree holds (tools/lib/image-tree.sh), and those alone, besides what a stage builds into it; membership is the contract, so names are compared, not contents"
+#MISE lock="heavy"
+#MISE timeout="30m"
+#MISE hide=true
+#MISE depends=["image:build"]
+#MISE depends_post=["image:docker stop"]
+set -eu
+# shellcheck source=tools/lib/image-tree.sh
+. ./tools/lib/image-tree.sh
+
+# The composed suite reads Dockerfile.dockerignore and the Dockerfile's copy of
+# the checkout itself, so a form it misses (a glob, a re-exclusion, a flag on
+# its own line) would test a tree the image does not ship. The image is the
+# answer: every path its /app holds, against the tree the suite would run in,
+# from this checkout, which is the image's when the pipeline runs this.
+work="$(mktemp -d "${TMPDIR:-/tmp}/hq-image-tree.XXXXXX")"
+trap 'rm -rf "${work}"' EXIT
+mkdir "${work}/tree"
+image_tree "${work}/tree"
+(cd "${work}/tree" && find . ! -type d | sed 's|^\./||' | LC_ALL=C sort) >"${work}/suite"
+docker run --rm --entrypoint find "${IMAGE:-severino-hq:ci-local}" /app -mindepth 1 ! -type d -printf '%P\n' \
+    | LC_ALL=C sort >"${work}/listed"
+[ -s "${work}/listed" ] || { echo "The image's /app holds nothing, or could not be listed." >&2; exit 1; }
+
+# What a stage builds into /app rather than copying from the checkout, each
+# derived from what builds it, so nothing else can hide behind it:
+# - a program a COPY --from puts under /app (the controller stage's host
+#   programs), named by the Dockerfile's line;
+# - the bytecode compileall writes beside a module, D/__pycache__/N.*.pyc for a
+#   D/N.py the tree holds.
+set -f
+sed -nE 's|^COPY --from=[^ ]+ (.+) /app/([^ ]*)$|\2 \1|p' Dockerfile | while read -r dest sources; do
+    for source in ${sources}; do
+        case "${source}" in
+            --*) ;;
+            *) case "${dest}" in "" | */) echo "${dest}${source##*/}" ;; *) echo "${dest}" ;; esac ;;
+        esac
+    done
+done | LC_ALL=C sort -u >"${work}/built"
+set +f
+# Each listed path is either left out, into left, or kept, into shipped.
+awk -v left="${work}/left" -v shipped="${work}/shipped" '
+    FILENAME == ARGV[1] { built[$0] = 1; next }
+    FILENAME == ARGV[2] { tree[$0] = 1; next }
+    $0 in built { print > left; next }
+    {
+        n = split($0, part, "/")
+        if (n >= 2 && part[n - 1] == "__pycache__" && part[n] ~ /\.pyc$/) {
+            module = part[n]
+            sub(/\..*$/, "", module)
+            dir = ""
+            for (i = 1; i < n - 1; i++) dir = dir part[i] "/"
+            if ((dir module ".py") in tree) { print > left; next }
+        }
+        print > shipped
+    }
+' "${work}/built" "${work}/suite" "${work}/listed"
+touch "${work}/left" "${work}/shipped"
+
+status=0
+missing="$(grep -Fvx -f "${work}/left" "${work}/built" || true)"
+if [ -n "${missing}" ]; then
+    echo "The Dockerfile copies these into /app from another stage, and the image's /app does not hold them:" >&2
+    printf '%s\n' "${missing}" | sed 's/^/  /' >&2
+    status=1
+fi
+only_image="$(LC_ALL=C comm -23 "${work}/shipped" "${work}/suite")"
+only_suite="$(LC_ALL=C comm -13 "${work}/shipped" "${work}/suite")"
+if [ -n "${only_image}" ]; then
+    echo "The image's /app holds these, and the composed suite's tree does not:" >&2
+    printf '%s\n' "${only_image}" | sed 's/^/  /' >&2
+    status=1
+fi
+if [ -n "${only_suite}" ]; then
+    echo "The composed suite's tree holds these, and the image's /app does not:" >&2
+    printf '%s\n' "${only_suite}" | sed 's/^/  /' >&2
+    status=1
+fi
+[ "${status}" = 0 ] || {
+    echo "tools/lib/image-tree.sh builds the composed suite's tree; it reads Dockerfile.dockerignore and the Dockerfile's COPY into /app." >&2
+    exit 1
+}
+echo "The image's /app is the composed suite's tree, $(wc -l <"${work}/suite" | tr -d ' ') paths, with $(wc -l <"${work}/left" | tr -d ' ') built by a stage left out"

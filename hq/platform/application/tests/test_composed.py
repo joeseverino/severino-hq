@@ -28,6 +28,7 @@ from hq.platform.application.plugins import (
     plugin_attention_items,
 )
 from hq.platform.application.projection import projection_scope
+from hq.platform.application.security import cli_principal
 from hq.platform.application.ui import DomainOverview, Insight, Kpi
 from hq.platform.core.models import UpstreamReading
 
@@ -79,8 +80,8 @@ class ComposedTests(ComposedPluginTestCase, TestCase):
         with projection_scope():
             domain_attention_items()
             work_queue()
-            domain_dashboard_sections()
-            dashboard_highlights()
+            domain_dashboard_sections(cli_principal())
+            dashboard_highlights(cli_principal())
             gather(*WINDOW)
             plugin_attention_items()
 

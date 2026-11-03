@@ -14,6 +14,10 @@ type Web struct {
 	// StartPeriod is how long HQ may take to answer healthy; zero is
 	// HealthStartPeriod.
 	StartPeriod time.Duration
+	// SealPublic is the public key the web seals secrets to, root's file
+	// (SealPublicKey), when a controller pass has written it. Without it HQ
+	// holds no sealed secret.
+	SealPublic string
 }
 
 // Args are the `docker run` arguments, after "docker". The container is
@@ -60,6 +64,13 @@ func (w Web) Args() []string {
 		// HQ reads its environment from where it is mounted, told here once.
 		"--env", "SEVERINO_APP_ENV_PATH="+appEnv,
 	)
+	if w.SealPublic != "" {
+		sealPublic := "/run/secrets/seal_public_key"
+		args = append(args,
+			"--mount", readOnly(w.SealPublic, sealPublic),
+			"--env", "SEVERINO_SEAL_PUBLIC_KEY_FILE="+sealPublic,
+		)
+	}
 	// No certificate authority: HQ reads none. Provider HTTPS on the private
 	// network is the controller's, which builds its bundle from the host's store.
 	return append(args, w.Image)

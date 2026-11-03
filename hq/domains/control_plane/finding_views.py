@@ -1,5 +1,6 @@
 """Infrastructure findings."""
 
+from collections import Counter
 from typing import override
 
 from django.views.generic import TemplateView
@@ -39,9 +40,7 @@ class FindingsView(PageMixin, TemplateView):
         # The queue's own cards: one renderer for a problem wherever it is drawn.
         entries = [queue_item(SOURCE_ID, SOURCE, finding_insight(finding, url)) for finding in raised]
 
-        counts: dict[str, int] = {}
-        for finding in raised:
-            counts[finding.severity] = counts.get(finding.severity, 0) + 1
+        counts = Counter(finding.severity for finding in raised)
         context.update(
             {
                 "finding_entries": tuple(entries),
@@ -59,7 +58,7 @@ class FindingsView(PageMixin, TemplateView):
                 "finding_coverage": coverage() if not raised and not active_rule else None,
                 # The checks are one source of the queue; what else waits is
                 # named beside their verdict, so the two pages never disagree.
-                "waiting_elsewhere": waiting(self.request.user.pk) if not raised and not active_rule else 0,
+                "waiting_elsewhere": waiting(principal, self.request.user.pk) if not raised and not active_rule else 0,
             }
         )
         return context

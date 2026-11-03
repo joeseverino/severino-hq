@@ -28,7 +28,7 @@ from hq.platform.core.templatetags.value_tags import breakable, entity, readable
 
 # Filters whose output holds every name in it: `breakable` itself, and the
 # filters that build on it or print a `<time>`.
-HOLDING = {"breakable", "or_empty", "readout", "when", "readable"}
+HOLDING = {"breakable", "code_spans", "or_empty", "readout", "when", "readable"}
 
 # Filters whose output can never hold a hyphen or a seam, so it has nothing
 # to hold.

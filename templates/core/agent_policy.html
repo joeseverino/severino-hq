@@ -5,13 +5,13 @@
     <span class="agent-state-dot" aria-hidden="true"></span>
     <div class="agent-state-copy">
       <h2>{% if agents_paused %}Agents are blocked{% else %}Agents are allowed{% endif %}</h2>
-      <p>{% if agents_paused %}No agent can do anything through HQ until you allow them again.{% else %}They can do what the rules below allow.{% endif %}</p>
+      <p>{% if agents_paused %}No agent can do anything through HQ until you allow them again.{% else %}They can do what the rules below allow, unless you block one of them.{% endif %}</p>
     </div>
     {% url 'agent_access' as agent_access_url %}
     {% if agents_paused %}
-      {% words "agents.access.set" "off" as allow %}{% post_button allow agent_access_url name="paused" value="0" css="btn primary" %}
+      {% words "agent.access.set" "off" as allow %}{% post_button allow agent_access_url name="paused" value="0" css="btn primary" %}
     {% else %}
-      {% words "agents.access.set" "on" as block %}{% post_button block agent_access_url name="paused" value="1" %}
+      {% words "agent.access.set" "on" as block %}{% post_button block agent_access_url name="paused" value="1" %}
     {% endif %}
   </div>
   <p class="agent-state-facts">
@@ -20,38 +20,197 @@
     <a href="{% url 'core:audit_list' %}?action=denied"><strong>{{ refused_count|breakable }}</strong> refused in the last day</a>
     {% if any_dormant %}<span class="policy-dormant-note">A grayed-out rule does nothing until HQ's settings let agents do that action.</span>{% endif %}
   </p>
-  {% if agents %}
-    <ul class="policy-agents">
-      {% for agent in agents %}
-        <li>
-          <span class="policy-agent-name">{{ agent.label|breakable }}</span>
-          <ul class="dot-list muted">
-            <li>Uses {{ agent.detail|breakable }}</li>
-            <li>{{ agent.identity.granted|length|counted:"permission from your sign-in,permissions from your sign-in" }}</li>
-            <li>Last seen {{ agent.identity.last_seen|ago }}</li>
-          </ul>
-        </li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <p class="muted policy-none">No agent has connected yet.</p>
-  {% endif %}
 {% endcard %}
+
+{% comment %}
+Each agent HQ has seen, a row each: what it is, what of its grant HQ lets it
+use, what it did over the window, and its own block beside the pause above.
+{% endcomment %}
+<h2 id="agents">Agents <span class="count">{{ standings|length|breakable }}</span> <span class="heading-aside">What each did and was refused over the last {{ recent_days|counted:"day" }}</span></h2>
+{% if standings %}
+  {% url 'agent_block' as block_url %}
+  {% table_region "Agents" %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          {% table_heading "Agent" "identifier" local_sort=standings|sortable gutter=True %}
+          {% table_heading "Permissions in force" local_sort=standings|sortable drop=2 %}
+          {% table_heading "Last seen" "status" local_sort=standings|sortable drop=3 %}
+          {% table_heading "Lately" local_sort=standings|sortable drop=1 %}
+          {% table_heading "Block" "control" hidden=True %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for standing in standings %}{% with identity=standing.identity activity=standing.activity %}
+          <tr data-agent="{{ identity.client_id }}"{% if identity.blocked_at %} data-blocked{% endif %}>
+            <th scope="row" class="row-gutter">
+              <code>{{ identity.client_id|breakable }}</code>{% if identity.blocked_at %} <span class="pill pill-attention">Blocked</span>{% endif %}{% row_toggle %}
+              <ul class="dot-list muted">
+                {% if identity.person %}<li data-person>For {{ identity.person.get_username|breakable:"," }} {% if standing.role %}{{ standing.role_label|lower|breakable }}{% else %}no role{% endif %}</li>{% endif %}
+                {% if identity.signs_in %}<li>Signs in {{ identity.get_signs_in_display|lower|breakable }}</li>{% endif %}
+                {% if identity.interfaces %}<li>Over {{ identity.interfaces|interface_label|breakable }}</li>{% endif %}
+              </ul>
+              <div class="row-below agent-more">
+                {% if identity.blocked_at %}<p>Every call it makes is refused until you allow it again. Blocked {{ identity.blocked_at|when:"ago" }}{% if identity.blocked_by %} by {{ identity.blocked_by.get_username|breakable }}{% endif %}</p>{% endif %}
+                {% if identity.person %}{% if standing.acts_for_nobody %}<p data-role="none">Signed in by {{ identity.person.get_username|breakable:"," }} who holds no role in HQ, so every call it makes is refused.</p>{% else %}<p data-role="{{ standing.role }}">Acts for {{ identity.person.get_username|breakable:"," }} and does only what their role allows: {{ standing.role_label|lower|breakable:"," }} confirmed {{ standing.role_confirmed|when:"ago" }}.</p>{% endif %}{% endif %}
+                {% if standing.in_force %}<p>In force: {% for name in standing.in_force %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
+                {% if standing.beyond_role %}<p>Granted, but beyond {{ identity.person.get_username|breakable }}'s role: {% for name in standing.beyond_role %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
+                {% if standing.held_back %}<p>Granted, but off in HQ's settings: {% for name in standing.held_back %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
+                {% if activity.latest %}
+                  <ul class="agent-events" data-label="Latest">
+                    {% for event in activity.latest %}
+                      <li{% if event.action == "denied" %} data-refused{% endif %}><a href="{{ event.get_absolute_url }}">{{ event.summary|breakable }}</a>{% if event.metadata.count > 1 %} <span class="muted">{{ event.metadata.count|counted:"time" }}</span>{% endif %} <span class="muted">{{ event.created_at|when:"ago" }}</span></li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
+              </div>
+            </th>
+            <td data-sort="{{ standing.in_force|length }}">{{ standing.in_force|length|breakable }} of {{ identity.granted|length|breakable }}{% if standing.held_back %}<br><span class="muted">{{ standing.held_back|length|breakable }} off in HQ's settings</span>{% endif %}{% if standing.beyond_role %}<br><span class="muted">{{ standing.beyond_role|length|breakable }} beyond its person's role</span>{% endif %}</td>
+            <td>{{ identity.last_seen|when:"ago" }}</td>
+            <td data-sort="{{ activity.changes }}">
+              {{ activity.changes|counted:"change" }}
+              {% if activity.refused %}<br><span class="figure tone-attention">{{ activity.refused|breakable }} refused</span>{% if activity.limited == activity.refused %} <span class="muted">for calling too much</span>{% elif activity.limited %} <span class="muted">{{ activity.limited|breakable }} for calling too much</span>{% endif %}{% endif %}
+            </td>
+            <td class="row-actions">
+              {% if identity.blocked_at %}
+                {% words "agent.block.set" "off" as label %}{% include "partials/_target_button.html" with url=block_url target=identity.client_id name="blocked" value="0" label=label css="btn compact primary" %}
+              {% else %}
+                {% words "agent.block.set" "on" as label %}{% include "partials/_target_button.html" with url=block_url target=identity.client_id name="blocked" value="1" label=label css="btn compact" %}
+              {% endif %}
+            </td>
+          </tr>
+        {% endwith %}{% endfor %}
+      </tbody>
+    </table>
+  {% endtable_region %}
+{% else %}
+  <p class="muted">No agent has connected yet.</p>
+{% endif %}
+
+{% comment %}
+The signed-in person's own devices: a client registered here whose token also
+carries the device permission stands as them. Only theirs, never anybody else's.
+{% endcomment %}
+{% url 'own_device' as device_url %}
+{% card css="own-devices" heading="own-devices" %}
+  {% section_head id="own-devices" %}Your devices <span class="count">{{ devices|length|breakable }}</span>{% endsection_head %}
+  {% if devices %}
+    {% table_region "Your devices" %}
+      <table class="data-table">
+        <thead>
+          <tr>
+            {% table_heading "Client" "identifier" local_sort=devices|sortable gutter=True %}
+            {% table_heading "Registered" "status" local_sort=devices|sortable %}
+            {% table_heading "Remove" "control" hidden=True %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for device in devices %}
+            <tr data-device="{{ device.client_id }}">
+              <th scope="row" class="row-gutter"><code>{{ device.client_id|breakable }}</code>{% row_toggle %}</th>
+              <td>{{ device.registered_at|when:"ago" }}</td>
+              <td class="row-actions">{% words "agent.device.set" "off" as label %}{% include "partials/_target_button.html" with url=device_url target=device.client_id name="registered" value="0" label=label css="btn compact" %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endtable_region %}
+  {% else %}
+    <p class="muted">None registered. A phone app or a Shortcut you sign in with stands as you once you register its client here.</p>
+  {% endif %}
+  <form method="post" action="{{ device_url }}" class="form">
+    {% write_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <div class="field">
+      <label for="device-client">Client id</label>
+      <input type="text" id="device-client" name="client_id" required autocomplete="off" spellcheck="false" aria-describedby="device-client-help">
+      <p class="help" id="device-client-help">The client id your device signs in with.</p>
+    </div>
+    <div class="form-actions"><button type="submit" name="registered" value="1" class="btn">{% words "agent.device.set" "on" %}</button></div>
+  </form>
+{% endcard %}
+
+{% comment %}
+What an agent finds at the MCP endpoint, read from the server the way a client
+reads it, so whatever the server comes to list appears with nothing here to
+change. Asked for when opened: asking takes the server's SDK into the process.
+{% endcomment %}
+{% partialdef mcp_endpoint %}
+<div id="mcp-endpoint" class="mcp-endpoint">
+  {% if endpoint %}
+    <dl class="kv">
+      <dt>Address</dt><dd><code>{{ endpoint.url|breakable }}</code></dd>
+      <dt>Sign-in</dt><dd>{% outside_link url=endpoint.sign_in %}{{ endpoint.sign_in|breakable }}{% endoutside_link %}</dd>
+      <dt>Protocol</dt><dd><code>{{ endpoint.protocol|breakable }}</code></dd>
+    </dl>
+    {% if endpoint.told %}<div class="mcp-instructions">{% for paragraph in endpoint.told %}<p>{{ paragraph|code_spans }}</p>{% endfor %}</div>{% endif %}
+    {% table_region "What an agent finds" %}
+      <table class="data-table">
+        <thead>
+          <tr>
+            {% table_heading "Name" "identifier" gutter=True local_sort=True %}
+            {% table_heading "What it is" local_sort=True %}
+          </tr>
+        </thead>
+        {% for offer in endpoint.offers %}
+          <tbody>
+            {% row_group offer.label offer.items|length %}
+            {% for item in offer.items %}
+              <tr>
+                <th scope="row" class="row-gutter">
+                  <code>{{ item.name|breakable }}</code>{% row_toggle %}{% if item.reads_only %}<br><span class="muted">Reads only</span>{% endif %}
+                  {% for paragraph in item.more %}<p class="row-below">{{ paragraph|code_spans }}</p>{% endfor %}
+                </th>
+                <td class="cell-data">{% if item.title %}<strong>{{ item.title|breakable }}</strong> {% endif %}{{ item.summary|code_spans }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        {% endfor %}
+      </table>
+    {% endtable_region %}
+  {% else %}
+    <p class="muted">Off: agents cannot connect until HQ's settings name the address their tokens are issued for.</p>
+  {% endif %}
+</div>
+{% endpartialdef %}
+<details class="section-fold" id="mcp"{% if endpoint_read %} open{% endif %}>
+  <summary><h2>What an agent finds</h2></summary>
+  {% if endpoint_read %}
+    {% partial mcp_endpoint %}
+  {% else %}
+    <div id="mcp-endpoint" class="mcp-endpoint" data-fragment="" data-fragment-name="mcp_endpoint" data-fragment-load data-fragment-failure="HQ could not ask its MCP server." data-fragment-fallback="?endpoint=1#mcp">
+      <p class="muted">Asked of HQ's MCP server when you open this. <a href="?endpoint=1#mcp">Ask now</a></p>
+    </div>
+  {% endif %}
+</details>
 
 {% comment %}
 The rules that differ from the default, then every other action folded under
 its own heading. Each row is in one table only, so the form posts each rule once.
+The folded table is drawn when opened, inside the form: a save before then
+posts only the changed rules, and a rule not posted is left as it holds.
 {% endcomment %}
+{% partialdef every_rule %}
+<div id="every-rule">
+  {% include "core/_policy_table.html" with groups=default_groups label="Rules left at the default" %}
+</div>
+{% endpartialdef %}
 <form method="post" class="policy">
-  {% csrf_token %}
+  {% write_token %}
   {% if changed_groups %}
     <h2>Changed from the default</h2>
-    {% include "core/_policy_table.html" with groups=changed_groups %}
+    {% include "core/_policy_table.html" with groups=changed_groups label="Rules changed from the default" %}
   {% endif %}
   {% if default_groups %}
-    <details class="section-fold" open>
+    <details class="section-fold" id="every-action"{% if every_read %} open{% endif %}>
       <summary><h2>{% if changed_groups %}Every other action{% else %}Every action{% endif %} <span class="heading-aside">{{ default_count|breakable }}</span></h2></summary>
-      {% include "core/_policy_table.html" with groups=default_groups %}
+      {% if every_read %}
+        {% partial every_rule %}
+      {% else %}
+        <div id="every-rule" data-fragment="" data-fragment-name="every_rule" data-fragment-load data-fragment-failure="HQ could not draw these rules." data-fragment-fallback="?all=1#every-action">
+          <p class="muted">Drawn when you open this. <a href="?all=1#every-action">Show them</a></p>
+        </div>
+      {% endif %}
     </details>
   {% endif %}
   <div class="save-bar"><button type="submit" class="btn primary">Save changes</button></div>

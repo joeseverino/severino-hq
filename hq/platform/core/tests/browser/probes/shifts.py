@@ -16,12 +16,14 @@ CLS_LIMIT = 0.1
 # while they read) and moved within the box's bounds, is left out. A page loads
 # at its top, so a shift's rect, taken in the viewport as it happened, is the
 # page's. A browser that keeps no such record (WebKit) has nothing to say;
-# Chromium's legs of the gates read it.
+# Chromium's legs of the gates read it. The record is read at once: with script
+# off Chromium runs no timer and calls back no observer, so a probe that waits
+# on either never returns.
 LAYOUT_SHIFTS = (
-    "([vendored, limit]) => new Promise((done) => {"
+    "([vendored, limit]) => {"
     + DESCRIBE
     + """
-  if (!PerformanceObserver.supportedEntryTypes.includes('layout-shift')) { done([]); return; }
+  if (!PerformanceObserver.supportedEntryTypes.includes('layout-shift')) return [];
   const boxes = [...document.querySelectorAll(vendored)].map((el) => {
     const r = el.getBoundingClientRect();
     return [el, r.left + scrollX, r.top + scrollY, r.right + scrollX, r.bottom + scrollY];
@@ -51,14 +53,13 @@ LAYOUT_SHIFTS = (
     const score = sum(worst);
     return score > limit ? [`layout shift ${score.toFixed(4)} past ${limit}: ${worst.map(said).join(' | ')}`] : [];
   };
-  const seen = [];
-  const observer = new PerformanceObserver((list) => seen.push(...list.getEntries()));
+  // A buffered observe() puts what the browser kept in the observer's buffer
+  // as it returns (Performance Timeline, observe()); only the callback waits
+  // for a task.
+  const observer = new PerformanceObserver(() => {});
   observer.observe({type: 'layout-shift', buffered: true});
-  // What the browser kept from before is handed over in a task of its own.
-  setTimeout(() => {
-    seen.push(...observer.takeRecords());
-    observer.disconnect();
-    done(report(seen));
-  }, 0);
-})"""
+  const seen = observer.takeRecords();
+  observer.disconnect();
+  return report(seen);
+}"""
 )

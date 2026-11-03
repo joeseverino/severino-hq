@@ -10,7 +10,6 @@ scope names a Unix listener, which is the only kind the application serves.
 import json
 from dataclasses import dataclass
 from typing import Any
-from unittest.mock import patch
 from urllib.parse import urlencode
 
 from asgiref.sync import async_to_sync
@@ -64,8 +63,7 @@ def request(
     async def send(message: dict[str, Any]) -> None:
         received.append(message)
 
-    with patch("hq.domains.control_plane.bridge_application.close_old_connections"):
-        async_to_sync(app)(scope, receive, send)
+    async_to_sync(app)(scope, receive, send)
     start = next(message for message in received if message["type"] == "http.response.start")
     media_type = dict(start["headers"]).get(b"content-type", b"").decode()
     content = b"".join(m.get("body", b"") for m in received if m["type"] == "http.response.body")

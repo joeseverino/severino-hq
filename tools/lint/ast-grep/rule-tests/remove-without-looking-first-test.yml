@@ -1,0 +1,40 @@
+id: remove-without-looking-first
+valid:
+  - 'path.unlink(missing_ok=True)'
+  - |
+    with contextlib.suppress(FileNotFoundError):
+        path.replace(previous)
+  - |
+    if path.exists():
+        other.unlink()
+  - |
+    if not path.exists():
+        path.mkdir()
+  - |
+    if entry.is_dir():
+        shutil.rmtree(entry)
+  - |
+    if path.exists():
+        text = path.read_text()
+invalid:
+  - |
+    if path.exists():
+        path.replace(VERDICTS / "test.prev.txt")
+  - |
+    if (out / "plugin-lock.json").exists():
+        (out / "plugin-lock.json").unlink()
+  - |
+    if policy_sha256:
+        policy.write_text(policy_sha256)
+    elif policy.exists():
+        policy.unlink()
+  - |
+    if keep and folder.exists():
+        shutil.rmtree(folder)
+  - |
+    if os.path.exists(name):
+        os.remove(name)
+  - |
+    if path.exists():
+        print("moving")
+        os.replace(path, target)

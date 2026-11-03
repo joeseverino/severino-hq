@@ -6,108 +6,16 @@ every module that adds edges gives them the same stable id and phrase.
 
 from dataclasses import dataclass
 from hashlib import sha256
+from typing import Annotated
 
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink as TopologyAction
+from .answer_fields import ObservedAt
+from .describe import Describe, listed
 from .entity_links import EntityLink
 from .timestamps import moment
-
-
-@dataclass(frozen=True, slots=True)
-class TopologyNode:
-    """One addressable thing in the derived topology."""
-
-    id: str
-    kind: str
-    label: str
-    subtitle: str
-    # What a page calls it, where ``label`` is the key HQ files it under: the
-    # name a record stands for (``entity_links.record_name``). "" when the
-    # label is already that name.
-    name: str = ""
-    # What a record holds, shortened (``resource_context.record_summary``),
-    # when another record goes by the same name: then it is what tells them
-    # apart. "" otherwise.
-    summary: str = ""
-    status: str = "neutral"
-    status_label: str = ""
-    detail: str = ""
-    url: str = ""
-    # What this node is an instance of: a provider kind, or the connection
-    # family that emitted it. The subtitle already reads as this, but a subtitle
-    # is a rendered label and must never become a join key; grouping siblings
-    # needs identity.
-    kind_key: str = ""
-    # A connection node's provider (``tailscale``, ``cloudflare_api``): the join
-    # key its readings are matched by. The subtitle is that provider's label.
-    provider: str = ""
-    # A connection node's ref and the controller that reported it: the join keys
-    # for facts about the connection. A ref is unique per controller only.
-    connection_ref: str = ""
-    controller_id: str = ""
-    # When this was last observed, ISO 8601, or "" when nothing observes it.
-    # Health describes the content of the last observation and says nothing
-    # about its age, so a thing observed once and never again reads healthy
-    # forever. This is the fact that distinguishes the two.
-    observed_at: str = ""
-    # What was asked for, and what was last confirmed back. Between them the
-    # whole of triage: equal means a reconcile already ran against this exact
-    # declaration, so a difference the world still shows is the declaration
-    # being wrong rather than the convergence being late.
-    declared_revision: int = 0
-    observed_revision: int = 0
-    # The reason on the active condition, verbatim. "Observed" was written by a
-    # sweep that saw this; "Reconciled" was written by a reconcile and says
-    # nothing about whether a sweep has confirmed it since.
-    reason: str = ""
-    # Whether HQ is converging this at all. A disabled declaration is not a
-    # finding: nobody asked for it to be true.
-    managed: bool = True
-    # Declared as usually absent, so a sweep not finding it is expected.
-    on_demand: bool = False
-    # Fields this declaration asserts that the last observation did not echo
-    # back, excluding the ones the provider declared it cannot report. Drift is
-    # compared only across fields present in both, so a field the reading omits
-    # is unverified rather than agreed: the difference between "set" and
-    # "checked".
-    unconfirmed_fields: tuple[str, ...] = ()
-    # Facts a sweep reports that no declaration carries, as flat strings. A
-    # findings rule derives from this topology and is not allowed a query of its
-    # own (the suite measures that) so an observation a rule has to reason
-    # about has to arrive here or not at all.
-    #
-    # Flat and small on purpose. This is not a second copy of the inventory; it
-    # is the handful of observed facts that decide something.
-    facts: tuple[tuple[str, str], ...] = ()
-    # What this name actually served, where anything measures it. ``None`` is
-    # not zero: nobody visited and nobody looked are opposite findings, and the
-    # second is the one worth acting on: a target HQ reaches, and nothing
-    # measures, is a site running unobserved.
-    pageviews: int | None = None
-    visits: int | None = None
-    actions: tuple[TopologyAction, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class TopologyEdge:
-    """A relationship derived from a declaration or observation."""
-
-    id: str
-    source: str
-    target: str
-    kind: str
-    label: str
-    status: str = "neutral"
-    # For an edge a reading supports: the reading kind, what it names, and
-    # when it was read. An edge exists only while its reading does.
-    source_kind: str = ""
-    detail: str = ""
-    observed_at: str = ""
-    # For a reading edge: each record it stands for, through the link builder,
-    # and the facet the reading supplies.
-    entities: tuple[EntityLink, ...] = ()
-    facet: str = ""
+from .ui import ended
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +40,9 @@ RELATIONS: dict[str, RelationKind] = {
     "contains": RelationKind("Names", "In domain", 30),
     "redirects_to": RelationKind("Redirects to", "Redirected from", 25),
     "reaches": RelationKind("Reads", "Read through", 70),
+    # A target a connection names as an estate node, kept apart from it by
+    # its gate: the inverse is the fact a folded target leaves on that node.
+    "stands_for": RelationKind("Stands for", "Reached as", 71),
     "on_tailnet": RelationKind("Tailnet device", "Machine", 75),
     "declared_by": RelationKind("Record in HQ", "For", 80),
     "carries": RelationKind("Holds the connections", "Held on", 85),
@@ -153,6 +64,201 @@ READING_RANKS: dict[str, int] = {
     "": 90,
 }
 
+# Every node kind, in the order a page lists them.
+NODE_KIND_ORDER = {
+    "controller": 0,
+    "connection": 1,
+    "machine": 2,
+    "service": 3,
+    "zone": 4,
+    "ability": 5,
+    "resource": 6,
+    "registry": 7,
+    "target": 8,
+    "dependency": 9,
+}
+
+# How a node, an edge or a finding stands, most severe first.
+STANDINGS = ("serious", "attention", "neutral", "good")
+
+
+@dataclass(frozen=True, slots=True)
+class TopologyNode:
+    """One addressable thing in the derived topology."""
+
+    id: Annotated[
+        str,
+        Describe(
+            "Names this node for the rest of the answer and later reads: an edge's source and target, "
+            "a trace's focus, a problem's subject. Stable while the thing it stands for exists."
+        ),
+    ]
+    kind: Annotated[str, Describe(ended(f"What sort of thing it is: {listed(NODE_KIND_ORDER)}"))]
+    label: Annotated[
+        str,
+        Describe(
+            "The key HQ files it under, which a command or a record's page is addressed by: "
+            "a record's key, a machine's name, a hostname."
+        ),
+    ]
+    subtitle: Annotated[str, Describe("What it is, in a few words under its name, such as the service it reads.")]
+    name: Annotated[
+        str,
+        Describe(
+            "What a person calls it, where that differs from `label`: the name a record stands for. "
+            "Empty when `label` already reads as that name."
+        ),
+    ] = ""
+    summary: Annotated[
+        str,
+        Describe(
+            "What the record holds, shortened, when another record goes by the same name: "
+            "what tells the two apart. Empty otherwise."
+        ),
+    ] = ""
+    status: Annotated[str, Describe(ended(f"How it stands: {listed(STANDINGS)}"))] = "neutral"
+    status_label: Annotated[str, Describe("How it stands, in the words a page shows beside it.")] = ""
+    detail: Annotated[str, Describe("A line on why it stands as it does; empty when there is nothing to add.")] = ""
+    url: Annotated[
+        str,
+        Describe("Where it is shown: a path in HQ, or an outside address such as a service's console. Empty for none."),
+    ] = ""
+    # The subtitle already reads as this, but a subtitle is a rendered label
+    # and must never become a join key; grouping siblings needs identity.
+    kind_key: Annotated[
+        str,
+        Describe(
+            "What it is an instance of: a record's type, or the connection family that added it. "
+            "Nodes alike in this are siblings."
+        ),
+    ] = ""
+    provider: Annotated[
+        str,
+        Describe(
+            "The service a connection node reads, such as `tailscale`, which its readings are matched by; "
+            "`subtitle` names it in words. Empty on any other node."
+        ),
+    ] = ""
+    connection_ref: Annotated[
+        str,
+        Describe("A connection node's ref, unique only within the controller that reported it. Empty otherwise."),
+    ] = ""
+    controller_id: Annotated[
+        str,
+        Describe(
+            "The controller that reported a connection node; with `connection_ref` it names the connection. "
+            "Empty otherwise."
+        ),
+    ] = ""
+    # "" when nothing reads it. Health describes the content of the last
+    # observation and says nothing about its age, so a thing observed once
+    # and never again reads healthy forever. This is the fact that
+    # distinguishes the two.
+    observed_at: ObservedAt = ""
+    # What was asked for, and what was last confirmed back. Between them the
+    # whole of triage: equal means a reconcile already ran against this exact
+    # declaration, so a difference the world still shows is the declaration
+    # being wrong rather than the convergence being late.
+    declared_revision: Annotated[
+        int,
+        Describe(
+            "Which version of HQ's copy of the record HQ last asked for, counting up from 1 as the copy "
+            "changes; 0 on a node HQ keeps no copy of."
+        ),
+    ] = 0
+    observed_revision: Annotated[
+        int,
+        Describe(
+            "Which version of HQ's copy was last applied and confirmed back, 0 until one has been. "
+            "When it equals `declared_revision`, a difference the live system still shows lies in HQ's copy."
+        ),
+    ] = 0
+    reason: Annotated[
+        str,
+        Describe(
+            "The reason on its current condition, verbatim, saying whether a read of the live system "
+            "wrote it or applying HQ's copy did, which no read has confirmed since."
+        ),
+    ] = ""
+    # A disabled declaration is not a finding: nobody asked for it to be true.
+    managed: Annotated[
+        bool,
+        Describe("Whether HQ keeps the live system to its copy; false, a difference is no problem."),
+    ] = True
+    on_demand: Annotated[
+        bool,
+        Describe("Whether it is expected to be absent most of the time, so a read not finding it is no problem."),
+    ] = False
+    # Drift is compared only across fields present in both, so a field the
+    # reading omits is unverified rather than agreed.
+    unconfirmed_fields: Annotated[
+        tuple[str, ...],
+        Describe(
+            "Fields HQ's copy sets that the last read did not report back, leaving out those the service "
+            "cannot report: set, but never checked."
+        ),
+    ] = ()
+    # A findings rule derives from this topology and is not allowed a query of
+    # its own (the suite measures that) so an observation a rule has to reason
+    # about has to arrive here or not at all.
+    #
+    # Flat and small on purpose. This is not a second copy of the inventory; it
+    # is the handful of observed facts that decide something.
+    facts: Annotated[
+        tuple[tuple[str, str], ...],
+        Describe("What a read found that HQ's copy does not carry, as `[name, value]` pairs; a name may repeat."),
+    ] = ()
+    # Nobody visited and nobody looked are opposite findings, and the second is
+    # the one worth acting on: a target HQ reaches, and nothing measures, is a
+    # site running unobserved.
+    pageviews: Annotated[
+        int | None,
+        Describe("Pages served under this hostname over the last 7 days; null, never 0, when nothing measures it."),
+    ] = None
+    visits: Annotated[
+        int | None,
+        Describe("Visits to this hostname over the last 7 days; null when nothing measures them."),
+    ] = None
+    actions: Annotated[
+        tuple[TopologyAction, ...],
+        Describe("What the reader may do from here, each already checked against the reader's permissions."),
+    ] = ()
+    # A claim about it reaches only such a reader, wherever it is derived.
+    read_capabilities: Annotated[
+        tuple[str, ...],
+        Describe(
+            "The permissions a reader must hold to be told about it: for what a service reported, "
+            "its connection family's own."
+        ),
+    ] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class TopologyEdge:
+    """A relationship derived from a declaration or observation."""
+
+    id: Annotated[str, Describe("The relationship's id, stable while both ends and the relation hold.")]
+    source: Annotated[str, Describe("The id of the node it reads from.")]
+    target: Annotated[str, Describe("The id of the node it points to.")]
+    kind: Annotated[str, Describe(f"The relation: {listed(RELATIONS)}, the last for one a reading supports.")]
+    label: Annotated[str, Describe("The relation as it reads from the source, such as `Runs on`.")]
+    status: Annotated[str, Describe(ended(f"How the relationship stands: {listed(STANDINGS)}"))] = "neutral"
+    # An edge a reading supports exists only while its reading does.
+    source_kind: Annotated[
+        str,
+        Describe("The type of reading the relationship rests on; empty for one HQ's records state."),
+    ] = ""
+    detail: Annotated[str, Describe("What its reading names, in a few words; empty without a reading.")] = ""
+    observed_at: ObservedAt = ""
+    entities: Annotated[
+        tuple[EntityLink, ...],
+        Describe("Each record its reading stands for, as a link; empty without a reading."),
+    ] = ()
+    facet: Annotated[
+        str,
+        Describe(f"What its reading supplies: {listed(READING_RANKS)}; empty for an overlay that supplies none."),
+    ] = ""
+
 
 def relation_rank(edge: TopologyEdge) -> int:
     """Where an edge's relation is shown among a node's relationships."""
@@ -169,9 +275,9 @@ class Topology:
 
     nodes: tuple[TopologyNode, ...]
     edges: tuple[TopologyEdge, ...]
-    # Unmet checks of HQ's standard as ``(id, evidence, read)``, here so the
-    # posture finding rule costs no query.
-    unmet_standard: tuple[tuple[str, str, bool], ...] = ()
+    # Checks of HQ's standard read and found failing, as ``(id, evidence,
+    # read_capabilities)``, here so the posture finding rule costs no query.
+    unmet_standard: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,6 +320,16 @@ def derived_id(kind: str, *parts: str) -> str:
 
     digest = sha256("\0".join(parts).encode()).hexdigest()[:16]
     return f"{kind}:{digest}"
+
+
+# Every reader of the topology holds it, so a gate is compared above it.
+_READ_FLOOR = frozenset({"read"})
+
+
+def gate_covers(holder: tuple[str, ...], gate: tuple[str, ...]) -> bool:
+    """Whether a reader ``holder``'s gate admits may be told what ``gate`` guards."""
+
+    return set(gate) - _READ_FLOOR <= set(holder) - _READ_FLOOR
 
 
 def edge_between(source: str, target: str, kind: str, label: str = "", status: str = "neutral") -> TopologyEdge:

@@ -18,12 +18,12 @@
   setting was missing is the one outcome nobody would have chosen.
   {% endcomment %}
   <p class="msg msg-error">
-    No secret store key is configured, so HQ cannot accept a private key.
-    Add a secret store key to HQ's settings.
+    Sealing is unavailable: HQ has not been given the controller's sealing
+    key, so it cannot accept a private key. A release of HQ's host makes it.
   </p>
 {% else %}
   <form method="post" class="form">
-    {% csrf_token %}
+    {% write_token %}
     {% include "partials/_form_errors.html" %}
     {{ form }}
     <div class="form-actions">
@@ -34,7 +34,7 @@
 
   <p class="muted">
     HQ checks that the certificate and key match and have not expired. The key
-    is encrypted at rest and sent only to the controller that installs it.
+    is sealed so that only the controller that installs it can read it.
   </p>
 {% endif %}
 {% endblock %}

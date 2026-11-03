@@ -3,6 +3,11 @@
 # DO NOT EDIT." line, which exclusions.generated leaves out.
 version: "2"
 
+# Every checkout on a machine shares golangci-lint's lock, so a run that
+# finds another checkout's holding it waits its turn instead of failing.
+run:
+  allow-serial-runners: true
+
 linters:
   # errcheck, govet, ineffassign, staticcheck and unused.
   default: standard
@@ -12,6 +17,7 @@ linters:
   # cancellation, and each says so where it does it.
   enable:
     - errorlint
+    - forbidigo
     - gocritic
     - modernize
     - perfsprint
@@ -25,6 +31,23 @@ linters:
         # excludes for the same reason.
         - (*os.Root).Remove
         - (*os.Root).RemoveAll
+    forbidigo:
+      # Matches the method through its receiver's type, so a renamed import
+      # or a decoder held in a field is still caught.
+      analyze-types: true
+      forbid:
+        # Strict JSON is jsonv2.Unmarshal with RejectUnknownMembers(true): it
+        # refuses duplicate and case-variant names, invalid UTF-8 and trailing
+        # data, all of which v1's strict decoder lets through.
+        - pattern: ^json\.Decoder\.DisallowUnknownFields$
+          pkg: ^encoding/json$
+          msg: decode strict JSON with jsonv2.Unmarshal(data, &v, jsonv2.RejectUnknownMembers(true))
+        # A log a binary writes strikes every secret the process has learned,
+        # which only mask.Logger's writer does; a handler built anywhere else
+        # writes them as they are.
+        - pattern: ^slog\.(New|NewTextHandler|NewJSONHandler)$
+          pkg: ^log/slog$
+          msg: build the logger with mask.Logger (controller/internal/mask)
     govet:
       settings:
         # A subtest that stops its parent (t.Fatal, FailNow or Skip on the t
@@ -57,6 +80,11 @@ linters:
       # name that stutters, still holds.
       - linters: [revive]
         text: "exported (.+) should have comment( \\(or a comment on this block\\))? or be unexported"
+      # mask.Logger is the one place a logger is built; a test builds its own
+      # to read what a value prints.
+      - linters: [forbidigo]
+        path: (^internal/mask/mask\.go$|_test\.go$)
+        text: mask\.Logger
 
 issues:
   max-issues-per-linter: 0

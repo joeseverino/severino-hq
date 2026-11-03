@@ -231,3 +231,22 @@ Store it as an API Credential item:
 | `env_prefix` | `ONEPASSWORD` | Says which service it is for. |
 | `credential` | the secret | The item's own credential field. |
 | `manages` | `1` | Optional. Lets HQ make changes through it, not only read. |
+
+## ACME certificate authority
+
+Certificates for the names you serve, issued and renewed.
+
+An account at an ACME certificate authority: its directory address and a contact email. [Where to make it](https://letsencrypt.org/docs/client-options/)
+
+This is the whole account: ACME certificate authority offers nothing narrower, so make it for HQ alone.
+
+Store it as an item of any type:
+
+| Field | Value | What it is |
+| --- | --- | --- |
+| `connection_ref` | `acme` | Any name; how HQ refers to this connection. |
+| `projection` | `acme` | The shape the controller reads the item as. |
+| `env_prefix` | `ACME` | Says which service it is for. |
+| `website` | yours | A field labeled website. |
+| `email` | yours | A field labeled email. |
+| `manages` | `1` | Optional. Lets HQ make changes through it, not only read. |

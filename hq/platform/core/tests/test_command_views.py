@@ -9,13 +9,14 @@ from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
-from hq.platform.api.models import IdempotencyRecord
-from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.capabilities import Ran, capability_registry
 from hq.platform.application.command_targets import capability_target_options
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.markup import elements, links, select, text, texts, with_class, within
+from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.ui import MISSING
-from hq.platform.core.models import AuditLog
+from hq.platform.application.web_writes import RETRY_KEY_FIELD
+from hq.platform.core.models import AuditLog, IdempotencyRecord
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 User = get_user_model()
@@ -61,7 +62,7 @@ class CommandViewTests(TestCase):
         return {
             "name": name,
             "slug": slug,
-            "__execution_key": response.context["form"].initial["__execution_key"],
+            RETRY_KEY_FIELD: drawn_key(response, "data-command-form"),
         }
 
     def test_unknown_command_is_404(self):
@@ -80,17 +81,28 @@ class CommandViewTests(TestCase):
         self.assertEqual(response.status_code, 403)
         form_factory.assert_not_called()
 
+    def test_a_page_refused_for_want_of_authority_is_recorded(self):
+        principal = Principal("reader", "web", frozenset({Capability.READ}))
+        with mock.patch("hq.platform.core.command_views.web_principal", return_value=principal):
+            response = self.client.get("/commands/project.create/")
+
+        self.assertEqual(response.status_code, 403)
+        denied = AuditLog.objects.filter(
+            action=AuditLog.Action.DENIED, metadata__capability="project.create", metadata__actor="reader"
+        )
+        self.assertEqual(denied.count(), 1)
+
     def test_form_and_machine_contract_come_from_the_registered_schema(self):
         response = self.client.get("/commands/project.create/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertLessEqual({"name", "slug", "__execution_key"}, fields(response))
+        self.assertLessEqual({"name", "slug", RETRY_KEY_FIELD}, fields(response))
         self.assertNotIn("__target", fields(response))
 
     def test_the_page_is_a_title_what_it_changes_and_one_button(self):
         response = self.client.get("/commands/project.create/")
 
-        self.assertEqual([button.words for button in submits(response)], ["Create project"])
+        self.assertEqual([button.words for button in submits(response)], ["Create a project"])
         self.assertNotIn("project.create", text(response))
         for built in (
             "manage_projects",
@@ -169,7 +181,9 @@ class CommandViewTests(TestCase):
         self.assertIn("The certificate to renew.", text(response))
         self.assertIn("example-certificate", options(response))
         self.assertNotIn("example-zone", options(response))
-        (key,) = select(response, "name", "idempotency_key")
+        (key,) = [
+            field for field in within(response, "data-command-form") if field.attrs.get("name") == RETRY_KEY_FIELD
+        ]
         self.assertEqual(key.attrs["type"], "hidden")
         self.assertNotIn("Idempotency Key", text(response))
         self.assertNotContains(response, "request_certificate_renewal")
@@ -208,7 +222,7 @@ class CommandViewTests(TestCase):
             spec={},
         )
 
-        response = self.client.get("/commands/infrastructure.reconcile/", {"kind": "tailscale.device"})
+        response = self.client.get("/commands/infrastructure.resource.reconcile/", {"kind": "tailscale.device"})
 
         self.assertIn("example-device", options(response))
         self.assertNotIn("example-zone", options(response))
@@ -248,12 +262,12 @@ class CommandViewTests(TestCase):
 
     def test_a_contextual_command_returns_to_the_workflow_that_offered_it(self):
         source = "/infrastructure/findings/"
-        form = self.client.get("/commands/project.create/", {"next": source}).context["form"]
+        page = self.client.get("/commands/project.create/", {"next": source})
         payload = {
             "name": "Contextual command",
             "slug": "contextual-command",
-            "__execution_key": form.initial["__execution_key"],
-            "next": form.initial["next"],
+            RETRY_KEY_FIELD: drawn_key(page, "data-command-form"),
+            "next": page.context["form"].initial["next"],
         }
 
         response = self.client.post("/commands/project.create/", payload, follow=True)
@@ -310,7 +324,7 @@ class CommandViewTests(TestCase):
         unknown = self.client.post("/commands/project.create/", {**payload, "surprise": "no"})
         repeated = self.client.post(
             "/commands/project.create/",
-            {**payload, "name": ["One", "Two"], "__execution_key": "web:repeat"},
+            {**payload, "name": ["One", "Two"], RETRY_KEY_FIELD: "web:repeat"},
         )
 
         self.assertEqual(unknown.status_code, 400)
@@ -346,11 +360,11 @@ class CommandResultProjectionTests(TestCase):
         self.client.force_login(self.user)
 
     def _run(self, name, payload, form_data):
-        key = self.client.get(f"/commands/{name}/").context["form"].initial["__execution_key"]
-        with mock.patch("hq.platform.core.command_views.execute_capability", return_value=payload) as execute:
+        key = drawn_key(self.client.get(f"/commands/{name}/"), "data-command-form")
+        with mock.patch("hq.platform.core.command_views.run_posted", return_value=Ran(payload)) as execute:
             response = self.client.post(
                 f"/commands/{name}/",
-                {**form_data, "__execution_key": key},
+                {**form_data, RETRY_KEY_FIELD: key},
                 follow=True,
             )
         execute.assert_called_once()
@@ -368,7 +382,7 @@ class CommandResultProjectionTests(TestCase):
             ],
         }
 
-        response = self._run("lookup.name", payload, {"name": "example.test"})
+        response = self._run("lookup.name.read", payload, {"name": "example.test"})
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
@@ -392,7 +406,7 @@ class CommandResultProjectionTests(TestCase):
     def test_a_shape_the_rules_do_not_fit_shows_the_json_open(self):
         payload = {"ok": True, "nested": {"deep": [1, 2]}, "mixed": [{"a": 1}, {"b": {"c": 2}}]}
 
-        response = self._run("lookup.name", payload, {"name": "example.test"})
+        response = self._run("lookup.name.read", payload, {"name": "example.test"})
 
         self.assertEqual(response.context["result_facts"], ())
         self.assertIsNone(response.context["result_table"])

@@ -59,7 +59,7 @@ func strict[T any](t *testing.T, raw string) T {
 	t.Helper()
 	var value T
 	decoder := json.NewDecoder(strings.NewReader(raw))
-	decoder.DisallowUnknownFields()
+	decoder.DisallowUnknownFields() //nolint:forbidigo // reads the generated bridge types as SocketBridge.call does, on v1.
 	if err := decoder.Decode(&value); err != nil {
 		t.Fatalf("decode %T: %v", value, err)
 	}
@@ -131,9 +131,23 @@ func TestAnalyticsPlanResponse(t *testing.T) {
 }
 
 func TestMaterialResponse(t *testing.T) {
-	raw := `{"domains": ["a.example"], "fullchain": "-----BEGIN CERTIFICATE-----", "private_key": "-----BEGIN PRIVATE KEY-----"}`
+	raw := `{"domains": ["a.example"], "fullchain": "-----BEGIN CERTIFICATE-----", "slots": {"certificate:private_key": "hq2.5eb35369.AAAA"}}`
 	conforms(t, "Material", []byte(raw))
-	strict[Material](t, raw)
+	if strict[Material](t, raw).Slots["certificate:private_key"] != "hq2.5eb35369.AAAA" {
+		t.Fatal("a sealed slot decoded wrong")
+	}
+	// A secret crosses the bridge only sealed: a key in the clear, as a field
+	// or in a slot, fails the contract.
+	schema := contractSchema(t, "Material")
+	for _, clear := range []string{
+		`{"domains": [], "fullchain": "x", "slots": {}, "private_key": "-----BEGIN PRIVATE KEY-----"}`,
+		`{"domains": [], "fullchain": "x", "slots": {"certificate:private_key": "-----BEGIN PRIVATE KEY-----"}}`,
+	} {
+		value, _ := jsonschema.UnmarshalJSON(strings.NewReader(clear))
+		if schema.Validate(value) == nil {
+			t.Fatalf("the contract took %s", clear)
+		}
+	}
 }
 
 // Payloads: what the controller sends must match what Django accepts.

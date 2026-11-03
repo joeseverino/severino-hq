@@ -22,7 +22,13 @@ lazy from playwright.sync_api import Error as BrowserError
 
 from hq.platform.core.speculation import rules_document
 from hq.platform.core.test_runner import stall_watch
-from hq.platform.core.tests.browser.probes.palette import FILL_STEPS, LINE_CONTRAST, lost_fills
+from hq.platform.core.tests.browser.probes.palette import (
+    FILL_PAINTERS,
+    FILL_STEPS,
+    LINE_CONTRAST,
+    losses,
+    lost_fills,
+)
 from hq.platform.core.tests.browser.probes.settle import (
     DEAF_WHILE_PROBED,
     FINISH_TRANSITIONS,
@@ -36,7 +42,8 @@ from hq.platform.core.tests.browser.probes.settle import (
 from hq.platform.core.tests.browser.reading import _in_one_trip, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, static_file
-from hq.platform.core.tests.browser.survey import _PALETTE, AS_FINDINGS, _as_is, geometry_probes
+from hq.platform.core.tests.browser.shots import shoot_page
+from hq.platform.core.tests.browser.survey import AS_FINDINGS, _as_is, geometry_probes, palette_probes
 from hq.platform.core.tests.browser.uncaught import Uncaught
 from hq.platform.core.tests.browser.widths import viewport
 
@@ -55,6 +62,11 @@ def failure_name(params):
     name = "-".join(str(params[key]) for key in keys)
     return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")[:150] or "subtest"
 
+
+# A failure's shot of a long page, the opened API reference above all, is a
+# capture the browser lays the whole page out for, past an action's 5 s; it is
+# given a navigation's 30 s, the failure it shows being already decided.
+_FAILURE_SHOT_WITHIN = 30_000
 
 # What a running test holds that holds the test itself; the parent has no use
 # for either, and Django sends them as None.
@@ -342,6 +354,13 @@ class BrowserGate(SimpleTestCase):
         self.held = None
         self.context = self.browser.new_context(**options)
         self.context.set_default_timeout(5000)
+        # A page's load waits on the server, which a loaded machine slows;
+        # how fast the server answers is perf's question, so a navigation
+        # gets Playwright's own 30 s while an action keeps 5 s.
+        self.context.set_default_navigation_timeout(30_000)
+        # Playwright's record of what the test did, each step with the page as
+        # it stood, kept beside a failure's screenshot (``shoot``).
+        self.context.tracing.start(snapshots=True)
         if options["java_script_enabled"]:
             self.context.expose_binding("hqRefused", self.refused_by_policy)
             self.context.add_init_script(_REPORT_REFUSALS)
@@ -463,30 +482,44 @@ class BrowserGate(SimpleTestCase):
     def shoot(self, name):
         """The page as it stands, saved as ``name``.png in this test's own
         hq-browser-failure-* folder in the temporary directory, every one of
-        which CI keeps when a gate fails."""
+        which CI keeps when a gate fails, and beside it as ``name``.zip the
+        trace of what the test did since its last failure, which
+        `playwright show-trace` opens. The trace is kept first, so a shot
+        that cannot be taken still leaves it. A page past what a shot holds
+        is shot to there, and the line says so (``shoot_page``)."""
 
         if self.failures is None:
             self.failures = Path(tempfile.mkdtemp(prefix=f"hq-browser-failure-{self._testMethodName}-"))
         path = self.failures / f"{name}.png"
-        self.page.screenshot(path=str(path), full_page=True)
-        print(f"Browser failure screenshot: {path}")
+        trace = path.with_suffix(".zip")
+        tracing = self.page.context.tracing
+        tracing.stop_chunk(path=trace)
+        tracing.start_chunk()
+        print(f"Browser failure trace: {trace}")
+        cut = shoot_page(self.page, path, timeout=_FAILURE_SHOT_WITHIN)
+        print(f"Browser failure screenshot: {path}" + (f" ({cut})" if cut else ""))
 
     def subtest_failed(self, params):
         """A failed subtest's page, shot while it is still in the browser and
-        named for its page, width and rule. A browser that has gone with the
-        failure is said instead."""
+        named for its page, width and rule."""
 
-        name = failure_name(params)
-        try:
-            self.shoot(name)
-        except BrowserError as gone:
-            print(f"No browser failure screenshot of {name}: {str(gone).splitlines()[0]}")
+        self.shoot_or_say(failure_name(params))
 
     def capture_failure(self):
         """A test that failed outside its subtests, shot as it ended."""
 
         if self.failed:
-            self.shoot("page")
+            self.shoot_or_say("page")
+
+    def shoot_or_say(self, name):
+        """``shoot(name)``, or why there is no shot when the browser cannot take
+        one (it has gone with the failure, or the shot timed out): the test's
+        own failure is what its report shows, never one from its cleanup."""
+
+        try:
+            self.shoot(name)
+        except BrowserError as gone:
+            print(f"No browser failure screenshot of {name}: {str(gone).splitlines()[0]}")
 
     def open(self, name, width):
         self.page.set_viewport_size(viewport(width))
@@ -506,23 +539,39 @@ class BrowserGate(SimpleTestCase):
 
     def lost_fills(self):
         """The fills one palette shows and the other loses, read in each on
-        this load; the page is left in the palette it was in."""
+        this load, each with what paints its fill in the palette that loses
+        it; the page is left in the palette it was in."""
 
         was = self.scheme()
-        steps = {}
+        reads = {}
         for palette in ("light", "dark"):
-            self.page.emulate_media(color_scheme=palette)
-            self.page.evaluate(FINISH_TRANSITIONS)
-            steps[palette] = self.page.evaluate(FILL_STEPS, [SELECTORS["contrast_scope"], SELECTORS["vendored"]])
-        self.page.emulate_media(color_scheme=was)
+            self.in_scheme(palette)
+            reads[palette] = self.page.evaluate(FILL_STEPS, [SELECTORS["contrast_scope"], SELECTORS["vendored"]])
+        # A box only one reading saw came or went between them.
+        both = {str(at) for at in reads["light"]["seen"]} & {str(at) for at in reads["dark"]["seen"]}
+        steps = {
+            palette: {at: step for at, step in read["steps"].items() if at in both} for palette, read in reads.items()
+        }
+        painted: dict[str, str] = {}
+        for palette in ("light", "dark"):
+            if places := [at for at, lost in losses(steps, LINE_CONTRAST) if lost == palette]:
+                self.in_scheme(palette)
+                painted |= self.read([(FILL_PAINTERS, [places, SELECTORS["vendored"]])])[0]
+        self.in_scheme(was)
+        return lost_fills(steps, LINE_CONTRAST, painted)
+
+    def in_scheme(self, scheme):
+        """The same load in the other palette. Its colors are finished rather
+        than waited for: without script no animation frame runs."""
+
+        self.page.emulate_media(color_scheme=scheme)
         self.page.evaluate(FINISH_TRANSITIONS)
-        return lost_fills(steps, LINE_CONTRAST)
 
     def palette(self):
         """What depends on the palette: text, and the edges of fields and
         buttons, against what they sit on."""
 
-        return self.checked(_PALETTE)
+        return self.checked(palette_probes())
 
     def findings(self, path, width):
         """What the layout rules find in HQ's own markup, checks that found
@@ -535,7 +584,7 @@ class BrowserGate(SimpleTestCase):
             {
                 "stand in": (STAND_IN, SELECTORS["vendored"]),
                 **geometry_probes(path, width),
-                **_PALETTE,
+                **palette_probes(),
                 "put back": (PUT_BACK, None),
             }
         )

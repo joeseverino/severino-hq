@@ -92,6 +92,12 @@ const (
 	UnitSocket    = UnitSocketDir + "/unit.sock"
 	// ACMEDir is the controller's certificate state on the host.
 	ACMEDir = "/opt/apps/severino-hq/secrets/acme"
+	// SealDir holds the private keys HQ's web seals secrets to: the
+	// controller's alone, lent to a pass read-only and never to the web.
+	SealDir = "/opt/apps/severino-hq/secrets/seal"
+	// SealPublicKey is the public half the web seals with, root's, so the
+	// account the web and the controller share cannot replace it.
+	SealPublicKey = StateDir + "/seal/public.key"
 
 	// RenovateSpool is root's directory on /run's tmpfs that a valid
 	// dependency handoff waits in, and each run stages its environment files
@@ -110,11 +116,11 @@ var Renderers = []struct{ Name, Status string }{
 	{"hq", "status.json"},
 }
 
-// UnitProperties is what the controller asks systemd of each unit: states,
-// the last run's result and exit, and instants, as `systemctl show` names
-// them. None holds a command line, an environment or a path.
+// UnitProperties is what the controller asks systemd of each unit: its
+// title, states, the last run's result and exit, and instants, as `systemctl
+// show` names them. None holds a command line, an environment or a path.
 var UnitProperties = []string{
-	"Id", "LoadState", "UnitFileState", "ActiveState", "SubState", "Result",
+	"Id", "Description", "LoadState", "UnitFileState", "ActiveState", "SubState", "Result",
 	"ExecMainCode", "ExecMainStatus", "InactiveExitTimestamp", "InactiveEnterTimestamp",
 	"ConditionResult", "ConditionTimestamp", "LastTriggerUSec", "NextElapseUSecRealtime", "Unit",
 }
@@ -131,6 +137,16 @@ var Volumes = []Volume{
 	{"severino-hq_severino_media", "/media"},
 	{"severino-hq_severino_exports", "/exports"},
 	{"severino-hq_severino_bridge", "/run/hq-bridge"},
+}
+
+// volumeAt is the declared volume the container mounts at target.
+func volumeAt(target string) Volume {
+	for _, volume := range Volumes {
+		if volume.Target == target {
+			return volume
+		}
+	}
+	panic("no volume is declared at " + target)
 }
 
 // On the data volume: the database, and the copy of it a boot keeps before

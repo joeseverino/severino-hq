@@ -13,13 +13,10 @@ import (
 )
 
 // The verifier a deploy checks the composition's signature with: cosign, at
-// a pinned release and its published digest. It lives beside the tree, not
-// in it, because the tree is replaced from the image the verifier checks.
-const (
-	CosignVersion = "v3.1.3"
-	CosignSHA256  = "4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71"
-	CosignURL     = "https://github.com/sigstore/cosign/releases/download/" + CosignVersion + "/cosign-linux-amd64"
-)
+// the release and digest mise.lock records, which Renovate moves. It lives
+// beside the tree, not in it, because the tree is replaced from the image the
+// verifier checks.
+//go:generate yq --input-format toml --output-format yaml --split-exp "\"verifier.gen.go\"" --from-file verifier.yq ../../mise.lock
 
 // InstallVerifier puts the pinned cosign at path, unless it is there already.
 // The download is checked against the pinned digest before it is made

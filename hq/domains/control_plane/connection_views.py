@@ -9,11 +9,12 @@ lazy from django.http import Http404, JsonResponse
 lazy from django.utils import timezone
 
 from hq.platform.application.action_links import READ_NOW_CAPABILITY, read_now_payload
-from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.connection_context import connections_context
 from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
+from hq.platform.application.web_writes import execute_posted
 lazy from hq.platform.application.asks import (
     FAILED,
     WATCH_LIMIT,
@@ -85,9 +86,9 @@ class ReadNowView(View):
         back = reverse("control_plane:connections")
         payload = read_now_payload({**request.GET.dict(), **request.POST.dict()})
         asked = timezone.now()
-        result = execute_capability(READ_NOW_CAPABILITY, payload, principal=web_principal(request.user))
+        result = execute_posted(request, READ_NOW_CAPABILITY, payload)
         if not result.get("ok"):
-            return answer(request, Standing(FAILED, result["error"]["message"]), fallback=back)
+            return answer(request, Standing(FAILED, refusal_of(result).message), fallback=back)
         if not result.get("read_now"):
             # A bare wake-up names nothing to wait for.
             return answer(request, Standing(note=str(result.get("message") or "")), fallback=back)

@@ -5,6 +5,8 @@ from dataclasses import KW_ONLY, dataclass
 from django.conf import settings
 from django.utils.csp import CSP
 
+from hq.domains.control_plane.names import is_hostname
+from hq.platform.application.labels import dotted
 from hq.platform.core.network import split_host_port
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.providers import PROVIDERS
@@ -149,6 +151,17 @@ def _name_layer(request) -> Layer:
     """Whether the name in the address bar is one the internet can resolve."""
 
     host, _port = split_host_port(request.get_host())
+    if not is_hostname(host):
+        return Layer(
+            "name",
+            "The name is not in public DNS",
+            holds=False,
+            detail="This request used an address, so DNS was not involved.",
+            evidence=host,
+            boundary="Exposure",
+            mechanism="Public DNS records",
+            conclusive=False,
+        )
     answers = public_answers_for(host)
     return Layer(
         "name",
@@ -288,7 +301,7 @@ def _policy_layer(
             label,
             holds=False,
             detail=f"HQ could not find {missing} on the tailnet, so it cannot check the policy for this step.",
-            evidence=f"port {port} · {missing} not found",
+            evidence=dotted(f"port {port}", f"{missing} not found"),
             boundary="Zero trust policy",
             mechanism="The tailnet policy",
             conclusive=False,
@@ -452,7 +465,7 @@ def _lock_layer(device: tailnet.Device | None) -> Layer | None:
         "Node key signed by tailnet lock",
         holds=True,
         detail=f"Tailnet lock is on and {device.label}'s node key has a valid signature.",
-        evidence=f"Signed · {counted(keys, 'signing key', 'signing keys')}",
+        evidence=dotted("Signed", counted(keys, "signing key", "signing keys")),
         boundary="Device identity",
         mechanism="Tailnet lock signature",
     )
@@ -496,9 +509,11 @@ def _identity_agreement_layer(identity: Identity) -> Layer:
             else "A different tailnet account owns this device. Check who owns the device and who is signed in."
         ),
         evidence=(
-            f"Device owner {identity.tailnet_user} · single sign-on "
-            f"{identity.provider_principal} · signed in as "
-            f"{session_principal or 'unnamed session'}"
+            dotted(
+                f"Device owner {identity.tailnet_user}",
+                f"single sign-on {identity.provider_principal}",
+                f"signed in as {session_principal or 'unnamed session'}",
+            )
             if identity.agreement_basis == "SSO-signed principal link"
             else f"{identity.tailnet_user} ↔ {session_principal or 'unnamed session'}"
         ),
@@ -592,7 +607,7 @@ def _proxy_headers_layer(request, *, trusted: bool, address: str) -> Layer | Non
             "from the address or scheme HQ used. Check the proxy's forwarding "
             "settings."
         ),
-        evidence=(f"{client_header}={real_host or 'missing'} · {scheme_header}={scheme or 'missing'}"),
+        evidence=dotted(f"{client_header}={real_host or 'missing'}", f"{scheme_header}={scheme or 'missing'}"),
         boundary="Forwarding evidence",
         mechanism=mechanism,
     )
@@ -617,7 +632,7 @@ def _tailnet_observation_layer(observer: tailnet.Device | None, serving: Serving
             "HQ's own machine measured this link",
             holds=False,
             detail="HQ could not tell which tailnet machine it runs on, so it cannot say these measurements are its own.",
-            evidence=f"Measured by {observer.label} · HQ's machine not found",
+            evidence=dotted(f"Measured by {observer.label}", "HQ's machine not found"),
             boundary="Transport attestation",
             mechanism="Tailscale on the machine that read the tailnet",
             conclusive=False,
@@ -633,9 +648,9 @@ def _tailnet_observation_layer(observer: tailnet.Device | None, serving: Serving
             else "A different machine measured this link, so the measurements do not describe your connection to HQ."
         ),
         evidence=(
-            f"{observer.label} · {serving.basis}"
+            dotted(observer.label, serving.basis)
             if same
-            else f"Measured by {observer.label} · HQ runs on {serving.device.label}"
+            else dotted(f"Measured by {observer.label}", f"HQ runs on {serving.device.label}")
         ),
         boundary="Transport attestation",
         mechanism="Tailscale on the machine that read the tailnet",
@@ -733,7 +748,7 @@ def _session_layer() -> Layer:
             if holds
             else "The session cookie is missing a protection. Check Secure, HttpOnly, SameSite and the __Host- prefix."
         ),
-        evidence=" · ".join(stated),
+        evidence=dotted(*stated),
         boundary="Session",
         mechanism="HQ's cookie settings",
     )
@@ -774,7 +789,7 @@ def _browser_layer() -> Layer:
             if holds
             else "The content security policy is missing a rule that stops scripts HQ did not send."
         ),
-        evidence=" · ".join(stated),
+        evidence=dotted(*stated),
         boundary="Browser boundary",
         mechanism="Content Security Policy",
     )
@@ -811,7 +826,7 @@ def _canonical_layer() -> Layer:
             else "HQ redirects plain HTTP but sends no HSTS header, so the "
             "browser's first request to this name can still be plain HTTP."
         ),
-        evidence=" · ".join(stated),
+        evidence=dotted(*stated),
         boundary="Transport",
         mechanism="HTTPS redirect and HSTS",
     )

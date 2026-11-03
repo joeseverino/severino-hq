@@ -2,6 +2,7 @@
 
 from hq.platform.application.plugins import (
     PLUGIN_API_VERSION,
+    NavigationGroup,
     NavigationItem,
     PluginIntegration,
     PluginManifest,
@@ -14,6 +15,7 @@ from hq.platform.application.plugins import (
 
 __all__ = [
     "PLUGIN_API_VERSION",
+    "NavigationGroup",
     "NavigationItem",
     "PluginIntegration",
     "PluginManifest",

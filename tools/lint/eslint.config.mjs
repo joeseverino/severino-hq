@@ -8,11 +8,15 @@ import js from "@eslint/js";
 import noUnsanitized from "eslint-plugin-no-unsanitized";
 import globals from "globals";
 
-// What reads layout. tables.js reads it only where a disable comment says
-// why, so a new read is refused and an allowance that no longer reads
-// anything is reported as unused.
-const layoutReads =
-  "^(getBoundingClientRect|getClientRects|getComputedStyle|offset(Width|Height|Left|Top)|scroll(Width|Height)|client(Width|Height))$";
+// What reads layout, or watches it change. Layout is the stylesheet's: a
+// script reads it only where a disable comment says why CSS cannot answer
+// the question, so a new read is refused and an allowance that no longer
+// reads anything is reported as unused.
+const layoutReads = {
+  selector:
+    "Identifier[name=/^(getBoundingClientRect|getClientRects|getComputedStyle|offset(Width|Height|Left|Top)|scroll(Width|Height)|client(Width|Height)|ResizeObserver)$/]",
+  message: "Layout is computed by CSS: a script reads it only where a disable comment says why it must.",
+};
 
 // fragment.js is the one fetch-and-swap: it crosses the session boundary,
 // turns a response into markup through the page's one Trusted Types policy,
@@ -80,6 +84,15 @@ const parserStaysInside = {
   message: "The parser is declared and called inside hqFragment's closure, never handed out: anything holding it holds the Trusted Types sink.",
 };
 
+// A native submit sends the pressed button among the form's fields in tree
+// order; `set` overwrites a field of the same name and `append` puts it last.
+// `new FormData(form, submitter)` sends what a plain submit sends.
+const submitterRebuilt = {
+  selector:
+    "CallExpression[callee.property.name=/^(set|append)$/][arguments.0.property.name='name'][arguments.1.property.name='value']",
+  message: "A submit's body is `new FormData(form, submitter)`, which places the button as a native submit does.",
+};
+
 export default [
   {
     linterOptions: { reportUnusedDisableDirectives: "error" },
@@ -119,7 +132,7 @@ export default [
     rules: {
       "no-restricted-globals": ["error", ...primitiveGlobals],
       "no-restricted-properties": ["error", ...primitiveProperties],
-      "no-restricted-syntax": ["error", ...primitiveSyntax],
+      "no-restricted-syntax": ["error", ...primitiveSyntax, layoutReads, submitterRebuilt],
     },
   },
   {
@@ -132,20 +145,7 @@ export default [
         { name: "setTimeout", message: "fragment.js keeps one timer, hqEvery's, as window.setTimeout." },
       ],
       "no-restricted-properties": ["error", ...oncePerPage],
-      "no-restricted-syntax": ["error", parserStaysInside],
-    },
-  },
-  {
-    files: ["static/js/tables.js"],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        ...primitiveSyntax,
-        {
-          selector: `Identifier[name=/${layoutReads}/]`,
-          message: "tables.js reads layout only where a disable comment says why it must.",
-        },
-      ],
+      "no-restricted-syntax": ["error", parserStaysInside, layoutReads, submitterRebuilt],
     },
   },
 ];

@@ -7,7 +7,7 @@ before the controller runs it.
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.db import transaction
 
@@ -15,10 +15,10 @@ from hq.domains.control_plane.desired_state import advance_dependents
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, controller_action_policy
-from hq.platform.core.audit import operation_context
+from hq.platform.core.audit import audit_operation
 
 from .adoption import OBSERVES_ONLY, keep_out_declaration, observes_only
-from .approvals import AGENT_SURFACES, consent_gap
+from .approvals import consent_gap
 from .asks import WAITING
 from .cadence import request_reading, ring_doorbell, swept
 from .command_fields import Describe
@@ -30,7 +30,22 @@ from .infrastructure import (
     save_managed_resource,
 )
 from .record_errors import PolicyError, RecordNotFound, Sentence
-from .security import Principal
+from .record_saves import Created
+from .resource_records import (
+    AskedAt,
+    AttemptCount,
+    CompletedAt,
+    ConditionPart,
+    ManagedResourceItem,
+    OperationAction,
+    OperationId,
+    OperationReason,
+    OperationState,
+    OperationSummary,
+    RequestedActor,
+    RequestedInterface,
+)
+from .security import CONTROLLER_INTERFACE, Principal, is_agent
 from .ui import counted, ended
 lazy from . import tailnet
 lazy from .containers import Running
@@ -47,7 +62,85 @@ class OperationCommand:
     reason: Annotated[str, Describe("Why it is done, kept with the operation it queues.")] = ""
 
 
-def serialize_operation(operation: OperationRequest) -> dict[str, Any]:
+class OperationItem(TypedDict):
+    """One operation asked of the controller, as it stands."""
+
+    id: OperationId
+    resource: Annotated[str, Describe("The key of the record it acts on.")]
+    action: OperationAction
+    state: OperationState
+    reason: OperationReason
+    requested_actor: RequestedActor
+    requested_interface: RequestedInterface
+    created_at: AskedAt
+    completed_at: CompletedAt
+    claimed_by: Annotated[str, Describe("The controller working on it; empty while none is.")]
+    lease_expires_at: Annotated[
+        str | None,
+        Describe("When the controller's hold on it lapses, an ISO 8601 date-time; null while none holds it."),
+    ]
+    attempt_count: AttemptCount
+    result: Annotated[dict[str, Any], Describe("What the controller reported of its run; empty until it has run.")]
+
+
+# The reconcile a save queues, which every answer built on a save carries.
+type Applying = Annotated[
+    OperationItem | None, Describe("The operation queued to apply the change at once; null where none was.")
+]
+
+
+class ResourceSaved(TypedDict):
+    """A managed record as saved, and the reconcile queued to apply it."""
+
+    ok: Literal[True]
+    created: Created
+    resource: ManagedResourceItem
+    applying: Applying
+
+
+type Queued = Annotated[bool, Describe("Whether this call queued it; false when the same one was already waiting.")]
+
+
+class OperationQueued(TypedDict):
+    """An operation asked of the controller, and whether this call queued it."""
+
+    ok: Literal[True]
+    queued: Queued
+    operation: OperationItem
+
+
+class RenewalAllowed(TypedDict):
+    """That the renewal is allowed, and why."""
+
+    allowed: Annotated[Literal[True], Describe("That renewing it is allowed.")]
+    explanation: Annotated[str, Describe("Why renewing it is allowed, in a sentence.")]
+
+
+class RenewalQueued(OperationQueued):
+    """A certificate renewal asked of the controller, and why it is allowed."""
+
+    policy: RenewalAllowed
+
+
+class DeclarationForgotten(TypedDict):
+    """A record HQ stopped managing, left as it is at its provider."""
+
+    ok: Literal[True]
+    queued: Annotated[
+        Literal[False], Describe("That nothing was queued, since the service holding it is left as it is.")
+    ]
+    forgotten: Annotated[str, Describe("The key of the record HQ stopped managing.")]
+    released: Annotated[list[str], Describe("The keys of the records inside it that HQ stopped managing too.")]
+    reason: OperationReason
+
+
+class ObservedAccepted(ResourceSaved):
+    """The record as saved from what its provider holds, and why that was asked."""
+
+    reason: OperationReason
+
+
+def serialize_operation(operation: OperationRequest) -> OperationItem:
     return {
         "id": str(operation.id),
         "resource": operation.resource.key,
@@ -67,12 +160,11 @@ def serialize_operation(operation: OperationRequest) -> dict[str, Any]:
 
 # Conditions that say something is wrong, whatever the operation's own state.
 _PROBLEM_CONDITIONS = ("Degraded", "Drifted")
-_AUTOMATIC = "controller"
 # How many past operations are read to find the ones that changed something.
 HISTORY_WINDOW = 200
 
 
-def _active(result: dict[str, Any]) -> list[dict[str, Any]]:
+def _active(result: dict[str, Any]) -> list[ConditionPart]:
     return [item for item in result.get("conditions") or [] if item.get("status") is True]
 
 
@@ -109,14 +201,14 @@ def _outcome(operation: OperationRequest) -> tuple[str, str, str]:
 def requested_by(operation: OperationRequest) -> str:
     """Who asked, as a person reads it."""
 
-    if operation.requested_interface == _AUTOMATIC:
+    if operation.requested_interface == CONTROLLER_INTERFACE:
         return "Automatic"
-    if operation.requested_interface in AGENT_SURFACES:
+    if is_agent(operation.requested_interface):
         return f"{operation.requested_actor} (agent)"
     return operation.requested_actor
 
 
-def operation_summary(operation: OperationRequest) -> dict[str, Any]:
+def operation_summary(operation: OperationRequest) -> OperationSummary:
     """Project one operation into one sentence and its structured evidence."""
     result = operation.result or {}
     status = result.get("status") or {}
@@ -132,7 +224,7 @@ def operation_summary(operation: OperationRequest) -> dict[str, Any]:
         "state_label": label,
         "tone": tone,
         "headline": headline,
-        "automatic": operation.requested_interface == _AUTOMATIC,
+        "automatic": operation.requested_interface == CONTROLLER_INTERFACE,
         "requested_actor": operation.requested_actor,
         "requested_interface": operation.requested_interface,
         "by": requested_by(operation),
@@ -180,7 +272,7 @@ def changes(operations: Any, limit: int) -> list[OperationRequest]:
         key = (operation.resource_id, operation.action)
         said = signature(operation)
         repeats = (
-            operation.requested_interface == _AUTOMATIC
+            operation.requested_interface == CONTROLLER_INTERFACE
             and operation.state == OperationRequest.State.SUCCEEDED
             and last.get(key) == said
         )
@@ -191,7 +283,7 @@ def changes(operations: Any, limit: int) -> list[OperationRequest]:
     return kept[:limit]
 
 
-def resource_history(resource: ManagedResource, limit: int = 20) -> list[dict[str, Any]]:
+def resource_history(resource: ManagedResource, limit: int = 20) -> list[OperationSummary]:
     """One record's history: each operation that changed something, newest first."""
 
     return [operation_summary(operation) for operation in changes(resource.operations.all()[:HISTORY_WINDOW], limit)]
@@ -246,7 +338,7 @@ def _queue_operation(
     principal: Principal,
     action: str,
     require_enabled: bool = True,
-) -> dict[str, Any]:
+) -> OperationQueued:
     if require_enabled and not resource.enabled:
         raise PolicyError("This record is switched off in HQ.")
     if observes_only(resource.kind, resource.spec):
@@ -291,7 +383,7 @@ def _queue_operation(
     return {"ok": True, "queued": True, "operation": serialize_operation(operation)}
 
 
-def queue_reconcile(resource: ManagedResource, *, principal: Principal, reason: str) -> dict[str, Any]:
+def queue_reconcile(resource: ManagedResource, *, principal: Principal, reason: str) -> OperationQueued:
     """Queue a reconcile of a declaration a domain service has just written.
 
     For a service that writes a declaration under its own capability (the
@@ -310,16 +402,12 @@ def request_reconcile(
     *,
     principal: Principal,
     current_key: str,
-) -> dict[str, Any]:
+) -> OperationQueued:
     resource = _resource_for_operation(current_key)
 
     if PROVIDERS[resource.kind].public_effect and not public_dns_enabled():
         raise PolicyError("Public DNS changes are off on this server.")
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="infrastructure.reconcile.request",
-    ):
+    with audit_operation(operation="infrastructure.reconcile.request", principal=principal):
         return _queue_operation(
             resource,
             command,
@@ -354,18 +442,14 @@ def _contained_keys(resource: ManagedResource) -> list[str]:
 @transaction.atomic
 def _forget_declaration(
     resource: ManagedResource, command: OperationCommand, *, principal: Principal
-) -> dict[str, Any]:
+) -> DeclarationForgotten:
     """Stop being responsible for something without touching the provider.
 
     For a declaration-only kind (a domain) and for anything whose connection
     only observes. Nothing is queued and nothing is deleted at the provider.
     """
 
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="infrastructure.resource.forget",
-    ):
+    with audit_operation(operation="infrastructure.resource.forget", principal=principal):
         # The declarations inside it go too. Left behind, HQ would keep
         # reconciling records in a domain it is no longer responsible for. They
         # are forgotten rather than deleted: the records stay exactly as they
@@ -399,7 +483,7 @@ def _request_lifecycle(
     principal: Principal,
     current_key: str,
     action: str,
-) -> dict[str, Any]:
+) -> OperationQueued:
     """Ask the controller to start, stop or restart what a declaration names.
 
     Not reconciliation: cycling a container is asked for once, about something
@@ -411,11 +495,7 @@ def _request_lifecycle(
     gap = unit_gap(resource)
     if gap:
         raise PolicyError(gap)
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation=f"infrastructure.{action}.request",
-    ):
+    with audit_operation(operation=f"infrastructure.{action}.request", principal=principal):
         # Which verbs exist is the capability registry's to say, so a verb the
         # controller does not implement is refused here rather than queued for
         # work nothing will claim.
@@ -463,19 +543,19 @@ def unit_gap(resource: ManagedResource) -> Sentence:
     return UNIT_OUT_OF_REACH if found is not None and not found.reachable else ""
 
 
-def request_restart(command: OperationCommand, *, principal: Principal, current_key: str) -> dict[str, Any]:
+def request_restart(command: OperationCommand, *, principal: Principal, current_key: str) -> OperationQueued:
     return _request_lifecycle(
         command, principal=principal, current_key=current_key, action=OperationRequest.Action.RESTART
     )
 
 
-def request_start(command: OperationCommand, *, principal: Principal, current_key: str) -> dict[str, Any]:
+def request_start(command: OperationCommand, *, principal: Principal, current_key: str) -> OperationQueued:
     return _request_lifecycle(
         command, principal=principal, current_key=current_key, action=OperationRequest.Action.START
     )
 
 
-def request_stop(command: OperationCommand, *, principal: Principal, current_key: str) -> dict[str, Any]:
+def request_stop(command: OperationCommand, *, principal: Principal, current_key: str) -> OperationQueued:
     return _request_lifecycle(
         command, principal=principal, current_key=current_key, action=OperationRequest.Action.STOP
     )
@@ -484,12 +564,12 @@ def request_stop(command: OperationCommand, *, principal: Principal, current_key
 # The capability that asks for each verb, so a page asks for one by its verb
 # and runs it through the capability runner like every other caller.
 ACTION_CAPABILITY = {
-    OperationRequest.Action.RECONCILE: "infrastructure.reconcile",
+    OperationRequest.Action.RECONCILE: "infrastructure.resource.reconcile",
     OperationRequest.Action.RENEW: "certificate.renew",
     OperationRequest.Action.DELETE: "infrastructure.resource.remove",
-    OperationRequest.Action.RESTART: "infrastructure.restart",
-    OperationRequest.Action.START: "infrastructure.start",
-    OperationRequest.Action.STOP: "infrastructure.stop",
+    OperationRequest.Action.RESTART: "infrastructure.resource.restart",
+    OperationRequest.Action.START: "infrastructure.resource.start",
+    OperationRequest.Action.STOP: "infrastructure.resource.stop",
     OperationRequest.Action.APPROVE_ROUTES: "tailnet.routes.approve",
 }
 
@@ -500,7 +580,7 @@ def accept_observed(
     *,
     principal: Principal,
     current_key: str,
-) -> dict[str, Any]:
+) -> ObservedAccepted:
     """Make the declaration say what the provider holds.
 
     For a change made at the provider on purpose (a policy a connector edited,
@@ -518,11 +598,7 @@ def accept_observed(
     kept = {
         field: resource.spec[field] for field in PROVIDERS[resource.kind].unobservable_fields if field in resource.spec
     }
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="infrastructure.resource.accept_observed",
-    ):
+    with audit_operation(operation="infrastructure.resource.accept_observed", principal=principal):
         result = save_managed_resource(
             ManagedResourceCommand(
                 key=resource.key, kind=resource.kind, spec={**found, **kept}, enabled=resource.enabled
@@ -539,7 +615,7 @@ def request_removal(
     *,
     principal: Principal,
     current_key: str,
-) -> dict[str, Any]:
+) -> OperationQueued | DeclarationForgotten:
     """Queue removal of the thing this declaration describes.
 
     Not a plain row delete: the record lives at a provider, so forgetting the
@@ -554,11 +630,7 @@ def request_removal(
     allowed, explanation = controller_action_policy(resource.kind, OperationRequest.Action.DELETE)
     if not allowed:
         raise PolicyError(explanation)
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="infrastructure.resource.remove",
-    ):
+    with audit_operation(operation="infrastructure.resource.remove", principal=principal):
         # Bypasses the enabled check in _queue_operation on purpose: that guard
         # exists to stop HQ converging a paused declaration, and removal is the
         # opposite of converging it. A switched-off record is exactly what is
@@ -611,7 +683,7 @@ def request_route_approval(
     *,
     principal: Principal,
     current_key: str,
-) -> dict[str, Any]:
+) -> OperationQueued:
     """Approve the routes a tailnet device is already advertising.
 
     The remedy the "advertises routes nothing approved" finding names. HQ does
@@ -622,11 +694,7 @@ def request_route_approval(
     """
 
     resource = _resource_for_operation(current_key)
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="tailnet.routes.approve.request",
-    ):
+    with audit_operation(operation="tailnet.routes.approve.request", principal=principal):
         return _queue_operation(
             resource,
             command,
@@ -640,7 +708,7 @@ def request_reach_allow(
     *,
     principal: Principal,
     current_key: str,
-) -> dict[str, Any]:
+) -> ResourceSaved:
     """Open the path a reading proved is shut, where the tailnet is what shut it.
 
     Given a resource, never a policy, so the only change this can produce is
@@ -711,21 +779,16 @@ def request_certificate_renewal(
     *,
     principal: Principal,
     current_key: str,
-) -> dict[str, Any]:
+) -> RenewalQueued:
     resource = _resource_for_operation(current_key)
     allowed, explanation = certificate_renewal_allowed(resource)
     if not allowed:
         raise PolicyError(explanation)
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="certificate.renew.request",
-    ):
+    with audit_operation(operation="certificate.renew.request", principal=principal):
         result = _queue_operation(
             resource,
             command,
             principal=principal,
             action=OperationRequest.Action.RENEW,
         )
-    result["policy"] = {"allowed": True, "explanation": explanation}
-    return result
+    return {**result, "policy": {"allowed": True, "explanation": explanation}}

@@ -10,7 +10,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -23,14 +23,16 @@ from .command_fields import Describe
 from .projection import projection_scope
 from .security import Principal, person
 lazy from . import dashboard
+lazy from .attention import readable_by
+lazy from .domains import attention_urls
 
 # How long a set-aside mark outlives its item. Long enough that a finding which
 # clears and returns within a sweep or two is still recognized as set aside.
 FORGET_AFTER = timedelta(days=30)
 
 # The capabilities a person sets items aside, and brings them back, through.
-SET_ASIDE = "action_items.set_aside"
-RESTORE = "action_items.restore"
+SET_ASIDE = "action_item.set_aside"
+RESTORE = "action_item.restore"
 AUDIT_LABEL = "Needs you"
 
 
@@ -137,14 +139,23 @@ def by_source(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     raising items has its section, and a family its fold, without anybody
     listing either. The queue's own order is kept: a domain appears where its
     first (and so its worst) item does, and so does a family within it. A
-    family of one is that item alone.
+    family of one is that item alone. A domain that declares where its items
+    are decided together (``PluginIntegration.attention_url``) gives its group
+    that page as ``url``.
     """
 
+    urls = attention_urls() if items else {}
     groups: dict[str, dict[str, Any]] = {}
     for item in items:
         group = groups.setdefault(
             item["source_id"],
-            {"id": item["source_id"], "label": item["source"], "items": [], "entries": {}},
+            {
+                "id": item["source_id"],
+                "label": item["source"],
+                "url": urls.get(item["source_id"], ""),
+                "items": [],
+                "entries": {},
+            },
         )
         group["items"].append(item)
         family = item.get("family", "")
@@ -256,8 +267,8 @@ def _audit(user, message: str, count: int) -> None:
     )
 
 
-def set_items_aside(command: SetAsideCommand, *, principal: Principal) -> dict[str, Any]:
-    """Set items aside for the person asking: the ``action_items.set_aside`` capability.
+def set_items_aside(command: SetAsideCommand, *, principal: Principal) -> ItemsActedOn:
+    """Set items aside for the person asking: the ``action_item.set_aside`` capability.
 
     A row names itself and its revision, so it needs no queue. Items named by
     key alone are set aside as the queue holds them now, which is read once
@@ -271,14 +282,21 @@ def set_items_aside(command: SetAsideCommand, *, principal: Principal) -> dict[s
         dismiss_rows(user, command.rows)
         if command.keys:
             with projection_scope():
-                set_aside(user, command.keys, aside=True, current=dashboard.work_queue())
+                set_aside(user, command.keys, aside=True, current=readable_by(principal, dashboard.work_queue()))
         count = len(command.rows) + len(command.keys)
         _audit(user, "Set items aside.", count)
     return {"ok": True, "count": count}
 
 
-def restore(command: RestoreCommand, *, principal: Principal) -> dict[str, Any]:
-    """Bring set-aside items back for the person asking: the ``action_items.restore`` capability."""
+class ItemsActedOn(TypedDict):
+    """How many items the call set aside or brought back."""
+
+    ok: Literal[True]
+    count: Annotated[int, Describe("How many items it set aside or brought back.")]
+
+
+def restore(command: RestoreCommand, *, principal: Principal) -> ItemsActedOn:
+    """Bring set-aside items back for the person asking: the ``action_item.restore`` capability."""
 
     user = person(principal)
     with transaction.atomic():

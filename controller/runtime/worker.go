@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"maps"
+	"slices"
 )
 
 const ApplyLimit = 5
@@ -14,8 +16,11 @@ type Worker struct {
 	ID        string
 	Bridge    Bridge
 	Providers Providers
-	Output    io.Writer
-	Log       *slog.Logger
+	// Opener opens the sealed secrets an action's material carries; nil
+	// opens none.
+	Opener Unsealer
+	Output io.Writer
+	Log    *slog.Logger
 }
 
 func (w *Worker) logger() *slog.Logger {
@@ -232,17 +237,7 @@ func (w *Worker) applyOne(ctx context.Context) (bool, bool, error) {
 		return false, true, nil
 	}
 	resource := pending.Resource
-	if w.Providers.NeedsMaterial(resource.Kind) {
-		material, err := w.Bridge.Material(ctx, resource.Key)
-		if err != nil {
-			return true, false, err
-		}
-		if resource.Spec == nil {
-			resource.Spec = Object{}
-		}
-		resource.Spec["material"] = material
-	}
-	result, err := w.Providers.Execute(WithVerification(ctx, pending.Verification), resource, pending.Operation.Action, true)
+	result, err := w.execute(ctx, pending, &resource)
 	var refusal *ProviderError
 	if err != nil && !errors.As(err, &refusal) {
 		return true, false, err
@@ -274,4 +269,41 @@ func (w *Worker) applyOne(ctx context.Context) (bool, bool, error) {
 		output = RefusedOperationOutput{OK: false, Operation: pending.Operation.ID, Resource: resource.Key, Message: ReportText(err.Error())}
 	}
 	return true, refusal == nil, w.emit(output)
+}
+
+// execute applies a claimed action, first opening the material its kind
+// needs. A sealed value that does not open refuses this action alone.
+func (w *Worker) execute(ctx context.Context, pending Pending, resource *Resource) (Result, error) {
+	if w.Providers.NeedsMaterial(resource.Kind) {
+		material, err := w.Bridge.Material(ctx, resource.Key)
+		if err != nil {
+			return Result{}, err
+		}
+		opened, err := w.open(resource.Key, material)
+		if err != nil {
+			return Result{}, err
+		}
+		if resource.Spec == nil {
+			resource.Spec = Object{}
+		}
+		resource.Spec["material"] = opened
+	}
+	return w.Providers.Execute(WithVerification(ctx, pending.Verification), *resource, pending.Operation.Action, true)
+}
+
+// open is material with every sealed slot opened for resourceKey.
+func (w *Worker) open(resourceKey string, material Material) (OpenedMaterial, error) {
+	opener := w.Opener
+	if opener == nil {
+		opener = Unopenable{Err: errors.New("no sealing keys were lent to this run")}
+	}
+	opened := OpenedMaterial{Fullchain: material.Fullchain, Domains: material.Domains, Secrets: map[string]string{}}
+	for _, slot := range slices.Sorted(maps.Keys(material.Slots)) {
+		plaintext, err := opener.Open(material.Slots[slot], resourceKey, slot)
+		if err != nil {
+			return OpenedMaterial{}, &ProviderError{Message: "HQ's sealed " + slot + " does not open on this controller", Err: err}
+		}
+		opened.Secrets[slot] = string(plaintext)
+	}
+	return opened, nil
 }

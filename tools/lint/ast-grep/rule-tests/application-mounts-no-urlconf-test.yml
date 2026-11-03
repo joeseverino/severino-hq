@@ -1,0 +1,14 @@
+id: application-mounts-no-urlconf
+valid:
+  - 'from django.urls import NoReverseMatch, resolve'
+  - 'mounts=(Mount("api/docs/", "hq.platform.api.web_urls"),)'
+  - 'describe(include=("example.notes",))'
+  - 'from hq.platform.application.plugins import include'
+  - 'urls.reverse("example:index")'
+invalid:
+  - 'from django.urls import include'
+  - 'from django.urls import URLResolver, include, path'
+  - 'lazy from django.urls import include'
+  - 'from django.urls import include as mounted'
+  - 'django.urls.include("example.urls")'
+  - 'urls.include("example.urls")'

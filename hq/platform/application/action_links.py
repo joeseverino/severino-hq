@@ -17,11 +17,10 @@ from django.urls import NoReverseMatch
 from hq.platform.application.routes import reverse
 
 from .contracts import route_url
-from .security import AuthorizationError, Principal
+from .security import Principal
 from .ui import counted
 from .workflow_contracts import ActionLink
 lazy from . import capabilities, outbound_work
-lazy from .capabilities import authorize_capability
 
 
 class ConnectionLinkSpec(Protocol):
@@ -143,11 +142,7 @@ def _permitted_spec(name: str, principal: Principal):
     spec = capabilities.capability_registry().get(name)
     if spec is None:
         return None
-    try:
-        authorize_capability(spec, principal)
-    except AuthorizationError:
-        return None
-    return spec
+    return spec if principal.permits(*spec.required_capabilities) else None
 
 
 READ_NOW_CAPABILITY = "infrastructure.controller.refresh"

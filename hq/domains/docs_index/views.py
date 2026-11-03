@@ -15,10 +15,10 @@ from django.views.generic import (
 )
 
 from hq.platform.application import related
-from hq.platform.application.capabilities import capability_words, execute_capability
+from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import SYNC
+from hq.platform.application.labels import dotted_html
 from hq.platform.application.pages import PageAction, PageMixin, page_context
-from hq.platform.application.security import web_principal
 from hq.platform.application.tables import (
     TableColumn,
     TableFilter,
@@ -26,13 +26,14 @@ from hq.platform.application.tables import (
     TableSort,
     TableToggle,
 )
+from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from hq.platform.core.templatetags.value_tags import breakable
 
 from .forms import DocumentationRecordForm, ManifestImportForm
 from .models import DocumentationRecord
 
-DOCS_TRAIL = ("Docs", reverse_lazy("docs_index:list"))
+DOCS_TRAIL = (("Docs", reverse_lazy("docs_index:list")),)
 
 
 class DocsListView(PageMixin, TableListMixin, ListView):
@@ -159,15 +160,12 @@ class DocsDetailView(PageMixin, DetailView):
     @override
     def get_page_lede(self):
         record = self.object
-        return format_html(
-            '<code>{}</code> · {} · {} · <span class="pill pill-{}">{}</span> · <span class="pill pill-{}">{}</span>',
-            breakable(record.doc_id),
+        return dotted_html(
+            format_html("<code>{}</code>", breakable(record.doc_id)),
             record.get_doc_type_display(),
             record.get_environment_display(),
-            record.status,
-            record.get_status_display(),
-            record.sensitivity,
-            record.get_sensitivity_display(),
+            format_html('<span class="pill pill-{}">{}</span>', record.status, record.get_status_display()),
+            format_html('<span class="pill pill-{}">{}</span>', record.sensitivity, record.get_sensitivity_display()),
         )
 
     @override
@@ -216,7 +214,7 @@ class ManifestImportView(View):
                 **page_context(
                     "Import documentation manifest",
                     "Upload a JSON list with one entry per vault document.",
-                    trail=(DOCS_TRAIL,),
+                    trail=DOCS_TRAIL,
                 ),
             },
         )
@@ -237,16 +235,12 @@ class ManifestImportView(View):
         except json.JSONDecodeError as exc:
             messages.error(request, f"This file is not valid JSON: {exc}")
             return self.render_form(request, form)
-        result = execute_capability(
-            SYNC,
-            {"manifest": data, "update_existing": form.cleaned_data["update_existing"]},
-            principal=web_principal(request.user),
+        result = execute_posted(
+            request, SYNC, {"manifest": data, "update_existing": form.cleaned_data["update_existing"]}
         )
-        if "error" in result:
-            messages.error(request, f"Nothing was imported: {result['error']['message']}")
-            return self.render_form(request, form)
-        if not result["ok"]:
-            messages.error(request, f"Nothing was imported. Fix these entries first: {result['problems']}")
+        if refusal := refused(request, result):
+            if refusal.code == "invalid_input" and refusal.details:
+                messages.error(request, f"Fix these entries first: {refusal.details}")
             return self.render_form(request, form)
         stats = result["stats"]
         messages.success(

@@ -11,6 +11,7 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from hq.domains.control_plane.names import normalized_hostname
+from hq.platform.application.labels import dotted
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.models import ManagedResource
 lazy from hq.domains.control_plane.providers import service_facets
@@ -19,15 +20,18 @@ from . import docker_sections
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import entity_link, kind_label
 from .projection import projection_scope
+from .security import Principal
 from .service_context import Cell, ServiceSection, recent_changes
 from .ui import MISSING
-lazy from . import connections, services
+lazy from . import connections, docker_estate, services
 lazy from .cadence import connection_providers
+lazy from .findings import rule_of
 lazy from .hq_self import hq_service
 lazy from .locate import host_of
 lazy from .machines import Machine
 lazy from .own_addresses import tailnet_sightings
 lazy from .policy_links import PolicyNames
+lazy from .problems import problems_about
 lazy from .public_registry import public_endpoints
 lazy from .reach import network_of
 lazy from .tailnet import TAILNET_KIND
@@ -147,7 +151,7 @@ def _names(machine) -> ServiceSection | None:
     any_measured = any(measured.get(normalized_hostname(host)) for host in hostnames)
     label = "Serves"
     if any_measured:
-        label = f"{label} · traffic over {HOST_TRAFFIC_DAYS} days"
+        label = dotted(label, f"traffic over {HOST_TRAFFIC_DAYS} days")
     return ServiceSection(
         id="names",
         label=label,
@@ -233,6 +237,24 @@ def machine_links(machine: Machine, relationships) -> dict[str, object]:
     names = PolicyNames()
     links["opening_links"] = tuple((port, names.of(who)) for port, who in presence.openings)
     return links
+
+
+def problems_by_part(machine: Machine, principal: Principal) -> dict[str, tuple[dict, ...]]:
+    """The machine's open problems ``principal`` may read, by where its page draws them: a line about
+    a container under Containers, any other line under Tailnet, and an urgent
+    one, or one whose part the page does not draw, above the page (``page``)."""
+
+    containers = {rule.name for rule in docker_estate.RULES}
+    found: dict[str, list[dict]] = {"page": [], "containers": [], "tailnet": []}
+    for item in problems_about(machine.url, principal):
+        part = "page"
+        if item.get("status") != "serious":
+            if machine.containers and rule_of(item["key"]) in containers:
+                part = "containers"
+            elif machine.presence is not None:
+                part = "tailnet"
+        found[part].append(item)
+    return {part: tuple(items) for part, items in found.items()}
 
 
 def _reached_through(machine: Machine, ref: str):

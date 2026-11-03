@@ -110,6 +110,59 @@ HIDDEN_IN_SUMMARIES = (
 }"""
 )
 
+# Every select that opens to its choices wears HQ's chevron and no arrow of
+# the browser's own, whichever way the engine draws it (base-select or
+# native), so no two forms read as two kinds of control. The chevron is
+# compared with the token painted where the select sits, since its ink is
+# light-dark(). A vendored widget draws its own.
+SELECT_ARROWS = """([dropdowns, vendored]) => {
+  const named = (el) => el.name || el.getAttribute('aria-label') || el.id || 'unnamed';
+  return [...document.querySelectorAll(dropdowns)]
+    .filter((el) => !el.multiple && el.size <= 1 && !(vendored && el.closest(vendored)))
+    .flatMap((el) => {
+      const style = getComputedStyle(el);
+      const own = style.appearance === 'base-select'
+        ? getComputedStyle(el, '::picker-icon').display !== 'none'
+        : style.appearance !== 'none';
+      const mark = document.createElement('span');
+      mark.style.setProperty('background-image', 'var(--chevron-image)');
+      el.parentElement.append(mark);
+      const chevron = getComputedStyle(mark).backgroundImage;
+      mark.remove();
+      return [
+        own && `select ${named(el)} draws the browser's own arrow`,
+        style.backgroundImage !== chevron && `select ${named(el)} does not wear HQ's chevron`,
+      ].filter(Boolean);
+    });
+}"""
+
+# A link that draws an underline draws it under all of its words. A line a
+# link draws never reaches into a box of its own inside it (an inline-block
+# part of a name), so each word set in one is read from the nearest such box
+# between it and the link.
+PARTS_NOT_UNDERLINED = """([links, vendored]) => {
+  const atomic = (el) => !['inline', 'contents'].includes(getComputedStyle(el).display);
+  const underlined = (el) => getComputedStyle(el).textDecorationLine.includes('underline');
+  const found = [];
+  for (const link of document.querySelectorAll(links)) {
+    if ((vendored && link.closest(vendored)) || !underlined(link)) continue;
+    const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent.trim()) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      if (![...range.getClientRects()].some((r) => r.width && r.height)) continue;
+      let box = node.parentElement;
+      while (box !== link && !atomic(box)) box = box.parentElement;
+      if (box !== link && !underlined(box)) {
+        found.push(`link ${link.textContent.trim().slice(0, 60)} leaves ${node.textContent.trim().slice(0, 40)} without its underline`);
+        break;
+      }
+    }
+  }
+  return found;
+}"""
+
 # A dialog a page declares is one a reader can open: some control on the page
 # names it, so drawing a dialog without its control is a finding.
 DIALOGS_WITHOUT_OPENERS = """([dialogs, openers]) => {
@@ -120,33 +173,20 @@ DIALOGS_WITHOUT_OPENERS = """([dialogs, openers]) => {
     .map((dialog) => `dialog #${dialog.id} has no control that opens it`);
 }"""
 
-# An ask in a table's row says how its work stands without growing the row:
-# its note is given the longest thing an ask says, as ask.js writes it (the
-# state's word and its sentence), the row measured before and after, and the
-# note put back as it was.
-ASKS_THAT_GROW_THEIR_ROW = """([asks, sentence]) => [...document.querySelectorAll(asks)]
-  .filter((ask) => ask.querySelector('[data-ask-button]')?.checkVisibility() && ask.querySelector('[data-ask-note][data-ask-word]'))
-  .flatMap((ask) => {
-    const row = ask.closest('tr');
-    const note = ask.querySelector('[data-ask-note]');
-    const kept = [...note.childNodes];
-    const part = (name, text) => Object.assign(document.createElement('span'), { className: name, textContent: text });
-    const before = row.getBoundingClientRect().height;
-    note.replaceChildren(part('ask-word', 'Waiting'), part('ask-sentence', sentence));
-    const after = row.getBoundingClientRect().height;
-    note.replaceChildren(...kept);
-    if (after <= before + 1) return [];
-    const name = row.querySelector('td, th')?.textContent.trim().split(/\\s+/).slice(0, 4).join(' ');
-    return [`the row "${name}" grows from ${Math.round(before)}px to ${Math.round(after)}px when its ask says how its work stands`];
-  })"""
-
 # How many lines an element's words run over: the runs of its text that share
-# no height, and where the first starts and the last ends.
+# no height, and where the first starts and the last ends. Its text alone: a
+# range over the element would also give the box of each element inside it,
+# and a list's box spans every line its names wrap to.
 LINE_COUNT = """
 const lineRange = document.createRange();
 const linesOf = (el) => {
-  lineRange.selectNodeContents(el);
-  const rects = [...lineRange.getClientRects()].filter((r) => r.width && r.height).sort((a, b) => a.top - b.top);
+  const drawn = [];
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    lineRange.selectNodeContents(node);
+    drawn.push(...lineRange.getClientRects());
+  }
+  const rects = drawn.filter((r) => r.width && r.height).sort((a, b) => a.top - b.top);
   if (!rects.length) return {lines: 0, top: 0, bottom: 0};
   let lines = 1;
   let bottom = rects[0].bottom;

@@ -13,7 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cache
-from typing import Any
+from typing import Annotated, Any, Literal, NotRequired, TypedDict, cast
 
 from django.core.exceptions import ImproperlyConfigured
 from pydantic import BaseModel, ConfigDict
@@ -24,10 +24,12 @@ lazy from hq.domains.jobs.runner import ALREADY_RUNNING, JobConflict, Progress, 
 
 from .asks import FAILED, Ask, Standing, job_standing
 from .contracts import DOTTED_NAME
+from .describe import Describe
 from .integration_specs import CapabilitySpec, requested
 from .projection import read_once
 from .record_errors import RecordNotFound
-from .security import Principal, person_of
+from .refusal_status import RefusalEnvelope, refuse
+from .security import WAITING_INTERFACES, Principal, person_of
 lazy from .domains import host_specs
 lazy from .plugins import plugin_outbound_work
 lazy from .routes import reverse
@@ -162,10 +164,10 @@ def capability_for(work: OutboundWork) -> CapabilitySpec:
 
     validate(work)
 
-    def about(_command: Any, *, principal: Principal, current_key: str = "") -> dict[str, Any]:
+    def about(_command: Any, *, principal: Principal, current_key: str = "") -> WorkRequested | RefusalEnvelope:
         return request_work(work, current_key, principal=principal)
 
-    def whole(_command: Any, *, principal: Principal) -> dict[str, Any]:
+    def whole(_command: Any, *, principal: Principal) -> WorkRequested | RefusalEnvelope:
         return request_work(work, "", principal=principal)
 
     return CapabilitySpec(
@@ -217,7 +219,22 @@ def refusal(name: str, subject: str = "") -> str:
     return read_once(f"outbound_work.refusal:{name}:{subject}", answer)
 
 
-def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> dict[str, Any]:
+class WorkRequested(TypedDict):
+    """Work asked of HQ, and the job doing it."""
+
+    ok: Literal[True]
+    started: Annotated[bool, Describe("Whether this call started the work; false when it was already running.")]
+    job: NotRequired[Annotated[str, Describe("The id of the job doing it; absent when another job holds the work.")]]
+    message: Annotated[str, Describe("What asking did, in a sentence.")]
+    result: NotRequired[
+        Annotated[
+            dict[str, Any],
+            Describe("What the work answered, where the call waited for it to end, as a command line does."),
+        ]
+    ]
+
+
+def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> WorkRequested | RefusalEnvelope:
     """Ask for the work and answer at once, as a capability answers.
 
     A caller with a request to answer gets a job on its own thread. A command
@@ -228,12 +245,12 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> d
 
     reason = _refusal(work, subject)
     if reason:
-        return {"ok": False, "error": {"code": "precondition", "message": reason}}
+        return cast(RefusalEnvelope, refuse("precondition", reason))
 
     def job_work(progress: Progress) -> dict[str, Any]:
         return work.run(progress, subject=subject, principal=principal) or {}
 
-    waited = principal.interface == "cli"
+    waited = principal.interface in WAITING_INTERFACES
     try:
         job = (run if waited else start)(
             work.name,
@@ -246,17 +263,19 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> d
     except JobConflict:
         live = Job.objects.filter(kind=work.name, state__in=("queued", "running")).first()
         same = live is not None and live.request.get(SUBJECT_FIELD, "") == subject
-        return {
+        conflict: WorkRequested = {
             "ok": True,
             "started": False,
-            **({"job": str(live.pk)} if live is not None and same else {}),
             "message": ALREADY_RUNNING if same else ANOTHER_RUNNING,
         }
+        if live is not None and same:
+            conflict["job"] = str(live.pk)
+        return conflict
     if not waited:
         return {"ok": True, "started": True, "job": str(job.pk), "message": requested(work.words, subject)}
     standing = job_standing(job)
     if standing.state == FAILED:
-        return {"ok": False, "error": {"code": "operation_failed", "message": standing.note}}
+        return cast(RefusalEnvelope, refuse("work_failed", standing.note))
     return {"ok": True, "started": True, "job": str(job.pk), "message": standing.note, "result": job.result}
 
 

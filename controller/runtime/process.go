@@ -2,12 +2,7 @@ package runtime
 
 import (
 	"bytes"
-	"time"
 )
-
-// ProcessWaitDelay bounds how long a killed child's pipes are waited on, so a
-// grandchild holding them open cannot outlive the deadline.
-const ProcessWaitDelay = 5 * time.Second
 
 // BoundedBuffer keeps at most Limit bytes of a child's output and notes when
 // more arrived. Writes never fail, so the child is not killed by a short write.

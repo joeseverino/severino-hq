@@ -5,7 +5,7 @@
   <div class="window-bar">
     <nav class="window-switch" aria-label="Reporting window">
       {% for option in windows %}
-        <a class="chip{% if option.current %} is-current{% endif %}"
+        <a class="chip"
            href="?days={{ option.days }}"
            {% if option.current %}aria-current="page"{% endif %}>{{ option.label|breakable }}</a>
       {% endfor %}

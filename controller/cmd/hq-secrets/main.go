@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/host"
+	"github.com/joeseverino/severino-hq/controller/internal/clock"
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/secrets"
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
@@ -101,7 +103,7 @@ func configure(args []string, getenv func(string) string, stderr io.Writer) (sec
 }
 
 func run(ctx context.Context, args []string, getenv func(string) string, euid int, portFloor func() (int, error), stderr io.Writer) int {
-	log := slog.New(slog.NewTextHandler(stderr, nil))
+	log := mask.Logger(stderr)
 	fail := func(err error) int {
 		class := secrets.Class(err)
 		// The message is the renderer's own words: no value, no token, no URL.
@@ -117,17 +119,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 	}
 	runner := &secrets.Runner{
 		Config: config, Mounts: install.SystemMounts, PortFloor: portFloor, Web: secrets.UnitWeb{Unit: host.WebUnit, Container: container},
-		Log: log, Now: time.Now,
-		Sleep: func(ctx context.Context, d time.Duration) error {
-			timer := time.NewTimer(d)
-			defer timer.Stop()
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-timer.C:
-				return nil
-			}
-		},
+		Log: log, Now: time.Now, Sleep: clock.Sleep,
 	}
 	if _, err := runner.Run(ctx); err != nil {
 		return fail(err)

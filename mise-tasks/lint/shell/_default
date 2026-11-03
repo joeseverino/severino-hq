@@ -1,0 +1,11 @@
+#!/bin/sh
+#MISE description="Every shell file parses and passes shellcheck; the shell suites pass"
+#MISE lock="heavy"
+#MISE timeout="30m"
+#MISE hide=true
+set -eu
+sources="$(tools/gate/shell-sources.sh)"
+# A file that does not parse in the dialect its first line names fails shellcheck.
+# shellcheck disable=SC2086  # one path per word
+shellcheck -x $sources
+exec mise run lint:shell:suites tests/shell/test-*.sh

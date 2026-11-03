@@ -34,7 +34,7 @@ class JobState(models.TextChoices):
     SUCCEEDED = "succeeded", "Done"
     FAILED = "failed", "Failed"
     # Distinct from FAILED: a vanished process is a restart to retry,
-    # a raised exception is a traceback to read.
+    # a raised exception is a fault to read in the log.
     LOST = "lost", "Stopped early"
 
 
@@ -94,7 +94,8 @@ class Job(models.Model):
 
     @override
     def __str__(self):
-        return f"{self.kind}: {self.get_state_display()}"
+        # What the job is, never its state: a row that names it outlives the state.
+        return self.label or self.kind
 
     @property
     def is_live(self) -> bool:

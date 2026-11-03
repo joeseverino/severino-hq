@@ -5,7 +5,7 @@ import hashlib
 from dataclasses import dataclass
 from datetime import date as Date
 from decimal import Decimal
-from typing import Annotated, Any
+from typing import Annotated, Any, TypedDict
 
 from django.core.files.uploadedfile import SimpleUploadedFile, UploadedFile
 from django.db import transaction
@@ -15,14 +15,19 @@ from hq.domains.assets.models import Asset
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 from hq.domains.receipts.validation import MAX_RECEIPT_BASE64_CHARS, validate_receipt_file
-from hq.platform.core.audit import operation_context, record_event
+from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
+lazy from hq.domains.receipts.specs import ReceiptRow
 
-from .command_fields import Describe, Names
+from .command_fields import Describe, Names, Upload
+from .forms import file_as_sent
+from .integration_specs import Kept, keeps
 from .projection import iso
 from .record_errors import InputError, RecordNotFound
-from .record_saves import Held, held
+from .record_fields import Notes
+from .record_saves import Held, as_sent, found, held, written
 from .security import Principal
+lazy from .record_answers import ReceiptSaved, ReceiptUploaded
 
 UPLOAD = "receipt.upload"
 REPLACE = "receipt.replace"
@@ -32,16 +37,25 @@ UPDATE = "receipt.update"
 _RECEIPT = Held("That receipt was not found.", "That receipt changed after it was read.")
 
 
+# The records a receipt is matched to, as its command writes them and its row reads them back.
+type ReceiptExpense = Annotated[
+    int | None,
+    Names("expenses", key="id"),
+    Describe("The expense this receipt proves.", api="Its id; null for none."),
+]
+type ReceiptAsset = Annotated[
+    str | None, Names("assets"), Describe("The asset this receipt is for.", api="Its slug; null for none.")
+]
+
+
 @dataclass(frozen=True, slots=True)
 class ReceiptMetadataCommand:
     vendor: Annotated[str, Describe("Who issued the receipt.")] = ""
     date: Annotated[Date | None, Describe("The date on the receipt.")] = None
     amount: Annotated[Decimal, Describe("The amount it shows.")] = Decimal("0.00")
-    notes: Annotated[str, Describe("Anything else worth keeping.")] = ""
-    related_expense: Annotated[
-        int | None, Names("expenses", key="id"), Describe("The expense this receipt proves.")
-    ] = None
-    related_asset: Annotated[str | None, Names("assets"), Describe("The asset this receipt is for.")] = None
+    notes: Notes = ""
+    related_expense: ReceiptExpense = None
+    related_asset: ReceiptAsset = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,10 +73,20 @@ class ReceiptFile:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ReceiptUploadCommand(ReceiptMetadataCommand):
-    file: Annotated[ReceiptFile, Describe("The receipt's file.")]
+    file: Annotated[ReceiptFile, Upload(), Describe("The receipt's file.")]
 
 
-def serialize_receipt(receipt: Receipt) -> dict[str, Any]:
+def _stored(current_id: int) -> dict[str, Any]:
+    receipt = found(Receipt, _RECEIPT, {"pk": current_id})
+    return as_sent(receipt, ReceiptMetadataCommand, {"related_expense": "id", "related_asset": "slug"})
+
+
+# What changing a receipt keeps; a replacement always sends its file.
+_KEPT = Kept(_stored)
+_REPLACED = Kept(_stored, always_sent=frozenset({"file"}))
+
+
+def serialize_receipt(receipt: Receipt) -> ReceiptRow:
     return {
         "id": receipt.id,
         "original_filename": receipt.original_filename,
@@ -74,8 +98,8 @@ def serialize_receipt(receipt: Receipt) -> dict[str, Any]:
         "notes": receipt.notes,
         "related_expense": receipt.related_expense_id,
         "related_asset": receipt.related_asset.slug if receipt.related_asset else None,
-        "uploaded_at": iso(receipt.uploaded_at),
-        "updated_at": iso(receipt.updated_at),
+        "uploaded_at": receipt.uploaded_at.isoformat(),
+        "updated_at": receipt.updated_at.isoformat(),
     }
 
 
@@ -105,16 +129,21 @@ def _save(
     *,
     current_id: int,
     expected_updated_at: str | None,
+    sent: frozenset[str] | None,
     upload: UploadedFile | None = None,
 ) -> Receipt:
     receipt = held(Receipt, _RECEIPT, {"pk": current_id}, expected_updated_at)
+    values = written(command, sent)
     expense, asset = _relations(command)
     if upload is not None:
         _hold_file(receipt, upload)
     for field in ("vendor", "date", "amount", "notes"):
-        setattr(receipt, field, getattr(command, field))
-    receipt.related_expense = expense
-    receipt.related_asset = asset
+        if field in values:
+            setattr(receipt, field, values[field])
+    if "related_expense" in values:
+        receipt.related_expense = expense
+    if "related_asset" in values:
+        receipt.related_asset = asset
     receipt.full_clean(exclude=("file",))
     receipt.save()
     return receipt
@@ -127,7 +156,7 @@ def _hold_file(receipt: Receipt, upload: UploadedFile) -> None:
     receipt.size_bytes = upload.size or 0
 
 
-def _uploaded(receipt: Receipt, sha256: str) -> dict[str, Any]:
+def _uploaded(receipt: Receipt, sha256: str) -> StoredReceiptFile:
     """Record the file's arrival by name, size and digest, and answer the same."""
 
     told = {"name": receipt.original_filename, "size_bytes": receipt.size_bytes, "sha256": sha256}
@@ -141,6 +170,15 @@ def _uploaded(receipt: Receipt, sha256: str) -> dict[str, Any]:
     return told
 
 
+class StoredReceiptFile(TypedDict):
+    """The file a receipt holds, as it arrived."""
+
+    name: Annotated[str, Describe("The file's name, as uploaded.")]
+    size_bytes: Annotated[int, Describe("The file's size, in bytes.")]
+    sha256: Annotated[str, Describe("The file's SHA-256 digest, in hex.")]
+
+
+@keeps(_KEPT)
 @transaction.atomic
 def update_receipt(
     command: ReceiptMetadataCommand,
@@ -148,12 +186,14 @@ def update_receipt(
     principal: Principal,
     current_id: int,
     expected_updated_at: str | None = None,
-) -> dict[str, Any]:
-    with operation_context(interface=principal.interface, actor=principal.actor, operation=UPDATE):
-        receipt = _save(command, current_id=current_id, expected_updated_at=expected_updated_at)
+    sent: frozenset[str] | None = None,
+) -> ReceiptSaved:
+    with audit_operation(operation=UPDATE, principal=principal):
+        receipt = _save(command, current_id=current_id, expected_updated_at=expected_updated_at, sent=sent)
     return {"ok": True, "created": False, "receipt": serialize_receipt(receipt)}
 
 
+@keeps(_REPLACED)
 @transaction.atomic
 def replace_receipt(
     command: ReceiptUploadCommand,
@@ -161,17 +201,18 @@ def replace_receipt(
     principal: Principal,
     current_id: int,
     expected_updated_at: str | None = None,
-) -> dict[str, Any]:
+    sent: frozenset[str] | None = None,
+) -> ReceiptUploaded:
     """The ``receipt.replace`` capability, which authorizes it."""
 
     del principal
     upload, sha256 = _decoded(command.file)
-    receipt = _save(command, current_id=current_id, expected_updated_at=expected_updated_at, upload=upload)
+    receipt = _save(command, current_id=current_id, expected_updated_at=expected_updated_at, sent=sent, upload=upload)
     return {"ok": True, "created": False, "receipt": serialize_receipt(receipt), "file": _uploaded(receipt, sha256)}
 
 
 @transaction.atomic
-def upload_receipt(command: ReceiptUploadCommand, *, principal: Principal) -> dict[str, Any]:
+def upload_receipt(command: ReceiptUploadCommand, *, principal: Principal) -> ReceiptUploaded:
     """The ``receipt.upload`` capability, which authorizes it."""
 
     del principal
@@ -214,10 +255,5 @@ def receipt_payload(data: dict[str, Any], upload: UploadedFile | None = None) ->
         "related_asset": data["related_asset"].slug if data["related_asset"] else None,
     }
     if upload is not None:
-        upload.seek(0)
-        payload["file"] = {
-            "name": upload.name or "",
-            "content_type": upload.content_type or "",
-            "content": base64.b64encode(upload.read()).decode("ascii"),
-        }
+        payload["file"] = file_as_sent(upload)
     return payload

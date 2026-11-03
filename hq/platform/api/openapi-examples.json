@@ -1,4 +1,193 @@
 {
+  "assetUpdateV2": {
+    "request": {
+      "payload": {
+        "total_cost": "12.00"
+      },
+      "target": "example-box"
+    },
+    "responses": {
+      "200": {
+        "data": {
+          "asset": {
+            "business_use_percentage": 40,
+            "category": "other",
+            "estimated_deductible_amount": "4.80",
+            "infrastructure": "",
+            "item_name": "Example box",
+            "notes": "Kept.",
+            "payment_method": "",
+            "purchase_date": null,
+            "relationships": {
+              "content": [],
+              "documentation": [],
+              "expense_ids": [],
+              "projects": []
+            },
+            "serial_number": "",
+            "slug": "example-box",
+            "status": "active",
+            "total_cost": "12.00",
+            "updated_at": "2026-01-15T09:30:00+00:00",
+            "vendor": "",
+            "warranty_date": null
+          },
+          "created": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "capabilitiesV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "capabilities": [
+            {
+              "effect": "read",
+              "execution_notes": [
+                "Validate the hostname before anything leaves this machine."
+              ],
+              "idempotency_key_required": false,
+              "input_schema": {
+                "additionalProperties": false,
+                "description": "A name to ask a public resolver about.",
+                "properties": {
+                  "name": {
+                    "description": "The hostname to resolve.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "type": "object"
+              },
+              "label": "Look up a name",
+              "name": "lookup.name.read",
+              "permitted": false,
+              "request_schema": {
+                "$defs": {
+                  "ExpectedUpdatedAt": {
+                    "description": "The target's `updated_at`, copied as it was last read. Where the command checks it, a record changed since is refused `conflict`; without it the record is taken as it is now.",
+                    "examples": [
+                      "2026-11-02T14:30:00.123456+00:00"
+                    ],
+                    "format": "date-time",
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+                "properties": {
+                  "expected_updated_at": {
+                    "$ref": "#/$defs/ExpectedUpdatedAt"
+                  },
+                  "payload": {
+                    "additionalProperties": false,
+                    "description": "A name to ask a public resolver about.",
+                    "properties": {
+                      "name": {
+                        "description": "The hostname to resolve.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "payload"
+                ],
+                "type": "object"
+              },
+              "required_capabilities": [
+                "look_up_public_records"
+              ],
+              "resource": null,
+              "summary": "Ask a public resolver what the internet returns for a hostname.",
+              "target": null,
+              "target_help": "",
+              "target_initial_fields": [],
+              "target_label": "",
+              "target_query": {},
+              "variants": {},
+              "verb": "Look up a name"
+            }
+          ],
+          "schema_version": 2
+        },
+        "ok": true
+      },
+      "403": {
+        "error": {
+          "code": "forbidden",
+          "message": "Refused."
+        },
+        "ok": false
+      }
+    }
+  },
+  "connectionsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "connections": [
+            {
+              "abilities": [
+                {
+                  "capability": null,
+                  "effect": "read",
+                  "governs_kinds": [],
+                  "grant": null,
+                  "label": "DNS server",
+                  "name": "adguard.dns",
+                  "required_scopes": [],
+                  "subject_resource": null,
+                  "summary": "Reads DNS server."
+                }
+              ],
+              "documentation_url": null,
+              "label": "Infrastructure",
+              "management_route": null,
+              "name": "infrastructure.controllers",
+              "permitted": true,
+              "required_capabilities": [
+                "read"
+              ],
+              "secret_store": "1Password",
+              "setup_route": null,
+              "summary": "What the controller connects to.",
+              "web_route": "control_plane:connections"
+            }
+          ],
+          "schema_version": 1
+        },
+        "ok": true
+      }
+    }
+  },
+  "documentationSyncV2": {
+    "responses": {
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "details": [
+            {
+              "doc_id": "",
+              "errors": [
+                "missing doc_id"
+              ]
+            }
+          ],
+          "message": "1 record refused. Nothing was synced."
+        },
+        "ok": false
+      }
+    }
+  },
   "executeV2": {
     "responses": {
       "400": {
@@ -18,7 +207,40 @@
       "404": {
         "error": {
           "code": "unknown_capability",
-          "message": "Unknown capability 'nope.nothing'."
+          "details": {
+            "next": {
+              "arguments": {},
+              "tool": "describe_capabilities"
+            }
+          },
+          "message": "Unknown capability 'nope.nothing'. describe_capabilities lists the ones this caller may run."
+        },
+        "ok": false
+      }
+    }
+  },
+  "expenseUpdateV2": {
+    "responses": {
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "details": [
+            {
+              "loc": [
+                "target"
+              ],
+              "msg": "Input should be a valid integer",
+              "type": "int_parsing"
+            }
+          ],
+          "message": "expense.update: target must be a valid integer."
+        },
+        "ok": false
+      },
+      "403": {
+        "error": {
+          "code": "forbidden",
+          "message": "api principal 'example-automation' lacks 'write_expenses'."
         },
         "ok": false
       }
@@ -26,16 +248,250 @@
   },
   "findingsV2": {
     "responses": {
+      "200": {
+        "data": {
+          "findings": [
+            {
+              "affected_scopes": [],
+              "evidence": [
+                {
+                  "label": "Container",
+                  "value": "nginx-proxy-manager"
+                }
+              ],
+              "explanation": "A tag can later name a different build, so the next pull or recreate may run one nobody chose. Pin it by digest in its compose file and recreate it.",
+              "id": "claim:727c884d159f86c2",
+              "investigations": [
+                {
+                  "capability": "",
+                  "effect": "read",
+                  "label": "See it in the topology",
+                  "method": "GET",
+                  "name": "topology",
+                  "reason": "What this is connected to.",
+                  "recommended": false,
+                  "refusal": "",
+                  "target": "",
+                  "url": "/infrastructure/topology/?focus=machine%3Adocker-host-01#trace"
+                }
+              ],
+              "no_help_reason": null,
+              "offers": [
+                {
+                  "capability": "",
+                  "effect": "read",
+                  "label": "Open",
+                  "method": "GET",
+                  "name": "open",
+                  "reason": "",
+                  "recommended": false,
+                  "refusal": "",
+                  "target": "",
+                  "url": "/infrastructure/machines/docker-host-01/"
+                }
+              ],
+              "operator_steps": [
+                {
+                  "command": "docker compose up -d --force-recreate nginx-proxy-manager",
+                  "label": "On docker-host-01, in the compose project that runs nginx-proxy-manager, recreate it",
+                  "notes": []
+                }
+              ],
+              "remedies": [],
+              "rule": "container-image-unpinned",
+              "scope": null,
+              "severity": "attention",
+              "since": null,
+              "subject": "machine:docker-host-01",
+              "title": "nginx-proxy-manager on docker-host-01 runs jc21/nginx-proxy-manager:2.12.1 by tag alone",
+              "workflow": {
+                "id": "resolve:claim:727c884d159f86c2",
+                "label": "What to do",
+                "outcome": {
+                  "claim_id": "claim:727c884d159f86c2",
+                  "kind": "claim_absent",
+                  "label": ""
+                },
+                "steps": [
+                  {
+                    "actions": [
+                      {
+                        "capability": "",
+                        "effect": "read",
+                        "label": "Check again",
+                        "method": "GET",
+                        "name": "verify",
+                        "reason": "Runs this check against current data.",
+                        "recommended": false,
+                        "refusal": "",
+                        "target": "",
+                        "url": "/infrastructure/findings/?rule=container-image-unpinned"
+                      }
+                    ],
+                    "label": "Check again",
+                    "phase": "verify",
+                    "state": "available",
+                    "summary": ""
+                  }
+                ]
+              }
+            }
+          ],
+          "rule": null,
+          "schema_version": 2,
+          "summary": {
+            "findings": 2,
+            "returned": 2,
+            "severities": {
+              "attention": 1,
+              "neutral": 1
+            },
+            "truncated": false
+          }
+        },
+        "ok": true
+      },
       "400": {
         "error": {
           "code": "invalid_input",
-          "message": "findings: limit must be at least 1."
+          "details": [
+            {
+              "loc": [
+                "limit"
+              ],
+              "msg": "Input should be greater than or equal to 1",
+              "type": "greater_than_equal"
+            }
+          ],
+          "message": "get_findings: limit must be greater than or equal to 1."
         },
         "ok": false
       }
     }
   },
-  "getInfrastructureResourcesV2": {
+  "getConnectionsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "actions": [
+            {
+              "capability": "",
+              "effect": "read",
+              "label": "Open connections",
+              "method": "GET",
+              "name": "open",
+              "reason": "",
+              "recommended": false,
+              "refusal": "",
+              "target": "",
+              "url": "/infrastructure/connections/"
+            }
+          ],
+          "authority": "undeclared",
+          "changes": [
+            {
+              "action": null,
+              "available": true,
+              "capability": null,
+              "effect": "infrastructure_change",
+              "evidence": "unverified",
+              "grant": null,
+              "label": "Domain",
+              "missing_scopes": [],
+              "name": "cloudflare.zone",
+              "required_scopes": [],
+              "subject_resource": "infrastructure"
+            }
+          ],
+          "connection_ref": "api-cloudflare",
+          "controller_id": "controller",
+          "credential_fix": null,
+          "credential_model": "scoped",
+          "dependencies": [],
+          "detail": "",
+          "endpoint": null,
+          "facts": [],
+          "family": "infrastructure.controllers",
+          "family_label": "Infrastructure",
+          "granted_scopes": [],
+          "id": "controller:api-cloudflare",
+          "kind": "cloudflare_dns",
+          "label": "api-cloudflare",
+          "last_activity": null,
+          "lifecycle": "reachable",
+          "observed_at": "2026-01-15T09:30:00+00:00",
+          "open_problems": 0,
+          "reach": null,
+          "read_now": null,
+          "read_requested_at": null,
+          "reads": [
+            {
+              "ability": {
+                "action": null,
+                "available": true,
+                "capability": null,
+                "effect": "infrastructure_change",
+                "evidence": "unverified",
+                "grant": null,
+                "label": "Domain",
+                "missing_scopes": [],
+                "name": "cloudflare.zone",
+                "required_scopes": [],
+                "subject_resource": "infrastructure"
+              },
+              "label": "Domain",
+              "sight": {
+                "error": "",
+                "freshness": "never",
+                "freshness_label": "No reading yet",
+                "kind": "cloudflare.zone",
+                "label": "Domain",
+                "observed_at": null,
+                "parts": [],
+                "permissions": [],
+                "records": 0,
+                "refusal": "",
+                "remedy": "",
+                "requires": "",
+                "source": "resource",
+                "state": "never_swept",
+                "state_label": "Never read"
+              }
+            }
+          ],
+          "scopes_known": false,
+          "secret_store": "1Password",
+          "sight": {
+            "credential_refusal": "",
+            "label": "Cloudflare DNS",
+            "manages": [
+              "Domain"
+            ],
+            "provider": "cloudflare_dns",
+            "tally": [
+              {
+                "count": 2,
+                "state": "Never read"
+              }
+            ]
+          },
+          "status": "good",
+          "status_label": "Working",
+          "targets": [
+            {
+              "label": "example.com",
+              "resource_key": "",
+              "url": ""
+            }
+          ],
+          "used_for": "Infrastructure",
+          "would_also_see": []
+        },
+        "ok": true
+      }
+    }
+  },
+  "getInfrastructureV2": {
     "responses": {
       "200": {
         "data": {
@@ -123,6 +579,15 @@
       "404": {
         "error": {
           "code": "not_found",
+          "details": {
+            "identifier": "key",
+            "next": {
+              "arguments": {
+                "name": "infrastructure"
+              },
+              "tool": "list_resource"
+            }
+          },
           "message": "That record was not found."
         },
         "ok": false
@@ -134,6 +599,15 @@
       "404": {
         "error": {
           "code": "not_found",
+          "details": {
+            "identifier": "name",
+            "next": {
+              "arguments": {
+                "name": "machines"
+              },
+              "tool": "list_resource"
+            }
+          },
           "message": "No machine has that name."
         },
         "ok": false
@@ -169,6 +643,15 @@
       "404": {
         "error": {
           "code": "not_found",
+          "details": {
+            "identifier": "slug",
+            "next": {
+              "arguments": {
+                "name": "projects"
+              },
+              "tool": "list_resource"
+            }
+          },
           "message": "No record has that slug."
         },
         "ok": false
@@ -190,7 +673,29 @@
       }
     }
   },
-  "infrastructureReconcileV2": {
+  "hqImportV2": {
+    "responses": {
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "details": [
+            {
+              "loc": [
+                "projects",
+                1,
+                "slug"
+              ],
+              "msg": "Field required",
+              "type": "missing"
+            }
+          ],
+          "message": "hq.import: projects[1].slug is required."
+        },
+        "ok": false
+      }
+    }
+  },
+  "infrastructureResourceReconcileV2": {
     "responses": {
       "409": {
         "error": {
@@ -201,24 +706,127 @@
       }
     }
   },
+  "listActionItemsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 3,
+          "items": [
+            {
+              "action": "Open containers",
+              "detail": "registry.example.net/example-builds/home-automation-server:2024.11.3-ubu2404-ls45 to 2024.12.1-ubu2404-ls48.",
+              "label": "1 running image has an update",
+              "since": "",
+              "source": "Containers",
+              "status": "attention",
+              "url": "/infrastructure/containers/"
+            },
+            {
+              "action": "Open certificate",
+              "detail": "Expires Feb\u00a08\u00a0\u00b7 24 days. Renewal opens at 30 days; renew it or check why renewal did not run.",
+              "label": "wildcard-example-com expires in 24 days",
+              "since": "",
+              "source": "Estate",
+              "status": "attention",
+              "url": "/infrastructure/wildcard-example-com/"
+            },
+            {
+              "action": "",
+              "detail": "A tag can later name a different build, so the next pull or recreate may run one nobody chose. Pin it by digest in its compose file and recreate it.",
+              "label": "nginx-proxy-manager on docker-host-01 runs jc21/nginx-proxy-manager:2.12.1 by tag alone",
+              "since": "",
+              "source": "Infrastructure",
+              "status": "attention",
+              "url": "/infrastructure/findings/?rule=container-image-unpinned"
+            }
+          ],
+          "next": null,
+          "total": 3,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
   "listAnalyticsV2": {
     "responses": {
       "200": {
         "data": {
-          "count": 0,
+          "count": 10,
           "coverage": {
-            "complete": false,
-            "covered_days": 0,
+            "complete": true,
+            "covered_days": 28,
             "end": "2026-01-14",
-            "expected_days": 0,
+            "expected_days": 28,
             "missing_days": 0,
-            "sites": 0,
+            "sites": 1,
             "start": "2025-12-18"
           },
           "days": 28,
           "end": "2026-01-14",
-          "items": [],
-          "next": "",
+          "items": [
+            {
+              "dimension": "path",
+              "pageviews": 1544,
+              "value": "/",
+              "visits": 1112
+            },
+            {
+              "dimension": "path",
+              "pageviews": 872,
+              "value": "/writeups/restored-backups/",
+              "visits": 629
+            },
+            {
+              "dimension": "path",
+              "pageviews": 551,
+              "value": "/writeups/",
+              "visits": 400
+            },
+            {
+              "dimension": "path",
+              "pageviews": 479,
+              "value": "/writeups/why-a-control-panel/",
+              "visits": 344
+            },
+            {
+              "dimension": "path",
+              "pageviews": 384,
+              "value": "/about/",
+              "visits": 277
+            },
+            {
+              "dimension": "path",
+              "pageviews": 183,
+              "value": "/writeups/media-server-on-the-tv/",
+              "visits": 131
+            },
+            {
+              "dimension": "path",
+              "pageviews": 181,
+              "value": "/writeups/mirroring-private-git/",
+              "visits": 128
+            },
+            {
+              "dimension": "path",
+              "pageviews": 181,
+              "value": "/writeups/tailnet-only/",
+              "visits": 130
+            },
+            {
+              "dimension": "path",
+              "pageviews": 177,
+              "value": "/writeups/photos-off-the-cloud/",
+              "visits": 126
+            },
+            {
+              "dimension": "path",
+              "pageviews": 119,
+              "value": "/contact/",
+              "visits": 90
+            }
+          ],
+          "next": null,
           "sample_interval": 1,
           "start": "2025-12-18",
           "total": null,
@@ -232,13 +840,136 @@
     "responses": {
       "200": {
         "data": {
-          "count": 0,
-          "items": [],
-          "next": "",
-          "total": 0,
+          "count": 1,
+          "items": [
+            {
+              "business_use_percentage": 80,
+              "category": "server_hardware",
+              "estimated_deductible_amount": "311.20",
+              "infrastructure": "machine:docker-host-01",
+              "item_name": "Small form factor server",
+              "notes": "",
+              "payment_method": "credit",
+              "purchase_date": "2024-11-11",
+              "serial_number": "",
+              "slug": "sff-server",
+              "status": "active",
+              "total_cost": "389.00",
+              "updated_at": "2024-11-11T19:45:00+00:00",
+              "vendor": "eBay",
+              "warranty_date": null
+            }
+          ],
+          "next": null,
+          "total": 1,
           "truncated": false
         },
         "ok": true
+      }
+    }
+  },
+  "listCalendarV2": {
+    "responses": {
+      "403": {
+        "error": {
+          "code": "forbidden",
+          "message": "api principal 'example-automation' lacks 'read_calendar'."
+        },
+        "ok": false
+      }
+    }
+  },
+  "listConnectionsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 10,
+          "hq_path": null,
+          "items": [
+            {
+              "connection_ref": "npm",
+              "detail": "5 proxy hosts.",
+              "family": "infrastructure.controllers",
+              "id": "example-controller:npm",
+              "kind": "npm",
+              "label": "npm",
+              "observed_at": "2026-01-15T09:30:00+00:00",
+              "open_problems": 0,
+              "status": "good",
+              "status_label": "Working"
+            }
+          ],
+          "next": null,
+          "not_connected": [
+            {
+              "label": "ACME certificate authority",
+              "manages": [],
+              "provider": "acme",
+              "requires": [],
+              "sees": []
+            }
+          ],
+          "posture": {
+            "abilities": 48,
+            "controls": [
+              {
+                "detail": "HQ has no reading of an access list for this name.",
+                "evidence": "Not read",
+                "id": "edge",
+                "label": "The proxy lets in tailnet addresses only",
+                "state": "neutral"
+              }
+            ],
+            "dependencies": 33,
+            "network_gate_enforced": true,
+            "state": "neutral",
+            "summary": "What each connection could reach the last time it was read."
+          },
+          "read_all": null,
+          "reading_everything_since": null,
+          "request": null,
+          "standard": {
+            "advanced": false,
+            "checks": [
+              {
+                "evidence": "2 signing keys",
+                "id": "tailnet-lock",
+                "label": "Tailnet lock is on",
+                "met": true,
+                "qualified": false,
+                "remedy": null,
+                "remedy_url": null,
+                "stops": "a device added to your tailnet without your key"
+              }
+            ],
+            "met": 4,
+            "unread": 2
+          },
+          "summary": {
+            "all_custodied": false,
+            "attention": 0,
+            "connections": 10,
+            "externally_custodied": 9,
+            "healthy": 9,
+            "oldest": {
+              "connection_ref": "adguard",
+              "label": "adguard",
+              "observed_at": "2026-01-15T09:30:00+00:00"
+            },
+            "unverified": 1
+          },
+          "total": 10,
+          "truncated": false,
+          "unclassified": []
+        },
+        "ok": true
+      },
+      "403": {
+        "error": {
+          "code": "forbidden",
+          "message": "api principal 'example-automation' lacks 'read'."
+        },
+        "ok": false
       }
     }
   },
@@ -257,10 +988,21 @@
     "responses": {
       "200": {
         "data": {
-          "count": 0,
-          "items": [],
-          "next": "",
-          "total": null,
+          "count": 9,
+          "items": [
+            {
+              "address": "docker-host-01:adguard",
+              "compose_project": "adguard",
+              "machine": "docker-host-01",
+              "name": "adguard",
+              "serves": [],
+              "state": "running",
+              "status": "Up 12 days (healthy)",
+              "url": "/infrastructure/adguard-container/"
+            }
+          ],
+          "next": null,
+          "total": 9,
           "truncated": false
         },
         "ok": true
@@ -271,10 +1013,138 @@
     "responses": {
       "200": {
         "data": {
-          "count": 0,
-          "items": [],
-          "next": "",
-          "total": 0,
+          "count": 8,
+          "items": [
+            {
+              "content_type": "page",
+              "notes": "",
+              "published_at": "2024-12-11",
+              "published_url": "https://example.com/about/",
+              "slug": "about",
+              "status": "published",
+              "tags": [],
+              "title": "About",
+              "topic": "",
+              "updated_at": "2024-12-12T00:21:00+00:00"
+            }
+          ],
+          "next": null,
+          "total": 8,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listCredentialsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 10,
+          "items": [
+            {
+              "credential_refusal": "",
+              "label": "ACME certificate authority",
+              "provider": "acme",
+              "tally": []
+            },
+            {
+              "credential_refusal": "",
+              "label": "AdGuard Home",
+              "provider": "adguard",
+              "tally": [
+                {
+                  "count": 4,
+                  "state": "Readable"
+                }
+              ]
+            },
+            {
+              "credential_refusal": "",
+              "label": "Cloudflare API",
+              "provider": "cloudflare_api",
+              "tally": [
+                {
+                  "count": 9,
+                  "state": "Readable"
+                }
+              ]
+            },
+            {
+              "credential_refusal": "",
+              "label": "Cloudflare DNS",
+              "provider": "cloudflare_dns",
+              "tally": [
+                {
+                  "count": 2,
+                  "state": "Readable"
+                }
+              ]
+            },
+            {
+              "credential_refusal": "",
+              "label": "GitHub App",
+              "provider": "github_app",
+              "tally": [
+                {
+                  "count": 3,
+                  "state": "Readable"
+                }
+              ]
+            },
+            {
+              "credential_refusal": "",
+              "label": "Nginx Proxy Manager",
+              "provider": "npm",
+              "tally": [
+                {
+                  "count": 6,
+                  "state": "Readable"
+                }
+              ]
+            },
+            {
+              "credential_refusal": "",
+              "label": "1Password",
+              "provider": "onepassword",
+              "tally": []
+            },
+            {
+              "credential_refusal": "",
+              "label": "Portainer",
+              "provider": "portainer",
+              "tally": [
+                {
+                  "count": 7,
+                  "state": "Readable"
+                }
+              ]
+            },
+            {
+              "credential_refusal": "",
+              "label": "SSH",
+              "provider": "ssh",
+              "tally": [
+                {
+                  "count": 2,
+                  "state": "Readable"
+                }
+              ]
+            },
+            {
+              "credential_refusal": "",
+              "label": "Tailscale",
+              "provider": "tailscale",
+              "tally": [
+                {
+                  "count": 5,
+                  "state": "Readable"
+                }
+              ]
+            }
+          ],
+          "next": null,
+          "total": 10,
           "truncated": false
         },
         "ok": true
@@ -285,10 +1155,75 @@
     "responses": {
       "200": {
         "data": {
-          "count": 0,
-          "items": [],
-          "next": "",
-          "total": 0,
+          "count": 4,
+          "items": [
+            {
+              "doc_id": "rb-public-site",
+              "doc_type": "runbook",
+              "environment": "homelab",
+              "external_url": "",
+              "github_path": "",
+              "last_reviewed": "2025-12-16",
+              "notes": "",
+              "obsidian_path": "",
+              "published_at": null,
+              "sensitivity": "internal",
+              "status": "active",
+              "system": "",
+              "title": "Publish the public site and answer its contact form",
+              "updated_at": "2025-12-17T02:40:00+00:00"
+            },
+            {
+              "doc_id": "rb-restore-backup",
+              "doc_type": "runbook",
+              "environment": "homelab",
+              "external_url": "",
+              "github_path": "",
+              "last_reviewed": "2025-12-26",
+              "notes": "",
+              "obsidian_path": "",
+              "published_at": null,
+              "sensitivity": "internal",
+              "status": "active",
+              "system": "",
+              "title": "Restore a volume from the offsite backup",
+              "updated_at": "2025-12-26T18:01:00+00:00"
+            },
+            {
+              "doc_id": "rb-rotate-tailnet-keys",
+              "doc_type": "runbook",
+              "environment": "tailscale",
+              "external_url": "",
+              "github_path": "",
+              "last_reviewed": "2025-12-01",
+              "notes": "",
+              "obsidian_path": "",
+              "published_at": null,
+              "sensitivity": "internal",
+              "status": "active",
+              "system": "",
+              "title": "Rotate the tailnet lock signing keys",
+              "updated_at": "2025-12-01T22:26:00+00:00"
+            },
+            {
+              "doc_id": "rb-upgrade-containers",
+              "doc_type": "runbook",
+              "environment": "homelab",
+              "external_url": "",
+              "github_path": "",
+              "last_reviewed": "2026-01-06",
+              "notes": "",
+              "obsidian_path": "",
+              "published_at": null,
+              "sensitivity": "internal",
+              "status": "active",
+              "system": "",
+              "title": "Upgrade a container to a new release",
+              "updated_at": "2026-01-07T02:16:00+00:00"
+            }
+          ],
+          "next": null,
+          "total": 4,
           "truncated": false
         },
         "ok": true
@@ -299,10 +1234,56 @@
     "responses": {
       "200": {
         "data": {
-          "count": 0,
-          "items": [],
-          "next": "",
-          "total": 0,
+          "count": 1,
+          "items": [
+            {
+              "declaration": "example-com",
+              "name": "example.com",
+              "node": "zone:example.com",
+              "registration": {
+                "auto_renew": true,
+                "expires": "2026-08-03T09:30:00+00:00",
+                "source": "Registration"
+              },
+              "services": [
+                {
+                  "hostname": "docs.example.com",
+                  "status": "neutral"
+                },
+                {
+                  "hostname": "example.com",
+                  "status": "neutral"
+                },
+                {
+                  "hostname": "git.example.com",
+                  "status": "good"
+                },
+                {
+                  "hostname": "home-automation-dashboard.example.com",
+                  "status": "good"
+                },
+                {
+                  "hostname": "hq.example.com",
+                  "status": "good"
+                },
+                {
+                  "hostname": "photos.example.com",
+                  "status": "good"
+                },
+                {
+                  "hostname": "status.example.com",
+                  "status": "neutral"
+                },
+                {
+                  "hostname": "streaming.example.com",
+                  "status": "good"
+                }
+              ],
+              "url": "/domains/example.com/"
+            }
+          ],
+          "next": null,
+          "total": 1,
           "truncated": false
         },
         "ok": true
@@ -313,23 +1294,23 @@
     "responses": {
       "200": {
         "data": {
-          "count": 4,
+          "count": 6,
           "items": [
             {
-              "detail": "of 0",
+              "detail": "of 3",
               "id": "hq.estate.machines",
               "label": "Machines online",
               "status": "",
               "url": "/infrastructure/machines/",
-              "value": "0"
+              "value": "3"
             },
             {
-              "detail": "1 not fully set up",
+              "detail": "",
               "id": "hq.estate.services",
               "label": "Services",
               "status": "",
               "url": "/infrastructure/services/",
-              "value": "1"
+              "value": "8"
             },
             {
               "detail": "",
@@ -337,7 +1318,23 @@
               "label": "Domains",
               "status": "",
               "url": "/domains/",
-              "value": "0"
+              "value": "1"
+            },
+            {
+              "detail": "example.com\u00a0\u00b7 Registration",
+              "id": "hq.estate.registration",
+              "label": "Next renewal",
+              "status": "",
+              "url": "/domains/example.com/",
+              "value": "200 days"
+            },
+            {
+              "detail": "wildcard-example-com\u00a0\u00b7 Certificate",
+              "id": "hq.estate.certificate",
+              "label": "Next certificate expiry",
+              "status": "",
+              "url": "/infrastructure/wildcard-example-com/",
+              "value": "24 days"
             },
             {
               "detail": "",
@@ -345,11 +1342,11 @@
               "label": "Connections",
               "status": "",
               "url": "/infrastructure/connections/",
-              "value": "4"
+              "value": "10"
             }
           ],
-          "next": "",
-          "total": 4,
+          "next": null,
+          "total": 6,
           "truncated": false
         },
         "ok": true
@@ -360,10 +1357,31 @@
     "responses": {
       "200": {
         "data": {
-          "count": 0,
-          "items": [],
-          "next": "",
-          "total": 0,
+          "count": 9,
+          "items": [
+            {
+              "about": "",
+              "business_purpose": "",
+              "business_use_percentage": 100,
+              "category": "domains",
+              "date": "2025-08-03",
+              "estimated_deductible_amount": "10.44",
+              "id": 3,
+              "item": "example.com renewal",
+              "notes": "",
+              "paid_from": "",
+              "payment_method": "credit",
+              "related_asset": null,
+              "related_content": null,
+              "related_documentation": null,
+              "related_project": null,
+              "total_cost": "10.44",
+              "updated_at": "2025-08-03T23:51:00+00:00",
+              "vendor": "Cloudflare"
+            }
+          ],
+          "next": null,
+          "total": 9,
           "truncated": false
         },
         "ok": true
@@ -386,53 +1404,152 @@
       }
     }
   },
-  "listInfrastructureResourcesV2": {
+  "listHqV2": {
     "responses": {
       "200": {
         "data": {
-          "count": 1,
+          "count": 0,
+          "items": [],
+          "label": "Severino HQ",
+          "next": null,
+          "reached": {
+            "channel": "Loopback",
+            "hostname": "testserver",
+            "proof": "1 of 2 steps confirmed by this request"
+          },
+          "release": {
+            "behind": null,
+            "built": null,
+            "default_branch": null,
+            "deployed": "",
+            "digest": "",
+            "extensions": [],
+            "head": "",
+            "image": "",
+            "repository": null,
+            "revision": "",
+            "runs_deployed": null,
+            "signed": null,
+            "signed_unread": "HQ has read no container running it.",
+            "source": "",
+            "standing": "Not known",
+            "vulnerabilities": "not read",
+            "vulnerabilities_unread": "HQ has read no container running it."
+          },
+          "sees": {
+            "could_not_read": 0,
+            "never_read": 0,
+            "not_connected": [],
+            "out_of_date": 0,
+            "read": 40,
+            "readings": [
+              {
+                "error": "",
+                "kind": "host.perimeter",
+                "label": "Open-port test",
+                "observed_at": "2026-01-15T09:30:00+00:00",
+                "out_of_date": false,
+                "provider": "SSH",
+                "records": 1,
+                "remedy": "",
+                "state": "readable"
+              }
+            ]
+          },
+          "status": "good",
+          "summary": "Running",
+          "total": 0,
+          "truncated": false,
+          "where": {
+            "container": null,
+            "machine": null
+          },
+          "work": {
+            "credentials": [
+              {
+                "attempted": "2026-01-15T09:08:00+00:00",
+                "name": "hq",
+                "result": "Already current",
+                "succeeded": "2026-01-15T09:08:00+00:00",
+                "tone": "good"
+              }
+            ],
+            "credentials_unread": "",
+            "jobs": [
+              {
+                "last_run": "2026-01-03T09:30:00+00:00",
+                "next_run": null,
+                "result": "Running",
+                "runs": "Severino HQ",
+                "runs_unit": false,
+                "title": "Severino HQ",
+                "tone": "good",
+                "unit": "severino-hq-web.service"
+              }
+            ],
+            "read_at": "2026-01-15T09:30:00+00:00",
+            "scheduled": [
+              {
+                "every": "Daily",
+                "label": "Delete expired sessions",
+                "last_run": "2026-01-14T09:36:56+00:00",
+                "name": "sessions.clear",
+                "next_due": "2026-01-15T09:37:00+00:00",
+                "recent": [
+                  "Done, Jan 12 03:36"
+                ],
+                "result": "Done"
+              }
+            ],
+            "unread": ""
+          }
+        },
+        "ok": true
+      }
+    }
+  },
+  "listInfrastructureV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 42,
           "items": [
             {
-              "conditions": [
-                {
-                  "message": "Matches HQ's settings.",
-                  "reason": "Observed",
-                  "since": "2026-01-15T09:30:00+00:00",
-                  "status": true,
-                  "type": "Ready"
-                }
-              ],
               "enabled": true,
-              "generation": 1,
               "health": {
                 "label": "Working",
-                "message": "Matches HQ's settings.",
-                "reason": "Observed",
+                "message": "",
+                "reason": "Reconciled",
                 "state": "healthy"
               },
-              "id": "5da6c038-f78f-583a-b073-5da59683c5b1",
               "in_sync": true,
-              "key": "sentinel-rewrite",
+              "key": "hq-dns",
               "kind": "adguard.rewrite",
               "last_observed_at": "2026-01-15T09:30:00+00:00",
-              "observed_generation": 1,
-              "public_effect": false,
-              "spec": {
-                "answer": "192.0.2.10",
-                "domain": "sentinel.example.test"
-              },
-              "status": {
-                "answer": "192.0.2.10",
-                "domain": "sentinel.example.test"
-              },
-              "updated_at": "2026-01-15T09:30:00+00:00"
+              "public_effect": false
             }
           ],
-          "next": "",
-          "total": 1,
+          "next": null,
+          "total": 42,
           "truncated": false
         },
         "ok": true
+      },
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "details": [
+            {
+              "loc": [
+                "kind"
+              ],
+              "msg": "Input should be 'tls.certificate', 'tls.uploaded_certificate', 'npm.proxy_host', 'github.delivery', 'portainer.stack', 'portainer.container', 'tailscale.device', 'tailscale.policy', 'network', 'pki.authority', 'machine', 'tls.delivery_target', 'caddy.route', 'adguard.rewrite', 'cloudflare.dns_record', 'cloudflare.zone' or 'cloudflare.contact_inbox'",
+              "type": "literal_error"
+            }
+          ],
+          "message": "infrastructure: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox."
+        },
+        "ok": false
       }
     }
   },
@@ -440,10 +1557,63 @@
     "responses": {
       "200": {
         "data": {
-          "count": 0,
-          "items": [],
-          "next": "",
-          "total": 0,
+          "count": 3,
+          "items": [
+            {
+              "addresses": [
+                "10.100.200.214",
+                "docker-host-01:22",
+                "100.101.102.103",
+                "fd7a:115c:a1e0:1001:2002:3003:4004:5067"
+              ],
+              "hostnames": [
+                "git.example.com",
+                "home-automation-dashboard.example.com",
+                "hq.example.com",
+                "photos.example.com",
+                "streaming.example.com"
+              ],
+              "name": "docker-host-01",
+              "role": "Docker host",
+              "roles": [
+                {
+                  "id": "tailnet-dns",
+                  "label": "Tailnet DNS"
+                }
+              ],
+              "runs_hq": false,
+              "state": "online",
+              "url": "/infrastructure/machines/docker-host-01/"
+            },
+            {
+              "addresses": [
+                "100.101.102.105",
+                "fd7a:115c:a1e0:1001:2002:3003:4004:5069"
+              ],
+              "hostnames": [],
+              "name": "iphone-16-pro",
+              "role": "",
+              "roles": [],
+              "runs_hq": false,
+              "state": "online",
+              "url": "/infrastructure/machines/iphone-16-pro/"
+            },
+            {
+              "addresses": [
+                "100.101.102.104",
+                "fd7a:115c:a1e0:1001:2002:3003:4004:5068"
+              ],
+              "hostnames": [],
+              "name": "macbook-pro-16",
+              "role": "",
+              "roles": [],
+              "runs_hq": false,
+              "state": "online",
+              "url": "/infrastructure/machines/macbook-pro-16/"
+            }
+          ],
+          "next": null,
+          "total": 3,
           "truncated": false
         },
         "ok": true
@@ -454,14 +1624,30 @@
     "responses": {
       "200": {
         "data": {
-          "count": 1,
+          "count": 6,
           "items": [
             {
-              "slug": "selected-over-the-wire"
+              "category": "homelab",
+              "dependency_updates": false,
+              "description": "The control panel for the homelab: every machine, service, renewal and bill in one place.",
+              "last_push_at": null,
+              "name": "HQ",
+              "public_url": "https://hq.example.com/",
+              "repository_url": "https://github.com/example/hq",
+              "slug": "hq",
+              "status": "active",
+              "technologies": [],
+              "updated_at": "2026-01-15T00:36:00+00:00",
+              "updates": {
+                "last_run": null,
+                "oldest_pull_days": null,
+                "open_pulls": 0,
+                "unmatched_alerts": null
+              }
             }
           ],
-          "next": "",
-          "total": 1,
+          "next": null,
+          "total": 6,
           "truncated": false
         },
         "ok": true
@@ -488,6 +1674,37 @@
           "message": "api principal 'example-automation' lacks 'read'."
         },
         "ok": false
+      },
+      "500": {
+        "error": {
+          "code": "operation_failed",
+          "message": "This request could not be executed."
+        },
+        "ok": false
+      }
+    }
+  },
+  "listReadingsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 40,
+          "items": [
+            {
+              "error": "",
+              "kind": "npm.stream",
+              "label": "NPM stream",
+              "observed_at": "2026-01-15T09:30:00+00:00",
+              "provider": "npm",
+              "records": 0,
+              "state": "readable"
+            }
+          ],
+          "next": null,
+          "total": 40,
+          "truncated": false
+        },
+        "ok": true
       }
     }
   },
@@ -495,11 +1712,114 @@
     "responses": {
       "200": {
         "data": {
-          "count": 0,
-          "items": [],
-          "next": "",
-          "total": 0,
+          "count": 9,
+          "items": [
+            {
+              "amount": "389.00",
+              "content_type": "application/pdf",
+              "date": "2024-11-11",
+              "id": 1,
+              "notes": "",
+              "original_filename": "eBay receipt.pdf",
+              "related_asset": null,
+              "related_expense": 1,
+              "size_bytes": 0,
+              "updated_at": "2024-11-11T17:33:00+00:00",
+              "uploaded_at": "2026-01-15T09:30:00+00:00",
+              "vendor": "eBay"
+            }
+          ],
+          "next": null,
+          "total": 9,
           "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listRequestPathV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "addresses": [
+            {
+              "kind": "loopback",
+              "label": "Loopback",
+              "source": "this request came from it",
+              "value": "127.0.0.1"
+            }
+          ],
+          "connection": {
+            "address": "127.0.0.1",
+            "carried_over": "Not known yet",
+            "channel": "loopback",
+            "channel_label": "Loopback",
+            "device": "No tailnet device at this address",
+            "forwarded": false,
+            "handshake": "\u2013",
+            "identity_agrees": false,
+            "measured_by": "Another tailnet machine (docker-host-01)",
+            "path": "Unknown",
+            "summary": "6 failed\u00a0\u00b7 4 not confirmed",
+            "tailnet_observed_at": null,
+            "transport": "Encryption not confirmed",
+            "untrusted_forwarding": false
+          },
+          "count": 2,
+          "findings": [],
+          "headers": [
+            {
+              "name": "Authorization",
+              "state": "ignored",
+              "value": "present, 657 characters"
+            }
+          ],
+          "hostname": "testserver",
+          "hq_addresses": [],
+          "items": [
+            {
+              "certificate": null,
+              "check": {
+                "detail": "This request reached HQ at testserver.",
+                "label": "Confirmed by this request",
+                "state": "proven",
+                "step": ""
+              },
+              "detail": "",
+              "evidence": [
+                {
+                  "detail": "Whether this request arrived encrypted.",
+                  "label": "Scheme",
+                  "role": "",
+                  "value": "http"
+                }
+              ],
+              "label": "HQ",
+              "layers": [
+                {
+                  "boundary": "Network",
+                  "detail": "This request never left the machine HQ runs on.",
+                  "evidence": "127.0.0.1",
+                  "id": "channel",
+                  "label": "The address is on the tailnet",
+                  "mechanism": "The tailnet address range",
+                  "rules": [],
+                  "state": "does-not"
+                }
+              ],
+              "link": null,
+              "name": "Severino HQ",
+              "overlays": [],
+              "source": null,
+              "step": "hq",
+              "unread": ""
+            }
+          ],
+          "next": null,
+          "proof": "1 of 2 steps confirmed by this request",
+          "total": 2,
+          "truncated": false,
+          "unread": []
         },
         "ok": true
       }
@@ -511,7 +1831,7 @@
         "data": {
           "count": 0,
           "items": [],
-          "next": "",
+          "next": null,
           "total": 0,
           "truncated": false
         },
@@ -523,58 +1843,107 @@
     "responses": {
       "200": {
         "data": {
-          "count": 1,
+          "count": 8,
           "items": [
             {
-              "facets": [
-                {
-                  "id": "runtime",
-                  "label": "Container",
-                  "present": false,
-                  "resources": [],
-                  "state": ""
-                },
-                {
-                  "id": "dns",
-                  "label": "DNS",
-                  "present": true,
-                  "resources": [
-                    "sentinel-rewrite"
-                  ],
-                  "state": "good"
-                },
-                {
-                  "id": "proxy",
-                  "label": "Proxy",
-                  "present": false,
-                  "resources": [],
-                  "state": ""
-                },
-                {
-                  "id": "certificate",
-                  "label": "Certificate",
-                  "present": false,
-                  "resources": [],
-                  "state": ""
-                }
-              ],
-              "faults": [
-                "Resolves to 192.0.2.10, a documentation address. Nothing answers there."
-              ],
-              "hostname": "sentinel.example.test",
-              "mark": "",
+              "faults": [],
+              "hostname": "docs.example.com",
               "origin": {
-                "address": "192.0.2.10",
+                "address": "example-docs.pages.example.net",
                 "container": "",
                 "host": ""
               },
               "project": null,
-              "status": "attention",
-              "status_label": "Incomplete"
+              "status": "unknown",
+              "status_label": "DNS record only"
+            },
+            {
+              "faults": [],
+              "hostname": "example.com",
+              "origin": {
+                "address": "203.0.113.24",
+                "container": "",
+                "host": ""
+              },
+              "project": null,
+              "status": "unknown",
+              "status_label": "DNS record only"
+            },
+            {
+              "faults": [],
+              "hostname": "git.example.com",
+              "origin": {
+                "address": "10.100.200.214:3000",
+                "container": "forgejo",
+                "host": "docker-host-01"
+              },
+              "project": "Self-hosted git",
+              "status": "good",
+              "status_label": "Health check passing"
+            },
+            {
+              "faults": [],
+              "hostname": "home-automation-dashboard.example.com",
+              "origin": {
+                "address": "10.100.200.214:8123",
+                "container": "home-automation",
+                "host": "docker-host-01"
+              },
+              "project": null,
+              "status": "good",
+              "status_label": "Health check passing"
+            },
+            {
+              "faults": [],
+              "hostname": "hq.example.com",
+              "origin": {
+                "address": "10.100.200.214:8000",
+                "container": "hq",
+                "host": "docker-host-01"
+              },
+              "project": "HQ",
+              "status": "good",
+              "status_label": "Health check passing"
+            },
+            {
+              "faults": [],
+              "hostname": "photos.example.com",
+              "origin": {
+                "address": "10.100.200.214:2283",
+                "container": "immich",
+                "host": "docker-host-01"
+              },
+              "project": "Photo library",
+              "status": "good",
+              "status_label": "Health check passing"
+            },
+            {
+              "faults": [],
+              "hostname": "status.example.com",
+              "origin": {
+                "address": "example-status.statuspage.example.net",
+                "container": "",
+                "host": ""
+              },
+              "project": null,
+              "status": "unknown",
+              "status_label": "DNS record only"
+            },
+            {
+              "faults": [],
+              "hostname": "streaming.example.com",
+              "origin": {
+                "address": "10.100.200.214:8096",
+                "container": "jellyfin",
+                "host": "docker-host-01"
+              },
+              "project": "Media server",
+              "status": "good",
+              "status_label": "Health check passing"
             }
           ],
-          "next": "",
-          "total": null,
+          "next": null,
+          "total": 8,
           "truncated": false
         },
         "ok": true
@@ -590,104 +1959,184 @@
             {
               "app_connectors": [],
               "counts": {
-                "grants": 0,
-                "groups": 0,
-                "tags": 0,
-                "tests": 0
+                "grants": 1,
+                "groups": 1,
+                "tags": 1,
+                "tests": 1
               },
               "credential_refusal": null,
               "declaration": null,
-              "findings": [],
-              "grants": [],
-              "groups": [],
-              "known": false,
+              "findings": [
+                {
+                  "affected_scopes": [],
+                  "evidence": [
+                    {
+                      "label": "Trusted",
+                      "value": "100.64.0.0/10"
+                    }
+                  ],
+                  "explanation": "HQ accepts requests from every address in the range. You can narrow the trusted networks in HQ's settings to the addresses the tailnet uses.",
+                  "id": "claim:5bec129f1d278ff4",
+                  "investigations": [
+                    {
+                      "capability": "",
+                      "effect": "read",
+                      "label": "See it in the topology",
+                      "method": "GET",
+                      "name": "topology",
+                      "reason": "What this is connected to.",
+                      "recommended": false,
+                      "refusal": "",
+                      "target": "",
+                      "url": "/infrastructure/topology/?focus=connection%3Ainfrastructure.controllers%3Aexample-controller%3Atailscale#trace"
+                    }
+                  ],
+                  "no_help_reason": null,
+                  "offers": [
+                    {
+                      "capability": "",
+                      "effect": "read",
+                      "label": "Open connections",
+                      "method": "GET",
+                      "name": "open",
+                      "reason": "",
+                      "recommended": false,
+                      "refusal": "",
+                      "target": "",
+                      "url": "/infrastructure/connections/"
+                    }
+                  ],
+                  "operator_steps": [
+                    {
+                      "command": "SEVERINO_TRUSTED_NETWORKS=127.0.0.0/8,::1/128,100.101.102.103/32,100.101.102.104/32,100.101.102.105/32,fd7a:115c:a1e0:1001:2002:3003:4004:5067/128,fd7a:115c:a1e0:1001:2002:3003:4004:5068/128,fd7a:115c:a1e0:1001:2002:3003:4004:5069/128,10.100.200.0/24",
+                      "label": "Set this where HQ is deployed, then restart HQ",
+                      "notes": [
+                        "A device that joins later is refused until it is added."
+                      ]
+                    }
+                  ],
+                  "remedies": [],
+                  "rule": "trusted-wider-than-tailnet",
+                  "scope": null,
+                  "severity": "neutral",
+                  "since": null,
+                  "subject": "connection:infrastructure.controllers:example-controller:tailscale",
+                  "title": "HQ trusts all of 100.64.0.0/10, fd7a:115c:a1e0::/48, and the tailnet uses 6 device addresses and 1 subnet route",
+                  "workflow": {
+                    "id": "resolve:claim:5bec129f1d278ff4",
+                    "label": "What to do",
+                    "outcome": {
+                      "claim_id": "claim:5bec129f1d278ff4",
+                      "kind": "claim_absent",
+                      "label": ""
+                    },
+                    "steps": [
+                      {
+                        "actions": [
+                          {
+                            "capability": "",
+                            "effect": "read",
+                            "label": "Check again",
+                            "method": "GET",
+                            "name": "verify",
+                            "reason": "Runs this check against current data.",
+                            "recommended": false,
+                            "refusal": "",
+                            "target": "",
+                            "url": "/infrastructure/findings/?rule=trusted-wider-than-tailnet"
+                          }
+                        ],
+                        "label": "Check again",
+                        "phase": "verify",
+                        "state": "available",
+                        "summary": ""
+                      }
+                    ]
+                  }
+                }
+              ],
+              "grants": [
+                {
+                  "destinations": [
+                    {
+                      "link": null,
+                      "text": "tag:server"
+                    }
+                  ],
+                  "dst": [
+                    "tag:server"
+                  ],
+                  "ip": [
+                    "tcp:443"
+                  ],
+                  "ports": [
+                    {
+                      "entry": "tcp:443",
+                      "name": "HTTPS"
+                    }
+                  ],
+                  "sources": [
+                    {
+                      "link": null,
+                      "text": "group:admins"
+                    }
+                  ],
+                  "src": [
+                    "group:admins"
+                  ]
+                }
+              ],
+              "groups": [
+                {
+                  "members": [
+                    "alex@example.com"
+                  ],
+                  "name": "group:admins"
+                }
+              ],
+              "known": true,
               "locked_out": [],
               "services": [],
               "settings": [
                 {
                   "label": "MagicDNS",
                   "machines": null,
-                  "value": "Off"
-                },
-                {
-                  "label": "New devices",
-                  "machines": null,
-                  "value": "Join without approval"
-                },
-                {
-                  "label": "New users",
-                  "machines": null,
-                  "value": "Join without approval"
-                },
-                {
-                  "label": "Client updates",
-                  "machines": null,
-                  "value": "Manual"
-                },
-                {
-                  "label": "Policy edited in",
-                  "machines": null,
-                  "value": "Tailscale"
+                  "value": "On"
                 }
               ],
               "ssh_rules": [],
-              "tags": [],
-              "tests": [],
-              "unread": [
+              "tags": [
                 {
-                  "error": null,
-                  "kind": "tailscale.dns",
-                  "label": "Tailnet DNS",
-                  "refusal": null,
-                  "remedy": null,
-                  "requires": "dns:read",
-                  "state": "never_swept",
-                  "state_label": "Never read"
-                },
-                {
-                  "error": null,
-                  "kind": "tailscale.settings",
-                  "label": "Tailnet settings",
-                  "refusal": null,
-                  "remedy": null,
-                  "requires": "feature_settings:read, networking_settings:read, policy_file:read",
-                  "state": "never_swept",
-                  "state_label": "Never read"
-                },
-                {
-                  "error": null,
-                  "kind": "tailscale.user",
-                  "label": "Tailnet user",
-                  "refusal": null,
-                  "remedy": null,
-                  "requires": "users:read",
-                  "state": "never_swept",
-                  "state_label": "Never read"
-                },
-                {
-                  "error": null,
-                  "kind": "tailscale.device",
-                  "label": "Tailnet device",
-                  "refusal": null,
-                  "remedy": null,
-                  "requires": null,
-                  "state": "never_swept",
-                  "state_label": "Never read"
-                },
-                {
-                  "error": null,
-                  "kind": "tailscale.policy",
-                  "label": "Tailnet policy",
-                  "refusal": null,
-                  "remedy": null,
-                  "requires": null,
-                  "state": "never_swept",
-                  "state_label": "Never read"
+                  "machines": [
+                    {
+                      "detail": "",
+                      "external": false,
+                      "identity": "docker-host-01",
+                      "kind": "machine",
+                      "kind_label": "Machine",
+                      "label": "docker-host-01",
+                      "title": "",
+                      "url": "/infrastructure/machines/docker-host-01/"
+                    }
+                  ],
+                  "name": "tag:server",
+                  "owners": [
+                    "group:admins"
+                  ]
                 }
-              ]
+              ],
+              "tests": [
+                {
+                  "accept": [
+                    "tag:server:443"
+                  ],
+                  "src": "alex@example.com"
+                }
+              ],
+              "unread": []
             }
           ],
-          "next": "",
+          "next": null,
           "total": 1,
           "truncated": false
         },
@@ -699,17 +2148,38 @@
     "responses": {
       "200": {
         "data": {
-          "count": 0,
-          "items": [],
-          "next": "",
-          "total": null,
+          "count": 1,
+          "items": [
+            {
+              "address": "docker-host-01:home-automation",
+              "blockers": [
+                {
+                  "id": "no-apply-path",
+                  "reason": "HQ cannot apply an upgrade on docker-host-01 yet."
+                }
+              ],
+              "change": "minor",
+              "from": {
+                "digest": "sha256:d28e6c9378c30c97b2d3117373b60184d2cac0294e2dd6e8432a80f3a868b1ad",
+                "tag": "2024.11.3-ubu2404-ls45"
+              },
+              "risk": "medium",
+              "to": {
+                "digest": "sha256:dea20f655573fcd50487b9c7866f12391d3f6aa0dfc38d3a63bc0078495477ba",
+                "tag": "2024.12.1-ubu2404-ls48"
+              },
+              "viable": false
+            }
+          ],
+          "next": null,
+          "total": 1,
           "truncated": false
         },
         "ok": true
       }
     }
   },
-  "lookupAddressV2": {
+  "lookupAddressReadV2": {
     "responses": {
       "400": {
         "error": {
@@ -729,6 +2199,13 @@
         },
         "ok": false
       },
+      "403": {
+        "error": {
+          "code": "forbidden",
+          "message": "'example-nobody' holds no 'read', which this page reads under."
+        },
+        "ok": false
+      },
       "503": {
         "error": {
           "code": "not_configured",
@@ -741,8 +2218,8 @@
   "projectCreateV2": {
     "request": {
       "payload": {
-        "name": "Machine sync",
-        "slug": "machine-sync",
+        "name": "Capped",
+        "slug": "from-the-phone",
         "status": "active"
       }
     },
@@ -755,7 +2232,7 @@
             "dependency_updates": false,
             "description": "",
             "last_push_at": null,
-            "name": "Machine sync",
+            "name": "Capped",
             "public_url": "",
             "relationships": {
               "assets": [],
@@ -764,7 +2241,7 @@
               "expense_ids": []
             },
             "repository_url": "",
-            "slug": "machine-sync",
+            "slug": "from-the-phone",
             "status": "active",
             "technologies": [],
             "updated_at": "2026-01-15T09:30:00+00:00"
@@ -772,10 +2249,38 @@
         },
         "ok": true
       },
+      "202": {
+        "data": {
+          "applied": false,
+          "approval": {
+            "capability": "project.create",
+            "content_fingerprint": "6c9ba16f74000dd99ad2ac8841847ddd5d8537ac700937d8cae8327f35afbcfd",
+            "expires_at": "2026-01-16T09:30:00+00:00",
+            "id": "43708c02-7e78-5196-bc3a-45ca0445f068",
+            "reason": "",
+            "requested_actor": "example-automation",
+            "requested_at": "2026-01-15T09:30:00+00:00",
+            "requested_interface": "api",
+            "resource_key": "",
+            "resource_kind": "projects",
+            "review_url": "/audit/approval/43708c02-7e78-5196-bc3a-45ca0445f068/",
+            "state": "pending",
+            "target": ""
+          },
+          "message": "This change is waiting for a person to approve it in HQ. Nothing has been written and nothing is queued. Tell whoever asked, with the request id, and stop; approving it is not something a token can do.",
+          "queued": false,
+          "repeated": false,
+          "status": "awaiting_approval"
+        },
+        "ok": true
+      },
       "400": {
         "error": {
           "code": "idempotency_key_required",
-          "message": "Idempotency-Key is required for capabilities that change state."
+          "details": {
+            "field": "payload.idempotency_key"
+          },
+          "message": "A retry key is required for capabilities that change state: send a new one as payload.idempotency_key, and the same one again when you retry this change."
         },
         "ok": false
       },
@@ -796,7 +2301,7 @@
       "409": {
         "error": {
           "code": "idempotency_conflict",
-          "message": "This Idempotency-Key was already used for a different request."
+          "message": "This retry key was already used for a different request."
         },
         "ok": false
       },
@@ -806,10 +2311,17 @@
           "message": "Content-Type must be application/json."
         },
         "ok": false
+      },
+      "500": {
+        "error": {
+          "code": "operation_failed",
+          "message": "project.create could not be executed."
+        },
+        "ok": false
       }
     }
   },
-  "projectDependencyUpdatesV2": {
+  "projectDependencyUpdatesSetV2": {
     "responses": {
       "409": {
         "error": {
@@ -846,13 +2358,36 @@
               "expense_ids": []
             },
             "repository_url": "",
-            "slug": "renamed",
+            "slug": "hq",
             "status": "idea",
             "technologies": [],
             "updated_at": "2026-01-15T09:30:00+00:00"
           }
         },
         "ok": true
+      },
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "details": [
+            {
+              "loc": [
+                "expected_updated_at"
+              ],
+              "msg": "Input is invalid",
+              "type": "value_error"
+            }
+          ],
+          "message": "project.update: expected_updated_at is invalid."
+        },
+        "ok": false
+      },
+      "403": {
+        "error": {
+          "code": "forbidden",
+          "message": "api principal 'example-automation' lacks 'write_projects'."
+        },
+        "ok": false
       },
       "404": {
         "error": {
@@ -870,6 +2405,73 @@
       }
     }
   },
+  "resourceListV2": {
+    "responses": {
+      "403": {
+        "error": {
+          "code": "forbidden",
+          "message": "api principal 'example-automation' lacks 'read_audit_log'."
+        },
+        "ok": false
+      },
+      "404": {
+        "error": {
+          "code": "unknown_resource",
+          "details": {
+            "next": {
+              "arguments": {},
+              "tool": "describe_resources"
+            }
+          },
+          "message": "HQ serves no resource by that name; describe_resources names each one."
+        },
+        "ok": false
+      }
+    }
+  },
+  "resourcesV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "resources": [
+            {
+              "label": "Audit log",
+              "name": "audit",
+              "operations": {
+                "get": null,
+                "list": null,
+                "search": {
+                  "scope": "audit"
+                }
+              },
+              "permitted": false,
+              "required_capabilities": [
+                "read_audit_log"
+              ],
+              "summary": "Security-sensitive audit events indexed by HQ.",
+              "web_route": "core:audit_list"
+            }
+          ],
+          "schema_version": 2,
+          "schemas": "Each list's whole query_schema, with its types and choices, is describe_resources with name set to its resource."
+        },
+        "ok": true
+      },
+      "404": {
+        "error": {
+          "code": "unknown_resource",
+          "details": {
+            "next": {
+              "arguments": {},
+              "tool": "describe_resources"
+            }
+          },
+          "message": "HQ serves no resource by that name; describe_resources names each one."
+        },
+        "ok": false
+      }
+    }
+  },
   "rootV2": {
     "responses": {
       "200": {
@@ -877,7 +2479,7 @@
           "actor": "example-automation",
           "api_version": 2,
           "granted": [
-            "example.write"
+            "read"
           ],
           "links": {
             "capabilities": "/api/v2/capabilities/",
@@ -917,6 +2519,82 @@
   },
   "topologyV2": {
     "responses": {
+      "200": {
+        "data": {
+          "lens": null,
+          "lenses": [
+            {
+              "label": "Has a problem",
+              "name": "attention",
+              "summary": "Everything with a problem right now."
+            },
+            {
+              "label": "In HQ but not found by any connection",
+              "name": "unobserved-resources",
+              "summary": "Records HQ keeps that no connection reports using."
+            },
+            {
+              "label": "In HQ but no connection can change it",
+              "name": "ungoverned-resources",
+              "summary": "Records HQ keeps that none of its connections can change."
+            },
+            {
+              "label": "Things HQ could read but currently cannot",
+              "name": "unobserved-abilities",
+              "summary": "What a service offers that no working connection reads now."
+            },
+            {
+              "label": "Reached by a connection but not in HQ",
+              "name": "unresolved-dependencies",
+              "summary": "Things a connection uses that HQ keeps no record of."
+            },
+            {
+              "label": "Not read as recently as the rest",
+              "name": "stale-observations",
+              "summary": "Things last read well before others of the same type."
+            },
+            {
+              "label": "Connected to nothing",
+              "name": "isolated",
+              "summary": "Things with no link to anything else."
+            }
+          ],
+          "schema_version": 2,
+          "summary": {
+            "edges": 304,
+            "kinds": {
+              "ability": 57,
+              "connection": 10,
+              "controller": 1,
+              "machine": 3,
+              "registry": 1,
+              "resource": 42,
+              "service": 8,
+              "target": 1,
+              "zone": 1
+            },
+            "nodes": 124
+          },
+          "trace": null
+        },
+        "ok": true
+      },
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "details": [
+            {
+              "loc": [
+                "lens"
+              ],
+              "msg": "Input should be 'attention', 'unobserved-resources', 'ungoverned-resources', 'unobserved-abilities', 'unresolved-dependencies', 'stale-observations' or 'isolated'",
+              "type": "literal_error"
+            }
+          ],
+          "message": "get_topology: lens must be one of attention, unobserved-resources, ungoverned-resources, unobserved-abilities, unresolved-dependencies, stale-observations, isolated."
+        },
+        "ok": false
+      },
       "403": {
         "error": {
           "code": "forbidden",

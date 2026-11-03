@@ -9,14 +9,13 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 
-from ..facts import facts_about
 from ..findings import findings
 from ..paths import path_to
 from ..projection import projection_scope
 from ..resource_context import origin_machine
 from ..security import cli_principal
 from ..services import service_catalog
-from ..topology import topology
+from ..topology import derive_topology, topology
 
 CONTROLLER = "example-controller"
 EXPIRES = (timezone.now() + timedelta(days=60)).isoformat()
@@ -173,23 +172,18 @@ class RequestedHostRouteTests(TestCase):
         )
         self.assertNotIn("http.request.host", str(passed_through))
 
-    def test_no_fact_names_the_placeholder_as_an_origin(self):
-        self.routes(PLACEHOLDER, to_requested_host=True)
-
-        with projection_scope():
-            facts = facts_about(["example.dev"], [])
-
-        self.assertTrue(any(fact.source_kind == "caddy.route" for fact in facts))
-        self.assertNotIn("Origin", [fact.label for fact in facts if fact.source_kind == "caddy.route"])
-        self.assertNotIn(PLACEHOLDER, [fact.value for fact in facts])
-
     def test_the_catalog_and_the_graph_read_it_without_an_origin(self):
         self.routes(PLACEHOLDER, to_requested_host=True)
 
         with projection_scope():
             services = service_catalog()
-            graph = topology(principal=cli_principal())
+            routed = next(
+                node for node in derive_topology(principal=cli_principal()).nodes if node.label == "example.dev"
+            )
+            graph = topology(principal=cli_principal(), focus=routed.id, depth=5)
 
+        # The routed name's node is served, so the check below reads it.
+        self.assertIn(routed.id, {node["id"] for node in graph["nodes"]})
         self.assertNotIn("http.request.host", str(graph))
         for service in services:
             if service.origin is not None:

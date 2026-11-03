@@ -109,14 +109,13 @@ class UnchangedPartTests(TestCase):
         self.assertEqual(again.status_code, 304)
         self.assertEqual(again.content, b"")
 
-    def test_a_validator_the_compressor_weakened_still_answers_304(self):
-        first = self.client.get(self.url, headers={"Accept-Encoding": "gzip"})
-        validator = first["ETag"]
-        # Compressed, so weakened: what the browser holds and sends back.
-        self.assertEqual(first["Content-Encoding"], "gzip")
-        self.assertTrue(validator.startswith('W/"'))
+    def test_a_validator_a_compressor_weakened_still_answers_304(self):
+        # Django sends it strong; whatever encodes the body on its way out (HQ's
+        # own compressor, or the proxy's gzip) sends it back weakened.
+        validator = self.client.get(self.url)["ETag"]
+        self.assertTrue(validator.startswith('"'))
 
-        again = self.client.get(self.url, headers={"If-None-Match": validator, "Accept-Encoding": "gzip"})
+        again = self.client.get(self.url, headers={"If-None-Match": f"W/{validator}"})
 
         self.assertEqual(again.status_code, 304)
 
@@ -151,3 +150,16 @@ class UnchangedPartTests(TestCase):
         self.assertIsNone(fragments.base(request, None))
         self.assertIsNone(fragments.standing(None))
         self.assertIsNone(fragments.presented(request, None))
+
+
+class RegionsTests(TestCase):
+    def test_a_region_is_read_as_the_address_and_part_the_browser_asks_for(self):
+        page = (
+            '<div data-fragment="/elsewhere/?a=1&amp;b=2" data-fragment-name="calendar"></div>'
+            '<section data-fragment="" data-fragment-load></section>'
+        )
+
+        self.assertEqual(
+            list(fragments.regions(page, "/here/")),
+            [("/elsewhere/?a=1&b=2", "calendar"), ("/here/", "")],
+        )

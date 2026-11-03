@@ -11,6 +11,7 @@ run before it in `<name>.prev.txt` (docs/Development.md, The gates).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -23,6 +24,7 @@ from collections import deque
 from collections.abc import Collection
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import BinaryIO
 
 ROOT = Path(__file__).resolve().parents[2]
 # The folder a step's test runs write their failed tests into, a JSON list of
@@ -33,7 +35,29 @@ REPORTS = "HQ_TEST_REPORTS"
 # A line of mise's `-c` summary, and the line a task that failed alone ends on,
 # under the name of each task it runs inside. Anchored, so a tool that quotes
 # such a line from a file (a formatter's diff of a test) names nothing.
-TASK = re.compile(r"^(?:\[[^\]\s]+\] )*\[([^\]\s]+)\] (?:exited with status \d+|ERROR task failed)\s*$")
+TASK = re.compile(r"^((?:\[[^\]\s]+\] )*)\[([^\]\s]+)\] (?:exited with status \d+|ERROR task failed)\s*$")
+# The task that runs a command in the heavy turn for the task that asked
+# (mise-tasks/turn): its failure is that task's, named by the prefix it is
+# printed under, or by the step when nothing asked.
+TURN = "turn"
+
+
+def failed_task(line: str) -> str | None:
+    """The task a line of mise's says failed, as the gate names it."""
+
+    if not (task := TASK.match(line)):
+        return None
+    if task[2] != TURN:
+        return task[2]
+    under = re.findall(r"\[([^\]\s]+)\] ", task[1])
+    return under[-1] if under else None
+
+
+# The line mise prints once a task that waited for the heavy turn's lock holds
+# it, the wait as mise writes one: 4.2s, 3m02s, 2h01m.
+WAITED = re.compile(r"^(?:\[[^\]\s]+\] )*got lock heavy after ((?:\d+(?:\.\d+)?[hms])+)\s*$")
+PART = re.compile(r"(\d+(?:\.\d+)?)([hms])")
+SPAN = {"h": 3600.0, "m": 60.0, "s": 1.0}
 # The runner's heading over a failed test's traceback, under the task whose
 # run printed it: the test's id is in the parentheses.
 FAILED_UNDER = re.compile(r"^(?:\[[^\]\s]+\] )*\[([^\]\s]+)\] (?:FAIL|ERROR): \S+ \(([^)\s]+)\)")
@@ -129,6 +153,8 @@ class Step:
     tests: list[FailedTest] = field(default_factory=list)
     seconds: float = 0.0
     took: dict[str, float] = field(default_factory=dict)
+    # Seconds the step's heavy commands waited for the heavy turn.
+    waited: float = 0.0
     unimported: list[str] = field(default_factory=list)
     # The command the step ran, which reruns a failure it names nothing in.
     command: list[str] = field(default_factory=list)
@@ -142,10 +168,12 @@ class Step:
         self.hear(line)
         if (module := UNIMPORTED.match(line)) and module[1] not in self.unimported:
             self.unimported.append(module[1])
-        if (task := TASK.match(line)) and task[1] not in self.tasks:
-            self.tasks.append(task[1])
+        if (task := failed_task(line)) and task not in self.tasks:
+            self.tasks.append(task)
         if failed := FAILED_UNDER.match(line):
             self.under.setdefault(test_label(failed[2]), failed[1])
+        if waiting := WAITED.match(line):
+            self.waited += sum(float(amount) * SPAN[unit] for amount, unit in PART.findall(waiting[1]))
         for task, amount, unit in TIMED.findall(line):
             self.took[task] = float(amount) * UNITS[unit]
 
@@ -219,22 +247,23 @@ def hand_on(tests: list[FailedTest]) -> None:
             json.dump([asdict(failed) for failed in tests], record)
 
 
-def pass_through(output: int, step: Step) -> None:
-    """Copy the command's output to ours byte for byte, each line read on the way past."""
+def pass_through(output: int, step: Step, to: BinaryIO | None = None) -> None:
+    """Copy the command's output to ``to``, ours by default, byte for byte, each line read on the way past."""
 
+    to = to or sys.stdout.buffer
     pending = b""
     # Chunks, not lines: the runner's progress dots arrive without a newline.
     while chunk := os.read(output, 65536):
-        sys.stdout.buffer.write(chunk)
-        sys.stdout.buffer.flush()
+        to.write(chunk)
+        to.flush()
         *lines, pending = (pending + chunk).split(b"\n")
         for line in lines:
             step.read(line.decode(errors="replace"))
     step.read(pending.decode(errors="replace"))
 
 
-def run(label: str, cmd: list[str], cwd: Path = ROOT) -> Step:
-    """Run a command, its output passed through, and gather what failed in it."""
+def run(label: str, cmd: list[str], cwd: Path = ROOT, to: BinaryIO | None = None) -> Step:
+    """Run a command, its output passed through to ``to`` (ours by default), and gather what failed in it."""
 
     step = Step(label, command=cmd)
     started = time.monotonic()
@@ -245,7 +274,7 @@ def run(label: str, cmd: list[str], cwd: Path = ROOT) -> Step:
         with subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
             assert proc.stdout
             try:
-                pass_through(proc.stdout.fileno(), step)
+                pass_through(proc.stdout.fileno(), step, to)
             except KeyboardInterrupt:
                 # The terminal's interrupt reached the command too.
                 proc.wait()
@@ -264,6 +293,8 @@ def run(label: str, cmd: list[str], cwd: Path = ROOT) -> Step:
 
 def verdict(name: str, started: float, steps: list[Step], passed: str = "", outcome: str = "FAILED") -> str:
     elapsed = f"{time.monotonic() - started:.1f}s"
+    if waited := sum(step.waited for step in steps):
+        elapsed += f", {waited:.0f}s of it waiting for the turn"
     aggregates = leaves(steps)
     failed = [failure for step in steps for failure in step.failures(aggregates)]
     if failed:
@@ -316,40 +347,61 @@ def timings(steps: list[Step]) -> list[str]:
     return ["", "Slowest first:", *(f"{seconds:8.1f}s  {task}" for task, seconds in ranked)] if ranked else []
 
 
-def close(
-    name: str,
-    started: float,
-    steps: list[Step],
-    passed: str = "",
-    failed: str = "",
-    outcome: str = "FAILED",
-    tests: str = "",
-) -> None:
-    """Print the closing verdict, ending on the command that reruns what failed,
-    after the path of the file that keeps it whole, the last run's beside it.
+class Gate:
+    """One gate's run, opened before anything it prints and closed on its verdict.
 
-    ``tests`` is the command a failed test reruns under, when it is not
-    ``mise run test``."""
+    Its first line names the file the verdict is kept in: a failed command's
+    output read back through a tool that keeps only its head and tail, cut
+    from its first part, loses the last line, and the head is the one part
+    every cut copy shows. `close` is reached only through an opened gate, so
+    no gate ends on a verdict without having said where it is kept.
+    """
 
-    aggregates = leaves(steps)
-    named = [failure for step in steps for failure in step.everything_failed(aggregates)]
-    line = verdict(name, started, steps, passed, outcome)
-    if named:
-        line += failed + (f"; rerun: {command}" if (command := rerun(name, steps, tests)) else "")
-    stem = re.sub(r"[^\w.-]+", "-", name).strip("-")
-    path = VERDICTS / f"{stem}.txt"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        path.replace(VERDICTS / f"{stem}.prev.txt")
-    kept = [traceback for step in steps for traceback in step.tracebacks()]
-    tails = {task: said for step in steps for task, said in step.tails(aggregates).items()}
-    ended = [part for task, said in tails.items() for part in ("", f"{task} ended on:", *said)]
-    path.write_text("\n".join([line, *named, *ended, *timings(steps), *kept]) + "\n")
-    for task, said in tails.items():
-        shown = (f"[{name}]   {said_line}" for said_line in said[-TAIL_SHOWN:])
-        print(f"[{name}] {task} ended on:", *shown, sep="\n", flush=True)
-    print(f"[{name}] verdict kept in {path}", flush=True)
-    print(line, flush=True)
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.started = time.monotonic()
+        self.stem = re.sub(r"[^\w.-]+", "-", name).strip("-")
+        self.path = VERDICTS / f"{self.stem}.txt"
+        print(f"[{name}] verdict: the last line, kept whole in {self.path}", flush=True)
+
+    def close(
+        self,
+        steps: list[Step],
+        passed: str = "",
+        failed: str = "",
+        outcome: str = "FAILED",
+        tests: str = "",
+    ) -> None:
+        """Print the closing verdict, ending on the command that reruns what failed,
+        after the path of the file that keeps it whole, the last run's beside it.
+
+        ``tests`` is the command a failed test reruns under, when it is not
+        ``mise run test``."""
+
+        name, path = self.name, self.path
+        aggregates = leaves(steps)
+        named = [failure for step in steps for failure in step.everything_failed(aggregates)]
+        line = verdict(name, self.started, steps, passed, outcome)
+        if named:
+            line += failed + (f"; rerun: {command}" if (command := rerun(name, steps, tests)) else "")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Two runs of one gate can close at once (a suite under sh and dash), so
+        # the last verdict may already be moved, and a reader sees one whole.
+        with contextlib.suppress(FileNotFoundError):
+            path.replace(path.with_name(f"{self.stem}.prev.txt"))
+        kept = [traceback for step in steps for traceback in step.tracebacks()]
+        tails = {task: said for step in steps for task, said in step.tails(aggregates).items()}
+        ended = [part for task, said in tails.items() for part in ("", f"{task} ended on:", *said)]
+        with tempfile.NamedTemporaryFile(
+            "w", dir=path.parent, prefix=f".{self.stem}.", suffix=".txt", delete=False
+        ) as whole:
+            whole.write("\n".join([line, *named, *ended, *timings(steps), *kept]) + "\n")
+        Path(whole.name).replace(path)
+        for task, said in tails.items():
+            shown = (f"[{name}]   {said_line}" for said_line in said[-TAIL_SHOWN:])
+            print(f"[{name}] {task} ended on:", *shown, sep="\n", flush=True)
+        print(f"[{name}] verdict kept in {path}", flush=True)
+        print(line, flush=True)
 
 
 USAGE = "usage: python -m tools.gate.verdict <name> (<command...> | --step <label> <command...>...)"
@@ -377,7 +429,7 @@ def main(argv: list[str]) -> int:
     if not argv:
         sys.exit(USAGE)
     name, planned = argv[0], commands(argv[0], argv[1:])
-    started = time.monotonic()
+    gate = Gate(name)
     steps = []
     try:
         for label, cmd in planned:
@@ -386,7 +438,7 @@ def main(argv: list[str]) -> int:
             steps.append(run(label, cmd))
     except KeyboardInterrupt:
         return 130
-    close(name, started, steps)
+    gate.close(steps)
     return 0 if all(step.ok for step in steps) else 1
 
 

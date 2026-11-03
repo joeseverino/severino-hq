@@ -38,6 +38,7 @@ lazy from . import connections, container_attention
 lazy from .attestations import github_source
 lazy from .container_hardening import hardening_of
 lazy from .container_standard import posture_of, runtime_path
+lazy from .container_usage import usage_of
 lazy from .docker_sections import unused_images
 lazy from .entity_links import entity_link
 lazy from .facts import inventory_records
@@ -511,6 +512,10 @@ class Container:
         because neither a machine's name nor a container's can hold one."""
 
         return f"{self.machine.name}:{self.running.name}"
+
+    @property
+    def usage(self):
+        return usage_of(self.runtime)
 
     @property
     def posture(self):

@@ -7,3 +7,27 @@ generate:
 output-options:
   skip-prune: true
   prefer-skip-optional-pointer: true
+  user-templates:
+    # The built-in typedef.tmpl, and for each type with a setting the registry
+    # marks secret the methods that print and log it with that setting
+    # redacted (redact.go), so a new secret setting is covered by derivation.
+    typedef.tmpl: |
+      {{range .Types}}
+      {{ .DocComment }}
+      type {{.TypeName}} {{if .IsAlias }}={{end}} {{.Schema.TypeDecl}}
+      {{- $secret := false}}
+      {{- range .Schema.Properties}}{{with index .Extensions "x-oapi-codegen-extra-tags"}}{{with index . "secret"}}{{if eq . "true"}}{{$secret = true}}{{end}}{{end}}{{end}}{{end}}
+      {{- if $secret}}
+
+      // String is the settings with each secret one redacted.
+      func (s {{.TypeName}}) String() string { return redactedString(s) }
+
+      // Format writes String for every verb: %+v and %#v would otherwise print
+      // the secret.
+      func (s {{.TypeName}}) Format(state fmt.State, _ rune) { _, _ = io.WriteString(state, s.String()) }
+
+      // LogValue is what a structured log records of the settings: each secret
+      // one redacted.
+      func (s {{.TypeName}}) LogValue() slog.Value { return redactedLog(s) }
+      {{- end}}
+      {{end}}

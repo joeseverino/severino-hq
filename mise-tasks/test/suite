@@ -2,7 +2,9 @@
 #MISE description="The suite as production configures it, with the coverage floor"
 #MISE hide=true
 #MISE extends="django"
-#MISE env={DJANGO_DEBUG=false, SEVERINO_HEAVY_BOUND="30m"}
+#MISE env={DJANGO_DEBUG=false}
+#MISE lock="heavy"
+#MISE timeout="30m"
 
 # DJANGO_DEBUG unset: the settings take the defaults production takes (secure
 # cookies, cached templates, no live static). The development defaults are
@@ -11,9 +13,6 @@
 # Coverage follows the workers, and its report combines their data and judges
 # it against the floor (pyproject.toml).
 set -eu
-
-# shellcheck source=tools/lib/heavy-turn.sh
-. ./tools/lib/heavy-turn.sh
 
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
@@ -24,6 +23,13 @@ mkdir -p var/coverage
 uv run coverage erase
 uv run coverage run manage.py test --noinput --parallel auto --durations 10 >"$log" 2>&1 || status=$?
 cat "$log"
+# The runner's slowest classes, kept per Python whether or not the run passed,
+# so where a run's time went is read from data rather than gate totals.
+classes="$(awk '/^Slowest test classes/ { on = 1; print; next } on && /^  / { print; next } { on = 0 }' "$log")"
+if [ -n "$classes" ]; then
+    mkdir -p var/gate
+    printf '%s\n' "$classes" >"var/gate/test-classes-${UV_PYTHON:-default}.txt"
+fi
 [ "$status" -eq 0 ]
 # Under the floor, coverage prints its verdict after the total and exits 2.
 total="$(uv run coverage report --format=total --precision=2)" || {
@@ -44,5 +50,16 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
             | sed -E 's/^([0-9.]+)s +[^ ]+ \(([^)]+)\).*/| \1 | <code>\2<\/code> |/'
         echo
         echo "</details>"
+        if [ -n "$classes" ]; then
+            echo
+            echo "<details><summary>${classes%%
+*}</summary>"
+            echo
+            echo "| Seconds | Class |"
+            echo "| ---: | --- |"
+            printf '%s\n' "$classes" | sed -nE 's/^ +([0-9.]+)s +(.+)$/| \1 | <code>\2<\/code> |/p'
+            echo
+            echo "</details>"
+        fi
     } >>"$GITHUB_STEP_SUMMARY"
 fi

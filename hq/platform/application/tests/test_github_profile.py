@@ -6,12 +6,13 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.models import AuditLog, LinkedAccount
 
 from .. import github_profile
 from ..asks import READ_WAITING
 from ..capabilities import capability_registry, execute_capability
-from ..security import Principal
+from ..security import Capability, Principal
 from .markup import hrefs, select, text
 from .sentinel import SENTINEL
 
@@ -220,7 +221,9 @@ class PageTests(TestCase):
         LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")
         hold()
 
-        response = self.client.post(reverse("watching_refresh"), headers={"x-requested-with": "XMLHttpRequest"})
+        response = self.client.post(
+            reverse("watching_refresh"), form_keyed(), headers={"x-requested-with": "XMLHttpRequest"}
+        )
 
         self.assertEqual(response.status_code, 202)
         answer = response.json()
@@ -233,7 +236,7 @@ class PageTests(TestCase):
         LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")
         hold()
 
-        self.client.post(reverse("watching_refresh"))
+        self.client.post(reverse("watching_refresh"), form_keyed())
 
         self.assertTrue(
             AuditLog.objects.filter(
@@ -249,10 +252,11 @@ class PageTests(TestCase):
         hold()
         lacking = Principal(actor="operator", interface="web", capabilities=frozenset({"manage_infrastructure"}))
 
-        with patch("hq.domains.projects.views.web_principal", return_value=lacking):
-            response = self.client.post(reverse("watching_refresh"), follow=True)
+        with patch("hq.platform.application.web_writes.web_principal", return_value=lacking):
+            response = self.client.post(reverse("watching_refresh"), form_keyed(), follow=True)
 
-        self.assertIn("You may not read from GitHub.", text(response))
+        # The refusal names the grant the person lacks.
+        self.assertIn(Capability.LOOK_UP_PUBLIC_RECORDS.value, text(response))
         self.assertIsNone(github_profile.asked_at())
         self.assertTrue(
             AuditLog.objects.filter(
@@ -264,7 +268,7 @@ class PageTests(TestCase):
         LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")
         hold()
 
-        response = self.client.post(reverse("watching_refresh"), follow=True)
+        response = self.client.post(reverse("watching_refresh"), form_keyed(), follow=True)
 
         self.assertRedirects(response, reverse("watching"))
         self.assertIn(capability_registry()[github_profile.READ_NOW].requested("@example-user"), text(response))
@@ -275,9 +279,9 @@ class PageTests(TestCase):
     def test_the_status_says_when_the_read_landed_or_was_refused(self):
         LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")
         hold()
-        status = self.client.post(reverse("watching_refresh"), headers={"x-requested-with": "XMLHttpRequest"}).json()[
-            "status"
-        ]
+        status = self.client.post(
+            reverse("watching_refresh"), form_keyed(), headers={"x-requested-with": "XMLHttpRequest"}
+        ).json()["status"]
 
         hold({**PROFILE, "followers": 4})
         self.assertEqual(self.client.get(status).json()["state"], "done")

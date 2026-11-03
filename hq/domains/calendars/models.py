@@ -20,6 +20,11 @@ from hq.platform.core.rules import Rule
 lazy from hq.platform.application.calendar_entries import repeat_label
 lazy from hq.platform.application.moments import when_day
 
+# How far apart a repeating entry's occurrences may be, in its own unit: a
+# year of days at most. The rule below and the command's schema both read it.
+INTERVAL_MINIMUM = 1
+INTERVAL_MAXIMUM = 366
+
 
 class Entry(TimestampedModel):
     """One entry on My Calendar, in the operator's own time zone.
@@ -95,9 +100,9 @@ class Entry(TimestampedModel):
                 field="ends_at",
             ),
             Rule(
-                condition=Q(interval__gte=1, interval__lte=366),
+                condition=Q(interval__gte=INTERVAL_MINIMUM, interval__lte=INTERVAL_MAXIMUM),
                 name="calendar_entry_interval_in_range",
-                violation_error_message="Repeat every 1 to 366.",
+                violation_error_message=f"Repeat every {INTERVAL_MINIMUM} to {INTERVAL_MAXIMUM}.",
                 field="interval",
             ),
             Rule(

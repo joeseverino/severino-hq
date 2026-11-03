@@ -276,6 +276,7 @@ class TailnetKeyRenameTests(TestCase):
         these devices, which is worse than the key it set out to fix.
         """
 
+        from hq.platform.core import append_only
         from hq.platform.core.models import AuditLog
 
         self.device("box-2", "box")
@@ -286,7 +287,9 @@ class TailnetKeyRenameTests(TestCase):
             object_repr="box-2",
         )
 
-        rename_tailnet_keys.forwards(_RealApps, None)
+        # The migration ran before the log was append-only, as it runs here.
+        with append_only.lifted():
+            rename_tailnet_keys.forwards(_RealApps, None)
 
         self.assertTrue(AuditLog.objects.filter(object_type="ManagedResource", object_id="box-tailnet").exists())
 

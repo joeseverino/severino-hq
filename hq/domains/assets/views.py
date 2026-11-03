@@ -16,6 +16,7 @@ from hq.platform.application.assets import managed_domain
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.expenses import cost_totals
+from hq.platform.application.labels import dotted_html
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.references import ReferencePickerMixin, reference_of, referenced_by_row
 from hq.platform.application.security import web_principal
@@ -25,7 +26,7 @@ from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from .forms import AssetForm
 from .models import ASSET_CATEGORY_CHOICES, Asset
 
-ASSETS_TRAIL = ("Assets", reverse_lazy("assets:list"))
+ASSETS_TRAIL = (("Assets", reverse_lazy("assets:list")),)
 
 
 class AssetListView(PageMixin, TableListMixin, ListView):
@@ -123,11 +124,9 @@ class AssetDetailView(PageMixin, DetailView):
 
     @override
     def get_page_lede(self):
-        return format_html(
-            '{} · <span class="pill pill-{}">{}</span>',
+        return dotted_html(
             self.object.get_category_display(),
-            self.object.status,
-            self.object.get_status_display(),
+            format_html('<span class="pill pill-{}">{}</span>', self.object.status, self.object.get_status_display()),
         )
 
     @override

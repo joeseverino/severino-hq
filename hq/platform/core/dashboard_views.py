@@ -15,7 +15,6 @@ from hq.platform.application import action_items as queue_state, fragments, gett
 from hq.platform.application.cadence import controller_standing
 from hq.platform.application.calendar import calendar_month, month_of
 from hq.platform.application.calendar_entries import calendar_choices
-from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.connection_setup import docs_url
 from hq.platform.application.dashboard import dashboard_highlights, operating_snapshot
 from hq.platform.application.derivations import every_revision
@@ -33,6 +32,7 @@ from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import ListRow
 from hq.platform.application.visit_refresh import worth_asking
+from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.platform.application.pins import CHOOSE, DASHBOARD_LINK
 
 # A queue of this many or fewer is read on the dashboard itself, each card
@@ -70,11 +70,8 @@ class DashboardLinkChoiceView(View):
             for href in request.POST.getlist("href")
             if href.lower() in offered
         }
-        result = execute_capability(
-            CHOOSE, {"kind": DASHBOARD_LINK, "keys": sorted(keep)}, principal=web_principal(request.user)
-        )
-        if not result["ok"]:
-            messages.error(request, result["error"]["message"])
+        result = execute_posted(request, CHOOSE, {"kind": DASHBOARD_LINK, "keys": sorted(keep)})
+        refused(request, result)
         # One answer for both callers. A browser follows this and lands on the
         # dashboard; a fetch follows it too and reads the panel out of the page
         # it gets back, so what is shown is what was stored rather than what the
@@ -122,8 +119,9 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         if part is not None:
             ctx.update(part(self))
             return ctx
-        snapshot = operating_snapshot(principal=web_principal(self.request.user))
-        highlights = dashboard_highlights()
+        principal = web_principal(self.request.user)
+        snapshot = operating_snapshot(principal=principal)
+        highlights = dashboard_highlights(principal)
         glance = glance_context()
         for project in snapshot["active_projects"]:
             project["updated_at"] = moment(project["updated_at"], naive="keep")
@@ -239,7 +237,7 @@ class DashboardGlanceView(View):
         """
 
         name = DASHBOARD_REFRESH_STALE if request.POST.get("scope") == "stale" else DASHBOARD_REFRESH
-        result = execute_capability(name, {}, principal=web_principal(request.user))
+        result = execute_posted(request, name, {})
         if not result["ok"]:
             return render(request, self.template_name, glance_context(), status=403)
         # Drawn after the ask, so each panel asked for shows its refresh.
@@ -259,16 +257,14 @@ class DashboardGlanceSettingsView(View):
         )
 
     def post(self, request):
-        result = execute_capability(
+        result = execute_posted(
+            request,
             DASHBOARD_SETTINGS,
             {
                 field: request.POST.get(field, "")
                 for field in ("weather_point", "weather_label", "infrastructure_label")
             },
-            principal=web_principal(request.user),
         )
-        if result["ok"]:
+        if not refused(request, result):
             messages.success(request, "Dashboard settings saved.")
-        else:
-            messages.error(request, result["error"]["message"])
         return redirect("dashboard")

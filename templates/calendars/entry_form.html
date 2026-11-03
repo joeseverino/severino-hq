@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
 <form method="post" class="form">
-  {% csrf_token %}
+  {% write_token %}
   {% include "partials/_form_errors.html" %}
   {% for field in form %}
     {% if field.name == "interval" or field.name == "repeat_until" %}
@@ -13,7 +13,7 @@
     {% endif %}
   {% endfor %}
   <div class="form-actions">
-    <button type="submit" class="primary">{% if object %}Save changes{% else %}Add event{% endif %}</button>
+    <button type="submit" class="primary">{% if object %}Save changes{% else %}{% words "calendar.entry.create" %}{% endif %}</button>
     <a class="btn" href="{% if object %}{{ object.get_absolute_url }}{% else %}{% url 'calendar:month' %}{% endif %}">Cancel</a>
   </div>
 </form>

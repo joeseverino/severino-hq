@@ -8,18 +8,13 @@ from django.db.models.functions import Cast
 
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.search_index.backends import SnippetParts, search_backend
-from hq.platform.search_index.registry import BY_SCOPE
+from hq.platform.search_index.registry import by_scope
 
 from .projection import page_size, projection_scope
 from .resources import resource_search_capabilities
-from .security import AuthorizationError, Capability, Principal, require_all
+from .security import Capability, Principal, require_all
 
 MAX_SEARCH_RESULTS = 5000
-
-# Every scope is readable with the baseline READ capability except the audit
-# trail: it is a security log, and free-text search over it is strictly more
-# revealing than the bounded recent_activity projection MCP already gets.
-SCOPE_CAPABILITIES = dict.fromkeys(BY_SCOPE, Capability.READ) | resource_search_capabilities()
 
 
 class UnknownSearchScope(ValueError):
@@ -46,10 +41,16 @@ def _fts5_available() -> bool:
 
 
 def _authorize(scope: str, principal: Principal) -> None:
-    if scope not in BY_SCOPE:
+    if scope not in by_scope():
         raise UnknownSearchScope(f"Unknown search scope {scope!r}.")
-    required = SCOPE_CAPABILITIES[scope]
-    require_all(principal, required if isinstance(required, tuple) else (required,))
+    require_all(principal, _required(scope))
+
+
+def _required(scope: str) -> tuple[Capability | str, ...]:
+    # Every scope is readable with the baseline READ capability except the audit
+    # trail: it is a security log, and free-text search over it is strictly more
+    # revealing than the bounded recent_activity projection MCP already gets.
+    return resource_search_capabilities().get(scope, (Capability.READ,))
 
 
 def search_ids(scope: str, query: str, *, principal: Principal, limit: int = 100) -> list[str]:
@@ -61,7 +62,7 @@ def search_ids(scope: str, query: str, *, principal: Principal, limit: int = 100
     capped_limit = page_size(limit, maximum=MAX_SEARCH_RESULTS)
     if _fts5_available():
         return search_backend.search(scope=scope, query=query, limit=capped_limit)
-    return _fallback_ids(BY_SCOPE[scope], query, capped_limit)
+    return _fallback_ids(by_scope()[scope], query, capped_limit)
 
 
 def apply_search(queryset: QuerySet, *, scope: str, query: str, principal: Principal) -> QuerySet:
@@ -73,7 +74,7 @@ def apply_search(queryset: QuerySet, *, scope: str, query: str, principal: Princ
     statement carries the same few parameters however many rows match.
     """
     _authorize(scope, principal)
-    identifier_field = BY_SCOPE[scope].identifier_field
+    identifier_field = by_scope()[scope].identifier_field
     if not _fts5_available():
         return _apply_fallback_search(queryset, scope, query, principal)
     position = search_backend.position(
@@ -103,7 +104,7 @@ def _apply_fallback_search(queryset: QuerySet, scope: str, query: str, principal
     ids = search_ids(scope, query, principal=principal, limit=MAX_SEARCH_RESULTS)
     if not ids:
         return _no_matches(queryset)
-    identifier_field = BY_SCOPE[scope].identifier_field
+    identifier_field = by_scope()[scope].identifier_field
     return queryset.filter(**{f"{identifier_field}__in": ids}).annotate(
         _search_rank=Value(0, output_field=IntegerField())
     )
@@ -155,7 +156,7 @@ def _hits_by_scope(scopes: list[str], query: str, limit: int) -> dict[str, list[
         return search_backend.search_scopes(scopes=scopes, query=query, limit=limit)
     hits = {}
     for scope in scopes:
-        object_ids = _fallback_ids(BY_SCOPE[scope], query, limit)
+        object_ids = _fallback_ids(by_scope()[scope], query, limit)
         if object_ids:
             hits[scope] = [(object_id, None) for object_id in object_ids]
     return hits
@@ -202,21 +203,18 @@ def global_search(query: str, *, principal: Principal, limit_per_scope: int = 8)
 
 
 def _may_search(scope: str, principal: Principal) -> bool:
-    try:
-        _authorize(scope, principal)
-    except AuthorizationError:
-        return False
-    return True
+    return principal.permits(*_required(scope))
 
 
 def _global_search(query: str, *, principal: Principal, limit_per_scope: int) -> dict:
     # Authorization decides which scopes the index is asked about, so a scope
     # the principal may not search is never read, not read and then dropped.
-    permitted = [scope for scope in BY_SCOPE if _may_search(scope, principal)]
+    definitions = by_scope()
+    permitted = [scope for scope in definitions if _may_search(scope, principal)]
     hits_by_scope = _hits_by_scope(permitted, query, limit_per_scope)
     groups = []
     for scope in permitted:
-        definition = BY_SCOPE[scope]
+        definition = definitions[scope]
         items = _global_items(definition, query, hits_by_scope.get(scope, []))
         groups.append(
             {
@@ -258,7 +256,7 @@ def _global_items(
 def search_records(scope: str, query: str, *, principal: Principal, limit: int = 50) -> dict:
     """Adapter-neutral JSON result for CLI, TUI, and remote delivery surfaces."""
     _authorize(scope, principal)
-    definition = BY_SCOPE[scope]
+    definition = by_scope()[scope]
     hits = _hits_by_scope([scope], query, limit).get(scope, [])
     records = _fetch_records(definition, [object_id for object_id, _ in hits])
     items = []

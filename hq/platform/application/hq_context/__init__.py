@@ -10,11 +10,13 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from ..projection import projection_scope
-from .release import Release, release, release_json, release_tile, repository as repository_of
-from .sight import KEYLESS, HqSight, Sees, sight, sight_json, sight_tile
+from hq.platform.application.labels import dotted
+
+from ..projection import complete, projection_scope
+from .release_part import Release, release, release_json, release_tile, repository as repository_of
+from .sight_part import KEYLESS, HqSight, Sees, sight, sight_json, sight_tile
 from .tones import ATTENTION, GOOD, NEUTRAL, SERIOUS, Tile
-from .work import Renderer, Work, WorkUnit, work, work_json
+from .work_part import Renderer, Work, WorkUnit, work, work_json
 lazy from .. import hq_self, request_context, service_health
 lazy from ..decisions import urgency
 lazy from ..entity_links import entity_link
@@ -22,6 +24,7 @@ lazy from ..findings import finding_key
 lazy from ..hq_self import hq_hostnames, own_machine, serving, site_label
 lazy from ..problems import About, problems_by_part
 lazy from ..request_path import request_path
+lazy from ..security import Principal
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,18 +68,18 @@ class HQContext:
         )
 
 
-def hq_context(request: Any = None) -> HQContext:
-    """HQ as the page and the resource say it, for ``request`` when there is one."""
+def hq_context(request: Any = None, *, principal: Principal) -> HQContext:
+    """HQ as the page and the resource say it to ``principal``, for ``request`` when there is one."""
 
     with projection_scope(seed=serving(request) if request is not None else None):
-        return _context(request)
+        return _context(request, principal)
 
 
-def _context(request: Any) -> HQContext:
+def _context(request: Any, principal: Principal) -> HQContext:
     container = hq_self.own_container()
     machine = container.machine if container is not None else own_machine()
     path = request_path(request) if request is not None else None
-    found = _problems(machine, container, reached=path is not None)
+    found = _problems(machine, container, principal, reached=path is not None)
     problems = tuple(item for _, item in found)
     return HQContext(
         label=site_label() or "HQ",
@@ -100,8 +103,10 @@ RELEASE, WHERE, REACH, SIGHT = "release", "where", "reach", "sight"
 _SEVERITY = (SERIOUS, ATTENTION, NEUTRAL)
 
 
-def _problems(machine: Any, container: Any, *, reached: bool) -> tuple[tuple[str, Mapping[str, Any]], ...]:
-    """The queue's open items about HQ, each with the part of the page it
+def _problems(
+    machine: Any, container: Any, principal: Principal, *, reached: bool
+) -> tuple[tuple[str, Mapping[str, Any]], ...]:
+    """The queue's open items about HQ that ``principal`` may read, each with the part of the page it
     belongs under: the repository under the release, the machine and
     container under where it runs, its hostnames under how it was reached (or
     where it runs, when no request says how), the controller under what it
@@ -121,10 +126,11 @@ def _problems(machine: Any, container: Any, *, reached: bool) -> tuple[tuple[str
     return problems_by_part(
         {
             RELEASE: About(under=(repository.url,) if repository is not None else ()),
-            WHERE: About(urls=urls if reached else urls + names),
+            WHERE: About(urls=urls if reached else urls + names, part=container.running.name if container else ""),
             REACH: About(urls=names if reached else ()),
             SIGHT: About(keys=keys),
-        }
+        },
+        principal,
     )
 
 
@@ -136,7 +142,7 @@ def _status(problems: Iterable[Mapping[str, Any]]) -> tuple[str, str]:
     if not states:
         return GOOD, "Running"
     counts = [(state, states.count(state)) for state in _SEVERITY if state in states]
-    summary = " · ".join(f"{count} {urgency(state).lower()}" for state, count in counts)
+    summary = dotted(*(f"{count} {urgency(state).lower()}" for state, count in counts))
     return counts[0][0] if counts else ATTENTION, summary or "Needs attention"
 
 
@@ -150,11 +156,7 @@ def _runs_tile(found: HQContext) -> Tile:
     if found.machine is None:
         return Tile("Runs on", "Not known", "No machine HQ reads answers at HQ's addresses.", icon="server")
     container = found.container
-    detail = (
-        " · ".join(filter(None, (container.running.name, container.uptime)))
-        if container is not None
-        else "Its container is not known"
-    )
+    detail = dotted(container.running.name, container.uptime) if container is not None else "Its container is not known"
     healthy = container is not None and container.running.healthy
     return Tile("Runs on", found.machine.name, detail, found.machine.url, GOOD if healthy else ATTENTION, "server")
 
@@ -194,20 +196,20 @@ def serialize_hq(found: HQContext) -> dict[str, Any]:
     """HQ as every adapter returns it: its open problems are the items."""
 
     path = found.request_path
+    problems = [
+        {
+            "key": item["key"],
+            "label": item["label"],
+            "detail": item["detail"],
+            "status": item["status"],
+            "url": item["url"],
+            "subject": item["subject"],
+            "since": item["since"],
+        }
+        for item in found.problems
+    ]
     return {
-        "items": [
-            {
-                "key": item["key"],
-                "label": item["label"],
-                "detail": item["detail"],
-                "status": item["status"],
-                "url": item["url"],
-                "subject": item["subject"],
-                "since": item["since"],
-            }
-            for item in found.problems
-        ],
-        "count": len(found.problems),
+        **complete(problems),
         "label": found.label,
         "status": found.status[0],
         "summary": found.status[1],
@@ -223,10 +225,10 @@ def serialize_hq(found: HQContext) -> dict[str, Any]:
     }
 
 
-def read_hq() -> dict[str, Any]:
-    """The ``hq`` resource: HQ as its own page says it, for the calling request."""
+def read_hq(*, principal: Principal) -> dict[str, Any]:
+    """The ``hq`` resource: HQ as its own page says it, for the calling request and its principal."""
 
-    return serialize_hq(hq_context(request_context.current()))
+    return serialize_hq(hq_context(request_context.current(), principal=principal))
 
 
 __all__ = [

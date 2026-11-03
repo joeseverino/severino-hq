@@ -1,0 +1,23 @@
+# A context variable HQ sets for the length of a request or a call is set by
+# a `with` (`with var.set(value):`, or a helper that returns the Token), which
+# resets it on every way out. A token kept in a name and reset in another
+# statement is a pair that a raise between the two, or a path that forgets
+# the second, leaves set for whatever runs next in that context.
+id: context-var-set-in-a-with
+language: python
+severity: error
+message: A context variable is set in one statement and reset in another; set it in a `with`.
+note: >-
+  `with var.set(value):` resets on exit, since a contextvars.Token is a context
+  manager. A helper that sets one returns the Token, and its caller writes
+  `with helper(value):`; a test that holds it for the whole test writes
+  `self.enterContext(helper(value))`.
+rule:
+  any:
+    # token = var.set(value), later var.reset(token)
+    - pattern: $TOKEN = $VAR.set($VALUE)
+    - pattern: $VAR.reset($TOKEN)
+    # addCleanup(var.reset, token)
+    - kind: attribute
+      pattern: $VAR.reset
+      inside: { kind: argument_list }

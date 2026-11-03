@@ -1,0 +1,30 @@
+# A dot typed after a space lets a line start with the dot or hold it alone,
+# and a reader hears it, as a template's typed dot would. Parts of one line
+# are joined by dotted (hq.platform.application.labels, hq_sdk.ui), which
+# holds each dot to the part before it with a no-break space, as {% dot %}
+# does, and which breakable draws as {% dot %}'s mark, hidden from a reader;
+# markup built in Python joins with dotted_html. A docstring is for the
+# code's reader and may use one. src/ is an extension package's source, as
+# the plugin check (tools/pipeline/check-plugin.sh) scans it from the
+# package's root; the host has no src/ of its own.
+id: dot-typed-in-text
+language: python
+severity: error
+message: A dot typed after a space can start a line, stand on one alone, and is read aloud; join the parts with dotted().
+note: dotted(a, b) from hq_sdk.ui for text, labels.dotted_html(a, b) for markup.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+  - "src/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+rule:
+  kind: string
+  regex: " ·|&middot;|&#183;"
+  not:
+    # A docstring: a bare string statement, which no page shows.
+    inside:
+      kind: expression_statement

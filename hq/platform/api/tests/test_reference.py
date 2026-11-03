@@ -13,6 +13,8 @@ from django.urls import reverse
 
 from hq.platform.application.tests.markup import select
 
+from ..openapi import document
+
 STATIC = Path(settings.BASE_DIR) / "static"
 VENDOR = STATIC / "vendor" / "scalar"
 
@@ -140,6 +142,30 @@ class ReferenceConfigurationTests(SimpleTestCase):
         options = set(re.findall(r"^    (?:\.\.\.\(theme \? \{ )?(\w+):", self.script, flags=re.MULTILINE))
         self.assertGreater(len(options), 12)
         self.assertEqual({name for name in options if f"{name}:" not in self.bundle}, set())
+
+    def test_every_field_it_shows_is_one_an_operation_carries(self):
+        """A renamed extension would vanish from the page and fail nothing else."""
+
+        (listed,) = re.findall(r"showExtensions: \[([^\]]*)\]", self.script)
+        shown = set(re.findall(r'"(x-[\w-]+)"', listed))
+        self.assertTrue(shown)
+        carried = {
+            key
+            for item in document()["paths"].values()
+            for operation in item.values()
+            for key in operation
+            if key.startswith("x-")
+        }
+        self.assertLessEqual(shown, carried)
+
+    def test_every_stock_sentence_for_a_type_is_said_as_nothing(self):
+        """Each sentence the bundle gives an undescribed type or format is one the page blanks."""
+
+        (stock,) = re.findall(r"\{integer:\{_default:`schema\.typeInteger`.*?\}\}", self.bundle)
+        keys = set(re.findall(r"`schema\.(\w+)`", stock))
+        self.assertIn("formatDateTime", keys)
+        (listed,) = re.findall(r"STOCK_SENTENCES = \[([^\]]*)\]", self.script)
+        self.assertEqual(set(re.findall(r'"(\w+)"', listed)), keys)
 
     def test_curl_is_the_only_sample_offered(self):
         """Every target the bundle ships is hidden but the shell's curl."""

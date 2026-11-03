@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -80,6 +81,7 @@ func (g *githubRepository) image(ctx context.Context, image, token string) (GitH
 	if err != nil {
 		return GitHubImage{}, err
 	}
+	mask.Learn(pull.Token)
 	raw, err = g.r.HTTP.Request(ctx, "https://"+githubRegistry+"/v2/"+image+"/tags/list?n="+strconv.Itoa(githubTagsPage), "GET", map[string]string{"Authorization": "Bearer " + pull.Token}, nil)
 	if err != nil {
 		return GitHubImage{}, err

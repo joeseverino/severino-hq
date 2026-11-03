@@ -83,6 +83,7 @@ TAGS = (
     "table_heading",
     "table_region",
     "words",
+    "write_token",
 )
 FILTERS = (
     "ago",

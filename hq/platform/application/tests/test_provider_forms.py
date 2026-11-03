@@ -17,6 +17,7 @@ from django.urls import reverse
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.tests.markup import text, with_class
+from hq.platform.application.tests.writers import form_keyed
 
 from ..provider_forms import spec_form_class
 
@@ -195,7 +196,7 @@ class ResourceFormViewTests(TestCase):
         """
         response = self.client.post(
             reverse("control_plane:create"),
-            {"kind": "adguard.rewrite", **REWRITE},
+            form_keyed({"kind": "adguard.rewrite", **REWRITE}),
         )
 
         resource = ManagedResource.objects.get()
@@ -211,7 +212,7 @@ class ResourceFormViewTests(TestCase):
         """Otherwise the next topology import reads the blank as a change."""
         self.client.post(
             reverse("control_plane:create"),
-            {"kind": "adguard.rewrite", **REWRITE},
+            form_keyed({"kind": "adguard.rewrite", **REWRITE}),
         )
 
         self.assertTrue(ManagedResource.objects.get().desired_fingerprint)
@@ -219,13 +220,13 @@ class ResourceFormViewTests(TestCase):
     def test_editing_advances_the_generation_so_the_controller_reapplies(self):
         self.client.post(
             reverse("control_plane:create"),
-            {"kind": "adguard.rewrite", **REWRITE},
+            form_keyed({"kind": "adguard.rewrite", **REWRITE}),
         )
         created = ManagedResource.objects.get()
 
         self.client.post(
             reverse("control_plane:edit", kwargs={"key": created.key}),
-            {"key": created.key, "enabled": "on", **REWRITE, "answer": "10.0.0.11"},
+            form_keyed({"key": created.key, "enabled": "on", **REWRITE, "answer": "10.0.0.11"}),
         )
 
         resource = ManagedResource.objects.get()
@@ -235,11 +236,13 @@ class ResourceFormViewTests(TestCase):
     def test_an_invalid_spec_writes_nothing_and_says_why(self):
         response = self.client.post(
             reverse("control_plane:create"),
-            {
-                "kind": "adguard.rewrite",
-                "domain": "app.example.com",
-                "answer": "",
-            },
+            form_keyed(
+                {
+                    "kind": "adguard.rewrite",
+                    "domain": "app.example.com",
+                    "answer": "",
+                }
+            ),
         )
 
         self.assertEqual(response.status_code, 200)
@@ -255,7 +258,7 @@ class ResourceFormViewTests(TestCase):
 
         self.client.post(
             reverse("control_plane:create"),
-            {"kind": "adguard.rewrite", **REWRITE, "answer": "10.0.0.99"},
+            form_keyed({"kind": "adguard.rewrite", **REWRITE, "answer": "10.0.0.99"}),
         )
 
         self.assertTrue(ManagedResource.objects.filter(key="app-example-com-dns-2").exists())
@@ -300,20 +303,20 @@ class ResourceFormViewTests(TestCase):
         self.assertIn("/accounts/login/", response["Location"])
 
     def test_an_unknown_kind_is_not_found(self):
-        response = self.client.post(reverse("control_plane:create"), {"kind": "example.nothing"})
+        response = self.client.post(reverse("control_plane:create"), form_keyed({"kind": "example.nothing"}))
 
         self.assertEqual(response.status_code, 404)
 
     def test_saving_says_whether_it_added_or_updated(self):
         created = self.client.post(
             reverse("control_plane:create"),
-            {"kind": "adguard.rewrite", **REWRITE},
+            form_keyed({"kind": "adguard.rewrite", **REWRITE}),
             follow=True,
         )
         key = ManagedResource.objects.get().key
         updated = self.client.post(
             reverse("control_plane:edit", kwargs={"key": key}),
-            {"enabled": "on", **REWRITE, "answer": "10.0.0.11"},
+            form_keyed({"enabled": "on", **REWRITE, "answer": "10.0.0.11"}),
             follow=True,
         )
 
@@ -328,7 +331,7 @@ class ResourceFormViewTests(TestCase):
 
         response = self.client.post(
             reverse("control_plane:create"),
-            {"kind": "adguard.rewrite", **REWRITE},
+            form_keyed({"kind": "adguard.rewrite", **REWRITE}),
         )
 
         self.assertEqual(response.status_code, 200)
@@ -340,6 +343,8 @@ class ResourceFormViewTests(TestCase):
 
         from django.test import override_settings
 
+        from .test_certificates import SEAL_PUBLIC_KEY
+
         ManagedResource.objects.create(
             key="example-npm-target",
             kind="tls.delivery_target",
@@ -347,15 +352,17 @@ class ResourceFormViewTests(TestCase):
         )
         # Pasted into the wrong boxes: no certificate and no key.
         material = {"fullchain": "not a certificate", "private_key": "not a key"}
-        with override_settings(SEVERINO_SECRET_STORE_KEY="test-only-secret-store-key-long-enough"):
+        with override_settings(SEVERINO_SEAL_PUBLIC_KEY=SEAL_PUBLIC_KEY):
             response = self.client.post(
                 reverse("control_plane:create"),
-                {
-                    "kind": "tls.uploaded_certificate",
-                    "certificate_name": "app.example.com",
-                    "install_on": ["example-npm"],
-                    **material,
-                },
+                form_keyed(
+                    {
+                        "kind": "tls.uploaded_certificate",
+                        "certificate_name": "app.example.com",
+                        "install_on": ["example-npm"],
+                        **material,
+                    }
+                ),
                 follow=True,
             )
 

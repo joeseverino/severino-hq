@@ -92,7 +92,7 @@ class PolicyAmendmentTests(TestCase):
         self.assertTrue(amended)
 
 
-@override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
+@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class RemoveEmptyGroupsCapabilityTests(TestCase):
     def setUp(self):
         from hq.platform.application.adoption_testing import managing_everything
@@ -256,7 +256,7 @@ class DriftOffersBothWaysTests(TestCase):
         self.assertEqual(remedies[0].label, "Keep the live version")
         self.assertEqual(
             [(r.capability, r.label) for r in remedies[1:]],
-            [("infrastructure.reconcile", "Apply HQ's settings")],
+            [("infrastructure.resource.reconcile", "Apply HQ's settings")],
         )
 
     def test_another_fault_keeps_reconcile_alone(self):

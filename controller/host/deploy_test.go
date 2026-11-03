@@ -2,7 +2,10 @@ package host
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -20,19 +23,29 @@ type handover struct {
 }
 
 func newDeployer(f *fakeHost) (*Deployer, *handover) {
-	exec := &handover{}
+	handed := &handover{}
+	secrets := filepath.Join(f.root, "run", "severino-hq-secrets")
+	if err := os.WriteFile(filepath.Join(secrets, "controller-connections.json"), []byte(`{"connections":[]}`), 0o600); err != nil {
+		f.t.Fatal(err)
+	}
+	f.rehearses(&rehearsal{})
 	return &Deployer{
 		Machine: f.machine,
 		Source:  source,
 		Cosign:  "/verifier/cosign",
 		Exec: func(argv0 string, argv, env []string) error {
-			exec.argv0, exec.argv, exec.env = argv0, argv, env
+			handed.argv0, handed.argv, handed.env = argv0, argv, env
 			return nil
 		},
 		Drain: 50 * time.Millisecond, Poll: 10 * time.Millisecond,
 		FreeBytes: 512 << 20, FreeOn: "/",
 		Free: func(string) (uint64, error) { return 1 << 30, nil },
-	}, exec
+		Rehearsal: Rehearsal{
+			SecretDir: secrets, ACME: filepath.Join(f.root, "acme"),
+			LookPath: func(string) (string, error) { return "", exec.ErrNotFound },
+			Poll:     time.Millisecond,
+		},
+	}, handed
 }
 
 func TestOnlyTheCompositionByDigestIsDeployable(t *testing.T) {
@@ -73,7 +86,7 @@ func TestAForkDeploysItsOwnImagesAndAnUnnamedBuildNone(t *testing.T) {
 
 func TestADeployVerifiesPullsAndHandsOverToTheRelease(t *testing.T) {
 	f := newFakeHost(t)
-	d, exec := newDeployer(f)
+	d, handed := newDeployer(f)
 
 	if err := d.Deploy(context.Background(), next, strings.NewReader("deployer\nsecret-token\n")); err != nil {
 		t.Fatalf("%v\n%s", err, f.out.String())
@@ -81,16 +94,16 @@ func TestADeployVerifiesPullsAndHandsOverToTheRelease(t *testing.T) {
 
 	f.before(t, "/verifier/cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp "+source.Signer()+" "+next, "docker pull "+next)
 	f.before(t, "docker pull "+next, "docker create --pull never "+next)
-	if filepath.Base(exec.argv0) != "hq-host" || strings.Join(exec.argv[1:], " ") != "release --stage "+filepath.Dir(exec.argv0)+" "+next {
-		t.Fatalf("handed over as %s %v", exec.argv0, exec.argv)
+	if filepath.Base(handed.argv0) != "hq-host" || strings.Join(handed.argv[1:], " ") != "release --stage "+filepath.Dir(handed.argv0)+" "+next {
+		t.Fatalf("handed over as %s %v", handed.argv0, handed.argv)
 	}
 	config := ""
-	for _, variable := range exec.env {
+	for _, variable := range handed.env {
 		if value, ok := strings.CutPrefix(variable, "DOCKER_CONFIG="); ok {
 			config = value
 		}
 	}
-	if filepath.Dir(config) != filepath.Dir(exec.argv0) {
+	if filepath.Dir(config) != filepath.Dir(handed.argv0) {
 		t.Errorf("the credential is not in the stage the release removes: %q", config)
 	}
 	data, err := os.ReadFile(filepath.Join(config, "config.json"))
@@ -110,14 +123,14 @@ func TestADeployVerifiesPullsAndHandsOverToTheRelease(t *testing.T) {
 func TestAnUnsignedImageIsNotPulled(t *testing.T) {
 	f := newFakeHost(t)
 	f.fail = []string{"/verifier/cosign verify"}
-	d, exec := newDeployer(f)
+	d, handed := newDeployer(f)
 
 	err := d.Deploy(context.Background(), next, nil)
 
 	if err == nil || !strings.Contains(err.Error(), "not signed") {
 		t.Fatalf("got %v", err)
 	}
-	if f.called("docker pull") || exec.argv0 != "" {
+	if f.called("docker pull") || handed.argv0 != "" {
 		t.Error("an unsigned image went further than its check")
 	}
 	if entries, _ := os.ReadDir(f.machine.Runtime); len(entries) > 2 {
@@ -195,6 +208,20 @@ func TestTheHoldWaitsOutEveryPassUnderWay(t *testing.T) {
 	}
 }
 
+// failOnce fails the first run of call alone, as a release that does not
+// come up does before the previous one comes up again.
+func (f *fakeHost) failOnce(call string) {
+	program, failed := f.machine.Command, false
+	f.machine.Command = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		if !failed && strings.Join(append([]string{name}, args...), " ") == call {
+			failed = true
+			_ = f.program(ctx, name, args...)
+			return exec.CommandContext(ctx, "/bin/sh", "-c", "exit 1")
+		}
+		return program(ctx, name, args...)
+	}
+}
+
 func TestDriftAfterTheReleaseFailsTheDeployAndKeepsTheRelease(t *testing.T) {
 	f := newFakeHost(t)
 	if err := f.machine.Record(running); err != nil {
@@ -203,8 +230,12 @@ func TestDriftAfterTheReleaseFailsTheDeployAndKeepsTheRelease(t *testing.T) {
 	f.fail = []string{"systemctl start " + DriftUnit}
 	d, _ := newDeployer(f)
 
-	if err := d.Release(context.Background(), next); err == nil {
+	err := d.Release(context.Background(), next)
+	if err == nil {
 		t.Fatal("a deploy that left the host off its release passed")
+	}
+	if got := OutcomeOf(err); got != DeployLiveCheckFailed {
+		t.Errorf("a release that stands and failed a check ended %s: %v", got.Name, err)
 	}
 
 	data, _ := os.ReadFile(f.machine.ReleasePath())
@@ -230,13 +261,16 @@ func TestAnUnhealthyReleaseIsRolledBack(t *testing.T) {
 	if err := os.WriteFile(previousUnit, []byte("previous\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	f.fail = []string{"systemctl restart " + WebUnit}
+	f.failOnce("systemctl restart " + WebUnit)
 	d, _ := newDeployer(f)
 
 	err := d.Release(context.Background(), next)
 
 	if err == nil {
 		t.Fatal("an unhealthy release deployed")
+	}
+	if got := OutcomeOf(err); got != DeployNotDeployed {
+		t.Errorf("a release rolled back ended %s: %v", got.Name, err)
 	}
 	data, _ := os.ReadFile(f.machine.ReleasePath())
 	if strings.TrimSpace(string(data)) != running {
@@ -298,6 +332,59 @@ func TestAFailedInstallRollsTheTreeAndImageBack(t *testing.T) {
 	}
 }
 
+// A release that does not come up, then a previous one that does not either:
+// neither runs, so the deploy says production's state is unknown rather than
+// that the previous image still runs.
+func TestARollbackThatFailsEndsWithProductionUnknown(t *testing.T) {
+	f := newFakeHost(t)
+	if err := f.machine.Record(running); err != nil {
+		t.Fatal(err)
+	}
+	f.fail = []string{"systemctl restart " + WebUnit}
+	d, _ := newDeployer(f)
+
+	err := d.Release(context.Background(), next)
+
+	if got := OutcomeOf(err); got != DeployRollbackFailed {
+		t.Errorf("a deploy whose rollback failed ended %s: %v", got.Name, err)
+	}
+	if DeployRollbackFailed.Production != "unknown" {
+		t.Errorf("a failed rollback says production runs the %s", DeployRollbackFailed.Production)
+	}
+	if !strings.Contains(err.Error(), "did not become healthy") {
+		t.Errorf("the deploy's own failure was lost: %v", err)
+	}
+}
+
+// A failure from an install that rolled back cleanly carries no outcome of its
+// own, however it is wrapped, and the outcomes told apart by their status are
+// distinct and none is a usage error's 2.
+func TestEachOutcomeExitsWithAStatusOfItsOwn(t *testing.T) {
+	if got := OutcomeOf(fmt.Errorf("deploy: %w", errors.New("no space left"))); got != DeployNotDeployed {
+		t.Errorf("a plain failure ended %s", got.Name)
+	}
+	if got := OutcomeOf(nil); got != DeployLive {
+		t.Errorf("a deploy with no error ended %s", got.Name)
+	}
+	seen := map[int]string{}
+	for _, outcome := range DeployOutcomes {
+		if outcome.Exit == NeverExited {
+			// A deploy hq-host never answered cannot say the release is live.
+			if outcome.State == "success" || outcome.Production == "release" {
+				t.Errorf("%s never exited, and says production runs the release", outcome.Name)
+			}
+			continue
+		}
+		if outcome.Exit == 2 || (outcome.Exit == 0) != (outcome == DeployLive) {
+			t.Errorf("%s exits %d", outcome.Name, outcome.Exit)
+		}
+		if other, ok := seen[outcome.Exit]; ok {
+			t.Errorf("%s and %s both exit %d", other, outcome.Name, outcome.Exit)
+		}
+		seen[outcome.Exit] = outcome.Name
+	}
+}
+
 func TestNoRecordedReleaseNoDeploy(t *testing.T) {
 	f := newFakeHost(t)
 	d, _ := newDeployer(f)
@@ -347,7 +434,7 @@ func TestAReleaseThatMigratedAndFailedPutsTheDatabaseBack(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	f.fail = []string{"systemctl restart " + WebUnit}
+	f.failOnce("systemctl restart " + WebUnit)
 	d, _ := newDeployer(f)
 
 	if err := d.Release(context.Background(), next); err == nil {
@@ -384,7 +471,7 @@ func TestAReleaseThatFailedWithoutMigratingLeavesTheDatabase(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(f.data(), SchemaSnapshot), []byte("stale"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	f.fail = []string{"systemctl restart " + WebUnit}
+	f.failOnce("systemctl restart " + WebUnit)
 	d, _ := newDeployer(f)
 
 	if err := d.Release(context.Background(), next); err == nil {

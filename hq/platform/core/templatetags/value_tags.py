@@ -16,6 +16,7 @@ from django.utils.html import conditional_escape, format_html, format_html_join
 from django.utils.safestring import mark_safe
 lazy from django.conf import settings
 
+from hq.platform.application.doors import door_words as _door_words, interface_label as _interface_label
 from hq.platform.application.entity_links import (
     connection_anchor as anchor,
     declared_link as declared,
@@ -23,7 +24,7 @@ from hq.platform.application.entity_links import (
     kind_label as label,
     web_url as _web_url,
 )
-from hq.platform.application.labels import human_bytes
+from hq.platform.application.labels import DOT, DOT_MARKUP, human_bytes
 from hq.platform.application.moments import (
     ago as _ago,
     ahead as _ahead,
@@ -84,8 +85,8 @@ def dot():
     after the first part. A no-break space holds it to that part and the line
     may break only after it, so no line starts with a dot or holds one alone;
     a reader hears the two parts. A run of whole parts that is a list of its
-    own is a ``.dot-list``."""
-    return mark_safe('&nbsp;<span aria-hidden="true">·</span> ')
+    own is a ``.dot-list``; Python joins text as ``labels.dotted`` does."""
+    return mark_safe(DOT_MARKUP)
 
 
 @register.simple_tag
@@ -294,13 +295,6 @@ def expiry(value):
 
 
 @register.filter
-def posture_state(posture, check_id):
-    """``{{ posture|posture_state:check.id }}``: met, unmet, or unavailable."""
-
-    return posture.state_of(check_id)
-
-
-@register.filter
 def ago_short(value):
     """``ago``, saying nothing rather than the missing mark when there is no moment."""
 
@@ -340,8 +334,9 @@ _INNER_HYPHEN = re.compile(r"[^-\s]-")
 _INNER_SEAM = re.compile(r"\w(?:/|:+|\.)\w")
 _WORDS = re.compile(r"(\s+)")
 # A figure in a phrase: an amount, a time, an address of digits ("$12.00",
-# "9:29", "172.18.0.2"). Nothing in one is a place a line breaks.
-_FIGURE = re.compile(r"\W*\d+(?:[.:,]\d+)*\W*")
+# "9:29", "172.18.0.2"), or a range of two ("10.5–12.5"). Nothing in one is a
+# place a line breaks.
+_FIGURE = re.compile(r"\W*\d+(?:[.:,]\d+)*(?:–\d+(?:[.:,]\d+)*)?\W*")
 # Where a browser may break a hyphenated part: after each inner hyphen.
 _AFTER_HYPHEN = re.compile(r"(?<=[^-\s]-)")
 # A piece of a name shorter than this, alone on a line ("1" under
@@ -444,7 +439,10 @@ def _token(word: str, *, sole: bool) -> str:
     if not (_INNER_SEAM.search(word) or _INNER_HYPHEN.search(word)):
         return word
     if not sole and _FIGURE.fullmatch(unescape(word)):
-        return word
+        # A browser breaks after a dash, so a range is a part of its own:
+        # it moves to the next line whole and breaks at its dash only when it
+        # alone is longer than its line.
+        return f'<span class="whole">{word}</span>' if "–" in word else word
     # A word has no whitespace, so a newline marks where it splits.
     seams = _BREAK_AFTER.sub("\\1\n", word).split("\n")
     # Only a name standing alone holds its end labels: a value of several
@@ -507,13 +505,7 @@ def breakable(value, mark=""):
     # it, and a seam inside a tag would break the tag.
     if hasattr(value, "__html__"):
         return conditional_escape(value) + conditional_escape(mark)
-    # Escaped first, so the only markup in the result is what is added here.
-    text = str(conditional_escape(value))
-    words = _WORDS.split(text)
-    # A token that fits on its line moves to the next one whole; one longer than
-    # its line wraps at its seams; a part longer than its line alone breaks
-    # wherever it must.
-    drawn = [_token(word, sole=len(words) == 1) for word in words]
+    drawn = _words(value)
     # The mark goes inside the last word's innermost box: a box as wide as its
     # line leaves a mark after it no room there, and the mark would start the
     # next line alone.
@@ -523,7 +515,50 @@ def breakable(value, mark=""):
         # Hidden from the accessibility tree: in a link it would be heard as
         # part of the link's name.
         drawn[-1] = f'{last[:at]}<span class="mark" aria-hidden="true">{conditional_escape(mark)}</span>{last[at:]}'
-    return mark_safe("".join(drawn))
+    # A dot ``labels.dotted`` joined parts with is drawn as {% dot %} draws it,
+    # hidden from a reader.
+    return mark_safe("".join(drawn).replace(DOT, DOT_MARKUP))
+
+
+def _words(value, *, sole: bool | None = None) -> list[str]:
+    """``value``'s words as ``breakable`` draws them, a word standing alone as a
+    name unless ``sole`` says otherwise."""
+
+    # Escaped first, so the only markup in the result is what is added here.
+    words = _WORDS.split(str(conditional_escape(value)))
+    # A token that fits on its line moves to the next one whole; one longer than
+    # its line wraps at its seams; a part longer than its line alone breaks
+    # wherever it must.
+    alone = len(words) == 1 if sole is None else sole
+    return [_token(word, sole=alone) for word in words]
+
+
+# A Markdown code span: the text between a pair of backticks.
+_CODE_SPAN = re.compile(r"`([^`]+)`")
+
+
+@register.filter(is_safe=True)
+def code_spans(value):
+    """``value``, prose written as Markdown, as ``breakable`` draws it, with each
+    code span (a name between backticks) drawn as code.
+
+    For a description HQ shows as another program wrote it, as the MCP server
+    lists its tools. Each piece is escaped before it is drawn, so the only markup
+    in the result is the ``<code>`` added here, and a backtick without its pair
+    stays a backtick. The rest of Markdown is shown as written: one card is no
+    reason for a Markdown parser.
+    """
+
+    value = admitted(value)
+    if hasattr(value, "__html__"):
+        return conditional_escape(value)
+    drawn = []
+    # Split at a group, so every second piece is a span's text.
+    for index, piece in enumerate(_CODE_SPAN.split(str(value))):
+        # A word of a sentence, never a name standing alone, inside a span too.
+        words = "".join(_words(piece, sole=False))
+        drawn.append(f"<code>{words}</code>" if index % 2 else words)
+    return mark_safe("".join(drawn).replace(DOT, DOT_MARKUP))
 
 
 def _mark(mark) -> str:
@@ -616,15 +651,13 @@ def entity(context, link, code=False, label="", mark=""):
 @register.simple_tag
 def cell_line(text, url=""):
     """One fact in a table cell written as a line (``.cell-line``), a link when
-    ``url`` is given: its names held as ``breakable`` holds them, the whole
-    line in its title where the cell cuts it. The line asks for its whole
-    length around the box that cuts it (``.cut``, figures.css)."""
+    ``url`` is given: its names held as ``breakable`` holds them. The line asks
+    for its whole length around the box that cuts it (``.cut``, figures.css),
+    and a cut one reads whole as any cut value does (tables.js, ``markCut``)."""
 
     if url:
-        return format_html(
-            '<a class="cell-line" href="{}" title="{}"><span class="cut">{}</span></a>', url, text, breakable(text)
-        )
-    return format_html('<span class="cell-line" title="{}"><span class="cut">{}</span></span>', text, breakable(text))
+        return format_html('<a class="cell-line" href="{}"><span class="cut">{}</span></a>', url, breakable(text))
+    return format_html('<span class="cell-line"><span class="cut">{}</span></span>', breakable(text))
 
 
 def _viewer(context):
@@ -659,6 +692,22 @@ def referenced_by(context, thing, identity="", cards=True):  # noqa: ARG001 - hq
     else:
         found = references.referenced_by_row(thing, principal=principal)
     return {"groups": found, "request": context.get("request")}
+
+
+@register.filter
+def interface_label(value):
+    """An interface, or a list of them joined, as the audit log names it: ``mcp`` reads "MCP"."""
+
+    if isinstance(value, str):
+        return _interface_label(value)
+    return ", ".join(_interface_label(interface) for interface in value or ())
+
+
+@register.filter
+def door_words(interface):
+    """An interface in a sentence, beside who came through it: ``api`` reads "over the API"."""
+
+    return _door_words(str(interface or ""))
 
 
 @register.filter
@@ -755,7 +804,9 @@ def problems_about(context, url=""):
     is drawn on, for ``partials/_problems.html``. One read of a stored answer,
     made only by a page that asks."""
     request = context.get("request")
-    return _problems_about(url or (request.path if request is not None else ""))
+    if request is None:
+        return ()
+    return _problems_about(url or request.path, _viewer(context))
 
 
 @register.filter

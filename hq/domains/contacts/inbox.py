@@ -6,6 +6,7 @@ controller, in Architecture). A change it has not applied yet is laid over
 what it read (``_laid_over``).
 """
 
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -167,9 +168,7 @@ def _current() -> Inbox:
     resource = declaration()
     spec = resource.spec if resource is not None and _database_of(resource.spec) == database else {}
     rows = _laid_over(own, spec)
-    counts: dict[str, int] = {}
-    for row in rows:
-        counts[str(row.get("status", ""))] = counts.get(str(row.get("status", "")), 0) + 1
+    counts = Counter(str(row.get("status", "")) for row in rows)
     return Inbox(
         OK if stored.reachable else UNAVAILABLE,
         rows=tuple(rows),

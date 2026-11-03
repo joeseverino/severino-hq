@@ -2,10 +2,9 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"io"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/host/unit"
@@ -62,9 +61,7 @@ func (s unitSocket) Act(ctx context.Context, _, verb, name string) error {
 		return &ProviderError{Message: "the unit socket's answer did not read", Err: err}
 	}
 	var result unit.Result
-	decoder := json.NewDecoder(strings.NewReader(string(answer)))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&result); err != nil {
+	if err := jsonv2.Unmarshal(answer, &result, jsonv2.RejectUnknownMembers(true)); err != nil {
 		return &ProviderError{Message: "the unit socket's answer is not a result", Err: err}
 	}
 	if result.Outcome != unit.Done {

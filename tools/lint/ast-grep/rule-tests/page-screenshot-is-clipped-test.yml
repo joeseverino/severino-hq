@@ -1,0 +1,11 @@
+id: page-screenshot-is-clipped
+valid:
+  - 'shoot_page(self.page, path, animations="disabled")'
+  - 'self.page.screenshot(path=shot, animations="disabled")'
+  - 'page.screenshot(path=path, full_page=False)'
+  - 'dialog.screenshot(path=path)'
+  - 'page.screenshot(path=path, full_page=clip is not None, clip=clip)'
+invalid:
+  - 'self.page.screenshot(path=str(path), full_page=True)'
+  - 'self.page.screenshot(path=shot, full_page=True, animations="disabled")'
+  - 'page.screenshot(full_page=whole)'

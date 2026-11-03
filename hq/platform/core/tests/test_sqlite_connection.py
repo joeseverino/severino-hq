@@ -71,7 +71,7 @@ class CreatorTests(SimpleTestCase):
         self.assertLess(first(migrates), first(serves))
 
     def test_the_image_migrates_before_it_serves(self):
-        self.assert_migrates_before_serving("entrypoint.sh", r"python manage\.py boot_migrate$", r'exec "\$@"$')
+        self.assert_migrates_before_serving("entrypoint.sh", r"python manage\.py boot$", r'exec "\$@"$')
         self.assertIn('ENTRYPOINT ["/entrypoint.sh"]', (Path(settings.BASE_DIR) / "Dockerfile").read_text())
 
     def test_the_dev_server_migrates_before_it_serves(self):

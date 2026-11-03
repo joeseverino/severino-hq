@@ -7,14 +7,17 @@ from typing import override
 
 from django.conf import settings
 from django.db import models
+from django.db.models.fields.json import KeyTextTransform
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 lazy from django.apps import apps
 lazy from django.urls import reverse
 lazy from django.utils.text import slugify
 
-lazy from hq.platform.application.labels import plural
+from hq.platform.application.roles import Role
+lazy from hq.platform.application.labels import dotted, plural
 
-from .rules import singleton
+from .rules import Rule, one_of, singleton
 lazy from .audit import audited_labels
 
 
@@ -128,6 +131,8 @@ class AuditLog(models.Model):
         UPLOADED = "uploaded", "Uploaded"
         EXPORTED = "exported", "Exported"
         IMPORTED = "imported", "Imported"
+        # A run of work that finished and changed something: its outcome.
+        DONE = "done", "Done"
         FAILED = "failed", "Failed"
         SETTINGS_CHANGED = "settings_changed", "Settings changed"
         VIEWED = "viewed", "Viewed"
@@ -154,6 +159,24 @@ class AuditLog(models.Model):
     connection = models.CharField(max_length=160, blank=True)
     message = models.TextField(blank=True)
     metadata = models.JSONField(default=dict, blank=True)
+    # Who acted and through which door, read out of the metadata `record_event`
+    # wrote, so a deleted user's rows still say who it was and a read by actor
+    # is served from an index. Blank when the metadata names none: a column
+    # that may be empty would be added in place, which SQLite refuses for a
+    # stored one, where a blank one is added by rebuilding the table.
+    actor = models.GeneratedField(
+        expression=Coalesce(KeyTextTransform("actor", "metadata"), models.Value("", output_field=models.TextField())),
+        output_field=models.CharField(max_length=200),
+        db_persist=True,
+    )
+    interface = models.GeneratedField(
+        expression=Coalesce(
+            KeyTextTransform("interface", "metadata"), models.Value("", output_field=models.TextField())
+        ),
+        output_field=models.CharField(max_length=32),
+        db_persist=True,
+    )
+    # Defaults to now, and a seed or test may pass the moment it records.
     created_at = models.DateTimeField(default=timezone.now, editable=False)
 
     class Meta:
@@ -163,6 +186,7 @@ class AuditLog(models.Model):
             models.Index(fields=("object_type", "object_id")),
             models.Index(fields=("action",)),
             models.Index(fields=("connection", "-created_at")),
+            models.Index(fields=("actor", "-created_at")),
         ]
 
     @override
@@ -180,10 +204,6 @@ class AuditLog(models.Model):
         return object_type_label(self.object_type)
 
     @property
-    def type_plural(self) -> str:
-        return object_type_plural(self.object_type)
-
-    @property
     def actor_label(self) -> str:
         """The operator, else the recorded machine actor, else an unauthenticated source."""
 
@@ -193,7 +213,7 @@ class AuditLog(models.Model):
         if actor := metadata.get("actor"):
             return str(actor)
         if source := metadata.get("source"):
-            return f"unauthenticated · {source}"
+            return dotted("unauthenticated", source)
         return "system"
 
     @property
@@ -218,7 +238,7 @@ class AuditLog(models.Model):
 
         first = next(iter((self.message or "").strip().splitlines()), "")
         message = " ".join(_IDENTIFIER.sub("", first).split())[:160]
-        return " · ".join(part for part in (self.type_label, message) if part)
+        return dotted(self.type_label, message)
 
 
 class Pin(models.Model):
@@ -274,6 +294,15 @@ class AgentAccess(models.Model):
         return "agents paused" if self.paused else "agents allowed"
 
 
+class AgentSignIn(models.TextChoices):
+    """How an agent's token was signed in."""
+
+    # A client-credentials token, its subject the client itself.
+    MACHINE = "machine", "As itself"
+    # A token a person signed in for (an authorization code or device grant).
+    PERSON = "person", "Through a person's sign-in"
+
+
 class AgentIdentity(models.Model):
     """An identity that has presented a verified token, and its grant as of the latest one."""
 
@@ -282,9 +311,67 @@ class AgentIdentity(models.Model):
     granted = models.JSONField(default=list)
     first_seen = models.DateTimeField(default=timezone.now, editable=False)
     last_seen = models.DateTimeField(default=timezone.now)
+    # How its latest token was signed in; blank for one not seen since HQ asked.
+    signs_in = models.CharField(max_length=16, choices=AgentSignIn.choices, blank=True, default="")
+    # A person's stop on this one client, asked on its every call
+    # (``agent_access.refusal``): blocked while ``blocked_at`` is set.
+    blocked_at = models.DateTimeField(null=True, blank=True)
+    blocked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    # The person whose sign-in its latest token came from; none for a machine's own token.
+    person = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
 
     class Meta:
         ordering = ("client_id",)
+        constraints = [
+            # Whoever set a block, it says when; a person deleted since leaves the block standing.
+            Rule(
+                condition=models.Q(blocked_by__isnull=True) | models.Q(blocked_at__isnull=False),
+                name="agent_identity_block_is_dated",
+                violation_error_message="A block someone set says when they set it.",
+                field="blocked_at",
+            ),
+            Rule(
+                condition=models.Q(signs_in__in=["", *AgentSignIn.values]),
+                name="agent_identity_signs_in_a_known_way",
+                violation_error_message=f"Must be blank or one of: {', '.join(AgentSignIn.values)}.",
+                field="signs_in",
+            ),
+        ]
+
+    @override
+    def __str__(self) -> str:
+        return self.client_id
+
+
+class OwnDevice(models.Model):
+    """A client a person registered in HQ as their own device.
+
+    One half of a device's standing: a token earns it only when it carries the
+    identity provider's device permission too, and names this person as its
+    subject (``tokens.token_principal``). So a grant misconfigured in the
+    provider promotes no client nobody registered, and a registration grants
+    nothing to a token another person signed in.
+    """
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="own_devices")
+    client_id = models.CharField(max_length=160)
+    registered_at = models.DateTimeField(default=timezone.now, editable=False)
+
+    class Meta:
+        ordering = ("client_id",)
+        constraints = [models.UniqueConstraint(fields=("user", "client_id"), name="unique_own_device_per_person")]
 
     @override
     def __str__(self) -> str:
@@ -317,11 +404,34 @@ class LinkedAccount(models.Model):
     updated_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=("user", "provider"), name="unique_linked_account_per_provider")]
+        constraints = [
+            models.UniqueConstraint(fields=("user", "provider"), name="unique_linked_account_per_provider"),
+            # One account elsewhere is one person's, so a sign-in subject finds one user.
+            models.UniqueConstraint(fields=("provider", "login"), name="unique_linked_account_login"),
+        ]
 
     @override
     def __str__(self) -> str:
         return f"{self.provider}:{self.login}"
+
+
+class PersonRole(models.Model):
+    """The role a person holds in HQ, as their identity provider's groups resolved it.
+
+    Written at each sign-in and renewal (``core.oidc``); a person with no row
+    holds nothing (``application.roles``).
+    """
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="person_role")
+    role = models.CharField(max_length=16, choices=Role.choices)
+    resolved_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [one_of("role", Role, "person_role_is_a_known_role")]
+
+    @override
+    def __str__(self) -> str:
+        return f"{self.user_id}:{self.role}"
 
 
 class UpstreamReading(models.Model):  # noqa: DJ008 - stored state, never shown by name
@@ -330,6 +440,34 @@ class UpstreamReading(models.Model):  # noqa: DJ008 - stored state, never shown 
     key = models.CharField(max_length=100, primary_key=True)
     value = models.JSONField()
     observed_at = models.DateTimeField()
+
+
+class IdempotencyRecord(models.Model):  # noqa: DJ008 - stored state, never shown by name
+    """A command's retry key and the answer it was given, so a retry replays it across restarts.
+
+    Every transport keeps one (``hq.platform.application.idempotency``), a
+    browser's command and an agent's alike, so it is platform state rather
+    than the machine API's.
+    """
+
+    actor = models.CharField(max_length=255)
+    actor_sha256 = models.CharField(max_length=64)
+    key = models.CharField(max_length=128)
+    request_sha256 = models.CharField(max_length=64)
+    response = models.JSONField(null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        # The name hq_api's 0001 migration creates it under, so no migration renames the table.
+        db_table = "hq_api_idempotencyrecord"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("actor_sha256", "key"),
+                name="unique_api_idempotency_key_per_actor",
+            )
+        ]
+        ordering = ("-created_at",)
 
 
 class Revision(models.Model):

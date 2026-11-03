@@ -17,6 +17,8 @@ lazy from django.contrib.auth.decorators import login_not_required
 lazy from django.http import HttpResponsePermanentRedirect
 lazy from django.templatetags.static import static
 
+lazy from .write_bounds import NOTHING, writes
+
 # A quoted string (kept whole, so a "/*" in one is not a comment) or a comment.
 # A comment that opens "/*!" is a license, and is kept.
 _CSS_STRING_OR_COMMENT = re.compile(r"""("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|/\*(?!!).*?\*/""", re.DOTALL)
@@ -33,7 +35,7 @@ def without_comments(css: str) -> str:
 
 
 class HashedStaticStorage(CompressedManifestStaticFilesStorage):
-    """Django's content-hashed names for every collected asset, each beside a gzip copy.
+    """Django's content-hashed names for every collected asset, each beside a brotli copy.
 
     A name collectstatic has not produced (a checkout that never collected, a
     test run) keeps its plain name rather than failing the page. Collecting
@@ -45,8 +47,8 @@ class HashedStaticStorage(CompressedManifestStaticFilesStorage):
 
     @override
     def _save(self, name, content):
-        # collectstatic writes every copy through here, so the hash and the gzip
-        # copy match the bytes served.
+        # collectstatic writes every copy through here, so the hash and the
+        # brotli copy match the bytes served.
         if name.endswith((".css", ".js")) and not name.startswith("vendor/"):
             # Rewound first: hashing the file read it to its end.
             content.seek(0)
@@ -54,6 +56,13 @@ class HashedStaticStorage(CompressedManifestStaticFilesStorage):
             served = without_comments(text) if name.endswith(".css") else jsmin(text, keep_bang_comments=True)
             content = ContentFile(served.encode())
         return super()._save(name, content)
+
+    @override
+    def create_compressor(self, **kwargs):
+        # Only the copies COPIES names: every browser HQ serves takes br over
+        # HTTPS, so a client that takes gzip alone is rare enough to get the
+        # identity file rather than a second copy of every asset on disk.
+        return super().create_compressor(use_gzip="gzip" in COPIES, use_brotli="br" in COPIES, **kwargs)
 
     @override
     def stored_name(self, name):
@@ -76,9 +85,9 @@ def content_named(path: str) -> bool:
     return path in getattr(staticfiles_storage, "hashed_files", {}).values()
 
 
-# Each coding a copy can be written in, by the suffix collectstatic gives it,
-# best compression first: WhiteNoise writes a .br copy when brotli is installed.
-COPIES = {"br": ".br", "gzip": ".gz"}
+# Each coding collectstatic writes a copy in, by the suffix it gives it, best
+# compression first. Brotli alone: every browser HQ serves sends br over HTTPS.
+COPIES = {"br": ".br"}
 
 
 def acceptable_codings(scope) -> list[str]:
@@ -134,8 +143,8 @@ class CachedStaticFiles(StaticFiles):
             return None
         for coding in acceptable_codings(scope):
             try:
-                # The media type is the asset's: mimetypes reads ".css.br" and
-                # ".css.gz" as CSS, in that encoding.
+                # The media type is the asset's: mimetypes reads ".css.br" as
+                # CSS, in that encoding.
                 response = await super().get_response(path + COPIES[coding], scope)
             except HTTPException as refused:
                 if refused.status_code != 404:
@@ -176,6 +185,7 @@ def root_icon(name: str):
     redirect to the collected file, so each client asks once. Open before sign
     in, since a browser asks on the sign-in page too."""
 
+    @writes(NOTHING)
     @login_not_required
     def view(_request):
         return HttpResponsePermanentRedirect(static(name))

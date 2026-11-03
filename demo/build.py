@@ -14,7 +14,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from functools import cache
 from html import escape, unescape
 from pathlib import Path
@@ -25,11 +25,13 @@ from django.core.management import call_command
 from django.test import Client, TestCase, override_settings
 lazy from django.contrib.staticfiles.storage import staticfiles_storage
 
+from hq.platform.application.fragments import regions
 from hq.platform.core import seeds
 from hq.platform.core.example_estate import REQUEST, SSO
 from hq.platform.core.example_estate.names import HQ, HQ_SOURCE
 from hq.platform.core.example_estate.testing import as_production
 from hq.platform.core.middleware import DEMO_SESSION_KEY
+from hq.platform.core.static import COPIES
 
 OUT = Path(os.environ.get("HQ_DEMO_OUT") or Path(settings.BASE_DIR) / "var" / "demo")
 # Pages that need sign-in, an API token or an outside provider.
@@ -38,8 +40,6 @@ _SKIPPED = ("/accounts/", "/oidc/", "/api/v2/", "/static/", "/csp-report/", "/ad
 _MOST_PAGES = 800
 # Links, and addresses a script reads from the page (data-*-url).
 _HREF = re.compile(r'(?:href|data-[\w-]+-url)="(/[^"#?]*)')
-_REGION = re.compile(r'<[^>]*\sdata-fragment="([^"]+)"[^>]*>')
-_NAME = re.compile(r'\sdata-fragment-name="([^"]*)"')
 # Inserted right after the charset tag, before HQ's own scripts.
 _INJECT = '<script src="/static/js/demo-theme.js"></script><script defer src="/static/js/demo.js"></script>'
 # A static page has no response to draw a nonce for: one saved into the HTML is
@@ -327,7 +327,7 @@ class DemoBuild(TestCase):
     """A test only so it gets its own database."""
 
     def test_build(self):
-        if OUT.exists():
+        with suppress(FileNotFoundError):
             shutil.rmtree(OUT)
         OUT.mkdir(parents=True)
         # A saved copy: what a page says about the reader is an example, not
@@ -393,7 +393,7 @@ class DemoBuild(TestCase):
             _save_headers(response)
         page = response.content.decode()
         links: list[str] = []
-        for fragment in self._save_fragments(client, page, fragments):
+        for fragment in self._save_fragments(client, path, page, fragments):
             links.extend(unescape(href) for href in _HREF.findall(fragment))
             offered.read(path, fragment)
         offered.read(path, page)
@@ -401,23 +401,21 @@ class DemoBuild(TestCase):
         links.extend(unescape(href) for href in _HREF.findall(page))
         return links
 
-    def _save_fragments(self, client: Client, page: str, fragments: dict[str, str]) -> list[str]:
-        """Save each partial-load response, and the regions inside those, and
-        return them so the crawl follows their links."""
+    def _save_fragments(self, client: Client, address: str, page: str, fragments: dict[str, str]) -> list[str]:
+        """Save each partial-load response of the page at ``address``, and the
+        regions inside those, and return them so the crawl follows their links."""
 
         saved: list[str] = []
-        pending = [page]
+        pending = [(address, page)]
         while pending:
-            for region in _REGION.finditer(pending.pop()):
-                url = unescape(region.group(1))
+            at, body = pending.pop()
+            for url, name in regions(body, at):
                 if not _wanted(urlsplit(url).path):
                     continue
-                name_match = _NAME.search(region.group(0))
-                name = unescape(name_match.group(1)) if name_match else ""
                 answer = self._save_answer(client, url, name, fragments)
                 if answer is not None:
                     saved.append(answer)
-                    pending.append(answer)
+                    pending.append((url, answer))
         return saved
 
     def _save_answer(self, client: Client, url: str, name: str, fragments: dict[str, str]) -> str | None:
@@ -510,7 +508,7 @@ class DemoBuild(TestCase):
                 continue
             target = f"/__q/{len(variants)}/"
             page = response.content.decode()
-            for answer in [*self._save_fragments(client, page, fragments), page]:
+            for answer in [*self._save_fragments(client, address, page, fragments), page]:
                 offered.read(parts.path, answer, depth=further)
                 saved.append(answer)
             _write(target, _inject(page, response, address=key))
@@ -533,7 +531,7 @@ class DemoBuild(TestCase):
         named = json.loads((collected / "staticfiles.json").read_text(encoding="utf-8"))["paths"]
         unlinked = {collected / original for original in named} - {collected / "img" / icon for icon in _ROOT_ICONS}
         for source in collected.rglob("*"):
-            if source.is_file() and source.suffix not in {".gz", ".br"} and source not in unlinked:
+            if source.is_file() and source.suffix not in COPIES.values() and source not in unlinked:
                 target = OUT / "static" / source.relative_to(collected)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source, target)

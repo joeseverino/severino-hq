@@ -2,11 +2,13 @@
 
 This is the one secret HQ keeps on purpose, against a codebase that otherwise
 refuses to hold any, so the guarantees are worth asserting rather than
-assuming: encrypted at rest, refused outright when there is nowhere safe to put
-it, never in a serializer, and checked before it is trusted.
+assuming: sealed to the controller at rest, refused outright when there is no
+key to seal to, never in a serializer, and checked before it is trusted.
 """
 
+import base64
 import datetime
+import secrets as random
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -15,8 +17,10 @@ from cryptography.x509.oid import NameOID
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from hq.domains.control_plane.models import ApprovalRequest, CertificateMaterial, ManagedResource
+from hq.platform.application.tests.writers import keyed
 from hq.platform.core import secrets
 from hq.platform.core.models import AuditLog
+from hq.platform.core.tests.test_seal import SUITE, ciphertext, private_key, public_bytes
 
 from ..capabilities import execute_capability
 from ..certificates import (
@@ -31,7 +35,18 @@ from ..record_errors import CertificateError, PolicyError
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, internal_principal, mcp_principal
 from .markup import all_elements
 
-A_KEY = "test-only-secret-store-key-long-enough"
+# A controller's seed for these tests, and the public half HQ seals to.
+SEAL_SEED = random.token_bytes(32)
+SEAL_PUBLIC_KEY = base64.b64encode(public_bytes(SEAL_SEED)).decode()
+# The slot an uploaded certificate's key is sealed in.
+KEY_SLOT = "certificate:private_key"
+
+
+def opened(sealed: str, resource_key: str, slot: str = KEY_SLOT) -> str:
+    """What the controller holding SEAL_SEED reads from a sealed value."""
+
+    info = f"hq-seal/v1|{resource_key}|{slot}".encode()
+    return SUITE.decrypt(ciphertext(sealed), private_key(SEAL_SEED), info).decode()
 
 
 def a_certificate(name: str = "newhost.example.test", *, before=-1, after=825):
@@ -94,7 +109,7 @@ class InspectionTests(TestCase):
             inspect("not a certificate", "not a key")
 
 
-@override_settings(SEVERINO_SECRET_STORE_KEY=A_KEY)
+@override_settings(SEVERINO_SEAL_PUBLIC_KEY=SEAL_PUBLIC_KEY)
 class StorageTests(TestCase):
     def setUp(self):
         self.resource = ManagedResource.objects.create(
@@ -117,21 +132,41 @@ class StorageTests(TestCase):
             current_key=self.resource.key,
         )
 
-    def test_the_key_is_encrypted_at_rest(self):
+    def test_the_key_is_sealed_to_the_controller_at_rest(self):
         self._store()
 
+        (secret,) = self.resource.sealed_secrets.all()
+        self.assertEqual(secret.slot, KEY_SLOT)
+        self.assertTrue(secret.sealed.startswith("hq2."))
+        self.assertNotIn("PRIVATE KEY", secret.sealed)
         material = CertificateMaterial.objects.get()
-        self.assertNotIn("PRIVATE KEY", material.sealed_private_key)
-        self.assertNotIn("BEGIN", material.sealed_fullchain)
+        held = str([getattr(material, field.attname) for field in material._meta.concrete_fields])
+        self.assertNotIn("PRIVATE KEY", held)
+        self.resource.refresh_from_db()
+        self.assertNotIn("PRIVATE KEY", str(self.resource.spec))
 
-    def test_the_controller_gets_the_original_material_back(self):
+    def test_the_controller_gets_the_key_back_only_by_opening_it(self):
         self._store()
 
-        recovered = material_for(self.resource.key)
+        material = material_for(self.resource.key)
 
-        self.assertEqual(recovered["private_key"], self.private_key)
-        self.assertEqual(recovered["fullchain"], self.fullchain)
-        self.assertEqual(recovered["domains"], ["newhost.example.test"])
+        self.assertNotIn("PRIVATE KEY", str(material))
+        self.assertEqual(opened(material["slots"][KEY_SLOT], self.resource.key), self.private_key)
+        self.assertEqual(material["fullchain"], self.fullchain)
+        self.assertEqual(material["domains"], ["newhost.example.test"])
+
+    def test_the_audit_record_names_the_slot_and_version_and_nothing_of_the_value(self):
+        self._store()
+        self._store()
+
+        events = AuditLog.objects.filter(metadata__slot=KEY_SLOT).order_by("pk")
+        self.assertEqual([event.metadata["version"] for event in events], [1, 2])
+        self.assertEqual([event.metadata["change"] for event in events], ["set", "replaced"])
+        sealed = self.resource.sealed_secrets.get().sealed
+        for event in events:
+            recorded = f"{event.message} {event.metadata} {event.object_repr}"
+            self.assertNotIn("PRIVATE KEY", recorded)
+            self.assertNotIn(sealed, recorded)
 
     def test_what_the_certificate_covers_is_recorded_for_reading(self):
         """Expiry and names are printed, not protected.
@@ -153,6 +188,7 @@ class StorageTests(TestCase):
 
         self.assertNotIn("PRIVATE", serialized)
         self.assertNotIn("BEGIN CERTIFICATE", serialized)
+        self.assertNotIn("HQ2.", serialized)
 
     def test_the_response_does_not_hand_the_secret_back(self):
         """A response body is the easiest place for a secret to end up in a log."""
@@ -160,6 +196,7 @@ class StorageTests(TestCase):
 
         self.assertNotIn("private_key", result)
         self.assertNotIn("fullchain", result)
+        self.assertNotIn("slots", result)
 
     def test_uploading_again_replaces_rather_than_accumulates(self):
         self._store()
@@ -167,7 +204,11 @@ class StorageTests(TestCase):
         self._store()
 
         self.assertEqual(CertificateMaterial.objects.count(), 1)
-        self.assertEqual(material_for(self.resource.key)["private_key"], self.private_key)
+        (secret,) = self.resource.sealed_secrets.all()
+        self.assertEqual(secret.version, 2)
+        self.assertEqual(
+            opened(material_for(self.resource.key)["slots"][KEY_SLOT], self.resource.key), self.private_key
+        )
 
     def test_a_rejected_pair_stores_nothing(self):
         _, other_key = a_certificate("other.example.test")
@@ -183,13 +224,13 @@ class StorageTests(TestCase):
             )
 
         self.assertFalse(CertificateMaterial.objects.exists())
+        self.assertFalse(self.resource.sealed_secrets.exists())
 
 
 class FailClosedTests(TestCase):
-    """No key configured means no storage, not quiet plaintext."""
+    """No key to seal to means no storage, not quiet plaintext."""
 
-    @override_settings(SEVERINO_SECRET_STORE_KEY="")
-    def test_storing_is_refused_when_there_is_nowhere_safe_to_put_it(self):
+    def test_no_seal_key_refuses_the_upload(self):
         resource = ManagedResource.objects.create(
             key="newhost-cert",
             kind="tls.uploaded_certificate",
@@ -197,32 +238,25 @@ class FailClosedTests(TestCase):
         )
         fullchain, private_key = a_certificate()
 
-        with self.assertRaises(PolicyError):
-            store_certificate(
-                UploadCertificateCommand(fullchain=fullchain, private_key=private_key),
-                principal=cli_principal(),
-                current_key=resource.key,
-            )
+        for value in ("", "not a key"):
+            with (
+                self.subTest(key=value),
+                override_settings(SEVERINO_SEAL_PUBLIC_KEY=value),
+                self.assertRaisesMessage(PolicyError, secrets.NO_SEAL_KEY),
+            ):
+                store_certificate(
+                    UploadCertificateCommand(fullchain=fullchain, private_key=private_key),
+                    principal=cli_principal(),
+                    current_key=resource.key,
+                )
 
         self.assertFalse(CertificateMaterial.objects.exists())
-
-    @override_settings(SEVERINO_SECRET_STORE_KEY="far-too-short")
-    def test_a_weak_key_is_refused_rather_than_stretched(self):
-        with self.assertRaises(secrets.SecretsUnavailable):
-            secrets.seal("anything")
-
-    @override_settings(SEVERINO_SECRET_STORE_KEY=A_KEY)
-    def test_a_rotated_key_reports_rather_than_returning_an_empty_secret(self):
-        sealed = secrets.seal("material")
-
-        with (
-            override_settings(SEVERINO_SECRET_STORE_KEY="a-different-key-of-full-length"),
-            self.assertRaises(secrets.SecretsUnavailable),
-        ):
-            secrets.unseal(sealed)
+        self.assertFalse(resource.sealed_secrets.exists())
+        resource.refresh_from_db()
+        self.assertEqual(resource.generation, 1)
 
 
-@override_settings(SEVERINO_SECRET_STORE_KEY=A_KEY)
+@override_settings(SEVERINO_SEAL_PUBLIC_KEY=SEAL_PUBLIC_KEY)
 class CoverageTests(TestCase):
     """A certificate HQ was given covers the names it carries.
 
@@ -283,7 +317,7 @@ class CoverageTests(TestCase):
     def test_the_service_it_serves_stops_asking_for_a_certificate(self):
         from hq.domains.control_plane.models import ManagedResource as Resource
 
-        from ..services import service_or_prospect
+        from ..services import prospects
 
         self.upload("grafana.example")
         Resource.objects.create(
@@ -297,7 +331,7 @@ class CoverageTests(TestCase):
             },
         )
 
-        service = service_or_prospect("grafana.example")
+        service = prospects(("grafana.example",))[0]
 
         self.assertNotIn("no declared certificate covers it", " ".join(service.faults))
 
@@ -352,7 +386,7 @@ class UploadFormTests(SimpleTestCase):
         self.assertEqual([field.tag for field in all_elements(rendered)], ["textarea"])
 
 
-@override_settings(SEVERINO_SECRET_STORE_KEY=A_KEY)
+@override_settings(SEVERINO_SEAL_PUBLIC_KEY=SEAL_PUBLIC_KEY)
 class UploadCapabilityTests(TestCase):
     """Who may hand HQ a private key: an operator in the browser or at the host, and nobody else."""
 
@@ -367,7 +401,7 @@ class UploadCapabilityTests(TestCase):
     def upload(self, principal, *, target="newhost-cert", private_key=None):
         return execute_capability(
             UPLOAD,
-            {"fullchain": self.fullchain, "private_key": private_key or self.private_key},
+            keyed({"fullchain": self.fullchain, "private_key": private_key or self.private_key}),
             principal=principal,
             target=target,
         )
@@ -423,10 +457,9 @@ class UploadCapabilityTests(TestCase):
         self.assertEqual(elsewhere["error"]["code"], "precondition")
         self.assertFalse(CertificateMaterial.objects.exists())
 
-    @override_settings(SEVERINO_SECRET_STORE_KEY="")
+    @override_settings(SEVERINO_SEAL_PUBLIC_KEY="")
     def test_nowhere_safe_to_put_it_is_said(self):
         result = self.upload(cli_principal())
 
-        self.assertEqual(result["error"]["code"], "precondition")
-        self.assertIn("secret store key", result["error"]["message"])
+        self.assertEqual(result["error"], {"code": "precondition", "message": secrets.NO_SEAL_KEY})
         self.assertFalse(CertificateMaterial.objects.exists())

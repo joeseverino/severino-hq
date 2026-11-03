@@ -1,0 +1,23 @@
+id: attribution-bound-through-audit-operation
+valid:
+  - |
+    with audit_operation(operation="project.refresh", principal=principal):
+        refresh()
+  - |
+    with operation_context(interface=JOB_INTERFACE, actor=job.actor or "local-operator", operation=job.kind):
+        run(job)
+  - operation_context(interface="cli", actor="op", operation="example.edit")
+  - operation_context(interface=principal.interface, actor=other.actor, operation="example.edit")
+invalid:
+  - |
+    with operation_context(interface=principal.interface, actor=principal.actor, operation=spec.name):
+        run()
+  - |
+    with operation_context(
+        interface=principal.interface,
+        actor=principal.actor,
+        operation="report.export",
+    ):
+        export()
+  - operation_context(operation=name, actor=principal.actor, interface=principal.interface)
+  - operation_context(actor=self.principal.actor, interface=self.principal.interface, operation=name)

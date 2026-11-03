@@ -49,14 +49,14 @@ _DJANGO_REASONS = {
 
 
 @dataclass(frozen=True, slots=True)
-class Refusal:
+class InputRefusal:
     """What an ``invalid_input`` error says: one sentence and its evidence."""
 
     message: str
     details: Any
 
 
-def pydantic_refusal(subject: str, errors: Iterable[Mapping[str, Any]]) -> Refusal:
+def pydantic_refusal(subject: str, errors: Iterable[Mapping[str, Any]]) -> InputRefusal:
     """A refusal from Pydantic-shaped errors, stripped of what the caller sent."""
 
     # Pydantic's ``input``, ``url`` and ``ctx`` are dropped: ``ctx`` can hold
@@ -70,10 +70,10 @@ def pydantic_refusal(subject: str, errors: Iterable[Mapping[str, Any]]) -> Refus
         for error in errors
     ]
     problems = [(_path(error["loc"]), _pydantic_reason(error)) for error in details]
-    return Refusal(_message(subject, problems), details)
+    return InputRefusal(_message(subject, problems), details)
 
 
-def django_refusal(subject: str, exc: DjangoValidationError) -> Refusal:
+def django_refusal(subject: str, exc: DjangoValidationError) -> InputRefusal:
     """A refusal from a Django error, described by field and code, never text,
     since a model's messages interpolate values freely."""
 
@@ -86,7 +86,7 @@ def django_refusal(subject: str, exc: DjangoValidationError) -> Refusal:
             details.setdefault(field, []).append(error.code or "invalid")
             where = "" if field == NON_FIELD_ERRORS else field
             problems.append((where, _django_reason(error)))
-    return Refusal(_message(subject, problems), details)
+    return InputRefusal(_message(subject, problems), details)
 
 
 def unknown_field_errors(fields: Sequence[str]) -> list[dict[str, Any]]:

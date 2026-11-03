@@ -183,7 +183,6 @@ CSRF_FAILURE_VIEW = "hq.platform.core.error_views.csrf_failure"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 SECURE_REFERRER_POLICY = "same-origin"
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https") if env_bool("DJANGO_BEHIND_TLS_PROXY") else None
 # A year, on by default. HQ is HTTPS-only behind the proxy, and the header
 # costs nothing until a browser has already reached it over TLS once.
 SECURE_HSTS_SECONDS = env_int("DJANGO_HSTS_SECONDS", 31536000)
@@ -202,7 +201,9 @@ SECURE_HSTS_PRELOAD = False
 # none of the proxy's own source restrictions.
 #
 # Told that a proxy terminates TLS, HQ refuses the second one: a request
-# that did not arrive as HTTPS is redirected to the canonical name. The
+# that did not arrive as HTTPS is redirected to the canonical name. Whether it
+# did is the scheme a trusted proxy's X-Forwarded-Proto named
+# (hq.platform.core.network.ForwardedCaller), so no other caller can claim it. The
 # healthcheck is exempt because it deliberately probes the raw port from inside
 # the container's own network namespace, which is the one caller for whom plain
 # HTTP is the correct request.
@@ -360,8 +361,6 @@ MIDDLEWARE = [
     # the session store, the login form, or the audit log.
     "hq.platform.core.network.TrustedNetworkMiddleware",
     "hq.platform.core.middleware.RequestContextMiddleware",
-    # Outside whatever writes the body; it weakens a compressed ETag (fragments accept that).
-    "django.middleware.gzip.GZipMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.csp.ContentSecurityPolicyMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -424,6 +423,7 @@ TEMPLATES = [
                 "hq.platform.core.templatetags.value_tags",
                 "hq.platform.core.templatetags.action_tags",
                 "hq.platform.core.templatetags.table_tags",
+                "hq.platform.core.templatetags.write_tags",
             ],
         },
     },
@@ -604,17 +604,26 @@ SEVERINO_POSTURE = env_str("SEVERINO_POSTURE").strip()
 if SEVERINO_POSTURE not in {"", "advanced"}:
     raise RuntimeError('SEVERINO_POSTURE must be "advanced" or unset.')
 
-SEVERINO_OIDC_ALLOWED_EMAILS = {email.lower() for email in env_list("SEVERINO_OIDC_ALLOWED_EMAILS")}
-SEVERINO_OIDC_ALLOWED_GROUPS = set(env_list("SEVERINO_OIDC_ALLOWED_GROUPS"))
+# Who may sign in, and the role each holds (application.roles): a group the
+# identity provider names, written `group=role`, and a verified address, its
+# role `viewer` unless the entry names one. A person several entries name holds
+# the highest role among them.
+_roles = import_module("hq.platform.application.roles")
+SEVERINO_OIDC_ROLE_GROUPS = _roles.parse(env_list("SEVERINO_OIDC_ROLE_GROUPS"), setting="SEVERINO_OIDC_ROLE_GROUPS")
+SEVERINO_OIDC_ALLOWED_EMAILS = _roles.parse(
+    (entry.lower() for entry in env_list("SEVERINO_OIDC_ALLOWED_EMAILS")),
+    setting="SEVERINO_OIDC_ALLOWED_EMAILS",
+    default=_roles.Role.VIEWER,
+)
 
 # Empty rejects every token: no issuer matches it.
 OIDC_ISSUER = env_str("SEVERINO_OIDC_ISSUER").rstrip("/")
 OIDC_RP_CLIENT_ID = env_str("SEVERINO_OIDC_CLIENT_ID")
 OIDC_RP_CLIENT_SECRET = env_str("SEVERINO_OIDC_CLIENT_SECRET")
-# The `email` scope is requested only when an email allowlist is configured.
-# Without it the claim never arrives, so SEVERINO_OIDC_ALLOWED_EMAILS could be
-# set and simply never match: failing closed, but silently.
-OIDC_RP_SCOPES = "openid profile groups" + (" email" if SEVERINO_OIDC_ALLOWED_EMAILS else "")
+# `email` on every deployment: a verified address is the one claim that
+# introduces a person to an account HQ already holds (core.oidc), and the one
+# an email allowlist matches.
+OIDC_RP_SCOPES = "openid profile email groups"
 OIDC_RP_SIGN_ALGO = "RS256"
 OIDC_OP_AUTHORIZATION_ENDPOINT = f"{OIDC_ISSUER}/authorize"
 OIDC_OP_TOKEN_ENDPOINT = f"{OIDC_ISSUER}/api/oidc/token"
@@ -649,6 +658,7 @@ OIDC_TIMEOUT = 10
 OIDC_STORE_ACCESS_TOKEN = False
 OIDC_STORE_ID_TOKEN = False
 OIDC_AUTHENTICATION_CALLBACK_URL = "oidc_authentication_callback"
+OIDC_CALLBACK_CLASS = "hq.platform.core.oidc_views.HQCallbackView"
 
 # Machine-client API. HQ verifies access tokens Pocket ID issued for this
 # resource and mints no credential of its own, so there is nothing to revoke
@@ -666,11 +676,12 @@ SEVERINO_API_LEEWAY_SECONDS = 30
 # would fail the client that needs it.
 SEVERINO_API_IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60
 
-# Encrypts the few secrets an operator deliberately hands to HQ: today, the
+# The public half of the controller's sealing key, root's file that hq-host
+# binds read-only: what HQ seals with it only the controller opens, such as the
 # private key of an internally signed certificate that has to reach a proxy.
-# Unset, HQ refuses to hold one rather than storing it in the clear; see
-# core.secrets. Not a provider credential: those stay outside the web container.
-SEVERINO_SECRET_STORE_KEY = env_secret("SEVERINO_SECRET_STORE_KEY")
+# Unset, HQ refuses to hold a secret rather than storing it in the clear; see
+# core.secrets.
+SEVERINO_SEAL_PUBLIC_KEY = env_secret("SEVERINO_SEAL_PUBLIC_KEY")
 
 # Private MCP endpoint, enforced by the ASGI boundary. Callers authenticate with
 # an access token from the identity provider (SEVERINO_API_RESOURCE and the
@@ -681,22 +692,35 @@ SEVERINO_MCP_ALLOWED_NETWORKS = env_list(
     default=["100.64.0.0/10", "fd7a:115c:a1e0::/48"],
 )
 SEVERINO_MCP_ALLOWED_ORIGINS = env_list("SEVERINO_MCP_ALLOWED_ORIGINS")
+# How much one agent may ask, on /mcp/ and the machine API alike
+# (application.agent_limits): calls at once, its own and every agent's
+# together, and a rate with the burst it may spend at once. An agent past one
+# is answered "later" and nothing it asked runs.
+SEVERINO_AGENT_CALLS_AT_ONCE = 4
+SEVERINO_AGENT_CALLS_AT_ONCE_OVERALL = 8
+# Under test one example agent makes every test's calls in seconds; the tests
+# of the rate set their own.
+SEVERINO_AGENT_CALLS_PER_MINUTE = 10**9 if RUNNING_TESTS else 120
+SEVERINO_AGENT_CALL_BURST = 30
+# How long an MCP tool call is waited for before the agent is told it ran too
+# long. Its thread cannot be stopped and runs on, holding its call at once.
+SEVERINO_AGENT_CALL_TIMEOUT_SECONDS = 60
 # Whether HQ may queue a repair for a finding on its own. Off by default: the
 # first release of anything that acts unattended should be watched proposing
 # before it is trusted acting. Even on, it only ever queues: the controller
 # still pulls and claims, so no provider credential nears the web process.
-SEVERINO_FINDINGS_AUTO_REMEDY = False
-# What an agent may do beyond reading, one switch each, all off unless a
-# deployment turns one on. Why each stands apart is beside its grant in
-# application.security.mcp_principal.
-SEVERINO_MCP_ENABLE_WRITES = env_bool("SEVERINO_MCP_ENABLE_WRITES")
-SEVERINO_MCP_ENABLE_DOC_SYNC = env_bool("SEVERINO_MCP_ENABLE_DOC_SYNC")
-SEVERINO_MCP_ENABLE_INFRASTRUCTURE = env_bool("SEVERINO_MCP_ENABLE_INFRASTRUCTURE")
-SEVERINO_MCP_ENABLE_PRUNE = False
-SEVERINO_MCP_ENABLE_DELETES = False
-SEVERINO_MCP_ENABLE_CERT_RENEWAL = False
-SEVERINO_MCP_ENABLE_LOOKUP = False
-SEVERINO_MCP_ENABLE_CALENDAR = False
+SEVERINO_FINDINGS_AUTO_REMEDY = env_bool("SEVERINO_FINDINGS_AUTO_REMEDY")
+# What an agent may do beyond reading, on /mcp/ and the machine API alike, one
+# switch each, all off unless a deployment turns one on. Why each stands apart
+# is beside its grant in application.security.agent_ceiling.
+SEVERINO_AGENT_ENABLE_WRITES = env_bool("SEVERINO_AGENT_ENABLE_WRITES")
+SEVERINO_AGENT_ENABLE_DOC_SYNC = env_bool("SEVERINO_AGENT_ENABLE_DOC_SYNC")
+SEVERINO_AGENT_ENABLE_INFRASTRUCTURE = env_bool("SEVERINO_AGENT_ENABLE_INFRASTRUCTURE")
+SEVERINO_AGENT_ENABLE_PRUNE = env_bool("SEVERINO_AGENT_ENABLE_PRUNE")
+SEVERINO_AGENT_ENABLE_DELETES = env_bool("SEVERINO_AGENT_ENABLE_DELETES")
+SEVERINO_AGENT_ENABLE_CERT_RENEWAL = env_bool("SEVERINO_AGENT_ENABLE_CERT_RENEWAL")
+SEVERINO_AGENT_ENABLE_LOOKUP = env_bool("SEVERINO_AGENT_ENABLE_LOOKUP")
+SEVERINO_AGENT_ENABLE_CALENDAR = env_bool("SEVERINO_AGENT_ENABLE_CALENDAR")
 # How long a change held for a person's approval stands before it lapses. A day:
 # the person it waits for sleeps, and a request still clickable a month later is
 # a change nobody is looking at any more being applied on an old decision.
@@ -785,8 +809,8 @@ STATIC_ROOT = Path(env_str("DJANGO_STATIC_ROOT", str(BASE_DIR / "var" / "static"
 STATIC_LIVE = env_bool("DJANGO_WHITENOISE_AUTOREFRESH", default=DEBUG)
 
 # Collected assets are named by their content (css/app.3f2a1b9c0d4e.css), so
-# core.static can cache them forever, and each has a brotli and a gzip copy
-# beside it, so nothing is compressed while serving. Live serving keeps plain names: the
+# core.static can cache them forever, and each has a brotli copy beside it
+# (core.static.COPIES), so nothing is compressed while serving. Live serving keeps plain names: the
 # source trees it reads have no hashed copies, and it sends no-cache anyway.
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},

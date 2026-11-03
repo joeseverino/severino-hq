@@ -1,0 +1,78 @@
+#!/bin/sh
+#MISE description="The names hq/ and hq_sdk/ define that nothing outside tests reads, the composed extensions and templates counted as readers (classes, functions, methods, properties, imports), as vulture finds them, each file:line name kind, sorted and then counted; reach for it before deleting code or to find what only tests keep alive, which is deleted with its tests or, when it is a test's own check or helper, moved beside the tests that read it; read-only"
+#MISE hide=true
+#USAGE flag "--fields" help="Also list the variables and attributes, where model columns, Pydantic fields, settings and enum members read by keyword, by a built name or as data make most of what is found"
+
+# vulture reads every path it is given as uses and reports what none of them
+# reads. [tool.vulture] in pyproject.toml leaves the tests out, so a name only
+# a test reads is reported, and holds what a decorator or a naming convention
+# hands to a caller outside HQ. A use vulture cannot see in Python is handed
+# to it as one:
+#   - the source of Django and mozilla-django-oidc, for each hook they call on
+#     HQ's subclasses by name (Meta, handle, form_valid, verify_claims);
+#   - the extensions HQ_LOCAL_PYTHONPATH composes, which import hq_sdk;
+#   - each name a template reads after a dot, as a filter or as a tag;
+#   - each string in Python that is one name or a dotted path into hq or
+#     hq_sdk, as an admin column, a note="..." read with getattr, a setting
+#     or an entry point names what it loads;
+#   - each dotted path or import from hq or hq_sdk in a file of another
+#     language (a task's heredoc, TOML);
+#   - tools/lint/vulture-whitelist.py, the rest, each with who calls it.
+# rg reads the names; they reach vulture as getattr calls on a literal name,
+# which it counts as a read. Migrations are read as uses and not reported.
+set -euf
+
+uses="$(mktemp -d)"
+trap 'rm -rf "${uses}"' EXIT
+
+newline='
+'
+extensions=""
+IFS=:
+for dir in ${HQ_LOCAL_PYTHONPATH:-}; do
+    if [ -d "${dir}" ]; then extensions="${extensions}${dir}${newline}"; fi
+done
+# From here a list splits on newlines alone, and set -f keeps its globs.
+IFS="${newline}"
+
+# rg exits 1 when it matches nothing, which is no use found, never a failure.
+matched() { [ "${1}" -le 1 ]; }
+
+name='[A-Za-z_][A-Za-z0-9_]*'
+dotted="(hq|hq_sdk)(\.${name})+(:${name})?"
+# A template tag can span lines, so the tags are matched across them first.
+# shellcheck disable=SC2086
+rg -U -o --no-filename -g '**/templates/**' '(?s)\{[{%].*?[%}]\}' templates hq hq_sdk ${extensions} >"${uses}/found" || matched $?
+rg -o --no-filename --no-line-number -r '$1' "(?:\.|\||\{%-?\s*)(${name})" "${uses}/found" >"${uses}/names" || matched $?
+# shellcheck disable=SC2086
+rg -o --no-filename --no-line-number -g '*.py' -g '!**/tests/**' "[\"']${dotted}[\"']" . ${extensions} >"${uses}/found" || matched $?
+sed -E 's/^.(.*).$/\1/; s/.*[.:]//' "${uses}/found" >>"${uses}/names"
+# shellcheck disable=SC2086
+rg -o --no-filename --no-line-number -r '$1' -g '*.py' -g '!**/tests/**' "[\"'](${name})[\"']" . ${extensions} >"${uses}/found" || matched $?
+cat "${uses}/found" >>"${uses}/names"
+rg -o --no-filename --no-line-number -g '!*.py' -g '!*.md' -g '!**/tests/**' \
+    "${dotted}|from (hq|hq_sdk)[A-Za-z0-9_.]* import ${name}(, ${name})*" . >"${uses}/found" || matched $?
+sed -E 's/^from .* import //; s/.*[.:]//' "${uses}/found" | tr -s ', ' '\n' >>"${uses}/names"
+sort -u "${uses}/names" | sed 's/.*/getattr(_, "&")/' >"${uses}/names.py"
+rm "${uses}/found" "${uses}/names"
+
+frameworks="$(uv run python -c 'import django, mozilla_django_oidc as oidc; print(django.__path__[0]); print(oidc.__path__[0])')"
+
+# vulture exits 3 when it finds something, and 1 or 2 on input it refuses.
+status=0
+# shellcheck disable=SC2086
+uv run vulture hq hq_sdk tools demo examples manage.py ${frameworks} ${extensions} \
+    "${uses}/names.py" tools/lint/vulture-whitelist.py >"${uses}/vulture" || status=$?
+if [ "${status}" -ne 0 ] && [ "${status}" -ne 3 ]; then
+    cat "${uses}/vulture" >&2
+    exit "${status}"
+fi
+
+kinds='class|function|method|property|import'
+if [ "${usage_fields:-false}" = true ]; then kinds="${kinds}|variable|attribute"; fi
+# One line per name, sorted by file and line, so two runs are compared by a
+# diff. The closing line holds the total.
+sed -n -E "s#^((hq|hq_sdk)/[^:]+:[0-9]+): unused (${kinds}) '([^']+)'.*#\1 \4 \3#p" "${uses}/vulture" \
+    | grep -v '/migrations/' | sort -t: -k1,1 -k2,2n >"${uses}/listed" || true
+cat "${uses}/listed"
+printf '%s names nothing outside tests reads\n' "$(wc -l <"${uses}/listed" | tr -d ' ')"

@@ -10,7 +10,7 @@
 # mise is the release min_version names, from its image by digest
 # (lint:toolchain holds the tag to min_version).
 FROM python:3.15-slim-trixie@sha256:f786b2e19cf9bb54e96bfcd4c1b40c4c56336c22e60607ffd4b080ae5b5dee83 AS tools
-COPY --from=ghcr.io/jdx/mise:2026.10.21@sha256:a9a1654a19d150535bcaede142ff69368f18ec11f32986f6ed944d1c811702af /usr/local/bin/mise /usr/local/bin/mise
+COPY --from=ghcr.io/jdx/mise:2026.11.0@sha256:6e05da4113a812cc8ac72b21a38889d019fb0f97df6ce8075c0de98d1cf48cc4 /usr/local/bin/mise /usr/local/bin/mise
 ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
 COPY mise.toml mise.lock ./
@@ -179,8 +179,16 @@ ENTRYPOINT ["/entrypoint.sh"]
 #
 # Held above the proxy's 90s deliberately: whichever side hangs up first
 # decides, and it should be the one that knows a request is not in flight.
-CMD ["uvicorn", "hq.config.asgi:application", "--host", "0.0.0.0", "--port", "8000", \
-     "--no-proxy-headers", "--access-log", "--timeout-keep-alive", "120"]
+#
+# Loopback only: every caller, /mcp/ included, comes through that proxy. Its
+# forwarded headers are read by the application (hq/config/asgi.py) from
+# SEVERINO_TRUSTED_PROXIES, so the server reads none of its own.
+#
+# One process, named so a WEB_CONCURRENCY in the host's environment cannot
+# start more: the agent limits (hq/platform/application/agent_limits.py) are
+# counted in it.
+CMD ["uvicorn", "hq.config.asgi:application", "--host", "127.0.0.1", "--port", "8000", \
+     "--workers", "1", "--no-proxy-headers", "--access-log", "--timeout-keep-alive", "120"]
 
 # The probe is the static controller binary already in the image: no
 # interpreter or shell per check.

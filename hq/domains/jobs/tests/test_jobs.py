@@ -38,18 +38,17 @@ class JobRunnerTests(TransactionTestCase):
         self.assertEqual(job.result, {"rows": 7})
         self.assertEqual(job.percent, 100)
 
-    def test_a_raising_job_records_the_traceback_rather_than_vanishing(self):
+    def test_a_raising_job_ends_failed_rather_than_vanishing(self):
         def explode(progress):
             raise ValueError("the archive was not where it said")
 
-        job = self.wait(start("test.boom", "Boom", explode))
+        with self.assertLogs("severino.jobs", "ERROR"):
+            job = self.wait(start("test.boom", "Boom", explode))
 
+        # An exception on a thread is otherwise printed to a stream nobody is
+        # reading and the row sits at `running` forever.
         self.assertEqual(job.state, Job.State.FAILED)
-        # The message and the line that raised it. An exception on a thread is
-        # otherwise printed to a stream nobody is reading and the row sits at
-        # `running` forever.
-        self.assertIn("the archive was not where it said", job.error)
-        self.assertIn("explode", job.error)
+        self.assertIn("ValueError", job.error)
 
     def test_two_of_a_kind_cannot_run_at_once(self):
         gate = threading.Event()
@@ -95,12 +94,12 @@ class JobRunnerTests(TransactionTestCase):
         with (
             mock.patch("hq.domains.jobs.runner.threading.Thread.start", side_effect=RuntimeError("no threads")),
             self.assertRaises(RuntimeError),
+            self.assertLogs("severino.jobs", "ERROR"),
         ):
             start("test.nothread", "No thread", lambda progress: {})
 
         job = Job.objects.get(kind="test.nothread")
         self.assertEqual(job.state, Job.State.FAILED)
-        self.assertIn("no threads", job.error)
         # The kind is free again: a job that never ran does not hold it.
         self.assertEqual(self.wait(start("test.nothread", "Again", lambda progress: {})).state, Job.State.SUCCEEDED)
 
@@ -130,7 +129,7 @@ class JobRunnerTests(TransactionTestCase):
         user = get_user_model().objects.create_user("operator", password="x" * 14)
         job = self.wait(start("test.audited", "Audited", lambda p: {"rows": 3}, requested_by=user))
 
-        entry = AuditLog.objects.filter(action=AuditLog.Action.IMPORTED, object_id=str(job.pk)).first()
+        entry = AuditLog.objects.filter(action=AuditLog.Action.DONE, object_id=str(job.pk)).first()
         self.assertIsNotNone(entry, "a finished job must say so in the audit log")
         # Attributed. There is no request on a worker thread, so an audit row
         # written without being told the user records the work as having been
@@ -286,7 +285,7 @@ class RunOnTheCallingThreadTests(TestCase):
         job = run("test.inline", "Inline", lambda progress: {"seen": 3}, actor="timer")
 
         self.assertEqual((job.state, job.result, job.percent), ("succeeded", {"seen": 3}, 100))
-        ended = AuditLog.objects.filter(operation_id=str(job.pk), action=AuditLog.Action.IMPORTED).get()
+        ended = AuditLog.objects.filter(operation_id=str(job.pk), action=AuditLog.Action.OBSERVED).get()
         self.assertEqual(ended.metadata["counts"], {"seen": 3})
 
     def test_it_takes_the_same_slot_as_a_started_job(self):
@@ -329,15 +328,6 @@ class RunOnTheCallingThreadTests(TestCase):
         self.assertEqual(
             failed.metadata["failure"], {"message": "The registry lists nothing for it.", "kind": "Failed"}
         )
-
-    def test_any_other_exception_keeps_its_traceback(self):
-        def work(progress):
-            raise OSError("connection reset")
-
-        job = run("test.inline", "Inline", work)
-
-        self.assertEqual(job.state, "failed")
-        self.assertIn("Traceback", job.error)
 
 
 class JobIdTests(TestCase):

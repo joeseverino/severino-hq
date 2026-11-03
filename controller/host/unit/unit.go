@@ -157,6 +157,7 @@ func admit(stdin io.Reader) error {
 // caller's plugins as root.
 func rootCommand(ctx context.Context, name string, args ...string) *exec.Cmd {
 	command := exec.CommandContext(ctx, name, args...)
+	command.WaitDelay = host.ProcessWaitDelay
 	command.Env = []string{"LC_ALL=C", "PATH=" + rootPath, "HOME=/root"}
 	return command
 }

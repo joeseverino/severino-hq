@@ -4,6 +4,7 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
+from hq.platform.core.tests.forwarding import arrived
 
 from ..connection_catalog import ConnectionAbilityState, ConnectionGroup, ConnectionView
 from ..connection_security import (
@@ -184,8 +185,7 @@ class ConnectionSecurityPostureTests(TestCase):
             "/infrastructure/connections/",
             secure=secure,
             HTTP_HOST="hq.example.test",
-            REMOTE_ADDR=address,
-            **extra,
+            **arrived(REMOTE_ADDR=address, **extra),
         )
 
     def test_tailnet_ingress_and_connection_authority_are_derived_together(self):
@@ -345,7 +345,7 @@ class ConnectionSecurityPostureTests(TestCase):
         posture = connection_security_posture(_groups(), request=self.request(), edge=edge)
 
         self.assertEqual(edge.state, "good")
-        self.assertEqual(edge.evidence, "Tailnet ranges · deny all")
+        self.assertEqual(edge.evidence, "Tailnet ranges\xa0· deny all")
         self.assertEqual(posture.state, "good")
 
     def test_npm_generated_final_deny_is_not_duplicated_to_prove_the_policy(self):
@@ -377,7 +377,7 @@ class ConnectionSecurityPostureTests(TestCase):
         edge = observed_ingress_control("hq.example.test")
 
         self.assertEqual(edge.state, "good")
-        self.assertEqual(edge.evidence, "Tailnet ranges · implicit deny all")
+        self.assertEqual(edge.evidence, "Tailnet ranges\xa0· implicit deny all")
 
     def test_a_widened_npm_policy_degrades_the_whole_posture(self):
         ProviderInventory.objects.create(
@@ -432,7 +432,7 @@ class ConnectionSecurityPostureTests(TestCase):
                 tailnet_policy, _edge = observed_connection_controls("hq.example.test")
 
         self.assertEqual(tailnet_policy.state, "good")
-        self.assertEqual(tailnet_policy.evidence, "1 grant · 1 test")
+        self.assertEqual(tailnet_policy.evidence, "1 grant\xa0· 1 test")
 
 
 class ArrivalInterfaceTests(TestCase):

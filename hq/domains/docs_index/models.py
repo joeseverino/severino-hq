@@ -12,6 +12,7 @@ from django.db import models
 from django.db.models import Q
 from django.urls import reverse
 
+from hq.platform.application.labels import dotted
 from hq.platform.application.ui import ended
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule
@@ -159,7 +160,7 @@ class DocumentationRecord(TimestampedModel):
 
     @override
     def __str__(self) -> str:
-        return f"{self.doc_id} · {self.title}"
+        return dotted(self.doc_id, self.title)
 
     def get_absolute_url(self) -> str:
         return reverse("docs_index:detail", args=[self.doc_id])

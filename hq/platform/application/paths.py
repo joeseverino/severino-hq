@@ -23,7 +23,7 @@ lazy from hq.platform.core.network import split_host_port
 from .entity_links import EntityLink, entity_link, kind_label
 from .facts import Joined, Subject, readings, refusals_about, snapshots_of
 from .infrastructure import enabled_resources
-from .labels import lower_first
+from .labels import dotted, lower_first
 from .locate import host_of, split_endpoint
 from .path_model import NETWORK_LABELS, Certificate, Hop, HopSource, Route, ServicePath, dns_label, pointing_at
 from .projection import read_once
@@ -323,7 +323,7 @@ def _from_dns(name: str, row: _Row, depth: int) -> list[Hop]:
             dns_label(row.kind),
             answer,
             pointing_at(row.link, answer),
-            detail=" · ".join(part for part in (record_type, "Proxied" if fronted else "") if part),
+            detail=dotted(record_type, "Proxied" if fronted else ""),
             source=row.source,
         )
     ]

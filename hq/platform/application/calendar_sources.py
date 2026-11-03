@@ -14,6 +14,7 @@ from typing import Any
 
 from django.utils import timezone
 
+from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 
 from .calendar import CalendarEvent, CalendarSource
@@ -73,12 +74,19 @@ def _expiry_day(expiry: Expiry) -> date:
     return timezone.localtime(expiry.expires).date()
 
 
+def _whose(expiry: Expiry, what: str) -> str:
+    """What runs out, named with its subject: one domain has both a certificate
+    and a registration, and its title alone tells them apart."""
+
+    return f"{expiry.subject}'s {what}"
+
+
 def _certificate_event(expiry: Expiry) -> CalendarEvent:
     ends = _expiry_day(expiry)
     if expiry.managed:
         return CalendarEvent(
             id=f"certificate:{expiry.resource_key}",
-            title=f"Renew {expiry.subject}",
+            title=f"Renew {_whose(expiry, 'certificate')}",
             starts=ends - timedelta(days=expiry.renewal_window_days),
             ends=ends + timedelta(days=1),
             detail=f"Expires {expiry.phrase}",
@@ -86,7 +94,7 @@ def _certificate_event(expiry: Expiry) -> CalendarEvent:
         )
     return CalendarEvent(
         id=f"certificate:{expiry.source}:{expiry.subject}",
-        title=f"{expiry.subject} expires",
+        title=f"{_whose(expiry, 'certificate')} expires",
         starts=ends,
         detail=f"{expiry.source} renews it and has not yet",
         url=expiry.url,
@@ -110,18 +118,19 @@ def _registration_event(expiry: Expiry) -> CalendarEvent:
     if expiry.auto_renew:
         return CalendarEvent(
             id=f"registration:{expiry.subject}",
-            title=f"{expiry.subject} renews",
+            title=f"{_whose(expiry, 'registration')} renews",
             starts=ends,
             detail="Auto-renews at the registrar",
             url=expiry.url,
         )
     return CalendarEvent(
         id=f"registration:{expiry.subject}",
-        title=f"Renew {expiry.subject}",
+        title=f"Renew {_whose(expiry, 'registration')}",
         starts=ends - timedelta(days=REGISTRATION_NOTICE_DAYS),
         ends=ends + timedelta(days=1),
-        detail=f"Registration expires {expiry.phrase}"
-        + ("" if expiry.auto_renew is False else " · auto-renew not known"),
+        detail=dotted(
+            f"Registration expires {expiry.phrase}", "" if expiry.auto_renew is False else "auto-renew not known"
+        ),
         url=expiry.url,
     )
 

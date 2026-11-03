@@ -88,6 +88,7 @@ func (e ConditionType) Valid() bool {
 
 // Defines values for ConnectionProvider.
 const (
+	ConnectionProviderACME          ConnectionProvider = "acme"
 	ConnectionProviderAdGuard       ConnectionProvider = "adguard"
 	ConnectionProviderCloudflareAPI ConnectionProvider = "cloudflare_api"
 	ConnectionProviderCloudflareDNS ConnectionProvider = "cloudflare_dns"
@@ -102,6 +103,8 @@ const (
 // Valid indicates whether the value is a known member of the ConnectionProvider enum.
 func (e ConnectionProvider) Valid() bool {
 	switch e {
+	case ConnectionProviderACME:
+		return true
 	case ConnectionProviderAdGuard:
 		return true
 	case ConnectionProviderCloudflareAPI:
@@ -1398,7 +1401,7 @@ type HostTailnetLockRecord struct {
 	TrustedKeys   int      `json:"trusted_keys,omitempty"`
 }
 
-// HostUnitRecord One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships, and the controller reports no other. Each string is a unit name, one of systemd's state words or an instant in UTC; none is a path, a command line or an environment.
+// HostUnitRecord One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships, and the controller reports no other. Each string is a unit name, one of systemd's state words, an instant in UTC or the unit file's own title for a person to read; none is a path, a command line or an environment.
 type HostUnitRecord struct {
 	// Activates Unit: the unit a timer or path starts.
 	Activates string `json:"activates,omitempty"`
@@ -1444,6 +1447,9 @@ type HostUnitRecord struct {
 
 	// Sub SubState: the unit type's own word for the same state, such as waiting or elapsed for a timer.
 	Sub string `json:"sub"`
+
+	// Title Description: what the unit is, in the words of the unit file the repository ships. Its name when the file has none.
+	Title string `json:"title,omitempty"`
 
 	// Unit Id: the unit's name.
 	Unit string `json:"unit"`
@@ -1502,11 +1508,15 @@ type LockedAction struct {
 	Reason string       `json:"reason"`
 }
 
-// Material A stored certificate's material, released only to the controller applying it.
+// Material A stored certificate's material, released only to the controller applying it. Its secrets cross sealed.
 type Material struct {
-	Domains    []string `json:"domains"`
-	Fullchain  string   `json:"fullchain"`
-	PrivateKey string   `json:"private_key"`
+	Domains []string `json:"domains"`
+
+	// Fullchain The certificate and its chain, PEM-encoded, which are public.
+	Fullchain string `json:"fullchain"`
+
+	// Slots Each secret the resource holds, by slot, sealed to the controller: only the controller opens one, and only for this resource and slot.
+	Slots map[string]string `json:"slots"`
 }
 
 // NPMAccessListAccessRule defines model for NPMAccessListAccessRule.
@@ -1706,35 +1716,39 @@ type PortainerRuntimePortBinding struct {
 
 // PortainerRuntimeRecord How one container is run, from Docker's inspect of it. Only what decides what the container can reach or do on its machine. The inspect document also carries the environment, the command line and every label, where secrets live, and none of those is named here, so none can be stored.
 type PortainerRuntimeRecord struct {
-	CapAdd         []string                       `json:"cap_add,omitempty"`
-	CapDrop        []string                       `json:"cap_drop,omitempty"`
-	ConnectionRef  string                         `json:"connection_ref"`
-	Container      string                         `json:"container"`
-	CPULimit       float32                        `json:"cpu_limit,omitempty"`
-	Devices        []string                       `json:"devices,omitempty"`
-	EnvironmentID  int                            `json:"environment_id,omitempty"`
-	ExposedPorts   []int                          `json:"exposed_ports,omitempty"`
-	Health         string                         `json:"health,omitempty"`
-	Healthcheck    bool                           `json:"healthcheck,omitempty"`
-	Host           string                         `json:"host,omitempty"`
-	HostAddress    string                         `json:"host_address,omitempty"`
-	ImageID        string                         `json:"image_id,omitempty"`
-	IpcMode        string                         `json:"ipc_mode,omitempty"`
-	MemoryLimit    int                            `json:"memory_limit,omitempty"`
-	Mounts         []PortainerRuntimeRuntimeMount `json:"mounts,omitempty"`
-	NetworkMode    string                         `json:"network_mode,omitempty"`
-	PidMode        string                         `json:"pid_mode,omitempty"`
-	PidsLimit      int                            `json:"pids_limit,omitempty"`
-	PortBindings   []PortainerRuntimePortBinding  `json:"port_bindings,omitempty"`
-	Privileged     bool                           `json:"privileged,omitempty"`
-	ReadOnlyRootfs bool                           `json:"read_only_rootfs,omitempty"`
-	RestartCount   int                            `json:"restart_count,omitempty"`
-	RestartPolicy  string                         `json:"restart_policy,omitempty"`
-	SecurityOpt    []string                       `json:"security_opt,omitempty"`
-	Service        string                         `json:"service,omitempty"`
-	Stack          string                         `json:"stack,omitempty"`
-	StartedAt      string                         `json:"started_at,omitempty"`
-	User           string                         `json:"user,omitempty"`
+	CapAdd           []string                       `json:"cap_add,omitempty"`
+	CapDrop          []string                       `json:"cap_drop,omitempty"`
+	ConnectionRef    string                         `json:"connection_ref"`
+	Container        string                         `json:"container"`
+	CPULimit         float32                        `json:"cpu_limit,omitempty"`
+	CPUTime          int                            `json:"cpu_time,omitempty"`
+	Devices          []string                       `json:"devices,omitempty"`
+	EnvironmentID    int                            `json:"environment_id,omitempty"`
+	ExposedPorts     []int                          `json:"exposed_ports,omitempty"`
+	Health           string                         `json:"health,omitempty"`
+	Healthcheck      bool                           `json:"healthcheck,omitempty"`
+	Host             string                         `json:"host,omitempty"`
+	HostAddress      string                         `json:"host_address,omitempty"`
+	ImageID          string                         `json:"image_id,omitempty"`
+	IpcMode          string                         `json:"ipc_mode,omitempty"`
+	MemoryLimit      int                            `json:"memory_limit,omitempty"`
+	MemoryUsage      int                            `json:"memory_usage,omitempty"`
+	MemoryUsageBasis string                         `json:"memory_usage_basis,omitempty"`
+	Mounts           []PortainerRuntimeRuntimeMount `json:"mounts,omitempty"`
+	NetworkMode      string                         `json:"network_mode,omitempty"`
+	PidMode          string                         `json:"pid_mode,omitempty"`
+	PidsLimit        int                            `json:"pids_limit,omitempty"`
+	PortBindings     []PortainerRuntimePortBinding  `json:"port_bindings,omitempty"`
+	Privileged       bool                           `json:"privileged,omitempty"`
+	ReadOnlyRootfs   bool                           `json:"read_only_rootfs,omitempty"`
+	RestartCount     int                            `json:"restart_count,omitempty"`
+	RestartPolicy    string                         `json:"restart_policy,omitempty"`
+	SecurityOpt      []string                       `json:"security_opt,omitempty"`
+	Service          string                         `json:"service,omitempty"`
+	Stack            string                         `json:"stack,omitempty"`
+	StartedAt        string                         `json:"started_at,omitempty"`
+	UsageReadAt      string                         `json:"usage_read_at,omitempty"`
+	User             string                         `json:"user,omitempty"`
 }
 
 // PortainerRuntimeRuntimeMount defines model for PortainerRuntimeRuntimeMount.
@@ -2247,7 +2261,7 @@ type ClientInterface interface {
 	// Corresponds with POST /job (the `Job` operationId).
 	Job(ctx context.Context, params *JobParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// Material Certificate material for one resource.
+	// Material Certificate material for one resource, its key sealed.
 	//
 	// Corresponds with POST /material (the `Material` operationId).
 	Material(ctx context.Context, params *MaterialParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2531,7 +2545,7 @@ func (c *Client) Job(ctx context.Context, params *JobParams, reqEditors ...Reque
 	return c.Client.Do(req)
 }
 
-// Material Certificate material for one resource.
+// Material Certificate material for one resource, its key sealed.
 //
 // Corresponds with POST /material (the `Material` operationId).
 func (c *Client) Material(ctx context.Context, params *MaterialParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -3693,7 +3707,7 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /job (the `Job` operationId).
 	JobWithResponse(ctx context.Context, params *JobParams, reqEditors ...RequestEditorFn) (*JobResponse, error)
 
-	// MaterialWithResponse Certificate material for one resource.
+	// MaterialWithResponse Certificate material for one resource, its key sealed.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -4707,7 +4721,7 @@ func (c *ClientWithResponses) JobWithResponse(ctx context.Context, params *JobPa
 	return ParseJobResponse(rsp)
 }
 
-// MaterialWithResponse Certificate material for one resource.
+// MaterialWithResponse Certificate material for one resource, its key sealed.
 //
 // Returns a wrapper object for the known response body format(s).
 //

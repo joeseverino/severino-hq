@@ -213,11 +213,11 @@ default.
   (`REQUIRED_APP_VARIABLES` in `hq/config/settings.py`).
 - **Behind a TLS proxy:** `DJANGO_CSRF_TRUSTED_ORIGINS` and
   `DJANGO_BEHIND_TLS_PROXY`, and the proxy's address in
-  `SEVERINO_TRUSTED_PROXIES`. The renderer does not require them, but sign-in
-  through a proxy does not work without them.
+  `SEVERINO_TRUSTED_PROXIES`, the one peer whose forwarded address and scheme
+  HQ believes. The renderer does not require them, but sign-in through a
+  proxy does not work without them.
 - **On a first install:** `DJANGO_DEBUG=0`, the two cookie switches,
-  `DJANGO_TIME_ZONE`, `SEVERINO_SITE_NAME` and `SEVERINO_SECRET_STORE_KEY`,
-  with `SEVERINO_OIDC_ENABLED=0` until sign-in is set up below.
+  `DJANGO_TIME_ZONE` and `SEVERINO_SITE_NAME`, with `SEVERINO_OIDC_ENABLED=0` until sign-in is set up below.
 - **The rest** when you use the feature it names.
 
 **Check:** the item has `DJANGO_SECRET_KEY` and `DJANGO_ALLOWED_HOSTS` with

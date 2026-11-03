@@ -2,17 +2,64 @@
 // Runs before the bundle: zod inside it probes for eval unless told not to,
 // and HQ's policy refuses eval.
 globalThis.__zod_globalConfig = { jitless: true };
-// The viewer draws a section only when it comes into view, in batches it holds
-// for idle time, and keeps scrolling to every entry a reader followed until the
-// batch is drawn. A busy browser has no idle time, so an earlier entry's
-// scrolling outlasts the click on the next. Without idle callbacks the viewer
-// draws each batch at once, and the page settles on the entry followed last.
-window.requestIdleCallback = undefined;
+
+// Scalar marks the entry in view (the sidebar's current item, the bar's name
+// on a phone) as each entry's section crosses the middle of the window, an
+// IntersectionObserver with this margin (`c3`, its `Section`'s, in
+// static/vendor/scalar/standalone.js line 3395). A reader's place is the top
+// of what is shown, so the end of one entry above the middle reads as that
+// entry while the next is named. Each such observer watches instead the one
+// line under the bars that stand over the page, the ones Scalar scrolls an
+// entry to just below (`data-scalar-scroll-header`). Where that line falls
+// moves with the window's height and with the bars a width shows, so each is
+// built again on a resize, watching what it watched. The bars' height is read
+// from their boxes: HQ's header declares its own as a calc of other tokens,
+// which a custom property hands back unresolved, and whether the viewer's
+// own bar is shown is its breakpoint's.
+const MIDDLE = "-49% 0px -49% 0px";
+const Observer = window.IntersectionObserver;
+const atTheLine = new Set();
+const lineUnderTheBars = () => {
+  /* eslint-disable no-restricted-syntax -- where the reading line falls, for an observer's margin, which takes lengths and no CSS: Scalar reads its bars the same way to scroll an entry under them */
+  const bars = [...document.querySelectorAll("[data-scalar-scroll-header]")]
+    .filter((bar) => ["sticky", "fixed"].includes(getComputedStyle(bar).position))
+    .map((bar) => bar.getBoundingClientRect())
+    .filter((box) => box.height > 0)
+    .sort((a, b) => a.top - b.top);
+  /* eslint-enable no-restricted-syntax */
+  let line = 0;
+  for (const box of bars) if (box.top <= line + 1) line = Math.max(line, box.bottom);
+  const top = Math.round(line);
+  return `-${top}px 0px -${Math.max(0, window.innerHeight - top - 1)}px 0px`;
+};
+class AtTheLine {
+  constructor(callback, options) {
+    this.callback = callback;
+    this.options = options;
+    this.targets = new Set();
+    this.build();
+    atTheLine.add(this);
+  }
+  build() {
+    this.inner?.disconnect();
+    this.inner = new Observer((entries) => this.callback(entries, this), { ...this.options, rootMargin: lineUnderTheBars() });
+    this.targets.forEach((target) => this.inner.observe(target));
+  }
+  observe(target) { this.targets.add(target); this.inner.observe(target); }
+  unobserve(target) { this.targets.delete(target); this.inner.unobserve(target); }
+  disconnect() { this.targets.clear(); this.inner.disconnect(); atTheLine.delete(this); }
+  takeRecords() { return this.inner.takeRecords(); }
+}
+// An expression, since a declaration of that name in a script is the global
+// itself, the one replaced.
+window.IntersectionObserver = Object.assign(function IntersectionObserver(callback, options) {
+  return options?.rootMargin === MIDDLE ? new AtTheLine(callback, options) : new Observer(callback, options);
+}, { prototype: Observer.prototype });
+window.addEventListener("resize", () => atTheLine.forEach((observer) => observer.build()), { passive: true });
 
 // Every code-sample target the bundle ships, named so all but curl can be
 // hidden: the option is a list of what to hide, with no list of what to show.
-// HQ's own clients (the generated CLI and TypeScript client) are not among
-// them, and curl is the one sample every reader can run.
+// curl is the one sample every reader can run.
 const HIDDEN_CLIENTS = {
   shell: ["httpie", "wget"],
   ...Object.fromEntries(
@@ -23,18 +70,125 @@ const HIDDEN_CLIENTS = {
   ),
 };
 
+// The bundle's sentences for a type or format with no description of its own.
+const STOCK_SENTENCES = [
+  "typeInteger", "formatInt32", "formatInt64", "formatDate", "formatDateTime",
+  "formatPassword", "formatBase64", "formatBinary",
+];
+
+// Where a line may end inside a path: before each "/", "." or "-", the
+// places Scalar's own path text takes (`ScalarWrappingText`'s `path` preset,
+// static/vendor/scalar/standalone.js line 964), and before a query's "?" and
+// "&"; never after a space, a ":" or another of them, so "https://" and
+// "../" stay whole.
+const PATH_BREAK = /(?<=[^\s/.?&:-])[/.?&-]/g;
+
+// A hyphen inside a path, with the character after it.
+const PATH_HYPHEN = /-(?=\S)/g;
+
+// A path is a word with a "/" in it. Neither browser engine ends a line
+// inside one but where any character may end it (`overflow-wrap`), which
+// reads as a word cut in two ("refresh.reque" over "st/"), and CSS has no way
+// to name the characters a line may end at. A <wbr> is the platform's place
+// to end one, and is never copied. Scalar draws an operation's heading with
+// one before each such character, and its list of a section's operations
+// and its samples as plain text, so each text node holding a path is split at
+// each such place with a <wbr> between, as it is drawn.
+//
+// Both engines also end a line after a hyphen (UAX #14's HY class, kept by
+// every engine's line breaker), and take that later place over the <wbr>
+// before it, so "docker-" would end a line over "host". Only a box that does
+// not wrap takes that place away without a character of its own (a joiner
+// would be copied), so each hyphen and the character after it are set in one
+// (`[data-path-hyphen]` in api-reference.css).
+//
+// The viewer keeps its own node, the first part, and may write a new path
+// into it later, so the parts split off after it are kept to be taken out
+// then.
+const splitOff = new WeakMap();
+const markPaths = (node) => {
+  if (!node.isConnected || !node.data.includes("/")) return;
+  const breaks = new Set();
+  const hyphens = new Set();
+  for (const word of node.data.matchAll(/\S*\/\S*/g)) {
+    for (const at of word[0].matchAll(PATH_BREAK)) breaks.add(word.index + at.index);
+    for (const at of word[0].matchAll(PATH_HYPHEN)) hyphens.add(word.index + at.index);
+  }
+  const parts = [];
+  for (const place of [...new Set([...breaks, ...hyphens])].sort((a, b) => b - a)) {
+    let rest = node.splitText(place);
+    parts.push(rest);
+    if (hyphens.has(place)) {
+      parts.push(rest.splitText(2));
+      const joined = document.createElement("span");
+      joined.toggleAttribute("data-path-hyphen", true);
+      rest.replaceWith(joined);
+      joined.append(rest);
+      rest = joined;
+      parts.push(joined);
+    }
+    if (breaks.has(place)) {
+      const wbr = document.createElement("wbr");
+      rest.before(wbr);
+      parts.push(wbr);
+    }
+  }
+  if (parts.length) splitOff.set(node, parts);
+};
+const remarkPaths = (node) => {
+  splitOff.get(node)?.forEach((part) => part.remove());
+  splitOff.delete(node);
+  markPaths(node);
+};
+const markPathsIn = (added) => {
+  if (added.nodeType === Node.TEXT_NODE) { markPaths(added); return; }
+  if (added.nodeType !== Node.ELEMENT_NODE) return;
+  const walker = document.createTreeWalker(added, NodeFilter.SHOW_TEXT);
+  const found = [];
+  for (let text = walker.nextNode(); text; text = walker.nextNode()) found.push(text);
+  found.forEach(markPaths);
+};
+
 document.addEventListener("DOMContentLoaded", () => {
   const root = document.getElementById("api-reference-root");
-  // Scalar pins its sidebar and section bars to the top of the viewport unless
-  // it is told what already stands there. HQ's header is named to it, and its
-  // height is handed over as it is and whenever it changes.
-  const header = document.querySelector(".site-header");
-  if (header) {
-    header.setAttribute("data-scalar-scroll-header", "");
-    const offset = () => root.style.setProperty("--scalar-custom-header-height", `${header.offsetHeight}px`);
-    offset();
-    new ResizeObserver(offset).observe(header);
-  }
+  // Each path is split as the viewer draws it, in the same task, so no line
+  // is drawn first and moved after. What the splitting itself changes is
+  // dropped unread.
+  const drawn = new MutationObserver((records) => {
+    for (const record of records) {
+      if (record.type === "characterData") remarkPaths(record.target);
+      else record.addedNodes.forEach(markPathsIn);
+    }
+    drawn.takeRecords();
+  });
+  drawn.observe(root, { childList: true, characterData: true, subtree: true });
+  // Scalar scrolls an entry to just below what it is told stands over the
+  // page, so HQ's header is named to it. Where its bars stick is the
+  // stylesheet's (static/css/api-reference.css).
+  document.querySelector(".site-header")?.setAttribute("data-scalar-scroll-header", "");
+  // Scalar holds the page on an entry it was sent to that is not drawn yet,
+  // scrolling back to it every frame until its next batch is drawn
+  // (`freeze` in its lazy-bus `scrollToLazy`), and nothing stops that hold
+  // when a reader follows another entry meanwhile: the page is pulled back to
+  // the earlier entry while the address names the newer one. Scalar writes
+  // the entry followed last to the address before it scrolls there, so a
+  // scroll to one of its entries goes ahead only for the entry the address
+  // names, or the one holding it (a deep link into an operation that falls
+  // back to the operation). Its entries are ids "<document>/<entry>" in the
+  // root, scrolled to the top of the view; every other scroll is left alone.
+  // Scalar's own fix (scalar/scalar#10805) ends the hold, so this goes once
+  // the vendored bundle carries it.
+  const scrollIntoView = Element.prototype.scrollIntoView;
+  const addressed = () => {
+    try { return decodeURIComponent(window.location.hash.slice(1)); } catch { return ""; }
+  };
+  Element.prototype.scrollIntoView = function (options) {
+    const entry = this.id.slice(this.id.indexOf("/") + 1);
+    const named = addressed();
+    const stale = options?.block === "start" && this.id.includes("/") && root.contains(this)
+      && named && named !== entry && !named.startsWith(`${entry}.`);
+    if (!stale) scrollIntoView.call(this, options);
+  };
   // The operator's theme is the one on <html>: light, dark, or none for the
   // system's. A chosen theme is forced on Scalar; with none Scalar follows the
   // system too, once a mode it stored itself is out of the way.
@@ -51,8 +205,14 @@ document.addEventListener("DOMContentLoaded", () => {
     theme: "none",
     hideDarkModeToggle: true,
     ...(theme ? { forceDarkModeState: theme } : {}),
-    // The schemas are shown where an operation uses them.
+    // The schemas are shown where an operation uses them, so a field reads by
+    // its type ("string", "object"), never by the name of the schema it refers
+    // to, which names nothing a reader can open.
     hideModels: true,
+    hideModelNames: true,
+    // What a capability does and the grants it needs are the operation's own
+    // fields, drawn beside it.
+    showExtensions: ["x-hq-effect", "x-hq-required-capabilities"],
     // The API takes a bearer token from the identity provider, never this
     // page's session, so a request sent from here has nothing to send. This
     // also drops the panel that asks for a token.
@@ -64,7 +224,16 @@ document.addEventListener("DOMContentLoaded", () => {
     // ⌘K is HQ's "Find anything". This search covers the reference alone, and
     // says so.
     searchHotKey: "j",
-    localization: { translations: { search: { label: "Search the reference" } } },
+    // A property the document leaves undescribed is given a stock sentence
+    // for its type or format ("Integer numbers.", RFC 3339's wording for a
+    // date-time), which restates what its line already says. Each is said as
+    // nothing, so it is not drawn.
+    localization: {
+      translations: {
+        search: { label: "Search the reference" },
+        schema: Object.fromEntries(STOCK_SENTENCES.map((key) => [key, ""])),
+      },
+    },
     // Everything Scalar would fetch from its own servers, or link to there:
     // fonts, telemetry, its hosted client, agent and MCP generator, and the
     // toolbar that leads to them.

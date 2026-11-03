@@ -8,6 +8,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderConnection
 from hq.platform.core.audit import CONNECTION_AUDIT_TYPE
 from hq.platform.core.models import AuditLog
+from hq.platform.core.tests import audit_rows
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..connection_context import get_connection_standing
@@ -68,7 +69,7 @@ class ConnectionEventTests(TestCase):
             principal=cli_principal(),
             controller_id="example-controller",
         )
-        AuditLog.objects.all().delete()
+        before = audit_rows.mark()
 
         report_connections(
             [{"connection_ref": "example-ssh", "provider": "ssh", "carried": True}],
@@ -76,7 +77,7 @@ class ConnectionEventTests(TestCase):
             controller_id="example-controller",
         )
 
-        self.assertFalse(AuditLog.objects.filter(connection="example-ssh").exists())
+        self.assertFalse(audit_rows.since(before).filter(connection="example-ssh").exists())
 
     def test_a_resource_and_its_operations_name_their_connection(self):
         resource = ManagedResource.objects.create(

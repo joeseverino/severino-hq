@@ -1,17 +1,41 @@
 """The content resource, declared on its domain in application/domains.py."""
 
+from typing import Annotated, TypedDict
+
+from pydantic import Field, create_model
+
 from hq.platform.application import content
+from hq.platform.application.answer_fields import RecordSlug, UpdatedAt
+from hq.platform.application.describe import Describe
 from hq.platform.application.integration_specs import ResourceSpec
-from hq.platform.application.resources import BoundedQuery
+from hq.platform.application.record_fields import Notes, PublishedAt, PublishedUrl
+from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, TextFilter, one_of
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
 
 from .models import ContentItem
 
+ContentQuery = create_model(
+    "ContentQuery",
+    __base__=BoundedQuery,
+    status=(one_of(ContentItem.Status.values) | None, Field(default=None, description=STATUS_FILTER)),
+    query=(TextFilter, None),
+)
 
-class ContentQuery(BoundedQuery):
-    status: str | None = None
-    query: str | None = None
+
+class ContentRow(TypedDict):
+    """One writeup, video or page, published or not."""
+
+    slug: RecordSlug
+    title: content.ContentTitle
+    content_type: content.ContentType
+    status: content.ContentStatus
+    topic: content.ContentTopic
+    tags: Annotated[list[str], Describe("The tags it is filed under, in the order they were written.")]
+    published_url: PublishedUrl
+    published_at: PublishedAt
+    notes: Notes
+    updated_at: UpdatedAt
 
 
 def resources() -> tuple[ResourceSpec, ...]:
@@ -32,5 +56,6 @@ def resources() -> tuple[ResourceSpec, ...]:
                 title_field="title",
             ),
             web_route="content:list",
+            row_type=ContentRow,
         ),
     )

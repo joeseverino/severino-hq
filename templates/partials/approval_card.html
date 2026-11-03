@@ -3,7 +3,7 @@
   <header class="approval-head">
     <h2><code>{{ entry.asked.actor|breakable }}</code> {{ entry.asked.before|breakable }}{% if entry.asked.target %}{% if entry.resource_url %}<a href="{{ entry.resource_url }}">{{ entry.asked.target|breakable }}</a>{% else %}<code>{{ entry.asked.target|breakable }}</code>{% endif %}{% endif %}{{ entry.asked.after|breakable }}</h2>
     <p class="muted">
-      {{ entry.held.requested_interface|upper|breakable }}{% dot %}asked {{ entry.held.created_at|ago }}{% if entry.held.state == 'pending' %}{% dot %}expires {{ entry.held.expires_at|when:"ahead" }}
+      {{ entry.held.requested_interface|interface_label|breakable }}{% dot %}asked {{ entry.held.created_at|ago }}{% if entry.held.state == 'pending' %}{% dot %}expires {{ entry.held.expires_at|when:"ahead" }}
       {% else %}{% dot %}<strong>{{ entry.held.get_state_display|breakable }}</strong>{% if entry.held.decided_actor %} by <code>{{ entry.held.decided_actor|breakable }}</code>{% endif %}{% if entry.held.decided_at %} {{ entry.held.decided_at|ago }}{% endif %}
       {% endif %}
     </p>
@@ -35,20 +35,20 @@
     {% endtable_region %}
   {% endif %}
   {% if entry.preview.lines %}
-    <pre><code>{% for line in entry.preview.lines %}{{ line|breakable }}
+    <pre tabindex="0"><code>{% for line in entry.preview.lines %}{{ line|breakable }}
 {% endfor %}</code></pre>
   {% endif %}
 
   {% if entry.held.state == 'pending' %}
     <div class="approval-actions">
       <form action="{% url 'control_plane:approval_decision' entry.held.id %}" method="post">
-        {% csrf_token %}
+        {% write_token %}
         <input type="hidden" name="decision" value="approve">
         <input type="hidden" name="next" value="{{ request.get_full_path }}">
         <button type="submit" class="btn primary">Approve</button>
       </form>
       <form action="{% url 'control_plane:approval_decision' entry.held.id %}" method="post">
-        {% csrf_token %}
+        {% write_token %}
         <input type="hidden" name="decision" value="reject">
         <input type="hidden" name="next" value="{{ request.get_full_path }}">
         <button type="submit" class="btn">Reject</button>

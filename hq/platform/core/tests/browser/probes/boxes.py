@@ -2,50 +2,34 @@
 
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE, PAINTED_PART
 
-ESCAPES = (
-    "() => {"
-    + DESCRIBE
-    + """
-  const width = document.documentElement.clientWidth;
-  const found = [];
-  if (document.documentElement.scrollWidth > width + 1) {
-    found.push(`page scrolls sideways: ${document.documentElement.scrollWidth}px in ${width}px`);
-  }
-  for (const el of document.querySelectorAll('body *')) {
-    const r = box(el);
-    if (r.width < 2 || r.height < 2 || (r.right <= width + 1 && r.left >= -1)) continue;
-    if (!el.checkVisibility()) continue;
-    // Past the viewport is fine inside a box that scrolls; clipped, it is cut off.
-    let held = false;
-    for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
-      if (scrolls(up)) { held = true; break; }
-    }
-    if (!held) found.push(`${describe(el)} spans ${Math.round(r.left)}..${Math.round(r.right)}px`);
-  }
-  return found;
-}"""
-)
-
-
+# Nothing moves sideways except inside a box ``allowed`` selects: past the
+# page's edge it is cut off, and a box that clips or scrolls what it holds
+# without being allowed to hides it. A chip row, a lane or a code block
+# scrolled past the edge of a phone is content nobody finds; a name cut off
+# with an ellipsis is a deliberate truncation. ``ANY_SCROLLER`` allows every
+# box that scrolls, whatever it is.
 SIDEWAYS = (
     "(allowed) => {"
     + DESCRIBE
     + """
-  // Nothing moves sideways except inside the one box built for it. A chip row,
-  // a lane or a code block scrolled past the edge of a phone is content nobody
-  // finds; a name cut off with an ellipsis is a deliberate truncation.
   const width = document.documentElement.clientWidth;
   const found = [];
   if (document.documentElement.scrollWidth > width + 1) {
     found.push(`page scrolls sideways: ${document.documentElement.scrollWidth}px in ${width}px`);
   }
+  const allows = (el) => (allowed === null ? scrolls(el) : el.matches(allowed));
+  const held = (el) => {
+    for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
+      if (allows(up)) return true;
+    }
+    return false;
+  };
   for (const el of document.querySelectorAll('body *')) {
-    if (el.closest(allowed) || !el.checkVisibility()) continue;
     const r = box(el);
-    if (r.width < 2 || r.height < 2) continue;
+    if (r.width < 2 || r.height < 2 || !el.checkVisibility() || held(el)) continue;
     const style = getComputedStyle(el);
     const boxed = ['auto', 'scroll', 'hidden', 'clip'].includes(style.overflowX);
-    if (boxed && el.scrollWidth > el.clientWidth + 1 && style.textOverflow !== 'ellipsis') {
+    if (boxed && !allows(el) && el.scrollWidth > el.clientWidth + 1 && style.textOverflow !== 'ellipsis') {
       found.push(`${describe(el)} holds ${el.scrollWidth}px in ${el.clientWidth}px (overflow-x: ${style.overflowX})`);
     } else if (r.right > width + 1 || r.left < -1) {
       found.push(`${describe(el)} spans ${Math.round(r.left)}..${Math.round(r.right)}px`);
@@ -55,12 +39,15 @@ SIDEWAYS = (
 }"""
 )
 
+ANY_SCROLLER = None
+
 # A target a pointer cannot reliably hit: under 24 by 24 CSS px (WCAG 2.5.8)
 # and none of the criterion's exceptions it can be measured for. The area a
 # target is hit through is its box, grown by a pseudo-element it positions
 # over the space beside it, and for a tick box by the labels that tick it.
+# ``floating`` names the panels drawn over the page, each a layer of its own.
 SMALL_TARGETS = (
-    "([selector, least]) => {"
+    "([selector, least, floating]) => {"
     + DESCRIBE
     + """
   const found = [];
@@ -151,23 +138,41 @@ SMALL_TARGETS = (
   // makes the rest of the document inert. No pointer reaches it.
   const modal = document.querySelector('dialog:modal');
   const inert = (el) => Boolean(el.closest('[inert]')) || Boolean(modal && !modal.contains(el));
+  // The layer a target lies in: the floating panel out of flow that holds it
+  // (a menu's, a popover, a dialog), or the page. A panel shown over the page
+  // is dismissed by the next press beside it, so what lies beneath is out of
+  // reach while it shows and back in reach once it is gone: a target in one
+  // layer is never a neighbor of one in another (WCAG 2.5.8 leaves out a
+  // target "while obscured by content displayed as a result of a user
+  // interaction" and measures the new content's own).
+  const layer = (el) => {
+    for (let up = el.closest(floating); up; up = up.parentElement?.closest(floating)) {
+      if (['absolute', 'fixed'].includes(getComputedStyle(up).position)) return up;
+    }
+    return null;
+  };
   try {
     const targets = [];
+    // Under a panel shown over the page: out of reach until it is dismissed,
+    // and the target's size again then, so it still stands in for another.
+    const beneath = [];
     for (const el of new Set([...document.querySelectorAll(selector)])) {
       if (el.matches(':disabled') || inert(el) || !el.checkVisibility({visibilityProperty: true})) continue;
       const drawn = box(el);
       // Out of sight until focused (a skip link), or drawn by its label.
-      if (drawn.width <= 1 || drawn.height <= 1 || covered(el, drawn)) continue;
-      targets.push({el, drawn, r: area(el)});
+      if (drawn.width <= 1 || drawn.height <= 1) continue;
+      if (covered(el, drawn)) beneath.push(el);
+      else targets.push({el, drawn, r: area(el), layer: layer(el)});
     }
-    const nested = (a, b) => a.el.contains(b.el) || b.el.contains(a.el);
+    // Neither's neighbor: one holds the other, or they lie in different layers.
+    const apart = (a, b) => a.el.contains(b.el) || b.el.contains(a.el) || a.layer !== b.layer;
     const meet = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > .5
       && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > .5;
     // An area two targets share is neither's: one hung over another
     // target's area counts only the box it draws.
     const grown = new Map(targets.map((t) => [t, t.r]));
     for (const t of targets) {
-      if (targets.some((o) => o !== t && !nested(o, t) && meet(grown.get(t), grown.get(o)))) t.r = t.drawn;
+      if (targets.some((o) => o !== t && !apart(o, t) && meet(grown.get(t), grown.get(o)))) t.r = t.drawn;
     }
     const center = ({r}) => [(r.left + r.right) / 2, (r.top + r.bottom) / 2];
     const small = new Set(targets.filter(({r}) => r.width < least - .5 || r.height < least - .5));
@@ -176,7 +181,7 @@ SMALL_TARGETS = (
     const spaced = (t) => {
       const [x, y] = center(t);
       return !targets.some((o) => {
-        if (o === t || nested(o, t)) return false;
+        if (o === t || apart(o, t)) return false;
         const [ox, oy] = center(o);
         if (small.has(o) && Math.hypot(ox - x, oy - y) < least) return true;
         const dx = Math.max(o.r.left - x, 0, x - o.r.right);
@@ -187,7 +192,11 @@ SMALL_TARGETS = (
     const unmet = [...small].filter((t) => !browsers(t.el, t.drawn) && !inSentence(t.el) && !spaced(t));
     // Equivalent: the control it names as doing the same job is 24px square
     // and in the same cell or region.
-    const sized = new Map(targets.filter((t) => !small.has(t)).map((t) => [t.el, t]));
+    const sized = new Set(targets.filter((t) => !small.has(t)).map((t) => t.el));
+    for (const el of beneath) {
+      const r = area(el);
+      if (r.width >= least - .5 && r.height >= least - .5) sized.add(el);
+    }
     const region = (el) => el.closest('td, th, section, [role=region]');
     const standIn = (el) => {
       const named = document.getElementById(el.dataset.targetEquivalent || '');
@@ -275,32 +284,6 @@ INTO_A_NEIGHBOR = (
 )
 
 
-# A note the page says beside something (a live region: an ask's answer, the
-# readings a page asked for, a job's note) stands in the page's flow, so it
-# covers nothing and its line is held: placed out of flow, by itself or a box
-# around it, it is drawn over the page. What a reader opened (a menu, a
-# dialog) is drawn over the page by design, and so is its note; one hidden
-# for sight (`visually-hidden`) has no box to cover anything with.
-NOTES_OUT_OF_FLOW = (
-    "([notes, floating]) => {"
-    + DESCRIBE
-    + """
-  const found = [];
-  for (const note of document.querySelectorAll(notes)) {
-    const r = box(note);
-    if (r.width < 2 || r.height < 2 || !note.checkVisibility()) continue;
-    for (let up = note; up && up !== document.body && !up.matches(floating); up = up.parentElement) {
-      const {position} = getComputedStyle(up);
-      if (position !== 'absolute' && position !== 'fixed') continue;
-      found.push(`${describe(note)} is drawn over the page (${describe(up)} is ${position})`);
-      break;
-    }
-  }
-  return found;
-}"""
-)
-
-
 # A table's frame spans the box it sits in, as its heading does: a frame cut to
 # its columns leaves the heading's count and the page's edge beyond its end.
 NARROW_FRAMES = (
@@ -315,6 +298,36 @@ NARROW_FRAMES = (
     const room = parent.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     const width = box(el).width;
     if (width < room - 2) found.push(`${describe(el)} in ${describe(parent)}: ${Math.round(width)}px of ${Math.round(room)}px`);
+  }
+  return found;
+}"""
+)
+
+
+# A section's heading that follows other content in its box stands at least as
+# far from what is above it as from what it heads, so it reads as the start of
+# what comes next rather than a caption of what came before.
+CRAMPED_HEADS = (
+    "(selector) => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  for (const head of document.querySelectorAll('main ' + selector)) {
+    if (!head.checkVisibility() || !head.parentElement) continue;
+    const flow = inFlow(head.parentElement);
+    const at = flow.findIndex(([el]) => el === head);
+    if (at < 1 || at + 1 >= flow.length) continue;
+    const [before, , above] = flow[at - 1];
+    const under = flow[at + 1][2];
+    const r = box(head);
+    // Only a stack: a neighbor beside the heading is a column, not a section.
+    if (above.bottom > r.top + 1 || under.top < r.bottom - 1) continue;
+    const over = Math.round(r.top - above.bottom);
+    const heads = Math.round(under.top - r.bottom);
+    if (over < heads) {
+      const words = head.textContent.trim().split(/\\s+/).slice(0, 4).join(' ');
+      found.push(`${describe(head)} "${words}" is ${over}px under ${describe(before)}, ${heads}px over what it heads`);
+    }
   }
   return found;
 }"""

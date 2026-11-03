@@ -1,36 +1,38 @@
 #!/bin/sh
 #MISE description="To run tests: some by label as the gates run them, --at <ref> to prove a new one fails on the old code; with none, CI's test job on every Python"
 #MISE extends="django"
-#MISE env={SEVERINO_HEAVY_BOUND="2h"}
 #MISE depends=["setup:lint-tools"]
-#USAGE flag "--at <ref>" help="Run this tree's test files, uncommitted work included, on the code at <ref> in a throwaway worktree: the way to prove a new test fails without the fix. A support file (a gate, probe or fixture) is laid over too, and the closing line names what was laid over and kept (docs/Development.md)"
-#USAGE flag "--keep <path>" var=#true help="With --at, keep this support file as <ref> has it, when it holds the logic being proven; logic in a test module itself cannot be kept, so move it to a support module beside the test. Repeatable"
-#USAGE flag "--composed" help="When a change reaches the extensions (hq_sdk, shared templates): the suite composed with the set mise.local.toml names, as the image runs it; labels narrow it"
-#USAGE arg "[arguments]..." var=#true double_dash="automatic" help="Test labels, dotted, then any options for Django's test command, passed as typed. Without one, every test:* gate on every Python and the controller's tests"
+#USAGE flag "--at <ref>" help="Run this tree's test files, uncommitted work included, on the code at <ref> in a throwaway worktree: the way to prove a new test fails without the fix. A support file (a gate, probe or fixture) is laid over too, and the closing line names what was laid over and kept, each support file that replaced the ref's own copy apart from one the ref lacks. A Python or Go pass with such a file laid over runs again with each kept at <ref>, and the line gives both outcomes, that second run's as the verdict (docs/Development.md)"
+#USAGE flag "--keep <path>" var=#true help="With --at, keep this changed test file as <ref> has it: a support file that holds the logic being proven, or a test module (test_*.py, _test.go) whose fakes or helpers the fix changed, so a new test in a file of its own runs beside the ref's. A file new in this tree has nothing at <ref> to keep. Repeatable"
+#USAGE flag "--go" help="The controller's Go tests instead, as test:controller runs them: the arguments are go test's, packages from controller/ then its flags (./host -run TestName). With --at, the Go test files laid over are each _test.go, testdata and test-support package file this tree changed, a _test.go file is kept as <ref> has it with --keep, and a package that does not build at <ref> is said so"
+#USAGE flag "--composed" help="When a change reaches the extensions (hq_sdk, shared templates): the suite composed with the set mise.local.toml names, as the image runs it, on this checkout (it takes no --at); labels narrow it"
+#USAGE arg "[arguments]..." var=#true double_dash="automatic" help="Test labels, dotted, then any options for Django's test command, passed as typed (with --go, go test's); or shell suites by path (tests/shell/test-heavy.sh), each run as lint:shell runs it, under every shell its first line calls for, with --at on <ref>'s scripts. Without one, every test:* gate on every Python and the controller's tests"
 
-# Labels or a ref go to tools/gate/at.py, which reads mise's parse and takes
+# Labels, shell suites, a ref or --go are handed to tools/gate/at.py, which reads mise's parse and takes
 # the heavy turn unless tools/gate/turn.py finds the run narrow. The lint tools
 # are installed for a label that reaches Stylelint.
 set -eu
 
 if [ "${usage_composed:-}" = true ]; then
+    # The composed suite runs this checkout, so a ref it was handed would go unread.
+    if [ -n "${usage_at+set}" ] || [ -n "${usage_keep:-}" ] || [ "${usage_go:-}" = true ]; then
+        echo "test: --composed runs this checkout with the extension set mise.local.toml names; it takes no --at, --keep or --go" >&2
+        exit 2
+    fi
     # mise hands the arguments over shell-quoted, one word each.
     eval "set -- ${usage_arguments:-}"
     exec mise run test:composed -- "$@"
 fi
-if [ -n "${usage_arguments:-}" ] || [ -n "${usage_at+set}" ]; then
+if [ -n "${usage_arguments:-}" ] || [ -n "${usage_at+set}" ] || [ "${usage_go:-}" = true ]; then
     exec uv run --group browser python -m tools.gate.at
 fi
 
-# Every gate: one turn covers every interpreter's run. A pipeline leg names
-# its one interpreter in TEST_PYTHONS. Each interpreter's run is a step of one
-# verdict, headed by its Python; the composed suite and the Go tests stay out
-# of the loop, and Go runs once after it. The project's own interpreter, the
-# first of PYTHON_VERSIONS, runs in the project's environment; each other has
-# one of its own beside it.
-# shellcheck source=tools/lib/heavy-turn.sh
-. ./tools/lib/heavy-turn.sh
-
+# Every gate, each suite and the Go tests in a heavy turn of their own. A
+# pipeline leg names its one interpreter in TEST_PYTHONS. Each interpreter's
+# run is a step of one verdict, headed by its Python; the composed suite and
+# the Go tests stay out of the loop, and Go runs once after it. The project's
+# own interpreter, the first of PYTHON_VERSIONS, runs in the project's
+# environment; each other has one of its own beside it.
 set --
 for version in ${TEST_PYTHONS:-$PYTHON_VERSIONS}; do
     environment="${UV_PROJECT_ENVIRONMENT:-.venv}"

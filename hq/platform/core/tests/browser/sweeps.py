@@ -9,7 +9,7 @@ from hq.platform.core.tests.browser.probes.settle import (
     SETTLE,
 )
 from hq.platform.core.tests.browser.selectors import SELECTORS
-from hq.platform.core.tests.browser.stress import ALL_PAGES, SHARED_PARTS
+from hq.platform.core.tests.browser.stress import ALL_PAGES
 from hq.platform.core.tests.browser.widths import (
     NARROWEST,
     SPARSE_WIDTHS,
@@ -64,21 +64,6 @@ class UnscriptedLayoutTests(LayoutBrowserTests):
 class UnscriptedSparseLayoutTests(UnscriptedLayoutTests):
     def test_every_sparse_page_keeps_the_layout_rules_without_script(self):
         self.sweep(PAGES)
-
-    def test_a_shared_part_escapes_nothing_sideways(self):
-        """A component filled the way an extension fills it, closed and opened."""
-
-        for name in SHARED_PARTS:
-            for width in self.across(name, SPARSE_WIDTHS):
-                self.hold(
-                    name,
-                    width,
-                    [
-                        self.nothing_escapes_the_page_sideways,
-                        self.open_every_disclosure,
-                        self.nothing_escapes_the_page_sideways_with_every_disclosure_open,
-                    ],
-                )
 
 
 class UnscriptedDenseLayoutTests(UnscriptedLayoutTests):

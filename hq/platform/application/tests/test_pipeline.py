@@ -375,6 +375,17 @@ class JobConditionTests(SimpleTestCase):
                     self.assertEqual(upstream(name, needs) & skippable, set())
         self.assertGreater(checked, 1)
 
+    def test_a_job_that_can_be_skipped_is_not_named_from_its_matrix(self):
+        """A skipped job's matrix never expands, so its check shows the expression as written;
+        a name without one reads the same skipped, and GitHub appends each leg's values when run."""
+        named = 0
+        for workflow_name, name, job in all_jobs():
+            if "matrix" in job.get("strategy", {}) and (condition(job) or needed(job)):
+                named += 1
+                with self.subTest(workflow=workflow_name, job=name):
+                    self.assertNotIn("matrix.", str(job.get("name", "")))
+        self.assertGreater(named, 0)
+
 
 @tag("source")
 class LeastPrivilegeTests(SimpleTestCase):
@@ -387,7 +398,7 @@ class LeastPrivilegeTests(SimpleTestCase):
 
     def test_only_a_job_that_signs_or_publishes_holds_an_identity_token(self):
         # The actions whose only work is to present the job's OIDC identity.
-        presenters = ("actions/deploy-pages@", "ossf/scorecard-action@", "./.github/actions/cosign")
+        presenters = ("actions/deploy-pages@", "ossf/scorecard-action@")
         holders = 0
         for path, name, job in all_jobs():
             if job.get("permissions", {}).get("id-token") != "write":
@@ -401,6 +412,59 @@ class LeastPrivilegeTests(SimpleTestCase):
                     or any("cosign sign" in source for source in called)
                 )
         self.assertGreater(holders, 0)
+
+
+# cosign run as a command, in a step's script or a pipeline script it runs.
+COSIGN_COMMAND = re.compile(r"(?m)(?:^\s*|\bif\s+|[;&|(]\s*)cosign\s")
+
+
+def runs_cosign(step: Node) -> bool:
+    """Whether a step runs cosign itself or through a script under tools/pipeline/."""
+    source = script(step)
+    called = (ROOT / path for path in re.findall(r"tools/pipeline/[\w.-]+\.sh", source))
+    return any(COSIGN_COMMAND.search(code(each)) for each in [source, *(p.read_text() for p in called if p.is_file())])
+
+
+def installs_cosign(step: Node) -> bool:
+    """Whether a step installs the cosign mise.lock records."""
+    uses_ = step.get("uses", "")
+    with_ = step.get("with", {})
+    if uses_.endswith(".github/actions/host-tool"):
+        return with_.get("tool") == "cosign"
+    return uses_.startswith("jdx/mise-action@") and bool(re.search(r"\bcosign\b", str(with_.get("install_args", ""))))
+
+
+def cosign_users(documents: list[tuple[str, Node]]) -> list[tuple[str, list[Node]]]:
+    """Each job and composite action that runs cosign, with its steps."""
+    units = [
+        (f"{name}: {job_name}", steps(job))
+        for name, document in documents
+        for job_name, job in ([(name, document)] if "runs" in document else jobs(document).items())
+    ]
+    return [(name, found) for name, found in units if any(runs_cosign(step) for step in found)]
+
+
+def cosign_installed_first(found: list[Node]) -> bool:
+    """Whether mise installs cosign before the first step that runs it."""
+    first = next(index for index, step in enumerate(found) if runs_cosign(step))
+    return any(installs_cosign(step) for step in found[:first])
+
+
+@tag("source")
+class CosignTests(SimpleTestCase):
+    def test_every_cosign_that_runs_is_the_one_mise_lock_records(self):
+        """The host verifies with the release mise.lock records (verifier.gen.go),
+        so a signature made or checked by any other release can disagree with it."""
+        documents = [(path.name, load(path)) for path in workflows()]
+        documents += [(path.parent.name, load(path)) for path in composite_actions()]
+        users = cosign_users(documents)
+        self.assertGreater(len(users), 3)
+        for name, found in users:
+            with self.subTest(job=name):
+                self.assertTrue(cosign_installed_first(found))
+        for name, document in documents:
+            with self.subTest(file=name):
+                self.assertEqual([a for a in uses(document) if a.startswith("sigstore/cosign-installer@")], [])
 
 
 LEVELS = {"read": 1, "write": 2, "admin": 3}
@@ -879,6 +943,11 @@ class ExtensionCallerTests(SimpleTestCase):
                 self.assertNotIn(name, triggers(checks)["workflow_call"]["inputs"])
         self.assertIn('tools/pipeline/check-plugin.sh --plugin-root "$PACKAGE_DIR"', text(checks))
         self.assertIn("tools.pipeline.plugin_identity", text(admit))
+
+    def test_the_host_runs_the_check_on_a_locked_package_of_its_own_the_image_leaves_out(self):
+        (root,) = re.findall(r"check-plugin\.sh --plugin-root (\S+)", body(mise_tasks()["test:plugin-check"]))
+        self.assertTrue((ROOT / root / "uv.lock").is_file())
+        self.assertNotIn(f"!{PurePosixPath(root).parts[0]}/", (ROOT / "Dockerfile.dockerignore").read_text())
 
     def test_an_admission_audits_its_lock_as_the_host_audits_its_own(self):
         (audit,) = [step for step in every_step(ADMIT) if "Audit locked dependencies" in step.get("name", "")]

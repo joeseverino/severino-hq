@@ -4,8 +4,7 @@ from datetime import date
 from typing import override
 from uuid import UUID
 
-from django.core.exceptions import PermissionDenied
-from django.http import Http404, HttpResponseRedirect
+from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -22,19 +21,20 @@ from hq.platform.application.calendar_entries import (
     upcoming,
     when_label,
 )
-from hq.platform.application.capabilities import capability_words, execute_capability
+from hq.platform.application.capabilities import capability_title, capability_words
 from hq.platform.application.deletion import delete_calendar_entry
 from hq.platform.application.moments import when_day
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.references import ReferencePickerMixin, reference_of
-from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.security import Capability, safe_next, web_principal
 from hq.platform.application.ui import ListRow
+from hq.platform.application.web_writes import execute_posted, refusal_response
 from hq.platform.application.writes import ServiceCreateMixin, ServiceDeleteMixin, ServiceUpdateMixin
 
 from .forms import EntryForm
 from .models import Entry
 
-CALENDAR_TRAIL = ("Calendar", reverse_lazy("calendar:month"))
+CALENDAR_TRAIL = (("Calendar", reverse_lazy("calendar:month")),)
 
 
 def _day(value: str) -> date | None:
@@ -45,6 +45,8 @@ def _day(value: str) -> date | None:
 
 
 class CalendarView(PageMixin, TemplateView):
+    # The calendar is personal, so reading it is a grant of its own, never READ.
+    required_capability = Capability.READ_CALENDAR
     template_name = "calendars/calendar.html"
     page_title = "Calendar"
 
@@ -173,20 +175,19 @@ def _rows(day, *, opened: str = "") -> tuple:
 class CalendarSourceView(View):
     """Check or uncheck one source, then go back to the month it was chosen on."""
 
+    required_capability = Capability.READ_CALENDAR
+
     def post(self, request, source_id):
-        result = execute_capability(
-            CHOOSE_SOURCE,
-            {"source": source_id, "shown": request.POST.get("shown") == "1"},
-            principal=web_principal(request.user),
+        result = execute_posted(
+            request, CHOOSE_SOURCE, {"source": source_id, "shown": request.POST.get("shown") == "1"}
         )
         if not result["ok"]:
-            if result["error"]["code"] == "not_found":
-                raise Http404(result["error"]["message"])
-            raise PermissionDenied(result["error"]["message"])
+            return refusal_response(result)
         return HttpResponseRedirect(safe_next(request, fallback=reverse("calendar:month"), scope="/calendar/"))
 
 
 class EntryPage(PageMixin):
+    required_capability = Capability.READ_CALENDAR
     model = Entry
     slug_field = "uid"
     slug_url_kwarg = "uid"
@@ -205,17 +206,22 @@ class EntryWrite:
 class EntryDetailView(RedirectView):
     """An entry's own address opens it on the calendar."""
 
+    required_capability = Capability.READ_CALENDAR
+
     @override
     def get_redirect_url(self, uid):
         return get_object_or_404(Entry, uid=uid).get_absolute_url()
 
 
 class EntryCreateView(EntryWrite, EntryPage, ReferencePickerMixin, ServiceCreateMixin, CreateView):
-    page_title = "Add event"
     form_class = EntryForm
     template_name = "calendars/entry_form.html"
     service = staticmethod(save_entry)
     command_from_cleaned_data = staticmethod(entry_command)
+
+    @override
+    def get_page_title(self):
+        return capability_title("calendar.entry.create")
 
     @override
     def get_initial(self):

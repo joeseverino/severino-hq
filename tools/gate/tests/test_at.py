@@ -3,6 +3,7 @@
 import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -31,6 +32,16 @@ seen = {
 }
 pathlib.Path(sys.argv[1]).write_text(json.dumps(seen))
 sys.exit(int(sys.argv[2]))
+"""
+# Stands in for manage.py test over support that holds the fix: appends the support each run saw, then
+# exits with argv[2] under this tree's support and argv[3] under the ref's.
+SUPPORT_PROBE = """
+import json, pathlib, sys
+support = (pathlib.Path.cwd() / "hq" / "core" / "tests" / "browser" / "estate.py").read_text()
+seen = pathlib.Path(sys.argv[1])
+runs = json.loads(seen.read_text()) if seen.exists() else []
+seen.write_text(json.dumps([*runs, support]))
+sys.exit(int(sys.argv[3] if support == "old browser\\n" else sys.argv[2]))
 """
 
 
@@ -114,8 +125,31 @@ class TestAtRefTests(GateTestCase):
         self.assertEqual(code, 1)
         self.assertEqual(json.loads(self.seen.read_text())["support"], "new browser\n")
         verdict = out.strip().splitlines()[-1]
-        self.assertIn("3 test modules and support hq/core/tests/browser/estate.py from this tree", verdict)
+        self.assertIn("3 test modules from this tree", verdict)
+        self.assertIn("hq/core/tests/browser/estate.py", verdict)
         self.assertNotIn("kept at the ref", verdict)
+
+    def test_support_that_replaced_the_refs_copy_is_named_apart_from_support_the_ref_lacks(self):
+        """A run that laid this tree's code over the ref's tested this tree's, and the line says which files did."""
+        self.write("tests/helpers.py", "new helper\n")
+        code, out = self.run_main(str(self.seen), "1", at_ref=self.old)
+
+        self.assertEqual(code, 1)
+        verdict = out.strip().splitlines()[-1]
+        replaced = verdict.partition("laid over the ref's own: ")[2]
+        self.assertTrue(replaced.startswith("hq/core/tests/browser/estate.py"), verdict)
+        self.assertIn("--keep", replaced)
+        added = verdict.partition("new in this tree: ")[2]
+        self.assertTrue(added.startswith("tests/helpers.py"), verdict)
+        self.assertNotIn("tests/helpers.py", replaced.partition(";")[0])
+        self.assert_nothing_left()
+
+    def test_support_whose_name_git_quotes_is_found_at_the_ref(self):
+        name = "tests/fakes/unit\\x2dname.txt"
+        self.write(name, "old fake\n")
+        ref = self.commit("a fake whose name holds a backslash")
+
+        self.assertEqual(at.new_at(ref, [name, "tests/test_absent.py"]), ["tests/test_absent.py"])
 
     def test_kept_support_runs_as_the_ref_has_it_and_the_line_says_so(self):
         code, out = self.run_main(str(self.seen), "0", at_ref=self.old, keep=("hq/core/tests/browser/estate.py",))
@@ -126,7 +160,7 @@ class TestAtRefTests(GateTestCase):
         self.assertEqual(seen["changed"], "edited\n")
         verdict = out.strip().splitlines()[-1]
         self.assertIn("kept at the ref: hq/core/tests/browser/estate.py", verdict)
-        self.assertNotIn("and support", verdict)
+        self.assertNotIn("laid over the ref's own", verdict)
         self.assert_nothing_left()
 
     def test_a_module_a_label_names_is_a_test_module_whatever_its_name(self):
@@ -135,14 +169,34 @@ class TestAtRefTests(GateTestCase):
 
         self.assertEqual(code, 0)
         self.assertIn("4 test modules from this tree", out.strip().splitlines()[-1])
+        self.assert_nothing_left()
+
+    def test_a_kept_test_module_runs_as_the_ref_has_it_beside_this_trees_new_one(self):
+        code, out = self.run_main(str(self.seen), "1", at_ref=self.old, keep=("tests/test_app.py",))
+
+        self.assertEqual(code, 1)
+        seen = json.loads(self.seen.read_text())
+        self.assertEqual(seen["changed"], "old\n")
+        self.assertIn("tests/test_new.py", seen["tests"])
+        verdict = out.strip().splitlines()[-1]
+        self.assertIn("2 test modules from this tree", verdict)
+        self.assertIn("kept at the ref: tests/test_app.py", verdict)
+        rerun = shlex.split(verdict.rpartition("rerun: ")[2])
+        self.assertEqual(rerun[:7], ["mise", "run", "test", "--at", self.old, "--keep", "tests/test_app.py"])
+        self.assert_nothing_left()
+
+    def test_a_kept_test_module_new_in_this_tree_is_refused(self):
         with patch("sys.stderr", io.StringIO()) as err:
-            code, _ = self.run_main(label, at_ref=self.old, keep=("hq/core/tests/browser/estate.py",))
+            code, _ = self.run_main(str(self.seen), "0", at_ref=self.old, keep=("tests/test_new.py",))
+
         self.assertEqual(code, 2)
-        self.assertIn("is a test module", err.getvalue())
+        self.assertIn("tests/test_new.py", err.getvalue())
+        self.assertIn("nothing at the ref", err.getvalue())
+        self.assertFalse(self.seen.exists())
         self.assert_nothing_left()
 
     def test_a_keep_that_names_no_changed_support_is_refused(self):
-        for keep in ("tests/test_app.py", "app.py", "hq/core/tests/browser/missing.py"):
+        for keep in ("app.py", "hq/core/tests/browser/missing.py"):
             with self.subTest(keep=keep), patch("sys.stderr", io.StringIO()) as err:
                 code, _ = self.run_main(str(self.seen), "0", at_ref=self.old, keep=(keep,))
                 self.assertEqual(code, 2)
@@ -158,6 +212,73 @@ class TestAtRefTests(GateTestCase):
 
         self.assertEqual(code, 0)
         self.assertIn(f"at {self.old} ", out.strip().splitlines()[-1])
+        self.assert_nothing_left()
+
+    def run_support_probe(self, here: str, at_ref: str, keep: tuple[str, ...] = ()) -> tuple[int, str, list[str]]:
+        """A run whose test passes or fails by the support it finds: ``here`` is the status under this
+        tree's, ``at_ref`` under the ref's; with the support each run saw, in order."""
+        with patch.object(at, "UV_RUN", [sys.executable, "-c", SUPPORT_PROBE]):
+            code, out = self.run_main(str(self.seen), here, at_ref, at_ref=self.old, keep=keep)
+        return code, out.strip().splitlines()[-1], json.loads(self.seen.read_text())
+
+    def test_a_pass_with_support_laid_over_runs_again_with_it_kept_at_the_ref_and_that_run_is_the_verdict(self):
+        """The fix in a support module passes under this tree's copy, so the run that shows the test fail
+        without the fix is the one with the ref's copy."""
+        code, verdict, runs = self.run_support_probe("0", "1")
+
+        self.assertEqual(code, 1)
+        self.assertEqual(runs, ["new browser\n", "old browser\n"])
+        self.assertIn("FAILED", verdict)
+        self.assertIn("kept at the ref: hq/core/tests/browser/estate.py", verdict)
+        self.assertIn("this tree's hq/core/tests/browser/estate.py laid over instead, it passed", verdict)
+        rerun = shlex.split(verdict.rpartition("rerun: ")[2])
+        self.assertEqual(
+            rerun[:7], ["mise", "run", "test", "--at", self.old, "--keep", "hq/core/tests/browser/estate.py"]
+        )
+        self.assert_nothing_left()
+
+    def test_a_pass_under_either_support_is_a_pass_that_says_both(self):
+        code, verdict, runs = self.run_support_probe("0", "0")
+
+        self.assertEqual(code, 0)
+        self.assertEqual(runs, ["new browser\n", "old browser\n"])
+        self.assertIn("passed", verdict)
+        self.assertIn("kept at the ref: hq/core/tests/browser/estate.py", verdict)
+        self.assertIn("this tree's hq/core/tests/browser/estate.py laid over instead", verdict)
+        self.assert_nothing_left()
+
+    def test_a_failure_or_a_run_that_laid_no_support_over_runs_once(self):
+        for here, keep in (("1", ()), ("0", ("hq/core/tests/browser/estate.py",))):
+            with self.subTest(here=here, keep=keep):
+                self.seen.unlink(missing_ok=True)
+                code, verdict, runs = self.run_support_probe(here, "1", keep=keep)
+
+                self.assertEqual(code, 1)
+                self.assertEqual(len(runs), 1)
+                self.assertNotIn("laid over instead", verdict)
+        self.assert_nothing_left()
+
+    def test_support_the_new_test_needs_kept_at_the_ref_is_no_proof_and_the_line_says_so(self):
+        """Kept at the ref, a fixture the new test imports is missing, so that run reached no test."""
+        self.write("tests/fixture.py", "")
+        self.write(
+            "tests/test_app.py",
+            "import unittest\nfrom tests.fixture import NEEDED\n\n"
+            "class Case(unittest.TestCase):\n    def test_needed(self):\n        self.assertTrue(NEEDED)\n",
+        )
+        ref = self.commit("a fixture without what the new test needs")
+        self.write("tests/fixture.py", "NEEDED = True\n")
+        self.write("tests/test_app.py", Path(self.root, "tests/test_app.py").read_text() + "\n")
+        os.environ["PYTHONPATH"] = str(CHECKOUT)
+        with patch.object(at, "UV_RUN", [sys.executable, "-c", UNITTEST]):
+            code, out = self.run_main("tests.test_app", at_ref=ref)
+
+        self.assertEqual(code, at.UNIMPORTED)
+        verdict = out.strip().splitlines()[-1]
+        self.assertIn("DOES NOT IMPORT", verdict)
+        self.assertIn("kept at the ref: tests/fixture.py", verdict)
+        self.assertIn("this tree's tests/fixture.py laid over instead, it passed", verdict)
+        self.assertIn("fixture the new test needs", verdict)
         self.assert_nothing_left()
 
     def run_unittest_at_old(self, test: str) -> tuple[int, str]:
@@ -182,6 +303,16 @@ class TestAtRefTests(GateTestCase):
         self.assertIn("test_app", verdict)
         kept = Path(out.strip().splitlines()[-2].rsplit(" ", 1)[-1]).read_text()
         self.assertIn("cannot import name 'RENAMED'", kept)
+        self.assert_nothing_left()
+
+    def test_a_label_that_does_not_import_names_the_proof_that_does(self):
+        """No test ran on the ref's code, so the line names the run in this tree that proves the test."""
+        code, out = self.run_unittest_at_old("import unittest\nfrom app import RENAMED\n")
+
+        self.assertEqual(code, at.UNIMPORTED)
+        verdict = out.strip().splitlines()[-1].partition("; rerun: ")[0]
+        self.assertIn("proves nothing", verdict)
+        self.assertIn("break the fix in this tree and run mise run test tests.test_app", verdict)
         self.assert_nothing_left()
 
     def test_a_label_in_a_package_the_ref_lacks_names_the_oldest_ref_it_runs_at(self):

@@ -70,6 +70,8 @@ type Deployer struct {
 	FreeOn    string
 	// Free reports the free bytes under a path.
 	Free func(path string) (uint64, error)
+	// Rehearsal is where a release rehearses itself before it is installed.
+	Rehearsal Rehearsal
 }
 
 // Deploy is the first half, run by the release already on the host: it
@@ -146,6 +148,7 @@ func (d *Deployer) Deploy(ctx context.Context, image string, credentials io.Read
 }
 
 // Release is the second half, run from the image being deployed. It
+// rehearses the release on a copy of production's data (Rehearsal), then
 // replaces the root-owned tree with the image's and installs the image's web
 // unit before restarting HQ, so HQ comes up as the new release defines it;
 // once HQ is healthy it installs the rest. If any of it fails, the previous
@@ -158,6 +161,11 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 	previous, err := os.ReadFile(d.ReleasePath())
 	if err != nil {
 		return fmt.Errorf("no release is recorded to roll back to: %w", err)
+	}
+	// Before anything live is held: a release refused here leaves production
+	// exactly as it was.
+	if err := d.rehearse(ctx, image); err != nil {
+		return err
 	}
 	held, err := d.hold(ctx)
 	if err != nil {
@@ -187,8 +195,12 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 	}
 	stands := false
 	defer func() {
-		if err != nil && !stands {
-			err = errors.Join(err, d.rollBack(strings.TrimSpace(string(previous)), tree, units, kept, held))
+		if err == nil || stands {
+			return
+		}
+		// A rollback that fails leaves neither release known to be running.
+		if failed := d.rollBack(strings.TrimSpace(string(previous)), tree, units, kept, held); failed != nil {
+			err = outcomeError{fmt.Errorf("%w; and the rollback failed, so production's state is unknown: %w", err, failed), DeployRollbackFailed}
 		}
 	}()
 
@@ -200,6 +212,11 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 		return err
 	}
 	if err := d.Record(image); err != nil {
+		return err
+	}
+	// The restart below is when HQ reads the public sealing key, so a host
+	// that has none yet gets it now rather than at the next start.
+	if err := d.prepareSeal(); err != nil {
 		return err
 	}
 	// Returns once HQ answers its health check on the new image, or fails.
@@ -224,14 +241,14 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 
 // verifyRelease runs the drift unit on the release just installed, so a check
 // of the host has its verdict at once rather than at the next timer. Drift
-// fails the deploy without rolling it back: HQ is healthy on the release, and
+// fails the deploy as live without rolling it back: HQ is healthy on the release, and
 // what verify finds (a planted file, a sudo rule) is the host's, which the
 // previous release would stand on too. Verify's findings go to the journal,
 // never the public log.
 func (d *Deployer) verifyRelease(ctx context.Context) error {
 	if err := d.Command(ctx, "systemctl", "start", DriftUnit).Run(); err != nil {
 		fmt.Fprintf(d.Out, "The host is not its release; 'journalctl -u %s' there says why.\n", DriftUnit)
-		return fmt.Errorf("%s failed after the deploy: %w", DriftUnit, err)
+		return outcomeError{fmt.Errorf("the release is live, and %s failed after the deploy: %w", DriftUnit, err), DeployLiveCheckFailed}
 	}
 	fmt.Fprintln(d.Out, "The host is its release.")
 	return nil

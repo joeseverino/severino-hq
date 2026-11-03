@@ -1,0 +1,39 @@
+id: authorization-refused-in-one-place
+valid:
+  - |
+    try:
+        run()
+    except Exception as exc:
+        return refusal_of(exc, principal=principal)
+  - |
+    try:
+        run()
+    except ValueError:
+        raise AuthorizationError("Not yours.")
+  - 'allowed = principal.permits(Capability.READ)'
+invalid:
+  - |
+    try:
+        run()
+    except AuthorizationError:
+        return None
+  - |
+    try:
+        run()
+    except AuthorizationError as exc:
+        return exc.reason
+  - |
+    try:
+        run()
+    except (ValueError, AuthorizationError) as exc:
+        return exc
+  - |
+    try:
+        run()
+    except UpstreamUnavailable, AuthorizationError:
+        return None
+  - |
+    try:
+        run()
+    except security.AuthorizationError:
+        return None

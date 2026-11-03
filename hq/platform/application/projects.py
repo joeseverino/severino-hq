@@ -5,10 +5,12 @@ transaction, validation, persistence, audit attribution, and canonical result
 shape; adapters only parse input and render output.
 """
 
+import secrets
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, fields, replace
+from dataclasses import dataclass, fields, replace
 from datetime import datetime
-from typing import Annotated, Any
+from functools import partial
+from typing import Annotated, Any, cast
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -16,9 +18,10 @@ from django.db import transaction
 
 from hq.domains.content.content_sync import ContentSyncError, sync_content_index
 from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
-from hq.domains.projects.models import Project
-from hq.platform.core.audit import operation_context, record_event
+from hq.domains.projects.models import PROJECT_CATEGORY_CHOICES, Project
+from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
+lazy from hq.domains.projects.specs import ProjectRecord
 lazy from hq.platform.application.routes import reverse
 
 from .command_fields import Describe
@@ -27,8 +30,10 @@ from .github_public import github_repository
 from .outbound_work import OutboundWork
 from .projection import addressable, iso, listing, projection_scope, read_once
 from .record_errors import RecordConflict, RecordNotFound
+from .record_fields import Notes, PublishedUrl, Slug, one_of
 from .record_links import linked
-from .record_saves import Held, held
+from .record_saves import Held, held, linked_saver, saved_type
+from .refusal_status import RefusalEnvelope, refusal_of, refuse
 from .security import Principal
 from .standards import MET
 from .ui import counted
@@ -40,7 +45,25 @@ lazy from .entity_links import EntityLink, entity_link
 lazy from .github_estate import Repository, repositories, repository_for
 lazy from .github_posture import STANDARD, posture_of
 lazy from .plugins import installed_plugins
+lazy from .record_answers import DependencyUpdatesSet
 lazy from .timestamps import moment
+
+# A project's fields as its command writes them and its row reads them back, each said once.
+type ProjectName = Annotated[str, Describe("What the project is called.")]
+_CATEGORY = one_of(PROJECT_CATEGORY_CHOICES)
+_STATUS = one_of(Project.Status.values)
+type ProjectCategory = Annotated[_CATEGORY, Describe("What type of project it is.")]
+type ProjectStatus = Annotated[_STATUS, Describe("Where it stands.")]
+type ProjectDescription = Annotated[
+    str, Describe("What it is, in a sentence or two.", api="Empty when none was written.")
+]
+type TechnologiesUsed = Annotated[str, Describe("What it is built with.")]
+type RepositoryUrl = Annotated[str, Describe("Where its code lives.", api="Empty for none.")]
+type DeploymentNotes = Annotated[str, Describe("How it is deployed.")]
+type SecurityNotes = Annotated[str, Describe("What protects it, and what to watch.")]
+type DependencyUpdates = Annotated[
+    bool, Describe("Whether HQ's dependency update run covers its repository, opening pull requests there.")
+]
 
 _PROJECT = Held("That project was not found.", "That project changed after it was read.")
 
@@ -116,17 +139,17 @@ ContentSync = Callable[[], dict[str, Any]]
 
 @dataclass(frozen=True, slots=True)
 class ProjectCommand:
-    name: Annotated[str, Describe("What the project is called.")]
-    slug: Annotated[str, Describe("Its address in HQ; blank derives one from the name.")] = ""
-    category: Annotated[str, Describe("What type of project it is.")] = "other"
-    status: Annotated[str, Describe("Where it stands, from idea to archived.")] = Project.Status.IDEA
-    description: Annotated[str, Describe("What it is, in a sentence or two.")] = ""
-    technologies_used: Annotated[str, Describe("What it is built with.")] = ""
-    repository_url: Annotated[str, Describe("Where its code lives.")] = ""
-    public_url: Annotated[str, Describe("Where it is published.")] = ""
-    deployment_notes: Annotated[str, Describe("How it is deployed.")] = ""
-    security_notes: Annotated[str, Describe("What protects it, and what to watch.")] = ""
-    notes: Annotated[str, Describe("Anything else worth keeping.")] = ""
+    name: ProjectName
+    slug: Slug = ""
+    category: ProjectCategory = "other"
+    status: ProjectStatus = Project.Status.IDEA
+    description: ProjectDescription = ""
+    technologies_used: TechnologiesUsed = ""
+    repository_url: RepositoryUrl = ""
+    public_url: PublishedUrl = ""
+    deployment_notes: DeploymentNotes = ""
+    security_notes: SecurityNotes = ""
+    notes: Notes = ""
 
 
 def serialize_project(project: Project, *, relationships: bool = False) -> dict[str, Any]:
@@ -215,11 +238,7 @@ def refresh_project(
     result: dict[str, Any] = {"ok": True, "content": None, "github": None, "github_app": None}
     if slug == settings.CONTENT_INDEX_PROJECT_SLUG:
         try:
-            with operation_context(
-                interface=principal.interface,
-                actor=principal.actor,
-                operation="project.refresh_content",
-            ):
+            with audit_operation(operation="project.refresh_content", principal=principal):
                 stats = content_sync()
                 record_event(
                     action=AuditLog.Action.UPDATED,
@@ -270,9 +289,14 @@ def request_app_read(repository_url: str, *, principal: Principal) -> dict[str, 
     connection_ref = str(repository.record.get("connection_ref") or "") if repository else ""
     if not connection_ref:
         return None
-    answer = capabilities.execute_capability(
-        READ_NOW_CAPABILITY, {"connection_ref": connection_ref}, principal=principal
-    )
+    # Asked once for each refresh that runs, which its own key already holds
+    # to once, so a key of its own is fresh each time.
+    answer = capabilities.run_capability(
+        READ_NOW_CAPABILITY,
+        {"connection_ref": connection_ref},
+        principal=principal,
+        idempotency_key=f"refresh:{secrets.token_urlsafe(18)}",
+    ).answer
     if answer.get("ok") and answer.get("requested"):
         return {
             "ok": True,
@@ -280,11 +304,12 @@ def request_app_read(repository_url: str, *, principal: Principal) -> dict[str, 
             "message": str(answer.get("message") or ""),
             "pushed_at": _pushed_at(repository.record.get("pushed_at")),
         }
-    error = answer.get("error") or {}
     return {
         "ok": False,
         "connection_ref": connection_ref,
-        "error": str(error.get("message") or answer.get("message") or "The controller was not asked."),
+        "error": str(answer.get("message") or "The controller was not asked.")
+        if answer.get("ok")
+        else refusal_of(answer).message,
     }
 
 
@@ -301,11 +326,7 @@ def _record_push(project: Project, pushed_at: datetime | None, principal: Princi
         return {"ok": True, "last_push_at": iso(project.last_push_at) or None}
     with (
         transaction.atomic(),
-        operation_context(
-            interface=principal.interface,
-            actor=principal.actor,
-            operation="project.refresh",
-        ),
+        audit_operation(operation="project.refresh", principal=principal),
     ):
         project = held(Project, _PROJECT, {"pk": project.pk}, None)
         project.last_push_at = pushed_at
@@ -393,36 +414,10 @@ def outbound_work() -> tuple[OutboundWork, ...]:
     )
 
 
-@transaction.atomic
-def save_project(
-    command: ProjectCommand,
-    *,
-    principal: Principal,
-    current_slug: str | None = None,
-    expected_updated_at: str | None = None,
-) -> dict[str, Any]:
-    """Create or update one project and return the canonical representation."""
-
-    principal.require(records_of("projects").write)
-    operation = "project.create" if current_slug is None else "project.update"
-    with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
-        created = current_slug is None
-        project = (
-            Project() if current_slug is None else held(Project, _PROJECT, {"slug": current_slug}, expected_updated_at)
-        )
-        for field, value in asdict(command).items():
-            setattr(project, field, value)
-        project.full_clean()
-        project.save()
-
-    return {
-        "ok": True,
-        "created": created,
-        "project": serialize_project(project, relationships=True),
-    }
+save_project = linked_saver("projects", partial(serialize_project, relationships=True), refusals=_PROJECT, links={})
 
 
-DEPENDENCY_UPDATES = "project.dependency_updates"
+DEPENDENCY_UPDATES = "project.dependency_updates.set"
 # The repository check updates rest on: Renovate opens its security fixes from
 # these alerts.
 UPDATES_NEED = "vulnerability-alerts"
@@ -434,9 +429,7 @@ class DependencyUpdatesCommand:
 
     # Named as the project's own field, so a form opened on a project reads
     # its current value from the project's detail.
-    dependency_updates: Annotated[
-        bool, Describe("Whether HQ's dependency update run opens pull requests in this project's repository.")
-    ]
+    dependency_updates: DependencyUpdates
 
 
 @transaction.atomic
@@ -446,7 +439,7 @@ def set_dependency_updates(
     principal: Principal,
     current_slug: str,
     expected_updated_at: str | None = None,
-) -> dict[str, Any]:
+) -> DependencyUpdatesSet | RefusalEnvelope:
     """Opt a project's repository in to dependency updates, or out.
 
     Only a project that names a repository, and turning updates on only while
@@ -458,12 +451,13 @@ def set_dependency_updates(
     project = held(Project, _PROJECT, {"slug": current_slug}, expected_updated_at)
     refused = _updates_refusal(project, enabling=command.dependency_updates)
     if refused:
-        return {"ok": False, "error": {"code": "precondition", "message": refused}}
+        return refuse("precondition", refused)
     if project.dependency_updates != command.dependency_updates:
         project.dependency_updates = command.dependency_updates
         project.full_clean()
         project.save()
-    return {"ok": True, "project": serialize_project(project, relationships=True)}
+    # A project serialized with its relationships is its record, as a read of one answers it.
+    return {"ok": True, "project": cast(ProjectRecord, serialize_project(project, relationships=True))}
 
 
 def _updates_refusal(project: Project, *, enabling: bool) -> str:
@@ -481,12 +475,17 @@ def _updates_refusal(project: Project, *, enabling: bool) -> str:
     return f'Dependency updates need the repository check "{check.label}" ({check.id}) to pass first. {check.fix}'
 
 
+# What a project's save answers, read off its record type (``saved_type``).
+type ProjectSaved = saved_type("projects")
+
+
 def upsert_project(
     command: ProjectCommand,
     *,
     principal: Principal,
     expected_updated_at: str | None = None,
-) -> dict[str, Any]:
+    sent: frozenset[str] | None = None,
+) -> ProjectSaved:
     """Idempotently create or update a project by its command slug."""
 
     return upsert_by_slug(
@@ -495,6 +494,7 @@ def upsert_project(
         save_project,
         principal=principal,
         expected_updated_at=expected_updated_at,
+        sent=sent,
     )
 
 

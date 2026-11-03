@@ -49,6 +49,10 @@
   const answers = once("/__fragments__/index.json");
   const sent = once("/__fragments__/headers.json");
   const demo = window.hqDemo;
+  // The address this document was shown at. A list's navigation answered in
+  // place moves the address before it asks for its answer, so the address
+  // bar is not the page itself.
+  const shownAt = new URL(location.href);
   // What a control that asks for a reading again (ask.js: a row's Refresh, a
   // page's readings as it opens) is answered with: how the work stands, idle,
   // saying why.
@@ -76,7 +80,7 @@
       // HQ's answer for a word nothing matches, about the word asked.
       if (near) return new Response((await (await plainFetch(near)).text()).replaceAll(found.nothing, escapeHTML(asked)));
       // The page itself: the file it was served from, with the headers HQ sent.
-      if (demo.key(url, found) === demo.key(new URL(location.href), found)) {
+      if (demo.key(url, found) === demo.key(shownAt, found)) {
         return new Response(await (await plainFetch(demo.served)).text(), { headers: await sent() });
       }
       // Another address with a query: its saved copy, a whole page the

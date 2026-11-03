@@ -6,8 +6,8 @@
 
 A self-hosted operations app for one operator, reachable only over a tailnet.
 It reads what each credential it is given can see (machines, services,
-domains, certificates, containers), joins those readings into one picture,
-and changes infrastructure only through one gated path that the web UI, the
+domains, certificates, containers) and joins those readings into one picture.
+It changes infrastructure only through one gated path that the web UI, the
 HTTP API, MCP, the CLI and the extension SDK share. It also keeps the
 operator's projects, assets, expenses, receipts and documentation index, linked
 to each other.
@@ -78,9 +78,8 @@ its source, with what breaks if that step fails.
 mise run check
 ```
 
-runs every gate CI runs, at the same pinned versions: lint, types, the suite,
-the browser gates in WebKit, the controller, CodeQL,
-Scorecard, and the image built and tested from inside.
+runs every gate CI runs, at the same pinned versions; `mise tasks info check`
+names them.
 
 - The host/extension boundary is tested in both directions:
   `python -m hq_sdk.validation` rejects an extension importing anything but
@@ -120,15 +119,11 @@ docs/          architecture, operations and guides
 
 ```sh
 mise install
-mise run dev:scratch      # a local server: fresh database, signed-in account, reload
-mise run dev:look <page>  # screenshots of a page at every width the browser gates draw
-mise run fast             # what the change reaches
-mise run check            # every gate CI runs
-mise run check --release  # ready: every CI gate, the composed suite, the host
+mise run dev:scratch
 ```
 
-Agents work in their own worktrees on `mise run dev:scratch` and pass the same
-gates. [`AGENTS.md`](AGENTS.md) is the engineering contract: placement rules, the
+`mise tasks` lists every verb, each with when to reach for it. Agents work in
+their own worktrees on `mise run dev:scratch` and pass the same gates. [`AGENTS.md`](AGENTS.md) is the engineering contract: placement rules, the
 boundary, frontend standards and the definition of done. How agents build HQ
 and operate it, through MCP and the machine API under a person's policy, is in
 [AI and HQ](docs/AI.md). [Development](docs/Development.md) has setup and the
@@ -158,7 +153,6 @@ gates in full.
 | [Posture](docs/Posture.md) | the checks every HQ enforces, and the standard Advanced HQ Posture holds it to |
 | [Backup](docs/Backup.md) | the nightly backup and a restore |
 | [Blueprint Setup](docs/Blueprint-Setup.md) | every instance-specific value, for running your own |
-| [Decisions](docs/Decisions.md) | decisions that still shape the code, and why |
 | [Roadmap](docs/Roadmap.md) | what is next, and what is not planned |
 
 ## License

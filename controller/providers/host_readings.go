@@ -1,9 +1,9 @@
 package providers
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"io"
 	"io/fs"
@@ -143,10 +143,8 @@ func (r *Registry) hostFirewall(context.Context) ([]any, error) {
 	if err != nil {
 		return nil, &ProviderError{Message: "read host firewall reading", Err: err}
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	var record HostFirewallRecord
-	if err := decoder.Decode(&record); err != nil {
+	if err := jsonv2.Unmarshal(data, &record, jsonv2.RejectUnknownMembers(true)); err != nil {
 		return nil, &ProviderError{Message: "decode host firewall reading", Err: err}
 	}
 	if record.Record == "" {

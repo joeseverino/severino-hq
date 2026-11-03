@@ -7,7 +7,8 @@
 files = ["hq", "hq_sdk"]
 exclude = "(^|/)(tests/|tests\\.py|test_[^/]*\\.py|migrations/)"
 follow_imports = "silent"
-plugins = ["mypy_django_plugin.main"]
+# The seams pass's plugin; a path here is read from this file's directory.
+plugins = ["mypy_django.py"]
 # Its own cache: per-module options differ from the seams pass, and a shared
 # cache would be rebuilt by each pass in turn.
 cache_dir = ".mypy_cache/reach"

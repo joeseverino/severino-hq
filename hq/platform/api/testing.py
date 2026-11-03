@@ -72,6 +72,9 @@ class Contract:
 
 
 class ContractClient(Client):
+    # True in a test reading the showcase estate, whose successes are the recorded examples.
+    showcase = False
+
     @cached_property
     def contract(self) -> Contract:
         return Contract(document())
@@ -131,7 +134,7 @@ class ContractClient(Client):
                 request,
             )
         if os.environ.get("HQ_API_RECORD_EXAMPLES") == "1":
-            _record(operation["operationId"], response.status_code, body, request)
+            _record(operation["operationId"], response.status_code, body, request, showcase=self.showcase)
 
 
 def _small(value: object) -> bool:
@@ -139,7 +142,9 @@ def _small(value: object) -> bool:
 
 
 # With HQ_API_RECORD_EXAMPLES=1 (and --parallel 1, so one process holds them
-# all) the first small response per operation and status, and the first
+# all) the first response per operation and status (a success the showcase
+# estate answered first, and a large one with each list cut to its smallest
+# item, so a viewer never draws an empty record from the schema), and the first
 # accepted request body per operation, are written to openapi-examples.json
 # (or the path HQ_API_RECORD_EXAMPLES_TO names) when the run ends; `mise run
 # fix:api-examples` runs every module that uses this client so. A recording
@@ -173,10 +178,36 @@ def _fixed_ids(text: str) -> str:
     )
 
 
-def _record(operation_id: str, status: int, body: object, request: object) -> None:
-    if _small(body):
-        entry = _recorded.setdefault(operation_id, {})
-        entry.setdefault("responses", {}).setdefault(str(status), body)
+def _drawn_size(value: object) -> int:
+    """How long ``value`` is as a viewer prints it: JSON indented by two."""
+
+    return len(json.dumps(value, indent=2, ensure_ascii=False))
+
+
+def _one_item(value: object) -> object:
+    """``value`` with each list cut to its smallest item, printed: one real
+    record standing for the rest, and the one least likely to bury the shape
+    it shows."""
+
+    if isinstance(value, list):
+        return [min((_one_item(item) for item in value), key=_drawn_size)] if value else []
+    if isinstance(value, dict):
+        return {key: _one_item(inner) for key, inner in value.items()}
+    return value
+
+
+# A success the showcase estate answered, which outranks one a test's own rows
+# answered: the estate is a whole one, so each list holds a real record.
+_showcase: dict[str, dict[str, Any]] = {}
+
+
+def _record(operation_id: str, status: int, body: object, request: object, *, showcase: bool = False) -> None:
+    example = body if _small(body) else _one_item(body)
+    # A cut answer is recorded whatever its size, one record standing for the
+    # rest; the document, which answers in no envelope, is its own example.
+    if _small(example) or (isinstance(body, dict) and "ok" in body):
+        held = _showcase if showcase and status < 300 else _recorded
+        held.setdefault(operation_id, {}).setdefault("responses", {}).setdefault(str(status), example)
     if request is not None and _small(request):
         _recorded.setdefault(operation_id, {}).setdefault("request", request)
 
@@ -185,5 +216,7 @@ def _record(operation_id: str, status: int, body: object, request: object) -> No
 def _write_examples() -> None:
     if not RECORDING or not _recorded:
         return
+    for operation_id, entry in _showcase.items():
+        _recorded.setdefault(operation_id, {}).setdefault("responses", {}).update(entry["responses"])
     path = os.environ.get("HQ_API_RECORD_EXAMPLES_TO") or EXAMPLES_PATH
     Path(path).write_text(_fixed_ids(json.dumps(_recorded, indent=2, sort_keys=True)) + "\n", encoding="utf-8")

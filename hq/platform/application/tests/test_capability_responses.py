@@ -4,14 +4,13 @@ from unittest import mock
 
 from django.test import TestCase
 
-from hq.platform.api.models import IdempotencyRecord
-from hq.platform.api.views import CURRENT_API_VERSION
 from hq.platform.core.audit import record_event
-from hq.platform.core.models import AuditLog
+from hq.platform.core.models import AuditLog, IdempotencyRecord
 from hq_sdk.capabilities import StrictCommand
 
-from ..capabilities import CapabilitySpec, describe_capabilities, execute_capability
+from ..capabilities import CAPABILITIES_SCHEMA_VERSION, CapabilitySpec, describe_capabilities, execute_capability
 from ..security import Capability, Principal, cli_principal
+from .writers import keyed
 
 
 class ExampleCommand(StrictCommand):
@@ -45,11 +44,10 @@ class CapabilityCallTests(TestCase):
             name, "Change example records.", effect, Capability.READ, command, self.handler, target_kind=target_kind
         )
 
-    def test_the_description_is_of_the_current_api(self):
+    def test_the_description_says_its_shape(self):
         described = describe_capabilities(principal=cli_principal())
 
-        self.assertIs(described["ok"], True)
-        self.assertEqual(described["schema_version"], CURRENT_API_VERSION)
+        self.assertEqual(described["schema_version"], CAPABILITIES_SCHEMA_VERSION)
 
     def test_a_capability_that_takes_no_target_refuses_one_and_runs_nothing(self):
         result = self.call(self.spec(), {}, target="example")
@@ -75,7 +73,7 @@ class CapabilityCallTests(TestCase):
         result = self.call(self.spec(), {"idempotency_key": "example-once"})
 
         self.assertTrue(result["ok"], result)
-        self.assertEqual(IdempotencyRecord.objects.get().status_code, 200)
+        self.assertEqual(IdempotencyRecord.objects.get().response, result)
 
     def test_what_a_command_naming_a_connection_does_is_attributed_to_it(self):
         def handler(command, **_bound):
@@ -102,7 +100,7 @@ class CapabilityCallTests(TestCase):
             "example.records.change", "Change.", "remote_write", Capability.READ, ExampleCommand, handler
         )
         with self.registered(spec):
-            self.assertTrue(execute_capability(spec.name, {}, principal=caller)["ok"])
+            self.assertTrue(execute_capability(spec.name, keyed(), principal=caller)["ok"])
 
         metadata = AuditLog.objects.get(object_type="Example").metadata
         self.assertEqual(

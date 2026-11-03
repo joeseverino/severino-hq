@@ -1,15 +1,15 @@
 # shellcheck shell=sh
 # The checkout's files as git sees them (tracked and new, ignored ones left
 # out) copied into a directory. A tracked file deleted from the work tree is
-# skipped, as a build context would skip it.
+# skipped, as a build context would skip it. Names pass NUL-separated, since
+# git quotes a name holding a backslash or a newline in a line-separated list,
+# and tar reads a --null list verbatim.
 #   export_tree DEST [PATHSPEC...]
 export_tree() {
     dest=$1
     shift
-    git -c core.quotepath=off ls-files --cached --others --exclude-standard -- "$@" |
-        while IFS= read -r file; do
-            [ -f "${file}" ] && printf '%s\n' "${file}"
-        done | tar -cf - -T - | tar -xf - -C "${dest}"
+    git ls-files -z --cached --others --exclude-standard -- "$@" |
+        perl -0 -ne 'chomp; print "$_\0" if -f' | tar --null -cf - -T - | tar -xf - -C "${dest}"
 }
 
 # A scanner's work directory, printed, with a fresh export of the checkout in

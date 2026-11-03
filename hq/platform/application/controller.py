@@ -21,9 +21,8 @@ from hq.domains.control_plane.providers import (
 )
 lazy from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
 
+from . import agent_access
 from .adoption import manages_through, observes_only
-from .agent_access import agents_paused
-from .approvals import AGENT_SURFACES
 from .conditions import stamped
 from .infrastructure import controller_contract, resolved_spec, serialize_resource
 from .plugin_admission import admitted_sources
@@ -35,9 +34,7 @@ lazy from .expiry import certificate_expiry, renewal_opens_at, renewal_window
 lazy from .findings import auto_remediable
 lazy from .github_profile import plan as github_profiles
 lazy from .resource_capabilities import LIFECYCLE_VERBS
-lazy from .security import cli_principal
-
-_FORBIDDEN_STATUS_KEYS = ("private", "secret", "token", "password", "credential")
+lazy from .security import CONTROLLER_INTERFACE, cli_principal
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,20 +76,6 @@ def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any])
     ManagedResource.objects.filter(kind=DELIVERY_TARGET_KIND, spec__connection_ref__in=reached).update(
         last_observed_at=now, updated_at=now
     )
-
-
-def _assert_public_status(value: Any, path: str = "status") -> None:
-    if isinstance(value, dict):
-        for key, child in value.items():
-            normalized = str(key).lower()
-            if any(marker in normalized for marker in _FORBIDDEN_STATUS_KEYS):
-                raise ValueError(f"{path}.{key} is secret-bearing and cannot enter HQ.")
-            _assert_public_status(child, f"{path}.{key}")
-    elif isinstance(value, list):
-        for index, child in enumerate(value):
-            _assert_public_status(child, f"{path}[{index}]")
-    elif isinstance(value, str) and "PRIVATE KEY-----" in value:
-        raise ValueError(f"{path} contains private-key material.")
 
 
 def _compatible_operations(operations, capabilities: tuple[tuple[str, str], ...]):
@@ -231,7 +214,7 @@ def _finding_repairs(controller_id: str, now) -> list[str]:
             OperationRequest.Action.RECONCILE,
             idempotency_key=idempotency_key,
             requested_actor=controller_id,
-            requested_interface="controller",
+            requested_interface=CONTROLLER_INTERFACE,
             reason=repair.reason,
             input={"generation": resource.generation},
         )
@@ -275,7 +258,7 @@ def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
             action,
             idempotency_key=idempotency_key,
             requested_actor=controller_id,
-            requested_interface="controller",
+            requested_interface=CONTROLLER_INTERFACE,
             reason=reason,
             input={"generation": resource.generation},
         )
@@ -314,10 +297,9 @@ def claim_next_operation(
         .filter(state=OperationRequest.State.QUEUED)
         .order_by("created_at")
     )
-    if agents_paused():
-        # The switch stops what an agent already asked for, not only what it
-        # asks next. Left queued, so turning agents back on resumes it.
-        operations = operations.exclude(requested_interface__in=AGENT_SURFACES)
+    # The pause and a block stop what an agent already asked for, not only
+    # what it asks next. Left queued, so lifting the brake resumes it.
+    operations = operations.exclude(agent_access.held_askers())
     operations = _compatible_operations(operations, capabilities)
     operation, contract = _next_resolvable(operations, now)
     if operation is None:
@@ -385,8 +367,7 @@ def report_operation(
     *,
     controller_id: str,
 ) -> dict[str, Any]:
-    _assert_public_status(report.status)
-    _assert_public_status(report.conditions, "conditions")
+    # Held to the bridge's secret door (``secret_shapes``) before it arrives.
     try:
         operation = OperationRequest.objects.select_for_update().select_related("resource").get(pk=operation_id)
     except (OperationRequest.DoesNotExist, ValueError) as exc:

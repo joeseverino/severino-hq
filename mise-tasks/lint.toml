@@ -18,16 +18,14 @@ run = [
 ]
 
 ["lint:ast-grep"]
-description = "ast-grep holds the source of hq, hq_sdk and tools to the structural rules in tools/lint/ast-grep/rules, every test and test-support module (test*.py, *_testing.py) to those in tools/lint/ast-grep/test-code/rules, and each rule to its own cases"
+description = "ast-grep holds every Python module to the structural rules in tools/lint/ast-grep/rules, each over the scope its rule declares (code HQ runs: hq, hq_sdk and tools less their tests; test code: tests/, test_*.py, testing.py and *_testing.py; or every module), and each rule to its own cases"
 hide = true
-# Two projects, since the source rules exclude the tests the test-code rules
-# read. A rule's cases (rule-tests/) prove it refuses what it is for before
-# its scan is trusted to find nothing.
+# The scan reads the whole repository, since each rule's files: and ignores:
+# say which modules it holds. A rule's cases (rule-tests/) prove it refuses
+# what it is for before its scan is trusted to find nothing.
 run = [
   "ast-grep test -c tools/lint/ast-grep/sgconfig.yml --skip-snapshot-tests",
-  "ast-grep test -c tools/lint/ast-grep/test-code/sgconfig.yml --skip-snapshot-tests",
-  "ast-grep scan -c tools/lint/ast-grep/sgconfig.yml --globs '!**/tests/**' --globs '!**/test_*.py' --globs '!**/migrations/**' hq hq_sdk tools",
-  "ast-grep scan -c tools/lint/ast-grep/test-code/sgconfig.yml --globs 'test*.py' --globs '*_testing.py' .",
+  "ast-grep scan -c tools/lint/ast-grep/sgconfig.yml .",
 ]
 
 ["lint:openapi"]
@@ -39,7 +37,7 @@ depends = ["setup:lint-tools"]
 # Stylish names each problem's file, line and column. HQ writes all three
 # documents, so a problem is fixed in what declares them, never ignored.
 env = { REDOCLY_SUPPRESS_UPDATE_NOTICE = "true" }
-run = "redocly lint --extends=spec --format=stylish hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json || { echo 'lint:openapi: each problem is at the file:line:column above. HQ writes these documents: fix the Python that declares the shape, then mise run fix.' >&2; exit 1; }"
+run = "redocly lint --extends=spec --format=stylish hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json || { echo 'lint:openapi: each problem is at the file:line:column above. HQ writes these documents: fix the Python that declares the shape, then rewrite them: mise run manage -- api_openapi for hq-api, mise run manage -- bridge_contract for the two under controller/api.' >&2; exit 1; }"
 
 ["lint:deptry"]
 description = "Host code imports only declared runtime dependencies and imports every one, or pyproject.toml says why not"
@@ -93,7 +91,10 @@ run = "uv run python manage.py check --deploy --fail-level WARNING"
 ["lint:structural"]
 description = "No new near-duplicate pair outside tests"
 hide = true
-usage = 'flag "--record" help="Rewrite the baseline from this tree instead of checking it"'
+usage = '''
+flag "--record" help="Rewrite the baseline from this tree instead of checking it"
+flag "--pairs" help="First print every pair outside tests with the classification that explains it, or unexplained, one per line, sorted"
+'''
 run = "uv run python -m tools.structural.bar"
 
 ["lint:complexity"]
@@ -169,4 +170,7 @@ usage = '''
 arg "<shell>" help="The shell to run the suite under, which the suite finds in SHELL_UNDER_TEST; - runs it as its first line says"
 arg "<suite>" help="The suite, tests/shell/test-*.sh"
 '''
+# A suite matches the words the tools it runs print, and mise colors them
+# under GitHub Actions even with no terminal.
+env = { NO_COLOR = "1" }
 run = 'if [ "$usage_shell" = - ]; then exec "$usage_suite"; fi; SHELL_UNDER_TEST="$usage_shell" exec "$usage_shell" "$usage_suite"'

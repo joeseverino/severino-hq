@@ -9,12 +9,21 @@ from hq.domains.projects.models import Project
 from hq.platform.application.tests.test_refusal_text import refusal_of, switched_off
 
 from ..testing import ContractClient
-from .test_api import ISSUER, RESOURCE, _serving, _token
+from .tokens import ISSUER, RESOURCE, _serving, _token
 
 SENT = "sent-by-the-caller-7f3a"
 
 
-@override_settings(OIDC_ISSUER=ISSUER, SEVERINO_API_RESOURCE=RESOURCE, OIDC_RP_SIGN_ALGO="RS256")
+# A deployment that lets agents make each write below, so what is measured is
+# the record's refusal rather than the agent ceiling's.
+@override_settings(
+    OIDC_ISSUER=ISSUER,
+    SEVERINO_API_RESOURCE=RESOURCE,
+    OIDC_RP_SIGN_ALGO="RS256",
+    SEVERINO_AGENT_ENABLE_WRITES=True,
+    SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True,
+    SEVERINO_AGENT_ENABLE_LOOKUP=True,
+)
 class RecordRefusalTransportTests(TestCase):
     # Every response is also held to the OpenAPI document.
     client_class = ContractClient
@@ -38,7 +47,7 @@ class RecordRefusalTransportTests(TestCase):
         self.assertNotIn(SENT, error["message"])
 
     def test_a_missing_record_read_is_404_not_found(self):
-        for name in ("projects", "machines", "infrastructure.resources"):
+        for name in ("projects", "machines", "infrastructure"):
             with self.subTest(name), _serving():
                 response = self.client.get(
                     f"/api/v2/resources/{name}/{SENT}/",
@@ -74,7 +83,7 @@ class RecordRefusalTransportTests(TestCase):
 
         with _serving():
             response = self.client.post(
-                "/api/v2/capabilities/infrastructure.reconcile/",
+                "/api/v2/capabilities/infrastructure.resource.reconcile/",
                 data=json.dumps({"payload": {}, "target": resource.key}),
                 content_type="application/json",
                 HTTP_AUTHORIZATION=f"Bearer {_token(scope='manage_infrastructure')}",
@@ -87,7 +96,7 @@ class RecordRefusalTransportTests(TestCase):
     def test_a_value_hq_cannot_act_on_is_400_invalid_input_in_its_own_words(self):
         with _serving():
             response = self.client.post(
-                "/api/v2/capabilities/lookup.address/",
+                "/api/v2/capabilities/lookup.address.read/",
                 data=json.dumps({"payload": {"address": SENT}}),
                 content_type="application/json",
                 HTTP_AUTHORIZATION=f"Bearer {_token(scope='look_up_public_records')}",

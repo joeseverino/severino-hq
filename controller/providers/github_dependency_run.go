@@ -1,9 +1,9 @@
 package providers
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -299,10 +299,8 @@ func readDependencyRunResult(path string) (*DependencyRunResult, error) {
 }
 
 func parseDependencyRunResult(data []byte) (*DependencyRunResult, error) {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	var result DependencyRunResult
-	if err := decoder.Decode(&result); err != nil || decoder.More() || result.Version != dependencyRunVersion {
+	if err := jsonv2.Unmarshal(data, &result, jsonv2.RejectUnknownMembers(true)); err != nil || result.Version != dependencyRunVersion {
 		return nil, errDependencyResult
 	}
 	started, err := time.Parse(time.RFC3339, result.StartedAt)

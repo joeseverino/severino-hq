@@ -10,7 +10,7 @@ point as a comma-separated `package.module:attribute` list; importable code is
 never discovered and run on its own.
 
 ```python
-from hq_sdk.plugin import NavigationItem, PluginIntegration, PluginManifest
+from hq_sdk.plugin import NavigationGroup, NavigationItem, PluginIntegration, PluginManifest
 
 
 def integration():
@@ -34,28 +34,66 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=6,
+    api_version=8,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
     urlconf="example_notes.urls",
-    navigation=(NavigationItem("Notes", "notes:list", "notes"),),
-    token_authenticated_routes=("webhook/",),
+    navigation=(NavigationItem("Notes", "notes:list", "notes", 40, "Writing"),),
     operator_capabilities=("notes.read", "notes.write"),
     mcp_read_capabilities=("notes.read",),
     mcp_write_capabilities=("notes.write",),
+    description="Notes, each with its author and the records it mentions.",
+    navigation_groups=(NavigationGroup("Writing", "What gets written down, and where it is kept."),),
 )
 ```
 
+`description` says what the domain holds and each `NavigationGroup` what a
+group the extension's items add is for, as a host section and the host's own
+groups (`NAVIGATION_GROUPS` in `hq/platform/application/domains.py`) say
+theirs. The API document reads both under each tag.
+
 Locally, set `SEVERINO_HQ_PLUGINS=example_notes.plugin:plugin`, install the
-package and run its migrations; in production the list is derived from the
+package and run its migrations. In production the list is derived from the
 signed lock ([Composition](#composition)). `python manage.py plugins` prints the
 effective inventory as JSON and validates compatibility.
 
-A manifest's capabilities are the plugin's own: naming one of the host's fails
-at startup. Every plugin view needs a session wherever it is mounted; a route
-that authenticates its own requests is listed in `token_authenticated_routes`
-([below](#routes-that-authenticate-themselves)).
+A manifest is checked where it is built, at the extension's import. One
+`DeclarationRefused` (an `ImproperlyConfigured`) names the plugin by its id and
+lists every field it gets wrong, read from `MANIFEST_CHECKS` in
+`hq/platform/application/plugins.py`. A `NavigationItem` and a
+`NavigationGroup` are each checked the same way when built. Nothing pydantic
+loads for them, since every process builds the manifests at start.
+
+A manifest must pass these checks:
+
+- Every field is declared by the class, and every value has its declared type
+  as written. Nothing is converted, so a tuple field takes a tuple and never a
+  list, and `api_version` takes an int and never a string or a bool.
+- `id`, `distribution`, `source_repository`, `source_workflow`,
+  `integration_provider` (`module:attribute`), each Django app and each
+  capability name match their patterns in `hq/platform/application/plugins.py`.
+  `name` and `version` are not blank.
+- `api_version` is the host's `PLUGIN_API_VERSION`.
+- `url_prefix` (`segment/`, never `/segment`) and `urlconf` are both set or
+  both empty.
+- Each navigation item has a label, a route and a namespace.
+- Each navigation group has a name and a description, and is one the
+  manifest's own items are in, said once.
+- No capability appears twice in one list, and each MCP capability is also an
+  operator capability.
+
+Two checks need the running host, so they run at startup. A plugin's
+capabilities are its own: naming one of the host's fails there. The installed
+set is checked whole: two plugins may not share an id, a distribution, a
+Django app or a URL prefix, one prefix may not nest inside another, and a
+navigation group says what it is for once, in the host or one manifest.
+
+Every plugin view needs a session wherever it is mounted. A native or machine
+client uses the versioned [API](API.md), derived from the same command and query
+services as the web and MCP. Identifiers, idempotency keys, pagination and
+scoped authorization belong to that transport, not to templates or plugin
+registration.
 
 ## The golden path
 
@@ -76,27 +114,30 @@ domain; the SDK owns integration mechanics:
 | References to other records | `hq_sdk.references` |
 | Calendar sources | `hq_sdk.calendar` |
 | Tables, forms, UI projections, money, global search | the matching `hq_sdk.*` module |
+| Moving rows the host keeps under a renamed capability | `hq_sdk.migrations` |
 | Synthetic siblings and style checks | `hq_sdk.testing` |
 
 Imports from `application`, `core` or another host app are unsupported: they
 couple a private plugin to public implementation details.
-`python -m hq_sdk.validation src` enforces the boundary. It also refuses a
-test whose `assertContains`, `assertNotContains`, `assertIn` or `assertNotIn`
-looks for text ending on `</td>` or `</th>`: the host may wrap what a cell
-says, so a test reads the cell's text instead. And it refuses a page sentence
-that closes on a value with a period written by hand
-(`f"Renews through {registrar}."`): a value HQ did not write can end in its own
-period, so the sentence closes through `hq_sdk.ui.ended(f"... {value}")`, which
-adds the full stop only when the text has none. The host's own code is held to
-the same rule, and an extension to the refusal from `PLUGIN_API_VERSION` 6.
+`python -m hq_sdk.validation src` enforces the boundary. It also refuses two
+habits:
+
+| Refused | Why | Instead |
+| --- | --- | --- |
+| A test whose `assertContains`, `assertNotContains`, `assertIn` or `assertNotIn` looks for text ending on `</td>` or `</th>` | the host may wrap what a cell says | read the cell's text |
+| A page sentence that closes on a value with a period written by hand (`f"Renews through {registrar}."`) | a value HQ did not write can end in its own period | close it through `hq_sdk.ui.ended(f"... {value}")`, which adds the full stop only when the text has none |
+
+The host's own code is held to the same rule, and an extension to the refusal
+from `PLUGIN_API_VERSION` 6.
 
 The shape of that surface is committed as `hq_sdk/contract.json`: every
-export's parameters, fields, enum members and public methods, without
-annotations so it is identical across the interpreter matrix. A test fails when
-the exports drift from the file, because an extension's binding to a renamed
-field or a new required parameter is a change this repository cannot otherwise
-see. Regenerate it with `mise run fix`, read the diff as the review, and
-decide there whether `PLUGIN_API_VERSION` moves; `mise run lint` fails on
+export's parameters, fields, enum members and public methods. It leaves out
+annotations, so it is identical across the interpreter matrix.
+
+A test fails when the exports drift from the file. An extension's binding to a
+renamed field or a new required parameter is a change this repository cannot
+otherwise see. Regenerate it with `mise run fix`, read the diff as the review,
+and decide there whether `PLUGIN_API_VERSION` moves. `mise run lint` fails on
 drift.
 
 What the annotations promise is held from an extension's side by
@@ -108,9 +149,19 @@ there; an annotation that slides to `Any` fails it.
 Capability input models inherit `StrictCommand`, so unknown JSON keys fail at
 the boundary instead of being dropped. Class-based views inherit
 `CapabilityRequiredMixin` and declare `required_capability`; function views use
-`@capability_required(...)`. Bulk work uses `audit_operation` with
-`record_operation`, so adapter and actor attribution match without a
-domain-owned wrapper.
+`@capability_required(...)`. Either only names the capability. The host's page
+gate refuses a person who does not hold it, and records the refusal, before the
+view runs. It also refuses to serve a mixin view that names none. Bulk work
+uses `audit_operation` with `record_operation`, so adapter and actor
+attribution match without a domain-owned wrapper. Every row it writes carries
+one operation id: the id it is given, else the one of the operation it runs
+inside, else a new one. Without a principal it is the operation of whoever its
+door bound (a request, a job, a command), and with nothing bound it is refused,
+as `record_event` is. Every door binds who acted where it starts, so a row nobody bound is a door's
+defect and fails where it runs. Once an actor is bound, a binding opened inside
+it that names another actor is refused: a job's work runs under its job's
+binding, a command under the shell's, and a step that needs a principal is
+handed the requester's. The same actor may name another interface.
 
 Every extension's `.github/workflows/admit-plugin.yml` is the same, because it
 names nothing about the extension:
@@ -144,38 +195,79 @@ signed.
 
 The same checks run from an extension's checkout with nothing to pass:
 `../severino-hq/tools/pipeline/check-plugin.sh`, or `mise run plugin:check -- --plugin-root PATH`
-from the host checkout. It syncs the package against its lock and lints it,
-enforces SDK-only imports, type checks it, runs Django checks, migration drift
-checks and the plugin's tests, then installs the package (built as a wheel)
-with `--no-deps` into a clean host environment. That last step reproduces
-production's dependency boundary and catches a missing host pin before
-composition. Every package declares `[tool.mypy]` in its `pyproject.toml`, and
-the check refuses one that does not: its own mypy (from its dev group) runs
-against the host's typed `hq_sdk`, with django-stubs pointed at
+from the host checkout. The host runs it on `examples/extension`, a synthetic
+package of its own, in its own CI (`test:plugin-check`).
+
+The check:
+
+- refuses a dot typed between two parts of a line in its `src` (less tests
+  and migrations), by the host's `dot-typed-in-text` rule
+  (`tools/lint/ast-grep/rules`); a line's parts join with `hq_sdk.ui.dotted`;
+- syncs the package against its lock and lints it;
+- enforces SDK-only imports;
+- type checks it;
+- runs Django checks, migration drift checks and the plugin's tests;
+- then installs the package (built as a wheel) with `--no-deps` into a clean
+  host environment.
+
+That last step reproduces production's dependency boundary, and catches a
+missing host pin before composition.
+
+Every package declares `[tool.mypy]` in its `pyproject.toml`, and the check
+refuses one that does not. Its own mypy (from its dev group) runs against the
+host's typed `hq_sdk`, with django-stubs pointed at
 `hq.config.settings_typecheck`, the host's settings with that package
-installed. In CI it runs
-against host `main`, or the host branch named like the extension's branch when
-one exists ([Coordinated changes](#coordinated-changes)).
+installed.
+
+In CI it runs against host `main`, or the host branch named like the
+extension's branch when one exists
+([Coordinated changes](#coordinated-changes)).
+
+### Renaming a capability
+
+A capability's name follows the API's pattern ([API](API.md#names)). HQ keeps
+rows under it: an operator's standing rule, and a change held for a person.
+A rule left under an old name matches nothing, so the call would run at its
+default, and a held change could no longer be approved. A rename therefore
+lands with a migration of the plugin's own that moves them:
+
+```python
+from django.db import migrations
+
+from hq_sdk.migrations import CAPABILITY_ROWS, RenameCapabilities
+
+
+class Migration(migrations.Migration):
+    dependencies = [("example_ledger", "0004_entries"), CAPABILITY_ROWS]
+    operations = [RenameCapabilities({"example.entries": "example.entry.list"})]
+```
+
+`CAPABILITY_ROWS` is the host migration whose rows the operation reads, so
+the migration names no host app. A settled decision and the audit log keep
+the name they were written under.
 
 ### Several extensions in one repository
 
 One repository may hold several extensions, each still its own package (its
 own `pyproject.toml`, `uv.lock` and `src/<package>/`), plugin and signed wheel.
-One repository is one trust domain: its extensions share one signer, that
+One repository is one trust domain. Its extensions share one signer, that
 repository and its admission workflow, so whoever can sign for one can sign for
-all of them, and the composition set names the same `workflow` for every entry
-of one `repository`, with each entry's `path` (its package directory, `.` when
+all of them. The composition set names the same `workflow` for every entry of
+one `repository`, with each entry's `path` (its package directory, `.` when
 omitted).
 
 `plugin-checks.yml` takes the package's `package-dir`, called once per package
-with `secret-scan: false` on all but one call. One run admits them all: the
-admission job is a matrix over the package directories, each leg passing
-`dispatch: "false"`, and a final job that needs every leg starts the
-composition once, so it reads a run in which every package was admitted. That
-job dispatches **Compose** as the action does, with `admission-run` set to
-`$GITHUB_RUN_ID`: the run is still finishing, and Compose takes that
-repository's extensions from it once it has checked that the run is that
-repository's admission workflow on `main` and has not failed.
+with `secret-scan: false` on all but one call.
+
+One run admits them all. The admission job is a matrix over the package
+directories, each leg passing `dispatch: "false"`. A final job that needs every
+leg starts the composition once, so it reads a run in which every package was
+admitted.
+
+That job dispatches **Compose** as the action does, with `admission-run` set to
+`$GITHUB_RUN_ID`. The run is still finishing. Compose takes that repository's
+extensions from it once it has checked that the run is that repository's
+admission workflow on `main` and has not failed.
 
 ```yaml
   admit:
@@ -207,9 +299,19 @@ The lock's inventory must equal the enabled manifests exactly. Every entry
 binds the plugin ID, distribution, installed version, host API version,
 immutable source commit, wheel SHA-256 and Cordon policy SHA-256.
 
-The policy is `policy/plugin-admission-v1.json`. Admission requires the plugin
-contract and package tests, a dependency lock and audit, a secret scan, a wheel
-SBOM and a wheel vulnerability scan with no fixable high or critical findings.
+The policy is `policy/plugin-admission-v1.json`. Admission requires:
+
+| Evidence | Produced by |
+| --- | --- |
+| The plugin contract and package tests, and a secret scan | `plugin-checks.yml` |
+| A dependency lock that matches `pyproject.toml` | the admission action |
+| An audit of every locked dependency with no known vulnerability | the admission action |
+| An SBOM of the wheel and its locked runtime dependencies, dev groups left out | the admission action |
+
+Each id the policy lists is produced by one step or job, named beside it in
+`AdmissionEvidenceTests`, since Cordon's evidence step marks every listed id as
+passed.
+
 The extension's admission signs its statement with GitHub OIDC through
 Sigstore. Cordon verifies the bundle against the exact repository and workflow
 identity before installation, then emits the lock entry embedded in the
@@ -220,12 +322,19 @@ arbitrary plugin code or future versions are safe. A changed wheel, version,
 workflow, policy, host API or enabled inventory needs a new admission and
 image build.
 
+Compose refuses an admission signed under another policy. So once a policy
+change lands on `main`, each extension repository runs its admission workflow
+again (`gh workflow run admit-plugin.yml --repo OWNER/NAME`), which admits
+every package and starts the composition.
+
 Admission tests one extension against the host it checks out. Composition then
 runs Django's checks and the whole suite in the assembled image, with every
 admitted wheel installed together. Admission proves an artifact is acceptable
-on its own; composition proves the accepted set is one application. Duplicate
-routes or capabilities, missing host-owned runtime dependencies, migration
-conflicts and tests that assume no sibling exists fail before publication.
+on its own; composition proves the accepted set is one application.
+
+Duplicate routes or capabilities, missing host-owned runtime dependencies,
+migration conflicts and tests that assume no sibling exists fail before
+publication.
 
 ## Composition
 
@@ -246,13 +355,16 @@ together before it is published.
 
 A plugin's admission starts the composition, and nothing polls. The last step
 of the host's `admit-plugin` action mints a token as HQ's GitHub App, asking
-only for Actions write on this repository, and dispatches **Compose** with an
-input that names no plugin. The token lasts an hour and can only start a
-workflow here; the app's key is the only credential a plugin repository holds,
-as a secret on an `admission` environment limited to `main`. A deploy still
-waits for a person's approval in the `production` environment, which no app can
-give. A dispatch that fails fails the admission, where it happened, so nothing
-is missed silently and no schedule backs it up.
+only for Actions write on this repository. It dispatches **Compose** with an
+input that names no plugin.
+
+The token lasts an hour and can only start a workflow here. The app's key is
+the only credential a plugin repository holds, as a secret on an `admission`
+environment limited to `main`. A deploy still waits for a person's approval in
+the `production` environment, which no app can give.
+
+A dispatch that fails fails the admission, where it happened. So nothing is
+missed silently, and no schedule backs it up.
 
 ```
 merge a plugin → its CI admits the wheel and publishes the bundle
@@ -271,12 +383,16 @@ set on purpose.
 
 Compose reads the plugins' admissions as the same app, through a token minted
 per run with only Actions and Contents read; there is no personal token to
-renew. It is the only path to production. It verifies each signature itself,
-against the identity built from the declared repository and workflow, so a
-plugin cannot widen who may sign for it by editing its own repository. Cordon's
-lock tool merges the entries into one lock; the host does not reimplement it.
-`SEVERINO_HQ_PLUGINS` is derived from the merged lock, because the enabled and
-approved inventories must be identical or the host refuses to start.
+renew. It is the only path to production.
+
+It verifies each signature itself, against the identity built from the
+declared repository and workflow. So a plugin cannot widen who may sign for it
+by editing its own repository.
+
+Cordon's lock tool merges the entries into one lock; the host does not
+reimplement it. `SEVERINO_HQ_PLUGINS` is derived from the merged lock, because
+the enabled and approved inventories must be identical or the host refuses to
+start.
 
 The declared set is the `COMPOSITION_EXTENSIONS` repository secret rather than
 a committed file, because this repository is public and the extensions are not.
@@ -285,11 +401,12 @@ composes the host with none; a missing secret or list fails Compose.
 
 An extension leaves production only by being named. `hq-host deploy` reads the
 lock in the running image and in the one being deployed, both covered by the
-signature over their digests, and refuses an image that drops an extension the
-running release carries unless the image's composition lists its id under
-`retired` (shipped in the image as `/opt/severino/plugin-retired.json`). To remove one, move
-its id from `extensions` to `retired`, run Compose and deploy; once production
-runs without it, the `retired` entry may go.
+signature over their digests. It refuses an image that drops an extension the
+running release carries, unless the image's composition lists its id under
+`retired` (shipped in the image as `/opt/severino/plugin-retired.json`).
+
+To remove one, move its id from `extensions` to `retired`, run Compose and
+deploy. Once production runs without it, the `retired` entry may go.
 
 ### Coordinated changes
 
@@ -303,14 +420,18 @@ before either merges:
 - The host pull request's composition builds each extension's same-named branch
   into a candidate image and runs the composed checks and suite in it. The
   candidate is verify-only: unadmitted wheels, no lock, a local tag, never
-  published, signed or deployed. Extensions without such a branch are reused
-  from their verified admissions; the app's Contents read covers reading the
-  branches.
-- Beside composing, in a job of its own, the host pull request runs its own `plugin:check`
-  against every extension in the set, from its same-named branch or else its
-  default branch, so a host change that breaks an extension fails the pull
-  request rather than the next admission. Which extension failed is only in
-  the sealed failure logs.
+  published, signed or deployed.
+- Extensions without such a branch are reused from their verified admissions.
+  The app's Contents read covers reading the branches.
+- Beside composing, in a job of its own, the host pull request runs its own
+  `plugin:check` against every extension in the set, from its same-named branch
+  or else its default branch. So a host change that breaks an extension fails
+  the pull request rather than the next admission. Which extension failed is
+  only in the sealed failure logs.
+- The host's Test job runs the same check, `test:plugin-check`, on
+  `examples/extension`, a synthetic package of its own. So a host change that
+  breaks the check itself (a test it runs that reads a host dev dependency)
+  fails there, before anything is composed, and on a fork's pull request too.
 
 Merge the host first; each extension then checks and admits against `main`.
 
@@ -323,9 +444,11 @@ stay in the plugin's application services, so pages, commands, search and MCP
 cannot diverge.
 
 `api_version` is required and authored as a literal by the extension, never
-defaulted to the host's constant, so a host loading an older wheel reports the
-incompatible epoch instead of relabeling the wheel or failing with an
-unexplained constructor error. Additive manifest fields stay compatible within
+defaulted to the host's constant. So a host loading an older wheel reports the
+incompatible epoch, instead of relabeling the wheel or failing with an
+unexplained constructor error.
+
+Additive manifest fields stay compatible within
 a version; removals and semantic changes need the next version. Plugin IDs are
 stable reverse-DNS names and are never reused.
 
@@ -356,18 +479,27 @@ the host compiles these into one graph is in
 [Architecture](Architecture.md#emit-once-derive-everywhere).
 
 **Dashboard and attention.** A card and its destination page describe the same
-reporting window: put the actual window or data cutoff in the card's `detail`
+reporting window. Put the actual window or data cutoff in the card's `detail`
 when it differs from today or coverage is incomplete, since a render time does
 not establish freshness. The host never infers dates from a card label or
-recalculates an extension's totals. An attention provider emits `serious` or
-`attention` only for a decision that needs the operator, and `neutral` or
-`good` for observations. The title states what is wrong, with its count where
-it stands for several; the body says what it means. Supply the help the shared
-card shows: `Insight.actions` for what can be pressed, `Insight.action` with
-`Insight.url` for the page the work is done on (a short label; a sentence is
-shown as a sentence), `Insight.workflow` for commands and their check, and
-`Insight.since` when the moment it began is known ([Design](Design.md), "A card
-says what is wrong and holds what fixes it").
+recalculates an extension's totals.
+
+An attention provider emits `serious` or `attention` only for a decision that
+needs the operator, and `neutral` or `good` for observations. The title states
+what is wrong, with its count where it stands for several; the body says what
+it means. A domain whose items are also decided together on one page of its
+own names it in `PluginIntegration.attention_url`, and the Needs you page's
+heading for the domain links there.
+
+Supply the help the shared card shows ([Design](Design.md), "A card says what
+is wrong and holds what fixes it"):
+
+| Field | For |
+| --- | --- |
+| `Insight.actions` | what can be pressed |
+| `Insight.action` with `Insight.url` | the page the work is done on (a short label; a sentence is shown as a sentence) |
+| `Insight.workflow` | commands and their check |
+| `Insight.since` | the moment it began, when that is known |
 
 **Capabilities.** HQ validates every `CapabilitySpec` before describing or
 invoking the registry: name, effect, required permissions, target kind and
@@ -380,6 +512,11 @@ the keyword being the one its `target_kind` binds (`current_slug`,
 `current_id`, ...). A handler that checks for a stale write also declares
 `expected_updated_at` and receives the caller's token; any other handler
 leaves it out and is never handed it.
+
+A handler refuses with one of the host's error codes, the ones the API
+reference lists on each operation (`REFUSAL_STATUS` in
+`hq/platform/application/refusal_status.py`); any other code is answered as
+`operation_failed`.
 
 Fields that shape the Command Center form:
 
@@ -424,37 +561,51 @@ class NoteCommand(StrictCommand):
   as the grouped picker the record's own form shows, with what this caller
   may name.
 
-A marker is a plain value that pydantic leaves alone, so the schema every
-adapter reads carries it.
+A marker writes itself into the field's schema through pydantic's
+`__get_pydantic_json_schema__`, so the schema every adapter reads carries it.
+A field several commands declare alike is a named type alias,
+`type Notes = Annotated[str, Describe("Anything else worth keeping.")]`, used
+as `notes: Notes = ""`: the schema holds its definition once, under the
+alias's name in `$defs`, and each use is a `$ref` to it beside that use's
+default.
 
-A command's words are declared on it once. `label` is its name (`Remove a
-note`), `verb` what its button says where that is shorter (`Remove`), and
-`variants` the words for a mode one button cannot say,
-`variants=(("all", "Refresh all"),)`. Every button, link, remedy and toast
-for the command reads them (`spec.words(variant)`; a press answers with
-`spec.requested(subject)`), so a call site never writes them: a control built
-for a command takes no `label`, a template says them with
-`{% words "notes.remove" %}`, and a variant nothing declares fails the
-host's checks instead of the press. The commands one connection's abilities
-run share its row, so no two of them may say the same words: a composition
-where they do fails at startup (`connection.repeated_words`).
+A command's words are declared on it once:
+
+| Field | Its words | Example |
+| --- | --- | --- |
+| `label` | its name | `Remove a note` |
+| `verb` | what its button says, where that is shorter | `Remove` |
+| `variants` | the words for a mode one button cannot say | `variants=(("all", "Refresh all"),)` |
+
+Every button, link, remedy and toast for the command reads them
+(`spec.words(variant)`; a press answers with `spec.requested(subject)`). So a
+call site never writes them. A control built for a command takes no `label`,
+and a template says them with `{% words "notes.remove" %}`. A variant nothing
+declares fails the host's checks instead of the press.
+
+The commands one connection's abilities run share its row, so no two of them
+may say the same words. A composition where they do fails at startup
+(`connection.repeated_words`).
 
 A command whose one field is a yes or no is a switch. Declaring its `on` and
 `off` variants, `variants=(("on", "Turn on updates"), ("off", "Turn off
-updates"))`, presses it as those two words, and a page opened for one record
-says where it stands and offers only the word that changes it. Without both,
-it is a checkbox pressed by its name.
+updates"))`, presses it as those two words. A page opened for one record says
+where it stands and offers only the word that changes it. Without both, it is
+a checkbox pressed by its name.
 
 When an agent asks for a command a person must approve, the card, the bell
 and the audit say it as one sentence: "example-agent wants to delete the note
-example-note". It is read from the same declaration (`spec.wanted()`): the
-command's `label` mid-sentence with the record after it, its "a" read as
-"the" ("Delete a note" says "delete the note example-note"). A switch reads as the variant it sets ("turn off
-updates for example-project"), and a change of one short value as that change
-("change the status of example-note from draft to done"). Where a name does
-not read that way, `wants` says it, with `{target}` where the record goes:
-`wants="keep the live version of {target}"`. It names `{target}` exactly
-when the command takes one.
+example-note". It is read from the same declaration (`spec.wanted()`):
+
+| Command | Reads as |
+| --- | --- |
+| Any | the command's `label` mid-sentence with the record after it, its "a" read as "the" ("Delete a note" says "delete the note example-note") |
+| A switch | the variant it sets ("turn off updates for example-project") |
+| A change of one short value | that change ("change the status of example-note from draft to done") |
+
+Where a name does not read that way, `wants` says it, with `{target}` where the
+record goes: `wants="keep the live version of {target}"`. It names `{target}`
+exactly when the command takes one.
 
 HQ gives every capability that writes an `idempotency_key`
 ([API](API.md#safe-retries)); a command type declares the field only when its
@@ -464,115 +615,184 @@ handler keeps the key itself.
 `ResourceQuery` subclass, a detail handler with one stable identifier, a
 `SearchDefinition`, or any combination. HQ validates names, permissions, query
 and handler compatibility, identifier contracts, and duplicate resources and
-search scopes at startup; the API, MCP and global search derive from the spec.
+search scopes at startup. The API, MCP and global search derive from the spec.
 A search projection that belongs to no resource comes from
-`PluginIntegration.search`. Set `pass_principal=True` when the answer depends
-on what the caller may see; both handlers then also receive `principal=`. Set
-`web_route` to the resource's list route, which must reverse without
-arguments, to link it from the Command Center. Plugins read through the
-authorized `list_resource` and `get_resource`; the raw registry and handlers
-are not exported.
+`PluginIntegration.search`. A list that reads its first `limit` rows
+subclasses `hq_sdk.resources.TopQuery` rather than declaring `limit` itself,
+so its schema carries the deployment's maximum and a larger ask is refused.
+A list narrowed by a free-text `query` or a `status` types the field by
+`hq_sdk.resources.TextFilter` or `StatusFilter`, which say what it does in
+the words every list's does, so the API reference writes them once.
+
+| Field | Set it |
+| --- | --- |
+| `pass_principal=True` | when the answer depends on what the caller may see; both handlers then also receive `principal=` |
+| `web_route` | to the resource's list route, which must reverse without arguments, to link it from the Command Center |
+
+Plugins read through the authorized `list_resource` and `get_resource`; the raw
+registry and handlers are not exported.
 
 **Connections.** Emit a `ConnectionSpec` for every external API, token, consent
 or keyless gateway the package uses, and map each useful operation to its
-registered capability or resource. Each spec names a family, its abilities and
-provider scopes, the capability needed to inspect it, and a zero-argument
-provider of cached `ConnectionInstance` observations. HQ derives the
-Connections workspace, Command Center entry, API catalog, MCP tools and
-topology from it. The provider runs only after authorization and reads local
-state: it never makes a network request because someone opened discovery. An
-instance may carry status, safe endpoint text, granted scope names, targets,
-dependencies and small facts, never tokens, credentials, authorization headers,
-secret values or private URL parts; URL userinfo, query strings and fragments
-are rejected outright rather than filtered by a list of secret parameter names.
-`observed_at` is a `datetime` and serializes as ISO 8601; links are local paths
+registered capability or resource. Import the contracts and
+`describe_connections` from `hq_sdk.connections`; given `principal=`, it and
+`hq_sdk.resources.describe_resources` say whether each entry is `permitted`.
+
+Each spec names a family, its abilities and provider scopes, the capability
+needed to inspect it, and a zero-argument provider of cached
+`ConnectionInstance` observations. HQ derives the Connections workspace,
+Command Center entry, API catalog, MCP tools and topology from it. The provider
+runs under a principal its spec permits, or in HQ's own derivation, whose
+results each reader sees only as far as `readable_by` allows. It reads local
+state, and never makes a network request because someone opened discovery.
+
+An instance may carry status, safe endpoint text, granted scope names, targets,
+dependencies and small facts. It never carries tokens, credentials,
+authorization headers, secret values or private URL parts. URL userinfo, query
+strings and fragments are rejected outright, rather than filtered by a list of
+secret parameter names.
+
+`observed_at` is a `datetime` and serializes as ISO 8601. Links are local paths
 or explicit HTTP(S) URLs. Emit a truthful reduced mode when the gateway works
-anonymously rather than hiding it. Import the contracts and
-`describe_connections` from `hq_sdk.connections`.
+anonymously, rather than hiding it.
 
 Say how authority is proven, not only what it permits. Each ability declares a
-`grant`: `scoped` when the provider issues narrow permissions and the ability
-lists its needs in `required_scopes`; `coarse` when the credential is the whole
-account and nothing narrower exists; `none` when the call is keyless. Each
-instance reports its `credential_model` from the same words, or `rejected` for
-a credential the provider refused. HQ derives one evidence state per ability
-and instance: `verified`, `coarse` (whole account), `not_applicable`
-(keyless), `unverified`, `undeclared`, `unknown`, `missing` or `revoked`. Only
-`missing` and `revoked` close the ability; `unknown` leaves it undecided;
-`undeclared` leaves it usable under HQ's own authorization and says so. The
-same derivation gives each connection's lifecycle (configured, reachable,
+`grant`:
+
+| `grant` | When |
+| --- | --- |
+| `scoped` | the provider issues narrow permissions, and the ability lists its needs in `required_scopes` |
+| `coarse` | the credential is the whole account and nothing narrower exists |
+| `none` | the call is keyless |
+
+Each instance reports its `credential_model` from the same words, or `rejected`
+for a credential the provider refused. HQ derives one evidence state per
+ability and instance:
+
+| Evidence | The ability |
+| --- | --- |
+| `verified`, `coarse` (whole account), `not_applicable` (keyless), `unverified` | stays open |
+| `undeclared` | stays usable under HQ's own authorization, and says so |
+| `unknown` | is left undecided |
+| `missing`, `revoked` | is closed; only these two close it |
+
+The same derivation gives each connection's lifecycle (configured, reachable,
 ready, unauthorized, stale, revoked) against the family's `stale_after_hours`.
 
 An ability may set `subject_resource` to the resource it governs and list its
-provider kinds in `governs_kinds`; Command Center then offers the registered
+provider kinds in `governs_kinds`. Command Center then offers the registered
 commands against that resource whose target filters include one of those
 kinds. For an operation that maps through no resource, set `capability` to the
 exact `CapabilitySpec` name. Composition refuses unknown resource and
-capability references. The ability is the only connection-to-capability edge,
-and scope coverage decides only whether the connection can perform it; no
-command is fabricated from token text. Command discovery stays
-declaration-driven, so a missing or stale observation does not hide a supported
-workflow.
+capability references.
 
-In the topology, an ability's `governs_kinds` connect it to managed resources,
-`targets` become observed destinations, and dependencies with a `resource_key`
-become declared-use relationships. Set `controller_id` only when the instance
-is an observation emitted by a distinct controller; it is observer identity,
-not credential identity, and never holds secret material. A plugin needs no
-topology template, route, callback or host edit.
+The ability is the only connection-to-capability edge. Scope coverage decides
+only whether the connection can perform it; no command is fabricated from
+token text. Command discovery stays declaration-driven, so a missing or stale
+observation does not hide a supported workflow.
+
+In the topology:
+
+| Declared | Becomes |
+| --- | --- |
+| An ability's `governs_kinds` | edges to managed resources |
+| `targets` | observed destinations |
+| Dependencies with a `resource_key` | declared-use relationships |
+
+Set `controller_id` only when the instance is an observation emitted by a
+distinct controller. It is observer identity, not credential identity, and
+never holds secret material. A plugin needs no topology template, route,
+callback or host edit.
 
 ## Shared UI contract
 
 An extension renders HQ's design system and ships no stylesheet or script of
-its own. Its templates use only the public pieces below, and
-`python -m hq_sdk.validation src` (part of `plugin:check`) reads
-every file under a `templates` directory and refuses anything else: a frame or
-block not listed, a private partial, an include named at render time, a
-parameter a partial does not read, a required one left to whatever the page has
-in scope, or a host tag, filter, class or `data-` hook not listed. The record is the
-`templates` section of `hq_sdk/contract.json`, derived from the host's own
-templates by `manage.py sdk_contract`, which writes these tables too.
+its own. Its templates use only the public pieces below.
+`python -m hq_sdk.validation src` (part of `plugin:check`) reads every file
+under a `templates` directory and refuses anything else:
 
-Every view model `hq_sdk.ui` hands an extension says its values in words, and
-refuses one that is not with a `ValueError` where it is built: a date-time
+- a frame or block not listed;
+- a private partial;
+- an include named at render time;
+- a parameter a partial does not read, or a required one left to whatever the
+  page has in scope;
+- a host tag, filter, class or `data-` hook not listed.
+
+The record is the `templates` section of `hq_sdk/contract.json`, derived from
+the host's own templates by `manage.py sdk_contract`, which writes these tables
+too.
+
+Every view model `hq_sdk.ui` hands an extension says its values in words. It
+raises `ValueError` where it is built on a date-time
 stamp, a dumped record or list, a bare `True` or `False`, markup, a flag or
 `None` where text belongs, or a field's snake_case name as a label. A moment
 goes in its typed field (`ListRow.at`, `Insight.since`) or through
 `hq_sdk.ui.when`.
 
 A page extends a frame and fills its blocks. It never extends `base.html` or
-draws its own head: the view declares the page (`hq_sdk.pages`), and a head
-action that opens a dialog declares that as well,
+draws its own head: the view declares the page (`hq_sdk.pages`). A head action
+that opens a dialog declares that as well,
 `PageAction("Import", url, modal=PageDialog("import", "Import records", "notes/_import_form.html"))`,
-which `page.html` draws once with the page's context. A block a frame does not
-list is the host's, and an override of it is refused rather than silently
-ignored the day the frame stops rendering it.
+which `page.html` draws once with the page's context.
+
+Where the page sits is declared too. `page_trail` is every crumb above it, from
+the top, as (label, url) pairs, `(("Notes", reverse_lazy("notes:list")),)`. A
+record's page adds its own crumb after them by naming it in
+`trail_label(record)`. One crumb written bare is refused where the view is
+declared. `page_trail` holds the trail's crumbs from `PLUGIN_API_VERSION` 7.
+
+A block a frame does not list is the host's. An override of it is refused,
+rather than silently ignored the day the frame stops rendering it.
 
 A data table is declared through the table tags, so its shape is in the HTML on
-first paint. `{% table_region "Label" %}…{% endtable_region %}` wraps it in
-its labeled region, which derives from what each column holds the width its
-columns leave at, by rank ([Design](Design.md)), and that draws the empty
-state in place of tables with no row beneath their heads (an `{% if %}` around
-the region says what is missing in the page's own words); each column heading is
-`{% table_heading "Name" "identifier" %}`, with its kind (`prose`,
-`identifier`, `numeric`, `status` or `control`, following from `num-col`,
-`date-col` or `actions-col` when left out), `drop=` the order a narrow table
-lets it go in (never on the column that names the row or a `key-col`), and
-`sort=` for a list sorted on the server or `local_sort=True` for one sorted on
-the page. A row that holds more than it shows ends its naming cell with
-`{% row_toggle %}`; that cell in every row, and its heading (`gutter=True`),
-carry `row-gutter`; the stylesheet shows the toggle only where the row holds
-something back. A `TableListMixin` list declares the same through
-`TableColumn(kind=)`, its ranks derived from the columns unless one says
-`drop=`, and its region's `room=` as `table_room`.
+first paint. `{% table_region "Label" %}…{% endtable_region %}` wraps it in its
+labeled region. The region derives the width its columns leave at, by rank,
+from what each column holds ([Design](Design.md)). It draws the empty state in
+place of tables with no row beneath their heads; an `{% if %}` around the
+region says what is missing in the page's own words.
 
-A form renders as `{{ form }}`, and one field as `{{ field.as_field_group }}`:
+Each column heading is `{% table_heading "Name" "identifier" %}`:
+
+| Argument | What it says |
+| --- | --- |
+| The kind | `prose`, `identifier`, `numeric`, `status` or `control`, following from `num-col`, `date-col` or `actions-col` when left out |
+| `drop=` | the order a narrow table lets it go in, never on the column that names the row or a `key-col` |
+| `sort=` | a list sorted on the server |
+| `local_sort=True` | a list sorted on the page |
+
+A row that holds more than it shows ends its naming cell with
+`{% row_toggle %}`. That cell in every row, and its heading (`gutter=True`),
+carry `row-gutter`. The stylesheet shows the toggle only where the row holds
+something back.
+
+A `TableListMixin` list declares the same through `TableColumn(kind=)`, its
+ranks derived from the columns unless one says `drop=`, and its region's
+`room=` as `table_room`.
+
+A form renders as `{{ form }}`, and one field as `{{ field.as_field_group }}`.
 HQ's form renderer draws every field in its own markup, with the help text and
 errors the control's `aria-describedby` names, and a checkbox inside its label.
-The page draws `form.non_field_errors` where it says them. A form field may
-set `wide = True` to take the whole row, `change_effect` to the sentence
-saying what changing it causes, or `confirms = True` to close the form as the
-callout a submission is confirmed in.
+The page draws `form.non_field_errors` where it says them.
+
+A form that posts carries `{% write_token %}` where Django's own form carries
+`{% csrf_token %}`: the CSRF field and a retry key drawn for that drawing of
+the form. A view runs the write through `hq_sdk.capabilities.execute_posted(request, name, payload)`,
+which acts as the signed-in person under that key, so the form sent twice acts
+once; HQ refuses a change from the browser that posts no key. A refused
+answer reaches the person through `hq_sdk.capabilities.refused(request,
+answer, form=form)`. It puts the answer on the form drawn again (each detail
+beside its field) or, without a form, on the next page's messages. It returns
+the refusal, whose `status` the view answers with, or None when the write ran. A post no page is drawn for answers `refusal_response(answer)`: the
+refusal's sentence at its status. A form view whose write is a service call of
+its own inherits `hq_sdk.writes`' mixins, which run it once under the same key.
+A test that posts a form without opening its page first sends
+`hq_sdk.testing.form_keyed(data)`.
+
+| A form field may set | To |
+| --- | --- |
+| `wide = True` | take the whole row |
+| `change_effect` | the sentence saying what changing it causes |
+| `confirms = True` | close the form as the callout a submission is confirmed in |
 
 <!-- sdk_contract: shared UI contract, written by `mise run fix` from hq_sdk/template_contract.py -->
 
@@ -602,7 +822,7 @@ callout a submission is confirmed in.
 | `partials/_timeline.html` | nothing | `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
 | `partials/_week_plan.html` | `plan` | nothing | Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`. |
 
-Host tags: `{% arrow %}`, `{% card %}`, `{% dot %}`, `{% empty_value %}`, `{% entity %}`, `{% outside_link %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section_head %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`. Host filters: `|ago`, `|breakable[:arg]`, `|counted:arg`, `|day`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|sortable`, `|span`, `|web_url`, `|when[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
+Host tags: `{% arrow %}`, `{% card %}`, `{% dot %}`, `{% empty_value %}`, `{% entity %}`, `{% outside_link %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section_head %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|ago`, `|breakable[:arg]`, `|counted:arg`, `|day`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|sortable`, `|span`, `|web_url`, `|when[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
 Classes: `actions-col`, `allocation`, `allocation-legend`, `btn`, `card-columns`, `cell-data`, `chart-axis`, `chart-card`, `chart-data`, `chart-legend`, `compact`, `compact-table`, `count`, `danger`, `danger-link`, `data-table`, `date-col`, `domain-charts`, `domain-head`, `domain-head-copy`, `domain-stack`, `errors`, `eyebrow`, `field`, `field-row`, `figure-hero`, `figure-hero-note`, `figure-stats`, `finding`, `finding-evidence`, `form`, `form-actions`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `kv`, `list-rows`, `msg`, `msg-error`, `msg-warning`, `muted`, `narrow-more`, `notice`, `notice-attention`, `num-col`, `optional-col`, `page-lede`, `pie-chart`, `pie-row`, `pill`, `pill-attention`, `pill-good`, `pill-neutral`, `pill-serious`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `section-period`, `split`, `stacked`, `status-tabs`, `subtle-link`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `worth`, `worth-attention`, `worth-good`, `worth-neutral`.
 
@@ -619,69 +839,89 @@ in [Design](Design.md).
 What the host writes for a value is pinned by example in
 `hq_sdk/text_examples.json`: `span`, `when`, `when_day`, `counted`, `money`,
 `signed_number`, `ended` and `ago`, regenerated and reviewed like the
-contract. An extension's test asserts what it composed from them
-(`f"Due in {span(days)}"`) or reads a page through
-`hq_sdk.testing.plain`, which reads the host's no-break spaces as spaces; it
-never writes the host's words or markup out itself. Text that names the
-deployment reads `hq_sdk.site.host()`, never a setting.
+contract.
+
+An extension's test asserts what it composed from them
+(`f"Due in {span(days)}"`), or reads a page through `hq_sdk.testing.plain`,
+which reads the host's no-break spaces as spaces. It never writes the host's
+words or markup out itself. Text that names the deployment reads
+`hq_sdk.site.host()`, never a setting.
 
 An amount is written by `{{ amount|money }}` in a template and
-`hq_sdk.money.money` in Python: "$1,234.50", a true minus sign before the
-dollar, `money:"whole"` or `cents=False` for a figure that is scanned, and
-`plus=True` for a change signed either way. A debt is a negative value: no
-extension writes a sign of its own, since the host holds the sign to its
-figure so a line never ends between them. Any other figure takes its sign
-through `hq_sdk.money.signed_number(value, figure, plus=...)`: `figure` writes
-the magnitude in its own units (`lambda drop: f"{drop} bpm"`), and the host
-puts the sign before it by the rule an amount follows, so a value that writes
-as zero is never negative. An
-overview says what it is built from with `hq_sdk.pages.built_from(plugin.id)`,
-a link to the project that names the extension's repository. An extension's
-suite checks its templates for a `{# #}` comment left open with
-`hq_sdk.testing.unclosed_template_comments`.
+`hq_sdk.money.money` in Python:
+
+| Form | Written |
+| --- | --- |
+| Default | "$1,234.50", a true minus sign before the dollar |
+| `money:"whole"` or `cents=False` | a figure that is scanned |
+| `plus=True` | a change signed either way |
+
+A debt is a negative value. No extension writes a sign of its own, since the
+host holds the sign to its figure so a line never ends between them.
+
+Any other figure takes its sign through
+`hq_sdk.money.signed_number(value, figure, plus=...)`. `figure` writes the
+magnitude in its own units (`lambda drop: f"{drop} bpm"`), and the host puts
+the sign before it by the rule an amount follows. So a value that writes as
+zero is never negative.
+
+An overview says what it is built from with
+`hq_sdk.pages.built_from(plugin.id)`, a link to the project that names the
+extension's repository. An extension's suite checks its templates for a
+`{# #}` comment left open with `hq_sdk.testing.unclosed_template_comments`.
 
 A list extends `list_page.html` and declares its empty state on the view, never
-in its template: `table_empty` says what an empty list means ("No vehicles
-yet."), `table_empty_why` a sentence beside it, and `get_table_empty_remedy()`
-returns an `hq_sdk.tables.Remedy` where the page's lead action is not what
-fills it. HQ draws the one empty state, and the "nothing matches" state of a
-filtered list, from those.
+in its template:
 
-Wrap a `.data-table` in `.table-scroll`; HQ keeps its headings visible
-through long result sets with sticky cells, and the table stays the one
-semantic and interactive source. Dense pages declare their sections on the
-page, `navigation=PageNavigation((PageSection("overview", "Overview"), ...))`,
-which `page.html` draws, and put the stable `id` on each section; HQ owns overflow, sticky positioning,
-scroll-aware current state and fragment history. Labels may change; section
-IDs are durable links.
+| On the view | Says |
+| --- | --- |
+| `table_empty` | what an empty list means ("No vehicles yet.") |
+| `table_empty_why` | a sentence beside it |
+| `get_table_empty_remedy()` | returns an `hq_sdk.tables.Remedy`, where the page's lead action is not what fills it |
+
+HQ draws the one empty state, and the "nothing matches" state of a filtered
+list, from those.
+
+Wrap a `.data-table` in `.table-scroll`. HQ keeps its headings visible through
+long result sets with sticky cells, and the table stays the one semantic and
+interactive source.
+
+Dense pages declare their sections on the page,
+`navigation=PageNavigation((PageSection("overview", "Overview"), ...))`, which
+`page.html` draws, and put the stable `id` on each section. HQ owns overflow,
+sticky positioning, scroll-aware current state and fragment history. Labels may
+change; section IDs are durable links.
 
 ### What a template prints
 
 A `{{ value }}` in an extension's templates prints text, markup, a number
 (not a flag), a UUID or a path. Anything else is refused: a flag, None, a date
 or a length of time, a mapping, a list, bytes, a plain enum member, a model
-instance or any other object. The view or projection says it in words first:
-`when` or `when_day` for a moment, the missing mark for nothing, a count, a
-name. The same holds for `{% firstof %}`, `{% cycle %}`, the translation tags
-and a `simple_tag`'s result. Text always prints as it is, even text that looks
-like a date.
+instance or any other object.
+
+The view or projection says it in words first: `when` or `when_day` for a
+moment, the missing mark for nothing, a count, a name. The same holds for
+`{% firstof %}`, `{% cycle %}`, the translation tags and a `simple_tag`'s
+result. Text always prints as it is, even text that looks like a date.
 
 Under test and with DEBUG a refusal raises `Unprintable`, naming the template
 and line, so an extension's suite finds it. In production the page prints the
-missing mark and logs the value's type and place. The host holds only its own
-and its extensions' templates, so Django's widgets and other third-party
-templates print as they always have. The rule arrives with
-`PLUGIN_API_VERSION` 5.
+missing mark and logs the value's type and place.
+
+The host holds only its own and its extensions' templates, so Django's widgets
+and other third-party templates print as they always have. The rule arrives
+with `PLUGIN_API_VERSION` 5.
 
 ## Outbound work
 
-A request never waits on anything outside the process. While one is served HQ
+A request never waits on anything outside the process. While one is served, HQ
 refuses every connection, name lookup, subprocess and sleep, whichever library
-makes it, so a view or capability handler that calls a provider raises
+makes it. So a view or capability handler that calls a provider raises
 `OutboundInRequest` before the call leaves
-([Architecture](Architecture.md#what-a-request-waits-on)). An extension does
-not start threads, poll, or expose a status endpoint to get round that. It
-declares the work, and HQ runs it:
+([Architecture](Architecture.md#what-a-request-waits-on)).
+
+An extension does not start threads, poll, or expose a status endpoint to get
+round that. It declares the work, and HQ runs it:
 
 ```python
 from hq_sdk.outbound import Failed, OutboundWork, ask
@@ -741,10 +981,11 @@ the work ends; without one the page loads again.
 
 Work that is not about one record can run on a cadence. Declared with
 `every=timedelta(days=1)`, it is done by the host once that long has passed
-since it last succeeded: the hourly `due` timer asks for each piece
-whose cadence has come round, as its own job, recorded against the timer. A
-failed attempt is not a success, so it is asked again on the next hour. An
-extension ships no systemd unit for this, and the host removes any
+since it last succeeded. The hourly `due` timer asks for each piece whose
+cadence has come round, as its own job, recorded against the timer. A failed
+attempt is not a success, so it is asked again on the next hour.
+
+An extension ships no systemd unit for this, and the host removes any
 `severino-hq-*` unit it did not ship.
 
 Three rules keep the work honest:
@@ -753,12 +994,13 @@ Three rules keep the work honest:
   ends with a sentence (`progress(..., force=True)`), which the control shows
   when done. A failure the operator can act on is `Failed("...")`: the sentence
   is shown where the work was asked for and nothing stored is touched. Any
-  other exception is a fault, kept with its traceback.
+  other exception is a fault: the job says its kind, and its traceback is in
+  HQ's log alone.
 - **Refuse from what HQ holds.** `refuse(subject)` returns why the work cannot
-  be asked for now, or `""`. Every control for the work, its `ask` and any
-  link HQ offers to its command (a connection's row, a topology node, a
-  remedy), is drawn unusable with that reason, so a page draws nothing of its
-  own for it; an ask is refused with it before a job is recorded. It runs
+  be asked for now, or `""`. Every control for the work is drawn unusable with
+  that reason: its `ask`, and any link HQ offers to its command (a connection's
+  row, a topology node, a remedy). So a page draws nothing of its own for it.
+  An ask is refused with that reason before a job is recorded. `refuse` runs
   inside requests, once per subject in each, so it reads the database and
   nothing else.
 - **One at a time is the duplicate guard.** Work that costs money or is not
@@ -775,24 +1017,28 @@ leaves the request, and a test holds that. A credential the work uses is still
 read by the web process; a job changes when the call is made, not who holds the
 credential.
 
-In an extension's tests, `hq_sdk.testing.held_jobs` records each job a request
-starts and holds its work until the test calls `run()`, and
-`hq_sdk.testing.reaches_out()` called from a network double makes the double
-subject to the rule, so a test that drives a view proves the view answered
-without reaching out. `example_hq_plugin` and
+In an extension's tests, two helpers hold the rule. `example_hq_plugin` and
 `hq/platform/application/tests/test_outbound_work.py` show both.
+
+| Helper | What it does |
+| --- | --- |
+| `hq_sdk.testing.held_jobs` | records each job a request starts, and holds its work until the test calls `run()` |
+| `hq_sdk.testing.reaches_out()` | called from a network double, makes the double subject to the rule, so a test that drives a view proves the view answered without reaching out |
 
 ## Derived reads
 
 What an extension contributes to a page many domains share is derived once per
 change, by the host. HQ asks `attention`, `dashboard`, `overview` and each
 calendar source's `events` through a derivation of its own,
-`extension.<plugin id>.<provider>`: the answer is kept until a table the
-provider was seen to read is written, every request in between is answered from
-what is stored, and after a write the answer is derived again before the next
-request asks ([Architecture](Architecture.md#derived-once-per-change)). An
-extension does nothing to be kept, and keeps three rules so what is stored is
-true:
+`extension.<plugin id>.<provider>`
+([Architecture](Architecture.md#derived-once-per-change)).
+
+The answer is kept until a table the provider was seen to read is written.
+Every request in between is answered from what is stored. After a write, the
+answer is derived again before the next request asks.
+
+An extension does nothing to be kept, and keeps three rules so what is stored
+is true:
 
 - **Answer from rows, the clock and the demo switch.** HQ sees the tables a
   provider reads and counts every write to them. It cannot see a module-level
@@ -936,22 +1182,3 @@ The calendar page is the host's. An extension may place a host page in its own
 navigation group by naming its route, `NavigationItem("Calendar",
 "calendar:month", "calendar", 11, "Notes")`; where none does, the host lists it
 in its own place.
-
-## Routes that authenticate themselves
-
-`token_authenticated_routes` names paths under a plugin's own `url_prefix` that
-carry their own request authentication (a bearer token, a signed body) instead
-of the session cookie. They are exempt from the session login redirect, not
-from authentication: a 302 to an HTML login page is the wrong answer for a
-native or machine client, which cannot render it or tell it from success. Those
-routes answer 401 instead, and the view stays responsible for authenticating
-the request.
-
-Routes are declared relative and joined to `url_prefix` by the host, so a
-plugin can only ever say "these paths of mine". An absolute path, a traversing
-one, or one declared without a `url_prefix` fails closed at load.
-
-A native or machine client otherwise uses the versioned [API](API.md), derived
-from the same command and query services as the web and MCP. Identifiers,
-idempotency keys, pagination and scoped authorization belong to that transport,
-not to templates or plugin registration.

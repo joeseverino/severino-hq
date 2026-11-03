@@ -5,10 +5,9 @@ from typing import ClassVar
 from django.http import Http404, JsonResponse
 from django.views import View
 
-from hq.platform.application.capabilities import execute_capability
-from hq.platform.application.refusal_status import refusal_status
-from hq.platform.application.security import web_principal
+from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.visit_refresh import SUBJECTS, VISIT_REFRESH
+from hq.platform.application.web_writes import execute_posted
 
 # A hostname's limit, which is the longest thing a subject is named by.
 NAME_LIMIT = 253
@@ -30,11 +29,8 @@ class VisitRefreshView(View):
         name = str(request.POST.get("name", "")).strip()
         if subject not in SUBJECTS or not name or len(name) > NAME_LIMIT:
             raise Http404("No such page.")
-        found = execute_capability(
-            VISIT_REFRESH, {"subject": subject, "name": name}, principal=web_principal(request.user)
-        )
-        if not found["ok"] and found["error"]["code"] == "not_found":
-            raise Http404("No such page.")
+        found = execute_posted(request, VISIT_REFRESH, {"subject": subject, "name": name})
         if not found["ok"]:
-            return JsonResponse(found, status=refusal_status(found["error"]["code"]))
+            refusal = refusal_of(found)
+            return JsonResponse(refusal.answer(), status=refusal.status)
         return JsonResponse(found, status=202 if found["live"] else 200)

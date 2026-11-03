@@ -27,10 +27,12 @@ from .inventory import record_identity
 from .locate import Machines, index_of
 from .paths import path_to
 from .topology_model import (
+    RELATIONS,
     TopologyEdge,
     TopologyNode,
     derived_id,
     edge_between,
+    gate_covers,
     newest_stamp,
 )
 lazy from . import certificate_expiry, docker_estate, reference_findings, render_status_findings, tailnet, unit_findings
@@ -42,7 +44,9 @@ lazy from .zones import ZONE_KIND, zone_reads
 
 # Derived node kinds that only stand for a machine something mentioned: a
 # controller is the machine it runs on, a target is the machine it reaches.
-_FOLDS_INTO_MACHINE = {"controller": "Runs the controller", "target": "Reached as"}
+_FOLDS_INTO_MACHINE = {"controller": "Runs the controller", "target": RELATIONS["stands_for"].inverse}
+# How one kept apart by its gate joins the node it names instead.
+_JOINS_WHEN_KEPT = {"controller": "runs_on", "target": "stands_for"}
 
 _SERVICE_STATUS = {"good": "good", "attention": "attention", "serious": "serious"}
 
@@ -258,23 +262,21 @@ def _redirect_edges(nodes, edges) -> None:
 
 
 def _fold(nodes, edges, estate: _Estate) -> None:
-    """Move controllers and targets that name an estate node onto it."""
+    """Move controllers and targets that name an estate node onto it.
 
+    Only onto a node whose readers may be told of it: one a gated family
+    names stays a node of its own, under its gate, joined to the node it
+    names, so what it carries reaches nobody that node's gate admits.
+    """
+
+    named = _named_estate_nodes(nodes, estate)
     folded: dict[str, str] = {}
-    for node_id, node in nodes.items():
-        if node.kind not in _FOLDS_INTO_MACHINE:
-            continue
-        machine = estate.machine(node.label)
-        if machine:
-            folded[node_id] = machine
-            continue
-        if node.kind != "target":
-            continue
-        name = normalized_hostname(node.label)
-        for candidate in (f"service:{name}", f"zone:{name}"):
-            if candidate in nodes:
-                folded[node_id] = candidate
-                break
+    for node_id, into in named.items():
+        if gate_covers(nodes[into].read_capabilities, nodes[node_id].read_capabilities):
+            folded[node_id] = into
+        else:
+            relation = edge_between(node_id, into, _JOINS_WHEN_KEPT[nodes[node_id].kind])
+            edges[relation.id] = relation
     for node_id, into in folded.items():
         node, host = nodes[node_id], nodes[into]
         estate.saw(into, node.observed_at)
@@ -307,6 +309,27 @@ def _fold(nodes, edges, estate: _Estate) -> None:
     edges.update(moved)
     for node_id in folded:
         del nodes[node_id]
+
+
+def _named_estate_nodes(nodes, estate: _Estate) -> dict[str, str]:
+    """Each controller and target that names an estate node, and that node."""
+
+    named: dict[str, str] = {}
+    for node_id, node in nodes.items():
+        if node.kind not in _FOLDS_INTO_MACHINE:
+            continue
+        machine = estate.machine(node.label)
+        if machine:
+            named[node_id] = machine
+            continue
+        if node.kind != "target":
+            continue
+        name = normalized_hostname(node.label)
+        for candidate in (f"service:{name}", f"zone:{name}"):
+            if candidate in nodes:
+                named[node_id] = candidate
+                break
+    return named
 
 
 def _hosted(nodes, edges, resources, estate: _Estate) -> None:

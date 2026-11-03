@@ -1,0 +1,53 @@
+name: Host tool
+description: >-
+  Put one tool a host checkout pins (mise.toml, verified against mise.lock) on
+  the PATH, for a job whose own checkout is not the host's: an extension's.
+
+inputs:
+  host:
+    description: The host checkout, relative to the workspace.
+    required: true
+  tool:
+    description: The one tool to install, by the name mise.toml gives it.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - id: read
+      shell: bash
+      env:
+        HOST: ${{ inputs.host }}
+      run: |
+        set -euo pipefail
+        mise="$("$HOST/.github/actions/toolchain/mise-version.sh" "$HOST/mise.toml")"
+        echo "mise=$mise" >> "$GITHUB_OUTPUT"
+    # mise's download of the tool, which it checks against the host's mise.lock
+    # before installing (as the toolchain action's downloads are).
+    - id: mise-downloads
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/mise/downloads-cas
+        key: mise-downloads-${{ inputs.tool }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(format('{0}/mise.lock', inputs.host)) }}
+    # Only the named tool: the host's other tools and its [env] are not this job's.
+    - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+      with:
+        version: ${{ steps.read.outputs.mise }}
+        working_directory: ${{ inputs.host }}
+        install_args: ${{ inputs.tool }}
+        cache: false
+        env: false
+        add_shims_to_path: false
+    # Saved from the default branch only, which every branch reads.
+    - if: >-
+        github.ref_name == github.event.repository.default_branch &&
+        steps.mise-downloads.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/mise/downloads-cas
+        key: ${{ steps.mise-downloads.outputs.cache-primary-key }}
+    - shell: bash
+      working-directory: ${{ inputs.host }}
+      env:
+        TOOL: ${{ inputs.tool }}
+      run: dirname "$(mise which "$TOOL")" >> "$GITHUB_PATH" # zizmor: ignore[github-env] the directory of the tool mise installed from mise.lock

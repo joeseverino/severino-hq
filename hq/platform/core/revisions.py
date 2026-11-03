@@ -16,6 +16,7 @@ from django.conf import settings
 from django.db import DatabaseError, connection as default_connection, connections
 lazy from django.core.management import call_command
 
+from . import append_only
 lazy from .models import Revision
 
 logger = logging.getLogger("severino.revisions")
@@ -53,7 +54,8 @@ def counted_tables(connection=default_connection) -> list[str]:
 
 
 def install(connection=default_connection) -> list[str]:
-    """Put the triggers on every counted table; return the tables counted."""
+    """Put the triggers on every counted table, and the audit log's guard
+    (``append_only``); return the tables counted."""
 
     if connection.vendor != "sqlite":
         return []
@@ -79,6 +81,7 @@ def install(connection=default_connection) -> list[str]:
                     f"INSERT INTO {revision} (name, value) VALUES ('{table}', 1) "
                     "ON CONFLICT (name) DO UPDATE SET value = value + 1; END"
                 )
+    append_only.install(connection)
     return tables
 
 

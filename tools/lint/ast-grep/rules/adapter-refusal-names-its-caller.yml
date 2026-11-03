@@ -1,0 +1,30 @@
+# An exception an adapter catches is answered through adapter_refusal, which
+# records an authorization refusal in the audit log only when it is told whom
+# it refused. A call without the principal answers the caller and leaves no
+# Denied row, where the same refusal through another door leaves one.
+id: adapter-refusal-names-its-caller
+language: python
+severity: error
+message: adapter_refusal is called without the principal it refused, so a denial goes unrecorded.
+note: Pass principal=, the caller the door authenticated (None only where nobody was).
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+rule:
+  kind: call
+  has:
+    field: function
+    regex: (^|\.|\()adapter_refusal\)?$
+  not:
+    has:
+      field: arguments
+      has:
+        kind: keyword_argument
+        has:
+          field: name
+          regex: ^principal$

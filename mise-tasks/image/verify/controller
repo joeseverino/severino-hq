@@ -1,12 +1,11 @@
 #!/bin/sh
 #MISE description="It carries the controller, and no OpenSSH or Kerberos package, since the controller speaks SSH in process"
-#MISE env={SEVERINO_HEAVY_BOUND="30m"}
+#MISE lock="heavy"
+#MISE timeout="30m"
 #MISE hide=true
 #MISE depends=["image:build"]
+#MISE depends_post=["image:docker stop"]
 set -eu
-# shellcheck source=tools/lib/heavy-turn.sh
-. ./tools/lib/heavy-turn.sh
-
 image="${IMAGE:-severino-hq:ci-local}"
 usage="$(docker run --rm --entrypoint /usr/local/bin/hq-controller "$image" -help 2>&1 || true)"
 case "$usage" in

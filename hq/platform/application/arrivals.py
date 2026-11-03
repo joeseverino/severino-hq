@@ -18,15 +18,16 @@ from django.conf import settings
 from django.utils import timezone
 
 from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
+from hq.platform.core.write_bounds import Bound
 lazy from hq.domains.control_plane.models import ProviderInventory
-lazy from hq.platform.core.network import client_ip, is_trusted_proxy
+lazy from hq.platform.core.network import client_ip, is_trusted_proxy, socket_peer
 
 from .derivations import passed, present
 lazy from . import tailnet
 lazy from .inventory import record_inventory
 lazy from .moments import ago
 lazy from .reach import network_of
-lazy from .request_channel import channel_for_request, forwarded_chain, socket_peer
+lazy from .request_channel import channel_for_request, forwarded_chain
 lazy from .security import internal_principal
 lazy from .tailnet_presence import tailnet_presence
 lazy from .timestamps import moment
@@ -37,6 +38,11 @@ logger = logging.getLogger(__name__)
 # at most MAX_SOURCES are kept.
 WINDOW = timedelta(days=7)
 MAX_SOURCES = 64
+
+ARRIVALS = Bound(
+    "arrivals",
+    f"one stored reading of at most {MAX_SOURCES} sources, each written at most once an interval",
+)
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 

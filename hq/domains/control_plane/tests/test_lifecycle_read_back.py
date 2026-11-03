@@ -18,6 +18,7 @@ from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.controller import ControllerReport, report_operation
 from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal
+from hq.platform.application.tests.writers import form_keyed
 
 DIRECTORY = Path(tempfile.mkdtemp())
 (DIRECTORY / "heartbeat").touch()
@@ -77,7 +78,7 @@ class ReadBackTests(Estate):
 
     def press(self, action):
         with self.captureOnCommitCallbacks(execute=True):
-            return self.client.post(reverse(f"control_plane:{action}", kwargs={"key": "example-web"}))
+            return self.client.post(reverse(f"control_plane:{action}", kwargs={"key": "example-web"}), form_keyed())
 
     def test_each_verb_asks_for_the_containers_to_be_read_once_it_is_queued(self):
         for action in LIFECYCLE:
@@ -118,14 +119,18 @@ class ReadBackTests(Estate):
         # The page names itself to the visit ask, and the ask follows the read
         # the stop asked for.
         self.assertContains(drawn, 'name="subject" value="resource"')
-        following = self.client.post(reverse("control_plane:visit"), {"subject": "resource", "name": "example-web"})
+        following = self.client.post(
+            reverse("control_plane:visit"), form_keyed({"subject": "resource", "name": "example-web"})
+        )
         self.assertEqual(following.status_code, 202)
         self.assertTrue(following.json()["status"])
 
         containers(("example-web", "exited", 8080))
         ProviderInventory.objects.filter(kind=CONTAINER_KIND).update(updated_at=timezone.now())
 
-        landed = self.client.post(reverse("control_plane:visit"), {"subject": "resource", "name": "example-web"})
+        landed = self.client.post(
+            reverse("control_plane:visit"), form_keyed({"subject": "resource", "name": "example-web"})
+        )
         self.assertFalse(landed.json()["live"])
         redrawn = self.client.get(page)
         self.assertContains(redrawn, f'action="{start}"')

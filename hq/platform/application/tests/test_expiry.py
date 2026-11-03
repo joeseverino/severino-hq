@@ -94,7 +94,7 @@ class OneAnswerTests(TestCase):
         self.assertEqual(card.days, 88)
 
     def test_the_api_and_mcp_return_the_derived_facts(self):
-        found = get_resource("infrastructure.resources", "example-wildcard", principal=EVERYTHING)
+        found = get_resource("infrastructure", "example-wildcard", principal=EVERYTHING)
 
         derived = found["derived"]
         self.assertEqual(derived["expiry"]["days_left"], 88)

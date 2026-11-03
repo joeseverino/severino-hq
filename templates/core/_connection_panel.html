@@ -1,6 +1,8 @@
 {% comment %}
 The body of the connection panel, shared by the dialog in the header and the
-page it falls back to. Nothing here knows which one it is in.
+page it falls back to. Nothing here knows which one it is in, so each card's
+heading is an h2: the next level under the page's h1, and beside the dialog's
+own h2 title.
 {% endcomment %}
 <div class="conn" data-connection-panel>
   {% include "partials/_example_connection.html" with notice=True %}
@@ -49,7 +51,7 @@ page it falls back to. Nothing here knows which one it is in.
   </section>
 
   {% card %}
-    <h3>You</h3>
+    <h2>You</h2>
     <dl class="kv">
       <dt>Signed in</dt>
       <dd>
@@ -118,7 +120,7 @@ page it falls back to. Nothing here knows which one it is in.
   {% endcard %}
 
   {% card %}
-    <h3>The link</h3>
+    <h2>The link</h2>
     <dl class="kv">
       <dt>Path</dt>
       <dd>
@@ -204,7 +206,7 @@ page it falls back to. Nothing here knows which one it is in.
 
   {% card css="conn-path" label="Path to HQ" data_connection_layers=True %}
     <div class="conn-path-head">
-      <h3>Path to HQ</h3>
+      <h2>Path to HQ</h2>
       <span>{{ request_path.proof|breakable }}</span>
     </div>
     <ol class="conn-layers">
@@ -214,10 +216,13 @@ page it falls back to. Nothing here knows which one it is in.
             <summary>
               <span class="conn-tick" aria-hidden="true">{% if hop.check.state == 'proven' %}&check;{% elif hop.check.state == 'contradicted' %}&times;{% else %}?{% endif %}</span>
               <span class="conn-layer-boundary">{{ hop.label|breakable }}</span>
-              <span class="conn-layer-label">{% if hop.link and hop.link.url %}{% entity hop.link %}{% elif hop.name %}{{ hop.name|breakable }}{% elif hop.detail %}{{ hop.detail|breakable }}{% else %}{% empty_value %}{% endif %}{% if hop.name and hop.detail and hop.detail != hop.name and hop.detail != hop.link.label %}<span class="conn-hop-detail">{{ hop.detail|breakable }}</span>{% elif hop.link.url and hop.name and hop.name != hop.link.label %}<span class="conn-hop-detail">{{ hop.name|breakable }}</span>{% endif %}</span>
+              <span class="conn-layer-label">{% if hop.link and hop.link.url %}{{ hop.link.label|breakable }}{% elif hop.name %}{{ hop.name|breakable }}{% elif hop.detail %}{{ hop.detail|breakable }}{% else %}{% empty_value %}{% endif %}{% if hop.name and hop.detail and hop.detail != hop.name and hop.detail != hop.link.label %}<span class="conn-hop-detail">{{ hop.detail|breakable }}</span>{% elif hop.link.url and hop.name and hop.name != hop.link.label %}<span class="conn-hop-detail">{{ hop.name|breakable }}</span>{% endif %}</span>
               <span class="conn-hop-more">{% if hop.layers %}{{ hop.layers|length|counted:"check,checks" }}{% else %}Details{% endif %}</span>
             </summary>
             <div class="conn-layer-body">
+              {% comment %}The thing's own page, here rather than in the summary: a link inside
+              the control that opens the row is a control inside a control.{% endcomment %}
+              {% if hop.link and hop.link.url %}<p>{% entity hop.link %}</p>{% endif %}
               {% if hop.check or hop.source %}<p class="muted">{% if hop.check %}{{ hop.check.label|breakable:"." }} {{ hop.check.detail|breakable }}{% endif %}{% if hop.source %} Read from {% with mark=hop.source.observed_at|then:",|." %}{{ hop.source.phrase|breakable:mark }}{% endwith %}{% if hop.source.observed_at %} {{ hop.source.observed_at|when }}.{% endif %}{% endif %}</p>{% endif %}
               {% if hop.check.step %}<p class="conn-agree conn-agree-no">{{ hop.check.step|breakable }}</p>{% endif %}
               {% if hop.certificate %}<p class="conn-row-note">{{ hop.certificate.statement|breakable }}</p>{% endif %}
@@ -274,7 +279,7 @@ page it falls back to. Nothing here knows which one it is in.
     </summary>
     <div class="conn-protocol-body">
       <section>
-        <h3>Your addresses</h3>
+        <h2>Your addresses</h2>
         <div class="conn-rows">
           {% for address in request_path.addresses %}
             <div class="conn-row{% if address.current %} conn-current{% endif %}">
@@ -291,7 +296,7 @@ page it falls back to. Nothing here knows which one it is in.
 
       {% if request_path.hq_addresses %}
         <section>
-          <h3>HQ answers at</h3>
+          <h2>HQ answers at</h2>
           <div class="conn-rows">
             {% for address in request_path.hq_addresses %}
               <div class="conn-row">
@@ -317,7 +322,7 @@ page it falls back to. Nothing here knows which one it is in.
     </summary>
     <div class="conn-protocol-body">
       <section>
-        <h3>What this request carried</h3>
+        <h2>What this request carried</h2>
         <p class="conn-note">Every header this request carried, and what HQ reads it for.</p>
         <div class="conn-rows">
           {% for header in request_path.headers %}{% if header.used %}
@@ -345,7 +350,7 @@ page it falls back to. Nothing here knows which one it is in.
       </section>
 
       <section>
-        <h3>What HQ sent back</h3>
+        <h2>What HQ sent back</h2>
         <p class="conn-note">Read from the response this browser received.</p>
         <div class="conn-rows" data-response-headers>
           <div class="conn-row"><span class="conn-row-note">Open Headers to read the response.</span></div>

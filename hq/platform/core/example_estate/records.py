@@ -177,15 +177,16 @@ def calendar():
     Entry.objects.create(title="Renew example.com", starts_on=today + RENEWS_IN, repeat="yearly")
 
 
-# The server, bought refurbished: how long ago, from whom, what, its expense
+# The server, bought refurbished just before it was declared in HQ
+# (``history.MACHINE_DAYS``): how long ago, from whom, what, its expense
 # category, cost, and how much of its use is the business's.
-SERVER = (200, "eBay", "Small form factor server", "hardware", "389.00", 80)
+SERVER = (430, "eBay", "Small form factor server", "hardware", "389.00", 80)
 # How long ago each monthly storage bill was paid since the backups started.
 STORAGE = (2, 32, 62, 92, 122)
 
 
 def money():
-    """The host as an asset, and a year of what running it cost, every expense with its receipt."""
+    """The host as an asset, and what running it has cost, every expense with its receipt."""
 
     machine = f"machine:{MACHINE}"
     today = timezone.localdate()

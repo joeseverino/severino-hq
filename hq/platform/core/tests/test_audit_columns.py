@@ -6,7 +6,7 @@ from hq.platform.application.tests.markup import elements
 from hq.platform.core.audit_views import AuditLogListView
 from hq.platform.core.models import AuditLog
 
-from .test_web import _AuthedTestCase
+from .signed_in_case import _AuthedTestCase
 
 
 class AuditColumnTests(SimpleTestCase):
@@ -48,12 +48,15 @@ class AuditWhatTests(_AuthedTestCase):
         self.assertIn(AuditLog.Action.LOGIN.label, narrow)
         self.assertNotIn("Signed in", words)
 
-    def test_a_run_of_events_says_its_action_in_the_same_word(self):
-        for _ in range(3):
+    def test_an_operation_says_its_action_in_the_same_word(self):
+        for index in range(3):
             AuditLog.objects.create(
-                action=AuditLog.Action.LOGIN, object_type="auth.user", object_repr="example-record", message="Signed in"
+                action=AuditLog.Action.LOGIN,
+                object_type="auth.user",
+                object_repr=f"example-{index}",
+                message="Signed in",
+                operation_id="example-operation",
             )
 
-        words, narrow = self.what("example-record")
-        self.assertIn("3 times", words)
+        _words, narrow = self.what("and 2 more")
         self.assertIn(AuditLog.Action.LOGIN.label, narrow)

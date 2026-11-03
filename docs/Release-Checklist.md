@@ -31,10 +31,9 @@ only by a merged pull request.
 - [ ] The commit's `production` deployment is *queued*, waiting for
       approval. Approve the Deploy run in the `production` environment. A newer release waiting
       supersedes an older one; reject a stale one rather than approving it.
-- [ ] A release that migrates is rehearsed first: `mise run shadow-run IMAGE`
-      with the image it waits to deploy runs its migrations, bridge, jobs and
-      controller plan on a copy of production's database on the deploy host,
-      touching nothing live. Approve only on `result=pass`.
+- [ ] The deploy rehearses the release before it touches anything live
+      (step 5 of [A deploy](Deployment.md#a-deploy)); its `Rehearsal:` line in
+      the Deploy job's log says `result=pass`, or which check refused it.
 - [ ] The Deploy job is green and the deployment is *success*. CI
       green is not live: only the Deploy job deploys.
 

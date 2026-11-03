@@ -32,7 +32,9 @@ const inFlow = (parent) => {
 # nothing is left or one of them is not drawn at all. An absolutely placed box
 # escapes the overflow of every box up to the one it is placed against;
 # `clip-path` cuts all a box paints. A `display: contents` box has no box to
-# clip with.
+# clip with. A box that skips its content (`content-visibility: hidden`, a
+# part hidden until found) draws none of what it holds, though a layout query
+# still places it, so nothing in it or under it is seen.
 PAINTED_PART = r"""
 const painted = (el, rect) => {
   let shown = el;
@@ -47,6 +49,7 @@ const painted = (el, rect) => {
   let placed = null;
   for (let up = el; up && up !== document.documentElement; up = up.parentElement) {
     const style = getComputedStyle(up);
+    if (style.contentVisibility === 'hidden') return null;
     if (style.display === 'contents') continue;
     const b = up.getBoundingClientRect();
     const transformed = style.transform !== 'none';
@@ -73,21 +76,102 @@ const painted = (el, rect) => {
 };
 """
 
+# Whether a text node is drawn: as far as the box it lays out in is.
+# `checkVisibility()` is false on a box with no box of its own (`display:
+# contents`, as every part of a cell's identifier is), so asked of the text's
+# own parent it would skip the text inside one.
+TEXT_SHOWN = r"""
+const textShown = (node) => {
+  let box = node.parentElement;
+  while (box.parentElement && getComputedStyle(box).display === 'contents') box = box.parentElement;
+  return box.checkVisibility({visibilityProperty: true}) && getComputedStyle(node.parentElement).visibility === 'visible';
+};
+"""
+
+# Where text is cut: each run of text under `root` drawn past the edge of a
+# box that clips what it holds (`overflow: hidden` or `clip`), any box from
+# the text up to and including `root` (a cell, a card's box). Measured on the
+# text itself (`Range.getClientRects()`, which a layout places whole whatever
+# clips it), so a run inside an inline element and one clipped by its cell or
+# by a box around a chip are cut as surely as one clipped by its own box. A
+# box that scrolls is not cutting: a reader scrolls it. `boxes` are the boxes
+# that cut it, innermost first. A cut is `marked` when the reader can see it
+# is one: the innermost box that cuts it draws an ellipsis at the cut (its
+# `text-overflow` lands only in its own lines, so not past a chip or any box
+# between) or clamps its lines (`-webkit-line-clamp` on a `-webkit-box`), and
+# no box around that draws no mark of its own cuts that box in turn.
+# Text kept from sight on purpose (`unseen`, a decoration hidden from
+# assistive technology) is never cut. tables.js's `cutsIn` reads cut the same
+# way, to mark a row and title what it cuts.
+CUTS = (
+    TEXT_SHOWN
+    + r"""
+const cutRange = document.createRange();
+// The boxes a line clamp takes hold in: a `-webkit-box` or
+// `-webkit-inline-box`, which Chromium computes, clamped, to be a `flow-root`
+// or an `inline-block`.
+const CLAMPS = /^(-webkit-box|-webkit-inline-box|flow-root|inline-block)$/;
+const cutsIn = (root, unseen) => {
+  const found = [];
+  const clips = (value) => value === 'hidden' || value === 'clip';
+  const past = (rects, up, style) => {
+    const b = up.getBoundingClientRect();
+    const left = b.left + up.clientLeft;
+    const top = b.top + up.clientTop;
+    return {
+      x: clips(style.overflowX) && rects.some((r) => r.left < left - 1 || r.right > left + up.clientWidth + 1),
+      y: clips(style.overflowY) && rects.some((r) => r.top < top - 1 || r.bottom > top + up.clientHeight + 1),
+    };
+  };
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.data.trim() || node.parentElement.closest(`${unseen}, [aria-hidden=true]`) || !textShown(node)) continue;
+    cutRange.selectNodeContents(node);
+    const rects = [...cutRange.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+    if (!rects.length) continue;
+    const boxes = [];
+    let marked = true;
+    let marker = null;
+    let inLine = true;
+    for (let up = node.parentElement; up; up = up.parentElement) {
+      const style = getComputedStyle(up);
+      if (style.display !== 'inline' && style.display !== 'contents') {
+        const cut = past(rects, up, style);
+        if (cut.x || cut.y) {
+          // A run in a line past a clamp is marked by the clamp's ellipsis
+          // however wide it is; a run cut at the side, by an ellipsis in
+          // its own line.
+          const marks = cut.y
+            ? CLAMPS.test(style.display) && parseInt(style.webkitLineClamp, 10) > 0
+            : inLine && style.textOverflow === 'ellipsis';
+          // A box that draws no mark of its own leaves the cut marked only
+          // while the mark inside it stays in sight.
+          if (marks) marker = up;
+          else if (!marker || Object.values(past([marker.getBoundingClientRect()], up, style)).some(Boolean)) marked = false;
+          boxes.push(up);
+        }
+        inLine = false;
+      }
+      if (up === root) break;
+    }
+    if (boxes.length) found.push({node, boxes, marked});
+  }
+  return found;
+};
+"""
+)
+
 # Each character of an element's text with the line it is drawn on, for the
 # rules that judge where text breaks. A rule asking whether a part fits its
 # line cannot judge a table cell: the column's width is settled after the
 # browser chose where the cell's text breaks, so the line it measures is the
-# break's outcome. And `checkVisibility()` on a `display: contents` box is
-# false, which would skip the text inside it; its text is judged by the box
-# it lays out in.
-LINES = r"""
+# break's outcome.
+LINES = (
+    TEXT_SHOWN
+    + r"""
 const range = document.createRange();
 const charsOf = (node) => {
-  // A box with no box of its own (`display: contents`) is never "visible":
-  // its text is, as far as the box it lays out in is.
-  let box = node.parentElement;
-  while (box.parentElement && getComputedStyle(box).display === 'contents') box = box.parentElement;
-  if (!box.checkVisibility()) return [];
+  if (!textShown(node)) return [];
   const out = [];
   for (let i = 0; i < node.length; i++) {
     range.setStart(node, i);
@@ -105,3 +189,4 @@ const chars = (root) => {
 };
 const broke = (list, i) => list[i].top !== null && list[i - 1].top !== null && list[i].top > list[i - 1].top + 1;
 """
+)

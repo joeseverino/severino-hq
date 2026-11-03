@@ -2,7 +2,7 @@
 
 import re
 from dataclasses import dataclass, replace
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.db import transaction
 from django.db.models import Max
@@ -28,6 +28,7 @@ from .freshness import DASHBOARD_GLANCE, freshness
 from .record_errors import InputError, PolicyError
 from .security import Capability, Principal
 from .timestamps import moment
+lazy from .history import read_request_type
 lazy from .projection import read_once
 
 AUDIT_LABEL = "Dashboard"
@@ -230,10 +231,17 @@ class DashboardMachineCommand:
     selected: Annotated[bool, Describe("Whether the dashboard shows this machine's telemetry.")]
 
 
+class DashboardMachineSet(TypedDict):
+    """A machine's place on the dashboard, as the call left it."""
+
+    ok: Literal[True]
+    machine: Annotated[str, Describe("The machine's key while the dashboard shows it; empty when it does not.")]
+
+
 @transaction.atomic
 def select_dashboard_machine(
     command: DashboardMachineCommand, *, principal: Principal, current_key: str
-) -> dict[str, Any]:
+) -> DashboardMachineSet:
     del principal
     resource = ManagedResource.objects.filter(key=current_key, kind="machine", enabled=True).first()
     if resource is None:
@@ -284,8 +292,14 @@ class DashboardSettingsCommand:
     infrastructure_label: Annotated[str, Describe("What the infrastructure panel is called.")] = ""
 
 
+class DashboardSettingsSaved(TypedDict):
+    """The dashboard's settings, saved."""
+
+    ok: Literal[True]
+
+
 @transaction.atomic
-def save_dashboard_settings(command: DashboardSettingsCommand, *, principal: Principal) -> dict[str, Any]:
+def save_dashboard_settings(command: DashboardSettingsCommand, *, principal: Principal) -> DashboardSettingsSaved:
     del principal
     point = _clean_point(command.weather_point)
     configuration, _ = DashboardConfiguration.objects.select_for_update().get_or_create(pk=1)
@@ -478,13 +492,21 @@ def _glance_reading(metric: dict[str, str], spec: DashboardPanelSpec) -> dict[st
     }
 
 
-DASHBOARD_REFRESH = "dashboard.refresh.request"
-DASHBOARD_REFRESH_STALE = "dashboard.refresh.stale"
+DASHBOARD_REFRESH = "dashboard.panels.refresh"
+DASHBOARD_REFRESH_STALE = "dashboard.panels.refresh_due"
 
 
 @dataclass(frozen=True, slots=True)
 class DashboardRefreshCommand:
     """A refresh names nothing: which panels it asks for is HQ's to work out."""
+
+
+def _panel_names(ids: list[str]) -> list[str]:
+    """Each panel by what a person calls it: its machine's name, the weather's place."""
+
+    names = {f"machine-{machine.pk}": str(machine.spec.get("name") or machine.key) for machine in dashboard_machines()}
+    names["weather"] = dashboard_configuration().weather_label or "Weather"
+    return [names.get(panel_id, panel_id) for panel_id in ids]
 
 
 def _ask_for(ids: list[str], *, why: str) -> str:
@@ -497,10 +519,12 @@ def _ask_for(ids: list[str], *, why: str) -> str:
             defaults={"requested_at": now, "completed_at": None},
         )
     if ids:
+        # An ask for a fresh reading, as the log files every other one, so it
+        # waits behind the same toggle; each panel by the name its head shows.
         record_event(
             action=AuditLog.Action.CREATED,
-            type_label=AUDIT_LABEL,
-            message=f"Asked for {why}: {', '.join(ids)}",
+            type_label=read_request_type(),
+            message=f"Asked for {why}: {', '.join(_panel_names(ids))}",
             metadata={"panels": ids},
             required=True,
         )
@@ -508,8 +532,16 @@ def _ask_for(ids: list[str], *, why: str) -> str:
     return now.isoformat()
 
 
+class PanelsRefreshRequested(TypedDict):
+    """The dashboard panels asked to be read again."""
+
+    ok: Literal[True]
+    requested: Annotated[list[str], Describe("The panels asked to be read again, by id.")]
+    requested_at: Annotated[str, Describe("When they were asked for, an ISO 8601 date-time.")]
+
+
 @transaction.atomic
-def request_dashboard_refresh(_command: DashboardRefreshCommand, *, principal: Principal) -> dict[str, Any]:
+def request_dashboard_refresh(_command: DashboardRefreshCommand, *, principal: Principal) -> PanelsRefreshRequested:
     """Ask for a fresh reading of every panel a controller can read."""
 
     del principal
@@ -524,7 +556,7 @@ def request_dashboard_refresh(_command: DashboardRefreshCommand, *, principal: P
 
 
 @transaction.atomic
-def request_stale_panel_refresh(_command: DashboardRefreshCommand, *, principal: Principal) -> dict[str, Any]:
+def request_stale_panel_refresh(_command: DashboardRefreshCommand, *, principal: Principal) -> PanelsRefreshRequested:
     """Ask for the panels whose reading is due again.
 
     The dashboard posts this when it opens on a due reading. Only panels that

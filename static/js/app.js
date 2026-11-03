@@ -6,67 +6,6 @@
 // that it dismisses.
 const DISMISSIBLE_MENUS = "details[data-menu]";
 
-// A panel that hangs from a disclosure stays on screen. Each is placed from
-// its own edge in the stylesheet, so one near the right of a row (the last
-// filter in a toolbar) can overflow a phone. Measured when it opens: a panel that
-// would cross the viewport's right edge hangs from its disclosure's right
-// edge instead. One rule for every panel, so a new one needs nothing here.
-// Anchor positioning's `position-try-fallbacks: flip-inline` would flip it, but
-// only into a place that fits the panel's containing block in both axes, and a
-// panel hangs below the short positioned box it sits in (the sticky header, a
-// card), so no place fits and it never flips, in any engine the gate pins.
-const EDGE_MARGIN = 8;
-document.addEventListener(
-  "toggle",
-  (event) => {
-    const details = event.target;
-    if (!(details instanceof HTMLDetailsElement)) return;
-    const panel = [...details.children].find((child) => child.tagName !== "SUMMARY");
-    if (!panel || getComputedStyle(panel).position !== "absolute") return;
-    delete panel.dataset.edge;
-    if (!details.open) return;
-    if (panel.getBoundingClientRect().right > document.documentElement.clientWidth - EDGE_MARGIN) {
-      panel.dataset.edge = "end";
-    }
-  },
-  true,
-);
-const sectionMenuOpen = document.querySelector(".nav-toggle-open");
-const sectionMenuClose = document.querySelector(".nav-toggle-close");
-const sectionMenuBackdrop = document.querySelector(".nav-backdrop");
-
-function setSectionMenu(open, { restoreFocus = false } = {}) {
-  document.body.classList.toggle("nav-is-open", open);
-  // Both, not just the one that opens: CSS shows exactly one of them at a
-  // time, so a state written to only one half is a state written to whichever
-  // control happens to be hidden.
-  [sectionMenuOpen, sectionMenuClose].forEach((control) =>
-    control?.setAttribute("aria-expanded", String(open)),
-  );
-  if (restoreFocus) {
-    const control = open ? sectionMenuClose : sectionMenuOpen;
-    control?.focus({ preventScroll: true });
-  }
-}
-
-sectionMenuOpen?.addEventListener("click", (event) => {
-  event.preventDefault();
-  closeMenus(null);
-  // A pointer already communicates where the interaction happened. Move
-  // focus only for keyboard activation, otherwise mobile Safari paints a
-  // persistent focus ring around the replacement close control.
-  setSectionMenu(true, { restoreFocus: event.detail === 0 });
-});
-
-[sectionMenuClose, sectionMenuBackdrop].forEach((control) => {
-  control?.addEventListener("click", (event) => {
-    event.preventDefault();
-    setSectionMenu(false, {
-      restoreFocus: control === sectionMenuClose && event.detail === 0,
-    });
-  });
-});
-
 function closeMenus(except) {
   document.querySelectorAll(DISMISSIBLE_MENUS).forEach((menu) => {
     if (menu.open && menu !== except) {
@@ -82,10 +21,6 @@ document.addEventListener("click", (event) => {
   // moment the pointer leaves on its way to the item being clicked.
   if (menu && event.target.closest("summary")) {
     menu.dataset.pinned = "true";
-    // Category disclosures live inside the mobile section drawer. They must
-    // be allowed to open without dismissing their own parent; peer menus such
-    // as the user menu still dismiss the drawer.
-    if (!menu.closest(".primary-nav")) setSectionMenu(false);
   }
   // The clicked menu is left alone: the browser handles its own summary
   // toggle. Every other open menu closes, so two panels are never stacked.
@@ -93,12 +28,7 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    closeMenus(null);
-    if (document.body.classList.contains("nav-is-open")) {
-      setSectionMenu(false, { restoreFocus: true });
-    }
-  }
+  if (event.key === "Escape") closeMenus(null);
 });
 
 // Hover-to-open, for pointers only. On touch there is no hover: the first tap
@@ -159,6 +89,7 @@ document.addEventListener("change", (event) => {
     .filter(Boolean);
   let frame = null;
 
+  /* eslint-disable no-restricted-syntax -- which section is under the reading line, and the current link scrolled into its list: CSS scroll markers (`:target-current`) answer this in Chromium alone, and WebKit has none */
   const update = () => {
     frame = null;
     // Where the nav sticks is the header's height, resolved by the stylesheet.
@@ -191,6 +122,7 @@ document.addEventListener("change", (event) => {
       }
     });
   };
+  /* eslint-enable no-restricted-syntax */
 
   const schedule = () => {
     if (frame === null) frame = window.requestAnimationFrame(update);
@@ -217,8 +149,7 @@ document.addEventListener("click", (event) => {
   const was = { action: button.getAttribute("formaction"), label: button.textContent };
   const other = button.dataset.other ? JSON.parse(button.dataset.other) : null;
   const dismissing = !("dismissed" in row.dataset) && !row.closest(".action-items-aside");
-  const body = new FormData(form);
-  body.set(button.name, button.value);
+  const body = new FormData(form, button);
   button.disabled = true;
   hqFetch(was.action, { method: "POST", body, credentials: "same-origin" })
     .then((response) => {
@@ -306,22 +237,15 @@ document.querySelectorAll("form[data-command-hydrate-target]").forEach((form) =>
 
 // Modals. A trigger is always a real link to a page that does the same job, so
 // this only intercepts when there is in fact a dialog here to open, otherwise
-// the link is followed and the operator lands on the full page instead.
+// the link is followed and the operator lands on the full page instead. A
+// link cannot carry a `command`, so this opens it; its close button is the
+// platform's.
 document.addEventListener("click", (event) => {
   const opener = event.target.closest("[data-modal-open]");
-  if (opener) {
-    const dialog = document.getElementById(`modal-${opener.dataset.modalOpen}`);
-    if (typeof dialog?.showModal === "function") {
-      event.preventDefault();
-      dialog.showModal();
-      // What the dialog holds back until it is open is fetched now.
-      hqFragment.reveal(dialog);
-    }
-    return;
-  }
-  if (event.target.closest("[data-modal-close]")) {
-    event.target.closest("dialog")?.close();
-  }
+  const dialog = opener && document.getElementById(`modal-${opener.dataset.modalOpen}`);
+  if (!(dialog instanceof HTMLDialogElement)) return;
+  event.preventDefault();
+  dialog.showModal();
 });
 
 document.querySelectorAll("dialog.modal").forEach((dialog) => {
@@ -351,7 +275,6 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
     activeIndex = index;
     options.forEach((option, optionIndex) => {
       const active = optionIndex === activeIndex;
-      option.classList.toggle("is-active", active);
       option.setAttribute("aria-selected", active ? "true" : "false");
     });
     const active = options[activeIndex];
@@ -361,7 +284,6 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
     } else {
       input.removeAttribute("aria-activedescendant");
     }
-    form.classList.toggle("has-active-option", Boolean(active));
   };
 
   const bindResults = () => {
@@ -505,6 +427,7 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   const place = ({ clientX, clientY }) => {
     // Measured after the text is set, so a tooltip near an edge flips to the
     // side with room instead of being clipped by the viewport.
+    // eslint-disable-next-line no-restricted-syntax -- a tooltip placed at the pointer, which no CSS anchor follows, flips by its own size
     const { width, height } = tip.getBoundingClientRect();
     const gap = 14;
     const left = Math.min(
@@ -551,6 +474,7 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   document.addEventListener("focusin", (event) => {
     const mark = event.target.closest("[data-tip]");
     if (!mark) return;
+    // eslint-disable-next-line no-restricted-syntax -- a focused mark stands where the pointer would, so the one placement serves both
     const box = mark.getBoundingClientRect();
     show(mark, { clientX: box.left, clientY: box.top });
   });

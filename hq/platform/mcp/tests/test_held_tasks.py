@@ -1,0 +1,228 @@
+"""A held change as a task of the MCP tasks extension, through the SDK's own client.
+
+The client waits on the task while a person decides in HQ: it reads working,
+then the call's answer once a person approves, or a refusal once a person
+declines. Nothing in the extension decides it, and a task answers only the
+caller that asked.
+"""
+
+import json
+from datetime import timedelta
+from typing import Any, Literal
+
+from asgiref.sync import async_to_sync
+from django.contrib.auth import get_user_model
+from django.test import TestCase, override_settings
+from django.utils import timezone
+from mcp import Client, types
+from mcp.client.extension import ClientExtension, ResultClaim
+from mcp.shared.exceptions import MCPError
+from pydantic import Field, TypeAdapter
+
+from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
+from hq.platform.application.approvals import ApproveCommand, RejectCommand, approve, reject
+from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
+from hq.platform.application.security import Principal, cli_principal, mcp_principal, web_principal
+
+from ..identity import set_principal
+from ..server import mcp
+
+EXTENSION = "io.modelcontextprotocol/tasks"
+POLICY_KEY = "access-policy"
+ANSWER = TypeAdapter(dict[str, Any])
+
+
+class CreatedTask(types.Result):
+    """The extension's CreateTaskResult, as its specification shapes it."""
+
+    result_type: Literal["task"] = Field(alias="resultType")
+    task_id: str
+    status: str
+    created_at: str
+    last_updated_at: str
+    ttl_ms: int | None
+    poll_interval_ms: int | None = None
+    status_message: str | None = None
+
+
+async def _unresolved(_result, _context):
+    raise AssertionError("These tests read the task themselves.")
+
+
+class Tasks(ClientExtension):
+    identifier = EXTENSION
+
+    def claims(self):
+        return (ResultClaim(result_type="task", model=CreatedTask, resolve=_unresolved),)
+
+
+class TaskRequest(types.Request[types.GetTaskRequestParams, str]):
+    name_param = "taskId"
+
+
+def _ask(client):
+    """Reconcile the access policy, which waits for a person when an agent asks."""
+
+    return client.session.call_tool(
+        "execute_capability",
+        {
+            "name": "infrastructure.resource.reconcile",
+            "payload": {"idempotency_key": "example-once", "reason": "Stated reason for the change."},
+            "target": POLICY_KEY,
+        },
+        allow_claimed=True,
+    )
+
+
+async def _task(client, method, task_id, **fields):
+    params = types.GetTaskRequestParams(task_id=task_id)
+    request = TaskRequest(method=method, params=params.model_copy(update=fields))
+    return await client.session.send_request(request, ANSWER)
+
+
+@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
+class HeldTaskTests(TestCase):
+    def setUp(self):
+        from hq.platform.application.adoption_testing import managing_everything
+
+        managing_everything()
+        save_managed_resource(
+            ManagedResourceCommand(key=POLICY_KEY, kind="tailscale.policy", spec={"document": "{}"}),
+            principal=cli_principal(),
+            copied_from_live=True,
+        )
+        self.agent = Principal("example-agent", "mcp", mcp_principal().capabilities)
+        user = get_user_model().objects.create_user(username="operator", password="test-only-password")
+        self.person = web_principal(user)
+
+    def _session(self, steps, *, principal=None, tasks=True):
+        async def run():
+            async with Client(mcp.server, extensions=[Tasks()] if tasks else None) as client:
+                return await steps(client)
+
+        with set_principal(principal or self.agent):
+            return async_to_sync(run)()
+
+    def _held_task(self):
+        async def steps(client):
+            created = await _ask(client)
+            return created, await _task(client, "tasks/get", created.task_id)
+
+        return self._session(steps)
+
+    def _read(self, task_id, principal=None):
+        async def steps(client):
+            return await _task(client, "tasks/get", task_id)
+
+        return self._session(steps, principal=principal)
+
+    def test_a_held_call_is_a_task_that_waits_for_a_person(self):
+        created, read = self._held_task()
+
+        held = ApprovalRequest.objects.get()
+        self.assertEqual(created.task_id, str(held.pk))
+        self.assertEqual(created.status, "working")
+        self.assertEqual(read["status"], "working")
+        self.assertNotIn("result", read)
+        # Polled no faster than a person answers, within what Claude Code honors.
+        self.assertLessEqual(created.poll_interval_ms, 30_000)
+        self.assertGreaterEqual(created.poll_interval_ms, 250)
+        self.assertFalse(OperationRequest.objects.exists())
+
+    def test_the_task_completes_with_the_call_answer_once_a_person_approves(self):
+        created, _ = self._held_task()
+
+        approved = approve(ApproveCommand(created.task_id), principal=self.person)
+        read = self._read(created.task_id)
+
+        self.assertEqual(read["status"], "completed")
+        result = types.CallToolResult.model_validate(read["result"])
+        self.assertFalse(result.is_error)
+        self.assertEqual(result.structured_content, approved["result"])
+        self.assertEqual(json.loads(result.content[0].text), approved["result"])
+
+    def test_the_task_completes_as_a_refusal_once_a_person_declines(self):
+        created, _ = self._held_task()
+
+        reject(RejectCommand(created.task_id, note="Not this week."), principal=self.person)
+        read = self._read(created.task_id)
+
+        # A decline is the call refused, not a protocol failure.
+        self.assertEqual(read["status"], "completed")
+        result = types.CallToolResult.model_validate(read["result"])
+        self.assertTrue(result.is_error)
+        self.assertEqual(result.structured_content["error"]["code"], "declined")
+        self.assertIn("Not this week.", result.structured_content["error"]["message"])
+        self.assertFalse(OperationRequest.objects.exists())
+
+    def test_a_hold_nobody_decided_in_time_completes_as_expired(self):
+        created, _ = self._held_task()
+        ApprovalRequest.objects.update(expires_at=timezone.now() - timedelta(seconds=1))
+
+        read = self._read(created.task_id)
+
+        self.assertEqual(read["status"], "completed")
+        result = types.CallToolResult.model_validate(read["result"])
+        self.assertTrue(result.is_error)
+        self.assertEqual(result.structured_content["error"]["code"], "expired")
+
+    def test_another_agent_cannot_read_the_task(self):
+        created, _ = self._held_task()
+        other = Principal("example-other-agent", "mcp", self.agent.capabilities)
+
+        async def steps(client):
+            refused = []
+            for task_id in (created.task_id, "00000000-0000-4000-8000-000000000000"):
+                with self.assertRaises(MCPError) as raised:
+                    await _task(client, "tasks/get", task_id)
+                refused.append((raised.exception.error.code, raised.exception.error.message))
+            return refused
+
+        mine, missing = self._session(steps, principal=other)
+
+        # Told no more than of an id nothing holds.
+        self.assertEqual(mine, missing)
+        self.assertEqual(mine[0], types.INVALID_PARAMS)
+
+    def test_asking_what_another_agent_already_asked_is_a_task_of_its_own(self):
+        created, _ = self._held_task()
+        other = Principal("example-other-agent", "mcp", self.agent.capabilities)
+
+        async def steps(client):
+            asked = await _ask(client)
+            return asked, await _task(client, "tasks/get", asked.task_id)
+
+        answered, read = self._session(steps, principal=other)
+
+        self.assertIsInstance(answered, CreatedTask)
+        self.assertNotEqual(answered.task_id, created.task_id)
+        self.assertEqual(read["status"], "working")
+        self.assertEqual(ApprovalRequest.objects.get(pk=answered.task_id).requested_actor, other.actor)
+
+    def test_nothing_in_the_extension_decides_the_hold(self):
+        created, _ = self._held_task()
+
+        async def steps(client):
+            updated = await _task(client, "tasks/update", created.task_id, input_responses={"approve": {"ok": True}})
+            with self.assertRaises(MCPError):
+                await _task(client, "tasks/cancel", created.task_id)
+            return updated, await _task(client, "tasks/get", created.task_id)
+
+        _updated, read = self._session(steps)
+
+        self.assertEqual(read["status"], "working")
+        self.assertEqual(ApprovalRequest.objects.get().state, ApprovalRequest.State.PENDING)
+        self.assertFalse(OperationRequest.objects.exists())
+
+    def test_a_client_without_the_extension_keeps_the_held_answer(self):
+        async def steps(client):
+            answered = await _ask(client)
+            with self.assertRaises(MCPError) as raised:
+                await _task(client, "tasks/get", answered.structured_content["approval"]["id"])
+            return answered, raised.exception.error.code
+
+        answered, refused = self._session(steps, tasks=False)
+
+        self.assertIsInstance(answered, types.CallToolResult)
+        self.assertEqual(answered.structured_content["status"], "awaiting_approval")
+        self.assertEqual(refused, -32021)

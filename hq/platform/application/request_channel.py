@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from hq.platform.core.network import client_ip, is_trusted_proxy, split_host_port
+from hq.platform.core.network import client_ip, is_trusted_proxy, socket_peer, split_host_port
 
 from .reach import network_of
 
@@ -86,12 +86,6 @@ def displayed_client_ip(request) -> str:
     if forwarded and not is_trusted_proxy(peer):
         return split_host_port(forwarded[-1])[0]
     return client_ip(request)
-
-
-def socket_peer(request) -> str:
-    """The address that opened the socket to HQ."""
-
-    return str(request.META.get("REMOTE_ADDR", "") or "").strip()
 
 
 def forwarded_chain(request) -> list[str]:

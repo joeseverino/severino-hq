@@ -1,0 +1,18 @@
+# A retry key is read, required and kept in one place, run_capability in
+# hq/platform/application/capabilities.py, over idempotency.py's durable record.
+# A door that ran execute_once itself, or built a request's fingerprint, would
+# be a second key: one the application cannot see, with a fingerprint and an
+# API version of its own, so the same key could act twice by two doors.
+id: retry-keys-kept-in-one-place
+language: python
+severity: error
+message: A retry key is kept outside the application's one runner.
+note: >-
+  Hand the key the door received to `run_capability(..., idempotency_key=...)`
+  from hq.platform.application.capabilities, which reads `replayed` back.
+ignores:
+  - "hq/platform/application/capabilities.py"
+  - "hq/platform/application/idempotency.py"
+rule:
+  kind: identifier
+  regex: ^(execute_once|request_fingerprint)$

@@ -30,6 +30,7 @@ from hq.platform.application.ui import (
     stacked_bar_chart,
 )
 from hq.platform.core import seeds
+from hq.platform.core.network import SOCKET_PEER
 from hq.platform.core.tests.browser.gate import answered
 
 SERVICE = "app.example.com"
@@ -352,11 +353,13 @@ def _dashboard(*, populated):
             DashboardMachine.objects.all().delete()
 
 
-# The connection page's request: the laptop, forwarded by the proxy host.
+# The connection page's request: the laptop, forwarded by the proxy host, as
+# the forwarded-header middleware hands it on.
 _THROUGH_THE_PROXY = {
     "secure": True,
     "HTTP_HOST": HQ,
-    "REMOTE_ADDR": PROXY,
+    "REMOTE_ADDR": CALLER,
+    SOCKET_PEER: PROXY,
     "HTTP_X_FORWARDED_FOR": CALLER,
     "HTTP_X_REAL_IP": CALLER,
     "HTTP_X_FORWARDED_PROTO": "https",

@@ -11,7 +11,7 @@ count or a size in HQ's own form. ``RefusalTextTests`` reads every refusal for
 it (``tests/refusal_text.py`` says what a sentence is).
 """
 
-from typing import ClassVar
+from typing import Any, ClassVar
 
 # A sentence HQ wrote. To the type checker a ``str``; to the refusal test a
 # promise: every value passed, defaulted or returned where it is annotated is
@@ -24,9 +24,11 @@ class HostRefusal(Exception):
 
     code: ClassVar[str]
 
-    def __init__(self, reason: Sentence) -> None:
+    def __init__(self, reason: Sentence, *, details: Any = None) -> None:
         super().__init__(reason)
         self.reason = reason
+        # What gets past the refusal, as the envelope's ``details`` carries it.
+        self.details = details
 
 
 class RecordNotFound(HostRefusal, LookupError):

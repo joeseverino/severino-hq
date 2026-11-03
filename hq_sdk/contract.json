@@ -1,5 +1,5 @@
 {
-  "api_version": 6,
+  "api_version": 8,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -14,6 +14,7 @@
           "UPLOADED",
           "EXPORTED",
           "IMPORTED",
+          "DONE",
           "FAILED",
           "SETTINGS_CHANGED",
           "VIEWED",
@@ -280,7 +281,8 @@
           "GOVERN_AGENTS",
           "SET_PREFERENCES",
           "PIN_FAVORITES",
-          "SET_ASIDE_ACTION_ITEMS"
+          "SET_ASIDE_ACTION_ITEMS",
+          "END_SESSIONS"
         ]
       },
       "CapabilitySpec": {
@@ -352,7 +354,8 @@
       "Describe": {
         "bases": [],
         "constructor": [
-          "text"
+          "text",
+          "api="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -379,7 +382,8 @@
           "interface",
           "capabilities",
           "approved_by=",
-          "granted="
+          "granted=",
+          "person_key="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -447,9 +451,35 @@
           "expected_updated_at="
         ]
       },
+      "execute_posted": {
+        "kind": "function",
+        "parameters": [
+          "request",
+          "name",
+          "payload",
+          "*",
+          "target=",
+          "expected_updated_at="
+        ]
+      },
       "mcp_principal": {
         "kind": "function",
         "parameters": []
+      },
+      "refusal_response": {
+        "kind": "function",
+        "parameters": [
+          "answer"
+        ]
+      },
+      "refused": {
+        "kind": "function",
+        "parameters": [
+          "request",
+          "answer",
+          "*",
+          "form="
+        ]
       },
       "web_principal": {
         "kind": "function",
@@ -549,13 +579,9 @@
       },
       "describe_connections": {
         "kind": "function",
-        "parameters": []
-      },
-      "list_connections": {
-        "kind": "function",
         "parameters": [
           "*",
-          "principal"
+          "principal="
         ]
       }
     },
@@ -691,6 +717,22 @@
         ]
       }
     },
+    "migrations": {
+      "CAPABILITY_ROWS": {
+        "kind": "value",
+        "type": "tuple"
+      },
+      "RenameCapabilities": {
+        "bases": [
+          "RunPython"
+        ],
+        "constructor": [
+          "renamed"
+        ],
+        "kind": "class",
+        "members": {}
+      }
+    },
     "money": {
       "CENTS": {
         "kind": "value",
@@ -788,6 +830,10 @@
       }
     },
     "pages": {
+      "Crumb": {
+        "kind": "value",
+        "type": "TypeAliasType"
+      },
       "Page": {
         "bases": [],
         "constructor": [
@@ -915,7 +961,7 @@
           },
           "page_trail": {
             "kind": "attribute",
-            "type": "NoneType"
+            "type": "tuple"
           },
           "trail_label": {
             "kind": "method",
@@ -946,6 +992,16 @@
       }
     },
     "plugin": {
+      "NavigationGroup": {
+        "bases": [],
+        "constructor": [
+          "name",
+          "description"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
       "NavigationItem": {
         "bases": [],
         "constructor": [
@@ -972,6 +1028,7 @@
           "dashboard=",
           "overview=",
           "attention=",
+          "attention_url=",
           "search=",
           "health=",
           "calendars=",
@@ -996,10 +1053,11 @@
           "url_prefix=",
           "urlconf=",
           "navigation=",
-          "token_authenticated_routes=",
           "operator_capabilities=",
           "mcp_read_capabilities=",
-          "mcp_write_capabilities="
+          "mcp_write_capabilities=",
+          "description=",
+          "navigation_groups="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -1278,7 +1336,10 @@
           "not_found_errors=",
           "search=",
           "web_route=",
-          "pass_principal="
+          "pass_principal=",
+          "list_fields=",
+          "row_type=",
+          "record_type="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -1288,9 +1349,37 @@
           }
         }
       },
+      "StatusFilter": {
+        "kind": "value",
+        "type": "TypeAliasType"
+      },
+      "TextFilter": {
+        "kind": "value",
+        "type": "TypeAliasType"
+      },
+      "TopQuery": {
+        "bases": [
+          "ResourceQuery"
+        ],
+        "constructor": [
+          "*",
+          "limit="
+        ],
+        "fields": {
+          "limit": {
+            "required": false
+          }
+        },
+        "kind": "model",
+        "members": {}
+      },
       "describe_resources": {
         "kind": "function",
-        "parameters": []
+        "parameters": [
+          "*",
+          "principal=",
+          "name="
+        ]
       },
       "get_resource": {
         "kind": "function",
@@ -1630,9 +1719,21 @@
           "showing"
         ]
       },
+      "form_keyed": {
+        "kind": "function",
+        "parameters": [
+          "data="
+        ]
+      },
       "held_jobs": {
         "kind": "function",
         "parameters": []
+      },
+      "holding": {
+        "kind": "function",
+        "parameters": [
+          "*capabilities"
+        ]
       },
       "plain": {
         "kind": "function",
@@ -1888,12 +1989,14 @@
           "actions=",
           "key=",
           "subject=",
+          "part=",
           "notice=",
           "family=",
           "since=",
           "observed_at=",
           "facts=",
-          "links="
+          "links=",
+          "read_capabilities="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -2109,6 +2212,12 @@
           "many="
         ]
       },
+      "dotted": {
+        "kind": "function",
+        "parameters": [
+          "*parts"
+        ]
+      },
       "ended": {
         "kind": "function",
         "parameters": [
@@ -2206,21 +2315,6 @@
         "constructor": [],
         "kind": "class",
         "members": {
-          "dispatch": {
-            "kind": "method",
-            "parameters": [
-              "self",
-              "request",
-              "*args",
-              "**kwargs"
-            ]
-          },
-          "get_required_capability": {
-            "kind": "method",
-            "parameters": [
-              "self"
-            ]
-          },
           "required_capability": {
             "kind": "attribute",
             "type": "str"
@@ -2328,7 +2422,9 @@
     },
     "writes": {
       "CommandFormMixin": {
-        "bases": [],
+        "bases": [
+          "PostedOnce"
+        ],
         "constructor": [],
         "kind": "class",
         "members": {
@@ -2445,6 +2541,7 @@
       },
       "ServiceWriteMixin": {
         "bases": [
+          "PostedOnce",
           "WriteMessages"
         ],
         "constructor": [],
@@ -3036,7 +3133,8 @@
           "label",
           "count=",
           "*",
-          "folds="
+          "folds=",
+          "href="
         ],
         "parts": []
       },
@@ -3099,6 +3197,11 @@
           "capability",
           "variant="
         ],
+        "parts": []
+      },
+      "write_token": {
+        "classes": [],
+        "parameters": [],
         "parts": []
       }
     }

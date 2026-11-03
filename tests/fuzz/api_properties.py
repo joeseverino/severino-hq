@@ -12,15 +12,16 @@ from schemathesis.checks import not_a_server_error
 from schemathesis.generation import GenerationMode
 from schemathesis.specs.openapi.checks import (
     content_type_conformance,
+    response_headers_conformance,
     response_schema_conformance,
     status_code_conformance,
 )
 from werkzeug.test import Client
 
 from hq.platform.application.capabilities import CapabilitySpec
+from hq.platform.application.integration_testing import override_integration_graph
 from hq.platform.application.integrations import (
     compile_integration_graph,
-    override_integration_graph,
 )
 from hq_sdk.capabilities import StrictCommand
 
@@ -73,11 +74,12 @@ class APIPropertyTests(TestCase):
             not_a_server_error,
             status_code_conformance,
             content_type_conformance,
+            response_headers_conformance,
             response_schema_conformance,
         ]
         with (
-            patch("hq.platform.api.views.verify", return_value=claims),
-            patch("hq.platform.api.views.agents_paused", return_value=False),
+            patch("hq.platform.application.agent_admission.verify", return_value=claims),
+            patch("hq.platform.application.agent_access.paused_interfaces", return_value=frozenset()),
         ):
             schema = schemathesis.openapi.from_wsgi(
                 "/api/v2/openapi.json",
@@ -148,8 +150,11 @@ class APIPropertyTests(TestCase):
         }
         with (
             override_integration_graph(graph),
-            patch("hq.platform.api.views.verify", return_value=claims),
-            patch("hq.platform.api.views.agents_paused", return_value=False),
+            patch("hq.platform.application.agent_admission.verify", return_value=claims),
+            # The injected capability belongs to no extension's agent grant, so
+            # this deployment's ceiling is the token's grant.
+            patch("hq.platform.application.security.agent_ceiling", return_value=frozenset({"read", "example.write"})),
+            patch("hq.platform.application.agent_access.paused_interfaces", return_value=frozenset()),
         ):
             schema = schemathesis.openapi.from_wsgi(
                 "/api/v2/openapi.json",
@@ -164,6 +169,10 @@ class APIPropertyTests(TestCase):
                 @given(case=operation.as_strategy(generation_mode=mode))
                 def exercise(case):
                     handler.reset_mock()
+                    command = case.body.get("payload") if isinstance(case.body, dict) else None
+                    if mode == GenerationMode.POSITIVE and isinstance(command, dict) and "idempotency_key" in command:  # noqa: B023 - exercise runs before the loop advances
+                        # One key, however it arrives: a payload naming another than the header is refused.
+                        command["idempotency_key"] = headers["Idempotency-Key"]
                     with transaction.atomic():
                         first = case.call(
                             headers=headers,
@@ -175,6 +184,7 @@ class APIPropertyTests(TestCase):
                                 not_a_server_error,
                                 status_code_conformance,
                                 content_type_conformance,
+                                response_headers_conformance,
                                 response_schema_conformance,
                             ],
                         )

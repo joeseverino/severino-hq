@@ -10,6 +10,14 @@ language: python
 severity: error
 message: getattr names a literal attribute and a default; read it as an attribute where the type declares it.
 note: Where the value can be None, test for None; where it is one of two types, test the type.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
 rule:
   pattern: getattr($OBJ, $NAME, $DEFAULT)
   not:

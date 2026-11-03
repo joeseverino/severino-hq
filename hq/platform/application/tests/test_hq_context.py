@@ -12,16 +12,18 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND
 from hq.domains.jobs.models import Job
+from hq.platform.application.security import cli_principal
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..container_words import UP_TO_DATE, UPDATE_AVAILABLE
 from ..drawings import Dot, Dots
 from ..hq_context import hq_context
 from ..inventory_testing import store
+from .host_only import host_only
 from .markup import all_elements, links, select, text, with_class
 
 # The package exports a function named work, so the module is named by its path.
-work_module = importlib.import_module("hq.platform.application.hq_context.work")
+work_module = importlib.import_module("hq.platform.application.hq_context.work_part")
 
 DIGEST = "sha256:" + "a" * 64
 PREVIOUS = "sha256:" + "b" * 64
@@ -142,7 +144,7 @@ class ProjectionTests(TestCase):
     def context(self, request=None):
         first, second = own("192.0.2.44")
         with first, second:
-            return hq_context(request)
+            return hq_context(request, principal=cli_principal())
 
     def test_hq_knows_its_machine_container_release_and_work(self):
         estate()
@@ -163,6 +165,27 @@ class ProjectionTests(TestCase):
         self.assertEqual([item.result for item in found.work.renderers], ["Already current"])
         self.assertEqual([item["label"] for item in found.problems], [])
         self.assertEqual([tile.label for tile in found.tiles], ["Release", "Runs on", "Sees"])
+
+    def test_a_socket_and_a_mount_stand_as_themselves_doing_their_work(self):
+        estate()
+        store(
+            UNIT_KIND,
+            *units(),
+            *(
+                {
+                    "unit": unit, "load": "loaded", "file_state": "enabled", "active": "active", "sub": sub,
+                    "started_at": stamp(timedelta(days=1)), "read_at": stamp(),
+                }
+                for unit, sub in (("severino-hq-example.socket", "listening"), ("run-example.mount", "mounted"))
+            ),
+        )  # fmt: skip
+
+        jobs = {job.unit: job for job in self.context().work.jobs}
+
+        self.assertEqual(
+            [(jobs[unit].runs, jobs[unit].result) for unit in ("severino-hq-example.socket", "run-example.mount")],
+            [("severino-hq-example.socket", "Listening"), ("run-example.mount", "Mounted")],
+        )
 
     def test_a_branch_ahead_of_production_is_said(self):
         estate(deployed="e" * 40)
@@ -234,7 +257,7 @@ class ProjectionTests(TestCase):
         store("portainer.container", running("app", IMAGE), running("twin", IMAGE))
 
         with mock.patch("hq.platform.application.request_path.own_container_id", return_value=""):
-            found = hq_context()
+            found = hq_context(principal=cli_principal())
 
         self.assertIsNone(found.container)
 
@@ -245,7 +268,7 @@ class ProblemTests(TestCase):
         estate()
         first, second = own("192.0.2.44")
         with first, second:
-            found = hq_context()
+            found = hq_context(principal=cli_principal())
 
         self.assertEqual((found.problems, found.status), ((), ("good", "Running")))
 
@@ -257,7 +280,7 @@ class ProblemTests(TestCase):
         )
         first, second = own("192.0.2.44")
         with first, second:
-            found = hq_context()
+            found = hq_context(principal=cli_principal())
 
         self.assertTrue(any("credentials" in item["label"] for item in found.problems))
         self.assertEqual(found.status[0], "serious")
@@ -275,13 +298,13 @@ class ProblemTests(TestCase):
         )
         first, second = own("192.0.2.44")
         with first, second:
-            found = hq_context()
+            found = hq_context(principal=cli_principal())
 
         self.assertEqual(
             [item["label"] for item in found.problems],
             ["example-box is waiting for tailnet approval", "1 serious alert in hq"],
         )
-        self.assertEqual(found.status, ("serious", "1 urgent · 1 needs attention"))
+        self.assertEqual(found.status, ("serious", "1 urgent\xa0· 1 needs attention"))
         # Each beside the fact it explains: the machine where HQ runs, the repository its release.
         self.assertEqual(found.parts, ("where", "release"))
         tones = {tile.label: tile.tone for tile in found.tiles}
@@ -379,15 +402,14 @@ class PageTests(TestCase):
 class ResourceTests(TestCase):
     def test_an_agent_asks_hq_how_it_is(self):
         from hq.platform.mcp import services
-        from hq.platform.mcp.identity import reset_principal, set_principal
+        from hq.platform.mcp.identity import set_principal
 
         from ..resources import list_resource
         from ..security import cli_principal, mcp_principal
 
         estate()
         first, second = own("192.0.2.44")
-        bound = set_principal(mcp_principal())
-        self.addCleanup(reset_principal, bound)
+        self.enterContext(set_principal(mcp_principal()))
         with first, second:
             direct = list_resource("hq", {}, principal=cli_principal())
             through_mcp = services.list_resource("hq")
@@ -399,6 +421,22 @@ class ResourceTests(TestCase):
             self.assertEqual(found["where"]["container"], "example-box:app")
             self.assertIn("Delete old routine log entries", [job["runs"] for job in found["work"]["jobs"]])
             self.assertIsNone(found["reached"])  # no request to describe
+
+    def test_an_image_the_registry_refused_is_not_called_clean_and_says_why(self):
+        from ..resources import list_resource
+        from ..security import cli_principal
+
+        refused = "the registry refused an anonymous read (HTTP 401); the image may be private."
+        estate()
+        store("registry.image", {"image": "ghcr.io/example/hq/composition", "unread": refused, "read_at": stamp()})
+        first, second = own("192.0.2.44")
+        with first, second:
+            found = list_resource("hq", {}, principal=cli_principal())["release"]
+
+        self.assertNotIn("none", found["vulnerabilities"])
+        self.assertEqual(found["vulnerabilities_unread"], refused)
+        self.assertIsNone(found["signed"])
+        self.assertEqual(found["signed_unread"], refused)
 
     def test_unknown_filters_are_refused(self):
         from ..resources import InvalidResourceInput, list_resource
@@ -413,7 +451,7 @@ class ScheduledWorkTests(TestCase):
 
     def setUp(self):
         # The host's declarations only; an installed extension's are its own suite's.
-        self.enterContext(mock.patch("hq.platform.application.outbound_work.declared_work", return_value={}))
+        self.enterContext(host_only())
 
     def ran(self, kind, ago, state=Job.State.SUCCEEDED):
         job = Job.objects.create(kind=kind, label=kind, state=state, finished_at=timezone.now() - ago)

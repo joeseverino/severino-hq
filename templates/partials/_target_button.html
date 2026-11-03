@@ -1,0 +1,7 @@
+{% comment %}
+A post_button that also names what it acts on: a state for one target (an
+agent's client, a device) whose identifier may be any string, so it travels in
+the body rather than the address. The shared POST form carries a single field
+from its button, so this is a form of its own. It takes `url`, `target` (the
+`client_id`), `name` and `value` (the state), `label`, and `css`.
+{% endcomment %}<form method="post" action="{{ url }}">{% write_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><input type="hidden" name="client_id" value="{{ target }}"><button type="submit" name="{{ name }}" value="{{ value }}" class="{{ css|default:'btn' }}">{{ label|breakable }}</button></form>

@@ -1,26 +1,18 @@
 """The authenticated MCP caller, carried per request in a context variable."""
 
 import contextvars
-import logging
-from typing import Any
 
-from hq.platform.application.security import AuthorizationError, Principal, mcp_principal
-lazy from hq.platform.api.security import api_principal
-
-# Never "web": an interactive interface would waive the approval hold.
-INTERFACE = "mcp"
-
-logger = logging.getLogger("severino.mcp")
+from hq.platform.application import request_context
+from hq.platform.application.security import AuthorizationError, Principal
+from hq.platform.core.network import client_ip
 
 _current_principal: contextvars.ContextVar[Principal | None] = contextvars.ContextVar("hq_mcp_principal", default=None)
 
 
 def set_principal(principal: Principal | None) -> contextvars.Token[Principal | None]:
+    """Carry ``principal`` as the caller for the length of a ``with`` block."""
+
     return _current_principal.set(principal)
-
-
-def reset_principal(token: contextvars.Token[Principal | None]) -> None:
-    _current_principal.reset(token)
 
 
 def current_principal() -> Principal:
@@ -36,23 +28,14 @@ def current_principal() -> Principal:
     return principal
 
 
-def token_principal(claims: dict[str, Any]) -> Principal:
-    """An agent holding its grant, capped by what this deployment allows MCP."""
+def authenticated() -> Principal | None:
+    """The authenticated caller, or None, so a refusal is recorded against whoever made it."""
 
-    verified = api_principal(claims)
-    ceiling = {str(capability) for capability in mcp_principal().capabilities}
-    granted = {str(capability) for capability in verified.capabilities}
-    withheld = granted - ceiling
-    if withheld:
-        logger.debug(
-            "Agent %s holds grants this deployment withholds from MCP: %s",
-            verified.actor,
-            ", ".join(sorted(withheld)),
-            extra={"event": "mcp.grant.capped"},
-        )
-    return Principal(
-        verified.actor,
-        INTERFACE,
-        frozenset(granted & ceiling),
-        granted=frozenset(granted),
-    )
+    return _current_principal.get()
+
+
+def caller_address() -> str:
+    """The address this request's caller is judged and recorded by, or "" outside a request."""
+
+    arrived = request_context.current()
+    return "" if arrived is None else client_ip(arrived)

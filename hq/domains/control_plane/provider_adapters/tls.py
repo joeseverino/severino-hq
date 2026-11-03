@@ -6,8 +6,10 @@ from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field, field_validator, model_validator
 
+from ..connection_shapes import ACME
 from ..names import certificate_covers, normalized_hostname
 from ..provider_spec import (
+    ConnectionKind,
     ControllerVerification,
     NameContext,
     ProviderModel,
@@ -485,6 +487,19 @@ UPLOADED_CERTIFICATE = ProviderSpec(
 
 # Declarations only: the controller half is still the core's.
 DEFINITIONS = (CERTIFICATE, UPLOADED_CERTIFICATE)
+
+# The certificate authority account certificates are issued through. Its
+# account key is the whole account: a CA offers no narrower credential.
+CONNECTIONS = {
+    "acme": ConnectionKind(
+        "ACME certificate authority",
+        "coarse",
+        ACME,
+        create="An account at an ACME certificate authority: its directory address and a contact email.",
+        create_url="https://letsencrypt.org/docs/client-options/",
+        gives="Certificates for the names you serve, issued and renewed.",
+    )
+}
 
 
 def consumer_kinds() -> tuple[str, ...]:

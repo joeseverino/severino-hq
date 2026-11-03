@@ -8,7 +8,7 @@ key move, the pair otherwise pasted into a provider's form by hand.
 """
 
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, TypedDict
 
 from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm
@@ -20,15 +20,19 @@ from hq.domains.control_plane.desired_state import desired_fingerprint
 from hq.domains.control_plane.models import CertificateMaterial, ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.core import secrets
-from hq.platform.core.secrets import NO_STORE_KEY
+from hq.platform.core.secrets import NO_SEAL_KEY
 
 from .command_fields import Describe
 from .infrastructure import delivery_targets
 from .moments import when_day
 from .record_errors import CertificateError, PolicyError, RecordNotFound
+from .sealed_secrets import sealed_slots, set_secret
 from .security import Principal
 
 UPLOAD = "certificate.upload"
+# Where an uploaded certificate's private key is sealed; the controller's
+# uploadedReconcile reads it from the same slot.
+PRIVATE_KEY_SLOT = "certificate:private_key"
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,22 +82,31 @@ def _names(certificate: x509.Certificate) -> list[str]:
     return [name.lower() for name in extension.value.get_values_for_type(x509.DNSName)]
 
 
+class CertificateStored(TypedDict):
+    """The certificate HQ now holds for a record, told without the material itself."""
+
+    ok: Literal[True]
+    resource: Annotated[str, Describe("The key of the certificate record that holds the pair.")]
+    fingerprint_sha256: Annotated[str, Describe("The uploaded certificate's SHA-256 fingerprint.")]
+    not_after: Annotated[str, Describe("When the uploaded certificate expires, an ISO 8601 date-time.")]
+    domains: Annotated[list[str], Describe("The names the uploaded certificate covers.")]
+
+
 @transaction.atomic
 def store_certificate(
     command: UploadCertificateCommand,
     *,
     principal: Principal,
     current_key: str,
-) -> dict[str, Any]:
-    """Seal an uploaded pair against an existing certificate declaration.
+) -> CertificateStored:
+    """Hold an uploaded pair against an existing certificate declaration.
 
-    The ``certificate.upload`` capability, which authorizes it. Refuses before
-    touching anything if there is nowhere safe to put it: a secret store that
-    quietly degrades to plaintext is worse than none, because the operator
-    would believe otherwise.
+    The ``certificate.upload`` capability, which authorizes it. The key is
+    sealed to the controller, and the upload is refused before touching
+    anything when HQ has no key to seal to: a store that quietly degrades to
+    plaintext is worse than none, because the operator would believe otherwise.
     """
 
-    del principal
     details = inspect(command.fullchain, command.private_key)
     try:
         resource = ManagedResource.objects.select_for_update().get(key=current_key)
@@ -102,16 +115,15 @@ def store_certificate(
     if PROVIDERS[resource.kind].material_capability != UPLOAD:
         raise PolicyError("Only an uploaded certificate record holds a certificate and key.")
     try:
-        sealed = (secrets.seal(command.fullchain), secrets.seal(command.private_key))
+        set_secret(resource, PRIVATE_KEY_SLOT, command.private_key, principal)
     except secrets.SecretsUnavailable as exc:
-        # Sealing fails only for want of a key, which names the setting to fix.
-        raise PolicyError(NO_STORE_KEY) from exc
+        # Sealing fails only for want of the controller's key.
+        raise PolicyError(NO_SEAL_KEY) from exc
 
     CertificateMaterial.objects.update_or_create(
         resource=resource,
         defaults={
-            "sealed_fullchain": sealed[0],
-            "sealed_private_key": sealed[1],
+            "fullchain": command.fullchain,
             "fingerprint_sha256": details["fingerprint_sha256"],
             "not_after": details["not_after"],
             "subject": details["subject"],
@@ -146,15 +158,16 @@ def store_certificate(
     }
 
 
-def material_for(key: str) -> dict[str, str]:
-    """The unsealed pair, for the controller that is about to install it."""
+def material_for(key: str) -> dict[str, Any]:
+    """The certificate and its key still sealed, for the controller that is
+    about to install it and alone can open the key."""
 
     try:
         material = CertificateMaterial.objects.get(resource__key=key)
     except CertificateMaterial.DoesNotExist as exc:
         raise CertificateError("No certificate is stored for that record.") from exc
     return {
-        "fullchain": secrets.unseal(material.sealed_fullchain),
-        "private_key": secrets.unseal(material.sealed_private_key),
+        "fullchain": material.fullchain,
         "domains": list(material.domains or ()),
+        "slots": sealed_slots(key),
     }

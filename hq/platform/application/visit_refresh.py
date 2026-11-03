@@ -10,7 +10,7 @@ for what; ``cadence.request_reads`` asks and ``asks.read_standing`` follows.
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Literal
 
 from django.utils import timezone
 
@@ -19,7 +19,7 @@ from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .asks import Standing, read_standing, read_status_url
+from .asks import Standing, StandingAnswer, read_standing, read_status_url
 from .cadence import controller_standing, forced_reads, request_reads, swept
 from .command_fields import Describe
 from .freshness import PAGE_VISIT, freshness
@@ -151,7 +151,23 @@ def _watching(kinds: tuple[str, ...]) -> tuple[list[str], datetime | None]:
     return found, min((waiting[kind] for kind in found), default=None)
 
 
-def _answer(requested: list[str], kinds: tuple[str, ...]) -> dict[str, Any]:
+class VisitStanding(StandingAnswer):
+    """How the readings behind a page stand, and where to follow them while one is read."""
+
+    requested: Annotated[
+        list[str],
+        Describe("The readings this call asked for, by type; empty when none was due or no controller is near."),
+    ]
+    status: Annotated[str, Describe("Where to follow the readings while one is under way; empty when none is.")]
+
+
+class VisitRefreshed(VisitStanding):
+    """How the readings behind a page stand, as the command answers it."""
+
+    ok: Literal[True]
+
+
+def _answer(requested: list[str], kinds: tuple[str, ...]) -> VisitStanding:
     """How the page's readings stand, and where to follow them while one is
     being read: the shape every ask answers in."""
 
@@ -176,7 +192,7 @@ class VisitRefreshCommand:
     name: Annotated[str, Describe("Which one.")]
 
 
-def request_visit_refresh(command: VisitRefreshCommand, *, principal: Principal) -> dict[str, Any]:
+def request_visit_refresh(command: VisitRefreshCommand, *, principal: Principal) -> VisitRefreshed:
     """Ask for the readings behind one page that are due.
 
     Asks for nothing, and promises nothing, while no controller is arriving to

@@ -1,6 +1,9 @@
 package runtime
 
-import "github.com/joeseverino/severino-hq/controller/api"
+import (
+	"github.com/joeseverino/severino-hq/controller/api"
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
+)
 
 // Limits on text that crosses into a report, a log line or an error, cut by
 // characters.
@@ -16,9 +19,11 @@ const (
 // accepts.
 var AnalyticsValueMax = api.MustLimit("AnalyticsRow", "properties", "value", "maxLength")
 
-// Clip cuts s to at most n characters. It cuts between characters, never
-// inside a multi-byte one.
+// Clip cuts s to at most n characters, with every learned secret struck
+// first (mask.Text), so a cut never leaves part of one behind. It cuts between
+// characters, never inside a multi-byte one.
 func Clip(s string, n int) string {
+	s = mask.Text(s)
 	if n < 0 || len(s) <= n {
 		return s
 	}

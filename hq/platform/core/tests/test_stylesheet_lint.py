@@ -17,6 +17,9 @@ CONFIG = "tools/lint/stylelint.config.mjs"
 
 APP = "static/css/app/fixture.css"
 TOKENS = "static/css/app/tokens.css"
+CUTS = "static/css/app/cuts.css"
+CUT = "declaration-property-value-disallowed-list"
+WHY = "/* stylelint-disable-next-line declaration-property-value-disallowed-list"
 REFERENCE = "static/css/api-reference.css"
 
 REFUSED = [
@@ -45,6 +48,23 @@ REFUSED = [
     (APP, ".a::after { content: ' / '; }", "declaration-property-value-disallowed-list"),
     (TOKENS, '.a::after { content: "Dismissed: "; }', "declaration-property-value-disallowed-list"),
     (REFERENCE, '.a::after { content: "\\2197"; }', "declaration-property-value-disallowed-list"),
+    (APP, ".a { opacity: .62; }", "hq/faded-text"),
+    (APP, ".a { opacity: 50%; }", "hq/faded-text"),
+    (APP, ".a { opacity: var(--fade); } :root { --fade: .5; }", "hq/faded-text"),
+    (APP, ".btn:disabled, .btn-note { opacity: .5; }", "hq/faded-text"),
+    (APP, ".a:not(:disabled) { opacity: .5; }", "hq/faded-text"),
+    (APP, ".day :is(.label, .month-mark) { opacity: .6; }", "hq/faded-text"),
+    (APP, ".month-mark span { opacity: .6; }", "hq/faded-text"),
+    (APP, "@keyframes example-fade { to { opacity: .4; } }", "hq/faded-text"),
+    (APP, ".a { overflow: hidden; }", CUT),
+    (APP, ".a { overflow-x: clip; }", CUT),
+    (APP, ".a { overflow: auto hidden; }", CUT),
+    (APP, ".a { text-overflow: ellipsis; }", CUT),
+    (APP, ".a { -webkit-line-clamp: 2; }", CUT),
+    (APP, ".a { line-clamp: 2; }", CUT),
+    (TOKENS, ".a { overflow: hidden; }", CUT),
+    (APP, f"{WHY} */\n.a {{ overflow: hidden; }}", "--report-descriptionless-disables"),
+    (APP, f"{WHY} -- a frame's corners */\n.a {{ overflow: auto; }}", "--report-needless-disables"),
 ]
 
 PASSED = [
@@ -60,6 +80,15 @@ PASSED = [
         APP,
         '.a::before { content: none; } .b::before { content: counter(step) ". "; } .c::before { content: attr(data-x); }',
     ),
+    (APP, ".a { opacity: 0; } .b { opacity: 1; } .c { opacity: 100%; }"),
+    (APP, '.btn:disabled, span.btn[aria-disabled="true"] { opacity: .52; }'),
+    (APP, 'main[aria-busy="true"] :is(.a, .b) { opacity: .55; }'),
+    (APP, ".chart:hover rect:not(:hover) { opacity: .78; } .route-map:hover .route-line:not(:hover) { opacity: .55; }"),
+    (APP, ".day.is-past .month-mark, .day.is-past .month-item::before { opacity: .62; }"),
+    (APP, "@keyframes conn-pulse { 50% { opacity: .35; } }"),
+    (CUTS, ".a { overflow: hidden; text-overflow: ellipsis; } .b { -webkit-line-clamp: 2; line-clamp: 2; }"),
+    (APP, ".a { overflow: auto; } .b { overflow-x: visible; overflow-y: scroll; }"),
+    (APP, f"{WHY} -- a frame's corners clip its fill */\n.a {{ overflow: hidden; }}"),
 ]
 
 

@@ -447,7 +447,7 @@ func (r *run) writePinned() (string, error) {
 // snapshot copies one mount into the state directory, whole or not at all.
 func (r *run) snapshot(m mount) bool {
 	source := r.dataPath(m.kind, m.ref)
-	if source == "" || source == "/" || (m.kind != "volume" && !unmoved(source)) {
+	if source == "" || source == "/" || (m.kind == "bind" && !unmoved(source)) {
 		return false
 	}
 	part := filepath.Join(r.state, fmt.Sprintf("data-%d.part", m.index))
@@ -550,15 +550,20 @@ func (r *run) restoreData() bool {
 			r.step("restore", false, fmt.Sprintf("data-%d has no mountpoint", m.index))
 			return false
 		}
-		if m.kind != "volume" && !unmoved(target) {
+		var err error
+		switch {
+		case m.kind == "file":
+			err = copyFile(m.snapshot(r.state), target)
+		case m.kind == "bind" && !unmoved(target):
+			err = syscall.ELOOP
+		default:
+			if err = empty(target); err == nil {
+				err = r.tar("-C", target, "-xzf", m.snapshot(r.state))
+			}
+		}
+		if errors.Is(err, syscall.ELOOP) {
 			r.step("restore", false, fmt.Sprintf("data-%d could not be restored: its path now leads through a symlink; its snapshot is kept in the state directory", m.index))
 			return false
-		}
-		var err error
-		if m.kind == "file" {
-			err = copyFile(m.snapshot(r.state), target)
-		} else if err = empty(target); err == nil {
-			err = r.tar("-C", target, "-xzf", m.snapshot(r.state))
 		}
 		if errors.Is(err, syscall.ENOSPC) {
 			r.step("restore", false, fmt.Sprintf("the disk filled restoring data-%d; its snapshot is kept in the state directory", m.index))

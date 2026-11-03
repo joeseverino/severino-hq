@@ -1,10 +1,11 @@
 import json
-from urllib.error import URLError
+from unittest import mock
 
+import httpx2
 from django.test import SimpleTestCase
 
 from ..osv import OSVReadError, finding, matches, query_of
-from .network import Response, answering
+from .network import Response, answering, moved
 
 
 class QueryTests(SimpleTestCase):
@@ -35,7 +36,7 @@ class MatchTests(SimpleTestCase):
     def test_every_matched_package_and_how_many_were_asked(self):
         asked = []
 
-        def osv(request, timeout=None):
+        def osv(request):
             asked.append(request)
             # The shape of OSV's querybatch answer: one result per query, in order.
             return Response({"results": [{"vulns": [{"id": "GHSA-1", "modified": "m"}]}, {}]})
@@ -45,15 +46,43 @@ class MatchTests(SimpleTestCase):
 
         self.assertEqual((checked, found), (2, {"pkg:npm/a@1": [("GHSA-1", "m")]}))
         (request,) = asked
-        self.assertEqual((request.get_method(), request.full_url), ("POST", "https://api.osv.dev/v1/querybatch"))
-        self.assertEqual(len(json.loads(request.data)["queries"]), 2)
+        self.assertEqual((request.method, str(request.url)), ("POST", "https://api.osv.dev/v1/querybatch"))
+        self.assertEqual(len(json.loads(request.content)["queries"]), 2)
+
+    def test_packages_past_one_batch_are_asked_in_order_and_the_last_batch_may_be_short(self):
+        asked = []
+
+        def osv(request):
+            queries = json.loads(request.content)["queries"]
+            asked.append([query["package"]["purl"] for query in queries])
+            return Response({"results": [{"vulns": [{"id": f"GHSA-{len(asked)}", "modified": "m"}]} for _ in queries]})
+
+        purls = [f"pkg:npm/p{n}@1" for n in range(5)]
+        with answering(osv), mock.patch("hq.platform.application.osv.BATCH", 2):
+            checked, found = matches(purls)
+
+        self.assertEqual(asked, [purls[0:2], purls[2:4], purls[4:5]])
+        self.assertEqual(checked, 5)
+        self.assertEqual(found["pkg:npm/p3@1"], [("GHSA-2", "m")])
+        self.assertEqual(found["pkg:npm/p4@1"], [("GHSA-3", "m")])
 
     def test_an_unreachable_osv_says_so(self):
-        def unreachable(request, timeout=None):
-            raise URLError("no route to host")
+        def unreachable(request):
+            raise httpx2.ConnectError("no route to host")
 
         with answering(unreachable), self.assertRaisesMessage(OSVReadError, "Could not reach OSV"):
             matches(["pkg:npm/a@1"])
+
+    def test_a_redirect_is_not_followed(self):
+        asked = []
+
+        def redirecting(request):
+            asked.append(str(request.url))
+            return moved("http://osv.example/v1/querybatch")
+
+        with answering(redirecting), self.assertRaisesMessage(OSVReadError, "HTTP 302"):
+            matches(["pkg:npm/a@1"])
+        self.assertEqual(asked, ["https://api.osv.dev/v1/querybatch"])
 
 
 class FindingTests(SimpleTestCase):

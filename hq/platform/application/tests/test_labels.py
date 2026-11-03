@@ -1,6 +1,9 @@
+from django.template import engines
 from django.test import SimpleTestCase, tag
+from django.utils.safestring import mark_safe
 
-from ..labels import lower_first, plural
+from ..labels import dotted, dotted_html, lower_first, plural
+from .markup import elements, links, text
 
 
 class PluralTests(SimpleTestCase):
@@ -38,6 +41,28 @@ class LowerFirstTests(SimpleTestCase):
 
     def test_nothing_stays_nothing(self):
         self.assertEqual(lower_first(""), "")
+
+
+class DottedTests(SimpleTestCase):
+    def test_each_dot_is_held_to_the_part_before_it(self):
+        # A no-break space before the dot: no line starts with one or holds one alone.
+        self.assertEqual(dotted("Example Host", "Hosting", 0), "Example Host\xa0· Hosting\xa0· 0")
+
+    def test_a_part_that_is_not_there_leaves_no_dot(self):
+        self.assertEqual(dotted(None, "Hosting", "", None), "Hosting")
+        self.assertEqual(dotted(), "")
+
+    def test_markup_draws_the_dot_for_the_eye_and_a_reader_hears_the_parts(self):
+        html = f'<a href="/x/">{dotted_html("A & B", mark_safe("<em>c</em>"))}</a>'
+
+        self.assertEqual(links(html), [("A & B c", "/x/")])
+        self.assertEqual(text(html), "A & B · c")
+        self.assertEqual(len(elements(html, "em")), 1)
+
+    def test_the_dot_in_markup_is_the_one_templates_draw(self):
+        drawn = engines["django"].from_string("{% load value_tags %}a{% dot %}b").render()
+
+        self.assertEqual(drawn, dotted_html("a", "b"))
 
 
 @tag("source", "tree")

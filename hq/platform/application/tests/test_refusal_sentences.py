@@ -21,6 +21,7 @@ from ..record_errors import CertificateError
 from ..security import cli_principal, mcp_principal, web_principal
 from .test_adoption import ZONE_KIND, swept
 from .test_approvals import POLICY_KEY, an_operator, declare_policy, policy_document, update_payload
+from .writers import keyed
 
 # A key HQ holds that a refusal used to name, and must no longer.
 KEY = "example-sent-key"
@@ -30,7 +31,7 @@ class RefusalCase(TestCase):
     """A tailnet policy is a gated kind, so a change to it is asked as a signed-in person, who is not held."""
 
     def refused(self, name, payload, *, target=None, principal=None):
-        result = execute_capability(name, payload, principal=principal or cli_principal(), target=target)
+        result = execute_capability(name, keyed(payload), principal=principal or cli_principal(), target=target)
         self.assertFalse(result["ok"], result)
         return result["error"]
 
@@ -39,7 +40,7 @@ def _operation():
     return {"idempotency_key": "once", "reason": "Stated reason for the change."}
 
 
-@override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
+@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class DeclarationRefusalTests(RefusalCase):
     def setUp(self):
         managing_everything()
@@ -49,7 +50,7 @@ class DeclarationRefusalTests(RefusalCase):
             key=KEY, kind="adguard.rewrite", spec={"domain": "a.example.com", "answer": "192.0.2.1"}, enabled=False
         )
 
-        error = self.refused("infrastructure.reconcile", _operation(), target=KEY)
+        error = self.refused("infrastructure.resource.reconcile", _operation(), target=KEY)
 
         self.assertEqual(error["code"], "precondition")
         self.assertIn("This record is switched off in HQ.", error["message"])
@@ -73,14 +74,14 @@ class DeclarationRefusalTests(RefusalCase):
             key=KEY, kind="adguard.rewrite", spec={"domain": "a.example.com", "answer": "192.0.2.1"}
         )
 
-        error = self.refused("infrastructure.restart", _operation(), target=KEY)
+        error = self.refused("infrastructure.resource.restart", _operation(), target=KEY)
 
         self.assertEqual(error["code"], "precondition")
         self.assertIn("The controller does not do that to this kind of record.", error["message"])
         self.assertNotIn("adguard.rewrite", error["message"])
 
 
-@override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
+@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class PolicyAmendmentRefusalTests(RefusalCase):
     """The policy is the tailnet's document: neither its parse error nor its names are HQ's words."""
 
@@ -147,17 +148,18 @@ class ReadOnlyAdoptionRefusalTests(RefusalCase):
         self.assertFalse(ManagedResource.objects.exists())
 
 
-@override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
+@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class ApprovalRefusalTests(RefusalCase):
     def test_a_held_request_for_something_gone_is_refused_without_its_name(self):
         managing_everything()
         declare_policy()
-        execute_capability(
+        answer = execute_capability(
             "infrastructure.resource.update",
-            update_payload(policy_document("group:elsewhere")),
+            keyed(update_payload(policy_document("group:elsewhere"))),
             principal=mcp_principal(),
             target=POLICY_KEY,
         )
+        self.assertTrue(answer["ok"], answer)
         held = ApprovalRequest.objects.get()
         ApprovalRequest.objects.filter(pk=held.pk).update(capability="example.gone")
         user = get_user_model().objects.create_user(username="reviewer", password="test-only-password")

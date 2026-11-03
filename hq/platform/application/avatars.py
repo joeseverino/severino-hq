@@ -9,7 +9,6 @@ fetched is a picture that is not shown.
 
 import hashlib
 import logging
-from collections.abc import Iterator
 from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
@@ -20,6 +19,8 @@ from django.utils import timezone
 
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog, Avatar
+
+from .http_read import at_most
 
 logger = logging.getLogger("severino.auth")
 
@@ -56,17 +57,6 @@ def _origin(url: str) -> tuple[str, str, int | None]:
     return parts.scheme.lower(), (parts.hostname or "").lower(), parts.port
 
 
-def _at_most(chunks: Iterator[bytes], limit: int) -> bytes:
-    """The body's first ``limit`` bytes, reading no further than it takes."""
-
-    body = b""
-    for chunk in chunks:
-        body += chunk
-        if len(body) >= limit:
-            return body[:limit]
-    return body
-
-
 def picture_allowed(url: str, issuer: str) -> bool:
     """Whether ``url`` is the provider's own: same scheme, host and port."""
 
@@ -89,7 +79,7 @@ def fetch_picture(url: str, *, access_token: str = "") -> tuple[str, bytes] | No
         with httpx2.stream("GET", url, headers=headers, timeout=_TIMEOUT, follow_redirects=False) as response:
             if response.status_code != 200:
                 return None
-            image = _at_most(response.iter_bytes(), MAX_BYTES + 1)
+            image = at_most(response.iter_bytes(), MAX_BYTES + 1)
     except httpx2.HTTPError, httpx2.InvalidURL, httpx2.StreamError, OSError, ValueError:
         return None
     if not image or len(image) > MAX_BYTES:

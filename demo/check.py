@@ -28,10 +28,10 @@ _ADDRESS = re.compile(r'(?:href|src|data-[\w-]+-url)="(/[^"#?]*)')
 _VISITED = ("/", "/hq/", "/infrastructure/findings/", "/action-items/", "/infrastructure/", "/connection/")
 # What a healthy homelab never says on its dashboard.
 _ALARMS = ("No reading yet", "Not set up yet", "not fully set up", "not answering", " failed", "not confirmed")
-# The showcase leaves three things to do on purpose (an image update, a
-# certificate to renew, an agent's request to approve); anything more is the
-# seed missing a reading.
-_MOST_ITEMS = 3
+# The showcase leaves four things to do on purpose (an image update, an image
+# run by tag alone, a certificate to renew, an agent's request to approve);
+# anything more is the seed missing a reading.
+_MOST_ITEMS = 4
 
 
 _MARK = re.compile(r'\sclass="([^"]*)"|\s(data-[\w-]+)')
@@ -186,9 +186,13 @@ def _visible_lines(page: str) -> list[str]:
     """The text a reader sees in ``<main>``, one line per block."""
 
     main = re.search(r"<main.*?</main>", page, re.DOTALL)
-    if not main:
-        return []
-    text = re.sub(r"<(script|style|template)[^>]*>.*?</\1>", "", main.group(0), flags=re.DOTALL)
+    return _lines(main.group(0)) if main else []
+
+
+def _lines(markup: str) -> list[str]:
+    """The text a reader sees in ``markup``, one line per block."""
+
+    text = re.sub(r"<(script|style|template)[^>]*>.*?</\1>", "", markup, flags=re.DOTALL)
     # A newline in the markup is a space on screen; only a block starts a line.
     text = re.sub(r"\s+", " ", text)
     text = re.sub(r"</?(?:p|div|li|dd|dt|td|th|h\d|section|header|footer|ul|ol|dl)\b[^>]*>", "\n", text)
@@ -258,9 +262,9 @@ class DemoSiteTests(unittest.TestCase):
                 with self.subTest(path=path):
                     page.goto(self.origin + path, wait_until="networkidle")
                     choice = page.locator("[data-table-toolbar] input[type=checkbox]").first
-                    menu = choice.locator("xpath=ancestor::details")
-                    if menu.count():
-                        menu.locator("summary").click()
+                    panel = choice.locator("xpath=ancestor::*[@popover]")
+                    if panel.count():
+                        page.locator(f'[popovertarget="{panel.get_attribute("id")}"]').click()
                     name, value = choice.get_attribute("name"), choice.get_attribute("value")
                     choice.check()
                     page.wait_for_url(re.compile(rf"[?&]{re.escape(name)}="))
@@ -378,9 +382,14 @@ class DemoSiteTests(unittest.TestCase):
 
     def test_the_agents_page_shows_an_agent_at_work(self):
         page = (OUT / "agents" / "index.html").read_text(encoding="utf-8")
-        seen = [line for line in _visible_lines(page) if "last seen" in line.lower()]
-        self.assertTrue(seen, "an agent is listed")
-        self.assertRegex(seen[0].lower(), r"last seen (?:\d+ (?:second|minute)s?|just now)")
+        agents = re.findall(r"<tr data-agent=.*?</tr>", page, re.DOTALL)
+        self.assertTrue(agents, "an agent is listed")
+        # A moment is a line of its own: the last-seen cell, never an event's time beside its summary.
+        lately = re.compile(r"\d+ (?:second|minute)s? ago|just now")
+        self.assertTrue(
+            any(lately.fullmatch(line) for row in agents for line in _lines(row)),
+            "an agent was seen within the hour",
+        )
         refused = re.search(r"<strong>(\d+)</strong> refused in the last day", page)
         self.assertTrue(refused and int(refused.group(1)) > 0, "a refusal is counted")
 

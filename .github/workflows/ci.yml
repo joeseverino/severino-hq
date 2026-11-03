@@ -51,8 +51,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Cosign
-        uses: ./.github/actions/cosign
+      - name: Read the pinned mise
+        id: mise
+        run: echo "version=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
+      # The cosign mise.lock records, which the host verifies with too.
+      - name: Install the pinned cosign
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          version: ${{ steps.mise.outputs.version }}
+          install_args: cosign
+          cache: false
       - name: Log in to GHCR
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
@@ -136,9 +144,10 @@ jobs:
   # Real-browser layout invariants over synthetic example.* pages
   # (hq/platform/core/tests/browser/). Every request the page makes is answered in
   # process; the browser reaches nothing. One job per browser:* gate, side by
-  # side.
+  # side. Named without the matrix: GitHub appends each leg's gate itself, and
+  # a job skipped before its matrix expands shows its name as written.
   browser:
-    name: Browser (${{ matrix.gate }})
+    name: Browser
     needs: proven
     if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
     runs-on: ubuntu-26.04
@@ -160,6 +169,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/toolchain
+        with:
+          # Every browser gate installs tools/lint's npm project for axe-core.
+          npm: true
       - name: Browser
         # This leg's browser:* gate. GateReferenceTests holds the legs to the
         # gates mise-tasks/browser.toml declares, so the matrix cannot fall behind it.
@@ -288,17 +300,17 @@ jobs:
         if: env.PROVEN == ''
       - uses: ./.github/actions/toolchain
         if: env.PROVEN == ''
-      # A promotion runs crane and Trivy, so it installs those rather than the
-      # toolchain the build and its checks need. Trivy is lazy in mise.toml,
-      # so a build installs it here too.
+      # A promotion runs crane, Trivy and cosign, so it installs those rather
+      # than the toolchain the build and its checks need. Trivy and cosign are
+      # lazy in mise.toml, so a build installs them here too.
       - name: Read the pinned mise
         id: mise
         run: echo "version=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
-      - name: Install the pinned crane and Trivy
+      - name: Install the pinned crane, Trivy and cosign
         uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
         with:
           version: ${{ steps.mise.outputs.version }}
-          install_args: ${{ env.PROVEN != '' && 'crane trivy' || 'trivy' }}
+          install_args: ${{ env.PROVEN != '' && 'crane trivy cosign' || 'trivy cosign' }}
           cache: false
       - name: Build the production image
         id: build
@@ -324,8 +336,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install Cosign
-        uses: ./.github/actions/cosign
       - name: Publish
         id: publish
         if: env.PROVEN == ''

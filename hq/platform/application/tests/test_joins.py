@@ -447,14 +447,15 @@ class ServiceColumnTests(TestCase):
 
         self.assertContains(response, escape(authority_name("lets_encrypt")))
         # Only the raw readout, which is the record as read, holds the id.
-        shown = re.sub(r"<pre>.*?</pre>", "", response.content.decode(), flags=re.DOTALL)
+        shown = re.sub(r"<pre\b[^>]*>.*?</pre>", "", response.content.decode(), flags=re.DOTALL)
         self.assertNotIn("lets_encrypt", shown)
 
     def test_the_list_shows_them(self):
         response = self.client.get(reverse("control_plane:services"))
 
+        shown = " ".join(text(response.content.decode()).split())
         for hostname in ("example.com", "parked.example.org"):
-            self.assertContains(response, escape(self.services()[hostname].origin.headline))
+            self.assertIn(" ".join(self.services()[hostname].origin.headline.split()), shown)
 
     def test_the_service_page_shows_what_its_readings_say(self):
         response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "admin.example.com"}))
@@ -777,16 +778,3 @@ class NamingTests(TestCase):
         self.assertEqual(ended("Via Example, Inc."), "Via Example, Inc.")
         self.assertEqual(ended("Via Example"), "Via Example.")
         self.assertEqual(ended(""), "")
-
-    def test_the_facts_panel_names_the_issuer(self):
-        from ..facts import facts_about
-
-        store("cloudflare.edge_certificate", {**EDGE[1], "certificate_authority": "google"})
-        store("cloudflare.dns_record", proxied("www.example.com", "A", "192.0.2.5"))
-
-        facts = facts_about(("www.example.com",), ())
-
-        self.assertIn(
-            ("Issued by", "Google Trust Services"),
-            {(fact.label, fact.value) for fact in facts},
-        )

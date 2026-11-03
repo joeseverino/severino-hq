@@ -20,8 +20,10 @@ def upsert_by_slug[Command: SlugCommand](
     *,
     principal: Principal,
     expected_updated_at: str | None = None,
+    sent: frozenset[str] | None = None,
 ) -> dict[str, Any]:
-    """Lock an existing command slug, then delegate the domain-specific write."""
+    """Lock an existing command slug, then delegate the domain-specific write,
+    which on the record that slug names writes only the fields ``sent``."""
 
     exists = model._default_manager.select_for_update().filter(slug=command.slug).exists()
     return save(
@@ -29,4 +31,5 @@ def upsert_by_slug[Command: SlugCommand](
         principal=principal,
         current_slug=command.slug if exists else None,
         expected_updated_at=expected_updated_at,
+        sent=sent,
     )

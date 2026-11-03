@@ -375,7 +375,7 @@ class WorkflowRunTests(SimpleTestCase):
         )
 
         self.assertEqual((run.state, run.tone), ("Timed out", "serious"))
-        self.assertTrue(run.tip.startswith("Timed out\nmain · abcdef1 · "))
+        self.assertTrue(run.tip.startswith("Timed out\nmain\xa0· abcdef1\xa0· "))
         self.assertTrue(run.said.startswith("timed out, main, "))
 
     def test_a_run_still_going_asks_for_attention(self):
@@ -406,6 +406,13 @@ class ToneTests(SimpleTestCase):
             ["good", "serious", "serious", "attention", "attention"],
         )
         self.assertEqual(repository(deployments=[{"environment": "staging", "state": "success"}]).production_tone, "")
+
+    def test_a_live_release_whose_check_failed_needs_attention_never_good(self):
+        def tone(state):
+            deployed = {"environment": "production", "state": state, "check_failed": True}
+            return repository(deployments=[deployed]).production_tone
+
+        self.assertEqual((tone("success"), tone("error")), ("attention", "serious"))
 
     def test_a_deploy_verified_is_good_one_that_failed_its_checks_serious_one_that_ran_none_toneless(self):
         def tone(*conclusions):

@@ -5,7 +5,7 @@ from django.db.migrations.executor import MigrationExecutor
 
 from hq.domains.projects.models import Project
 from hq.platform.core.tests.migration_steps import MigrationStepTestCase
-from hq.platform.search_index.registry import BY_MODEL
+from hq.platform.search_index.registry import by_model
 
 
 def leaf(app_label):
@@ -36,7 +36,7 @@ class SearchIndexMigrationTests(MigrationStepTestCase):
         self.assertEqual(resource.object_id, "example-box")
         self.assertIn("machine", resource.body)
 
-        scope = BY_MODEL[Project].scope
+        scope = by_model()[Project].scope
         Documents.objects.create(scope=scope, object_id=indexed.slug, body=str({"name": "Example Project"}))
 
         apps = self.migrate(("search_index", "0003_readable_search_bodies"), leaf("projects"))

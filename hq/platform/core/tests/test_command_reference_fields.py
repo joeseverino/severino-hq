@@ -22,6 +22,10 @@ from hq.platform.application.integration_specs import capability_schema
 from hq.platform.application.references import Referable, Target
 from hq.platform.application.security import Principal, web_principal
 from hq.platform.application.tests.markup import within
+from hq.platform.application.tests.writers import drawn_key
+from hq.platform.application.web_writes import RETRY_KEY_FIELD
+
+from .command_shapes import field_schema
 
 User = get_user_model()
 
@@ -62,8 +66,9 @@ def reference_fields() -> dict[tuple[str, str], tuple[type, str]]:
 
     found = {}
     for name, spec in capability_registry().items():
-        for field, schema in capability_schema(spec).get("properties", {}).items():
-            if isinstance(reference := schema.get("x-hq-reference"), dict):
+        schema = capability_schema(spec)
+        for field in schema.get("properties", {}):
+            if isinstance(reference := field_schema(schema, field).get("x-hq-reference"), dict):
                 found[name, field] = (apps.get_model(reference["model"]), reference["field"])
     return found
 
@@ -112,11 +117,11 @@ class ReferenceFieldTests(TestCase):
 
     def test_what_is_not_offered_is_refused(self):
         page = self.client.get("/commands/calendar.entry.create/")
-        key = page.context["form"].initial["__execution_key"]
+        key = drawn_key(page, "data-command-form")
 
         refused = self.client.post(
             "/commands/calendar.entry.create/",
-            {"title": "Example", "starts_on": "2026-01-01", "about": "project:missing", "__execution_key": key},
+            {"title": "Example", "starts_on": "2026-01-01", "about": "project:missing", RETRY_KEY_FIELD: key},
         )
 
         self.assertEqual(refused.status_code, 400)

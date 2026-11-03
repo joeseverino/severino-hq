@@ -1,0 +1,14 @@
+#!/bin/sh
+#MISE description="What the MCP list answers cost a client, bytes and approximate tokens for tools/list, what an agent's first request costs a served process, the API document and the SDK named apart, and what slow agent calls at once cost against the same calls one after another, for the host alone and composed; kept as var/perf/mcp-*.json"
+#MISE hide=true
+#MISE extends="django"
+#USAGE flag "--base <ref>" help="Also measure this ref, in a throwaway worktree, for the numbers before a change"
+#USAGE flag "--defer-build" help="Also measure this tree with the SDK's wire models built on first use (pydantic's defer_build), set in the probe's process only"
+
+# The harness is tools/perf/mcp.py, which composes the extensions from
+# HQ_LOCAL_PLUGINS and HQ_LOCAL_PYTHONPATH as dev:scratch does. Each probe is
+# one process that loads the server and answers each list once, so it runs
+# outside the heavy turn.
+set -eu
+
+exec uv run python -m tools.perf.mcp

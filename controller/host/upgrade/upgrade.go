@@ -65,6 +65,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/host"
 )
 
 // Fixed for anyone reaching this through sudo, which passes none of the
@@ -191,6 +193,7 @@ func FromEnvironment(getenv func(string) string, euid int, stdout, stderr io.Wri
 	}
 	u.Command = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 		command := exec.CommandContext(ctx, name, args...)
+		command.WaitDelay = host.ProcessWaitDelay
 		command.Env = env
 		return command
 	}
@@ -304,9 +307,8 @@ func Parse(args []string) (Request, error) {
 // last slash: a registry's port is not a tag.
 func repository(ref string) string {
 	ref, _, _ = strings.Cut(ref, "@")
-	slash := strings.LastIndex(ref, "/")
-	if colon := strings.LastIndex(ref, ":"); colon > slash {
-		ref = ref[:colon]
+	if before, tag, found := strings.CutLast(ref, ":"); found && !strings.Contains(tag, "/") {
+		return before
 	}
 	return ref
 }

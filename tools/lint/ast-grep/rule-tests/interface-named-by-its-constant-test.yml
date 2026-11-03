@@ -1,0 +1,38 @@
+id: interface-named-by-its-constant
+valid:
+  - 'operation_context(interface=JOB_INTERFACE, actor="example-actor")'
+  - 'waited = principal.interface == CLI_INTERFACE'
+  - 'INTERFACE = MCP_INTERFACE'
+  - 'reader = Principal("example-reader", INTERNAL_INTERFACE, frozenset())'
+  - 'record = {"interface": "tailscale0"}'
+  - 'interface: str = ""'
+  - 'actor = getattr(principal, "actor", None) or "local-operator"'
+  - 'for name in ("api", "mcp"): print(name)'
+  - 'SYNC = {"interface": MCP_INTERFACE, "operation": "documentation.sync"}'
+  - 'NAMED = {"name": "mcp"}'
+  - 'CONTROLLER = "controller"'
+  - 'API_TAG = "api"'
+  - 'GO = "controller"'
+  - 'automatic = operation.requested_interface == CONTROLLER_INTERFACE'
+  - 'agent = principal.interface in AGENT_SURFACES'
+  - 'waited = principal.interface in WAITING_INTERFACES'
+invalid:
+  - 'SYNC = {"interface": "mcp", "operation": "documentation.sync"}'
+  - 'record = {"requested_interface": "controller"}'
+  - 'automatic = operation.requested_interface == _AUTOMATIC'
+  - 'waited = SHELL == principal.interface'
+  - 'operation_context(interface=SHELL, actor="example-actor")'
+  - 'operation_context(interface="job", actor="example-actor")'
+  - 'OperationRequest(requested_interface="controller")'
+  - 'operation_context(interface=getattr(principal, "interface", None) or "cli")'
+  - 'waited = principal.interface == "cli"'
+  - 'paused = "mcp" in paused_interfaces'
+  - 'agent = interface in ("api", "mcp")'
+  - 'INTERFACE = "api"'
+  - 'KEYLESS_INTERFACES = frozenset({"web", "cli"})'
+  - 'AGENT_SURFACES = frozenset({"mcp", "api"})'
+  - 'reader = Principal("example-reader", "internal", frozenset())'
+  - 'device = security.DevicePrincipal("example-phone", "device", frozenset())'
+  - |
+    for interface in ("api", "mcp"):
+        observe(interface)

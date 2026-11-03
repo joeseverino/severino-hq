@@ -1,45 +1,48 @@
 {% extends "list_page.html" %}
 {% comment %}
-One history. Each row is an application.history.HistoryLine: one audit event, a run
-of like events shown as one line whose events the row's toggle lists, or a
-moment another source dated (a deploy, a container start). What a row names
-reads as an identifier where it is one (`readout`, cut at the region's cap);
-what a row says is text that breaks wherever it must (`cell-data`). The
-operation an event belongs to is an identifier too, so it waits for the open
-row rather than holding the Message column at an identifier's width.
-On a phone only What and When stay, so there What's second line says what
-happened, in the action's own word (`narrow-only`); wider, the Action column
+One history. Each row is an application.history.HistoryLine: an event (every
+row one operation wrote, named by the row about the operation itself), a row
+it changed, folded beneath it in the same columns (`under`), or a moment
+another source dated (a deploy, a container start), or a run of like moments
+read as one (`burst`, history.RUN), its moments folded beneath it. An event that changed
+things heads them (`data-folds`): its gutter holds the fold rather than the
+row's own toggle, so opening the fold opens what its columns that left hold
+too (tables.js). A fold carries at most history.SHOWN of what the event
+changed, a run at most as many moments; a last row (`rest`) counts the others
+and, for an event, links to its page, which lists every one. What a row names reads as an identifier where it is one
+(`readout`, cut at the region's cap); what a row says is text that breaks
+wherever it must (`cell-data`).
+On a phone only What and When stay, so there What's second line says how it
+came out, in the action's own word (`narrow-only`); wider, the Action column
 says it.
 {% endcomment %}
+{% block row_attributes %}{% if row.under %} data-folded="{{ row.under }}"{% elif row.grouped %} id="{{ row.fold }}" data-folds{% endif %}{% endblock %}
 {% block row %}
-  {% if row.moment %}
+  {% if row.rest %}
+    <td class="row-gutter">{% if row.rest.burst %}<strong>{{ row.rest.more_words|breakable }}</strong>{% else %}<a href="{% url 'core:audit_detail' row.rest.page.pk %}"><strong>{{ row.rest.more_words|breakable }}</strong></a>{% endif %}{% row_toggle %}</td>
+    <td></td>
+    <td></td>
+    <td></td>
+    <td></td>
+  {% elif row.burst %}
+    {% with first=row.burst.0 %}
+    <td class="cell-data row-gutter">{% include "partials/_row_fold.html" with label=row.title only %}<strong>{{ row.title|breakable }}</strong></td>
+    <td class="muted date-col">{{ row.at|when }}</td>
+    <td>{{ first.actor|breakable }}</td>
+    <td><span class="pill">{{ first.source|breakable }}</span></td>
+    <td class="muted cell-data">{{ first.detail|breakable }}</td>
+    {% endwith %}
+  {% elif row.moment %}
     <td class="cell-data row-gutter">{% if row.moment.external %}<strong>{% entity row.moment.url|outside label=row.moment.title %}</strong>{% else %}<strong>{{ row.moment.title|breakable }}</strong>{% endif %}{% row_toggle %}</td>
     <td class="muted date-col">{{ row.at|when }}</td>
     <td>{{ row.moment.actor|breakable }}</td>
     <td><span class="pill">{{ row.moment.source|breakable }}</span></td>
     <td class="muted cell-data">{{ row.moment.detail|breakable }}</td>
-  {% elif row.grouped %}
-    {% with first=row.events.0 %}
-    <td class="row-gutter">
-      <a href="{% url 'core:audit_detail' first.pk %}"><strong>{{ row.title|breakable }}</strong></a>{% row_toggle %}<span class="narrow-only"><br><span class="muted">{{ first.get_action_display|breakable }}</span></span>
-      <ul class="history-run-list row-below">
-        {% for event in row.events %}
-        <li><a href="{% url 'core:audit_detail' event.pk %}">{{ event.object_repr|default:event.type_label|readout }}</a></li>
-        {% endfor %}
-      </ul>
-    </td>
-    <td class="muted date-col">{{ row.at|when }}</td>
-    <td>{{ first.actor_label|breakable }}</td>
-    <td><span class="pill pill-{{ first.action }}">{{ first.get_action_display|breakable }}</span></td>
-    <td class="muted cell-data">{{ first.message|breakable }}</td>
-    {% endwith %}
   {% else %}
-    {% with event=row.event %}
-    <td class="row-gutter"><a href="{% url 'core:audit_detail' event.pk %}"><strong>{{ event.object_repr|default:event.type_label|readout }}</strong></a>{% row_toggle %}{% if event.object_type and event.object_repr %}<br><span class="muted">{{ event.type_label|breakable }}<span class="narrow-only">{% dot %}{{ event.get_action_display|breakable }}</span></span>{% else %}<span class="narrow-only"><br><span class="muted">{{ event.get_action_display|breakable }}</span></span>{% endif %}</td>
-    <td class="muted date-col">{{ event.created_at|when }}</td>
-    <td>{{ event.actor_label|breakable }}</td>
-    <td><span class="pill pill-{{ event.action }}">{{ event.get_action_display|breakable }}</span></td>
-    <td class="muted cell-data">{{ event.message|breakable }}{% if event.operation_id %} <code class="row-more">{{ event.operation_id|breakable }}</code>{% endif %}</td>
-    {% endwith %}
+    <td class="row-gutter">{% if row.grouped %}{% include "partials/_row_fold.html" with label=row.title only %}{% endif %}{% if row.head %}<a href="{% url 'core:audit_detail' row.head.pk %}"><strong>{{ row.title|readout }}</strong></a>{% else %}<strong>{{ row.title|readout }}</strong>{% endif %}{% if row.grouped %} <span class="count">{{ row.total|breakable }}</span>{% else %}{% row_toggle %}{% endif %}{% if row.type_label %}<br><span class="muted">{{ row.type_label|breakable }}<span class="narrow-only">{% dot %}{{ row.action_label|breakable }}</span></span>{% else %}<span class="narrow-only"><br><span class="muted">{{ row.action_label|breakable }}</span></span>{% endif %}</td>
+    <td class="muted date-col">{{ row.at|when }}</td>
+    <td>{{ row.actor|breakable }}</td>
+    <td><span class="pill pill-{{ row.action }}">{{ row.action_label|breakable }}</span></td>
+    <td class="muted cell-data">{% if row.message %}{{ row.message|breakable }}{% endif %}</td>
   {% endif %}
 {% endblock %}

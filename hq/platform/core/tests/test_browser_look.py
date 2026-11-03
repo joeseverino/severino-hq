@@ -5,6 +5,7 @@ the base's shots."""
 
 import io
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -141,106 +142,16 @@ class StressPagesTests(TestCase):
         self.assertEqual(set(pages) & {*stress.ALL_PAGES, "example/not-a-stress-page"}, {"machine"})
 
 
-class _Popovers:
-    """A page's popovers as the look's scripts reach them: some shown, one
-    that will not show."""
-
-    def __init__(self, ids, refused=(), kinds=None):
-        self.ids, self.refused, self.shown = ids, set(refused), set()
-        self.kinds = kinds or ids
-
-    def evaluate(self, script, place=None):
-        if script == look._POPOVER_KINDS:
-            return list(self.kinds)
-        popover = self.ids[place]
-        if script == look._SHOW_POPOVER:
-            if popover in self.refused:
-                return None
-            self.shown.add(popover)
-            return [f"#{popover}", popover]
-        self.shown.discard(popover)
-        return None
-
-
-class _Lens:
-    """The look's walk over popovers, with a rule that finds a box on the page
-    beneath, one inside a popover, and two popovers lying over each other."""
-
-    with_each_popover = look.Look.with_each_popover
-
-    def __init__(self, page):
-        self.page, self.shots, self.shot_while_shown = page, [], []
-
-    def settle(self):
-        pass
-
-    def shoot_popover(self, name, width, popover):
-        self.shot_while_shown.append(sorted(self.page.shown))
-        return f"var/look/{name}-{width}.popover-{popover}.png"
-
-    def judged(self, _name, _width, _rule):
-        shown = sorted(self.page.shown)
-        found = ["frames: a box beneath"]
-        found += [f"overlaps: {one} over {other}" for one in shown for other in shown if one < other]
-        return found + [f"cut: a key in {popover}" for popover in shown]
-
-
-@tag("source")
-class PopoverTests(SimpleTestCase):
-    def test_each_popover_is_judged_alone_and_only_for_what_it_adds_to_the_page(self):
-        page = _Popovers(["origin-one", "origin-two", "origin-three"], refused=["origin-three"])
-        lens = _Lens(page)
-        found = lens.with_each_popover("example/one", 820, "survey", ["frames: a box beneath"])
-        self.assertEqual(
-            found,
-            [
-                "with #origin-one shown (var/look/example/one-820.popover-origin-one.png): cut: a key in origin-one",
-                "with #origin-two shown (var/look/example/one-820.popover-origin-two.png): cut: a key in origin-two",
-            ],
-        )
-        self.assertEqual(page.shown, set())
-
-    def test_each_popover_judged_is_shot_shown_on_its_own_and_the_shot_is_named_beside_it(self):
-        page = _Popovers(["origin-one", "origin-two"])
-        lens = _Lens(page)
-        lens.with_each_popover("example/one", 820, "survey", [])
-        self.assertEqual(lens.shot_while_shown, [["origin-one"], ["origin-two"]])
-        self.assertEqual(
-            lens.shots,
-            [
-                ("var/look/example/one-820.popover-origin-one.png", "with #origin-one shown"),
-                ("var/look/example/one-820.popover-origin-two.png", "with #origin-two shown"),
-            ],
-        )
-        self.assertEqual(
-            look._shot("example/one", 820, "popover-origin-one").name, "example-one-820.popover-origin-one.png"
-        )
-
-    def test_one_popover_stands_for_its_kind_and_the_next_stands_in_for_one_that_will_not_show(self):
-        page = _Popovers(
-            ["origin-one", "origin-two", "origin-three", "origin-four"],
-            refused=["origin-one"],
-            kinds=["origin-panel 0 2", "origin-panel 0 2", "origin-panel 0 2", "origin-panel 1 0"],
-        )
-        found = _Lens(page).with_each_popover("example/one", 820, "survey", ["frames: a box beneath"])
-        self.assertEqual(
-            found,
-            [
-                (
-                    "with #origin-two and 2 like it shown (var/look/example/one-820.popover-origin-two.png):"
-                    " cut: a key in origin-two"
-                ),
-                "with #origin-four shown (var/look/example/one-820.popover-origin-four.png): cut: a key in origin-four",
-            ],
-        )
-
-
 class _Folds:
     """A page with a fold of rows, as tables.js answers presses: pressing the
     fold shows its rows and marks each as cut, which shows its toggle."""
 
     def __init__(self, rows):
         self.rows, self.folded, self.opened = rows, False, set()
+        self.keyboard = self
+
+    def press(self, _key):
+        pass
 
     def evaluate(self, script, toggles=None):
         if script == look._PRESS_SHOWN and toggles == look._FOLD_TOGGLES:
@@ -250,10 +161,14 @@ class _Folds:
 
 
 class _Expander:
-    expand_rows = look.Look.expand_rows
+    """The look's own ways of opening a page, each its method as the look
+    has it, on a page of its own."""
 
     def __init__(self, page):
         self.page = page
+
+    def __getattr__(self, name):
+        return getattr(look.Look, name).__get__(self)
 
     def settle(self):
         pass
@@ -268,6 +183,50 @@ class ExpandTests(SimpleTestCase):
         self.assertEqual(page.opened, {"example-row-one", "example-row-two"})
 
 
+class _Inputs:
+    """A page that keeps, in order, each trusted key pressed in it and each
+    batch of presses a script made; it has one round of disclosures to open."""
+
+    def __init__(self):
+        self.said, self.rounds = [], 0
+        self.keyboard = self
+
+    def press(self, key):
+        self.said.append(("key", key))
+
+    def evaluate(self, script, arg=None):
+        if script == look._OPEN_ONCE:
+            self.rounds += 1
+            self.said.append(("batch", "disclosures"))
+            return self.rounds == 1
+        if script == look._PRESS_SHOWN:
+            self.said.append(("batch", arg))
+        return None
+
+    def wait_for_function(self, _script, arg=None):
+        pass
+
+
+@tag("source")
+class ReaderInputTests(SimpleTestCase):
+    def test_every_batch_the_look_opens_follows_a_trusted_input(self):
+        """Chromium scores what a script's click moves as the page moving by
+        itself, and excuses what moves in the half second after a reader's
+        input: so each batch the look presses comes straight after a trusted
+        key, and opening every row is judged as a reader opening them."""
+
+        page = _Inputs()
+        opener = _Expander(page)
+        opener.open_everything("example", 402)
+        opener.expand_rows()
+        batches = [place for place, (kind, _what) in enumerate(page.said) if kind == "batch"]
+        self.assertEqual(
+            [what for kind, what in page.said if kind == "batch"],
+            ["disclosures", "disclosures", look._FOLD_TOGGLES, look.ROW_TOGGLES],
+        )
+        self.assertEqual([page.said[place - 1][0] if place else None for place in batches], ["key"] * len(batches))
+
+
 class _Drawing:
     """A page that answers a press at once but draws it only on the next
     frame, which settling waits for: what a disclosure or a row opened is
@@ -275,6 +234,10 @@ class _Drawing:
 
     def __init__(self):
         self.pressed, self.drawn, self.rounds = set(), set(), 0
+        self.keyboard = self
+
+    def press(self, _key):
+        pass
 
     def evaluate(self, script, _arg=None):
         if script == look._OPEN_ONCE:
@@ -301,10 +264,13 @@ class _Looker:
     expand_rows = look.Look.expand_rows
     with_each_dialog = look.Look.with_each_dialog
     look = look.Look.look
-    css, script, dialogs = "", "() => document.title", []
+    css, script, dialogs, on_reference = "", "() => document.title", [], False
 
     def __init__(self, page):
-        self.page, self.read = page, {}
+        self.page, self.read, self.measured, self.base = page, {}, {}, None
+
+    def __getattr__(self, name):
+        return getattr(look.Look, name).__get__(self)
 
     def settle(self):
         self.page.drawn |= self.page.pressed
@@ -312,11 +278,14 @@ class _Looker:
     def refused(self, _name, _width):
         return ""
 
-    def evaluate_script(self, _name, _width):
+    def evaluate_script(self, _where, _width):
         self.read["eval"] = self.page.seen()
+        # A script that reads a value, and no element.
+        return "", "Example"
 
-    def screenshot(self, _name, _width):
+    def screenshot(self, name, _width, **_shows):
         self.read["shot"] = self.page.seen()
+        return [(f"{name}.png", 0, 1)]
 
 
 @tag("source")
@@ -326,8 +295,9 @@ class EvalOrderTests(SimpleTestCase):
         asked = {**ASKED, "usage_open": "true", "usage_expand": "true"}
         with (
             tempfile.TemporaryDirectory() as out,
-            mock.patch.object(look, "OUT", Path(out)),
+            mock.patch.object(look, "this_run", lambda: Path(out)),
             mock.patch.dict(os.environ, asked),
+            mock.patch("sys.stdout", new_callable=io.StringIO),
         ):
             looker = _Looker(page)
             looker.look("example", 402, "")
@@ -418,6 +388,7 @@ class _Opener:
     open_dialog = look.Look.open_dialog
     shoot_dialog = look.Look.shoot_dialog
     close_dialog = look.Look.close_dialog
+    take_shot = look.Look.take_shot
     script = ""
 
     def __init__(self, page, dialogs):
@@ -438,7 +409,7 @@ class DialogTests(SimpleTestCase):
     def look(self, page, dialogs, rule="survey"):
         with (
             tempfile.TemporaryDirectory() as out,
-            mock.patch.object(look, "OUT", Path(out)),
+            mock.patch.object(look, "this_run", lambda: Path(out)),
             mock.patch.dict(os.environ, ASKED),
         ):
             return _Opener(page, dialogs).with_each_dialog("estate", 402, rule, ["frames: a box beneath"])
@@ -731,7 +702,7 @@ class ProgressTests(SimpleTestCase):
     def test_each_page_and_width_is_said_before_it_is_looked_at(self):
         with (
             tempfile.TemporaryDirectory() as folder,
-            mock.patch.object(look, "OUT", Path(folder)),
+            mock.patch.object(look, "this_run", lambda: Path(folder)),
             mock.patch("sys.stdout", new_callable=io.StringIO) as said,
         ):
             pages = _Pages(["example/one", "example/two"], said)
@@ -744,7 +715,7 @@ class ProgressTests(SimpleTestCase):
         heard = {("example/one", 1360): ["/one/ at 1360px: uncaught TypeError: example"]}
         with (
             tempfile.TemporaryDirectory() as folder,
-            mock.patch.object(look, "OUT", Path(folder)),
+            mock.patch.object(look, "this_run", lambda: Path(folder)),
             mock.patch("sys.stdout", new_callable=io.StringIO) as said,
         ):
             pages = _Pages(["example/one"], said, heard)
@@ -792,6 +763,7 @@ class WorktreeTests(SimpleTestCase):
                     os.environ, {**ASKED, "SEVERINO_TEST_DATABASE_PATH": "var/example.sqlite3"}, clear=True
                 ),
                 mock.patch.object(look, "LENS", ()),
+                mock.patch.object(look, "this_run", lambda: checkout / "var" / "look" / "example-run"),
                 mock.patch.object(look, "_relay", relay),
                 mock.patch("sys.stdout", new_callable=io.StringIO),
             ):
@@ -799,33 +771,27 @@ class WorktreeTests(SimpleTestCase):
             self.assertEqual(seen["test"], "new\n")
             self.assertIsNone(seen["database"], "the base migrates a database of its own")
 
-    def test_the_bases_shots_are_kept_after_its_worktree_goes_and_this_runs_shots_beside_them(self):
+    def test_the_base_shoots_into_this_runs_folder_so_its_shots_outlive_its_worktree(self):
         with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
             checkout = _repository(Path(folder))
-            out = checkout / "var" / "look"
-            (out / "base").mkdir(parents=True)
-            (out / "base" / "stale-402.png").write_bytes(b"stale")
-            (out / "earlier-402.png").write_bytes(b"earlier")
+            run = checkout / "var" / "look" / "example-run"
+            run.mkdir(parents=True)
 
             def relay(_command, _sink, _ref, cwd, env):
-                Path(cwd, "var", "look").mkdir(parents=True)
-                Path(cwd, "var", "look", "example-402.png").write_bytes(b"base")
+                self.assertFalse(Path(env["usage_shots_into"]).is_relative_to(cwd))
+                Path(env["usage_shots_into"]).mkdir()
+                Path(env["usage_shots_into"], "example-402.png").write_bytes(b"base")
                 Path(env["usage_found_into"]).write_text("[]", encoding="utf-8")
 
             with (
                 mock.patch.dict(os.environ, ASKED, clear=True),
                 mock.patch.object(look, "LENS", ()),
-                mock.patch.object(look, "OUT", out),
+                mock.patch.object(look, "this_run", lambda: run),
                 mock.patch.object(look, "_relay", relay),
                 mock.patch("sys.stdout", new_callable=io.StringIO),
             ):
                 look._look_at("HEAD", "survey", 0.0)
-            self.assertEqual(sorted(path.name for path in (out / "base").iterdir()), ["example-402.png"])
-            # This run then empties all but the base's before it shoots.
-            look._empty(out, keep=look.BASE_OUT)
-            self.assertEqual([path.name for path in out.iterdir()], ["base"])
-            look._empty(out)
-            self.assertEqual(list(out.iterdir()), [])
+            self.assertEqual((run / look.BASE_OUT / "example-402.png").read_bytes(), b"base")
 
     def test_a_base_that_names_nothing_is_refused(self):
         with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
@@ -844,13 +810,83 @@ class _Unanswered:
 
     def __init__(self):
         self.base, self.base_errors, self.errors = None, {}, {("estate/example", 402): []}
-        self.unanswered = {"estate/example": 404}
+        self.unanswered_pages = {"estate/example": 404}
+        # The tree the run began on, unchanged at its close.
+        self.tree = "example-tree"
 
 
 @tag("source")
 class UnansweredTests(SimpleTestCase):
     def test_a_page_that_does_not_answer_200_fails_the_look_naming_the_page_and_its_status(self):
-        with mock.patch.dict(os.environ, ASKED, clear=True), mock.patch("sys.stdout", new_callable=io.StringIO) as said:
+        with (
+            tempfile.TemporaryDirectory() as folder,
+            override_settings(BASE_DIR=folder),
+            mock.patch.object(look, "this_run", lambda: Path(folder, "var", "look", "example-run")),
+            mock.patch.object(look, "tree_of", lambda _root: "example-tree"),
+            mock.patch.dict(os.environ, ASKED, clear=True),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as said,
+        ):
             failed = _Unanswered().close("", {})
         self.assertEqual(failed, ["estate/example answered 404, not 200"])
-        self.assertIn("estate/example answered 404, not 200", said.getvalue().splitlines())
+        lines = said.getvalue().splitlines()
+        self.assertIn("estate/example answered 404, not 200", lines)
+        self.assertIn("var/look/example-run/", lines[-1], "the closing line names the folder the shots are in")
+
+
+@tag("source")
+class RunTests(SimpleTestCase):
+    def test_a_later_run_leaves_an_earlier_runs_shots_where_it_printed_them(self):
+        with tempfile.TemporaryDirectory() as folder:
+            first = look._new_run(Path(folder))
+            (first / "example-402.png").write_bytes(b"first")
+            (first / look.BASE_OUT).mkdir()
+            (first / look.BASE_OUT / "example-402.png").write_bytes(b"first's base")
+            second = look._new_run(Path(folder))
+            (second / "example-402.png").write_bytes(b"second")
+            self.assertNotEqual(first, second)
+            self.assertEqual((first / "example-402.png").read_bytes(), b"first")
+            self.assertEqual((first / look.BASE_OUT / "example-402.png").read_bytes(), b"first's base")
+
+    def test_runs_inside_the_day_are_kept_however_many_there_are(self):
+        with tempfile.TemporaryDirectory() as folder:
+            Path(folder, "example-402.png").write_bytes(b"left by another layout")
+            runs = [look._new_run(Path(folder), kept=3) for _ in range(5)]
+            self.assertEqual(sorted(Path(folder).iterdir()), runs)
+
+    def test_a_run_older_than_the_day_beyond_the_newest_is_removed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            old = [Path(folder, f"2000010{n}-000000") for n in range(1, 6)]
+            for path in old:
+                path.mkdir()
+            run = look._new_run(Path(folder), kept=3)
+            self.assertEqual(sorted(Path(folder).iterdir()), [*old[-2:], run])
+
+    def test_the_newest_runs_are_kept_when_every_run_is_old(self):
+        with tempfile.TemporaryDirectory() as folder:
+            old = [Path(folder, f"2000010{n}-000000") for n in range(1, 8)]
+            for path in old:
+                path.mkdir()
+            run = look._new_run(Path(folder))
+            self.assertEqual(sorted(Path(folder).iterdir()), [*old[-(look.KEPT_RUNS - 1) :], run])
+
+    def test_an_entry_another_run_pruned_first_is_no_error(self):
+        removing, unlinking = shutil.rmtree, Path.unlink
+
+        def pruned_first(path, *args, **kwargs):
+            # The other run's pruning takes the entry between this run's listing and its removal.
+            removing(path)
+            return removing(path, *args, **kwargs)
+
+        def unlinked_first(path, *args, **kwargs):
+            unlinking(path)
+            return unlinking(path, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as folder:
+            Path(folder, "example-402.png").write_bytes(b"left by another layout")
+            Path(folder, "20000101-000000").mkdir()
+            with (
+                mock.patch.object(look.shutil, "rmtree", side_effect=pruned_first),
+                mock.patch.object(Path, "unlink", unlinked_first),
+            ):
+                run = look._new_run(Path(folder), kept=1)
+            self.assertEqual(list(Path(folder).iterdir()), [run])

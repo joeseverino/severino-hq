@@ -1,22 +1,23 @@
-"""The network as urllib and the resolver reach it, answered by a test.
+"""The network as httpx2 and the resolver reach it, answered by a test.
 
 A reader of an outside service is tested at the edge it really crosses: every
-request urllib opens goes to the test's ``answer``, and every name resolves
+request httpx2 sends goes to the test's ``answer``, and every name resolves
 from the test's table. Whatever the reader does between its caller and that
-edge (building the request, reading the body, wording a failure) runs as it
-does in production.
+edge (building the request, following a redirect, reading the body, wording a
+failure) runs as it does in production.
 """
 
-import io
 import json
 import socket
-import urllib.request
+import threading
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
-from email.message import Message
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from ipaddress import ip_address
 from typing import Any
-from unittest import mock
+from unittest import TestCase, mock
+
+import httpx2
 
 from .. import reach
 
@@ -24,38 +25,61 @@ from .. import reach
 PUBLIC = "203.0.113.10"
 
 
-class Response(io.BytesIO):
-    """An HTTP answer as urllib hands it back: a JSON body and its headers."""
+class Response(httpx2.Response):
+    """An HTTP answer: a JSON body (or ``content``, its bytes), its headers
+    and its status."""
 
-    def __init__(self, body: Any, headers: Mapping[str, str] | None = None) -> None:
-        super().__init__(json.dumps(body).encode())
-        self.headers = Message()
-        for key, value in (headers or {}).items():
-            self.headers[key] = value
-
-    def __enter__(self) -> Response:
-        return self
-
-    def __exit__(self, *exc: object) -> None:
-        self.close()
+    def __init__(
+        self,
+        body: Any = None,
+        headers: Mapping[str, str] | None = None,
+        *,
+        status: int = 200,
+        content: bytes | None = None,
+    ) -> None:
+        super().__init__(status, headers=headers, content=json.dumps(body).encode() if content is None else content)
 
 
-Answer = Callable[[urllib.request.Request, float | None], Any]
+def moved(location: str, status: int = 302) -> Response:
+    """A redirect to ``location``."""
+
+    return Response(status=status, headers={"Location": location}, content=b"")
+
+
+Answer = Callable[[httpx2.Request], httpx2.Response]
 
 
 @contextmanager
 def answering(answer: Answer) -> Iterator[None]:
-    """Every request urllib opens, by ``urlopen`` or an opener of its own, is
-    answered by ``answer(request, timeout)``, which returns a ``Response`` or
-    raises what the network would (``HTTPError``, ``URLError``)."""
+    """Every request httpx2 sends, a redirect's included, is answered by
+    ``answer(request)``, which returns a ``Response`` or raises what the
+    network would (``httpx2.ConnectError``, ``httpx2.ReadTimeout``)."""
 
-    def opened(_director, request, data=None, timeout=None):
-        if isinstance(request, str):
-            request = urllib.request.Request(request, data)
-        return answer(request, timeout)
+    def sent(_transport, request):
+        return answer(request)
 
-    with mock.patch.object(urllib.request.OpenerDirector, "open", opened):
+    with mock.patch.object(httpx2.HTTPTransport, "handle_request", sent):
         yield
+
+
+def local_origin(test: TestCase, answer: Callable[[BaseHTTPRequestHandler], None]) -> str:
+    """An http origin on the loopback whose every GET is ``answer(handler)``,
+    stopped when ``test`` ends: the wire itself, for what a stand-in for the
+    client could not show."""
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            answer(self)
+
+        def log_message(self, *_args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    # A short poll, so stopping the server at cleanup does not wait out the default half second.
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True).start()
+    test.addCleanup(server.server_close)
+    test.addCleanup(server.shutdown)
+    return f"http://127.0.0.1:{server.server_port}"
 
 
 @contextmanager

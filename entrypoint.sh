@@ -1,7 +1,8 @@
 #!/usr/bin/env sh
 # The container's boot: migrations first, keeping the database where the host
-# says so a failed release can put it back, then the image's CMD. Any failure
-# stops the boot.
+# says so a failed release can put it back, then the image's CMD, with one
+# Django setup before the server's own. A failure to migrate stops the boot;
+# the delivery read `boot` asks for after it is best effort.
 
 set -eu
 
@@ -14,12 +15,7 @@ if [ -n "${TMPDIR:-}" ] && [ "${TMPDIR}" != /tmp ]; then
 fi
 
 echo "[severino-hq] applying migrations…"
-python manage.py boot_migrate
-
-# A new image is the moment production changes what it runs, so delivery is
-# read now rather than found later. Best effort: nothing about serving may
-# wait on the controller.
-python manage.py request_delivery_read || echo "[severino-hq] delivery read not requested"
+python manage.py boot
 
 echo "[severino-hq] starting: $*"
 exec "$@"

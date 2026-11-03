@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/ecdsa"
@@ -8,12 +9,14 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/binary"
 	"errors"
 	"io"
 	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
@@ -389,5 +392,95 @@ func TestSSHNeedsItsDirectory(t *testing.T) {
 	commands := &Commands{Supplied: supplied(sshConnection("edge", connections.SSHTransport{Host: "192.0.2.1", User: "hq", Port: "22", HostKey: "ssh-ed25519 AAAA"}))}
 	if _, err := commands.SSH(t.Context(), "edge", "status", nil); !errors.Is(err, runtime.ErrSettingMissing) {
 		t.Fatalf("%v", err)
+	}
+}
+
+// clientOffer is the algorithm lists of a client's first key exchange
+// message, as RFC 4253 section 7.1 lays it out.
+type clientOffer struct {
+	Cookie                  [16]byte `sshtype:"20"`
+	KexAlgos                []string
+	ServerHostKeyAlgos      []string
+	CiphersClientServer     []string
+	CiphersServerClient     []string
+	MACsClientServer        []string
+	MACsServerClient        []string
+	CompressionClientServer []string
+	CompressionServerClient []string
+	LanguagesClientServer   []string
+	LanguagesServerClient   []string
+	FirstKexFollows         bool
+	Reserved                uint32
+}
+
+// readOffer answers the version exchange on conn and reads the client's key
+// exchange message, which goes out unencrypted before any key is agreed.
+func readOffer(conn net.Conn) (clientOffer, error) {
+	var offer clientOffer
+	if _, err := io.WriteString(conn, "SSH-2.0-example\r\n"); err != nil {
+		return offer, err
+	}
+	reader := bufio.NewReader(conn)
+	if _, err := reader.ReadString('\n'); err != nil {
+		return offer, err
+	}
+	var header [5]byte
+	if _, err := io.ReadFull(reader, header[:]); err != nil {
+		return offer, err
+	}
+	length, padding := binary.BigEndian.Uint32(header[:4]), int(header[4])
+	if length < 1+uint32(padding) || length > 35000 {
+		return offer, errors.New("not a key exchange packet")
+	}
+	packet := make([]byte, length-1)
+	if _, err := io.ReadFull(reader, packet); err != nil {
+		return offer, err
+	}
+	err := ssh.Unmarshal(packet[:len(packet)-padding], &offer)
+	return offer, err
+}
+
+func TestSSHOffersNoInsecureKeyExchangeOrMAC(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	type read struct {
+		offer clientOffer
+		err   error
+	}
+	offered := make(chan read, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			offered <- read{err: err}
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		offer, err := readOffer(conn)
+		offered <- read{offer, err}
+	}()
+	identity := connecttest.Ed25519Key(t)
+	fixture := newSSHFixture(t, &sshServer{listener: listener}, identity.OpenSSH, ed25519Host(t).PublicKey())
+	// The host closes once it has the offer, so the call itself fails.
+	_, _ = fixture.commands.SSH(t.Context(), "edge", "status", nil)
+	got := <-offered
+	if got.err != nil {
+		t.Fatal(got.err)
+	}
+	if len(got.offer.KexAlgos) == 0 || len(got.offer.MACsClientServer) == 0 || len(got.offer.MACsServerClient) == 0 {
+		t.Fatalf("no offer read: %+v", got.offer)
+	}
+	insecure := ssh.InsecureAlgorithms()
+	for _, kex := range got.offer.KexAlgos {
+		if slices.Contains(insecure.KeyExchanges, kex) {
+			t.Errorf("offers the insecure key exchange %s", kex)
+		}
+	}
+	for _, mac := range slices.Concat(got.offer.MACsClientServer, got.offer.MACsServerClient) {
+		if slices.Contains(insecure.MACs, mac) {
+			t.Errorf("offers the insecure MAC %s", mac)
+		}
 	}
 }

@@ -1,0 +1,41 @@
+# The application declares where each domain's and extension's URL
+# configuration mounts; the web adapter's root URL configuration,
+# hq/config/urls.py, is what includes them. An include() under the application
+# would load an adapter's URL modules from inside the layer they sit on.
+id: application-mounts-no-urlconf
+language: python
+severity: error
+message: The application includes a URL configuration.
+note: >-
+  Declare the mount (a domain's Mount, a manifest's url_prefix and urlconf)
+  and build its path() in hq/config/urls.py.
+files:
+  - "hq/platform/application/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+rule:
+  any:
+    - kind: import_from_statement
+      all:
+        - has:
+            field: module_name
+            regex: ^django\.urls$
+        # An imported name is a child of its own, aliased or not.
+        - has:
+            any:
+              - kind: dotted_name
+                regex: ^include$
+              - kind: aliased_import
+                has:
+                  field: name
+                  regex: ^include$
+    - kind: attribute
+      all:
+        - has:
+            field: object
+            regex: (^|\.)urls$
+        - has:
+            field: attribute
+            regex: ^include$

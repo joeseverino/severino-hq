@@ -1,11 +1,6 @@
-"""Probes of color: contrast, field and button edges, and the fills a theme paints."""
+"""Probes of color: field and button edges, the fills a theme paints, and the tokens that paint them."""
 
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
-
-# WCAG AA: body text, and text large enough to need less (24px, or 18.66px bold).
-TEXT_CONTRAST = 4.5
-
-LARGE_TEXT_CONTRAST = 3.0
 
 # The least a fill may differ from the surface it sits on to show at all:
 # below this it is the surface's own color.
@@ -62,48 +57,94 @@ _COLOR = """
   };
 """
 
-CONTRAST = (
-    "([scope, body, large]) => {"
-    + DESCRIBE
-    + _COLOR
-    + """
-  // Every visible element that holds text of its own, measured against the
-  // color actually behind it: the nearest ancestor that paints a background,
-  // with translucent layers composited down to an opaque one. A color
-  // written for one palette only is what this catches: a light-mode ink left
-  // on a dark card reads as nothing, and no other check looks at color.
-  // Inactive controls and deliberately faded content are exempt, as WCAG
-  // exempts them: they say they are not in play.
-  const inactive = (el) => el.closest(':disabled, [aria-disabled="true"], [hidden]')
-    || [...function* () { for (let up = el; up; up = up.parentElement) yield up; }()]
-      .some((up) => parseFloat(getComputedStyle(up).opacity) < 1);
-  const found = [];
-  let sampled = 0;
-  for (const root of document.querySelectorAll(scope)) {
-    for (const el of root.querySelectorAll('*')) {
-      const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
-      if (!own || !el.checkVisibility()) continue;
-      const r = box(el);
-      if (r.width < 2 || r.height < 2 || inactive(el)) continue;
-      const style = getComputedStyle(el);
-      const size = parseFloat(style.fontSize);
-      // Compact calendar bars retain accessible text but paint no glyphs.
-      if (size === 0) continue;
-      const bold = parseInt(style.fontWeight, 10) >= 700;
-      const needed = size >= 24 || (bold && size >= 18.66) ? large : body;
-      const behind = background(el);
-      const ink = over(rgba(style.color), behind);
-      const measured = ratio(ink, behind);
-      sampled += 1;
-      if (measured < needed) {
-        found.push(`${describe(el)} ${measured.toFixed(2)}:1 (${style.color} on ${behind.slice(0, 3).map(Math.round)}): ${el.textContent.trim().slice(0, 40)}`);
+# The custom properties (tokens) a color on an element is written in, so a
+# finding names the token every page shares rather than the one element it was
+# seen on. The browser keeps no record of the declaration that won the cascade:
+# getComputedStyle and computedStyleMap give computed values only. A rule's
+# own CSSStyleDeclaration keeps what it declared, var() and all (CSSOM, and a
+# shorthand written with var() keeps its text where its longhands read empty),
+# so the declarations of the property that reach the element are each painted
+# where they apply, and the ones that paint the color the element has are read
+# for the names in their var(). A color inherited (ink) is declared on the
+# nearest box that declares it. A sheet another origin serves, or one a
+# vendored widget brings (`vendored`), is not HQ's to name.
+_PAINTED_BY = """
+  let declarations = null;
+  const declared = () => {
+    if (declarations) return declarations;
+    declarations = [];
+    const nest = (selector, parent) => {
+      if (selector.includes('&')) return selector.replaceAll('&', `:is(${parent})`);
+      return /^\\s*[>+~]/.test(selector) ? `:is(${parent}) ${selector}` : `:is(${parent}) :is(${selector})`;
+    };
+    const walk = (rules, parent) => {
+      for (const rule of rules) {
+        if (rule instanceof CSSImportRule) {
+          try { walk(rule.styleSheet.cssRules, parent); } catch { /* another origin's */ }
+          continue;
+        }
+        if (rule instanceof CSSMediaRule && !matchMedia(rule.media.mediaText).matches) continue;
+        if (rule instanceof CSSSupportsRule && !CSS.supports(rule.conditionText)) continue;
+        let selector = parent;
+        if (rule instanceof CSSStyleRule) selector = parent === null ? rule.selectorText : nest(rule.selectorText, parent);
+        // A nested block of bare declarations applies with its rule's selector;
+        // a font face or a keyframe has a style and no selector at all.
+        if (rule.style && selector !== null) declarations.push([selector, rule.style]);
+        if (rule.cssRules) walk(rule.cssRules, selector);
       }
+    };
+    for (const sheet of document.styleSheets) {
+      if (vendored && sheet.ownerNode?.closest?.(vendored)) continue;
+      let rules;
+      try { rules = sheet.cssRules; } catch { continue; }
+      walk(rules, null);
     }
-  }
-  return {sampled, found: [...new Set(found)]};
-}"""
-)
-
+    return declarations;
+  };
+  const applies = (node, selector) => { try { return node.matches(selector); } catch { return false; } };
+  // What `value`, declared as `property` on `node`, paints there, read as
+  // `read`: a box placed in it inherits what it holds (its tokens,
+  // currentColor, its palette).
+  const paintedAs = (node, property, value, read) => {
+    const probe = document.createElement('span');
+    probe.style.position = 'absolute';
+    probe.style.setProperty(property, value);
+    node.append(probe);
+    const painted = getComputedStyle(probe)[read];
+    probe.remove();
+    return painted;
+  };
+  const scheme = (el) => paintedAs(el, 'color', 'light-dark(rgb(0, 0, 0), rgb(255, 255, 255))', 'color') === 'rgb(255, 255, 255)' ? 'dark' : 'light';
+  const PAINTS = {
+    color: {declared: ['color'], read: 'color', inherited: true},
+    background: {declared: ['background-color', 'background'], read: 'backgroundColor', inherited: false},
+  };
+  const tokensOf = (el, which) => {
+    const {declared: properties, read, inherited} = PAINTS[which];
+    for (let node = el; node; node = node.parentElement) {
+      const styles = [...declared().filter(([selector]) => applies(node, selector)).map(([, style]) => style), node.style];
+      const values = styles.flatMap((style) => properties.map((property) => [property, style.getPropertyValue(property).trim()]))
+        .filter(([, value]) => value && !(inherited && ['inherit', 'unset'].includes(value)));
+      if (!values.length && inherited && node.parentElement) continue;
+      const has = rgba(getComputedStyle(node)[read]).join();
+      const names = values.filter(([property, value]) => rgba(paintedAs(node, property, value, read)).join() === has)
+        .flatMap(([, value]) => [...value.matchAll(/var\\(\\s*(--[\\w-]+)/g)].map((match) => match[1]));
+      return [...new Set(names)];
+    }
+    return [];
+  };
+  // A finding's word for what paints a color: its tokens in the palette it is
+  // drawn in, or that it is written as a literal.
+  const paintedBy = (el, which) => {
+    const names = tokensOf(el, which);
+    return names.length ? `${names.join(' and ')} in ${scheme(el)}` : 'no token paints this';
+  };
+  // The box whose fill is what an element is read against.
+  const ground = (el) => {
+    for (let up = el; up; up = up.parentElement) if (rgba(getComputedStyle(up).backgroundColor)[3] > 0) return up;
+    return document.documentElement;
+  };
+"""
 
 # A field is found by its edge: the border it draws, or, for a control drawn
 # bare inside one that acts as the field (a search box's frame, a drop zone),
@@ -174,21 +215,32 @@ BUTTON_EDGES = (
 
 # How far each box that paints a fill (a chip, a code span, the item a menu is
 # at, a group's heading row) steps from the surface behind it: by its fill or
-# by its edge, whichever shows more. Keyed by the box's place in the document,
-# so the same box can be read again in the other palette. A vendored widget
-# carries its own two palettes, and is not HQ's to hold.
+# by its edge, whichever shows more, with every box it read (`seen`). A live
+# page changes between the two readings (a figure that samples adds a bar), so
+# a box is keyed by itself, the same key on this load however the document
+# around it grows, and is judged only where both palettes read it. A vendored
+# widget carries its own two palettes, and is not HQ's to hold.
+_FILL_BOXES = "(window.hqFillBoxes ??= {keys: new WeakMap(), boxes: []})"
+
 FILL_STEPS = (
     "([scope, vendored]) => {"
     + DESCRIBE
     + _COLOR
+    + f"""
+  const known = {_FILL_BOXES};"""
     + """
-  const place = new Map([...document.querySelectorAll('*')].map((el, at) => [el, at]));
+  const key = (el) => {
+    if (!known.keys.has(el)) known.keys.set(el, known.boxes.push(el) - 1);
+    return known.keys.get(el);
+  };
   const steps = {};
+  const seen = [];
   for (const root of document.querySelectorAll(scope)) {
     for (const el of root.querySelectorAll('*')) {
       if (!el.parentElement || el.closest(vendored) || !el.checkVisibility()) continue;
       const r = box(el);
       if (r.width < 2 || r.height < 2) continue;
+      seen.push(key(el));
       const style = getComputedStyle(el);
       const fill = rgba(style.backgroundColor);
       if (fill[3] === 0) continue;
@@ -198,29 +250,57 @@ FILL_STEPS = (
         .map((side) => ratio(over(rgba(style[`border${side}Color`]), behind), behind));
       const painted = over(fill, behind);
       const words = el.textContent.trim().replace(/\\s+/g, ' ').slice(0, 30);
-      steps[place.get(el)] = [Math.max(ratio(painted, behind), ...edges), `${describe(el)} (${painted.slice(0, 3).map(Math.round)} on ${behind.slice(0, 3).map(Math.round)}): ${words}`];
+      steps[key(el)] = [Math.max(ratio(painted, behind), ...edges), `${describe(el)} (${painted.slice(0, 3).map(Math.round)} on ${behind.slice(0, 3).map(Math.round)}): ${words}`];
     }
   }
-  return steps;
+  return {steps, seen};
 }"""
 )
 
 
-def lost_fills(steps, least):
-    """The boxes a fill sets apart in one palette and not in the other, from
-    each palette's ``FILL_STEPS``: the two palettes are one set of
-    distinctions, so a fill one shows and the other loses is a token whose
-    other half was never checked. A fill as faint in both is passed: its
-    faintness was chosen."""
+# What paints the fill of each box `places` names (its FILL_STEPS key), in the
+# palette the page is drawn in: read only for the boxes a palette loses, in the
+# palette that loses them, and only those still on the page.
+FILL_PAINTERS = (
+    "([places, vendored]) => {"
+    + _COLOR
+    + _PAINTED_BY
+    + f"""
+  const known = {_FILL_BOXES};"""
+    + """
+  return Object.fromEntries(places.map((at) => [at, known.boxes[Number(at)]])
+    .filter(([, el]) => el?.isConnected).map(([at, el]) => [at, paintedBy(el, 'background')]));
+}"""
+)
+
+
+def losses(steps, least):
+    """Each box a fill sets apart in one palette and not in the other, from
+    each palette's ``FILL_STEPS``, with the palette that loses it: the two
+    palettes are one set of distinctions, so a fill one shows and the other
+    loses is a token whose other half was never checked. A fill as faint in
+    both is passed: its faintness was chosen."""
 
     found = []
     for at in sorted(steps["light"].keys() | steps["dark"].keys(), key=int):
+        light, dark = (steps[palette].get(at, (1, ""))[0] for palette in ("light", "dark"))
+        if min(light, dark) < least <= max(light, dark):
+            found.append((at, "dark" if dark < light else "light"))
+    return found
+
+
+def lost_fills(steps, least, painted=None):
+    """What ``losses`` finds, said: the box in the palette that loses it, and,
+    from ``painted`` (FILL_PAINTERS read in that palette), what paints its
+    fill there."""
+
+    found = []
+    for at, lost in losses(steps, least):
         read = {palette: steps[palette].get(at, (1, "")) for palette in ("light", "dark")}
         light, dark = read["light"][0], read["dark"][0]
-        if min(light, dark) < least <= max(light, dark):
-            lost = "dark" if dark < light else "light"
-            said = read[lost][1] or read["light" if lost == "dark" else "dark"][1]
-            found.append(f"{lost} loses {said}: {light:.2f}:1 in light, {dark:.2f}:1 in dark")
+        said = read[lost][1] or read["light" if lost == "dark" else "dark"][1]
+        fill = f"; fill: {painted[at]}" if painted and at in painted else ""
+        found.append(f"{lost} loses {said}: {light:.2f}:1 in light, {dark:.2f}:1 in dark{fill}")
     return found
 
 

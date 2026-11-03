@@ -102,8 +102,22 @@ def _day(day, day_age):
             rows.append(_row(day, "path", path, views))
     total = sum(row["pageviews"] for row in rows)
     for dimension, shares in SPLITS.items():
-        rows.extend(_row(day, dimension, value, round(total * share)) for value, share in shares)
+        split = zip(shares, _split(total, shares), strict=True)
+        rows.extend(_row(day, dimension, value, views) for (value, _share), views in split)
     return [row for row in rows if row["pageviews"]]
+
+
+def _split(total, shares):
+    """``total`` divided by ``shares`` in whole views that add up to its share
+    of the total, as Cloudflare's breakdowns of one day's views do: each is
+    rounded down, and the views left over go to the largest remainders."""
+
+    exact = [total * share for _value, share in shares]
+    views = [int(each) for each in exact]
+    left = round(total * sum(share for _value, share in shares)) - sum(views)
+    for index in sorted(range(len(exact)), key=lambda i: exact[i] - views[i], reverse=True)[:left]:
+        views[index] += 1
+    return views
 
 
 def _row(day, dimension, value, views):
@@ -163,28 +177,31 @@ def analytics():
     )
 
 
-# Who wrote, what about, how long ago, and what became of it.
+# Who wrote, from where and on what, how long ago, and what became of it.
 MESSAGES = (
     (
-        "John Smith",
-        "john.smith@example.org",
-        "US",
+        "Priya Raman",
+        "priya.raman@example.org",
+        "IN",
+        ("Chrome", "desktop"),
         timedelta(hours=5),
         "read",
         "Read the post on restoring backups. Do you test the restore against a fresh volume or the live one?",
     ),
     (
-        "Mary Johnson",
-        "mary.johnson@example.net",
-        "US",
+        "Lukas Brandt",
+        "lukas.brandt@example.net",
+        "DE",
+        ("Firefox", "desktop"),
         timedelta(days=3),
         "replied",
         "Thanks for the writeup on mirroring a private git server. Which mirror schedule ended up holding?",
     ),
     (
-        "Mike Davis",
-        "mike.davis@example.com",
-        "US",
+        "Hannah Okafor",
+        "hannah@example.com",
+        "GB",
+        ("Safari", "mobile"),
         timedelta(days=11),
         "read",
         "Would you share the compose file for the media server? The TV discovery part is what I am stuck on.",
@@ -193,6 +210,7 @@ MESSAGES = (
         "Rank Booster",
         "seo@example.net",
         "US",
+        ("Chrome", "desktop"),
         timedelta(days=16),
         "spam",
         "We can put your site on the first page of every search engine. Reply for a free audit.",
@@ -203,7 +221,8 @@ MESSAGES = (
 def contact():
     """The contact form's messages, as the controller read them from D1."""
 
-    def message(number, sender, email, country, age, status, text):
+    def message(number, sender, email, country, client, age, status, text):
+        browser, device = client
         at = (timezone.now() - age).strftime("%Y-%m-%d %H:%M:%S")
         return {
             "connection_ref": CLOUDFLARE,
@@ -218,8 +237,8 @@ def contact():
             "message": text,
             "status": status,
             "country": country,
-            "browser": "Firefox",
-            "device": "desktop",
+            "browser": browser,
+            "device": device,
             "source_url": f"{SITE}/contact/",
             "turnstile": "verified",
         }

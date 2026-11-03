@@ -1,12 +1,8 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.core.exceptions import ImproperlyConfigured, PermissionDenied
-from django.http import HttpResponse
-from django.test import RequestFactory, SimpleTestCase, TestCase
-from django.views import View
+from django.test import SimpleTestCase, TestCase
 from pydantic import ValidationError
 
 from hq.platform.application.capabilities import CapabilitySpec
@@ -19,7 +15,6 @@ from hq_sdk.audit import audit_operation, record_operation
 from hq_sdk.capabilities import StrictCommand
 from hq_sdk.plugin import NavigationItem as SdkNavigationItem, PluginManifest as SdkPluginManifest
 from hq_sdk.validation import unsupported_hq_imports
-from hq_sdk.web import CapabilityRequiredMixin
 
 
 class SdkContractTests(SimpleTestCase):
@@ -103,7 +98,8 @@ class SdkContractTests(SimpleTestCase):
 
         self.assertEqual(fields["note"]["description"], "What to write down.")
         self.assertEqual(fields["project"]["x-hq-records"], {"resource": "example.projects", "key": "slug"})
-        self.assertEqual(fields["tone"]["oneOf"], [{"const": "plain", "title": "Plain"}])
+        self.assertEqual(fields["tone"]["enum"], ["plain"])
+        self.assertEqual(fields["tone"]["x-enumDescriptions"], {"plain": "Plain"})
         self.assertEqual(fields["about"]["x-hq-reference"], {"model": "calendars.entry", "field": "about"})
 
     def test_plugin_source_can_use_only_the_sdk(self):
@@ -215,45 +211,6 @@ class SdkContractTests(SimpleTestCase):
         from hq_sdk.workflows import WorkflowPlan as SdkWorkflowPlan
 
         self.assertIs(SdkWorkflowPlan, WorkflowPlan)
-
-
-class _AllowedView(CapabilityRequiredMixin, View):
-    required_capability = "example.read"
-
-    def get(self, request):
-        return HttpResponse("ok")
-
-
-class _UnconfiguredView(CapabilityRequiredMixin, View):
-    def get(self, request):
-        return HttpResponse("unreachable")
-
-
-class WebSdkTests(SimpleTestCase):
-    def setUp(self):
-        self.factory = RequestFactory()
-        self.user = SimpleNamespace(is_authenticated=True)
-
-    def test_capability_mixin_allows_a_narrow_authorized_principal(self):
-        request = self.factory.get("/example/")
-        request.user = self.user
-        principal = Principal("operator", "web", frozenset({"example.read"}))
-        with patch("hq_sdk.web.web_principal", return_value=principal):
-            response = _AllowedView.as_view()(request)
-        self.assertEqual(response.status_code, 200)
-
-    def test_capability_mixin_converts_denial_to_django_permission_denied(self):
-        request = self.factory.get("/example/")
-        request.user = self.user
-        principal = Principal("operator", "web", frozenset())
-        with patch("hq_sdk.web.web_principal", return_value=principal), self.assertRaises(PermissionDenied):
-            _AllowedView.as_view()(request)
-
-    def test_capability_mixin_requires_an_explicit_capability(self):
-        request = self.factory.get("/example/")
-        request.user = self.user
-        with self.assertRaises(ImproperlyConfigured):
-            _UnconfiguredView.as_view()(request)
 
 
 class AuditSdkTests(TestCase):

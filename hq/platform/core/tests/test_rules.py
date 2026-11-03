@@ -9,6 +9,7 @@ from io import StringIO
 from pathlib import Path
 
 from django.apps import apps
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import CommandError, call_command
 from django.db import IntegrityError, connection, models, transaction
@@ -29,7 +30,7 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.jobs.models import Job
 from hq.platform.core import revisions
 from hq.platform.core.management.commands import constraint_preflight
-from hq.platform.core.models import AgentAccess
+from hq.platform.core.models import AgentAccess, AgentIdentity
 from hq.platform.core.rules import Rule, one_of
 
 DAY = date(2026, 10, 1)
@@ -86,6 +87,8 @@ class RuleTests(TestCase):
         site = AnalyticsSite.objects.create(site_tag="tag", host="example.com")
         row = RumDaily.objects.create(site=site, date=DAY, dimension="path", value="/")
         runbook = DocumentationRecord.objects.create(doc_id="example-doc", title="A runbook")
+        agent = AgentIdentity.objects.create(client_id="example-agent")
+        operator = get_user_model().objects.create_user("example-operator", password="x" * 20)
 
         def changed(instance, **values):
             return lambda: type(instance).objects.filter(pk=instance.pk).update(**values)
@@ -113,6 +116,9 @@ class RuleTests(TestCase):
             "analytics_rumdaily_sample_interval": changed(row, sample_interval=0),
             "documentation_status_is_a_doc_status": changed(runbook, status="open"),
             "agent_access_is_one_row": lambda: AgentAccess.objects.create(pk=2),
+            "agent_identity_block_is_dated": changed(agent, blocked_by=operator),
+            "agent_identity_signs_in_a_known_way": changed(agent, signs_in="example"),
+            "person_role_is_a_known_role": changed(operator.person_role, role="example"),
             "dashboard_configuration_is_one_row": lambda: DashboardConfiguration.objects.create(pk=2),
             "analytics_vitalsdaily_sample_interval": lambda: site.vitals.create(date=DAY, sample_interval=0),
         }

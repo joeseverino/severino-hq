@@ -1,0 +1,83 @@
+#!/bin/sh
+#MISE description="Compose a built host image with this checkout's extension set, as Compose builds a pull request's candidate"
+#MISE lock="heavy"
+#MISE timeout="30m"
+#MISE hide=true
+#MISE depends_post=["image:docker stop"]
+#USAGE flag "--host <image>" required=#true help="The host image to compose on, as image:build tagged it"
+#USAGE flag "--tag <tag>" default="severino-hq:composed-local" help="The name to build the composed image as"
+#USAGE flag "--context <tree>" help="The tree whose composition/Dockerfile and compose_plugins compose it, this checkout by default; a base's worktree composes as that commit's release did"
+#USAGE example "mise run image:build --tag severino-hq:here && mise run image:compose --host severino-hq:here --tag severino-hq:here-composed" header="Build and compose this checkout"
+
+# Compose's "Stage the candidate" and "Build the candidate image" steps
+# (.github/workflows/compose.yml), run on the extension set this checkout
+# composes: each package HQ_LOCAL_PYTHONPATH imports from is built into a
+# wheel, as extension-branches.sh builds a branch's, and the context tree's
+# own compose_plugins stages them. The build context is a directory of its
+# own holding only what composition/Dockerfile copies, so no checkout gains
+# a build/ it does not ignore.
+set -eu
+# shellcheck source=tools/lib/extension-set.sh
+. ./tools/lib/extension-set.sh
+compose_extensions
+
+tree="${usage_context:-$PWD}"
+tree="$(cd "$tree" && pwd)"
+if [ -z "${SEVERINO_HQ_PLUGINS}" ]; then
+    echo "image:compose: no extension set to compose, so ${usage_host:?} is the image as it stands" >&2
+    exit 2
+fi
+sources="${PYTHONPATH}"
+asked="${SEVERINO_HQ_PLUGINS}"
+# The packages' builds and the staging import nothing of the extensions.
+unset PYTHONPATH
+
+work="$(mktemp -d "${TMPDIR:-/tmp}/hq-compose.XXXXXX")"
+trap 'rm -rf "${work}"' EXIT
+mkdir -p "${work}/wheels" "${work}/context/controller"
+
+# A source on HQ_LOCAL_PYTHONPATH is a package's src/ directory, or the
+# package itself in a flat layout.
+set --
+old_ifs="${IFS}"
+IFS=:
+for source in ${sources}; do
+    IFS="${old_ifs}"
+    [ -n "${source}" ] || continue
+    if [ -f "${source}/pyproject.toml" ]; then
+        package="${source}"
+    elif [ -f "${source%/}/../pyproject.toml" ]; then
+        package="$(cd "${source%/}/.." && pwd)"
+    else
+        echo "image:compose: ${source} (HQ_LOCAL_PYTHONPATH) is no package's source: no pyproject.toml in it or above it" >&2
+        exit 1
+    fi
+    uv build --quiet --wheel --out-dir "${work}/wheels" "${package}"
+done
+IFS="${old_ifs}"
+for wheel in "${work}"/wheels/*.whl; do
+    set -- "$@" --wheel "${wheel}"
+done
+
+cp "${tree}/mise.toml" "${tree}/mise.lock" "${work}/context/"
+cp "${tree}/controller/go.mod" "${work}/context/controller/"
+(cd "${tree}" && uv run --no-project python -m tools.pipeline.compose_plugins --candidate "$@" --out "${work}/context/build/candidate")
+references="$(cat "${work}/context/build/candidate/references")"
+
+# The references come from the wheels' names, the set from HQ_LOCAL_PLUGINS:
+# a source the set does not name, or a plugin no source builds, would compose
+# an image other than the one the checkout runs.
+sorted() { printf '%s\n' "$1" | tr ',' '\n' | sed '/^$/d' | sort; }
+if [ "$(sorted "${references}")" != "$(sorted "${asked}")" ]; then
+    echo "image:compose: the wheels built name ${references}, but HQ_LOCAL_PLUGINS names ${asked}" >&2
+    exit 1
+fi
+
+# The VM boots once the wheels are staged, the first step that needs it.
+mise run image:docker start
+docker build -f "${tree}/composition/Dockerfile" --target candidate -t "${usage_tag:?}" \
+    --build-arg HQ_IMAGE="${usage_host:?}" \
+    --build-arg STAGED=build/candidate \
+    --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="${references}" \
+    "${work}/context"
+echo "Composed ${usage_tag} from ${usage_host} and ${references}"

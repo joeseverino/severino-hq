@@ -15,12 +15,12 @@ from django.test import SimpleTestCase, tag
 from hq.platform.core.tests.test_settings_env import REPO_ROOT, subprocess_env
 
 # How many modules each start loads, the host alone as production starts it
-# (DEBUG off): about a tenth above what it loads today, a ceiling a new eager
-# import of a library or a domain crosses. The web process's first request
-# loads the URLconf and what its views import; a management command that saves
-# nothing never needs them.
-WEB_BUDGET = 980
-SETUP_BUDGET = 745
+# (DEBUG off, imports lazy): about a tenth above what it loads today, a ceiling
+# a new eager import of a library or a domain crosses. The web process's first
+# request loads the URLconf and what its views import; a management command
+# that saves nothing never needs them.
+WEB_BUDGET = 570
+SETUP_BUDGET = 500
 # Loaded by the first MCP request, never at start.
 ON_FIRST_MCP_REQUEST = ("mcp", "mcp_types", "opentelemetry", "sse_starlette")
 # Loaded by what validates a command or reads a provider, never by django.setup.
@@ -54,8 +54,9 @@ class StartupBudgetTests(SimpleTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        # The ASGI module switches lazy imports on itself; manage.py does before django.setup.
         cls.web = started_modules("import hq.config.asgi")
-        cls.setup = started_modules("import django; django.setup()")
+        cls.setup = started_modules("from hq.config.imports import lazily; lazily(); import django; django.setup()")
 
     def test_the_web_process_starts_without_the_mcp_sdk(self):
         loaded = sorted({name.partition(".")[0] for name in self.web} & set(ON_FIRST_MCP_REQUEST))

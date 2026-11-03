@@ -8,6 +8,7 @@ a view of the vault with no second list to drift from it.
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Annotated, NotRequired, TypedDict
 
 from hq.domains.control_plane.connection_kinds import connection_credential
 from hq.domains.control_plane.models import ProviderConnection
@@ -15,12 +16,14 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS, observer_abilities, registry_label, resource_home
 lazy from hq.domains.control_plane.names import normalized_hostname
 
-from .connection_catalog import CONTROLLER_CONNECTIONS, connection_catalog, serialize_connection
+from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion, WebRoute
+from .connection_catalog import CONTROLLER_CONNECTIONS
 
 # Declared next to the domains that emit them, so a gateway can import the
 # record without importing this reader. Re-exported here as the one name
 # callers already use.
 from .connection_contracts import (
+    GRANT_MODELS,
     ConnectionAbility,
     ConnectionFact,
     ConnectionInstance,
@@ -29,6 +32,8 @@ from .connection_contracts import (
 )
 from .connection_lifecycle import Lifecycle, probed, standing
 from .connection_setup import guide_url
+from .contracts import EFFECT_MEANINGS
+from .describe import Describe, listed
 from .entity_links import entity_link
 from .integration_validation import required_capability_names
 from .integrations import integration_graph
@@ -281,7 +286,7 @@ def _controller_contract() -> tuple[tuple[ConnectionAbility, ...], dict[str, tup
                 summary=spec.summary,
                 effect="destructive" if spec.destructive else "infrastructure_change",
                 governs_kinds=(kind,),
-                subject_resource="infrastructure.resources",
+                subject_resource="infrastructure",
             )
         )
         for provider in spec.connection_providers:
@@ -391,58 +396,100 @@ def connection_specs() -> tuple[ConnectionSpec, ...]:
     return (_controller_connection_spec(),)
 
 
-def describe_connections() -> dict:
+# The shape describe_connections answers in; it moves when that shape does.
+CONNECTIONS_SCHEMA_VERSION = 1
+
+
+class AbilityDescription(TypedDict):
+    """One ability a connection family offers, as ``describe_connections`` names it."""
+
+    name: Annotated[str, Describe("The name of what it lets HQ do, unique within its type of connection.")]
+    label: Annotated[str, Describe("What it lets HQ do, in a few words.")]
+    summary: Annotated[str, Describe("What it lets HQ do, in a sentence.")]
+    effect: Annotated[str, Describe(ended(f"What using it does: {listed(EFFECT_MEANINGS)}"))]
+    required_scopes: Annotated[
+        list[str], Describe("The permissions the credential must carry for it, in the service's own names.")
+    ]
+    grant: Annotated[
+        str | None,
+        Describe(
+            f"How HQ proves the credential allows it: {listed(GRANT_MODELS)}, where `scoped` is checked against "
+            "`required_scopes`; null where the connection says nothing."
+        ),
+    ]
+    capability: Annotated[str | None, Describe("The command that uses it, by name; null for none.")]
+    governs_kinds: Annotated[list[str], Describe("The types of record it lets HQ manage; empty for none.")]
+    subject_resource: Annotated[
+        str | None,
+        Describe("The list those records are read from, by the name `describe_resources` gives it; null for none."),
+    ]
+
+
+class ConnectionDescription(TypedDict):
+    """One connection family as every adapter describes it."""
+
+    name: Annotated[str, Describe("The name of this type of connection.")]
+    label: Annotated[str, Describe("What a person calls this type of connection.")]
+    summary: Annotated[str, Describe("What this type of connection lets HQ reach, in a sentence.")]
+    required_capabilities: RequiredPermissions
+    web_route: WebRoute
+    management_route: Annotated[
+        str | None, Describe("The page where its settings are changed, by its route name; null for none.")
+    ]
+    setup_route: Annotated[str | None, Describe("The page where one is set up, by its route name; null for none.")]
+    documentation_url: Annotated[str | None, Describe("The service's own documentation for it; null for none.")]
+    secret_store: Annotated[str | None, Describe("Where its credential is kept, such as `1Password`; null for none.")]
+    abilities: Annotated[list[AbilityDescription], Describe("What it lets HQ do, one entry for each thing.")]
+    permitted: NotRequired[Permitted]
+
+
+class ConnectionCatalog(TypedDict):
+    """What ``describe_connections`` answers."""
+
+    schema_version: Annotated[SchemaVersion, Pinned(CONNECTIONS_SCHEMA_VERSION)]
+    connections: Annotated[list[ConnectionDescription], Describe("Every type of connection HQ knows.")]
+
+
+def _ability(ability: ConnectionAbility) -> AbilityDescription:
     return {
-        "ok": True,
-        "schema_version": 1,
-        "connections": [
-            {
-                "name": spec.name,
-                "label": spec.label,
-                "summary": spec.summary,
-                "required_capabilities": list(required_capability_names(spec)),
-                "web_route": spec.web_route or None,
-                "management_route": spec.management_route or None,
-                "setup_route": spec.setup_route or None,
-                "documentation_url": spec.documentation_url or None,
-                "secret_store": spec.secret_store or None,
-                "abilities": [
-                    {
-                        "name": ability.name,
-                        "label": ability.label,
-                        "summary": ability.summary,
-                        "effect": ability.effect,
-                        "required_scopes": list(ability.required_scopes),
-                        "grant": ability.grant or None,
-                        "capability": ability.capability or None,
-                        "governs_kinds": list(ability.governs_kinds),
-                        "subject_resource": ability.subject_resource or None,
-                    }
-                    for ability in spec.abilities
-                ],
-            }
-            for spec in integration_graph().connections.values()
-        ],
+        "name": ability.name,
+        "label": ability.label,
+        "summary": ability.summary,
+        "effect": ability.effect,
+        "required_scopes": list(ability.required_scopes),
+        "grant": ability.grant or None,
+        "capability": ability.capability or None,
+        "governs_kinds": list(ability.governs_kinds),
+        "subject_resource": ability.subject_resource or None,
     }
 
 
-def list_connections(*, principal: Principal) -> dict:
-    """Serialize safe connection state for machine adapters; never credentials."""
+def _connection(spec: ConnectionSpec, principal: Principal | None) -> ConnectionDescription:
+    described: ConnectionDescription = {
+        "name": spec.name,
+        "label": spec.label,
+        "summary": spec.summary,
+        "required_capabilities": list(required_capability_names(spec)),
+        "web_route": spec.web_route or None,
+        "management_route": spec.management_route or None,
+        "setup_route": spec.setup_route or None,
+        "documentation_url": spec.documentation_url or None,
+        "secret_store": spec.secret_store or None,
+        "abilities": [_ability(ability) for ability in spec.abilities],
+    }
+    if principal is not None:
+        described["permitted"] = principal.permits(*spec.required_capabilities)
+    return described
 
-    groups = connection_catalog(principal=principal)
+
+def describe_connections(*, principal: Principal | None = None) -> ConnectionCatalog:
+    """Every connection family and its abilities; given ``principal``, each
+    entry says whether it is ``permitted``: whether the principal's
+    capabilities admit the family."""
+
     return {
-        "ok": True,
-        "schema_version": 1,
-        "groups": [
-            {
-                "name": group.spec.name,
-                "label": group.spec.label,
-                "summary": group.spec.summary,
-                "secret_store": group.spec.secret_store or None,
-                "instances": [serialize_connection(connection) for connection in group.connections],
-            }
-            for group in groups
-        ],
+        "schema_version": CONNECTIONS_SCHEMA_VERSION,
+        "connections": [_connection(spec, principal) for spec in integration_graph().connections.values()],
     }
 
 

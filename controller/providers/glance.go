@@ -331,24 +331,6 @@ func (r *Registry) hostGlance(ctx context.Context, key, ref string) (GlanceMachi
 	}, nil
 }
 
-// containerCPUPercent is Docker's share-of-one-core CPU for a stats sample.
-func containerCPUPercent(stats dockerStats) float64 {
-	cpu, previous := stats.CPUStats, stats.PreCPUStats
-	cpuDelta := float64(cpu.CPUUsage.TotalUsage) - float64(previous.CPUUsage.TotalUsage)
-	systemDelta := float64(cpu.SystemUsage) - float64(previous.SystemUsage)
-	online := float64(cpu.OnlineCPUs)
-	if online == 0 {
-		online = float64(len(cpu.CPUUsage.PercpuUsage))
-	}
-	if online == 0 {
-		online = 1
-	}
-	if cpuDelta > 0 && systemDelta > 0 {
-		return cpuDelta / systemDelta * online * 100
-	}
-	return 0
-}
-
 // getAnswer GETs address and decodes the answer into T, logging the call's time.
 func getAnswer[T any](ctx context.Context, r *Registry, address string, headers map[string]string, what string) (T, error) {
 	return timedStep("call", what, func() (T, error) {
@@ -437,9 +419,40 @@ func (r *Registry) portainerGlance(ctx context.Context, wanted map[string]bool) 
 // others: without a type, Docker also measures each container's writable layer.
 const glanceDiskUsage = "/system/df?type=image&type=volume&type=build-cache"
 
+// glanceCPUWindow is the shortest time between a container's two samples, the
+// window its CPU share is taken over: the host glance's own.
+const glanceCPUWindow = 200 * time.Millisecond
+
+// sampleContainers takes one one-shot sample of each container,
+// glanceStatsLimit at a time, in the containers' order.
+func (r *Registry) sampleContainers(ctx context.Context, docker string, headers map[string]string, containers []dockerContainer) ([]dockerStats, error) {
+	samples := make([]dockerStats, len(containers))
+	stats, statsCtx := errgroup.WithContext(ctx)
+	stats.SetLimit(glanceStatsLimit)
+	for i, container := range containers {
+		stats.Go(func() (err error) {
+			samples[i], err = getAnswer[dockerStats](statsCtx, r, docker+oneShotStats(container.ID), headers, "container stats")
+			return err
+		})
+	}
+	return samples, stats.Wait()
+}
+
+// waitFor returns after d, or with the context's error when it ends first.
+func waitFor(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
 // environmentGlance measures one Docker environment's running containers: the
-// machine, its storage and the container list at once, then each container's
-// sample, glanceStatsLimit at a time.
+// machine, its storage and the container list at once, then two samples of
+// each container, glanceCPUWindow apart, for its CPU over that window.
 func (r *Registry) environmentGlance(ctx context.Context, docker string, headers map[string]string) (GlanceMachine, error) {
 	var info dockerInfo
 	var disk dockerDiskUsage
@@ -464,16 +477,14 @@ func (r *Registry) environmentGlance(ctx context.Context, docker string, headers
 			return GlanceMachine{}, &ProviderError{Message: "running containers: a container has no id"}
 		}
 	}
-	samples := make([]dockerStats, len(containers))
-	stats, statsCtx := errgroup.WithContext(groupCtx)
-	stats.SetLimit(glanceStatsLimit)
-	for i, container := range containers {
-		stats.Go(func() (err error) {
-			samples[i], err = getAnswer[dockerStats](statsCtx, r, docker+"/containers/"+container.ID+"/stats?stream=false&one-shot=true", headers, "container stats")
-			return err
-		})
+	first, statsErr := r.sampleContainers(groupCtx, docker, headers, containers)
+	var second []dockerStats
+	if statsErr == nil {
+		statsErr = waitFor(groupCtx, glanceCPUWindow)
 	}
-	statsErr := stats.Wait()
+	if statsErr == nil {
+		second, statsErr = r.sampleContainers(groupCtx, docker, headers, containers)
+	}
 	if err := group.Wait(); err != nil {
 		return GlanceMachine{}, err
 	}
@@ -482,9 +493,12 @@ func (r *Registry) environmentGlance(ctx context.Context, docker string, headers
 	}
 	var cpu float64
 	var memoryUsed int64
-	for _, sample := range samples {
-		memoryUsed += max(0, sample.MemoryStats.Usage-sample.MemoryStats.Stats.InactiveFile)
-		cpu += containerCPUPercent(sample)
+	for i, sample := range second {
+		used, _ := memoryInUse(sample)
+		memoryUsed += used
+		if share, ok := cpuShare(first[i], sample); ok {
+			cpu += share
+		}
 	}
 	return GlanceMachine{
 		Status:  "good",

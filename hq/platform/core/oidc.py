@@ -7,17 +7,20 @@ lazy from urllib.parse import urlsplit
 import requests
 from django.conf import settings
 from django.contrib.auth import BACKEND_SESSION_KEY, get_user_model
-from django.core.exceptions import PermissionDenied, SuspiciousOperation
+from django.core.exceptions import PermissionDenied
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 from mozilla_django_oidc.middleware import SessionRefresh
 lazy from django.utils import timezone
 lazy from django.utils.http import url_has_allowed_host_and_scheme
 
+lazy from hq.platform.application import roles, tokens
 lazy from hq.platform.application.avatars import SESSION_KEY, remember_avatar
 lazy from hq.platform.application.linked_accounts import SIGN_IN, bind_sign_in, record_claimed_accounts, sign_in_subject
 lazy from hq.platform.core.audit import record_event
 lazy from hq.platform.core.models import AuditLog
 lazy from hq.platform.core.outbound import allowed
+
+from .write_bounds import Bound
 
 logger = logging.getLogger("severino.auth")
 
@@ -30,6 +33,13 @@ SSO_FAILURE_SESSION_KEY = "oidc_failure"
 # provider every few minutes and each renewal is a login to Django, so the
 # account's last login says only that the session is alive.
 SIGNED_IN_SESSION_KEY = "signed_in_at"
+
+# A stranger who starts a handshake, or answers one HQ did not start, gets a
+# session row; a refused sign-in's audit row needs the provider's own answer.
+HANDSHAKE = Bound(
+    "sign-in handshake",
+    "one session row a handshake, deleted each day once it has expired",
+)
 
 
 def sso_only() -> bool:
@@ -47,20 +57,43 @@ def _tailscale_principal(payload) -> str:
     return value if value and len(value) <= 254 else ""
 
 
+def _verified_email(claims) -> str:
+    """The address the provider stands behind, or "": an unverified one is the person's own say-so."""
+
+    email = claims.get("email")
+    if not isinstance(email, str) or claims.get("email_verified") is not True:
+        return ""
+    return email.strip().lower()
+
+
+def _refuse(request, reason: str) -> None:
+    """Audit a refused sign-in and keep its reason for the page it lands on.
+
+    Every refusal comes through here, since the login page reads a sign-in
+    with no reason as one the person cancelled.
+    """
+
+    record_event(action=AuditLog.Action.DENIED, type_label="Sign-in", message=reason)
+    request.session[SSO_FAILURE_SESSION_KEY] = reason
+
+
 class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
     """Map approved Pocket ID users onto Django users."""
 
     # The claims get_userinfo read in this sign-in.
     _userinfo: dict[str, Any] | None = None
+    # The role verify_claims resolved for this sign-in, which get_or_create_user writes.
+    _role = ""
 
     @override
     def authenticate(self, request, **kwargs):
-        """A provider that refuses the exchange is a failed sign-in, not a crash.
+        """A provider that refuses the exchange, or a token HQ refuses, is a failed sign-in, not a crash.
 
         The library raises out of ``authenticate()`` when the token endpoint
         answers an error, which Django turns into a 500. And the failure URL
         is the login page, which with single sign-on only goes straight back to
         the provider, so it has to be told why it stopped (``sso_failed``).
+        The library raises only once it has a request to read the code from.
         """
 
         try:
@@ -75,33 +108,36 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
                 else "HQ could not reach Pocket ID to finish signing in."
             )
             logger.warning(reason, extra={"event": "auth.sso.exchange_failed", "status": status})
-
-            record_event(action=AuditLog.Action.DENIED, type_label="Sign-in", message=reason)
-            # The library raises only once it has a request to read the code from.
-            request.session[SSO_FAILURE_SESSION_KEY] = reason
-            return None
+        except tokens.TokenError:
+            reason = "HQ could not verify the sign-in Pocket ID sent. Sign in again."
+        _refuse(request, reason)
+        return None
 
     @override
-    def verify_token(self, token, **kwargs):
-        """Check who the token was minted for, which the library does not.
+    def retrieve_matching_jwk(self, token):
+        """The key the machine API holds, so a sign-in never fetches the key set.
 
-        `mozilla_django_oidc` decodes with `verify_aud: False` and passes no
-        issuer, so every RS256 token signed by a key in the provider's JWKS
-        verifies here, including one minted for a different client. HQ's own
-        machine API already pins both; this is the browser path meeting it.
+        A key not held is a refused sign-in, and a read of the key set asked
+        for, so the person's next try finds it.
         """
 
-        payload = super().verify_token(token, **kwargs)
-        audience = payload.get("aud")
-        allowed = {audience} if isinstance(audience, str) else set(audience or ())
+        return tokens.signing_key(token)
+
+    @override
+    def get_payload_data(self, token, key):
+        """The claims of an ID token for this client, checked as every token HQ is handed.
+
+        The library decodes with `verify_aud: False` and no issuer; this is
+        the machine API's one check, with HQ's client as the audience. OpenID
+        Connect adds `azp` to its ID token validation, which PyJWT does not read.
+        """
+
         client_id = settings.OIDC_RP_CLIENT_ID
-        if client_id not in allowed:
-            raise SuspiciousOperation("The ID token was issued for another client.")
-        if len(allowed) > 1 and payload.get("azp") != client_id:
-            raise SuspiciousOperation("The ID token was authorized for another party.")
-        issuer = settings.OIDC_ISSUER
-        if not issuer or payload.get("iss") != issuer:
-            raise SuspiciousOperation("The ID token came from another issuer.")
+        payload = tokens.decode(token, key, audience=client_id, types=tokens.ID_TOKEN_TYPES)
+        audience = payload["aud"]
+        if not isinstance(audience, str) and len(audience) > 1 and payload.get("azp") != client_id:
+            logger.warning("Rejected an ID token authorized for another party.", extra={"event": "api.token.rejected"})
+            raise tokens.TokenError("The ID token was authorized for another party.")
         return payload
 
     @override
@@ -120,6 +156,8 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
 
         bind_sign_in(user, self._subject_key(payload))
         record_claimed_accounts(user, payload)
+        if self._role:
+            roles.assign(user, self._role)
         # authenticate() holds the callback's request, whose session the library reads too.
         session = self.request.session
         session.setdefault(SIGNED_IN_SESSION_KEY, timezone.now().isoformat())
@@ -157,22 +195,26 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
     def verify_claims(self, claims):
         preferred_username = claims.get("preferred_username", "").strip()
         email = claims.get("email", "").strip().lower()
-        if not preferred_username and not email:
+        if (not preferred_username and not email) or not self._subject_key(claims):
+            _refuse(self.request, "Pocket ID did not say who this account is, so HQ cannot sign it in.")
             return False
-        if not self._subject_key(claims):
-            return False
 
-        allowed_emails = settings.SEVERINO_OIDC_ALLOWED_EMAILS
-        allowed_groups = settings.SEVERINO_OIDC_ALLOWED_GROUPS
-        groups = set(claims.get("groups") or [])
+        if not settings.SEVERINO_OIDC_ROLE_GROUPS and not settings.SEVERINO_OIDC_ALLOWED_EMAILS:
+            reason = "Nobody can sign in until HQ's settings name the people or groups allowed in."
+            _refuse(self.request, reason)
+            raise PermissionDenied(reason)
+        self._role = resolved_role(claims)
+        if not self._role:
+            _refuse(
+                self.request, "Your account is in no group HQ admits. An operator can add you to one, then sign in."
+            )
+        return bool(self._role)
 
-        if allowed_emails or allowed_groups:
-            # An unverified address is a claim the person made about
-            # themselves, not one the provider stands behind.
-            verified_email = email if claims.get("email_verified") is True else ""
-            return bool(groups & allowed_groups) or (bool(verified_email) and verified_email in allowed_emails)
+    @override
+    def get_user(self, user_id):
+        """The session's person, with their role, so a request reads it without a query of its own."""
 
-        raise PermissionDenied("Nobody can sign in until HQ's settings name the people or groups allowed in.")
+        return self.UserModel.objects.select_related("person_role").filter(pk=user_id).first()
 
     @staticmethod
     def _subject_key(claims) -> str:
@@ -183,13 +225,13 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
 
     @override
     def filter_users_by_claims(self, claims):
-        """The user this subject signed in as before; else one not yet bound.
+        """The user this subject signed in as before; else one not yet bound, by verified address.
 
-        A name or an address is something a person can change, so it only
-        introduces a subject to an account nobody has signed in to by subject
-        yet, and an address only when the provider verified it. After that the
-        subject alone decides, so renaming someone does not hand them another
-        person's account.
+        A name is something a person can change and an unverified address is
+        one they typed, so neither finds an account. An address the provider
+        verified introduces a subject to an account nobody has signed in to by
+        subject yet; after that the subject alone decides, so renaming someone
+        does not hand them another person's account.
         """
 
         key = self._subject_key(claims)
@@ -198,25 +240,14 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         bound = self.UserModel.objects.filter(linked_accounts__provider=SIGN_IN, linked_accounts__login=key)
         if bound.exists():
             return bound
-        unbound = self.UserModel.objects.exclude(linked_accounts__provider=SIGN_IN)
-
-        preferred_username = claims.get("preferred_username", "").strip()
-        if preferred_username:
-            users = unbound.filter(username__iexact=preferred_username)
-            if users.exists():
-                return users
-
-        email = claims.get("email", "").strip().lower()
-        if email and claims.get("email_verified") is True:
-            users = unbound.filter(email__iexact=email)
-            if users.exists():
-                return users
-
-        return self.UserModel.objects.none()
+        email = _verified_email(claims)
+        if not email:
+            return self.UserModel.objects.none()
+        return self.UserModel.objects.exclude(linked_accounts__provider=SIGN_IN).filter(email__iexact=email)
 
     @override
     def create_user(self, claims):
-        email = claims.get("email", "").strip().lower()
+        email = _verified_email(claims)
         username = claims.get("preferred_username", "").strip() or email.split("@", 1)[0] or claims.get("sub", "")
         username = self._unique_username(username)
 
@@ -234,7 +265,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
     def update_user(self, user, claims):
         changed = []
         mappings = {
-            "email": claims.get("email", "").strip().lower(),
+            "email": _verified_email(claims),
             "first_name": claims.get("given_name", "")[:150],
             "last_name": claims.get("family_name", "")[:150],
         }
@@ -255,6 +286,26 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
             candidate = f"{base[:140]}-{suffix}"
             suffix += 1
         return candidate
+
+
+def resolved_role(claims) -> str:
+    """The highest role the person's groups and verified address are given, or "" for none.
+
+    A group HQ's settings do not name, and a `groups` claim that is missing or
+    not a list, give nothing.
+    """
+
+    groups = claims.get("groups")
+    named = settings.SEVERINO_OIDC_ROLE_GROUPS
+    held = (
+        [named[group] for group in groups if isinstance(group, str) and group in named]
+        if isinstance(groups, list)
+        else []
+    )
+    email = _verified_email(claims)
+    if email in settings.SEVERINO_OIDC_ALLOWED_EMAILS:
+        held.append(settings.SEVERINO_OIDC_ALLOWED_EMAILS[email])
+    return roles.highest(held)
 
 
 class HQSessionRefresh(SessionRefresh):

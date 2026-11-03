@@ -25,7 +25,7 @@ SEVERINO_MEDIA_ROOT = "/path/to/state/hq-dev-media"
 # Single sign-on.
 SEVERINO_OIDC_ISSUER = "https://sso.example.com/application/o/hq-dev/"
 SEVERINO_OIDC_CLIENT_ID = "hq-dev"
-SEVERINO_OIDC_ALLOWED_GROUPS = "admins"
+SEVERINO_OIDC_ROLE_GROUPS = "admins=operator"
 
 # Production's zone, so dates mean what they mean there.
 DJANGO_TIME_ZONE = "UTC"

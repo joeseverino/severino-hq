@@ -17,6 +17,7 @@ from django.test.utils import CaptureQueriesContext
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.platform.core import revisions
 from hq.platform.core.models import AuditLog
+from hq.platform.core.tests import audit_rows
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from hq.platform.search_index.models import SearchDocument
 
@@ -133,14 +134,14 @@ class ChangedSweepTests(TestCase):
 
     def test_an_observation_that_changed_is_saved_audited_and_indexed(self):
         ManagedResource.objects.filter(pk=self.first.pk).update(spec={**self.records[0], "answer": "192.0.2.99"})
-        AuditLog.objects.all().delete()
+        before = audit_rows.mark()
 
         _sweep([{**self.records[0], "answer": "192.0.2.99"}, self.records[1]])
 
         self.first.refresh_from_db()
         self.assertEqual(self.first.status["answer"], "192.0.2.99")
-        updates = AuditLog.objects.filter(object_type="Managed resource", action=AuditLog.Action.UPDATED)
+        updates = audit_rows.since(before).filter(object_type="Managed resource", action=AuditLog.Action.UPDATED)
         self.assertEqual(updates.count(), 1)
         self.assertIn("status", updates.get().metadata["changes"])
-        body = SearchDocument.objects.get(scope="infrastructure.resources", object_id="app0").body
+        body = SearchDocument.objects.get(scope="infrastructure", object_id="app0").body
         self.assertEqual(body.count("192.0.2.99"), 2)

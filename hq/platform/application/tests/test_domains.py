@@ -12,6 +12,7 @@ from django.utils import timezone
 from hq.domains.content.models import ContentItem
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.application.security import cli_principal
 
 from ..dashboard import work_queue
 from ..domains import (
@@ -159,7 +160,7 @@ class ComposedQueueTests(TestCase):
         zero on the page an operator reads every day teaches them to skim the
         row it sits in, and the row above it is the work queue.
         """
-        labels = [card["label"] for card in domain_dashboard_cards()]
+        labels = [card["label"] for card in domain_dashboard_cards(cli_principal())]
         self.assertFalse([label for label in labels if label.startswith("Expenses")], labels)
 
         Expense.objects.create(
@@ -171,7 +172,7 @@ class ComposedQueueTests(TestCase):
         )
 
         # Lights up on its own the moment the section has something to say.
-        labels = [card["label"] for card in domain_dashboard_cards()]
+        labels = [card["label"] for card in domain_dashboard_cards(cli_principal())]
         self.assertTrue([label for label in labels if label.startswith("Expenses")], labels)
 
     def test_the_card_row_reads_in_the_same_order_as_the_bar(self):
@@ -180,7 +181,7 @@ class ComposedQueueTests(TestCase):
             name="Live", slug="live", repository_url="https://github.com/example/live", dependency_updates=True
         )
 
-        cards = domain_dashboard_cards()
+        cards = domain_dashboard_cards(cli_principal())
         labels = [card["label"] for card in cards]
 
         # Build (100) before Web (110), matching the nav, so the row does not

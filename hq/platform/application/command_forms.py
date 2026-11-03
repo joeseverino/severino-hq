@@ -1,7 +1,6 @@
 """Django forms derived from the capability registry's JSON Schemas."""
 
 import re
-import secrets
 from collections.abc import Mapping
 from typing import Any, ClassVar, override
 
@@ -11,15 +10,17 @@ from django.core.validators import RegexValidator
 from django.utils.datastructures import MultiValueDict
 
 from .capabilities import CapabilitySpec
-from .command_fields import named_records, referred
+from .command_fields import is_upload, named_records, referred
 from .command_targets import CommandTargetOption
-from .forms import LinesField
-from .integration_specs import command_schema
+from .describe import meanings
+from .forms import LinesField, UploadField
+from .integration_specs import IDEMPOTENCY_FIELD, capability_schema, command_schema
+from .json_schemas import fields as whole_fields, labeled_choices
+from .labels import field_label
 from .records import as_its_model_declares
 from .references import keeping_held, leave_off_unoffered
 from .ui import ended
-
-_EXECUTION_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+from .web_writes import RETRY_KEY_FIELD
 
 
 class PrimitiveListField(LinesField):
@@ -65,17 +66,6 @@ def _one_type(schema: dict[str, Any]) -> dict[str, Any]:
     return {**schema, **concrete[0], "anyOf": choices}
 
 
-def _label(name: str, title: str | None) -> str:
-    """A field's label in sentence case, as every other form says it. A title
-    the command declares is its own; the one Pydantic derives from the name
-    ("Item Name") is only the name, title-cased."""
-
-    words = name.replace("_", " ")
-    if title and title != words.title():
-        return title
-    return words.capitalize()
-
-
 def _record_choice(
     effective: dict[str, Any], offered: tuple[CommandTargetOption, ...], options: dict[str, Any]
 ) -> forms.Field:
@@ -104,28 +94,26 @@ def _field_for_schema(
     *,
     required: bool,
     offered: tuple[CommandTargetOption, ...] | None = None,
+    meaning: str | None = None,
 ) -> forms.Field:
     effective = _one_type(schema)
     kind = effective.get("type")
     options: dict[str, Any] = {
         "required": required,
-        "label": _label(name, schema.get("title")),
-        "help_text": schema.get("description", ""),
+        "label": field_label(name, schema.get("title")),
+        # What the field means, without the part only a client reads (``describe``).
+        "help_text": schema.get("description", "") if meaning is None else meaning,
     }
     if "default" in schema and schema["default"] is not None:
         options["initial"] = schema["default"]
     if offered is not None:
         return _record_choice(effective, offered, options)
+    if is_upload(schema):
+        return UploadField(**options)
 
-    labeled = schema.get("oneOf")
-    if labeled and all("const" in choice for choice in labeled):
-        return forms.ChoiceField(
-            choices=[(choice["const"], choice.get("title", str(choice["const"]))) for choice in labeled],
-            **options,
-        )
-    choices = effective.get("enum")
+    choices = labeled_choices(effective)
     if choices:
-        return forms.ChoiceField(choices=[(value, str(value)) for value in choices], **options)
+        return forms.ChoiceField(choices=choices, **options)
     if kind == "boolean":
         return forms.BooleanField(**{**options, "required": False})
     if kind == "integer":
@@ -187,7 +175,7 @@ def is_switch(schema: dict[str, Any]) -> bool:
     """Whether a command sets one thing to yes or no: its one own field is a boolean."""
 
     names = own_fields(schema)
-    return len(names) == 1 and _one_type(schema["properties"][next(iter(names))]).get("type") == "boolean"
+    return len(names) == 1 and _one_type(whole_fields(schema)[next(iter(names))]).get("type") == "boolean"
 
 
 def switch_field(spec: CapabilitySpec) -> str:
@@ -225,8 +213,6 @@ class CapabilityCommandForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if "idempotency_key" in self.fields and not self.is_bound:
-            self.fields["idempotency_key"].initial = f"command:{secrets.token_urlsafe(18)}"
         for name in self.record_names:
             self._hold(self.fields[name], self.initial.get(name))
         leave_off_unoffered(
@@ -234,7 +220,8 @@ class CapabilityCommandForm(forms.Form):
         )
         if not self.is_bound or not isinstance(self.data, MultiValueDict):
             return
-        allowed = set(self.fields) | {"csrfmiddlewaretoken"}
+        # And what ``{% write_token %}`` draws beside the fields.
+        allowed = set(self.fields) | {"csrfmiddlewaretoken", RETRY_KEY_FIELD}
         unknown = sorted(set(self.data) - allowed)
         repeated = sorted(
             name
@@ -265,10 +252,9 @@ class CapabilityCommandForm(forms.Form):
         self.command_payload = {}
         for name in self.payload_names:
             value = cleaned.get(name)
-            field_schema = self.payload_schema[name]
-            if value in (None, "") and "default" in field_schema:
-                continue
-            if value is None and name not in self.payload_schema.get("required", ()):
+            # A blank the command may be sent without is left out, as a caller
+            # leaves it out: it takes its default, or an update keeps it.
+            if value in (None, "", []) and name not in self.payload_schema["required"]:
                 continue
             self.command_payload[name] = value
         return cleaned
@@ -285,6 +271,10 @@ def grouped_choices(options: tuple[CommandTargetOption, ...]) -> tuple:
     return tuple((group or "Other", tuple(choices)) for group, choices in sorted(groups.items()))
 
 
+def _title(used: Mapping[str, Any]) -> dict[str, Any]:
+    return {"title": used["title"]} if "title" in used else {}
+
+
 def command_form_class(
     spec: CapabilitySpec,
     *,
@@ -298,19 +288,31 @@ def command_form_class(
     """
 
     schema = as_its_model_declares(spec.command_type, command_schema(spec.command_type))
-    properties = schema.get("properties", {})
-    required = frozenset(schema.get("required", ()))
+    # A command that keeps its retry key is handed the one key the form
+    # posts, which ``{% write_token %}`` draws (``web_writes``).
+    properties = {name: field for name, field in whole_fields(schema).items() if name != IDEMPOTENCY_FIELD}
+    # What the command must be sent, which for an update is no field it keeps.
+    required = frozenset(capability_schema(spec).get("required", ()))
     offered = {
         name: (record_choices or {}).get(name)
         for name, field in properties.items()
         if named_records(field) is not None or referred(field) is not None
     }
+    said = meanings(spec.command_type)
+    # A field is labeled from its name or the title its own use declares: the
+    # title a shared alias's definition carries names the alias, for a viewer
+    # offering its branches (``json_schemas``), never this field.
+    used = schema.get("properties", {})
     fields = {
-        name: _field_for_schema(name, field, required=name in required, offered=offered.get(name))
+        name: _field_for_schema(
+            name,
+            {key: value for key, value in field.items() if key != "title"} | _title(used.get(name, {})),
+            required=name in required,
+            offered=offered.get(name),
+            meaning=said.get(name),
+        )
         for name, field in properties.items()
     }
-    if "idempotency_key" in fields:
-        fields["idempotency_key"].widget = forms.HiddenInput()
     if spec.target_kind:
         options = {"label": spec.target_label or "Which one", "help_text": spec.target_help}
         if target_options is None:
@@ -326,16 +328,6 @@ def command_form_class(
         # Filled from the record a chosen target loads, never typed: a save
         # made against a record that changed since is refused.
         fields["__expected_updated_at"] = forms.CharField(required=False, widget=forms.HiddenInput())
-    fields["__execution_key"] = forms.CharField(
-        max_length=128,
-        validators=[
-            RegexValidator(
-                _EXECUTION_KEY,
-                "The execution key must contain only URL-safe characters.",
-            )
-        ],
-        widget=forms.HiddenInput(),
-    )
     fields["next"] = forms.CharField(required=False, widget=forms.HiddenInput())
     if spec.effect in {"infrastructure_change", "destructive"}:
         fields["__confirm_effect"] = forms.BooleanField(

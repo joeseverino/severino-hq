@@ -29,7 +29,7 @@ def every_file(root):
 
 
 def listed():
-    return ["git", "ls-files"]
+    return ["git", "ls-files", "-z"]
 """
 
 

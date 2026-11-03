@@ -21,6 +21,7 @@ from hq.platform.application.tests import test_github_estate as estate
 from hq.platform.application.tests.markup import Element, all_elements, hrefs, select, text, with_class, within
 from hq.platform.application.tests.test_github_estate import store
 from hq.platform.application.tests.test_github_posture import kept
+from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.models import AuditLog
 
 URL = "https://github.com/example/alpha"
@@ -293,7 +294,7 @@ class LastRunSurfaceTests(TestCase):
         self.assertTrue(run_controls(response))
 
         posted = self.client.post(
-            reverse("projects:updates_run", args=["alpha"]), HTTP_X_REQUESTED_WITH="XMLHttpRequest"
+            reverse("projects:updates_run", args=["alpha"]), form_keyed(), HTTP_X_REQUESTED_WITH="XMLHttpRequest"
         )
 
         self.assertEqual(posted.status_code, 202)

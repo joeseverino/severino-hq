@@ -11,18 +11,15 @@ server-rendered: the panel works before any script runs, arrow keys move
 between tabs for free, and there is no state to fall out of step with the
 markup.
 
-The inputs are siblings of the panels rather than children of the tab strip,
-because the selector that shows a panel is a sibling combinator and cannot
-climb back out of a wrapper. The labels sit in the strip and point at them by
-id, which is what keeps the visual grouping without nesting the controls.
+Each radio sits inside its tab's label, and the stylesheet reads which one is
+checked through `:has()`. The strip carries no tablist role: its children are
+radios, which assistive technology already announces as one group by their
+shared name, and a tablist owning no tabs would say otherwise.
 {% endcomment %}
 {% card element="div" css="chart-tabs" %}
-  {% for chart in charts %}
-    <input type="radio" name="tabs-{{ group }}" id="tab-{{ group }}-{{ forloop.counter }}" class="chart-tab-input"{% if forloop.first %} checked{% endif %}>
-  {% endfor %}
-  <div class="chart-tablist" role="tablist">
+  <div class="chart-tablist">
     {% for chart in charts %}
-      <label class="chart-tab" for="tab-{{ group }}-{{ forloop.counter }}">{{ chart.title|breakable }}</label>
+      <label class="chart-tab"><input type="radio" name="tabs-{{ group }}" class="chart-tab-input"{% if forloop.first %} checked{% endif %}>{{ chart.title|breakable }}</label>
     {% endfor %}
   </div>
   {% for chart in charts %}

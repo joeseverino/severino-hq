@@ -15,20 +15,21 @@ from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
 from hq.domains.control_plane.providers import PROVIDERS
-from hq.platform.core.network import client_ip, is_trusted_proxy, split_host_port
+from hq.platform.application.labels import dotted
+from hq.platform.core.network import client_ip, is_trusted_proxy, socket_peer, split_host_port
 
 from .entity_links import entity_link
 from .path_model import NETWORK_LABELS, Hop, HopSource, Route, ServicePath, last_machine
 from .paths import hq_path, why_unread
 from .reach import network_of
 from .request_addresses import Address, addresses_of, addresses_of_hq
-from .request_channel import forwarded_chain, socket_peer
+from .request_channel import forwarded_chain
 from .request_connection import Connection, connection
 from .request_headers import Header, headers_of
 from .ui import ended
 lazy from . import connections
 lazy from .connection_security import observed_request_controls
-lazy from .derived_reads import serialize_hop, serialize_layer
+lazy from .derived_reads import serialize_hop
 lazy from .facts import Subject, readings
 lazy from .hq_self import own_addresses, served_at, served_port, site_label
 lazy from .locate import index_of
@@ -135,11 +136,12 @@ def address_chain(request) -> tuple[Evidence, ...]:
     roles = _roles(chain)
     found = [_address(value, roles[index], _CHAIN_DETAIL[roles[index]]) for index, value in enumerate(chain)]
     if "judged" not in roles.values():
-        found[-1] = _address(
+        # The first hop is the one the forwarded-header middleware takes then.
+        found[0] = _address(
             client_ip(request),
             "judged",
             "Every address this request passed through is a trusted proxy, so "
-            "HQ has no address for the caller and uses the proxy's.",
+            "HQ has no address for the caller and uses the first proxy's.",
         )
     return tuple(found)
 
@@ -223,7 +225,7 @@ def _whose(found: Connection) -> str:
         owner = "yours"
     else:
         owner = f"owned by {device.user}" if device.user else "no reported owner"
-    return " · ".join(part for part in (device.os, owner) if part)
+    return dotted(device.os, owner)
 
 
 def _device_gap(found: Connection) -> str:
@@ -315,7 +317,7 @@ def _with_leg(hop: Hop, found: Connection) -> Hop:
     return replace(
         hop,
         name="Connected" if found.path == "idle" else found.leg_label,
-        detail=f"{hop.detail} · handshake {presence.handshake}",
+        detail=dotted(hop.detail, f"handshake {presence.handshake}"),
         source=HopSource(TAILNET_KIND, presence.connection_ref, presence.observed_at),
     )
 
@@ -686,7 +688,7 @@ class RequestPath:
         if checked and proven == len(checked):
             return f"All {len(checked)} steps confirmed by this request"
         text = f"{proven} of {len(checked)} steps confirmed by this request"
-        return f"{text} · {len(self.findings)} disagree" if self.findings else text
+        return dotted(text, f"{len(self.findings)} disagree") if self.findings else text
 
 
 def request_path(request) -> RequestPath:
@@ -733,7 +735,6 @@ def serialize_request_path(found: RequestPath) -> dict[str, Any]:
             "measured_by": connection.measurement_label,
             "tailnet_observed_at": iso(connection.tailnet_observed_at),
             "identity_agrees": connection.identity.corroborated,
-            "layers": [serialize_layer(layer) for layer in connection.layers],
         },
         "addresses": [_address_row(row) for row in found.addresses],
         "hq_addresses": [_address_row(row) for row in found.hq_addresses],

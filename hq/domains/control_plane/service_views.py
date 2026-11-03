@@ -11,7 +11,6 @@ from django.views import View
 from django.views.generic import TemplateView
 
 from hq.platform.application.adoption import unmanaged_services
-from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.connections import machines_once
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.exposure import OPEN
@@ -37,6 +36,7 @@ from hq.platform.application.service_facets import CERTIFICATE_FACET, DNS_FACET,
 from hq.platform.application.service_list import listed_service, listed_services
 from hq.platform.application.services import alias_target
 from hq.platform.application.ui import PageNavigation, PageSection
+from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.platform.application.page_relations import for_service
 lazy from hq.platform.application.pins import MOVE, PIN, SERVICE, ordered
 
@@ -160,7 +160,7 @@ class ServiceDetailView(PageMixin, TemplateView):
     def get_page_title(self):
         return self.service.hostname
 
-    page_trail = ("Services", reverse_lazy("control_plane:services"))
+    page_trail = (("Services", reverse_lazy("control_plane:services")),)
 
     @override
     def get_page_navigation(self):
@@ -285,9 +285,7 @@ class ServicePinView(View):
         name = normalized_hostname(hostname)
         if not name:
             raise Http404("No such service.")
-        result = execute_capability(self.capability, self.payload(name), principal=web_principal(request.user))
-        if not result["ok"]:
-            messages.error(request, result["error"]["message"])
+        refused(request, execute_posted(request, self.capability, self.payload(name)))
         return redirect(safe_next(request) or reverse("control_plane:services"))
 
 

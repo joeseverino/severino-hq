@@ -2,9 +2,14 @@
 
 from dataclasses import asdict
 from hashlib import sha256
-from typing import Any
+from typing import Annotated, Any
 
+from .json_schemas import Written
 from .workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, WorkflowStep
+
+# A plan and an action as an answer carries them.
+WrittenWorkflow = Annotated[dict[str, Any], Written(WorkflowPlan)]
+WrittenAction = Annotated[dict[str, Any], Written(ActionLink)]
 
 
 def claim_identity(namespace: str, rule: str, subject: str, scope: str = "") -> str:
@@ -67,7 +72,7 @@ def claim_resolution_plan(
     )
 
 
-def serialize_workflow(plan: WorkflowPlan | None) -> dict[str, Any] | None:
+def serialize_workflow(plan: WorkflowPlan | None) -> WrittenWorkflow | None:
     """JSON-safe contract shared by API and MCP finding adapters."""
 
     return asdict(plan) if plan is not None else None

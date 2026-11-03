@@ -1,4 +1,4 @@
-"""The OpenAPI document is valid, complete, and what the API really answers.
+"""The OpenAPI document is complete, and what the API really answers.
 
 Complete means derived: every route, capability, resource operation and domain
 appears without anyone listing it (application/tests/test_domain_declaration.py
@@ -8,9 +8,8 @@ request; the tests below cover the document's own route and the contract
 client's refusals.
 """
 
-import importlib.util
 import json
-from unittest import skipUnless
+import re
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -21,16 +20,52 @@ from jsonschema import ValidationError
 
 from hq.platform.application.capabilities import capability_registry, describe_capabilities
 from hq.platform.application.domains import all_domains
+from hq.platform.application.idempotency import InvalidIdempotencyKey, validate_key
+from hq.platform.application.integration_specs import IDEMPOTENCY_FIELD, IDEMPOTENCY_HEADER
+from hq.platform.application.json_schemas import fields as whole_fields
 from hq.platform.application.resources import resource_registry
-from hq.platform.application.security import cli_principal, could_hold
+from hq.platform.application.security import Capability, cli_principal, could_hold
+from hq.platform.core.models import AuditLog
+from hq.platform.core.test_runner import no_default_role
 
 from .. import openapi, views
 from ..testing import Contract, ContractClient
-from .test_api import _OTHER_KEY as OTHER_KEY, ISSUER, RESOURCE, _serving, _token
+from .tokens import ISSUER, OTHER_KEY, RESOURCE, _serving, _token
 
-VALIDATOR = importlib.util.find_spec("openapi_spec_validator") is not None
 # A list that matched nothing, with every field the collection contract requires.
-EMPTY_PAGE = {"items": [], "count": 0, "total": 0, "truncated": False, "next": ""}
+EMPTY_PAGE = {"items": [], "count": 0, "total": 0, "truncated": False, "next": None}
+
+
+def _last(reference: str) -> str:
+    return reference.rsplit("/", 1)[-1]
+
+
+def _resolved(document: dict, value):
+    """``value`` with each reference into the document's schemas replaced by what it names."""
+
+    if isinstance(value, list):
+        return [_resolved(document, item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    if "$ref" in value and value["$ref"].startswith("#/components/schemas/"):
+        named = document["components"]["schemas"][_last(value["$ref"])]
+        return _resolved(document, {**named, **{key: item for key, item in value.items() if key != "$ref"}})
+    return {key: _resolved(document, item) for key, item in value.items()}
+
+
+def _named(document: dict, value: dict) -> dict:
+    """What a bare reference into the document's components names, followed to the end."""
+
+    while set(value) == {"$ref"}:
+        section, name = value["$ref"].removeprefix("#/components/").split("/")
+        value = document["components"][section][name]
+    return value
+
+
+def _unsaid(schema) -> dict:
+    """A query field's schema without its words, which its parameter carries."""
+
+    return {key: value for key, value in schema.items() if key != "description"}
 
 
 def _operations(value: dict) -> list[tuple[str, str, dict]]:
@@ -42,14 +77,6 @@ class DocumentTests(SimpleTestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.document = openapi.document()
-
-    @skipUnless(VALIDATOR, "openapi-spec-validator is a development tool, not in the image")
-    def test_it_is_a_valid_openapi_3_2_document(self):
-        from openapi_spec_validator import validate
-        from openapi_spec_validator.validation import OpenAPIV32SpecValidator
-
-        self.assertTrue(self.document["openapi"].startswith("3.2."))
-        validate(self.document, cls=OpenAPIV32SpecValidator)
 
     def test_it_names_its_served_url(self):
         self.assertEqual(self.document["$self"], reverse("hq_api:openapi"))
@@ -88,17 +115,18 @@ class DocumentTests(SimpleTestCase):
     def test_list_queries_emit_each_field_and_preserve_the_strict_schema(self):
         from hq.platform.application.resources import describe_resources
 
-        resources = {spec["name"]: spec for spec in describe_resources()["resources"]}
+        resources = {
+            spec["name"]: describe_resources(name=spec["name"])["resources"][0]
+            for spec in describe_resources()["resources"]
+        }
         for _, _, operation in _operations(self.document):
             name = operation.get("x-hq-resource")
             if not name or "x-hq-identifier" in operation:
                 continue
-            expected = openapi._Components().hoist(
-                resources[name]["operations"]["list"]["query_schema"],
-                f"{openapi._pascal(name)}Query",
-            )
-            self.assertEqual(operation["x-hq-query-schema"], expected)
-            parameters = {parameter["name"]: parameter for parameter in operation["parameters"] if "name" in parameter}
+            query = resources[name]["operations"]["list"]["query_schema"]
+            expected = openapi._Components().hoist({**query, "properties": whole_fields(query)})
+            written = [_named(self.document, parameter) for parameter in operation["parameters"]]
+            parameters = {parameter["name"]: parameter for parameter in written if parameter["name"] != "fields"}
             self.assertEqual(set(parameters), set(expected.get("properties", {})))
             # The selection sits beside the query, never inside it.
             self.assertIn({"$ref": "#/components/parameters/Fields"}, operation["parameters"])
@@ -108,7 +136,10 @@ class DocumentTests(SimpleTestCase):
                 self.assertEqual(parameter["style"], "form")
                 self.assertIs(parameter["explode"], True)
                 self.assertEqual(parameter["required"], field in expected.get("required", []))
-                self.assertEqual(parameter["schema"], schema)
+                # The field's words are the parameter's, said once beside its schema.
+                self.assertEqual(
+                    _resolved(self.document, parameter["schema"]), _resolved(self.document, _unsaid(schema))
+                )
                 self.assertEqual(parameter.get("description"), schema.get("description"))
                 self.assertNotIn("content", parameter)
 
@@ -117,8 +148,11 @@ class DocumentTests(SimpleTestCase):
 
         operation = self.document["paths"]["/api/v2/findings/"]["get"]
         declared = {parameter["name"]: parameter["schema"] for parameter in operation["parameters"]}
+        said = {parameter["name"]: parameter.get("description") for parameter in operation["parameters"]}
 
-        self.assertEqual(declared, {name: dict(schema) for name, schema in views.findings.__hq_query_fields__.items()})
+        fields = views.findings.__hq_query_fields__
+        self.assertEqual(declared, {name: _unsaid(schema) for name, schema in fields.items()})
+        self.assertEqual(said, {name: schema.get("description") for name, schema in fields.items()})
         self.assertEqual(declared["limit"]["type"], "integer")
         self.assertIn("400", operation["responses"])
 
@@ -148,9 +182,35 @@ class DocumentTests(SimpleTestCase):
             if spec["name"] == "project.update"
         )
         self.assertEqual(
-            self.document["components"]["schemas"]["ProjectUpdateRequest"],
-            views.request_schema(spec),
+            _resolved(self.document, self.document["components"]["schemas"]["ProjectUpdateRequest"]),
+            _resolved(self.document, openapi._Components().hoist(views.request_schema(spec))),
         )
+
+    def test_every_retry_key_is_the_one_the_header_takes(self):
+        """A payload's key and the header are one schema, and it is the shape the key is validated by."""
+
+        shared = {"$ref": "#/components/schemas/IdempotencyKey"}
+        schemas = self.document["components"]["schemas"]
+        header = self.document["components"]["parameters"]["IdempotencyKey"]
+        self.assertEqual(header["name"], IDEMPOTENCY_HEADER)
+        self.assertEqual(header["schema"], shared)
+        written = 0
+        for _, _, operation in _operations(self.document):
+            if operation.get("x-hq-effect", "read") == "read":
+                continue
+            body = _named(self.document, operation["requestBody"]["content"]["application/json"]["schema"])
+            key = _named(self.document, body["properties"]["payload"])["properties"][IDEMPOTENCY_FIELD]
+            self.assertEqual(key, shared)
+            written += 1
+        self.assertTrue(written)
+        pattern = re.compile(schemas["IdempotencyKey"]["pattern"])
+        for value in ("a", "a" * 128, "example-key:1.2_3"):
+            self.assertTrue(pattern.search(value) and len(value) <= schemas["IdempotencyKey"]["maxLength"])
+            self.assertEqual(validate_key(value), value)
+        for value in ("a" * 129, "-a", "a b", ""):
+            self.assertFalse(pattern.search(value) and len(value) <= schemas["IdempotencyKey"]["maxLength"])
+            with self.assertRaises(InvalidIdempotencyKey):
+                validate_key(value)
 
     def test_tags_are_the_nav_tree(self):
         tags = {tag["name"]: tag for tag in self.document["tags"]}
@@ -161,38 +221,66 @@ class DocumentTests(SimpleTestCase):
                 self.assertIn(tag["parent"], tags)
                 self.assertEqual(tags[tag["parent"]]["kind"], "nav")
         projects = self.document["paths"]["/api/v2/resources/projects/"]["get"]
-        self.assertEqual(projects["tags"], ["hq.projects", "api.v2"])
-        self.assertEqual(tags["hq.projects"]["parent"], "nav.projects")
+        self.assertEqual(projects["tags"], ["hq.projects"])
+        self.assertEqual(tags["hq.docs"]["parent"], "hq.projects")
+        self.assertEqual(tags["hq.content"]["parent"], "nav.web")
 
-    def test_tags_stand_in_the_order_of_the_bar(self):
-        """A group where its first domain is, its domains after it, the rest in place."""
+    def test_the_apis_own_section_leads_and_the_rest_stand_in_the_order_of_the_bar(self):
+        """The group holding the API's own domain first, that domain first in
+        it, then the bar's order: a group where its first domain is, its
+        domains after it, the rest in place."""
 
         domains = {domain.id: domain for domain in all_domains()}
         tags = self.document["tags"]
-        self.assertEqual(tags[0]["name"], openapi.API_TAG)
+        parent = {tag["name"]: tag.get("parent") for tag in tags}
         placed = [tag["name"] for tag in tags if tag["name"] in domains]
-        self.assertEqual(
-            placed,
-            sorted(placed, key=lambda name: (domains[name].bar_order, domains[name].label)),
-        )
+        self.assertEqual(placed[0], openapi.API_TAG)
+        self.assertEqual(tags[0]["name"], parent[openapi.API_TAG])
+
+        def bar(name):
+            return domains[name].bar_order, domains[name].label
+
+        leading = [name for name in placed if parent[name] == parent[openapi.API_TAG]]
+        self.assertEqual(placed[: len(leading)], leading)
+        self.assertEqual(leading[1:], sorted(leading[1:], key=bar))
+        # A domain heading its group stands where the group does, ahead of the domains under it.
+        rest = [name for name in placed[len(leading) :] if name not in parent.values()]
+        self.assertEqual(rest, sorted(rest, key=bar))
         seen: list[str] = []
         for tag in tags:
             if "parent" in tag:
                 self.assertIn(tag["parent"], seen)
             seen.append(tag["name"])
-        groups = [tag["name"] for tag in tags if tag["name"].startswith("nav.")]
         parents = [tag["parent"] for tag in tags if "parent" in tag]
+        groups = [tag["name"] for tag in tags if tag["name"] in parents]
         self.assertEqual(groups, list(dict.fromkeys(parents)))
 
+    def test_the_apis_own_routes_stand_under_the_api_where_the_bar_has_it(self):
+        tags = {tag["name"]: tag for tag in self.document["tags"]}
+        api = next(domain for domain in all_domains() if domain.id == openapi.API_TAG)
+        group = next(item.group for item in api.navigation)
+        self.assertEqual(tags[openapi.API_TAG]["parent"], f"nav.{group.lower()}")
+        root = self.document["paths"]["/api/v2/"]["get"]
+        self.assertEqual(root["tags"][0], openapi.API_TAG)
+
+    def test_no_section_repeats_the_documents_description(self):
+        tags = self.document["tags"]
+        said = self.document["info"]["description"]
+        for tag in tags:
+            with self.subTest(tag=tag["name"]):
+                self.assertFalse(tag.get("description") and tag["description"] in said)
+
     def test_each_resource_and_capability_is_tagged_with_the_domain_it_belongs_to(self):
-        """Its declaring domain, else the domain of its web page or subject, else the API's own."""
+        """Its declaring domain, else the domain of its page, else of its subject; else none."""
 
         tags = openapi._Tags(resource_registry(), capability_registry())
         self.assertEqual(tags.of_resource("projects"), "hq.projects")
         self.assertEqual(tags.of_resource("services"), "hq.services")
-        self.assertEqual(tags.of_resource("search"), openapi.API_TAG)
+        self.assertEqual(tags.of_resource("search"), "hq.search")
         self.assertEqual(tags.of_capability("project.create"), "hq.projects")
-        self.assertEqual(tags.of_capability("pin.toggle"), openapi.API_TAG)
+        self.assertEqual(tags.of_capability("infrastructure.zone.adopt"), "hq.zones")
+        # Held only in the browser, so never in the document: no domain's to place.
+        self.assertIsNone(tags.of_capability("pin.toggle"))
         declaring = next(domain for domain in all_domains() if domain.integration.capabilities)
         declared = next(iter(declaring.integration.capabilities())).name
         self.assertEqual(tags.of_capability(declared), declaring.id)
@@ -206,30 +294,25 @@ class DocumentTests(SimpleTestCase):
                     self.assertLessEqual(len(operation["summary"]), 48)
                     self.assertFalse(operation["summary"].endswith("."))
 
-    def test_only_nav_tags_are_sections(self):
-        """A badge marks operations; a viewer is told not to list it as a section."""
-
-        for tag in self.document["tags"][1:]:
-            with self.subTest(tag=tag["name"]):
-                self.assertEqual(tag.get("x-scalar-ignore", False), tag["kind"] != "nav")
-        badges = [tag["name"] for tag in self.document["tags"] if tag.get("kind") == "badge"]
-        self.assertEqual(badges, [openapi.VERSION_TAG])
-        for _, _, operation in _operations(self.document):
-            self.assertNotIn(operation["tags"][0], badges)
-
-    def test_local_schema_definitions_are_hoisted(self):
+    def test_local_schema_definitions_are_hoisted_under_their_own_names(self):
         components = openapi._Components()
         hoisted = components.hoist(
             {
                 "type": "object",
-                "$defs": {"record": {"type": "object"}},
-                "properties": {"r": {"$ref": "#/$defs/record"}},
-            },
-            "Owner",
+                "$defs": {"Record": {"type": "object"}},
+                "properties": {"r": {"$ref": "#/$defs/Record"}},
+            }
         )
         self.assertNotIn("$defs", hoisted)
-        self.assertEqual(hoisted["properties"]["r"]["$ref"], "#/components/schemas/OwnerRecord")
-        self.assertIn("OwnerRecord", components.schemas)
+        self.assertEqual(hoisted["properties"]["r"]["$ref"], "#/components/schemas/Record")
+        self.assertIn("Record", components.schemas)
+
+    def test_two_definitions_meaning_different_things_under_one_name_fail_the_build(self):
+        components = openapi._Components()
+        components.hoist({"$defs": {"Record": {"type": "object"}}})
+
+        with self.assertRaisesRegex(openapi.OpenAPIError, "Record"):
+            components.hoist({"$defs": {"Record": {"type": "string"}}})
 
     def test_a_parameterised_route_without_an_expansion_fails_the_build(self):
         with patch.dict(openapi.EXPANSIONS, clear=True), self.assertRaises(openapi.OpenAPIError):
@@ -284,6 +367,16 @@ class ServedDocumentTests(TestCase):
         response = self.client.get(reverse("hq_api:openapi"))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), openapi.document())
+
+    def test_a_signed_in_person_with_no_role_is_refused_it_as_a_page_is(self):
+        with no_default_role():
+            self.client.force_login(get_user_model().objects.create_user("example-nobody"))
+
+        response = self.client.get(reverse("hq_api:openapi"))
+
+        self.assertEqual(response.status_code, 403)
+        denial = AuditLog.objects.filter(action=AuditLog.Action.DENIED).get()
+        self.assertEqual(denial.metadata["capability"], Capability.READ)
 
     @override_settings(SEVERINO_API_RESOURCE="")
     def test_the_operator_reads_it_where_the_token_surface_is_off(self):

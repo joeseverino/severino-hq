@@ -1,29 +1,45 @@
 """Running a job off the request thread, and saying so while it happens.
 
 A thread rather than a queue: this host is one process against one SQLite
-file, so a broker would add another thing to deploy and to fail
-(docs/Decisions.md). The row stands in for its durability: a job whose process
-vanished is `lost`, not silently absent.
+file, so a broker would add another thing to deploy and to fail. The row
+stands in for its durability: a job whose process vanished is `lost`, not
+silently absent.
 """
 
+import logging
 import threading
-import traceback
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from datetime import datetime, timedelta
 from typing import Any
 
-from django.db import IntegrityError, close_old_connections, connection, transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 lazy from django.contrib.auth.base_user import AbstractBaseUser
 lazy from django.contrib.auth.models import AnonymousUser
 
-from hq.platform.core.audit import operation_context, record_event
+from hq.platform.application.security import JOB_INTERFACE
+from hq.platform.core.attribution import door_of_its_own
+from hq.platform.core.audit import record_event
 from hq.platform.core.database import gives_way
 from hq.platform.core.facets import Counts, Failure, Timing
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import OutboundInRequest, off_request, serving_request
+from hq.platform.core.outside_requests import connections_of_its_own
 
 from .models import LOST_ERROR, Job
+
+logger = logging.getLogger("severino.jobs")
+
+# What a job whose thread could not start says went wrong.
+NOT_STARTED = "HQ could not start it; its log holds why."
+
+
+def unexpected(kind: str, job_id: Any) -> str:
+    """What a job a fault stopped says: the fault's kind, and where its trace is."""
+
+    return f"It stopped on an unexpected {kind}; HQ's log, under job {job_id}, says why."
+
 
 # How often progress reaches the database, at most. Work may report per
 # record; at a few million records the reporting would cost more than the work.
@@ -78,7 +94,7 @@ class Failed(RuntimeError):
 
     Work raises it with a sentence for whoever asked: the job ends failed and
     that sentence is what its control says. Any other exception is a fault,
-    kept with its traceback.
+    recorded by its kind, with its traceback in the log.
     """
 
 
@@ -136,10 +152,11 @@ def _launch(job: Job, work: Callable[[Progress], dict[str, Any]]) -> None:
 
     try:
         threading.Thread(target=run_job, args=(job.pk, work), name=f"job:{job.kind}", daemon=True).start()
-    except RuntimeError as exc:
+    except RuntimeError:
+        logger.exception("jobs.not_started job=%s kind=%s", job.pk, job.kind)
         ended = timezone.now()
-        _audit(job, AuditLog.Action.FAILED, "could not start", {"error": str(exc)}, ended)
-        Job.objects.filter(pk=job.pk).update(state=Job.State.FAILED, error=f"Could not start: {exc}", finished_at=ended)
+        _audit(job, AuditLog.Action.FAILED, "could not start", {}, ended)
+        Job.objects.filter(pk=job.pk).update(state=Job.State.FAILED, error=NOT_STARTED, finished_at=ended)
         raise
 
 
@@ -165,22 +182,20 @@ def run(
             f"{serving} tried to run the {kind} job itself. A request starts a job and answers at once."
         )
     job = _record(kind, label, actor=actor, requested_by=requested_by, request=request)
-    _work(job.pk, work, own_connection=False)
+    _work(job.pk, work)
     job.refresh_from_db()
     return job
 
 
 def run_job(job_id, work: Callable[[Progress], dict[str, Any]]) -> None:
-    # A job is nobody's request: it may wait on whatever its work needs.
-    with off_request():
+    # A job is nobody's request: it may wait on whatever its work needs, on
+    # connections of its thread's own. Work `run` runs on the caller's thread
+    # leaves the caller's alone.
+    with off_request(), connections_of_its_own():
         _work(job_id, work)
 
 
-def _work(job_id, work: Callable[[Progress], dict[str, Any]], *, own_connection=True) -> None:
-    # A job's thread has a database connection of its own, closed when the
-    # work ends; work run on the caller's thread leaves the caller's alone.
-    if own_connection:
-        close_old_connections()
+def _work(job_id, work: Callable[[Progress], dict[str, Any]]) -> None:
     started = timezone.now()
     Job.objects.filter(pk=job_id).update(state=Job.State.RUNNING, started_at=started, heartbeat_at=started)
     job = Job.objects.get(pk=job_id)
@@ -194,15 +209,7 @@ def _work(job_id, work: Callable[[Progress], dict[str, Any]], *, own_connection=
     # raise on the failure path.
     # An import writes transaction after transaction; this lets the
     # controller's report and a person saving a form have the lock between them.
-    with (
-        gives_way(),
-        operation_context(
-            interface="job",
-            actor=job.actor or "local-operator",
-            operation=job.kind,
-            operation_id=str(job.pk),
-        ),
-    ):
+    with gives_way(), _its_operation(job):
         # The audit row is written before the state changes, both ways round:
         # anything that sees a job finished can rely on the record of how it
         # finished already existing. The other order is a race that hides,
@@ -213,13 +220,17 @@ def _work(job_id, work: Callable[[Progress], dict[str, Any]], *, own_connection=
             # Counts come from the work, which is the only thing that knows
             # what it changed. Reported as a facet so `counts.created` means
             # the same here as it does for an infrastructure reconcile.
+            counts = _counts(result)
+            changed = _changed(job, counts)
+            # The rest of the result is recorded beside the counts, which say their own numbers.
+            counted = counts[0].as_metadata() if counts else {}
             _audit(
                 job,
-                AuditLog.Action.IMPORTED,
-                "finished",
-                result,
+                AuditLog.Action.DONE if changed or not _routine(job) else AuditLog.Action.OBSERVED,
+                "finished" if changed else "finished with nothing to change",
+                {key: value for key, value in result.items() if key not in counted},
                 ended,
-                facets=_counts(result),
+                facets=counts,
             )
             Job.objects.filter(pk=job_id).update(
                 state=Job.State.SUCCEEDED,
@@ -231,17 +242,15 @@ def _work(job_id, work: Callable[[Progress], dict[str, Any]], *, own_connection=
         except Failed as said:
             # A stated outcome, not a fault: the sentence is the whole record.
             _fail(job, str(said) or "Failed.", Failure(message=str(said)[:400], kind="Failed"))
-        except Exception:  # noqa: BLE001 - a failed job is recorded, never raised
+        except Exception as exc:
             # Recorded here, since an exception left on a thread goes to stderr
-            # and the row sits at `running` forever. The whole traceback, not
-            # just the message: nobody can reproduce a background failure by
-            # running it again from a terminal.
-            detail = traceback.format_exc()
-            last = detail.strip().splitlines()[-1]
-            _fail(job, detail[-8000:], Failure(message=last[:400], kind=last.split(":")[0][:80]))
-        finally:
-            if own_connection:
-                connection.close()
+            # and the row sits at `running` forever. The row and its audit say
+            # that it failed and by what kind of fault; the traceback goes to
+            # the log alone, since its text can carry anything the work held.
+            logger.exception("jobs.failed job=%s kind=%s", job.pk, job.kind)
+            kind = type(exc).__name__[:80]
+            said = unexpected(kind, job.pk)
+            _fail(job, said, Failure(message=said[:400], kind=kind))
 
 
 def _fail(job: Job, error: str, failure: Failure) -> None:
@@ -266,6 +275,7 @@ def _counts(result: dict) -> list[Counts]:
         seen=result.get("seen"),
         created=result.get("created"),
         updated=result.get("updated"),
+        deleted=result.get("deleted"),
         skipped=result.get("skipped"),
     )
     # A list because the answer is none or one, and a tuple whose length
@@ -273,31 +283,65 @@ def _counts(result: dict) -> list[Counts]:
     return [counts] if counts.as_metadata() else []
 
 
-def _audit(job: Job, action: str, outcome: str, detail: dict, ended, facets=()) -> None:
-    """Record how the job ended, attributed to whoever asked for it.
+# What a job's row is filed under in the audit log.
+AUDIT_TYPE = "Background job"
+# The one name the scheduler acts under, starting a job or running it.
+SCHEDULER = "timer"
 
-    Creation is audited by the model signal; without this the log would show
-    every job starting and none ending.
-    """
+
+def _routine(job: Job) -> bool:
+    """Whether nobody but the scheduler asked for ``job``."""
+
+    return job.requested_by_id is None and job.actor == SCHEDULER
+
+
+def _changed(job: Job, counts: list[Counts]) -> bool:
+    """Whether ``job``'s work changed anything: a row recorded inside its
+    operation, or a count of records it made or changed."""
+
+    counted = any((count.created or 0) + (count.updated or 0) + (count.deleted or 0) for count in counts)
+    return counted or AuditLog.objects.filter(operation_id=str(job.pk)).exists()
+
+
+def _its_operation(job: Job) -> AbstractContextManager[None]:
+    """The operation every row of ``job``'s work and its ending is part of, under the job's own id
+    and its requester, whoever is bound where it runs."""
+
+    return door_of_its_own(
+        interface=JOB_INTERFACE,
+        actor=job.actor or "local-operator",
+        operation=job.kind,
+        operation_id=str(job.pk),
+    )
+
+
+def _audit(job: Job, action: str, outcome: str, detail: dict, ended, facets=()) -> None:
+    """Record how the job ended, attributed to whoever asked for it: the job's
+    one row in the log, which the rows its work wrote sit beneath."""
+
     # Measured from the in-memory job's start: the row is not marked finished
     # until after this returns.
     seconds = (ended - job.started_at).total_seconds() if job.started_at else 0
     took = f" in {seconds:.0f}s" if seconds >= 1 else ""
-    record_event(
-        action=action,
-        obj=job,
-        type_label="Background job",
-        # The label as a title: a sentence built on it reads wrong for a verb phrase.
-        message=f"{job.label}: {outcome}{took}",
-        # Timing as a facet rather than baked into the message, so how long a
-        # job takes is a number that can be compared with the last one rather
-        # than a phrase that has to be read.
-        facets=(Timing(duration_ms=round(seconds * 1000)), *facets),
-        metadata={"kind": job.kind, "job": str(job.pk), **detail},
-        # Passed explicitly: `record_event` otherwise reads the current
-        # request's user, and there is no request on a worker thread.
-        user=job.requested_by,
-    )
+    # Bound here too: a job found lost, or one whose thread never started,
+    # ends outside its work's binding.
+    with _its_operation(job):
+        record_event(
+            action=action,
+            obj=job,
+            type_label=AUDIT_TYPE,
+            # The row names the job already, so the message is how it ended.
+            message=f"{outcome[:1].upper()}{outcome[1:]}{took}",
+            # Timing as a facet rather than baked into the message, so how long a
+            # job takes is a number that can be compared with the last one rather
+            # than a phrase that has to be read.
+            facets=(Timing(duration_ms=round(seconds * 1000)), *facets),
+            # The job is the row's object and its kind the operation, so neither is restated.
+            metadata=detail,
+            # Passed explicitly: `record_event` otherwise reads the current
+            # request's user, and there is no request on a worker thread.
+            user=job.requested_by,
+        )
 
 
 # The hourly timer that asks for due work fires a few minutes late or early,

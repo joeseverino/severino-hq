@@ -11,6 +11,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.platform.application.tests.writers import form_keyed
 
 from ..controller import ControllerReport, claim_next_operation, report_operation
 from ..record_errors import PolicyError
@@ -202,7 +203,7 @@ class RemovalWebTests(TestCase):
         connection("adguard", manages=False)
         response = self.client.post(
             reverse("control_plane:remove", kwargs={"key": "app-dns"}),
-            {"reason": "Retired."},
+            form_keyed({"reason": "Retired."}),
         )
 
         self.assertEqual(response.status_code, 302)
@@ -225,7 +226,7 @@ class RemovalWebTests(TestCase):
         managing_everything()
         response = self.client.post(
             reverse("control_plane:remove", kwargs={"key": "app-dns"}),
-            {"reason": "Retired."},
+            form_keyed({"reason": "Retired."}),
         )
 
         self.assertRedirects(response, reverse("control_plane:detail", kwargs={"key": "app-dns"}))
@@ -237,7 +238,7 @@ class RemovalWebTests(TestCase):
     def test_removal_requires_a_signed_in_operator(self):
         self.client.logout()
 
-        response = self.client.post(reverse("control_plane:remove", kwargs={"key": "app-dns"}))
+        response = self.client.post(reverse("control_plane:remove", kwargs={"key": "app-dns"}), form_keyed())
 
         self.assertEqual(response.status_code, 302)
         self.assertIn("/accounts/login/", response["Location"])

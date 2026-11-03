@@ -3,6 +3,7 @@
 import subprocess
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 from django.test import SimpleTestCase, tag
 from django.urls import reverse
@@ -55,9 +56,9 @@ class PagesTests(SimpleTestCase):
             task.pages(["estate/containers", "control_plane:containerz", "example"], self.EVERY)
         said = str(refused.exception)
 
-        nearest = f"control_plane:containers ({reverse('control_plane:containers')})"
-        self.assertIn(f"No page estate/containers; the nearest: {nearest}", said)
-        self.assertIn(f"No page control_plane:containerz; the nearest: {nearest}", said)
+        offer = f"\n  {task.estate_name(reverse('control_plane:containers'))} (the estate's control_plane:containers)"
+        self.assertIn(f"No page estate/containers; type one of these instead:{offer}", said)
+        self.assertIn(f"No page control_plane:containerz; type one of these instead:{offer}", said)
         self.assertIn("No page example", said)
 
     def test_an_estate_page_keeps_its_query_and_its_path_its_slash(self):
@@ -67,7 +68,7 @@ class PagesTests(SimpleTestCase):
         self.assertEqual(task.estate_path("estate"), "/")
 
     def test_a_page_known_by_name_is_named_as_nearest_where_it_is_one(self):
-        with self.assertRaisesMessage(PageRefused, "the nearest: dense/services"):
+        with self.assertRaisesMessage(PageRefused, "\n  dense/services (a page by name)"):
             task.pages(["dense/service"], self.EVERY, ["dense/services"])
 
 
@@ -80,12 +81,37 @@ def _repository(folder: Path) -> Path:
 
     _git("init", "--quiet", cwd=folder)
     (folder / "page.txt").write_text("example\n", encoding="utf-8")
-    _git("add", "page.txt", cwd=folder)
+    _commit(folder)
+    return folder
+
+
+def _commit(folder: Path) -> None:
+    """Everything in the work tree committed."""
+
+    _git("add", "-A", cwd=folder)
     _git(
         "-c", "user.name=Example", "-c", "user.email=example@example.com", "-c", "commit.gpgsign=false",
         "commit", "--quiet", "--no-verify", "-m", "example", cwd=folder,
     )  # fmt: skip
-    return folder
+
+
+@tag("source", "tree")
+class ChangedTestsTests(SimpleTestCase):
+    def test_a_test_file_whose_name_git_quotes_in_a_list_of_lines_is_named_as_it_is(self):
+        """systemd's escaping writes a backslash into a unit's name, which git quotes unless asked for -z."""
+
+        added, new, gone = (rf"tests/run\x2d{name}.mount" for name in ("added", "new", "gone"))
+        with tempfile.TemporaryDirectory() as folder:
+            checkout = _repository(Path(folder))
+            (checkout / "tests").mkdir()
+            (checkout / gone).write_text("[Mount]\n")
+            _commit(checkout)
+            base = task.commit_of("HEAD", checkout)
+            (checkout / gone).unlink()
+            (checkout / added).write_text("[Mount]\n")
+            _commit(checkout)
+            (checkout / new).write_text("[Mount]\n")
+            self.assertEqual(task.changed_tests(base, checkout), (sorted([added, new]), [gone]))
 
 
 @tag("source")
@@ -105,6 +131,29 @@ class WorktreeTests(SimpleTestCase):
             [tree] = trees
             self.assertFalse(tree.parent.exists())
             self.assertNotIn(str(tree), _git("worktree", "list", "--porcelain", cwd=checkout))
+
+    def test_a_tree_asked_for_its_lint_tools_has_the_ones_it_pins_installed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            Path(folder, "repo").mkdir()
+            checkout = _repository(Path(folder, "repo"))
+            (checkout / task.LINT_TOOLS_LOCK).parent.mkdir(parents=True)
+            (checkout / task.LINT_TOOLS_LOCK).write_text("{}\n", encoding="utf-8")
+            _commit(checkout)
+            # A stand-in for mise that installs as setup:lint-tools does, in the tree -C names.
+            bin_dir = Path(folder, "bin")
+            bin_dir.mkdir()
+            fake = bin_dir / "mise"
+            fake.write_text(
+                '#!/bin/sh\n[ "$1" = -C ] && [ "$4" = setup:lint-tools ] || exit 9\n'
+                'mkdir -p "$2/tools/lint/node_modules/axe-core" && : > "$2/tools/lint/node_modules/axe-core/axe.min.js"\n',
+                encoding="utf-8",
+            )
+            fake.chmod(0o755)
+            with mock.patch.dict("os.environ", {"PATH": f"{bin_dir}:/usr/bin:/bin"}):
+                with task.worktree("HEAD", checkout, lint_tools=True) as tree:
+                    self.assertTrue((tree / "tools/lint/node_modules/axe-core/axe.min.js").is_file())
+                with task.worktree("HEAD", checkout) as tree:
+                    self.assertFalse((tree / "tools/lint/node_modules").exists())
 
     def test_a_ref_that_names_nothing_is_said_and_leaves_nothing(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -27,7 +27,7 @@ const (
 // image or a nonce.
 var launchVariables = []string{
 	"HQ_CONTROLLER_RUN", "SEVERINO_BRIDGE_SOCKET", "HQ_CONTROLLER_CONNECTIONS",
-	"HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_CONTROLLER_IMAGE", "SEVERINO_HQ_SOURCE_REPOSITORY",
+	"HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_SEAL_DIR", "HQ_CONTROLLER_IMAGE", "SEVERINO_HQ_SOURCE_REPOSITORY",
 	"HQ_CONTROLLER_CA_FILE", "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK",
 	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS",
 	"HQ_CONTROLLER_OUT", "SEVERINO_DEPENDENCY_RUN", "SEVERINO_UNIT_SOCKET",
@@ -109,7 +109,6 @@ func newLaunch(t *testing.T) *launch {
 			l.order = append(l.order, "lock")
 			return func() { l.locked = false; l.order = append(l.order, "unlock") }, nil
 		},
-		Owner:    func(*os.Root, string) error { return nil },
 		LookPath: func(string) (string, error) { return "", errors.New("absent") },
 		Now:      time.Now,
 		Stdout:   io.Discard, Stderr: io.Discard,

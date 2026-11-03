@@ -2,7 +2,8 @@
 
    The viewer reads its look from `--scalar-*` custom properties and keeps its
    own rules in cascade layers it declares after HQ's, so they outrank
-   every layered HQ rule. This sheet is unlayered, which outranks both, and
+   every layered HQ rule. This sheet is unlayered, which outranks both (but
+   for one rule in HQ's own layers, which takes HQ's controls back out), and
    is loaded by this page only. It holds no color, size or face of its own:
    every value is an HQ token, and each color token already carries its
    light and dark halves, so the reference follows `color-scheme` with the
@@ -13,6 +14,23 @@
    viewer pins or floats can be drawn over HQ's header. */
 .content:has(> .api-reference) { max-width: none; padding: 0; overflow-x: visible; isolation: isolate; }
 .content > .api-reference { margin: 0; }
+
+/* The viewer pins its sidebar and section bars this far down, under HQ's
+   header, which is one row of one height at every width. */
+.api-reference {
+  --scalar-custom-header-height: var(--site-header-height);
+  /* The longest path the document serves, set by the page from the paths it
+     serves (hq/platform/api/reference.py); without it a list is as wide as
+     its own paths. */
+  --longest-path: auto;
+}
+
+/* The viewer scrolls an entry to just below the bars it is told stand over
+   the page (`data-scalar-scroll-header`, api-reference.js), as a scroll
+   margin of its own; the page's scroll padding for HQ's header would be added
+   on top, and land each entry that much lower, under the end of the one
+   before it. */
+:root:has(.api-reference) { scroll-padding-block-start: 0; }
 
 /* Said until the viewer has mounted; one that has not mounted after a while
    is said to have failed, with the document itself. Both lines share one
@@ -135,6 +153,20 @@
   --scalar-sidebar-search-color: var(--muted);
 }
 
+/* HQ draws its controls with element rules (a link's ink, a field's box in
+   base.css, a button's raised box in page.css), so each reaches the controls
+   the viewer draws and gives them whatever the viewer's own rules leave
+   unsaid: a raised shadow and a control's height on a dotted "Example", a box
+   round each status tab. The viewer's controls are its own, so each of HQ's
+   layers gives way there to the layers before it, and the viewer draws them
+   alone. */
+@layer base {
+  .api-reference :is(button, input, select, textarea, a) { all: revert-layer; }
+}
+@layer components {
+  .api-reference :is(button, input, select, textarea, a) { all: revert-layer; }
+}
+
 /* The viewer's own utilities are unlayered and scoped two classes deep, so a
    rule that takes something away names one class more. */
 
@@ -150,7 +182,92 @@
 
 /* A group has no operations of its own: its section is its heading, over the
    domains it holds, with no empty list beside it. */
-.api-reference .scalar-app .endpoints-card:not(:has(a)) { display: none; }
+.api-reference .scalar-app .section-column:has(> .endpoints-card:not(:has(a))) { display: none; }
+
+/* A tag's list of operations sits beside its description only where each path
+   in it fits on one line; elsewhere it takes the row under the description.
+   The list asks for its widest line and the description for a reading
+   measure, and the row wraps when both do not fit, so the browser decides
+   from what each holds, at any width the viewer's own breakpoint misses. */
+.api-reference .scalar-app .section-columns:has(> .section-column > .endpoints-card) {
+  flex-flow: row wrap;
+  gap: var(--space-12) var(--space-24);
+}
+.api-reference .scalar-app .section-columns:has(> .section-column > .endpoints-card) > .section-column {
+  flex: 1 1 20rem;
+  padding-block-start: 0;
+  &:has(> .endpoints-card) { flex: 0 1 max-content; }
+}
+
+/* Every list's path column is as wide as the longest path the document
+   holds (`--longest-path`, in characters of the path's own face, set by the
+   page from the paths it serves), so every list is one width and its edges
+   line up from section to section; narrower than that, a list stacks under
+   its description and a path wraps only where the row itself is narrower. */
+.api-reference .scalar-app .endpoints .endpoint-path {
+  display: block;
+  inline-size: var(--longest-path);
+  max-inline-size: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Every heading the viewer draws takes one size, its `--font-size`; each
+   level of the tree is given a step of its own: a section at the top (a group
+   or a domain outside one), a domain inside a group, then an operation. */
+.api-reference .scalar-app .section-header:has(h2) { --font-size: var(--text-4xl); }
+.api-reference .scalar-app .tag-section-nested .section-header:has(h2) { --font-size: var(--text-2xl); }
+.api-reference .scalar-app .operation-title { --font-size: var(--text-xl); }
+
+/* A path in a section's list of operations wraps at the card's edge rather
+   than running under it, ending a line where api-reference.js marks a path
+   may end one. Its parts are lines of one box: as a flex box of its own, the
+   viewer's, each part between two marks would be a box beside the next
+   (the path rule above). */
+.api-reference .scalar-app .endpoints .endpoint { white-space: normal; }
+
+/* The viewer cuts a long value to one line behind an ellipsis: a property's
+   type and the values it takes, its default and example, an operation's path,
+   and the shape a choice between shapes shows (its selector's label, a type
+   or a schema's name, kept whole in a title a phone never shows). Each is
+   what a reader came to read, so it wraps at the column's edge and is read
+   whole; a name with no break in it breaks where it meets the edge. The box
+   around a property's type clips too, so it is let go with the type. */
+.api-reference .scalar-app :is(
+  .property-detail-truncate,
+  .property-detail-truncate > .property-detail-value,
+  .property-example-value span,
+  .property-default-value span,
+  .endpoint-label-path,
+  .composition-selector-label
+) { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+
+/* A response's description is clamped to one line beside its status; it is
+   what the status means here, so it is read whole. */
+.api-reference .scalar-app .markdown-summary { display: block; white-space: normal; overflow: visible; }
+
+/* A code sample keeps its lines but wraps each at the column's edge, so a
+   reader on a phone reads the whole request and answer without scrolling
+   sideways; copying it still copies the lines as written. Its highlighting
+   sets each token's own spacing, so the tokens are told too. */
+.api-reference .scalar-app .scalar-code-block :is(pre, pre *) { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* A hyphen in a path is held to the character after it, so a line ends
+   before the hyphen, where api-reference.js marks it may, and never after.
+   It is a token of a sample too, so it names the sample's box to outrank the
+   rule above. */
+.api-reference .scalar-app :is(.scalar-code-block pre, *) [data-path-hyphen] { text-wrap-mode: nowrap; }
+
+/* An answer's statuses take a second row rather than run past the card. */
+.api-reference .scalar-app .tab-list { flex-wrap: wrap; }
+
+/* Where the viewer stacks an operation into one column, its heading leads and
+   the badges and actions follow it. */
+@container references-container (width <= 900px) {
+  .api-reference .scalar-app .operation-layout {
+    grid-template-areas: "heading" "badge" "description" "examples" "details";
+  }
+}
 
 /* One sample language is offered, so there is nothing to choose between. */
 .api-reference .scalar-app .scalar-reference-intro-clients { display: none; }

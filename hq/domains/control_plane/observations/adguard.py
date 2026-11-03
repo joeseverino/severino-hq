@@ -11,6 +11,7 @@ from ipaddress import ip_address
 from typing import Any
 from urllib.parse import urlsplit
 
+from hq.platform.application.labels import dotted
 from hq.platform.application.ui import counted
 lazy from hq.platform.application.reach import network_of
 
@@ -222,7 +223,7 @@ def _dns_title(record: Mapping[str, Any]) -> str:
         parts.append("protection off")
     if record.get("filtering_enabled") is False:
         parts.append("filtering off")
-    return " · ".join(parts)
+    return dotted(*parts)
 
 
 def _listen_addresses(record: Mapping[str, Any]) -> tuple[str, ...]:

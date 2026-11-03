@@ -30,8 +30,7 @@ class ResourceExecutionTests(TestCase):
     def test_one_spec_drives_discovery_list_and_detail(self):
         project = Project.objects.create(name="Resource registry")
 
-        described = describe_resources()
-        spec = next(item for item in described["resources"] if item["name"] == "projects")
+        (spec,) = describe_resources(name="projects")["resources"]
         listed = list_resource("projects", {"query": "registry", "limit": 10}, principal=READ)
 
         self.assertEqual(spec["operations"]["get"]["identifier"], "slug")
@@ -100,7 +99,7 @@ class ResourceExecutionTests(TestCase):
         ManagedResource.objects.create(key="policy", kind="tailscale.policy", spec={})
 
         listed = list_resource(
-            "infrastructure.resources",
+            "infrastructure",
             {"kinds": "tailscale.device,tailscale.policy", "limit": 2},
             principal=READ,
         )
@@ -110,7 +109,7 @@ class ResourceExecutionTests(TestCase):
     def test_infrastructure_kinds_filter_rejects_invalid_or_repeated_kinds(self):
         for value in ("not a kind", "tailscale.device,tailscale.device"):
             with self.subTest(value=value), self.assertRaises(InvalidResourceInput):
-                list_resource("infrastructure.resources", {"kinds": value}, principal=READ)
+                list_resource("infrastructure", {"kinds": value}, principal=READ)
 
     def test_every_operation_authorizes_before_reading(self):
         with self.assertRaises(AuthorizationError):

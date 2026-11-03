@@ -27,6 +27,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/providers"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -38,16 +39,19 @@ func main() {
 	if len(os.Args) > 1 {
 		mode = os.Args[1]
 	}
+	// What a pass prints is its launcher's account of it, so it is struck of
+	// every learned secret as its log is.
+	stdout := mask.Writer(os.Stdout)
 	switch mode {
 	case "job":
-		code = job(ctx, os.Args[2:], os.Getenv(BridgeSocket), os.Stdout)
+		code = job(ctx, os.Args[2:], os.Getenv(BridgeSocket), stdout)
 	case "ready":
-		code = ready(ctx, os.Args[2:], os.Stdout)
+		code = ready(ctx, os.Args[2:], stdout)
 	default:
 		if env, supplied, err := load(os.Environ()); err != nil {
-			_ = json.NewEncoder(os.Stdout).Encode(failure{Message: err.Error()})
+			_ = json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
 		} else {
-			code = run(ctx, os.Args[1:], env, supplied, os.Stdout, os.Stderr)
+			code = run(ctx, os.Args[1:], env, supplied, stdout, os.Stderr)
 		}
 	}
 	stop()
@@ -153,15 +157,16 @@ func run(ctx context.Context, args []string, env runtime.Environment, supplied r
 		fmt.Fprintln(stderr, "--apply and --glance are separate passes")
 		return 2
 	}
-	log := slog.New(slog.NewTextHandler(stderr, nil))
+	log := mask.Logger(stderr)
 	slog.SetDefault(log)
 
 	fail := func(err error) int {
 		_ = json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
 		return 1
 	}
-	// The bridge carries no credential in either direction: HQ persists, it
-	// does not reach providers, and the socket itself is the authorization.
+	// The bridge carries no credential in either direction, and a secret
+	// only sealed to this controller: HQ persists, it does not reach
+	// providers, and the socket itself is the authorization.
 	bridge, err := runtime.NewSocketBridge(env.BridgeSocket)
 	if err != nil {
 		return fail(err)
@@ -187,6 +192,14 @@ func run(ctx context.Context, args []string, env runtime.Environment, supplied r
 			slog.String("actions", strings.Join(uncovered, ", ")))
 	}
 	worker := runtime.Worker{ID: *controllerID, Bridge: bridge, Providers: controller, Output: stdout, Log: log}
+	// Keys that cannot be read refuse each action that needs one, with the
+	// reason, and leave the rest of the pass to run.
+	if opener, err := runtime.NewOpener(env.SealKeyDir); err != nil {
+		log.Warn("sealing keys unreadable", slog.String("event", "controller.seal_keys"), slog.Any("error", err))
+		worker.Opener = runtime.Unopenable{Err: err}
+	} else {
+		worker.Opener = opener
+	}
 	var code int
 	if *glance {
 		code, err = worker.Glances(ctx)

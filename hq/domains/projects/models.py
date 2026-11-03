@@ -79,7 +79,7 @@ class Project(TimestampedModel):
     repository_url = models.URLField(blank=True)
     last_push_at = models.DateTimeField(null=True, blank=True)
     # Whether HQ's dependency update run covers the repository. Set only by the
-    # `project.dependency_updates` capability, which holds its precondition.
+    # `project.dependency_updates.set` capability, which holds its precondition.
     dependency_updates = models.BooleanField(default=False)
     public_url = models.URLField(blank=True)
     deployment_notes = models.TextField(blank=True)

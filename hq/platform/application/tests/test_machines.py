@@ -20,6 +20,7 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
     ProviderInventory,
 )
+from hq.platform.application.tests.writers import form_keyed
 
 from ..capabilities import capability_words
 from ..machines import machine, machine_catalog
@@ -775,7 +776,7 @@ class IdentifierIsFixedTests(TestCase):
     def test_a_save_keeps_the_identifier_it_already_had(self):
         response = self.client.post(
             reverse("control_plane:edit", kwargs={"key": "a-box"}),
-            {"name": "a-box", "role": "A renamed purpose", "enabled": "on"},
+            form_keyed({"name": "a-box", "role": "A renamed purpose", "enabled": "on"}),
         )
 
         self.assertEqual(response.status_code, 302)
@@ -937,7 +938,7 @@ class DeclareFromWhatHQKnowsTests(TestCase):
         )
         response = self.client.post(
             reverse("control_plane:create") + "?" + query,
-            {"kind": "machine", "name": "example-host", "addresses": ["100.64.0.7"]},
+            form_keyed({"kind": "machine", "name": "example-host", "addresses": ["100.64.0.7"]}),
         )
 
         self.assertRedirects(

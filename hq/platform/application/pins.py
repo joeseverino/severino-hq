@@ -6,7 +6,7 @@ controller: the world does not change because somebody starred a domain.
 """
 
 from dataclasses import dataclass, field
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -197,7 +197,7 @@ def _audit(user, message: str, **metadata: Any) -> None:
 
 
 @transaction.atomic
-def pin(command: PinCommand, *, principal: Principal) -> dict[str, Any]:
+def pin(command: PinCommand, *, principal: Principal) -> PinToggled:
     """Pin or unpin one thing for the person asking: the ``pin.toggle`` capability."""
 
     kind, key = _kind(command.kind), _key(command.key)
@@ -208,7 +208,7 @@ def pin(command: PinCommand, *, principal: Principal) -> dict[str, Any]:
 
 
 @transaction.atomic
-def move_pin(command: MoveCommand, *, principal: Principal) -> dict[str, Any]:
+def move_pin(command: MoveCommand, *, principal: Principal) -> PinsChanged:
     """Move one of the person's pins past its neighbor: the ``pin.move`` capability."""
 
     kind, key = _kind(command.kind), _key(command.key)
@@ -218,8 +218,25 @@ def move_pin(command: MoveCommand, *, principal: Principal) -> dict[str, Any]:
     return {"ok": True, "kind": kind}
 
 
+type PinKind = Annotated[str, Describe("The type of thing whose pins changed, such as `project`.")]
+
+
+class PinsChanged(TypedDict):
+    """Which type of thing the call changed the person's pins of."""
+
+    ok: Literal[True]
+    kind: PinKind
+
+
+class PinToggled(PinsChanged):
+    """One thing pinned or unpinned for the person."""
+
+    key: Annotated[str, Describe("The thing pinned or unpinned, by its key.")]
+    pinned: Annotated[bool, Describe("Whether it is pinned now.")]
+
+
 @transaction.atomic
-def choose(command: ChooseCommand, *, principal: Principal) -> dict[str, Any]:
+def choose(command: ChooseCommand, *, principal: Principal) -> PinsChanged:
     """Set exactly which things of a kind the person pins: the ``pin.choose`` capability."""
 
     kind = _kind(command.kind)

@@ -1,0 +1,55 @@
+# An authorization refusal becomes an answer in one place,
+# refusal_status.refusal_of, which records the denial in the audit log as it
+# maps it. A handler of its own answers the caller and leaves no Denied row.
+# A surface deciding whether to draw something asks Principal.permits, which
+# records nothing.
+#
+# The exceptions are the two that are not a refusal of a known caller:
+# permits itself, and agent_admission, where a token that grants nothing has
+# no principal yet and is recorded as an unauthenticated refusal there. And
+# command_targets, which offers a choice list only when its read is the
+# caller's: the read's handler may ask for more than its resource declares,
+# so permits cannot answer it beforehand.
+id: authorization-refused-in-one-place
+language: python
+severity: error
+message: An except clause catches AuthorizationError outside refusal_status.refusal_of.
+note: Let it reach the adapter's one refusal mapper (adapter_refusal, refusal_of), or ask Principal.permits for a yes or no.
+files:
+  - "hq/platform/application/**"
+  - "hq/platform/api/**"
+  - "hq/platform/mcp/**"
+  - "hq/platform/core/**"
+  - "hq/domains/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  - "hq/platform/application/security.py"
+  - "hq/platform/application/agent_admission.py"
+  - "hq/platform/application/command_targets.py"
+rule:
+  kind: except_clause
+  has:
+    any:
+      - kind: identifier
+        regex: ^AuthorizationError$
+      - kind: attribute
+        regex: \.AuthorizationError$
+      - kind: as_pattern
+        has:
+          stopBy: end
+          regex: ^(.*\.)?AuthorizationError$
+          any:
+            - kind: identifier
+            - kind: attribute
+      - any:
+          - kind: tuple
+          - kind: expression_list
+          - kind: parenthesized_expression
+        has:
+          stopBy: end
+          regex: ^(.*\.)?AuthorizationError$
+          any:
+            - kind: identifier
+            - kind: attribute

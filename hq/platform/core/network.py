@@ -11,6 +11,9 @@ from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
 
 from django.conf import settings
 from django.http import HttpResponseForbidden
+lazy from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
+from .write_bounds import NOTHING, writes
 
 
 @cache
@@ -107,32 +110,64 @@ def is_trusted_proxy(value) -> bool:
     return _within(value, tuple(settings.SEVERINO_TRUSTED_PROXIES))
 
 
-def client_ip(request) -> str:
-    """The closest address to the caller that HQ can actually vouch for.
+def trusted_proxies() -> list[str]:
+    """SEVERINO_TRUSTED_PROXIES as networks, in the form uvicorn's middleware reads.
 
-    Behind a proxy every request comes from the proxy's private address, and
-    X-Forwarded-For is text any client can send, so the chain is walked from the
-    right, past the proxies HQ was told to believe, to the first hop that is not
-    one: the closest hop infrastructure wrote. Further left is the caller's text.
+    Parsed here, so an entry that is no network is dropped as everywhere else
+    rather than kept by uvicorn as a literal: its `*` trusts every peer, and a
+    name would be matched against the text of a forwarded hop.
     """
 
-    peer = str(request.META.get("REMOTE_ADDR", "") or "").strip()
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    if not forwarded or not is_trusted_proxy(peer):
-        # Not behind a known proxy, so the header is unverifiable hearsay and
-        # the peer is the only fact available.
-        return peer
-    hops = [hop.strip() for hop in str(forwarded).split(",") if hop.strip()]
-    for hop in reversed(hops):
-        if not is_trusted_proxy(hop):
-            return hop
-    # Every hop was a known proxy. The peer is as close to the caller as this
-    # request gets.
-    return peer
+    return [str(network) for network in _networks(tuple(settings.SEVERINO_TRUSTED_PROXIES))]
+
+
+# Where the address that opened the socket is kept, namespaced as the ASGI
+# specification asks of a key it does not define. In a WSGI environ, as the
+# test client builds one, the same key is in META; no request header can name
+# it, since a header's key always starts with HTTP_.
+SOCKET_PEER = "hq.socket_peer"
+
+
+class ForwardedCaller:
+    """The caller's address and scheme, from a proxy's forwarded headers, for every route.
+
+    Uvicorn's ProxyHeadersMiddleware decides: it reads X-Forwarded-For and
+    X-Forwarded-Proto only from a peer in SEVERINO_TRUSTED_PROXIES, and
+    resolves the chain to the first hop from the right that is not one. It
+    replaces the scope's client, so the peer is recorded first, for the pages
+    that show how a request was forwarded. The server runs with
+    --no-proxy-headers, or its own copy would resolve the caller before the
+    peer is recorded.
+    """
+
+    def __init__(self, app):
+        self.app = ProxyHeadersMiddleware(app, trusted_hosts=trusted_proxies())
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "lifespan":
+            scope[SOCKET_PEER] = (scope.get("client") or ("",))[0]
+        await self.app(scope, receive, send)
+
+
+def client_ip(request) -> str:
+    """The caller's address, as ForwardedCaller resolved it: the one HQ judges and records."""
+
+    return str(request.META.get("REMOTE_ADDR", "") or "").strip()
+
+
+def socket_peer(request) -> str:
+    """The address that opened the socket to HQ, which a trusted proxy's forwarding replaced."""
+
+    recorded = getattr(request, "scope", request.META).get(SOCKET_PEER)
+    return str(recorded or request.META.get("REMOTE_ADDR", "") or "").strip()
+
+
+def is_trusted_address(address: str) -> bool:
+    return _within(address, tuple(settings.SEVERINO_TRUSTED_NETWORKS))
 
 
 def is_trusted_client(request) -> bool:
-    return _within(client_ip(request), tuple(settings.SEVERINO_TRUSTED_NETWORKS))
+    return is_trusted_address(client_ip(request))
 
 
 class TrustedNetworkASGI:
@@ -147,34 +182,24 @@ class TrustedNetworkASGI:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and settings.SEVERINO_ENFORCE_TRUSTED_NETWORK:
-            headers = {
-                key.decode("latin-1").lower(): value.decode("latin-1") for key, value in scope.get("headers", [])
-            }
-            peer = (scope.get("client") or ("", 0))[0]
-            request = _FakeScopeRequest(peer, headers.get("x-forwarded-for", ""))
-            if not is_trusted_client(request):
-                await send(
-                    {
-                        "type": "http.response.start",
-                        "status": 403,
-                        "headers": [(b"content-type", b"text/plain; charset=utf-8")],
-                    }
-                )
-                await send({"type": "http.response.body", "body": b"Forbidden."})
-                return
+        if (
+            scope["type"] == "http"
+            and settings.SEVERINO_ENFORCE_TRUSTED_NETWORK
+            and not is_trusted_address((scope.get("client") or ("",))[0])
+        ):
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 403,
+                    "headers": [(b"content-type", b"text/plain; charset=utf-8")],
+                }
+            )
+            await send({"type": "http.response.body", "body": b"Forbidden."})
+            return
         await self.app(scope, receive, send)
 
 
-class _FakeScopeRequest:
-    """Adapts an ASGI scope to the two keys `client_ip` reads."""
-
-    def __init__(self, peer: str, forwarded: str):
-        self.META = {"REMOTE_ADDR": peer}
-        if forwarded:
-            self.META["HTTP_X_FORWARDED_FOR"] = forwarded
-
-
+@writes(NOTHING)
 class TrustedNetworkMiddleware:
     """Refuse anything arriving from outside the LAN, the tailnet or loopback.
 
@@ -187,13 +212,6 @@ class TrustedNetworkMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        # Django's SECURE_PROXY_SSL_HEADER is intentionally simple: when it is
-        # enabled it believes X-Forwarded-Proto without deciding who sent it.
-        # Make the proxy trust decision first so an arbitrary peer cannot turn
-        # a plain request into an apparently secure one by writing a header.
-        peer = str(request.META.get("REMOTE_ADDR", "") or "").strip()
-        if request.META.get("HTTP_X_FORWARDED_PROTO") and not is_trusted_proxy(peer):
-            request.META.pop("HTTP_X_FORWARDED_PROTO", None)
         if settings.SEVERINO_ENFORCE_TRUSTED_NETWORK and not is_trusted_client(request):
             return HttpResponseForbidden("Forbidden.")
         return self.get_response(request)

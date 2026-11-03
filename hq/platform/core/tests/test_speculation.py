@@ -3,8 +3,10 @@
 import json
 
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
-from django.urls import reverse
+from django.contrib.auth.decorators import login_not_required
+from django.http import HttpResponse
+from django.test import Client, TestCase, override_settings
+from django.urls import path, reverse
 
 from hq.platform.core import revisions, speculation
 from hq.platform.core.bench import seed
@@ -51,6 +53,25 @@ class RulesTests(TestCase):
         self.assertNotIn(reverse("dashboard"), left_out)
         excluded = speculation.rules()["prefetch"][0]["where"]["and"][1]["not"]["href_matches"]
         self.assertEqual(excluded, list(left_out))
+
+    def test_the_routes_left_out_are_the_url_configuration_in_force(self):
+        speculation.sessionless()
+
+        with override_settings(ROOT_URLCONF=__name__):
+            self.assertEqual(speculation.sessionless(), ("/example/open/",))
+        self.assertIn(reverse("login"), speculation.sessionless())
+
+
+@login_not_required
+def _open(_request):
+    return HttpResponse()
+
+
+def _closed(_request):
+    return HttpResponse()
+
+
+urlpatterns = [path("example/open/", _open), path("example/closed/", _closed)]
 
 
 class SpeculativeRequestTests(TestCase):
@@ -116,12 +137,8 @@ class SpeculativeRequestTests(TestCase):
     def test_the_outbound_boundary_refuses_a_guess(self):
         from hq.platform.core.outbound import allowed
 
-        token = speculation._refused.set([])
-        try:
-            with self.assertRaises(speculation.Speculative), allowed("lookup"):
-                self.fail("a speculative request reached outside")
-        finally:
-            speculation._refused.reset(token)
+        with speculation._refused.set([]), self.assertRaises(speculation.Speculative), allowed("lookup"):
+            self.fail("a speculative request reached outside")
 
     def test_a_request_somebody_made_is_untouched(self):
         speculation.refuse("nothing")

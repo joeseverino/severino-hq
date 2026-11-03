@@ -7,22 +7,50 @@ value wins over an imported one: docs/Derived-Facts.md#one-time-import.
 """
 
 from dataclasses import asdict, dataclass, field, fields
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, NotRequired, TypedDict
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from pydantic import TypeAdapter, ValidationError as PydanticValidationError
+from pydantic import ConfigDict, TypeAdapter, ValidationError as PydanticValidationError, with_config
 
 from hq.domains.assets.models import Asset
 from hq.domains.projects.models import Project
-from hq.platform.core.audit import operation_context, record_event
+from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
 
-from .assets import AssetCommand, upsert_asset
+from .answer_fields import BusinessUseShare, RecordSlug
+from .assets import (
+    AssetCategory,
+    AssetCommand,
+    AssetInfrastructure,
+    AssetName,
+    AssetProjects,
+    AssetStatus,
+    AssetVendor,
+    PaymentMethod,
+    PurchaseDate,
+    SerialNumber,
+    WarrantyDate,
+    upsert_asset,
+)
 from .command_fields import Describe
+from .describe import listed
 from .domains import records_of
-from .projects import ProjectCommand, upsert_project
+from .projects import (
+    DeploymentNotes,
+    ProjectCategory,
+    ProjectCommand,
+    ProjectDescription,
+    ProjectName,
+    ProjectStatus,
+    RepositoryUrl,
+    SecurityNotes,
+    TechnologiesUsed,
+    upsert_project,
+)
 from .record_errors import RecordConflict, RecordNotFound
+from .record_fields import Notes, PublishedUrl, TotalCost
+from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal, require_all
 from .ui import counted, ended
 
@@ -38,12 +66,52 @@ DERIVED_FIELDS: dict[str, tuple[str, ...]] = {
 REQUIRED_CAPABILITIES = (records_of("projects").write, records_of("assets").write)
 
 
+# A record of the document is laid over the one stored under its slug, so
+# every field but the slug may be left out. Closed: a field the command does
+# not have is refused rather than dropped.
+@with_config(ConfigDict(extra="forbid"))
+class ImportedProject(TypedDict):
+    """A project to import: its slug, and the fields to lay over the project stored under it."""
+
+    slug: RecordSlug
+    name: NotRequired[ProjectName]
+    category: NotRequired[ProjectCategory]
+    status: NotRequired[ProjectStatus]
+    description: NotRequired[ProjectDescription]
+    technologies_used: NotRequired[TechnologiesUsed]
+    repository_url: NotRequired[RepositoryUrl]
+    public_url: NotRequired[PublishedUrl]
+    deployment_notes: NotRequired[DeploymentNotes]
+    security_notes: NotRequired[SecurityNotes]
+    notes: NotRequired[Notes]
+
+
+@with_config(ConfigDict(extra="forbid"))
+class ImportedAsset(TypedDict):
+    """An asset to import: its slug, and the fields to lay over the asset stored under it."""
+
+    slug: RecordSlug
+    item_name: NotRequired[AssetName]
+    vendor: NotRequired[AssetVendor]
+    category: NotRequired[AssetCategory]
+    purchase_date: NotRequired[PurchaseDate]
+    total_cost: NotRequired[TotalCost]
+    business_use_percentage: NotRequired[BusinessUseShare]
+    payment_method: NotRequired[PaymentMethod]
+    serial_number: NotRequired[SerialNumber]
+    warranty_date: NotRequired[WarrantyDate]
+    status: NotRequired[AssetStatus]
+    notes: NotRequired[Notes]
+    related_projects: NotRequired[AssetProjects]
+    infrastructure: NotRequired[AssetInfrastructure]
+
+
 @dataclass(frozen=True, slots=True)
 class HQImportCommand:
-    projects: Annotated[list[dict[str, Any]], Describe("Projects to import, each as a project record.")] = field(
-        default_factory=list
+    projects: Annotated[list[ImportedProject], Describe("Projects to import, each laid over the one of its slug.")] = (
+        field(default_factory=list)
     )
-    assets: Annotated[list[dict[str, Any]], Describe("Assets to import, each as an asset record.")] = field(
+    assets: Annotated[list[ImportedAsset], Describe("Assets to import, each laid over the one of its slug.")] = field(
         default_factory=list
     )
     check_only: Annotated[bool, Describe("Check the import without saving anything.")] = False
@@ -91,6 +159,12 @@ def _problem(kind: str, index: int, slug: str, *errors: str) -> dict[str, Any]:
     return {"kind": kind, "index": index, "slug": slug, "errors": list(errors)}
 
 
+def _refused(message: str, problems: list[dict[str, Any]]) -> dict[str, Any]:
+    """An import refused as invalid input, each record's problems its details."""
+
+    return refuse("invalid_input", message, problems)
+
+
 def _stored(kind: _Kind, instance) -> dict[str, Any]:
     """An existing row as the command's fields."""
 
@@ -104,15 +178,15 @@ def _stored(kind: _Kind, instance) -> dict[str, Any]:
 
 
 def _existing(kind: _Kind, records: list[Any]) -> dict[str, Any]:
-    slugs = [str(record.get("slug", "")).strip() for record in records if isinstance(record, dict)]
+    slugs = [record["slug"].strip() for record in records]
     query = kind.model.objects.filter(slug__in=slugs)
     if kind is _ASSET:
         query = query.prefetch_related("related_projects")
     return {row.slug: row for row in query}
 
 
-def _shape_errors(record: dict, slug: str, seen: set[str], names: set[str]) -> list[str]:
-    """A record's slug and field-name errors; records the slug as seen."""
+def _slug_errors(slug: str, seen: set[str]) -> list[str]:
+    """A record's slug errors; records the slug as seen."""
 
     errors = []
     if not slug:
@@ -120,9 +194,6 @@ def _shape_errors(record: dict, slug: str, seen: set[str], names: set[str]) -> l
     elif slug in seen:
         errors.append("slug appears twice in this document.")
     seen.add(slug)
-    unknown = sorted(set(record) - names)
-    if unknown:
-        errors.append(ended(f"Unknown fields: {', '.join(unknown)}"))
     return errors
 
 
@@ -185,16 +256,12 @@ def _plan_kind(
     problems: list[dict[str, Any]],
     known_projects: set[str],
 ) -> list[_Planned]:
-    names = {item.name for item in fields(kind.command)}
     existing = _existing(kind, records)
     seen: set[str] = set()
     planned = []
     for index, record in enumerate(records):
-        if not isinstance(record, dict):
-            problems.append(_problem(kind.name, index, "", "Each record is a JSON object."))
-            continue
-        slug = str(record.get("slug", "")).strip()
-        errors = _shape_errors(record, slug, seen, names)
+        slug = record["slug"].strip()
+        errors = _slug_errors(slug, seen)
         if not errors:
             plan, errors = _plan_record(kind, index, record, slug, existing.get(slug), known_projects)
         if errors:
@@ -255,35 +322,62 @@ def _report(planned: list[_Planned]) -> list[dict[str, Any]]:
     return [{"slug": item.slug, "outcome": item.outcome, "kept": item.kept} for item in planned]
 
 
-def import_registry(command: HQImportCommand, *, principal: Principal) -> dict[str, Any]:
+# What the import does with each record of the document.
+OUTCOMES = ("created", "updated", "unchanged")
+
+
+class KeptValue(TypedDict):
+    """A stored value the import kept in place of the one the document offered."""
+
+    field: Annotated[str, Describe("The field whose stored value was kept.")]
+    kept: Annotated[str, Describe("The value HQ kept, as text.")]
+    offered: Annotated[str, Describe("The value the document offered, as text.")]
+
+
+class ImportedRecord(TypedDict):
+    """One record of the document, and what the import does with it."""
+
+    slug: RecordSlug
+    outcome: Annotated[str, Describe(ended(f"What the import does with it: {listed(OUTCOMES)}"))]
+    kept: Annotated[list[KeptValue], Describe("The stored values it keeps in place of the ones offered.")]
+
+
+class ImportSummary(TypedDict):
+    """How many records the import creates, updates and leaves as they are, and how many values it keeps."""
+
+    created: Annotated[int, Describe("How many records it creates.")]
+    updated: Annotated[int, Describe("How many records it updates.")]
+    unchanged: Annotated[int, Describe("How many records it leaves as they are.")]
+    kept: Annotated[int, Describe("How many stored values it keeps in place of the ones offered.")]
+
+
+class HqImported(TypedDict):
+    """What importing the document did, or would do where it was only checked."""
+
+    ok: Literal[True]
+    check_only: Annotated[bool, Describe("Whether the import was only checked, so nothing was saved.")]
+    projects: Annotated[list[ImportedRecord], Describe("Each project in the document, in its order.")]
+    assets: Annotated[list[ImportedRecord], Describe("Each asset in the document, in its order.")]
+    summary: ImportSummary
+
+
+def import_registry(command: HQImportCommand, *, principal: Principal) -> HqImported | RefusalEnvelope:
     """Validate the whole document, then upsert every record or none."""
 
     require_all(principal, REQUIRED_CAPABILITIES)
     total = len(command.projects) + len(command.assets)
     if total > MAX_IMPORT_RECORDS:
-        return {
-            "ok": False,
-            "problems": [
-                _problem(
-                    "document",
-                    0,
-                    "",
-                    f"The document holds {counted(total, 'record')}; the limit is {MAX_IMPORT_RECORDS}.",
-                )
-            ],
-        }
+        limit = f"The document holds {counted(total, 'record')}; the limit is {MAX_IMPORT_RECORDS}."
+        return _refused(limit, [_problem("document", 0, "", limit)])
 
     problems: list[dict[str, Any]] = []
     projects = _plan_kind(_PROJECT, command.projects, problems, set())
     known = {item.slug for item in projects} | set(Project.objects.values_list("slug", flat=True))
     assets = _plan_kind(_ASSET, command.assets, problems, known)
     if problems:
-        return {"ok": False, "problems": problems}
+        return _refused(f"{counted(len(problems), 'record')} refused. Nothing was imported.", problems)
 
-    summary = {
-        outcome: sum(item.outcome == outcome for item in (*projects, *assets))
-        for outcome in ("created", "updated", "unchanged")
-    }
+    summary = {outcome: sum(item.outcome == outcome for item in (*projects, *assets)) for outcome in OUTCOMES}
     summary["kept"] = sum(len(item.kept) for item in (*projects, *assets))
     result = {
         "ok": True,
@@ -295,7 +389,7 @@ def import_registry(command: HQImportCommand, *, principal: Principal) -> dict[s
     try:
         with (
             transaction.atomic(),
-            operation_context(interface=principal.interface, actor=principal.actor, operation="hq.import"),
+            audit_operation(operation="hq.import", principal=principal),
         ):
             for planned in (*projects, *assets):
                 _apply(planned, principal)
@@ -309,7 +403,7 @@ def import_registry(command: HQImportCommand, *, principal: Principal) -> dict[s
             if command.check_only:
                 transaction.set_rollback(True)
     except _Refused as exc:
-        return {"ok": False, "problems": [exc.problem]}
+        return _refused("1 record was refused while writing. Nothing was imported.", [exc.problem])
     return result
 
 
@@ -317,5 +411,5 @@ def execute_hq_import(
     command: HQImportCommand,
     *,
     principal: Principal,
-) -> dict[str, Any]:
+) -> HqImported | RefusalEnvelope:
     return import_registry(command, principal=principal)

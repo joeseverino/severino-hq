@@ -12,7 +12,7 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .entity_links import EntityLink, entity_link, kind_label
-from .labels import lower_first
+from .labels import dotted, lower_first
 lazy from .freshness import Freshness, freshness as reading_freshness
 lazy from .moments import ago
 
@@ -104,20 +104,20 @@ class Certificate:
         """The hover card: the verdict, then which certificate, who, how long."""
 
         verdict = "Confirmed" if self.attestation else "Not confirmed yet"
-        facts = " · ".join(part for part in (self.name, self.issuer, self.left) if part)
+        facts = dotted(self.name, self.issuer, self.left)
         return f"{verdict}\n{facts}" if facts else verdict
 
     @property
     def statement(self) -> str:
         """The line, and what the controller proved about it."""
 
-        return " · ".join(part for part in (self.line, self.attestation) if part)
+        return dotted(self.line, self.attestation)
 
     @property
     def line(self) -> str:
         if self.unread:
             return self.unread[:1].upper() + self.unread[1:]
-        detail = " · ".join(part for part in (self.name, self.issuer) if part)
+        detail = dotted(self.name, self.issuer)
         text = f"{self.role} certificate {detail}".strip()
         return f"{text}, expires {self.expiry}" if self.expiry else text
 
@@ -286,7 +286,7 @@ class ServicePath:
     def observed_line(self) -> str:
         """What the observing readings say about the name, once each."""
 
-        return " · ".join(dict.fromkeys(hop.phrase for hop in self.observed))
+        return dotted(*dict.fromkeys(hop.phrase for hop in self.observed))
 
     @property
     def primary(self) -> Route | None:

@@ -57,19 +57,58 @@ OBSERVE = """(() => {
   }).observe({ type: 'longtask', buffered: true });
   Object.defineProperty(window, '__hqPerf', { value: perf });
 })();"""
+# The resource types a load's wire bytes are counted by, beside its total; a
+# type none of them names (a fragment's JSON, a manifest) counts in `other`.
+TYPES = ("document", "stylesheet", "script", "font", "image")
 # What the document and everything it fetched cost the network, an entry
-# answered from the cache transferring nothing, and when it painted.
+# answered from the cache transferring nothing, by type, and when it painted.
+# A type is the response's media type (`contentType`), or the path's extension
+# where the browser reports none. `static` and `static_coded` count the
+# stylesheets and scripts fetched and those that came compressed (fewer bytes
+# encoded than decoded): a server that sends none compressed serves its assets
+# as no production server does (`uncompressed`).
 FETCHED = """() => {
   const entries = [...performance.getEntriesByType('navigation'), ...performance.getEntriesByType('resource')];
   const fetched = entries.filter((entry) => entry.transferSize > 0);
+  const byType = { document: 0, stylesheet: 0, script: 0, font: 0, image: 0, other: 0 };
+  const typeOf = (entry) => {
+    if (entry.entryType === 'navigation') return 'document';
+    const media = (entry.contentType || '').toLowerCase();
+    const extension = new URL(entry.name).pathname.split('.').pop().toLowerCase();
+    if (media === 'text/css' || (!media && extension === 'css')) return 'stylesheet';
+    if (media.includes('javascript') || (!media && ['js', 'mjs'].includes(extension))) return 'script';
+    if (media.startsWith('font/') || (!media && ['woff2', 'woff', 'ttf', 'otf'].includes(extension))) return 'font';
+    if (media.startsWith('image/') || (!media && ['svg', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'ico'].includes(extension))) return 'image';
+    if (media === 'text/html') return 'document';
+    return 'other';
+  };
+  let assets = 0, coded = 0;
+  for (const entry of fetched) {
+    const type = typeOf(entry);
+    byType[type] += entry.transferSize;
+    if (type === 'stylesheet' || type === 'script') {
+      assets += 1;
+      if (entry.encodedBodySize < entry.decodedBodySize) coded += 1;
+    }
+  }
   const paint = (ms) => (ms === null ? null : Math.round(ms * 10) / 10);
   return {
     bytes: fetched.reduce((sum, entry) => sum + entry.transferSize, 0),
     requests: fetched.length,
+    by_type: byType,
+    static: assets,
+    static_coded: coded,
     fcp_ms: paint(window.__hqPerf.fcp),
     lcp_ms: paint(window.__hqPerf.lcp),
   };
 }"""
+
+
+def uncompressed(seen: dict[str, Any]) -> bool:
+    """Whether a load fetched stylesheets or scripts and none came compressed, as a server serving
+    its assets live sends them (STATIC_LIVE), so its bytes are no production load's."""
+
+    return seen.get("static", 0) > 0 and seen.get("static_coded", 0) == 0
 
 
 class Answer(NamedTuple):

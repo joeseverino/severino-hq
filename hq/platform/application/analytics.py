@@ -631,7 +631,7 @@ def overview(*, days: int = DEFAULT_WINDOW_DAYS, limit: int = 12) -> dict[str, A
     }
 
 
-def list_analytics(*, dimension: str = "", days: int = DEFAULT_WINDOW_DAYS, limit: int = 50) -> dict[str, Any]:
+def list_analytics(*, dimension: str | None = None, days: int = DEFAULT_WINDOW_DAYS, limit: int = 50) -> dict[str, Any]:
     """One breakdown as a machine-readable collection.
 
     The same numbers the page shows, in the shape every registered resource

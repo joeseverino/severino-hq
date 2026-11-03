@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 	tsapi "tailscale.com/client/tailscale/v2"
 )
@@ -292,6 +293,7 @@ func (r *Registry) tailnetToken(ctx context.Context, connectionRef string) (stri
 	if err := json.Unmarshal(raw, &token); err != nil {
 		return "", err
 	}
+	mask.Learn(token)
 	return token, nil
 }
 

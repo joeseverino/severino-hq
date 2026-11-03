@@ -1,0 +1,19 @@
+# The agent limits every request in a process shares are one module attribute,
+# agent_limits.LIMITS, and the test runner gives each test a new one. A name
+# bound to it by an import, or copied from it into another name, keeps the set
+# of the moment it was bound: a door reading it would count every earlier
+# test's calls, and a test reading it would read a set no door uses.
+id: agent-limits-read-where-used
+language: python
+severity: error
+message: The agent limits are bound to a name of their own, which keeps a set the doors no longer use.
+note: >-
+  Import the module (from hq.platform.application import agent_limits) and
+  read agent_limits.LIMITS where it is used.
+rule:
+  any:
+    - kind: import_from_statement
+      all:
+        - has: { field: module_name, regex: (^|\.)agent_limits$ }
+        - has: { any: [{ kind: dotted_name }, { kind: aliased_import }], regex: ^LIMITS(\s+as\s+\w+)?$ }
+    - pattern: $NAME = $MODULE.LIMITS

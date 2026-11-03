@@ -1,34 +1,37 @@
 """What a command's field says about itself beyond its type.
 
-A field carries these markers in its ``Annotated`` type, and
-``integration_specs.command_schema`` writes them into the field's JSON Schema,
-the one shape every adapter reads: the command page shows a description as
-the field's help and offers a record-naming field's records, a reference's
-things, or a field's declared choices, to choose from, and the machine
-contract publishes each. They are plain values rather than pydantic's
-``Field``, so a module that declares a command loads no validation library at
-startup; pydantic leaves metadata it does not know alone.
+A field carries these markers in its ``Annotated`` type, and each writes
+itself into the field's JSON Schema through pydantic's
+``__get_pydantic_json_schema__``, the one shape every adapter reads: the
+command page shows a description as the field's help and offers a
+record-naming field's records, a reference's things, or a field's declared
+choices, to choose from, and the machine contract publishes each. Inside a
+named type alias (``type Notes = Annotated[str, Describe(...)]``) a marker is
+written once, in the alias's definition, however many commands use it. They
+are plain values rather than pydantic's ``Field``, so a module that declares
+a command loads no validation library at startup.
 """
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Any, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Any
+
+from .describe import Describe
+
+# Lazy: it loads pydantic, which declaring a command does not.
+lazy from .json_schemas import choices
 
 if TYPE_CHECKING:
     from django.db.models import Model
+    from pydantic import GetJsonSchemaHandler
+    from pydantic_core import CoreSchema
 
 # The JSON Schema extension a record-naming field carries.
 NAMES_RECORDS = "x-hq-records"
 # The JSON Schema extension a field holding a model's reference carries.
 REFERS = "x-hq-reference"
-
-
-@dataclass(frozen=True, slots=True)
-class Describe:
-    """What a field is, in a sentence a person reads beside it:
-    ``notes: Annotated[str, Describe("Anything else worth keeping.")]``."""
-
-    text: str
+# The JSON Schema extension a field holding a file carries.
+UPLOAD = "x-hq-upload"
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +46,12 @@ class Names:
     resource: str
     key: str = ""
 
+    def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
+        return {
+            **handler(schema),
+            NAMES_RECORDS: {"resource": self.resource, **({"key": self.key} if self.key else {})},
+        }
+
 
 @dataclass(frozen=True, slots=True, init=False)
 class Choices:
@@ -54,6 +63,9 @@ class Choices:
 
     def __init__(self, options: Iterable[tuple[Any, Any]]) -> None:
         object.__setattr__(self, "options", tuple((str(value), str(label)) for value, label in options))
+
+    def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
+        return {**handler(schema), **choices(self.options)}
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -77,31 +89,24 @@ class Refers:
         object.__setattr__(self, "model", model._meta.label_lower)
         object.__setattr__(self, "field", field)
 
-
-def _declared(metadata: tuple[Any, ...]) -> dict[str, Any]:
-    declared: dict[str, Any] = {}
-    for marker in metadata:
-        if isinstance(marker, Describe):
-            declared["description"] = marker.text
-        elif isinstance(marker, Names):
-            declared[NAMES_RECORDS] = {"resource": marker.resource, **({"key": marker.key} if marker.key else {})}
-        elif isinstance(marker, Refers):
-            declared[REFERS] = {"model": marker.model, "field": marker.field}
-        elif isinstance(marker, Choices):
-            declared["oneOf"] = [{"const": value, "title": label} for value, label in marker.options]
-    return declared
+    def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
+        return {**handler(schema), REFERS: {"model": self.model, "field": self.field}}
 
 
-def marked(command_type: type) -> dict[str, dict[str, Any]]:
-    """What each field of ``command_type`` declares through its markers, as
-    the schema keys to write into that field's property."""
+@dataclass(frozen=True, slots=True)
+class Upload:
+    """A field that is a file, sent in JSON as its ``name``, ``content_type``
+    and base64 ``content``: the form offers a file to pick and sends it so
+    (``forms.file_as_sent``)."""
 
-    hints = get_type_hints(command_type, include_extras=True)
-    return {
-        name: declared
-        for name, hint in hints.items()
-        if get_origin(hint) is Annotated and (declared := _declared(get_args(hint)[1:]))
-    }
+    def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
+        return {**handler(schema), UPLOAD: True}
+
+
+def is_upload(schema: dict[str, Any]) -> bool:
+    """Whether one field's schema is a file a person picks."""
+
+    return schema.get(UPLOAD) is True
 
 
 def named_records(schema: dict[str, Any]) -> dict[str, Any] | None:
@@ -116,3 +121,19 @@ def referred(schema: dict[str, Any]) -> tuple[str, str] | None:
 
     declared = schema.get(REFERS)
     return (declared["model"], declared["field"]) if isinstance(declared, dict) else None
+
+
+# Every marker is imported from here, Describe too, though it lives in a leaf of its own.
+__all__ = [
+    "NAMES_RECORDS",
+    "REFERS",
+    "UPLOAD",
+    "Choices",
+    "Describe",
+    "Names",
+    "Refers",
+    "Upload",
+    "is_upload",
+    "named_records",
+    "referred",
+]

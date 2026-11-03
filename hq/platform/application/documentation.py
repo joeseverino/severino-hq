@@ -4,7 +4,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from datetime import date
 from functools import partial
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, TypedDict, final
+
+from pydantic import ConfigDict, with_config
 
 from hq.domains.docs_index.importer import (
     import_manifest_data,
@@ -12,7 +14,7 @@ from hq.domains.docs_index.importer import (
 )
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
-from hq.platform.core.audit import operation_context, record_event
+from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
 
 from .command_fields import Describe, Names
@@ -20,10 +22,13 @@ from .entity_links import EntityLink, entity_link
 from .labels import plural
 from .projection import listing
 from .record_errors import PolicyError
+from .record_fields import Notes, PublishedAt, one_of
 from .record_saves import Held, Link, linked_saver
 from .references import Mention, Mentions
+from .refusal_status import RefusalEnvelope, refuse
 from .security import Capability, Principal
 from .sensitivity import safe_records
+from .ui import counted
 
 MAX_MANIFEST_ITEMS = 2000
 SYNC = "documentation.sync"
@@ -101,30 +106,92 @@ def related_documents(
     )
 
 
+# What a sync of records from a manifest does with the records HQ holds,
+# said once for each sync that takes it.
+type UpdateExisting = Annotated[bool, Describe("Update records HQ already holds.")]
+type PruneOrphans = Annotated[bool, Describe("Delete records the manifest no longer lists.")]
+type ConfirmPrune = Annotated[bool, Describe("Confirms the delete that prune_orphans asks for.")]
+
+
 @dataclass(frozen=True, slots=True)
 class DocumentationSyncCommand:
-    manifest: Annotated[list[dict[str, Any]], Describe("The documentation records to sync, one per doc.")]
-    update_existing: Annotated[bool, Describe("Update records HQ already holds.")] = True
+    manifest: Annotated[list[ManifestEntry], Describe("The documentation records to sync, one per doc.")]
+    update_existing: UpdateExisting = True
     report_orphans: Annotated[bool, Describe("Report records the manifest no longer lists.")] = False
-    prune_orphans: Annotated[bool, Describe("Delete records the manifest no longer lists.")] = False
-    confirm_prune: Annotated[bool, Describe("Confirms the delete that prune_orphans asks for.")] = False
+    prune_orphans: PruneOrphans = False
+    confirm_prune: ConfirmPrune = False
+
+
+# A doc's fields as its command writes them and its row reads them back, each said once.
+type DocId = Annotated[str, Describe("The doc's ID in the vault.")]
+type DocumentationTitle = Annotated[str, Describe("The doc's title.")]
+_DOC_TYPE = one_of(DocumentationRecord.DocType.values)
+_ENVIRONMENT = one_of(DocumentationRecord.Environment.values)
+_STATUS = one_of(DocumentationRecord.Status.values)
+_SENSITIVITY = one_of(DocumentationRecord.Sensitivity.values)
+type DocType = Annotated[_DOC_TYPE, Describe("What type of doc it is.")]
+type DocEnvironment = Annotated[_ENVIRONMENT, Describe("Where that system runs.")]
+type DocStatus = Annotated[_STATUS, Describe("Where the doc stands.")]
+type DocSensitivity = Annotated[_SENSITIVITY, Describe("Who may read it; a restricted doc never reaches an agent.")]
+type ObsidianPath = Annotated[str, Describe("Its path in the vault.", api="Empty for none.")]
+type GithubPath = Annotated[str, Describe("Its path in a repository.", api="Empty for none.")]
+type ExternalUrl = Annotated[str, Describe("Where it is published outside HQ.", api="Empty for none.")]
+type LastReviewed = Annotated[
+    date | None, Describe("When it was last checked against what it describes.", api="Null for never.")
+]
+
+
+# The vault's manifest copies a doc's frontmatter as it is written, so any
+# field may be absent or null, and a key HQ does not read is passed over; the
+# importer holds each entry to the frontmatter schema, so a choice takes any text.
+@with_config(ConfigDict(extra="allow"))
+class ManifestEntry(TypedDict, total=False):
+    """One doc of the vault's manifest: its frontmatter, its path, and what it relates to."""
+
+    doc_id: DocId | None
+    title: DocumentationTitle | None
+    doc_type: Annotated[str | None, Describe("What type of doc it is, as its frontmatter writes it.")]
+    system: Annotated[str | None, Describe("The system or service the doc is about.")]
+    system_service: Annotated[str | None, Describe("The same as `system`, under the name HQ stores it by.")]
+    environment: Annotated[str | None, Describe("Where that system runs, as its frontmatter writes it.")]
+    status: Annotated[str | None, Describe("Where the doc stands, as its frontmatter writes it.")]
+    sensitivity: Annotated[str | None, Describe("Who may read it, as its frontmatter writes it.")]
+    path: Annotated[str | None, Describe("Where the doc is in the vault, which `obsidian_path` stands in for.")]
+    obsidian_path: ObsidianPath | None
+    github_path: GithubPath | None
+    external_url: ExternalUrl | None
+    last_reviewed: LastReviewed | None
+    published_at: PublishedAt | None
+    notes: Notes | None
+    related_projects: Annotated[list[str] | None, Describe("The slugs of the projects the doc is about.")]
+    related_assets: Annotated[list[str] | None, Describe("The slugs of the assets the doc is about.")]
+    content_type: Annotated[
+        str | None, Describe("For site content, what it is on the site, such as `portfolio_article` or `page`.")
+    ]
+    slug: Annotated[str | None, Describe("For site content, the slug of the item it mirrors to.")]
+    published: Annotated[bool | None, Describe("For site content, whether it is live on the site.")]
+    topic: Annotated[str | None, Describe("For site content, what it is about, in a line.")]
+    description: Annotated[str | None, Describe("For site content, its description, which `topic` stands in for.")]
+    excerpt: Annotated[str | None, Describe("For site content, its excerpt, read where it has no description.")]
+    tags: Annotated[list[str] | None, Describe("The doc's tags.")]
+    technologies: Annotated[list[str] | None, Describe("For site content, what it was built with, read as its tags.")]
 
 
 @dataclass(frozen=True, slots=True)
 class DocumentationCommand:
-    doc_id: Annotated[str, Describe("The doc's ID in the vault.")]
-    title: Annotated[str, Describe("The doc's title.")]
-    doc_type: Annotated[str, Describe("What type of doc it is.")] = "runbook"
+    doc_id: DocId
+    title: DocumentationTitle
+    doc_type: DocType = "runbook"
     system_service: Annotated[str, Describe("The system or service it is about.")] = ""
-    environment: Annotated[str, Describe("Where that system runs.")] = "other"
-    status: Annotated[str, Describe("Where the doc stands.")] = "draft"
-    sensitivity: Annotated[str, Describe("Who may read it; restricted docs never reach an agent.")] = "internal"
-    obsidian_path: Annotated[str, Describe("Its path in the vault.")] = ""
-    github_path: Annotated[str, Describe("Its path in a repository.")] = ""
-    external_url: Annotated[str, Describe("Where it is published outside HQ.")] = ""
-    last_reviewed: Annotated[date | None, Describe("When it was last checked against what it describes.")] = None
-    published_at: Annotated[date | None, Describe("When it was published.")] = None
-    notes: Annotated[str, Describe("Anything else worth keeping.")] = ""
+    environment: DocEnvironment = "other"
+    status: DocStatus = "draft"
+    sensitivity: DocSensitivity = "internal"
+    obsidian_path: ObsidianPath = ""
+    github_path: GithubPath = ""
+    external_url: ExternalUrl = ""
+    last_reviewed: LastReviewed = None
+    published_at: PublishedAt = None
+    notes: Notes = ""
     related_projects: Annotated[tuple[str, ...], Names("projects"), Describe("The projects this doc covers.")] = ()
     related_assets: Annotated[tuple[str, ...], Names("assets"), Describe("The assets this doc covers.")] = ()
     related_expenses: Annotated[
@@ -186,6 +253,29 @@ save_documentation = linked_saver(
 )
 
 
+# What a sync of the vault's docs answers under every name it is published by.
+type SyncStats = Annotated[
+    dict[str, Any],
+    Describe(
+        "How the sync went: how many docs it created, updated and skipped, the links naming a record "
+        "HQ does not hold, and the orphans found or pruned where asked."
+    ),
+]
+
+
+class DocumentationSync(TypedDict):
+    """What syncing the vault's docs into HQ did."""
+
+    stats: SyncStats
+
+
+@final
+class DocumentationSynced(DocumentationSync):
+    """What syncing the vault's docs into HQ did, as the command answers it."""
+
+    ok: Literal[True]
+
+
 def sync_documentation(
     manifest: list[dict[str, Any]],
     *,
@@ -194,7 +284,7 @@ def sync_documentation(
     report_orphans: bool = False,
     prune_orphans: bool = False,
     confirm_prune: bool = False,
-) -> dict[str, Any]:
+) -> DocumentationSynced | RefusalEnvelope:
     """Validate and atomically synchronize vault metadata into HQ."""
 
     principal.require(Capability.SYNC_DOCUMENTATION)
@@ -206,15 +296,11 @@ def sync_documentation(
         raise PolicyError("Every manifest record must be a JSON object.")
     problems = validate_manifest_data(manifest)
     if problems:
-        return {"ok": False, "problems": problems}
+        return refuse("invalid_input", f"{counted(len(problems), 'record')} refused. Nothing was synced.", problems)
     if prune_orphans and not confirm_prune:
         raise PolicyError("confirm_prune must be true when prune_orphans is true")
 
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation=SYNC,
-    ):
+    with audit_operation(operation=SYNC, principal=principal):
         stats = import_manifest_data(
             manifest,
             update_existing=update_existing,
@@ -234,7 +320,7 @@ def execute_documentation_sync(
     command: DocumentationSyncCommand,
     *,
     principal: Principal,
-) -> dict[str, Any]:
+) -> DocumentationSynced | RefusalEnvelope:
     return sync_documentation(
         command.manifest,
         principal=principal,

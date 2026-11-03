@@ -37,11 +37,13 @@ from .plugins import (
     clear_plugin_composition_cache,
 )
 from .ui import DomainOverview, Insight
-lazy from . import plugins
+lazy from . import pages, plugins
 lazy from .connection_contracts import ConnectionSpec
 lazy from .derivation_testing import frozen
 lazy from .derivations import counting
 lazy from .projection import projection_scope
+lazy from .security import WEB_INTERFACE, Principal
+lazy from .web_writes import RETRY_KEY_FIELD, new_key
 
 # Deliberately not a name any real extension would take. A synthetic sibling
 # that collided with a real id would silently displace it.
@@ -336,3 +338,23 @@ class ComposedPluginTestCase:
         self._composition = ExitStack()
         self.addCleanup(self._composition.close)
         self._composition.enter_context(installed(*self.siblings))
+
+
+def form_keyed(data: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """``data`` with the retry key a write form posts, drawn as ``{% write_token %}``
+    draws one, for a test that posts a form without opening its page first."""
+
+    return {**(data or {}), RETRY_KEY_FIELD: new_key()}
+
+
+def holding(*capabilities: str) -> AbstractContextManager[Any]:
+    """While open, a signed-in person holds only ``capabilities`` at the page gate.
+
+    Patches the one name the gate reads a person's principal through, so a test
+    of which pages open asks the real gate, whatever role the person has.
+    """
+
+    def principal(user: Any) -> Principal:
+        return Principal(user.get_username(), WEB_INTERFACE, frozenset(capabilities))
+
+    return mock.patch.object(pages, "web_principal", principal)

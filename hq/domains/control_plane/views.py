@@ -10,7 +10,7 @@ from django.views.generic import DetailView, ListView
 
 from hq.platform.application.action_links import READ_NOW_CAPABILITY, command_url
 from hq.platform.application.approvals import DESTRUCTIVE_EFFECT
-from hq.platform.application.capabilities import capability_registry, capability_words, execute_capability
+from hq.platform.application.capabilities import capability_registry, capability_words
 from hq.platform.application.entity_links import kind_label, record_name, web_url
 from hq.platform.application.infrastructure import (
     declared_machines,
@@ -24,6 +24,7 @@ from hq.platform.application.inventory import service_hostnames
 from hq.platform.application.labels import field_label
 from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.payload_words import value_words
+from hq.platform.application.refusal_status import refuse
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_capabilities import (
     Allowed,
@@ -54,6 +55,7 @@ from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.timestamps import moment
 from hq.platform.application.topology_model import RELATIONS
 from hq.platform.application.ui import counted
+from hq.platform.application.web_writes import execute_posted, refusal_response, refused
 from hq.platform.application.whereabouts import whereabouts
 from hq.platform.core.templatetags.nav_tags import returning_to
 lazy from hq.platform.application.page_relations import for_container
@@ -68,11 +70,8 @@ lazy from .container_views import container_detail
 def _web_operation(request, resource, action) -> dict[str, Any]:
     """Ask for ``action`` on ``resource`` through its capability, as the operator."""
 
-    return execute_capability(
-        ACTION_CAPABILITY[action],
-        {"reason": request.POST.get("reason", "").strip()},
-        principal=web_principal(request.user),
-        target=resource.key,
+    return execute_posted(
+        request, ACTION_CAPABILITY[action], {"reason": request.POST.get("reason", "").strip()}, target=resource.key
     )
 
 
@@ -214,8 +213,7 @@ class ResourceRemoveView(View):
     def post(self, request, key):
         resource = get_object_or_404(ManagedResource, key=key)
         result = _web_operation(request, resource, OperationRequest.Action.DELETE)
-        if not result["ok"]:
-            messages.error(request, result["error"]["message"])
+        if refused(request, result):
             return redirect("control_plane:detail", key=key)
         if "forgotten" in result:
             # Nothing was queued because nothing exists at the provider that HQ
@@ -584,8 +582,7 @@ class OperationView(View):
         # the field cannot become an open redirect.
         destination = safe_next(request, fallback=reverse("control_plane:detail", kwargs={"key": key}))
         result = _web_operation(request, resource, self.action)
-        if not result["ok"]:
-            messages.error(request, result["error"]["message"])
+        if refused(request, result):
             return redirect(destination)
         messages.success(request, requested(self.action, resource.key, queued=result["queued"]))
         return redirect(destination)
@@ -596,15 +593,10 @@ class CertificateDownloadView(View):
         resource = get_object_or_404(ManagedResource, key=key)
         certificate_pem = resource.status.get("certificate_pem", "")
         if resource.kind != CERTIFICATE_KIND or not certificate_pem:
-            return JsonResponse(
-                {"ok": False, "error": "No verified certificate to download."},
-                status=404,
-            )
+            return refusal_response(refuse("not_found", "No verified certificate to download."))
         if "PRIVATE KEY-----" in certificate_pem:
-            return JsonResponse(
-                {"ok": False, "error": "Refused: the certificate file contains a private key."},
-                status=500,
-            )
+            # HQ stored something it should never have: its fault, never the asker's.
+            return refusal_response(refuse("operation_failed", "The certificate file contains a private key."))
         response = HttpResponse(certificate_pem, content_type="application/x-pem-file")
         response["Content-Disposition"] = f'attachment; filename="{resource.key}-public.pem"'
         return response

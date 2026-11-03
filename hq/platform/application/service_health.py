@@ -9,13 +9,15 @@ the readings observing it say, and whether a DNS record names it.
 from dataclasses import dataclass
 from typing import Any
 
+from hq.platform.application.labels import dotted
+
 from .projection import read_once
 from .ui import counted, ended
 lazy from . import connections
 lazy from .findings import estate_findings
 lazy from .hq_self import hq_service
 lazy from .moments import ago
-lazy from .security import Capability, Principal
+lazy from .security import INTERNAL_INTERFACE, Capability, Principal
 lazy from .whereabouts import reads_containers_on
 
 GOOD = "good"
@@ -174,7 +176,7 @@ def _undeclared(service: Any) -> Health:
     said = [path.observed_line]
     if not path.routes and path.gaps:
         said.append(_dns_state(path.gaps[0]))
-    return Health(UNKNOWN, "Read only", " · ".join(said))
+    return Health(UNKNOWN, "Read only", dotted(*said))
 
 
 def _dns_state(gap: str) -> str:
@@ -205,7 +207,7 @@ def _hq_findings() -> tuple[Any, ...]:
     subjects = {f"service:{name}" for name in own.hostnames}
     if own.machine:
         subjects.add(f"machine:{own.machine}")
-    reader = Principal("hq-health", "internal", frozenset({Capability.READ}))
+    reader = Principal("hq-health", INTERNAL_INTERFACE, frozenset({Capability.READ}))
     return tuple(
         finding
         for finding in estate_findings(principal=reader)

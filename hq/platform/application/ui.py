@@ -16,7 +16,7 @@ from .chart_numbers import (
 )
 from .display_words import display, in_words
 from .drawings import Dots, Trend
-from .labels import plural
+from .labels import dotted, plural
 from .workflow_contracts import ActionLink, WorkflowPlan
 
 # The one status vocabulary. Every surface that shows state (dashboard cards,
@@ -183,6 +183,10 @@ class Insight:
     key: str = ""
     # The thing this item is about, as a link to its own page.
     subject: ActionLink | None = None
+    # The one thing on its subject it is about, where the subject holds many:
+    # a container's name on its machine. A page about one of them alone tells
+    # its own problems from its neighbors' by it.
+    part: str = ""
     # A notice reports something that happened or was measured; there is
     # nothing to resolve and no reading to refresh until it clears. The queue
     # keeps notices apart from what needs doing and out of that count, and a
@@ -211,6 +215,9 @@ class Insight:
     # Pages that help look into it (where it sits, what depends on it), drawn
     # as one line of links under its buttons. Never something that acts.
     links: tuple[ActionLink, ...] = ()
+    # The capabilities a reader must hold to be shown it, for an item drawn
+    # from what only they may read. Empty, every reader of the queue sees it.
+    read_capabilities: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _one_of("Insight status", self.status, STATUS_VALUES)
@@ -663,7 +670,7 @@ def _placed_line(series: DatedSeries, plot: DatePlot, *, unit: str, trend: bool)
             y=plot.y(value),
             value=value,
             label=f"{day:%b %-d, %Y}",
-            tooltip=f"{day:%b %-d, %Y} · {label}: {_format_reading(value, unit)}",
+            tooltip=dotted(f"{day:%b %-d, %Y}", f"{label}: {_format_reading(value, unit)}"),
         )
         for day, value in points
     )
@@ -968,7 +975,7 @@ def _stacked_column(
                 value=value,
                 label=item.label,
                 slot=item.slot,
-                tooltip=f"{label} · {item.label}: {_format_reading(value, unit)}",
+                tooltip=dotted(label, f"{item.label}: {_format_reading(value, unit)}"),
             )
         )
     return bars

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/internal/clock"
 	"github.com/joeseverino/severino-hq/controller/providers/npmapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -328,7 +329,7 @@ func (r *Registry) verifyTLSDeployment(ctx context.Context, spec TLSCertificateS
 	if err != nil {
 		return Result{}, nil, err
 	}
-	deadline := r.Monotonic().Add(timeout)
+	deadline := time.Now().Add(timeout)
 	for {
 		result, status, err := r.reconcileTLS(ctx, spec)
 		if err != nil {
@@ -337,7 +338,7 @@ func (r *Registry) verifyTLSDeployment(ctx context.Context, spec TLSCertificateS
 		if consumersServe(spec, status, expected) {
 			return result, status, nil
 		}
-		if !r.Monotonic().Before(deadline) {
+		if !time.Now().Before(deadline) {
 			evidence := TLSVerificationEvidence{ExpectedFingerprint: expected, Consumers: []TLSConsumerEvidence{}}
 			for _, item := range status.Consumers {
 				matches := item.FingerprintSHA256 == expected
@@ -358,7 +359,7 @@ func (r *Registry) verifyTLSDeployment(ctx context.Context, spec TLSCertificateS
 				Status:  evidence,
 			}
 		}
-		if err := r.Sleep(ctx, interval); err != nil {
+		if err := clock.Sleep(ctx, interval); err != nil {
 			return Result{}, nil, err
 		}
 	}

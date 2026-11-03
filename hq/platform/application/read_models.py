@@ -1,21 +1,23 @@
 """Canonical, non-mutating HQ projections shared by delivery adapters."""
 
-from typing import Any
+from typing import Any, Literal, TypedDict, cast
 
 from django.db.models import FETCH_RAISE, Count
 from django.utils import timezone
 
-from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 from hq.platform.core.models import AuditLog
 
-from . import records
+from . import history, records
 from .expenses import serialize_expense
-from .projection import iso, listing, page_size
+from .projection import NextPage, listing, page_size
 from .receipts import serialize_receipt
-from .sensitivity import SAFE_SENSITIVITIES
-lazy from .security import Capability
+from .resource_records import DocumentationRow
+from .routes import reverse
+from .sensitivity import safe_records
+lazy from .resources import list_resource
+lazy from .security import Capability, Principal
 
 
 def list_expenses(*, year: int | None = None, category: str | None = None, limit: int = 50) -> dict[str, Any]:
@@ -38,9 +40,22 @@ def list_receipts(*, unmatched_only: bool = False, limit: int = 50) -> dict[str,
     return listing(rows, serialize_receipt, order=("-uploaded_at",), limit=limit)
 
 
-def documentation_status() -> dict[str, Any]:
-    """Summarize AI-safe documentation pointers; sensitive records stay excluded."""
-    safe = DocumentationRecord.objects.filter(sensitivity__in=SAFE_SENSITIVITIES).fetch_mode(FETCH_RAISE)
+class DocumentationStatus(TypedDict):
+    total: int
+    by_status: dict[str, int]
+    by_type: dict[str, int]
+    # The first page of the documentation list, as it reads it.
+    records: list[DocumentationRow]
+    next: NextPage | None
+
+
+def documentation_status(*, principal: Principal) -> DocumentationStatus:
+    """Counts of the AI-safe documentation pointers, and the first page of them
+    as the documentation list reads it, whose ``next`` it is read on by."""
+
+    principal.require(Capability.READ)
+    safe = safe_records().fetch_mode(FETCH_RAISE)
+    page = list_resource("documentation", {}, principal=principal)
     return {
         "total": safe.count(),
         "by_status": {
@@ -50,53 +65,103 @@ def documentation_status() -> dict[str, Any]:
             row["doc_type"]: row["count"]
             for row in safe.values("doc_type").annotate(count=Count("id")).order_by("doc_type")
         },
-        "records": [
-            {
-                "doc_id": doc.doc_id,
-                "title": doc.title,
-                "type": doc.doc_type,
-                "system": doc.system_service,
-                "environment": doc.environment,
-                "status": doc.status,
-                "sensitivity": doc.sensitivity,
-                "obsidian_path": doc.obsidian_path,
-                "github_path": doc.github_path,
-                "external_url": doc.external_url,
-                "last_reviewed": iso(doc.last_reviewed),
-            }
-            for doc in safe.order_by("doc_id")
-        ],
+        # The list cuts each item to its row, as its kind declares it.
+        "records": cast("list[DocumentationRow]", page["items"]),
+        "next": page["next"],
     }
 
 
-def recent_activity(*, principal, limit: int = 25) -> dict[str, Any]:
-    """Return stable audit summaries without free-form metadata payloads.
+class ActivityRow(TypedDict):
+    """One audit-log row an event changed."""
+
+    id: int
+    action: str
+    action_label: str
+    object_type: str
+    object_id: str
+    object_repr: str
+    message: str
+    actor: str
+    created_at: str
+
+
+class ActivityEvent(TypedDict):
+    """One audit-log event: the newest of the rows it changed, how many more there are, and the page of them all."""
+
+    id: int | None
+    title: str
+    action: str
+    action_label: str
+    actor: str
+    message: str
+    created_at: str
+    operation_id: str
+    items: list[ActivityRow]
+    more: int
+    url: str
+
+
+class RecentActivity(TypedDict):
+    items: list[ActivityEvent]
+    count: int
+
+
+def _activity_row(event: AuditLog) -> ActivityRow:
+    return {
+        "id": event.id,
+        "action": event.action,
+        "action_label": event.get_action_display(),
+        "object_type": event.object_type,
+        "object_id": event.object_id,
+        "object_repr": event.object_repr,
+        "message": event.message,
+        "actor": event.actor_label,
+        "created_at": event.created_at.isoformat(),
+    }
+
+
+def recent_activity(*, principal: Principal, limit: int = 25) -> RecentActivity:
+    """The newest events, as the audit log page reads them: one per operation,
+    named, attributed to whoever started it, its outcome as its action, and
+    the newest rows it changed beneath it, the rest counted in ``more`` and
+    listed at ``url``. No free-form metadata payloads.
 
     The audit trail is gated apart from baseline reads (``READ_AUDIT_LOG``).
     """
 
     principal.require(Capability.READ_AUDIT_LOG)
-    items = [
+    items: list[ActivityEvent] = [
         {
-            "id": event.id,
-            "action": event.action,
-            "object_type": event.object_type,
-            "object_id": event.object_id,
-            "object_repr": event.object_repr,
-            "message": event.message,
-            "actor": event.actor_label,
-            "action_label": event.get_action_display(),
-            "created_at": event.created_at.isoformat(),
+            "id": line.pk,
+            "title": line.title,
+            "action": line.action,
+            "action_label": line.action_label,
+            "actor": line.actor,
+            "message": line.message,
+            "created_at": line.at.isoformat(),
+            "operation_id": line.events[0].operation_id,
+            "items": [_activity_row(item) for item in line.items],
+            # The items past those carried, and the page that lists every one.
+            "more": line.more,
+            "url": reverse("core:audit_detail", args=[line.page.pk]),
         }
-        for event in AuditLog.objects.select_related("user")
-        .fetch_mode(FETCH_RAISE)
-        .order_by("-created_at")[: page_size(limit)]
+        for line in history.recent(limit=page_size(limit))
     ]
     return {"items": items, "count": len(items)}
 
 
-def system_health() -> dict[str, Any]:
+class SystemHealth(TypedDict):
+    status: Literal["ok"]
+    checked_at: str
+    database: Literal["ok"]
+    # Each record domain's own count.
+    counts: dict[str, int]
+
+
+def system_health(*, principal: Principal) -> SystemHealth:
     """Prove database access and return only non-sensitive record counts."""
+
+    principal.require(Capability.READ)
     return {
         "status": "ok",
         "checked_at": timezone.now().isoformat(),

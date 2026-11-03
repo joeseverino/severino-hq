@@ -3,6 +3,7 @@ from pathlib import Path
 from django import forms
 from django.urls import reverse
 
+from hq.platform.application.labels import dotted
 from hq.platform.application.record_errors import InputError
 
 from .models import Receipt
@@ -17,7 +18,7 @@ from .validation import (
 # restated beside it. A phone camera roll narrows on this attribute, so the two
 # disagreeing means being offered a file the server then refuses after upload.
 RECEIPT_ACCEPT = ",".join(sorted(ALLOWED_RECEIPT_CONTENT_TYPES))
-RECEIPT_SIZE_HINT = f"PDF or image · up to {MAX_RECEIPT_BYTES // (1024 * 1024)} MB"
+RECEIPT_SIZE_HINT = dotted("PDF or image", f"up to {MAX_RECEIPT_BYTES // (1024 * 1024)} MB")
 
 
 class _StoredReceipt:

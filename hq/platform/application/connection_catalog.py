@@ -223,10 +223,6 @@ class ConnectionView:
     authority: str = "none"
 
     @property
-    def lifecycle_label(self) -> str:
-        return Lifecycle(self.lifecycle).label
-
-    @property
     def authority_label(self) -> str:
         if self.abilities and all(state.evidence == "not_applicable" for state in self.abilities):
             return KEYLESS_LABEL
@@ -372,23 +368,21 @@ def _sound_link(link: ConnectionLink) -> bool:
     return link.resource_key == link.resource_key.strip()
 
 
-def connection_total() -> int:
-    """How many connections HQ has, of every family: the one count every page says.
+def connection_total(*, principal: Principal) -> int:
+    """How many connections ``principal`` may see: the one count every page says.
 
     The Connections page lists each of these, keyless lookups included, so a
-    figure leading there counts the same rows.
+    figure leading there counts the same rows, of the same families.
     """
 
-    return sum(len(_connection_instances(spec)) for spec in integration_graph().connections.values())
+    return sum(len(_connection_instances(spec)) for spec in _permitted(principal))
 
 
 def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
     """Every permitted connection family and its locally cached instances."""
 
     groups = []
-    for spec in integration_graph().connections.values():
-        if not principal.permits(*spec.required_capabilities):
-            continue
+    for spec in _permitted(principal):
         instances = _connection_instances(spec)
         abilities = {ability.name: ability for ability in spec.abilities}
         groups.append(
@@ -402,6 +396,14 @@ def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
     # rest in the order they were composed.
     groups.sort(key=lambda group: group.spec.name != CONTROLLER_CONNECTIONS)
     return tuple(groups)
+
+
+def _permitted(principal: Principal) -> tuple[ConnectionSpec, ...]:
+    """The families ``principal`` may read, whose providers alone may run for it."""
+
+    return tuple(
+        spec for spec in integration_graph().connections.values() if principal.permits(*spec.required_capabilities)
+    )
 
 
 def _connection_instances(spec: ConnectionSpec) -> tuple[ConnectionInstance, ...]:

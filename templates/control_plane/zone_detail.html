@@ -11,7 +11,7 @@ four domains behind a click and then need a second one to go anywhere.
 {% if zones|length > 1 %}
   <nav class="zone-switch" aria-label="Domains">
     {% for other in zones %}
-      <a href="{{ other.url }}"{% if other.zone == zone.zone %} class="active" aria-current="page"{% endif %}>
+      <a href="{{ other.url }}"{% if other.zone == zone.zone %} aria-current="page"{% endif %}>
         {% if other.pinned %}<span aria-hidden="true">★</span> {% endif %}{{ other.zone|breakable }}{% if not other.managed %} <span class="zone-switch-note">not managed</span>{% endif %}
       </a>
     {% endfor %}

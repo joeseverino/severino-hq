@@ -1,19 +1,18 @@
 #!/bin/sh
-#MISE description="It carries its collected assets, their brotli and gzip copies and their manifest, readable by the account that serves them"
-#MISE env={SEVERINO_HEAVY_BOUND="30m"}
+#MISE description="It carries its collected assets, their brotli copies alone and their manifest, readable by the account that serves them"
+#MISE lock="heavy"
+#MISE timeout="30m"
 #MISE hide=true
 #MISE depends=["image:build"]
+#MISE depends_post=["image:docker stop"]
 set -eu
-# shellcheck source=tools/lib/heavy-turn.sh
-. ./tools/lib/heavy-turn.sh
-
 # As the image's own user, so "readable" means readable by the server.
 docker run --rm --entrypoint sh "${IMAGE:-severino-hq:ci-local}" -c '
     root="${DJANGO_STATIC_ROOT:?}"
     [ -s "$root/staticfiles.json" ] || { echo "$root has no manifest, so a page falls back to plain names." >&2; exit 1; }
-    for copy in br gz; do
-        [ -n "$(find "$root" -name "*.css.$copy" | head -n 1)" ] || { echo "$root has no .$copy copies, so every request for one is sent uncompressed." >&2; exit 1; }
-    done
+    [ -n "$(find "$root" -name "*.css.br" | head -n 1)" ] || { echo "$root has no .br copies, so every asset is sent uncompressed." >&2; exit 1; }
+    gz="$(find "$root" -name "*.gz" | head -n 1)"
+    [ -z "$gz" ] || { echo "$gz: a gzip copy is a second copy on disk that nothing sends (core.static.COPIES)." >&2; exit 1; }
     unreadable="$(find "$root" ! -readable | head -n 5)"
     [ -z "$unreadable" ] || { printf "%s\n" "$unreadable" >&2; echo "Collected assets the serving account cannot read." >&2; exit 1; }
 '

@@ -4,7 +4,7 @@ import json
 import os
 import re
 import tempfile
-from dataclasses import MISSING, fields, replace
+from dataclasses import MISSING, asdict, fields, replace
 from datetime import timedelta
 from pathlib import Path
 from unittest import TestCase, mock
@@ -30,7 +30,6 @@ from ..plugins import (
     ordered_attention,
     plugin_capabilities,
     plugin_health,
-    plugin_token_authenticated_prefixes,
 )
 from ..ui import Insight, Kpi, PageNavigation, PageSection
 from .markup import hrefs, text, with_class
@@ -93,6 +92,17 @@ VALID = PluginManifest(
 class PluginContractTests(TestCase):
     def tearDown(self):
         clear_plugin_composition_cache()
+
+    def assertRefused(self, field, pattern=".", **overrides):
+        """The manifest ``overrides`` make is refused where it is built, naming the plugin and ``field``."""
+
+        with self.assertRaises(ImproperlyConfigured) as refused:
+            replace(VALID, **overrides)
+        ((named, message),) = refused.exception.violations
+        self.assertEqual(named, field)
+        self.assertRegex(message, pattern)
+        self.assertIn(repr(overrides.get("id", VALID.id)), str(refused.exception))
+        self.assertIn(field, str(refused.exception))
 
     def load(self, manifest=VALID):
         clear_plugin_composition_cache()
@@ -202,25 +212,41 @@ class PluginContractTests(TestCase):
             self.assertEqual(inventory["plugins"][0]["id"], "example.notes")
 
     def test_incompatible_api_fails_closed(self):
-        env, importer = self.load(replace(VALID, api_version=999))
-        with env, importer, self.assertRaises(ImproperlyConfigured):
-            installed_plugins()
+        self.assertRefused("api_version", "HQ supports", api_version=999)
 
     def test_mcp_cannot_receive_a_capability_the_operator_does_not_hold(self):
-        env, importer = self.load(
-            replace(
-                VALID,
-                operator_capabilities=("notes.read",),
-                mcp_read_capabilities=("notes.export",),
-            )
+        self.assertRefused(
+            "mcp_read_capabilities",
+            "operator does not hold.*notes.export",
+            operator_capabilities=("notes.read",),
+            mcp_read_capabilities=("notes.export",),
         )
-        with env, importer, self.assertRaisesRegex(ImproperlyConfigured, "operator does not hold"):
-            installed_plugins()
 
     def test_malformed_plugin_capability_names_fail_closed(self):
-        env, importer = self.load(replace(VALID, operator_capabilities=("Notes Write",)))
-        with env, importer, self.assertRaisesRegex(ImproperlyConfigured, "invalid capability"):
-            installed_plugins()
+        self.assertRefused("operator_capabilities", operator_capabilities=("Notes Write", "notes.read"))
+
+    def test_a_capability_is_granted_once_per_audience(self):
+        self.assertRefused("mcp_read_capabilities", "repeats", mcp_read_capabilities=("notes.read",) * 2)
+
+    def test_a_bad_manifest_names_every_violation_at_once(self):
+        with self.assertRaises(ImproperlyConfigured) as refused:
+            replace(VALID, distribution="not a distribution", api_version=999, mcp_write_capabilities=("notes.export",))
+        named = {field for field, _ in refused.exception.violations}
+        self.assertEqual(named, {"distribution", "api_version", "mcp_write_capabilities"})
+        self.assertIn(repr(VALID.id), str(refused.exception))
+
+    def test_a_field_no_manifest_declares_is_refused(self):
+        with self.assertRaisesRegex(TypeError, "mcp_capabilities"):
+            PluginManifest(**{**asdict(VALID), "navigation": VALID.navigation, "mcp_capabilities": ()})
+
+    def test_a_manifest_is_taken_as_declared_never_coerced(self):
+        self.assertRefused("django_apps", django_apps=["example_notes"])
+        self.assertRefused("api_version", api_version=str(PLUGIN_API_VERSION))
+        with self.assertRaises(ImproperlyConfigured):
+            NavigationItem("Notes", "notes:list", "notes", order=True)
+
+    def test_a_navigation_item_names_its_namespace(self):
+        self.assertRefused("navigation", "namespace", navigation=(NavigationItem("Notes", "notes:list", ""),))
 
     def test_a_plugin_cannot_declare_a_host_capability(self):
         """Listed under mcp_read, a host write would reach read-only agents."""
@@ -300,14 +326,10 @@ class PluginContractTests(TestCase):
             installed_plugins()
 
     def test_every_plugin_must_declare_its_integration(self):
-        env, importer = self.load(replace(VALID, integration_provider=""))
-        with env, importer, self.assertRaisesRegex(ImproperlyConfigured, "invalid integration_provider"):
-            installed_plugins()
+        self.assertRefused("integration_provider", integration_provider="")
 
-    def test_invalid_integration_provider_reference_fails_at_startup(self):
-        env, importer = self.load(replace(VALID, integration_provider="not a module reference"))
-        with env, importer, self.assertRaisesRegex(ImproperlyConfigured, "invalid integration_provider"):
-            installed_plugins()
+    def test_invalid_integration_provider_reference_is_refused(self):
+        self.assertRefused("integration_provider", integration_provider="not a module reference")
 
     def test_the_manifest_has_one_executable_integration_provider(self):
         provider_fields = [field.name for field in fields(PluginManifest) if field.name.endswith("provider")]
@@ -369,46 +391,12 @@ class PluginContractTests(TestCase):
         ):
             installed_integrations()
 
-    def test_malformed_url_prefix_fails_at_startup(self):
-        env, importer = self.load(replace(VALID, url_prefix="/notes", urlconf="example.urls"))
-        with env, importer, self.assertRaisesRegex(ImproperlyConfigured, "invalid url_prefix"):
-            installed_plugins()
+    def test_malformed_url_prefix_is_refused(self):
+        self.assertRefused("url_prefix", url_prefix="/notes", urlconf="example.urls")
 
     def test_route_configuration_is_atomic(self):
-        env, importer = self.load(replace(VALID, url_prefix="notes/"))
-        with env, importer, self.assertRaises(ImproperlyConfigured):
-            installed_plugins()
-
-    def test_token_authenticated_routes_are_anchored_to_the_plugin_mount(self):
-        env, importer = self.load(
-            replace(
-                VALID,
-                url_prefix="mobile/",
-                urlconf="example.urls",
-                token_authenticated_routes=("webhook/",),
-            )
-        )
-        with env, importer:
-            self.assertEqual(plugin_token_authenticated_prefixes(), ("/mobile/webhook/",))
-
-    def test_a_token_route_cannot_escape_its_own_mount(self):
-        for route in ("/admin/", "../admin/", ""):
-            with self.subTest(route=route):
-                env, importer = self.load(
-                    replace(
-                        VALID,
-                        url_prefix="mobile/",
-                        urlconf="example.urls",
-                        token_authenticated_routes=(route,),
-                    )
-                )
-                with env, importer, self.assertRaises(ImproperlyConfigured):
-                    installed_plugins()
-
-    def test_a_token_route_without_a_mount_fails_closed(self):
-        env, importer = self.load(replace(VALID, token_authenticated_routes=("webhook/",)))
-        with env, importer, self.assertRaises(ImproperlyConfigured):
-            installed_plugins()
+        self.assertRefused("urlconf", "with url_prefix", url_prefix="notes/")
+        self.assertRefused("urlconf", "with url_prefix", urlconf="example.urls")
 
     def test_host_ui_primitives_render_for_installable_plugins(self):
         page_head = render_to_string(

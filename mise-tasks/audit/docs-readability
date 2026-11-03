@@ -1,0 +1,55 @@
+#!/bin/sh
+#MISE description="How easily each doc reads: its Flesch-Kincaid grade, its words, and its longest paragraph and sentence in words with the line each ends on, longest paragraph first, read-only"
+#MISE hide=true
+#USAGE flag "--sentences-over <words>" help="Instead, every sentence of this many words or more, at the line it ends on"
+#USAGE flag "--paragraphs-over <words>" help="Instead, every paragraph (a list item counts as one) of this many words or more, at the line it ends on"
+
+# Vale measures (tools/lint/vale/audit.ini says what each rule counts) and jq
+# keeps each doc's largest block, at the line Vale reports, the block's last.
+# A list item counts as a paragraph. CLAUDE.md is a link to AGENTS.md, so it
+# is measured once, as AGENTS.md.
+set -eu
+
+measured=$(vale --config=tools/lint/vale/audit.ini --output=JSON docs/*.md AGENTS.md README.md)
+
+if [ -n "${usage_sentences_over:-}${usage_paragraphs_over:-}" ]; then
+    printf '%s\n' "${measured}" | jq -r \
+        --argjson sentence "${usage_sentences_over:-null}" \
+        --argjson paragraph "${usage_paragraphs_over:-null}" '
+        [to_entries[]
+            | .key as $doc
+            | .value[]
+            | (if .Check == "Readability.Sentence" then "sentence"
+               elif .Check | IN("Readability.Paragraph", "Readability.ListItem") then "paragraph"
+               else empty end) as $block
+            | (if $block == "sentence" then $sentence else $paragraph end) as $over
+            | (.Message | tonumber | floor) as $words
+            | select($over != null and $words >= $over)
+            | {doc: $doc, line: .Line, block: $block, words: $words}]
+        | sort_by(.doc, .line)
+        | "| Doc | Line | Block | Words |",
+          "| --- | ---: | --- | ---: |",
+          (.[] | "| \(.doc) | \(.line) | \(.block) | \(.words) |")
+    '
+    exit
+fi
+
+printf '%s\n' "${measured}" | jq -r '
+    def value: .Message | tonumber;
+    def largest($checks): map(select(.Check | IN($checks[]))) | max_by(value) // {Message: "0", Line: 0};
+    def cell: "\(value | floor), to line \(.Line)";
+    [to_entries[]
+        | .key as $doc
+        | .value as $alerts
+        | {
+            doc: $doc,
+            grade: ($alerts | largest(["Readability.Grade"]) | value),
+            words: ($alerts | largest(["Readability.Words"]) | value | floor),
+            paragraph: ($alerts | largest(["Readability.Paragraph", "Readability.ListItem"])),
+            sentence: ($alerts | largest(["Readability.Sentence"]))
+        }]
+    | sort_by(-(.paragraph | value), .doc)
+    | "| Doc | Grade | Words of prose | Longest paragraph, words | Longest sentence, words |",
+      "| --- | ---: | ---: | --- | --- |",
+      (.[] | "| \(.doc) | \(.grade * 10 | round / 10) | \(.words) | \(.paragraph | cell) | \(.sentence | cell) |")
+'

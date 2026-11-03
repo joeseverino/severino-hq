@@ -11,33 +11,33 @@ agents alike. Setup, tasks and layout: [Development](docs/Development.md).
    exist there.
 2. Ready is the [definition of done](#definition-of-done).
 
-`mise tasks` lists the verbs to start from; `--hidden` adds the steps they
-run, each still runnable by the name a verdict gives it. `mise tasks info
-<task>` says what a task takes without running it; `mise run <task> --help`
-adds the examples a task carries (`dev:look`'s).
+mise prints the tasks live, so this file does not list them:
 
-- `mise run fast [BASE]` while editing. It selects through Python imports and
-  app names, so a rule held only by a string or a template needs `check`.
-- `mise run check` before handing work back, when the machine can hold it (a
-  worker runs `fast`, per its house rules): every gate CI runs. One of CI's
-  jobs alone is the task of its name: `lint`, `test`, `browser`, `build`,
-  `scan`.
-- `mise run test <labels>`, and `mise run test --at <base> <labels>` to prove a
-  new test fails without the fix, never a base worktree, snapshot or checkout
-  made by hand.
-- `mise run dev:scratch` in the agent's own worktree, never `mise run dev`.
-- `mise run manage -- <command>` for Django on an empty database, host alone,
-  `manage --scratch` on this checkout's scratch database; `fix` for what lint
-  holds and for derived files.
+| To see | Run |
+| --- | --- |
+| the verbs to start from, each with when to reach for it | `mise tasks` |
+| the steps they run, each runnable by the name a verdict gives it | `mise tasks --hidden` |
+| what a task takes, without running it | `mise tasks info <task>` |
+| the examples a task carries (`dev:look`'s) | `mise run <task> --help` |
 
-A CI job is named for the task it runs, so a gate goes in its job's file under
-`mise-tasks/` (`mise-tasks/lint.toml` for `lint:*`), never in a workflow.
+What the listing does not say:
+
+- `fast` selects through Python imports and app names, so a rule held only by
+  a string or a template needs `check`. A worker runs `fast`, per its house
+  rules.
+- A new test is proven to fail without the fix by `mise run test --at <base>
+  <labels>`, never by a base worktree, snapshot or checkout made by hand.
+- An agent runs `dev:scratch` in its own worktree, never `dev`.
+
+A CI job is named for the task it runs (`lint`, `test`, `browser`, `build`,
+`scan`), so a gate goes in its job's file under `mise-tasks/`
+(`mise-tasks/lint.toml` for `lint:*`), never in a workflow.
 
 The composed suite (`mise run test --composed`, run as the image runs it) is where the
 host and its extensions first meet, which CI cannot reach. It loads the set
 the gitignored `mise.local.toml` names. A worktree Claude Code makes gets a
 copy of the main checkout's through `.worktreeinclude`, and an agent leaves
-it as it is; it names the extensions' main checkouts, so composing an
+it as it is. It names the extensions' main checkouts, so composing an
 extension worktree instead is
 [one variable on the command line](docs/Development.md#the-extension-set).
 
@@ -73,11 +73,13 @@ Detail: [Architecture](docs/Architecture.md), [Plugins](docs/Plugins.md),
 HQ is a host. Its extensions are separate packages with their own
 repositories, tests and release cycles, installed at composition time. This
 repository names none of them: not their inventory, repository
-identifiers, routes, models, fixtures or vocabulary. A host that names an
-extension has taken a dependency on it, and the properties this design exists
-for (add an extension without touching the host, run the host with none
-installed, develop the two on independent schedules) quietly stop being true.
-Examples and tests use the synthetic `example.*` namespace.
+identifiers, routes, models, fixtures or vocabulary. Examples and tests use
+the synthetic `example.*` namespace.
+
+A host that names an extension has taken a dependency on it. The properties
+this design exists for then quietly stop being true: add an extension without
+touching the host, run the host with none installed, develop the two on
+independent schedules.
 
 Runtime-supplied composition metadata is the only place the real installed
 set meets the host; two tests in `hq/platform/application/tests/test_plugins.py`
@@ -136,7 +138,7 @@ architecture test, a glob) fails when its path matches nothing.
   way to do it.
 - An href built from data HQ did not write (a reading, an attestation, a
   manifest, the public contact form) passes through `web_url`, in Python or as
-  the template filter, so it is an http(s) address or no link at all.
+  the template filter. It is then an http(s) address or no link at all.
 - A dependency used by a plugin must survive a clean wheel install with
   `--no-deps`; the host-owned plugin check reproduces that production boundary.
 - A workflow's write to GitHub (a deployment status, a push, a pull request)
@@ -177,8 +179,9 @@ adding UI; grow a primitive rather than styling a page.
   it; a line-level `# noqa` names its code and says why.
 - A `# type: ignore[code]` is for a wrong stub, with the reason.
 - A new `lint:ast-grep` rule is a file of its own, with its reason, in
-  `tools/lint/ast-grep/rules` (`test-code/rules` for tests and test-support
-  modules), and its cases in `rule-tests/`.
+  `tools/lint/ast-grep/rules`, with its scope in its own `files:` and
+  `ignores:` (`sgconfig.yml` there names the scopes), and its cases in
+  `rule-tests/`.
 - A docstring says what the thing is and why it exists. How it works lives in
   the one doc or comment that owns the mechanism, so a long docstring is
   trimmed as its file is touched.

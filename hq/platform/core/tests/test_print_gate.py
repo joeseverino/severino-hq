@@ -6,7 +6,6 @@ from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from enum import Enum, IntEnum, StrEnum
 from pathlib import Path, PurePosixPath
-from unittest import mock
 
 import django
 from django import forms, template
@@ -20,6 +19,7 @@ from django.test import SimpleTestCase, override_settings
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy
 
+from hq.platform.application.plugin_testing import installed, sibling
 from hq.platform.application.printable import Unprintable
 from hq.platform.application.ui import MISSING
 from hq.platform.core import print_gate
@@ -193,24 +193,22 @@ class PrintGateTests(SimpleTestCase):
 
 
 class ScopeTests(SimpleTestCase):
-    def setUp(self):
-        print_gate._ours.cache_clear()
-        self.addCleanup(print_gate._ours.cache_clear)
-
     def test_an_extension_app_template_is_held_and_a_third_party_one_is_not(self):
+        """Held as the set installed at the print has it, whatever an earlier print found."""
+
         app = apps.get_app_config("messages")
         origin = Origin(str(Path(app.path) / "templates" / "example.html"), template_name="example.html")
 
         self.assertEqual(printed("{{ value }}", origin=origin, value=True), "True")
         # A manifest names its app by module or by AppConfig.
         for named in (app.name, f"{type(app).__module__}.{type(app).__qualname__}"):
-            print_gate._ours.cache_clear()
             with (
                 self.subTest(named),
-                mock.patch("hq.platform.core.print_gate.installed_plugin_apps", return_value=[named]),
+                installed(sibling(identifier="example.messages", django_apps=(named,))),
                 self.assertRaises(Unprintable),
             ):
                 printed("{{ value }}", origin=origin, value=True)
+        self.assertEqual(printed("{{ value }}", origin=origin, value=True), "True")
 
     def test_a_template_built_from_a_string_is_not_held(self):
         self.assertEqual(engines["django"].from_string("{{ value }}").render({"value": True}), "True")

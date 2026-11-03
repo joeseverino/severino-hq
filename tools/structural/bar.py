@@ -1,6 +1,8 @@
 """The structural bar as a gate: fail on a near-duplicate function pair
 outside tests that the baseline does not list, so the code stays one system
-(Structural Gate, in docs). ``--record`` rewrites the baseline from this tree.
+(Structural Gate, in docs). ``--record`` rewrites the baseline from this tree;
+``--pairs`` first prints every pair outside tests with what explains it, so a
+change to the classifier is read as a diff of that list.
 
 The graph is the codebase-memory-mcp release mise.toml pins, since the
 answer's shape is that release's; an answer the classifier refuses fails too.
@@ -53,7 +55,9 @@ def cli(store: Path, tool: str, arguments: dict) -> dict:
         env=env,
     )
     if answer.returncode != 0:
-        print(answer.stderr, file=sys.stderr)
+        # A tool killed by a signal (the memory limit's, say) writes no stderr.
+        ended = f"signal {-answer.returncode}" if answer.returncode < 0 else f"status {answer.returncode}"
+        print(f"structural bar: the graph's {tool} ended on {ended}", answer.stderr, sep="\n", file=sys.stderr)
         raise SystemExit(1)
     return json.loads(answer.stdout)
 
@@ -100,16 +104,23 @@ def main(asked: Usage) -> int:
     else:
         print(f"structural bar: answered from {CACHE.relative_to(ROOT)}, which read these same inputs", file=sys.stderr)
 
+    # One line, so a gate's verdict is never pushed out of view by pairs that pass.
+    explained = sum(1 for reason in current.values() if reason)
+    print(f"{counted(explained, 'similar pair', 'similar pairs')} explained by a classification", file=sys.stderr)
+    if asked.switch("pairs"):
+        for line, reason in current.items():
+            print(f"{line.removeprefix('similar ')}\t{reason or 'unexplained'}")
+    unexplained = [line for line, reason in current.items() if not reason]
     if asked.switch("record"):
-        BASELINE.write_text(HEADER + "".join(f"{line}\n" for line in current))
+        BASELINE.write_text(HEADER + "".join(f"{line}\n" for line in unexplained))
         print("structural baseline recorded")
         return 0
-    return compare(current)
+    return compare(unexplained)
 
 
-def measure() -> list[str] | None:
-    """Every pair outside tests, from a graph of this tree indexed afresh; None
-    when the classifier refuses the graph."""
+def measure() -> dict[str, str | None] | None:
+    """Every pair outside tests with what explains it, from a graph of this
+    tree indexed afresh; None when the classifier refuses the graph."""
 
     project = "structural-bar"
     # Under /tmp: the daemon's socket lives in the store, and a socket's path
@@ -159,7 +170,7 @@ def working_tree() -> bytes:
         return git("write-tree", env=env)
 
 
-def cached(key: str) -> list[str] | None:
+def cached(key: str) -> dict[str, str | None] | None:
     """The pairs a run with these inputs found, or None when none is kept."""
 
     entry = CACHE / f"{key}.json"
@@ -172,7 +183,7 @@ def cached(key: str) -> list[str] | None:
     return pairs
 
 
-def keep(key: str, pairs: list[str]) -> None:
+def keep(key: str, pairs: dict[str, str | None]) -> None:
     """Keep these pairs as the answer for these inputs, and drop all but the KEPT newest entries."""
 
     CACHE.mkdir(parents=True, exist_ok=True)

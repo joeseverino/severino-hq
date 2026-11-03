@@ -1,23 +1,21 @@
-import io
-import urllib.parse
 from contextlib import contextmanager
-from email.message import Message
-from urllib.error import HTTPError
 
 from django.test import SimpleTestCase
 
 from ..images import ImageRef
-from ..oci_registry import MAX_RESPONSE_BYTES, RegistryReadError, _CheckedRedirects, digest_of, labels, tags
-from .network import PUBLIC, Response, answering, resolving
+from ..oci_registry import MAX_RESPONSE_BYTES, RegistryReadError, digest_of, labels, tags
+from .network import PUBLIC, Response, answering, moved, resolving
 
 # The made-up hosts a registry, its token service and its CDN answer at.
 PUBLIC_NAMES = {"registry.example": PUBLIC, "auth.example": PUBLIC, "cdn.example": PUBLIC}
 
 
-def _challenge(url):
-    headers = Message()
-    headers["WWW-Authenticate"] = 'Bearer realm="https://auth.example/token",service="registry.example"'
-    return HTTPError(url, 401, "Unauthorized", headers, io.BytesIO())
+def _challenge(realm="https://auth.example/token"):
+    return Response(
+        {"errors": [{"code": "UNAUTHORIZED"}]},
+        {"WWW-Authenticate": f'Bearer realm="{realm}",service="registry.example"'},
+        status=401,
+    )
 
 
 class FakeRegistry:
@@ -27,16 +25,16 @@ class FakeRegistry:
         self.refuse_token = refuse_token
         self.calls = []
 
-    def __call__(self, request, timeout=None):
-        url = request.full_url
-        self.calls.append(url)
+    def __call__(self, request):
+        url = str(request.url)
+        self.calls.append(request.url)
         authorized = request.headers.get("Authorization") == "Bearer anonymous"
         if url.startswith("https://auth.example/token"):
             if self.refuse_token:
-                raise HTTPError(url, 401, "Unauthorized", Message(), io.BytesIO())
+                return Response({"errors": [{"code": "UNAUTHORIZED"}]}, status=401)
             return Response({"token": "anonymous"})
         if not authorized:
-            raise _challenge(url)
+            return _challenge()
         if "/tags/list" in url and "last=" not in url:
             return Response(
                 {"tags": ["1.0.0", "1.1.0"]}, {"Link": '</v2/team/app/tags/list?last=1.1.0&n=1000>; rel="next"'}
@@ -76,8 +74,8 @@ class RegistryTests(SimpleTestCase):
             found = tags(self.image)
 
         self.assertEqual(found, ["1.0.0", "1.1.0", "2.0.0"])
-        token_url = next(call for call in fake.calls if urllib.parse.urlsplit(call).hostname == "auth.example")
-        self.assertIn("scope=repository%3Ateam%2Fapp%3Apull", token_url)
+        token_url = next(call for call in fake.calls if call.host == "auth.example")
+        self.assertEqual(token_url.params["scope"], "repository:team/app:pull")
 
     def test_labels_come_from_the_platform_the_machines_run(self):
         with reads(FakeRegistry()):
@@ -89,12 +87,12 @@ class RegistryTests(SimpleTestCase):
         digest = "sha256:" + "f" * 64
         seen = []
 
-        def head(request, timeout=None):
-            seen.append(request.get_method())
+        def head(request):
+            seen.append(request.method)
             if request.headers.get("Authorization") != "Bearer anonymous":
-                if urllib.parse.urlsplit(request.full_url).hostname == "auth.example":
+                if request.url.host == "auth.example":
                     return Response({"token": "anonymous"})
-                raise _challenge(request.full_url)
+                return _challenge()
             return Response({}, {"Docker-Content-Digest": digest})
 
         with reads(head):
@@ -113,7 +111,7 @@ class BoundaryTests(SimpleTestCase):
     """Every host here is named by someone else, so none is trusted."""
 
     def test_a_registry_on_a_private_address_is_never_asked(self):
-        def opened(request, timeout=None):
+        def opened(request):
             raise AssertionError("no request may be made")
 
         with resolving({}), answering(opened):
@@ -122,10 +120,8 @@ class BoundaryTests(SimpleTestCase):
                     tags(ImageRef.parse(reference))
 
     def test_a_token_service_the_registry_names_is_checked_too(self):
-        def challenge_to_internal(request, timeout=None):
-            headers = Message()
-            headers["WWW-Authenticate"] = 'Bearer realm="https://internal.example/token",service="x"'
-            raise HTTPError(request.full_url, 401, "Unauthorized", headers, io.BytesIO())
+        def challenge_to_internal(request):
+            return _challenge("https://internal.example/token")
 
         with (
             resolving({"registry.example": PUBLIC, "internal.example": "10.0.0.7"}),
@@ -134,33 +130,48 @@ class BoundaryTests(SimpleTestCase):
         ):
             tags(ImageRef.parse("registry.example/team/app:1"))
 
-    def test_a_redirect_is_checked_and_leaves_the_token_behind(self):
-        from urllib.request import Request
+    def blob_moved_to(self, location):
+        """The blob a registry moves to ``location``, and every request made for it."""
 
-        handler = _CheckedRedirects()
-        request = Request(
-            "https://registry.example/v2/team/app/blobs/sha256:x", headers={"Authorization": "Bearer anonymous"}
-        )
-        with resolving(PUBLIC_NAMES):
-            followed = handler.redirect_request(
-                request, None, 307, "Temporary Redirect", Message(), "https://cdn.example/blob"
-            )
-        self.assertIsNone(followed.get_header("Authorization"))
-        with (
-            resolving(PUBLIC_NAMES),
-            self.assertRaises(RegistryReadError),
-        ):
-            handler.redirect_request(request, None, 307, "Temporary Redirect", Message(), "https://10.0.0.5/blob")
-        with self.assertRaises(RegistryReadError):
-            handler.redirect_request(request, None, 307, "Temporary Redirect", Message(), "http://cdn.example/blob")
+        asked = []
+
+        def answer(request):
+            asked.append((str(request.url), request.headers.get("Authorization")))
+            if request.url.host == "auth.example":
+                return Response({"token": "anonymous"})
+            if request.url.host == "registry.example":
+                if request.headers.get("Authorization") != "Bearer anonymous":
+                    return _challenge()
+                if "/blobs/" in request.url.path:
+                    return moved(location, 307)
+                return Response({"config": {"digest": "sha256:config"}})
+            return Response({"config": {"Labels": {"example": "label"}}})
+
+        with resolving({**PUBLIC_NAMES, "inside.example": "10.0.0.5"}), answering(answer):
+            try:
+                found = labels(ImageRef.parse("registry.example/team/app@sha256:platform"))
+            except RegistryReadError as exc:
+                found = exc
+        return found, asked
+
+    def test_a_redirect_to_a_public_cdn_is_followed_without_the_registrys_token(self):
+        found, asked = self.blob_moved_to("https://cdn.example/blob")
+
+        self.assertEqual(found, {"example": "label"})
+        self.assertEqual(asked[-1], ("https://cdn.example/blob", None))
+
+    def test_a_redirect_to_plain_http_or_inside_is_never_asked(self):
+        for location in ("http://cdn.example/blob", "https://inside.example/blob", "https://10.0.0.5/blob"):
+            with self.subTest(location=location):
+                found, asked = self.blob_moved_to(location)
+
+                self.assertIsInstance(found, RegistryReadError)
+                # The blob was asked for, and the place it moved to never was.
+                self.assertEqual(asked[-1][0], "https://registry.example/v2/team/app/blobs/sha256:config")
 
     def test_an_oversized_answer_is_refused(self):
-        class Huge(Response):
-            def read(self, size=-1):
-                return b"x" * (MAX_RESPONSE_BYTES + 1)
-
         with (
-            reads(lambda request, timeout=None: Huge({})),
+            reads(lambda request: Response(content=b"x" * (MAX_RESPONSE_BYTES + 1))),
             self.assertRaisesMessage(RegistryReadError, "more than"),
         ):
             tags(ImageRef.parse("registry.example/team/app:1"))
@@ -172,12 +183,12 @@ class AttestationTests(SimpleTestCase):
     def registry(self, layers):
         blobs = {f"sha256:{name}": body for name, (_type, _size, body) in layers.items()}
 
-        def answer(request, timeout=None):
-            url = request.full_url
+        def answer(request):
+            url = str(request.url)
             if url.startswith("https://auth.example/token"):
                 return Response({"token": "anonymous"})
             if request.headers.get("Authorization") != "Bearer anonymous":
-                raise _challenge(url)
+                return _challenge()
             if url.endswith("/manifests/sha256:index"):
                 return Response(
                     {
@@ -244,11 +255,11 @@ class AttestationTests(SimpleTestCase):
     def test_an_image_with_nothing_attached_has_no_statements(self):
         from ..oci_registry import attestations
 
-        def answer(request, timeout=None):
-            if request.full_url.startswith("https://auth.example/token"):
+        def answer(request):
+            if str(request.url).startswith("https://auth.example/token"):
                 return Response({"token": "anonymous"})
             if request.headers.get("Authorization") != "Bearer anonymous":
-                raise _challenge(request.full_url)
+                return _challenge()
             return Response(
                 {"manifests": [{"digest": "sha256:platform", "platform": {"os": "linux", "architecture": "amd64"}}]}
             )

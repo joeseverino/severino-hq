@@ -65,7 +65,7 @@ func (s *stubBridge) Calls() []call {
 func strict(t *testing.T, data []byte, into any) {
 	t.Helper()
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
+	decoder.DisallowUnknownFields() //nolint:forbidigo // reads the generated bridge types as the bridge client does, on v1.
 	if err := decoder.Decode(into); err != nil {
 		t.Fatalf("not contract-valid %T: %v\n%s", into, err, data)
 	}

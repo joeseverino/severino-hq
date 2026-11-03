@@ -12,6 +12,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.tests.writers import form_keyed
 
 from ..mail_policy import (
     SPF_LOOKUP_LIMIT,
@@ -220,7 +221,8 @@ class MailPageTests(TestCase):
         """`fo` is not on the form. Saving must not delete it."""
 
         self.client.post(
-            self.url, {"section": "dmarc", "p": "reject", "sp": "", "rua": "mailto:box@example.com", "pct": "100"}
+            self.url,
+            form_keyed({"section": "dmarc", "p": "reject", "sp": "", "rua": "mailto:box@example.com", "pct": "100"}),
         )
         content = ManagedResource.objects.get(key="dmarc").spec["content"]
 
@@ -229,7 +231,8 @@ class MailPageTests(TestCase):
 
     def test_senders_are_composed_rather_than_typed(self):
         self.client.post(
-            self.url, {"section": "spf", "rule": ["include:example.net", "include:other.example"], "default": "~"}
+            self.url,
+            form_keyed({"section": "spf", "rule": ["include:example.net", "include:other.example"], "default": "~"}),
         )
         content = ManagedResource.objects.get(key="spf").spec["content"]
 
@@ -239,7 +242,7 @@ class MailPageTests(TestCase):
     def test_the_sender_policy_always_ends_with_a_decision(self):
         """Without a final `all`, unlisted senders are simply unhandled."""
 
-        self.client.post(self.url, {"section": "spf", "rule": ["include:example.net"], "default": "-"})
+        self.client.post(self.url, form_keyed({"section": "spf", "rule": ["include:example.net"], "default": "-"}))
 
         self.assertIn("-all", ManagedResource.objects.get(key="spf").spec["content"])
 

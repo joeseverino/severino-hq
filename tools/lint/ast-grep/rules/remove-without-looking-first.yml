@@ -1,0 +1,41 @@
+# A file is moved or removed whether or not it is there, never after a look
+# that says it is: two runs that share it (one gate's suite under sh and dash,
+# two dev:look runs) can both look, and the second to act finds it gone and
+# raises FileNotFoundError. The act itself is the look.
+id: remove-without-looking-first
+language: python
+severity: error
+message: A file is looked for and then moved or removed, which another run can do in between; act on it and let a missing file be no error.
+note: >-
+  `path.unlink(missing_ok=True)`; a move, `os.rmdir` or `shutil.rmtree` in
+  `with contextlib.suppress(FileNotFoundError):`.
+rule:
+  any:
+    - kind: if_statement
+    - kind: elif_clause
+  all:
+    - has:
+        field: condition
+        any:
+          - matches: looked-for
+          - kind: boolean_operator
+            has: { matches: looked-for, stopBy: end }
+    - has:
+        field: consequence
+        stopBy: end
+        any:
+          - pattern: $PATH.unlink($$$)
+          - pattern: $PATH.replace($$$)
+          - pattern: $PATH.rename($$$)
+          - pattern: $PATH.rmdir()
+          - pattern: shutil.rmtree($PATH $$$)
+          - pattern: os.remove($PATH)
+          - pattern: os.unlink($PATH)
+          - pattern: os.rmdir($PATH)
+          - pattern: os.rename($PATH, $$$)
+          - pattern: os.replace($PATH, $$$)
+utils:
+  looked-for:
+    any:
+      - pattern: $PATH.exists()
+      - pattern: os.path.exists($PATH)

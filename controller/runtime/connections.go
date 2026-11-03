@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 )
 
 // Environment is what the launcher tells a run that is not a connection: who
@@ -34,6 +35,9 @@ type Environment struct {
 	// ACMEDir is the certificate lineage directory.
 	ACMEDir                string `env:"HQ_ACME_DIR"`
 	ACMEPropagationSeconds string `env:"ACME_PROPAGATION_SECONDS"`
+	// SealKeyDir holds the private keys HQ's web seals to (NewOpener),
+	// mounted read-only.
+	SealKeyDir string `env:"HQ_SEAL_DIR"`
 	// Run is this run's nonce, which labels its own container.
 	Run string `env:"HQ_CONTROLLER_RUN"`
 	// Image is the image this run was started from, and SourceRepository the
@@ -125,7 +129,8 @@ type Connections struct {
 
 // NewConnections holds each connection under its ref, with the space around
 // its settings removed. A ref two connections share names neither, so which
-// credential answers never depends on order.
+// credential answers never depends on order. Every secret setting is learned
+// (mask.Learn), so no log or report of this process carries one.
 func NewConnections(list ...connections.Connection) Connections {
 	found := map[string]connections.Connection{}
 	shared := map[string]bool{}
@@ -134,6 +139,7 @@ func NewConnections(list ...connections.Connection) Connections {
 			shared[connection.Ref] = true
 		}
 		found[connection.Ref] = connection.Trimmed()
+		mask.Learn(found[connection.Ref].Secrets()...)
 	}
 	whole := map[string]bool{}
 	for ref := range shared {
@@ -226,7 +232,8 @@ func (c Connections) For(provider ConnectionProvider, ref string) (connections.C
 
 // Need is a connection's settings in the shape a provider reads: member is
 // the connection's member for that shape. A connection that arrived in
-// another shape lacks every setting of this one.
+// another shape lacks every setting of this one. Its secret settings were
+// learned when the connection was held (NewConnections).
 func Need[S any](member *S) (S, error) {
 	if member == nil {
 		var none S

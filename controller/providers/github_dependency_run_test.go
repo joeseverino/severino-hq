@@ -259,6 +259,9 @@ func TestAMalformedRunResultIsRefused(t *testing.T) {
 		"bad time":       strings.Replace(dependencyResult, `"2030-01-02T03:00:00Z"`, `"yesterday"`, 1),
 		"ends too early": strings.Replace(dependencyResult, `"2030-01-02T03:20:00Z"`, `"2030-01-02T02:00:00Z"`, 1),
 		"two documents":  dependencyResult + `{}`,
+		"trailing data":  dependencyResult + `]`,
+		"a name twice":   strings.Replace(dependencyResult, `"outcome":"ok"`, `"outcome":"failed","outcome":"ok"`, 1),
+		"a name in case": strings.Replace(dependencyResult, `"outcome":"ok"`, `"Outcome":"ok"`, 1),
 	} {
 		h := newDependencyRunHarness(t, runtime.DependencyUpdatesPlan{}, runtime.Environment{DependencyRun: writeResult(t, text)})
 		_, err := h.read(t)

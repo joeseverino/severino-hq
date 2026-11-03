@@ -34,7 +34,7 @@ type TLSCertificateSpec struct {
 	Consumers         []TLSConsumer            `json:"consumers"`
 	PublishTo         []OnePasswordPublication `json:"publish_to"`
 	RenewalWindowDays int                      `json:"renewal_window_days"`
-	Material          *runtime.Material        `json:"material,omitempty"`
+	Material          *runtime.OpenedMaterial  `json:"material,omitempty"`
 }
 
 // TLSCertificateObserved is what a certificate resource was last seen holding:

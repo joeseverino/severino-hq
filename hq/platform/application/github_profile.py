@@ -9,7 +9,7 @@ GitHub rations calls by the hour (``observations.github.PROFILE_EVERY``).
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.utils import timezone
 
@@ -132,7 +132,15 @@ def standing() -> Standing:
     return read_standing((KIND,), asked) if asked is not None else Standing()
 
 
-def request_read(command: ProfileReadCommand, *, principal: Principal) -> dict[str, Any]:
+class ProfileReadRequested(TypedDict):
+    """A read of a GitHub profile, asked for now."""
+
+    ok: Literal[True]
+    login: Annotated[str, Describe("The GitHub account to read, by its login.")]
+    asked_at: Annotated[str, Describe("When the read was asked for, an ISO 8601 date-time.")]
+
+
+def request_read(command: ProfileReadCommand, *, principal: Principal) -> ProfileReadRequested:
     """Ask the controller to read a profile now: the ``github.profile.read``
     capability, answering when it was asked.
 

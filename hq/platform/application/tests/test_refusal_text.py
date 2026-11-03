@@ -5,11 +5,12 @@ from io import StringIO
 from unittest import mock
 
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.platform.mcp import services
-from hq.platform.mcp.identity import reset_principal, set_principal
+from hq.platform.mcp.identity import set_principal
 
 from ..adoption_testing import managing_everything
 from ..capabilities import execute_capability
@@ -17,7 +18,7 @@ from ..record_errors import PolicyError
 from ..resource_operations import OperationCommand, request_reconcile
 from ..security import cli_principal, mcp_principal
 
-RECONCILE = "infrastructure.reconcile"
+RECONCILE = "infrastructure.resource.reconcile"
 
 
 def switched_off() -> ManagedResource:
@@ -60,14 +61,15 @@ class PolicyRefusalTextTests(TestCase):
     def test_the_operator_command_line_answers_with_the_reason(self):
         request = {"tool": "execute_capability", "arguments": {"name": RECONCILE, "payload": {}, "target": "app-dns"}}
         output = StringIO()
-        with mock.patch("sys.stdin", StringIO(json.dumps(request))):
+        with mock.patch("sys.stdin", StringIO(json.dumps(request))), self.assertRaises(CommandError):
             call_command("hq_call", stdout=output)
 
         self.assertRefused(json.loads(output.getvalue()))
 
-    @override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
+    @override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
     def test_an_agent_is_answered_with_the_reason(self):
-        bound = set_principal(mcp_principal())
-        self.addCleanup(reset_principal, bound)
+        self.enterContext(set_principal(mcp_principal()))
 
-        self.assertRefused(services.execute_capability(RECONCILE, {}, target=self.resource.key))
+        self.assertRefused(
+            services.execute_capability(RECONCILE, {"idempotency_key": "example-reconcile"}, target=self.resource.key)
+        )

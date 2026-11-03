@@ -80,7 +80,8 @@ class ProjectPageTests(TestCase):
         self.assertIn("Writeups and pages 1", [" ".join(heading.text.split()) for heading in elements(response, "h2")])
         self.assertNotContains(response, "Content items")
         self.assertContains(response, f'href="{item.get_absolute_url()}"')
-        self.assertIn(("Example Host · Hosting", expense.get_absolute_url()), links(response))
+        # The dot between who was paid and for what is drawn, never read.
+        self.assertIn(("Example Host Hosting", expense.get_absolute_url()), links(response))
 
     def test_the_description_is_the_heads_own_line_and_not_a_section(self):
         self.project.description = "One place for every example."

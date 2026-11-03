@@ -19,6 +19,8 @@ from hq.platform.application.integrations import integration_graph
 from hq.platform.application.references import NO_LONGER_OFFERED
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.markup import select, within
+from hq.platform.application.tests.writers import drawn_key
+from hq.platform.application.web_writes import RETRY_KEY_FIELD
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 User = get_user_model()
@@ -66,15 +68,15 @@ class RecordFieldTests(TestCase):
         Project.objects.create(name="Example project", slug="example-project")
         page = self.client.get("/commands/asset.create/")
         self.assertIn("example-project", option_values(page, "related_projects"))
-        key = page.context["form"].initial["__execution_key"]
+        key = drawn_key(page, "data-command-form")
 
         refused = self.client.post(
             "/commands/asset.create/",
-            {"item_name": "Example", "related_projects": "missing-project", "__execution_key": key},
+            {"item_name": "Example", "related_projects": "missing-project", RETRY_KEY_FIELD: key},
         )
         accepted = self.client.post(
             "/commands/asset.create/",
-            {"item_name": "Example", "related_projects": "example-project", "__execution_key": key},
+            {"item_name": "Example", "related_projects": "example-project", RETRY_KEY_FIELD: key},
         )
 
         self.assertEqual(refused.status_code, 400)

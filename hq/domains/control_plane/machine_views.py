@@ -11,7 +11,12 @@ from django.views.generic import TemplateView
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.connections import machines_once
 from hq.platform.application.hq_self import LABEL as HQ_LABEL
-from hq.platform.application.machine_context import header_addresses, machine_links, sections_for as machine_sections
+from hq.platform.application.machine_context import (
+    header_addresses,
+    machine_links,
+    problems_by_part,
+    sections_for as machine_sections,
+)
 from hq.platform.application.machines import declaration_seed, machine
 from hq.platform.application.pages import PageAction, PageDialog, PageMixin
 from hq.platform.application.resource_capabilities import UPDATE_CAPABILITY, resource_capabilities
@@ -167,7 +172,7 @@ class MachineDetailView(PageMixin, TemplateView):
     def get_page_title(self):
         return self.found.name
 
-    page_trail = ("Machines", reverse_lazy("control_plane:machines"))
+    page_trail = (("Machines", reverse_lazy("control_plane:machines")),)
 
     @override
     def get_page_actions(self):
@@ -220,7 +225,8 @@ class MachineDetailView(PageMixin, TemplateView):
         # what HQ learns next reaches the page without either being edited.
         sections = machine_sections(found)
 
-        whole, context["relationships"] = for_machine(found, sections, principal=web_principal(self.request.user))
+        principal = web_principal(self.request.user)
+        whole, context["relationships"] = for_machine(found, sections, principal=principal)
         # One Docker environment is a line under the containers heading. Its
         # table is left for a machine that has several.
         context["docker"] = docker_line(found) if found.containers else None
@@ -253,6 +259,8 @@ class MachineDetailView(PageMixin, TemplateView):
         # containers page says it, and what the machine keeps that nothing runs.
         context.update(on_machine(found))
         context["header_addresses"] = header_addresses(found)
+        # Each line under the part it is about, as HQ's own page draws them.
+        context["problems_in"] = problems_by_part(found, principal)
         # The same panel as the tailnet page, started on this machine. Asked
         # here it is nearly always about this one, so both ends default to it
         # and changing either is one dropdown rather than three.

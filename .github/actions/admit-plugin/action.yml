@@ -146,9 +146,11 @@ runs:
         set -euo pipefail
         cd host
         . ./tools/pipeline/toolchain.env
-        # The oldest, which the images run and so the one a wheel is installed on.
-        echo "python=${PYTHON_VERSIONS%% *}" >> "$GITHUB_OUTPUT"
-        echo "cordon-commit=$CORDON_COMMIT" >> "$GITHUB_OUTPUT"
+        {
+          # The oldest, which the images run and so the one a wheel is installed on.
+          echo "python=${PYTHON_VERSIONS%% *}"
+          echo "cordon-commit=$CORDON_COMMIT"
+        } >> "$GITHUB_OUTPUT"
 
     - name: Check out exact Cordon verifier
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -162,11 +164,13 @@ runs:
       with:
         python-version: ${{ steps.pins.outputs.python }}
 
-    - uses: ./host/.github/actions/uv
+    - uses: ./host/.github/actions/host-tool
       with:
         host: host
+        tool: uv
 
     - name: Build the immutable wheel
+      id: dependency-lock
       shell: bash
       run: |
         set -euo pipefail
@@ -175,20 +179,45 @@ runs:
         test "$(find dist -maxdepth 1 -name '*.whl' | wc -l)" -eq 1
 
     - name: Audit locked dependencies
+      id: dependency-audit
       shell: bash
       # The host's own audit, run by the host's pinned uv.
       run: host/tools/pipeline/audit.sh "$PACKAGE_DIR"
 
-    - name: Generate wheel SBOM
-      uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+    # The trivy the host checkout's mise.lock records, the one its image
+    # scans run.
+    - name: Install the host's trivy
+      uses: ./host/.github/actions/host-tool
       with:
-        path: dist
-        format: spdx-json
-        output-file: wheel.spdx.json
-        upload-artifact: false
+        host: host
+        tool: trivy
 
-    - name: Install Cosign
-      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+    - name: Generate wheel SBOM
+      id: wheel-sbom
+      shell: bash
+      # Read from the package's lock, which the build just held to its
+      # pyproject.toml, since trivy does not open a wheel. Its dev groups are
+      # left out, so the SBOM lists the wheel and what installs beside it. An
+      # SBOM format turns trivy's security scanning off, so no database is
+      # fetched. An SBOM that does not name the distribution read nothing.
+      env:
+        DISTRIBUTION: ${{ steps.identity.outputs.distribution }}
+      run: |
+        set -euo pipefail
+        trivy fs --quiet --format spdx-json --output wheel.spdx.json "$PACKAGE_DIR/uv.lock"
+        name=$(printf '%s' "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]' | tr -s '_.' '--')
+        if ! jq -e --arg name "$name" 'any(.packages[]; .name == $name)' wheel.spdx.json > /dev/null; then
+          echo "::error::The SBOM of $PACKAGE_DIR/uv.lock does not name $DISTRIBUTION."
+          exit 1
+        fi
+
+    # The cosign the host checkout's mise.lock records: the release Compose
+    # and the host verify this admission with.
+    - name: Install the host's cosign
+      uses: ./host/.github/actions/host-tool
+      with:
+        host: host
+        tool: cosign
 
     - name: Emit and sign admission
       shell: bash

@@ -54,6 +54,15 @@ def timer(unit: str = TIMER, activates: str = SERVICE, **said) -> dict:
     }  # fmt: skip
 
 
+def socket(unit: str, activates: str = SERVICE, **said) -> dict:
+    """A unit that does its work while active, a socket listening by default."""
+
+    return {
+        "unit": unit, "load": "loaded", "file_state": "enabled", "active": "active", "sub": "listening",
+        "activates": activates, "read_at": stamp(), **said,
+    }  # fmt: skip
+
+
 def failed(unit: str = SERVICE, **said) -> dict:
     return service(unit, **{"active": "failed", "sub": "failed", "result": "exit-code", "main_status": 3, **said})
 
@@ -113,7 +122,9 @@ class RecordTests(SimpleTestCase):
                 self.assertEqual(SPEC.clean([service(**{field: value})]), ([], 1))
 
     def test_the_reading_holds_no_secret(self):
-        """Every field is a unit name, a state word, a number or an instant."""
+        """Every field is a unit name, a state word, a number or an instant,
+        but the unit file's title, which is words and never a path or an
+        assignment."""
 
         declared = contract()["components"]["schemas"]["HostUnitRecord"]
         self.assertFalse(declared["additionalProperties"])
@@ -121,14 +132,25 @@ class RecordTests(SimpleTestCase):
             with self.subTest(field=name):
                 self.assertTrue(schema["type"] == "integer" or schema.get("pattern"), "free text")
                 self.assertNotRegex(name, r"exec|environment|credential|path|command")
-        for refused in (
-            "EXAMPLE_TOKEN=sentinel-value",
-            "/run/example/token",
-            "two words",
-            "Sentinel0123456789abcdef0123456789abcdef",
+        # Description is the one field of words; a second waits on a decision.
+        words = {"title"}
+        self.assertEqual(
+            {
+                name
+                for name, schema in declared["properties"].items()
+                if re.search(schema.get("pattern", "^$"), "two words")
+            },
+            words,
+        )
+        for refused, anywhere in (
+            ("EXAMPLE_TOKEN=sentinel-value", True),
+            ("/run/example/token", True),
+            ("a title\nover two lines", True),
+            ("two words", False),
+            ("Sentinel0123456789abcdef0123456789abcdef", False),
         ):
             for name, schema in declared["properties"].items():
-                if "pattern" in schema:
+                if "pattern" in schema and (anywhere or name not in words):
                     self.assertIsNone(re.search(schema["pattern"], refused), (name, refused))
 
 
@@ -170,6 +192,14 @@ class SourceTests(SimpleTestCase):
         for name in shipped:
             self.assertNotIn(name, source)
 
+    def test_every_unit_type_shipped_is_judged_kept_active_or_run_when_started(self):
+        types = {path.suffix for path in UNITS.iterdir() if path.is_file() and not path.name.endswith(".example")}
+
+        self.assertIn(".service", types)
+        for suffix in types:
+            with self.subTest(type=suffix):
+                self.assertIn(suffix, (*rules.KEPT_ACTIVE, *rules.RUN_WHEN_STARTED))
+
 
 class HealthyTests(TestCase):
     def setUp(self):
@@ -191,6 +221,16 @@ class HealthyTests(TestCase):
         self.assertEqual(every_rule(), NOTHING)
 
     def test_a_machine_that_reports_no_units_raises_nothing(self):
+        self.assertEqual(every_rule(), NOTHING)
+
+    def test_a_listening_or_held_socket_and_a_mounted_mount_raise_nothing(self):
+        sweep(
+            service(),
+            socket("severino-hq-example.socket", sub="listening"),
+            socket("severino-hq-example-held.socket", sub="running"),
+            socket("run-example.mount", activates="", sub="mounted"),
+        )
+
         self.assertEqual(every_rule(), NOTHING)
 
 
@@ -316,6 +356,21 @@ class AbsentTests(TestCase):
             },
         )
         self.assertEqual(raised("timer-stalled"), [])
+
+    def test_a_socket_that_is_not_listening_and_a_mount_that_is_not_mounted_are_not_started(self):
+        sweep(
+            service(),
+            socket("severino-hq-example.socket", active="inactive", sub="dead"),
+            socket("run-example.mount", activates="", active="inactive", sub="dead"),
+        )
+
+        self.assertEqual(
+            self.state(),
+            {"severino-hq-example.socket": "Not started", "run-example.mount": "Not started"},
+        )
+        (finding,) = raised("unit-not-installed")
+        self.assertIn("systemctl enable --now severino-hq-example.socket", str(finding))
+        self.assertIn("systemctl enable --now run-example.mount", str(finding))
 
     def test_a_service_that_is_not_running_now_is_not_absent(self):
         sweep(service(), service("severino-hq-example-other.service", file_state=""))

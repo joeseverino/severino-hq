@@ -223,3 +223,61 @@ class SummaryTests(SimpleTestCase):
 
         self.assertIn("slowest", listed[0])
         self.assertTrue(listed[2].startswith("/ "), listed)
+
+
+def typed(report: dict, *, coded: int) -> dict:
+    """``report`` with each first load's bytes counted by type, its two stylesheets and scripts
+    ``coded`` of them compressed."""
+
+    report = copy.deepcopy(report)
+    for entry in report["pages"]:
+        for seen in entry["browser"].values():
+            seen["first"] |= {
+                "by_type": {
+                    "document": 10240,
+                    "stylesheet": 20480,
+                    "script": 5120,
+                    "font": 0,
+                    "image": 2048,
+                    "other": 0,
+                },
+                "static": 2,
+                "static_coded": coded,
+            }
+    return report
+
+
+class WireBytesTests(SimpleTestCase):
+    """A first load's bytes by type sit beside its total, and a load whose assets came uncompressed,
+    as a live server sends them, offers no byte figure as a first load's."""
+
+    def test_each_type_s_bytes_sit_beside_the_first_load_s_total_and_sum_over_the_pages(self):
+        found = rows(table.render(typed(RECORDED, coded=2)))
+
+        self.assertEqual(found["/", "402"]["first KB"], f"{563445 / 1024:.1f}")
+        self.assertEqual(
+            {name: found["/", "402"][name] for name in ("doc KB", "css KB", "js KB", "img KB")},
+            {"doc KB": "10.0", "css KB": "20.0", "js KB": "5.0", "img KB": "2.0"},
+        )
+        self.assertEqual(found["total", "402"]["css KB"], "40.0")
+
+    def test_a_load_whose_assets_came_uncompressed_shows_no_byte_figure_and_the_title_says_why(self):
+        rendered = table.render(typed(RECORDED, coded=0))
+        found = rows(rendered)
+
+        for name in ("first KB", "doc KB", "css KB", "repeat KB"):
+            with self.subTest(column=name):
+                self.assertEqual(found["/", "402"][name], "-")
+                self.assertEqual(found["total", "402"][name], "-")
+        self.assertEqual(found["/", "402"]["first req"], "25", "what is not bytes is still shown")
+        self.assertIn(table.LIVE, rendered.splitlines()[0])
+        self.assertNotIn(table.LIVE, table.render(typed(RECORDED, coded=1)).splitlines()[0])
+
+    def test_beside_a_base_served_live_no_byte_figure_is_offered_either(self):
+        base = typed(RECORDED, coded=0)
+        base["commit"] = "0123456789ab"
+
+        rendered = table.render(typed(RECORDED, coded=2), base)
+
+        self.assertIn(table.LIVE, rendered.splitlines()[0])
+        self.assertEqual(rows(rendered)["/", "402"]["first KB"], f"{563445 / 1024:.1f}")

@@ -51,6 +51,10 @@ for image in release candidate; do
     esac
     { cat "${work}/extended"; stage "${from}"; } >"${work}/${image}"
     collects_last "${work}/${image}" "composition/Dockerfile's ${image}"
+    # The host image's tree is already a layer below: collecting straight
+    # into it again ships every asset twice.
+    grep -v '^[[:space:]]*#' "${work}/${image}" | grep 'collectstatic' | grep -qv 'composition/collectstatic\.sh' &&
+        fail "composition/Dockerfile's ${image} collects over the host's assets rather than writing only what differs (composition/collectstatic.sh)"
 done
 
 # 3. The application's bytecode is compiled into the image, valid without a

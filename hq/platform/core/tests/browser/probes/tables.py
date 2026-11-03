@@ -1,6 +1,6 @@
 """Probes of tables: their cells, rows, columns and gutter, and the tables drawn to probe them."""
 
-from hq.platform.core.tests.browser.probes.describe import DESCRIBE, PAINTED_PART
+from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, PAINTED_PART
 
 CELLS = (
     "() => {"
@@ -126,6 +126,117 @@ TABLES_THAT_DO_NOT_FIT = """(scroll) => [...document.querySelectorAll('main ' + 
     && table.getBoundingClientRect().width > box.clientWidth + 1)
   .map(([box, table]) => (box.getAttribute('aria-label') || table.querySelector('th')?.textContent || '').trim().slice(0, 24)
     + ' +' + Math.round(table.getBoundingClientRect().width - box.clientWidth))"""
+
+
+# A cell's identifier cut in a table whose columns still give way (no
+# `data-narrow`, tables.js): one no longer than its column's hold
+# (`--name-hold`, read off a box sized by it in the same cell) had the room to
+# be shown whole.
+CUT_WITH_ROOM = (
+    "([boxes, holders, unseen]) => {"
+    + DESCRIBE
+    + CUTS
+    + """
+  const found = [];
+  // What a name asks for on one line: its runs end to end, however a clamp
+  // wraps them, inside its own padding.
+  const asked = (el) => {
+    const pad = getComputedStyle(el);
+    let width = parseFloat(pad.paddingLeft) + parseFloat(pad.paddingRight);
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!textShown(node) || node.parentElement.closest(`${unseen}, [aria-hidden=true]`)) continue;
+      cutRange.selectNodeContents(node);
+      for (const r of cutRange.getClientRects()) width += r.width;
+    }
+    return Math.round(width);
+  };
+  for (const table of document.querySelectorAll('main table:not([data-narrow])')) {
+    if (!table.checkVisibility() || table.closest('details:not([open])')) continue;
+    for (const el of table.querySelectorAll(`:scope > tbody > tr:not([data-row-detail], :has(> * > [aria-expanded="true"])) > td ${boxes}`)) {
+      if (!el.checkVisibility() || !cutsIn(el, unseen).some((run) => run.boxes.includes(el))) continue;
+      const asks = asked(el);
+      const cell = el.closest('td');
+      const ruler = document.createElement('div');
+      ruler.style.cssText = 'position: absolute; visibility: hidden; block-size: 0; inline-size: var(--name-hold)';
+      cell.append(ruler);
+      const hold = ruler.getBoundingClientRect().width;
+      ruler.remove();
+      // The hold bounds the name's whole box, an external link's arrow with it.
+      let holder = el;
+      for (let up = el.parentElement; up && up !== cell; up = up.parentElement) {
+        if (up.matches(holders)) holder = up;
+      }
+      const beside = holder.getBoundingClientRect().width - el.clientWidth;
+      if (asks + beside <= hold + 1)
+        found.push(`${describe(el)} "${el.textContent.trim().slice(0, 40)}" is cut to ${el.clientWidth}px of ${asks}px though its column holds ${Math.round(hold)}px`);
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
+# A value cut short that nothing shows whole: its row does not open at this
+# width, and either the cut draws no ellipsis, so nothing tells a reader there
+# is more to see, or, outside a narrow box (`--box`, tables.css), where a
+# pointer can hover, nothing around it carries its whole text as a title or a
+# tip (`data-tip`, app.js). Cut is read as `CUTS` reads it, up to the cell.
+CUT_AND_CLOSED = (
+    "(unseen) => {"
+    + DESCRIBE
+    + CUTS
+    + """
+  const found = [];
+  const plain = (text) => (text || '').replace(/[\\s\\u00ad\\u200b\\u2060]+/g, '');
+  // Hover text over the cut run that holds the whole of what its innermost
+  // cutting box holds.
+  const titled = (node, inner, cell) => {
+    const whole = plain(inner.textContent);
+    for (let up = node.parentElement; up && up !== cell.parentElement; up = up.parentElement) {
+      const said = up.getAttribute('title') ?? up.dataset.tip;
+      if (said && plain(said).includes(whole)) return true;
+    }
+    return false;
+  };
+  const rows = 'main table > tbody > tr:not([data-row-detail], .row-detail, .is-expanded)';
+  for (const row of document.querySelectorAll(rows)) {
+    if (!row.checkVisibility() || row.closest('details:not([open])')) continue;
+    if ([...row.querySelectorAll('[aria-expanded]')].some((toggle) => toggle.checkVisibility())) continue;
+    const narrow = getComputedStyle(row.closest('table')).getPropertyValue('--box').trim() === 'narrow';
+    for (const cell of row.querySelectorAll(':scope > :is(td, th)')) {
+      for (const {node, boxes, marked} of cutsIn(cell, unseen)) {
+        const by = boxes.at(-1);
+        const why = !marked ? 'with no ellipsis' : narrow ? 'in a narrow box' : titled(node, boxes[0], cell) ? '' : 'with no title';
+        if (why) found.push(`${describe(by)} "${by.textContent.trim().slice(0, 40)}" is cut ${why}, in a row that does not open`);
+      }
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
+# A value cut short in a row that is open: the row and the line beneath it,
+# which is how a narrow box shows a value whole, so nothing there may cut one.
+CUT_WHEN_OPEN = (
+    "(unseen) => {"
+    + DESCRIBE
+    + CUTS
+    + """
+  const found = [];
+  const rows = 'main table > tbody > tr.is-expanded:not(.row-detail), main table > tbody > tr.is-expanded + tr.row-detail';
+  for (const row of document.querySelectorAll(rows)) {
+    if (!row.checkVisibility() || row.closest('details:not([open])')) continue;
+    for (const cell of row.querySelectorAll(':scope > :is(td, th)')) {
+      for (const {boxes} of cutsIn(cell, unseen)) {
+        found.push(`${describe(boxes.at(-1))} "${boxes.at(-1).textContent.trim().slice(0, 40)}" is cut in a row that is open`);
+      }
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
 
 
 UNSEEN_COLUMNS = (
@@ -268,6 +379,92 @@ ROW_TOGGLE_TABLES = """
 <tr data-probe="cut-in-a-kept-gutter"><td class="row-gutter">Name{% row_toggle %}</td>
 <td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
 </tbody></table>{% endtable_region %}"""
+
+# A table of cut values, each the word its row is probed by then more: one
+# with no title, one carrying its whole text as a title, one titled in a row
+# that opens, two past the line a clamp ends with an ellipsis (a block and a
+# link set in its line, as a cell's name is), and two cut
+# where no ellipsis can land: a box of words around a
+# box of its own, and a name's chip in the muted line under a row's name, as
+# a unit's page drew one. A note wider than a phone puts the table in a
+# narrow box there, which keeps the gutter of a table whose rows open, so the
+# third opens; a wide box shows each titled value whole on hover, and a cut
+# with no ellipsis tells no one to hover.
+_CUT = (
+    '<div style="max-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap"{}>'
+    "{} value far too long to fit</div>"
+)
+_CHIP = "chip-" + "-".join(["example-unit-name-long-enough-to-be-cut"] * 4) + ".timer"
+_NOTE = '<td><span style="display: inline-block; inline-size: 30rem">A note wider than a phone</span></td>'
+CUT_TABLE = (
+    '{% load value_tags %}{% table_region "Cuts" %}<table class="data-table"><thead><tr>'
+    '{% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" %}</tr></thead><tbody>'
+    + "".join(
+        f'<tr><td class="row-gutter">{name.title()}{toggle}</td><td>{_CUT.format(title.format(name), name)}</td>{_NOTE}</tr>'
+        for name, title, toggle in (
+            ("untitled", "", ""),
+            ("titled", ' title="{} value far too long to fit"', ""),
+            ("opens", ' title="{} value far too long to fit"', "{% row_toggle %}"),
+        )
+    )
+    + '<tr><td class="row-gutter">Clamped</td><td><div style="display: -webkit-box; -webkit-box-orient: vertical; '
+    '-webkit-line-clamp: 1; overflow: hidden; max-width: 80px">clamped value far too long to fit on its one line'
+    f"</div></td>{_NOTE}</tr>"
+    + '<tr><td class="row-gutter">Inline</td><td><a href="#" style="display: -webkit-inline-box; -webkit-box-orient: '
+    'vertical; -webkit-line-clamp: 1; overflow: hidden; max-width: 80px">inline value far too long to fit on its one '
+    f"line</a></td>{_NOTE}</tr>"
+    + '<tr><td class="row-gutter">Unmarked</td><td><div style="max-width: 40px; overflow: hidden; '
+    'text-overflow: ellipsis; white-space: nowrap"><span style="display: inline-block">unmarked value far too long '
+    f"to fit</span></div></td>{_NOTE}</tr>"
+    + f'<tr><td class="row-gutter">Chip<br><span class="muted"><code>{{{{ "{_CHIP}"|breakable }}}}</code></span></td>'
+    f"<td>Short</td>{_NOTE}</tr>" + "</tbody></table>{% endtable_region %}"
+)
+
+# Rows that open, as an event's log draws them: a host name in a column a
+# phone lets go, so an opened row shows it in the line beneath, and a value
+# its own cell cuts.
+OPEN_ROW_TABLE = """{% load value_tags %}
+{% table_region "Opened" %}<table class="data-table"><thead><tr>
+{% table_heading "Name" gutter=True %}{% table_heading "Object" drop=1 %}{% table_heading "Note" %}</tr></thead><tbody>
+<tr><td class="row-gutter">Updated{% row_toggle %}</td><td>{{ host|breakable }}</td>
+<td><span style="display: inline-block; inline-size: 14rem">A note that keeps its line</span></td></tr>
+<tr><td class="row-gutter">Created{% row_toggle %}</td><td>{{ host|breakable }}</td>
+<td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
+</tbody></table>{% endtable_region %}"""
+
+OPEN_ROW_VALUES = {"host": "example-hostname-with-a-long-descriptive-name-01.example.com"}
+
+# A value cut at half the window's width, whole on a wide one, in a row that
+# cannot open, and one always cut in a row that can, whose toggle a wide box
+# does not show; tables.js titles each while it is cut and its row is closed.
+TITLED_CUTS = """{% table_region "Titled" %}<table class="data-table"><thead><tr>
+{% table_heading "Name" gutter=True %}{% table_heading "Value" %}</tr></thead><tbody>
+<tr data-probe="narrows"><td class="row-gutter">Narrows</td>
+<td><div style="max-inline-size: 50vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis">
+a value that is whole on a wide screen and cut at half of a phone's</div></td></tr>
+<tr data-probe="opens"><td class="row-gutter">Opens{% row_toggle %}</td>
+<td><div style="max-inline-size: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
+</tbody></table>{% endtable_region %}"""
+
+# A panel shown from a cell, as an item's origin is: a key and a source too
+# long for the cell, which the panel has the room to show whole.
+POPOVER_IN_A_CELL = """{% load value_tags %}
+{% table_region "Origins" %}<table class="data-table"><thead><tr>
+{% table_heading "Item" gutter=True %}{% table_heading "Urgency" %}</tr></thead><tbody>
+<tr><td class="row-gutter">Example item</td><td><span class="pill">Urgent</span>
+<div class="modal origin-panel" id="example-origin" popover><div class="modal-panel"><dl class="kv compact">
+<dt>From</dt><dd>{{ source|breakable }}</dd><dt>Key</dt><dd><code>{{ key|breakable }}</code></dd></dl></div></div></td></tr>
+</tbody></table>{% endtable_region %}"""
+
+POPOVER_VALUES = {
+    "key": "example.approvals:approval:d7f2b3ed-186d-402a-9c5e-1f0b2a3c4d5e",
+    "source": "an-example-source-with-a-deliberately-long-name",
+}
+
+# The rows whose values tables.js titled for being cut, by `data-probe`.
+TITLED_ROWS = (
+    "() => [...document.querySelectorAll('[data-cut-title]')].map((el) => el.closest('tr').dataset.probe).sort()"
+)
 
 ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr:not([data-row-detail])')].map((row) => ({
   probe: row.dataset.probe,

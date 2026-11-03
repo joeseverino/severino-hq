@@ -30,6 +30,7 @@ from django.test.utils import setup_databases, teardown_databases
 from hq.platform.application.derivations import counting
 from hq.platform.core.ahead import keeping
 from hq.platform.core.bench import Seeded, seed, unchanged_sweep
+from hq.platform.core.outside_requests import connections_of_its_own
 lazy from hq.domains.expenses.models import Expense
 lazy from hq.domains.jobs import runner
 
@@ -105,11 +106,9 @@ def _once(tally: RoleTimings, work: Callable[[], None], what: str = "") -> None:
 
 def _loop(go: threading.Event, stop: threading.Event, step: Callable[[], None]) -> None:
     go.wait()
-    try:
+    with connections_of_its_own():
         while not stop.is_set():
             step()
-    finally:
-        connection.close()
 
 
 def _reader(seeded: Seeded, urls: list[str], tally: RoleTimings, headers: dict[str, str], seed_value: int):
@@ -176,8 +175,7 @@ def _importer(seeded: Seeded, tally: RoleTimings, batch: int, stop: threading.Ev
 
 
 def _percentile(values: list[float], share: float) -> float:
-    ordered = sorted(values)
-    return ordered[max(0, round(len(ordered) * share) - 1)] if ordered else 0.0
+    return statistics.quantiles(values, n=100, method="inclusive")[round(share * 100) - 1] if values else 0.0
 
 
 def _peak_mb() -> float:

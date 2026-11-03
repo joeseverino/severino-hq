@@ -22,6 +22,10 @@ lazy from .published_sites import public_sites
 # record without importing this reader. Re-exported here as the one name
 # callers already use.
 
+# Where an offered link leads: a page HQ serves, or a web address elsewhere.
+HQ_OWN = "hq"
+OUTSIDE = "outside"
+
 
 def consoles() -> tuple[tuple[str, str, str], ...]:
     """Connections that are a thing you can open, as (label, sub, url).
@@ -77,17 +81,18 @@ def offered_links() -> list[dict[str, str]]:
     """Every link HQ can offer, derived once per change of what it is read from.
 
     The same for every reader: which of them a person chose is applied after.
+    Each says whether it leads to a page of HQ's own (``where``), which opens
+    in place, or outside, which only a web address can.
     """
 
-    return [
-        {
-            "label": "Health endpoint",
-            "sub": "HQ's own health check",
-            "href": reverse("health_ready"),
-        },
+    outside = (
         *({"label": label, "sub": sub or "admin console", "href": href} for label, sub, href in consoles()),
         *({"label": hostname, "sub": sub or "public site", "href": href} for hostname, sub, href in public_sites()),
         *operator_links(),
+    )
+    return [
+        {"label": "Health endpoint", "sub": "HQ's own health check", "href": reverse("health_ready"), "where": HQ_OWN},
+        *({**link, "where": OUTSIDE} for link in outside),
     ]
 
 

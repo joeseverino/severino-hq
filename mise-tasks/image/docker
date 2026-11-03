@@ -1,0 +1,127 @@
+#!/bin/sh
+#MISE description="A Docker daemon for the run: start brings up colima's VM when none answers, stop ends it once no run of a task needing it is left, if one of them started it"
+#MISE hide=true
+#MISE quiet=true
+#USAGE arg "<action>" help="start before the work, stop after it" {
+#USAGE   choices "start" "stop"
+#USAGE }
+
+# A running VM keeps every page of memory it has touched until it stops (the
+# Virtualization framework does not hand them back to macOS), so no VM is
+# left running between tasks. A task that needs a daemon depends on
+# `image:docker start`, or runs it once its body knows it does, and lists
+# `image:docker stop` in depends_post, which mise runs once the task ends,
+# passed, failed or stopped.
+#
+# Start makes the run of mise it belongs to a holder of the VM, and marks the VM
+# as one of ours when it boots it; a VM up before that (started by hand, or
+# Docker without colima, as in CI) is never stopped. Stop ends its run's hold,
+# and stops the VM once no live run holds it and nothing else uses it: no
+# running container, no docker or buildx client. So a task that runs another
+# with `mise run` keeps the VM between them, and a run waiting for the heavy
+# turn keeps it for when its turn comes.
+set -eu
+
+state="${XDG_CACHE_HOME:-${HOME}/.cache}/severino/docker"
+
+# The run this task belongs to: the nearest mise above it, past one that runs
+# image:docker alone, as a task's body does with `mise run image:docker start`.
+run_of() {
+    pid="$$" run=""
+    while [ "${pid}" -gt 1 ]; do
+        case "$(ps -o comm= -p "${pid}" 2>/dev/null || true)" in
+            mise | */mise)
+                run="${pid}"
+                case "$(ps -o args= -p "${pid}" 2>/dev/null || true)" in
+                    *image:docker*) ;;
+                    *) return 0 ;;
+                esac
+                ;;
+        esac
+        pid="$(ps -o ppid= -p "${pid}" 2>/dev/null | tr -d ' ')"
+        [ -n "${pid}" ] || break
+    done
+    run="${run:-$$}"
+}
+
+# A holder's file holds the start time of its pid, so a reused pid is no holder.
+started_at() { ps -o lstart= -p "$1" 2>/dev/null || true; }
+
+alive() {
+    since="$(started_at "$1")"
+    [ -n "${since}" ] && [ "${since}" = "$(cat "${state}/holders/$1" 2>/dev/null || true)" ]
+}
+
+answers() { docker info >/dev/null 2>&1; }
+
+# Lima's host agent for the VM, by its pid file; the started mark records it,
+# so a VM booted again by hand is not taken for ours.
+vm_id() { cat "${COLIMA_HOME:-${HOME}/.colima}/_lima/colima/ha.pid" 2>/dev/null || true; }
+
+# Start and stop each hold this lock while they look and act, so a start never
+# sees a daemon a stop is about to end. Each colima command closes the
+# descriptor itself, since the processes it leaves running would hold the
+# lock, and a shell keeps a copy of one closed around a function call.
+locked() {
+    mkdir -p "${state}/holders"
+    exec 8>>"${state}/lock"
+    perl -MFcntl=:flock -e 'open my $l, ">&=", 8 or die "image:docker: the lock: $!\n"; flock $l, LOCK_EX or die "image:docker: the lock: $!\n"'
+}
+
+start() {
+    if ! command -v colima >/dev/null 2>&1; then
+        answers && return 0
+        echo "No Docker daemon answers, and colima, which this task starts one with, is not installed (brew install colima)." >&2
+        exit 69
+    fi
+    locked
+    run_of
+    started_at "${run}" >"${state}/holders/${run}"
+    answers && return 0
+    rm -f "${state}/started"
+    echo "image:docker: starting colima's VM, which stops when the tasks that need it end" >&2
+    # Rosetta runs the linux/amd64 Playwright image `browser --linux` uses,
+    # and the size is what that leg needs. The profile on disk keeps its own.
+    if ! colima start --cpus 4 --memory 5 --vm-type vz --vz-rosetta --save-config=false \
+        >"${state}/colima.log" 2>&1 8>&-; then
+        tail -n 20 "${state}/colima.log" >&2
+        colima stop >/dev/null 2>&1 8>&- || true
+        echo "colima did not start its VM; ${state}/colima.log has the whole of what it said." >&2
+        exit 69
+    fi
+    vm_id >"${state}/started"
+    answers || { echo "colima started, but no Docker daemon answers: docker context ls names the one in use." >&2; exit 69; }
+}
+
+stop() {
+    command -v colima >/dev/null 2>&1 || return 0
+    [ -d "${state}/holders" ] || return 0
+    locked
+    run_of
+    rm -f "${state}/holders/${run}"
+    for holder in "${state}/holders"/*; do
+        [ -e "${holder}" ] || continue
+        if alive "${holder##*/}"; then
+            return 0
+        fi
+        rm -f "${holder}"
+    done
+    [ -f "${state}/started" ] || return 0
+    if [ "$(cat "${state}/started")" != "$(vm_id)" ]; then
+        rm -f "${state}/started"
+        return 0
+    fi
+    if [ -n "$(docker ps -q 2>/dev/null || true)" ]; then
+        echo "image:docker: colima's VM stays up for the containers docker ps lists" >&2
+        return 0
+    fi
+    if pgrep -x docker >/dev/null || pgrep -x docker-buildx >/dev/null; then
+        echo "image:docker: colima's VM stays up for a docker client still running" >&2
+        return 0
+    fi
+    echo "image:docker: stopping colima's VM" >&2
+    colima stop >"${state}/colima.log" 2>&1 8>&- || { cat "${state}/colima.log" >&2; exit 1; }
+    rm -f "${state}/started"
+}
+
+"${usage_action:?}"

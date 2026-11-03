@@ -13,39 +13,51 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"filippo.io/age"
 )
 
 // BackupDir is where archives are written unless the unit says otherwise.
 const BackupDir = "/srv/severino-hq/backups"
 
-// archivePrefix names every archive, so retention removes nothing else.
-const archivePrefix = "severino-hq-"
+// archivePrefix and archiveSuffix name every archive, so retention removes
+// nothing else.
+const (
+	archivePrefix = "severino-hq-"
+	archiveSuffix = ".tar.gz.age"
+)
 
 // BackupSettings are what the backup unit decides: where archives go, who can
 // read them, and how long they stay on this disk.
 type BackupSettings struct {
 	Dir string
-	// Recipients are age recipients; with none the archive is plain.
-	Recipients []string
+	// Recipients are post-quantum age recipients, at least one: an archive is
+	// only ever written encrypted, and to keys a quantum computer cannot break.
+	Recipients []*age.HybridRecipient
 	// Retention is how long an archive stays in Dir.
 	Retention time.Duration
 }
 
-// ReadBackupSettings reads the unit's environment. Encryption that is
-// required without recipients, or a retention that is not a whole number of
-// days, is refused before anything is written.
+// ReadBackupSettings reads the unit's environment. No recipient, one that is
+// not post-quantum, or a retention that is not a whole number of days is
+// refused before anything is written.
 func ReadBackupSettings(getenv func(string) string) (BackupSettings, error) {
 	settings := BackupSettings{Dir: getenv("SEVERINO_BACKUP_DIR")}
 	if settings.Dir == "" {
 		settings.Dir = BackupDir
 	}
 	for recipient := range strings.SplitSeq(getenv("SEVERINO_BACKUP_AGE_RECIPIENTS"), ",") {
-		if recipient = strings.TrimSpace(recipient); recipient != "" {
-			settings.Recipients = append(settings.Recipients, recipient)
+		if recipient = strings.TrimSpace(recipient); recipient == "" {
+			continue
 		}
+		parsed, err := parseRecipient(recipient)
+		if err != nil {
+			return BackupSettings{}, err
+		}
+		settings.Recipients = append(settings.Recipients, parsed)
 	}
-	if getenv("SEVERINO_BACKUP_REQUIRE_ENCRYPTION") == "1" && len(settings.Recipients) == 0 {
-		return BackupSettings{}, errors.New("backup encryption is required but no age recipients are configured")
+	if len(settings.Recipients) == 0 {
+		return BackupSettings{}, errors.New("SEVERINO_BACKUP_AGE_RECIPIENTS names no recipient, and a backup is only written encrypted: set an age1pq1 key made with age-keygen -pq")
 	}
 	days := getenv("SEVERINO_BACKUP_RETENTION_DAYS")
 	if days == "" {
@@ -57,6 +69,22 @@ func ReadBackupSettings(getenv func(string) string) (BackupSettings, error) {
 	}
 	settings.Retention = time.Duration(count) * 24 * time.Hour
 	return settings, nil
+}
+
+// parseRecipient admits only a post-quantum hybrid recipient (ML-KEM-768 with
+// X25519), naming any other so the unit's setting can be corrected.
+func parseRecipient(recipient string) (*age.HybridRecipient, error) {
+	if strings.HasPrefix(recipient, "age1pq1") {
+		parsed, err := age.ParseHybridRecipient(recipient)
+		if err != nil {
+			return nil, fmt.Errorf("SEVERINO_BACKUP_AGE_RECIPIENTS: %w", err)
+		}
+		return parsed, nil
+	}
+	if _, err := age.ParseX25519Recipient(recipient); err == nil {
+		return nil, fmt.Errorf("SEVERINO_BACKUP_AGE_RECIPIENTS names %s, a classic X25519 recipient: a backup is encrypted only to post-quantum age1pq1 keys, made with age-keygen -pq", recipient)
+	}
+	return nil, fmt.Errorf("SEVERINO_BACKUP_AGE_RECIPIENTS names %q, which is not a post-quantum age1pq1 recipient", recipient)
 }
 
 // Backup archives HQ's volumes, where docker says they are, so a host
@@ -78,7 +106,7 @@ func (m *Machine) Backup(ctx context.Context, getenv func(string) string) error 
 	if _, err := os.Stat(database); err != nil {
 		return fmt.Errorf("there is no database at %s to back up", database)
 	}
-	return m.backup(ctx, settings, database, map[string]string{"media": at["/media"], "exports": at["/exports"]}, time.Now())
+	return m.backup(ctx, settings, database, map[string]string{"media": at["/media"], "exports": at["/exports"], "seal": m.Seal}, time.Now())
 }
 
 // backup snapshots database, archives it with each directory under its name,
@@ -93,22 +121,19 @@ func (m *Machine) backup(ctx context.Context, settings BackupSettings, database 
 	}
 	defer os.RemoveAll(stage)
 	snapshot := filepath.Join(stage, Database)
-	fmt.Fprintln(m.Out, "[1/3] Snapshotting the database with VACUUM INTO.")
+	fmt.Fprintln(m.Out, "[1/2] Snapshotting the database with VACUUM INTO.")
 	if err := m.snapshot(ctx, database, snapshot); err != nil {
 		return err
 	}
 
-	name := archivePrefix + now.UTC().Format("20060102T150405Z") + ".tar.gz"
-	if len(settings.Recipients) > 0 {
-		name += ".age"
-	}
+	name := archivePrefix + now.UTC().Format("20060102T150405Z") + archiveSuffix
 	target := filepath.Join(settings.Dir, name)
 	file, err := os.CreateTemp(settings.Dir, "."+name+".")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(file.Name())
-	err = m.writeArchive(ctx, file, settings.Recipients, snapshot, dirs)
+	err = m.writeArchive(file, settings.Recipients, snapshot, dirs)
 	if closeErr := file.Close(); err == nil {
 		err = closeErr
 	}
@@ -138,35 +163,23 @@ func (m *Machine) snapshot(ctx context.Context, database, snapshot string) error
 	return nil
 }
 
-// writeArchive writes the tarball to file, through age when there are
-// recipients, so no plaintext archive touches the disk.
-func (m *Machine) writeArchive(ctx context.Context, file *os.File, recipients []string, snapshot string, dirs map[string]string) error {
-	fmt.Fprintln(m.Out, "[2/3] Assembling the archive.")
-	if len(recipients) == 0 {
-		fmt.Fprintln(m.Out, "[3/3] Encryption skipped: SEVERINO_BACKUP_AGE_RECIPIENTS is not set.")
-		return assemble(file, m.Out, snapshot, dirs)
+// writeArchive encrypts the tarball to recipients as it is assembled, so no
+// plaintext archive touches the disk.
+func (m *Machine) writeArchive(file io.Writer, recipients []*age.HybridRecipient, snapshot string, dirs map[string]string) error {
+	fmt.Fprintf(m.Out, "[2/2] Assembling the archive, encrypted with age to %d post-quantum recipients.\n", len(recipients))
+	to := make([]age.Recipient, len(recipients))
+	for i, recipient := range recipients {
+		to[i] = recipient
 	}
-	fmt.Fprintln(m.Out, "[3/3] Encrypting it with age.")
-	var args []string
-	for _, recipient := range recipients {
-		args = append(args, "-r", recipient)
-	}
-	encrypt := m.Command(ctx, "age", args...)
-	var refusal strings.Builder
-	encrypt.Stdout, encrypt.Stderr = file, &refusal
-	plain, err := encrypt.StdinPipe()
+	encrypted, err := age.Encrypt(file, to...)
 	if err != nil {
-		return err
+		return fmt.Errorf("the archive could not be encrypted: %w", err)
 	}
-	if err := encrypt.Start(); err != nil {
-		return fmt.Errorf("age could not be started: %w", err)
+	err = assemble(encrypted, m.Out, snapshot, dirs)
+	if closeErr := encrypted.Close(); err == nil {
+		err = closeErr
 	}
-	assembled := assemble(plain, m.Out, snapshot, dirs)
-	plain.Close()
-	if err := encrypt.Wait(); err != nil {
-		return fmt.Errorf("age refused the archive: %w: %s", err, refusal.String())
-	}
-	return assembled
+	return err
 }
 
 // assemble writes a gzipped tar of the snapshot at its top level and each
@@ -188,7 +201,7 @@ func (a *assembly) write(w io.Writer, snapshot string, dirs map[string]string) e
 	compressed := gzip.NewWriter(w)
 	a.archive = tar.NewWriter(compressed)
 	err := a.addFile(snapshot, Database)
-	for _, name := range []string{"media", "exports"} {
+	for _, name := range []string{"media", "exports", "seal"} {
 		if dir := dirs[name]; err == nil && dir != "" {
 			err = a.addTree(dir, name)
 		}
@@ -315,8 +328,7 @@ func prune(dir string, retention time.Duration, now time.Time) error {
 	}
 	for _, entry := range entries {
 		name := entry.Name()
-		if !entry.Type().IsRegular() || !strings.HasPrefix(name, archivePrefix) ||
-			!strings.HasSuffix(name, ".tar.gz") && !strings.HasSuffix(name, ".tar.gz.age") {
+		if !entry.Type().IsRegular() || !strings.HasPrefix(name, archivePrefix) || !strings.HasSuffix(name, archiveSuffix) {
 			continue
 		}
 		info, err := entry.Info()

@@ -5,6 +5,7 @@ import subprocess
 import threading
 import time
 
+import httpx2
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
 from hq.platform.core import outbound
@@ -22,6 +23,8 @@ def reach_a_network():
 ATTEMPTS = {
     "a connection": reach_a_network,
     "a name lookup": lambda: socket.getaddrinfo("example.com", 443),
+    # The client HQ's outside readers use, which opens its own sockets.
+    "an HTTP read": lambda: httpx2.get("https://192.0.2.1/", timeout=0.01),
     "a process": lambda: subprocess.run(["true"], check=False),
     "a sleep": lambda: time.sleep(0),
 }

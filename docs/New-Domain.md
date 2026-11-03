@@ -10,37 +10,46 @@ file names it. The descriptor carries:
 - `integration`: providers for its resources (`<app>/specs.py`), other commands,
   attention items, dashboard cards, connections and calendars.
 - `records`, for a plain record domain: one model created, updated and deleted
-  by command. It yields `<noun>.create` (unless `create=False`), `<noun>.upsert`
-  (with `upsert`), `<noun>.update` and `<noun>.delete`, the `write_<resource>`
-  and `delete_<resource>` permissions (operators hold them; MCP under its write
-  and delete switches), deletion itself (`hq.platform.application.records.deleter`) and
-  its count on the health reading. Its web views take `RecordFormMixin`
-  (create, update) and `RecordDeleteMixin` from `hq/platform/application/writes.py` and
-  name only their `ModelForm`: the form saves through
-  `hq.platform.application.records.save_form`, which runs the model's `full_clean` exactly
-  as the command does, so put a field rule on the model (a validator or a
-  constraint), never on the form or the service.
+  by command ([Records](#records)).
 
 `expenses` is the worked example; `hq/platform/application/tests/fixture_domain` is the
 smallest one.
 
-What a new host domain has to do before the gate passes. Every row names the
-test that enforces it, in `Class.method` form.
-`hq/platform/application/tests/test_new_domain.py` fails if an architecture
-rule exists that this page does not name, or names one that is gone, so edit
-this page in the same commit as the rule. Extensions take a different path:
-[Plugins](Plugins.md).
+### Records
+
+A `records` declaration yields:
+
+- the commands `<noun>.create` (unless `create=False`), `<noun>.upsert` (with
+  `upsert`), `<noun>.update` and `<noun>.delete`;
+- the `write_<resource>` and `delete_<resource>` permissions, which operators
+  hold, and MCP under its write and delete switches;
+- deletion itself (`hq.platform.application.records.deleter`) and its count on
+  the health reading.
+
+Its web views take `RecordFormMixin` (create, update) and `RecordDeleteMixin`
+from `hq/platform/application/writes.py` and name only their `ModelForm`.
+
+The form saves through `hq.platform.application.records.save_form`, which runs
+the model's `full_clean` exactly as the command does. So put a field rule on
+the model (a validator or a constraint), never on the form or the service.
 
 ## Steps
 
+What a new host domain has to do before the gate passes. Every row names the
+test that enforces it, in `Class.method` form. Extensions take a different
+path: [Plugins](Plugins.md).
+
+`hq/platform/application/tests/test_new_domain.py` fails if an architecture
+rule exists that this page does not name, or names one that is gone, so edit
+this page in the same commit as the rule.
+
 | Do | Enforced by |
 |---|---|
-| Keep views in `<app>/views.py` or `<app>/*_views.py`; a view in any other module escapes the checks below | `DeliveryAdapterArchitectureTests.test_every_module_defining_a_view_is_one_these_checks_read` |
-| Views never call `.save()`, `.delete()` or `objects.create/update_or_create/bulk_*`; writes go through an `hq/platform/application/` service | `lint:ast-grep` (`tools/lint/ast-grep/rules/views-write-no-model.yml`) |
+| Views never call `.save()`, `.delete()` or a manager's or queryset's bulk write. They reach a domain write only through `execute_posted` (a form mixin's through `write_once`). The rule reads the module of every routed view and its bases, whatever the module is called | `hq/platform/application/tests/test_view_writes.py` |
 | A view with `paginate_by` takes `TableListMixin` | `DeliveryAdapterArchitectureTests.test_paginated_list_views_use_the_shared_table_engine` |
 | `hq/platform/mcp/services.py` stays free of models and `.objects`; expose reads through `hq/platform/application/resources.py` and read models | `lint:ast-grep` (`tools/lint/ast-grep/rules/mcp-services-reach-no-model.yml`) |
 | Keep the workflow layering: `workflow_contracts.py` imports nothing of HQ, `ui.py` never reaches `workflows`, `workflows.py` never reaches `action_links` | `lint:imports`, the contracts in `pyproject.toml`'s `[tool.importlinter]` |
-| Serve static assets from the shared delivery path: the ASGI mount is the only server of `/static/`, before Django; versioned files are immutable and sent as the brotli or gzip copy the image build wrote | `DeliveryAdapterArchitectureTests.test_asgi_routes_static_assets_before_django`, `DeliveryAdapterArchitectureTests.test_static_assets_have_one_server`, `DeliveryAdapterArchitectureTests.test_versioned_static_assets_are_compressed_and_immutable` |
+| Serve static assets from the shared delivery path. The ASGI mount is the only server of `/static/`, before Django. Versioned files are immutable and sent as the brotli copy the image build wrote, or as they are to a client that takes no brotli | `DeliveryAdapterArchitectureTests.test_asgi_routes_static_assets_before_django`, `DeliveryAdapterArchitectureTests.test_static_assets_have_one_server`, `DeliveryAdapterArchitectureTests.test_versioned_static_assets_are_compressed_and_immutable` |
 | Resolve URLs with `hq.platform.application.routes.reverse`, never `django.urls.reverse`, in `hq/platform/application/` and `hq/domains/control_plane/` | `RouteOwnerTests.test_the_application_resolves_routes_through_its_one_owner`, `RouteOwnerTests.test_a_remembered_route_is_djangos_and_follows_the_url_configuration` |
 | Every template sets `{% block title %}` to the page's own name, without the site name | `PageTitleTests.test_every_page_names_itself`, `PageTitleTests.test_no_page_appends_the_site_name_itself`, `PageTitleTests.test_the_layout_is_what_appends_it` |
 | Link a command's form with `command_url`, never `reverse("command")` or `{% url "command" %}` | `OnePrimitiveTests.test_a_command_is_linked_through_command_url` |
@@ -64,27 +73,26 @@ package.
 
 ## Always on
 
-Rules that hold for every change, not a domain in particular; the class docstring
-is the rule. `lint:css` (Stylelint under `tools/lint/stylelint.config.mjs`:
-tokens, spacing, color), `StyleContractTests` and `SharedPrimitiveStyleTests`
-(CSS, layers), `TemplateCommentTests` (what a `{# #}` comment left open is),
-`lint:complexity` (complexipy's cognitive complexity, 20 per function), `FileSizeTests` (no source
-file past 1,000 lines; a test file over it is listed in a baseline that only shrinks), `OneDefinitionTests` (a module-level name is
-assigned once), `PageTrailTests` (a view declares `page_trail` and `trail_label`, not a
-`get_page_trail` that restates them), `lint:ast-grep` (ast-grep under
-`tools/lint/ast-grep`: a setting is read as `settings.NAME`, never with a
-default; an operation is queued through `resource_operations.enqueue`, whose
-unique key settles two writers; who a request's session signed in is
-`request_identity.signed_in`; a test writes `assertEqual(a, b)`, not
-`assertTrue(a == b)`), `CellMarkupTests` (a table cell is read by its text,
-never by the tag that closes it), `CountedTests` (plurals), `InterfaceTextTests` (no hand-built plural,
-nested form, `counted` phrase that cannot agree or `{# #}` comment that spans
-lines, in HQ or an extension; no
-system check reads source), `lint:prose` (Vale under `tools/lint/vale/.vale.ini`: no comment
-narrates history, no em dash or hedged plural, and no word HQ keeps to itself
-in what its owner reads, with what to say instead), `PostButtonTests` (the shared post button),
-`ComposedQueueTests` (a domain's attention items and cards reach the shared queue),
-`TestPlacementTests` (every test module is in its package's `tests/`),
-`RuntimeDependencyTests` (each finding `lint:deptry` ignores is one it
-would report). `lint:deptry` holds host code to importing only its declared
-runtime dependencies, each of them imported, or a reason in `pyproject.toml`.
+Rules that hold for every change, not a domain in particular; the class
+docstring is the rule.
+
+| Rule | What it holds |
+| --- | --- |
+| `lint:css` | Stylelint under `tools/lint/stylelint.config.mjs`: tokens, spacing, color |
+| `StyleContractTests`, `SharedPrimitiveStyleTests` | CSS, layers |
+| `TemplateCommentTests` | what a `{# #}` comment left open is |
+| `lint:complexity` | complexipy's cognitive complexity, 20 per function |
+| `FileSizeTests` | no source or test file past 1,000 lines |
+| `OneDefinitionTests` | a module-level name is assigned once |
+| `PageReadCapabilityTests` | every routed page reads under one capability (`required_capability`, else `read`), refused before its view; a route that answers without a session authorizes itself |
+| `PageTrailTests` | a view declares `page_trail`, every crumb above it, and `trail_label`, not a `get_page_trail` that restates them |
+| `lint:ast-grep` | the rules under `tools/lint/ast-grep`, among them: a setting is read as `settings.NAME`, never with a default; an operation is queued through `resource_operations.enqueue`, whose unique key settles two writers; who a request's session signed in is `request_identity.signed_in`; a test writes `assertEqual(a, b)`, not `assertTrue(a == b)` |
+| `CellMarkupTests` | a table cell is read by its text, never by the tag that closes it |
+| `CountedTests` | plurals |
+| `InterfaceTextTests` | no hand-built plural, nested form, `counted` phrase that cannot agree or `{# #}` comment that spans lines, in HQ or an extension; no system check reads source |
+| `lint:prose` | Vale under `tools/lint/vale/.vale.ini`: no comment narrates history, no em dash or hedged plural, and no word HQ keeps to itself in what its owner reads, with what to say instead |
+| `PostButtonTests` | the shared post button |
+| `ComposedQueueTests` | a domain's attention items and cards reach the shared queue |
+| `TestPlacementTests` | every test module is in its package's `tests/` |
+| `lint:deptry` | host code imports only its declared runtime dependencies, each of them imported, or a reason in `pyproject.toml` |
+| `RuntimeDependencyTests` | each finding `lint:deptry` ignores is one it would report |

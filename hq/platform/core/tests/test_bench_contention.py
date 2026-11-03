@@ -32,5 +32,6 @@ class RoleTimingsTests(SimpleTestCase):
             tally.add(float(took), [], Counter(), what=f"/page/{took}/")
 
         self.assertEqual([what for _took, what in tally.slowest], [f"/page/{n}/" for n in (9, 8, 7, 6, 5)])
-        self.assertEqual(_percentile(tally.times, 0.5), 4.0)
+        # 0 to 9: the 50th percentile halfway between 4 and 5.
+        self.assertEqual(_percentile(tally.times, 0.5), 4.5)
         self.assertEqual(_percentile([], 0.95), 0.0)

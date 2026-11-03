@@ -90,7 +90,7 @@ class SavingADeclarationAppliesItTests(TestCase):
 
         self.assertFalse(OperationRequest.objects.exists())
 
-    @override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=False)
+    @override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=False)
     def test_a_caller_without_infrastructure_authority_changes_and_queues_nothing(self):
         result = self._update(principal=mcp_principal(), forward_port=8080)
 

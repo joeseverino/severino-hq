@@ -27,16 +27,36 @@ body {
      not change how wide a table cell asks to be. */
   overflow-wrap: break-word;
 }
+/* Prose is broken into lines the way a typesetter would, so a paragraph does
+   not end on one stranded word. */
+p, li, dd, blockquote, figcaption { text-wrap: pretty; }
 a { color: var(--accent-2); text-decoration: none; }
 a:hover { color: var(--accent); text-decoration: underline; }
+/* A link set among words is told apart from them by more than its color
+   (WCAG 1.4.1), which beside muted text is barely a step: a quiet underline,
+   full on hover. A span is a run of words, whatever color a page sets it
+   in. A link with a class of its own is a control, and a row's name stands
+   alone in its cell. */
+:where(p, li, dd, td, span, .muted) a:where(:not([class], td > strong > a, td > a:has(> strong))) {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: .18em;
+}
+:where(p, li, dd, td, span, .muted) a:where(:not([class])):hover { text-decoration-color: currentColor; }
+/* A line a link draws never reaches a box of its own inside it, so whatever
+   is inside a link draws the line its link draws. */
+a * { text-decoration: inherit; }
 code { font-family: var(--font-mono); font-size: .88em; background: var(--bg-tint); padding: 1px var(--space-2); border-radius: 4px; color: var(--ink-2); }
 pre code { background: transparent; padding: 0; color: inherit; }
 /* An identifier (`|breakable`, or code): an address, a path, a key, an image.
    One that fits on its line moves to the next line whole; one longer than its
    line wraps at the seams the filter marks; a hyphenated part (`.whole`) or one
    with no seams breaks inside only when it alone is longer than its line. A
-   table lays out its own identifiers. */
-:is(code, .token, .whole):not(pre *, td *, th *) {
+   table lays out its own identifiers; code in a sentence in a cell is laid
+   out as here. */
+:is(code, .token, .whole):not(pre *, td *, th *),
+:is(td, th) :is(p, li) :is(code, code .token, code .whole):not(pre *) {
   display: inline-block; max-width: 100%; overflow-wrap: break-word; text-decoration: inherit;
   /* As wide as what it says: a sized item is not stretched to its column,
      and still sits where its container aligns its items. */
@@ -48,8 +68,15 @@ pre code { background: transparent; padding: 0; color: inherit; }
      a smaller face would sit off the line. */
   baseline-source: first;
 }
+/* No box of its own here (figures.css), it still passes a link's underline
+   on to the parts inside it, which are boxes of their own. */
+.cut:not(pre *, td *, th *) { text-decoration: inherit; }
 :is(code, .token):is(td *, th *) { overflow-wrap: break-word; }
 .whole:is(td *, th *) { display: inline-block; max-width: 100%; }
+/* A row header's identifier is a box of its own, as a cell's is (tables.css):
+   WebKit leaves an inline chip's padding out of the width its column asks
+   for, so the name would run into the cell's padding. */
+th[scope=row] > code { display: inline-block; max-width: 100%; }
 :is(td, th) [data-entity] > .token, :is(td, th) [data-entity] > .token > .whole { display: contents; }
 /* Where the filter lets a token break (value_tags._SEAM): a zero-width space,
    so `white-space` governs it as it does any text, kept out of the name a
@@ -158,6 +185,9 @@ pre ::selection { color: var(--code-ink); }
    short past it; every breakpoint names it, so none can size it by content.
    Each width's tracks are here; on a phone the person's track is squared
    where its control is, beside the rule that hides the name. */
+/* One row a control tall at every width, padded and ruled: the inset a
+   sticky part below it sits under. */
+:root:has(.site-header) { --site-header-height: calc(var(--control-size) + 2 * var(--space-5) + 1px); }
 .site-header {
   --header-user: minmax(var(--control-size), calc(4 * var(--control-size)));
   display: grid;
@@ -184,9 +214,14 @@ pre ::selection { color: var(--code-ink); }
   background: var(--accent); display: inline-block;
 }
 .brand:hover { text-decoration: none; }
+/* A popover (base.html) set in the header's row: what the browser gives a
+   popover (hidden, fixed, framed, painted Canvas) is undone here; open, it
+   is a panel (routes.css). */
 .primary-nav {
   grid-area: nav;
   display: flex;
+  position: static; inset: auto; inline-size: auto; block-size: auto;
+  margin: 0; padding: 0; border: 0; background: none; color: inherit;
   /* Single row, deliberately: a control wrapped onto a second row would sit
      beneath an open dropdown, where the panel covers it and swallows its
      clicks. Grouping keeps the bar short enough that one row is enough. */
@@ -205,7 +240,7 @@ pre ::selection { color: var(--code-ink); }
 }
 .primary-nav > a, .nav-group > summary { color: var(--muted); font-weight: 500; font-size: var(--text-sm); padding: var(--space-2) var(--space-5); border-radius: 6px; white-space: nowrap; }
 .primary-nav a:hover { color: var(--ink); background: var(--bg-tint); text-decoration: none; }
-.primary-nav a.active { color: var(--ink); background: var(--bg-tint); }
+.primary-nav a[aria-current] { color: var(--ink); background: var(--bg-tint); }
 
 /* Grouped sections. A <details> dropdown keeps the bar to a fixed number of
    controls as sections are added, instead of overflowing behind a hidden
@@ -223,7 +258,7 @@ pre ::selection { color: var(--code-ink); }
 .nav-group > summary::marker { content: ""; }
 .nav-group-label { display: inline-flex; align-items: center; gap: var(--space-2); }
 .nav-group > summary:hover, .nav-group[open] > summary { color: var(--ink); background: var(--bg-tint); }
-.nav-group > summary.active { color: var(--ink); background: var(--bg-tint); }
+.nav-group > summary[aria-current] { color: var(--ink); background: var(--bg-tint); }
 .nav-caret { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
 .nav-group[open] .nav-caret { transform: rotate(180deg); }
 .nav-group-panel {
@@ -252,12 +287,12 @@ pre ::selection { color: var(--code-ink); }
 }
 .global-search:hover { background: var(--bar-control-bg-hover); color: var(--ink-2); text-decoration: none; }
 .search-icon { flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
-.search-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .search-key { padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--muted-2); font: inherit; font-size: var(--text-3xs); line-height: 1.6; }
 
 @media (max-width: 1280px) {
   .site-header { grid-template-columns: auto auto 1fr var(--control-size) var(--control-size) var(--header-user); }
   .global-search { justify-content: center; padding: 0; }
+  /* Gone, the label still names the link (its aria-labelledby). */
   .search-label, .search-key { display: none; }
 }
 /* The sections move behind the toggle, which takes the last track; open, they
@@ -292,6 +327,9 @@ textarea {
   font-size: var(--text-sm);
   transition: border-color .12s ease, box-shadow .12s ease;
 }
+/* A textarea is as tall as what is in it, up to most of the screen, where it
+   scrolls; its `rows` is the height a browser without `field-sizing` keeps. */
+textarea { field-sizing: content; max-block-size: 60dvh; }
 /* A one-line control is the height of a button, whatever the browser would
    draw it at: a select, a date and a field side by side read as one row. */
 input:where([type=text], [type=url], [type=number], [type=password], [type=email], [type=date], [type=time], [type=datetime-local], [type=search], :not([type])),
@@ -300,19 +338,36 @@ select:not([multiple], [size]) {
   block-size: var(--control-size);
   padding-block: 0;
 }
-/* HQ draws the select, so WebKit's small rounded one does not sit beside
-   square fields; the chevron is two gradient strokes in the muted ink. */
+/* A select wears HQ's chevron, set in from its end by --chevron-inset, in
+   every browser and however it is drawn. The browser's own arrow is a filled
+   triangle where the page styles the select and the platform's glyph where it
+   does not, so two forms would read as two kinds of control. A list box stays
+   native. */
 select:not([multiple], [size]) {
   appearance: none;
-  padding-inline-end: calc(var(--chevron-inset) + 14px);
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
-    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  padding-inline-end: calc(var(--chevron-inset) + 2 * var(--chevron-size) + var(--space-3));
+  background-image: var(--chevron-image);
   background-position:
-    calc(100% - var(--chevron-inset) - 5px) 50%,
+    calc(100% - var(--chevron-inset) - var(--chevron-size)) 50%,
     calc(100% - var(--chevron-inset)) 50%;
-  background-size: 5px 5px;
+  background-size: var(--chevron-size) var(--chevron-size);
   background-repeat: no-repeat;
+}
+/* Where the browser lets a page style its select (`base-select`), its list of
+   choices is framed as HQ's other panels. */
+@supports (appearance: base-select) {
+  select:not([multiple], [size]),
+  select:not([multiple], [size])::picker(select) { appearance: base-select; }
+  select:not([multiple], [size]) { align-items: center; gap: var(--space-3); }
+  select:not([multiple], [size])::picker-icon { display: none; }
+  select:not([multiple], [size])::picker(select) {
+    margin-block: var(--space-1); padding: var(--space-2);
+    border: 1px solid var(--line); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--ink); box-shadow: var(--shadow);
+  }
+  select:not([multiple], [size]) option { gap: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: 4px; }
+  select:not([multiple], [size]) option:is(:hover, :focus-visible) { outline: none; background: var(--bg-tint); }
+  select:not([multiple], [size]) option:checked { font-weight: 600; }
 }
 input::-webkit-datetime-edit { padding-block: 0; }
 input::-webkit-date-and-time-value { text-align: start; }

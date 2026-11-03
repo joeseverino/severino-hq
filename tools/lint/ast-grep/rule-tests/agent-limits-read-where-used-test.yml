@@ -1,0 +1,12 @@
+id: agent-limits-read-where-used
+valid:
+  - from . import agent_limits
+  - from .agent_limits import Limited, Limits
+  - agent_limits.LIMITS.take(actor)
+  - agent_limits.LIMITS = agent_limits.Limits()
+  - from example.limits import LIMITS
+invalid:
+  - from .agent_limits import LIMITS
+  - from ..agent_limits import LIMITS, Limited
+  - from hq.platform.application.agent_limits import LIMITS as limits
+  - limits = agent_limits.LIMITS

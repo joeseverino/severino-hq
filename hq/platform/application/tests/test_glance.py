@@ -19,6 +19,7 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
     WeatherObservation,
 )
+from hq.platform.application.tests.writers import form_keyed, keyed
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_grow
 
@@ -435,7 +436,7 @@ class DashboardGlanceTests(TestCase):
 
         response = self.client.post(
             reverse("control_plane:edit", kwargs={"key": other.key}),
-            {"name": "other-machine", "enabled": "on", "show_on_dashboard": "on"},
+            form_keyed({"name": "other-machine", "enabled": "on", "show_on_dashboard": "on"}),
         )
 
         self.assertEqual(response.status_code, 302)
@@ -453,7 +454,7 @@ class DashboardGlanceTests(TestCase):
         ):
             with self.subTest(interface=principal.interface):
                 result = execute_capability(
-                    DASHBOARD_MACHINE, {"selected": True}, principal=principal, target=other.key
+                    DASHBOARD_MACHINE, keyed({"selected": True}), principal=principal, target=other.key
                 )
 
                 self.assertEqual(result["error"]["code"], "forbidden")
@@ -464,7 +465,9 @@ class DashboardGlanceTests(TestCase):
         ManagedResource.objects.create(key="off-machine", kind="machine", spec={"name": "off"}, enabled=False)
         for key in ("off-machine", "nothing-by-this-name"):
             with self.subTest(key=key):
-                result = execute_capability(DASHBOARD_MACHINE, {"selected": True}, principal=AN_OPERATOR, target=key)
+                result = execute_capability(
+                    DASHBOARD_MACHINE, keyed({"selected": True}), principal=AN_OPERATOR, target=key
+                )
 
                 self.assertEqual(
                     result["error"],
@@ -475,17 +478,20 @@ class DashboardGlanceTests(TestCase):
     def test_a_selection_that_is_not_a_yes_or_no_is_invalid(self):
         for payload in ({}, {"selected": "sometimes"}):
             with self.subTest(payload=payload):
-                result = execute_capability(DASHBOARD_MACHINE, payload, principal=AN_OPERATOR, target="app-server")
+                result = execute_capability(
+                    DASHBOARD_MACHINE, keyed(payload), principal=AN_OPERATOR, target="app-server"
+                )
 
                 self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertEqual(DashboardMachine.objects.count(), 1)
 
     def test_weather_settings_validate_and_normalize_coordinates(self):
-        execute_capability(
+        answer = execute_capability(
             DASHBOARD_SETTINGS,
-            {"weather_point": " 41.1, -87.2 ", "weather_label": "Outside", "infrastructure_label": "Lab"},
+            keyed({"weather_point": " 41.1, -87.2 ", "weather_label": "Outside", "infrastructure_label": "Lab"}),
             principal=AN_OPERATOR,
         )
+        self.assertTrue(answer["ok"], answer)
 
         configuration = DashboardConfiguration.objects.get()
         self.assertEqual(configuration.weather_point, "41.1000,-87.2000")
@@ -793,7 +799,7 @@ class GlanceEndpointTests(TestCase):
     def test_a_stale_post_requests_the_stale_panels_and_shows_them_refreshing(self):
         with doorbells() as rung:
             with self.captureOnCommitCallbacks(execute=True):
-                response = self.client.post(reverse("dashboard_glance"), {"scope": "stale"})
+                response = self.client.post(reverse("dashboard_glance"), form_keyed({"scope": "stale"}))
 
             self.assertIn("glance-doorbell", rung())
         self.assertEqual(response.status_code, 202)
@@ -809,7 +815,7 @@ class GlanceEndpointTests(TestCase):
             readings.machine_telemetry(self.machine.key),
             {"metrics": [{"label": "CPU", "value": "4%"}]},
         )
-        response = self.client.post(reverse("dashboard_glance"), {"scope": "stale"})
+        response = self.client.post(reverse("dashboard_glance"), form_keyed({"scope": "stale"}))
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(DashboardRefreshRequest.objects.exists())

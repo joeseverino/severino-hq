@@ -1,11 +1,13 @@
-"""Which tests of a checkout carry which tags, and which of them walk a tree, read from their source.
+"""Which tests of a checkout carry which tags, and which of them walk a tree or run git, read from their source.
 
 The guard in test_tree_tag.py holds the ``tree`` tag to the walks, and
-``mise run fast`` runs the tests it finds tagged ``tree``.
+``mise run fast`` runs the tests it finds tagged ``tree``. The guard in
+test_git_tag.py holds a test that runs git to the ``source`` tag.
 """
 
 import ast
-from collections.abc import Iterator
+import re
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,6 +30,15 @@ def is_walk(node: ast.AST) -> bool:
         return False
     owner = node.func.value
     return node.func.attr == "rglob" or (node.func.attr == "walk" and isinstance(owner, ast.Name) and owner.id == "os")
+
+
+def is_git(node: ast.AST) -> bool:
+    """A command line that runs git: a list or tuple whose first item is ``"git"``."""
+
+    if not (isinstance(node, (ast.List, ast.Tuple)) and node.elts):
+        return False
+    head = node.elts[0]
+    return isinstance(head, ast.Constant) and head.value == "git"
 
 
 def tags(decorators: list[ast.expr]) -> set[str]:
@@ -81,11 +92,13 @@ class Unit:
     walks: bool
 
 
-class Walks:
-    """Which definitions of a checkout reach a walk, followed by name across its modules."""
+class Reach:
+    """Which definitions of a checkout reach what ``found`` picks out (a walk
+    unless told otherwise), followed by name across its modules."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, found: Callable[[ast.AST], bool] = is_walk):
         self.root = root
+        self.found = found
         self.modules: dict[str, Module | None] = {}
         self.known: dict[int, bool] = {}
 
@@ -143,9 +156,9 @@ class Walks:
         return any(self.step(dotted, sub, cls) for sub in ast.walk(node))
 
     def step(self, dotted: str, node: ast.AST, cls: ast.ClassDef | None) -> bool:
-        """Whether one node walks, or names something that does."""
+        """Whether one node is what is looked for, or names something that reaches it."""
 
-        if is_walk(node):
+        if self.found(node):
             return True
         found: Found | str | None = None
         if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
@@ -167,12 +180,15 @@ class Walks:
         found = []
         for cls, method, held, own in self.methods(dotted):
             setup = [m for name in SETUP if (m := self.member(dotted, cls, name))]
-            if replaces_root([method, *(node for _, node in setup)]):
-                walks = False
-            else:
-                walks = any(self.definition(m, cls) for m in setup) or self.definition((dotted, method), cls)
+            walks = not replaces_root([method, *(node for _, node in setup)]) and self.reached(dotted, cls, method)
             found.append(Unit(f"{dotted}.{cls.name}.{method.name}", frozenset(held | own), bool(own), walks))
         return found
+
+    def reached(self, dotted: str, cls: ast.ClassDef, method: ast.FunctionDef) -> bool:
+        """Whether a test method, or its class's setup, reaches what is looked for."""
+
+        setup = [m for name in SETUP if (m := self.member(dotted, cls, name))]
+        return any(self.definition(m, cls) for m in setup) or self.definition((dotted, method), cls)
 
     def methods(self, dotted: str) -> Iterator[tuple[ast.ClassDef, ast.FunctionDef, set[str], set[str]]]:
         """Each test method of a test module: its class, itself, its class's tags and its own."""
@@ -210,7 +226,7 @@ def replaces_root(nodes: list[ast.AST]) -> bool:
 def tagged(root: Path, tag: str) -> list[str]:
     """The label of every test carrying ``tag``: its class's, when every test of the class does."""
 
-    walks = Walks(root)
+    walks = Reach(root)
     labels = []
     for dotted in test_modules(root):
         by_class: dict[str, list[tuple[str, bool]]] = {}
@@ -224,8 +240,8 @@ def tagged(root: Path, tag: str) -> list[str]:
     return labels
 
 
-def test_modules(root: Path) -> list[str]:
-    paths = [path for package in SUITE for path in source_files(root / package, "test*.py")]
+def test_modules(root: Path, packages: tuple[str, ...] = SUITE) -> list[str]:
+    paths = [path for package in packages for path in source_files(root / package, "test*.py")]
     return [".".join(path.relative_to(root).with_suffix("").parts) for path in paths]
 
 
@@ -236,7 +252,7 @@ def misplaced(root: Path) -> tuple[list[str], list[str]]:
     one tag rather than one per method.
     """
 
-    walks = Walks(root)
+    walks = Reach(root)
     untagged, idle = [], []
     for dotted in test_modules(root):
         by_class: dict[str, list[Unit]] = {}
@@ -249,3 +265,24 @@ def misplaced(root: Path) -> tuple[list[str], list[str]]:
             if all("tree" in unit.tags and not unit.walks for unit in units) and any(not u.on_method for u in units):
                 idle.append(cls)
     return untagged, idle
+
+
+def shipped(root: Path) -> tuple[str, ...]:
+    """The packages of SUITE the image is built from: those Dockerfile.dockerignore admits."""
+
+    ignore = (root / "Dockerfile.dockerignore").read_text(encoding="utf-8")
+    admitted = set(re.findall(r"^!([^*/\s]+)/?$", ignore, re.MULTILINE))
+    return tuple(package for package in SUITE if package in admitted)
+
+
+def runs_git_untagged(root: Path) -> list[str]:
+    """Every test the image ships that runs git, itself or through what it
+    reaches by name, without the ``source`` tag: no image ships git."""
+
+    reach = Reach(root, is_git)
+    return [
+        f"{dotted}.{cls.name}.{method.name}"
+        for dotted in test_modules(root, shipped(root))
+        for cls, method, held, own in reach.methods(dotted)
+        if "source" not in held | own and reach.reached(dotted, cls, method)
+    ]

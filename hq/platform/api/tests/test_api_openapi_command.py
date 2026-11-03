@@ -11,6 +11,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, tag
 
+from hq.platform.api import openapi
 from hq.platform.api.management.commands import api_openapi as command
 from hq.platform.api.openapi import document, render
 from tests.mise_tasks import ROOT, mise_tasks
@@ -56,9 +57,32 @@ class CheckTests(SimpleTestCase):
         with self.assertRaises(CommandError) as raised:
             self.check()
 
-        named = set(re.findall(r"`mise run ([\w:-]+)`", str(raised.exception)))
-        self.assertLessEqual({"fix", "fix:api-examples"}, named)
+        named = set(re.findall(r"`mise run ([\w:-]+)[^`]*`", str(raised.exception)))
+        self.assertLessEqual({"manage", "fix:api-examples"}, named)
         self.assertLessEqual(named, mise_tasks().keys())
+
+
+class PruneTests(SimpleTestCase):
+    setUp = CheckTests.setUp
+
+    def test_an_example_whose_operation_is_gone_is_dropped_and_the_rest_kept_as_they_were(self):
+        examples = Path(self.path.parent, "openapi-examples.json")
+        kept = {"rootV2": {"responses": {"200": {"ok": True}}}}
+        examples.write_text(render({**kept, "exampleMovedV2": {"responses": {}}}), encoding="utf-8")
+        out = StringIO()
+
+        with patch.object(openapi, "EXAMPLES_PATH", examples):
+            call_command("api_openapi", "--prune-examples", stdout=out, stderr=StringIO())
+
+        self.assertEqual(json.loads(examples.read_text(encoding="utf-8")), kept)
+        self.assertIn("exampleMovedV2", out.getvalue())
+        self.assertFalse(self.path.exists())
+
+    @tag("source")
+    def test_the_recording_drops_gone_examples_before_its_tests_read_them(self):
+        (run,) = mise_tasks()["fix:api-examples"]["run"]
+
+        self.assertLess(run.index("--prune-examples"), run.index("manage.py test"))
 
 
 @tag("source", "tree")

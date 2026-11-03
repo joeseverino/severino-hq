@@ -6,19 +6,24 @@ from django.test import SimpleTestCase
 
 from hq.platform.core.stylesheets import SHEETS
 from hq.platform.core.tests.browser import (
+    accessibility,
+    catalog,
     command_forms,
     components,
+    current_state,
     estate,
+    folds,
     fragments,
     gate,
-    heads,
     in_flight,
     layout,
     page_errors,
+    planted,
     reading,
     reference,
     selectors,
     serving,
+    shots,
     stress,
     survey,
     sweeps,
@@ -26,6 +31,7 @@ from hq.platform.core.tests.browser import (
     widths,
 )
 from hq.platform.core.tests.browser.probes import (
+    axe,
     boxes,
     describe,
     palette,
@@ -35,32 +41,39 @@ from hq.platform.core.tests.browser.probes import (
     tables,
     text,
 )
-from hq.platform.core.tests.browser.probes.palette import LINE_CONTRAST, lost_fills
+from hq.platform.core.tests.browser.probes.palette import LINE_CONTRAST, losses, lost_fills
 from hq.platform.core.tests.browser.serving import static_file
-from hq.platform.core.tests.browser.survey import AUDIT
+from hq.platform.core.tests.browser.survey import AUDIT, survey_checks
+from hq.platform.core.tests.browser.widths import WIDE
 from hq.platform.core.tests.browser_modules import browser_modules
 
 # Imported by name rather than found, so a change to any of them selects these
 # tests in the fast gate; test_every_browser_module_is_read holds the list whole.
 MODULES = (
+    accessibility,
+    catalog,
     command_forms,
     components,
+    current_state,
     estate,
+    folds,
     fragments,
     gate,
-    heads,
     in_flight,
     layout,
     page_errors,
+    planted,
     reading,
     reference,
     selectors,
     serving,
+    shots,
     stress,
     survey,
     sweeps,
     uncaught,
     widths,
+    axe,
     boxes,
     describe,
     palette,
@@ -119,7 +132,11 @@ def probes() -> dict[str, str]:
 
 class ProbeTests(SimpleTestCase):
     def test_every_browser_module_is_read(self):
-        self.assertEqual(sorted(module.__name__ for module in MODULES), sorted(browser_modules()))
+        self.assertEqual(
+            sorted(module.__name__ for module in MODULES),
+            sorted(browser_modules()),
+            "a browser module is imported and listed in MODULES above",
+        )
 
     def test_no_probe_walks_the_page_with_a_callback(self):
         """An engine with script off refuses to call a page function back, so
@@ -131,6 +148,17 @@ class ProbeTests(SimpleTestCase):
         self.assertEqual(
             {name: walks for name, source in probes().items() if (walks := walks_with_a_callback(source))}, {}
         )
+
+
+class PlantTests(SimpleTestCase):
+    def test_every_geometry_check_has_a_known_bad_case(self):
+        """A check is proven able to fail by the plant PlantedBrowserTests
+        requires it to find: one with none could pass every page forever."""
+
+        checks = survey_checks("/", WIDE)
+        self.assertIn("sideways", checks)
+        self.assertEqual(sorted(set(checks) - set(planted.PLANTS)), [], "a check with no plant in planted.PLANTS")
+        self.assertEqual(sorted(set(planted.PLANTS) - set(checks)), [], "a plant for no check the survey runs")
 
 
 class LostFillTests(SimpleTestCase):
@@ -158,6 +186,17 @@ class LostFillTests(SimpleTestCase):
         steps = {"light": {"3": [1.2, "active item"]}, "dark": {}}
         self.assertEqual(len(lost_fills(steps, LINE_CONTRAST)), 1)
         self.assertIn("dark loses active item", lost_fills(steps, LINE_CONTRAST)[0])
+
+    def test_a_lost_fill_says_what_paints_it_in_the_palette_that_loses_it(self):
+        steps = {
+            "light": {"4": [1.15, "code (light)"], "9": [1.02, "tag (light)"]},
+            "dark": {"4": [1.04, "code (dark)"], "9": [1.2, "tag (dark)"]},
+        }
+        self.assertEqual(losses(steps, LINE_CONTRAST), [("4", "dark"), ("9", "light")])
+        found = lost_fills(steps, LINE_CONTRAST, {"4": "--code-bg in dark", "9": "no token paints this"})
+        self.assertTrue(found[0].startswith("dark loses code (dark)"), found[0])
+        self.assertTrue(found[0].endswith("--code-bg in dark"), found[0])
+        self.assertTrue(found[1].endswith("no token paints this"), found[1])
 
 
 class StaticFileTests(SimpleTestCase):

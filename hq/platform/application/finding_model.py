@@ -9,11 +9,14 @@ import shlex
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, NotRequired, TypedDict
+from typing import Annotated, Any, NotRequired, TypedDict
+
+from pydantic import ConfigDict, with_config
 
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink
+from .command_fields import Describe
 from .core_capabilities import CONTROLLER_REFRESH
 from .timestamps import moment
 from .topology_model import Topology, TopologyNode
@@ -84,6 +87,14 @@ class Finding:
     # The page of what it is about, as the topology names it. Derivation sets
     # it beside the offers, so a card links its title without the topology.
     subject_link: ActionLink | None = None
+    # What a reader must hold to be told this, derived beside the subject link
+    # (findings.read_gate). A detector sets it only for evidence that names
+    # what its subject and scope do not gate, such as a posture check's.
+    read_capabilities: tuple[str, ...] = ()
+    # The one thing on its subject it is about, where the subject holds many:
+    # a container's name on its machine. A page about one of them alone tells
+    # its own problems from its neighbors' by it.
+    part: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,7 +168,7 @@ def reconcile_remedy(node: TopologyNode) -> tuple[FindingRemedy, ...]:
     policy = provider.actions.get("reconcile") if provider else None
     if policy is not None and policy.mode == "locked":
         return ()
-    return (FindingRemedy(capability="infrastructure.reconcile", target=node.label),)
+    return (FindingRemedy(capability="infrastructure.resource.reconcile", target=node.label),)
 
 
 def is_observable(kind_key: str) -> bool:
@@ -233,13 +244,18 @@ def built_findings(fields: tuple[dict[str, Any], ...]) -> tuple[Finding, ...]:
     return tuple(Finding(**item) for item in fields)
 
 
+# Its own config, so it is written one way under every answer that holds it.
+@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class OperatorStep:
     """A command an operator runs on their own machine. HQ never runs it."""
 
-    label: str
-    command: str = ""
-    notes: tuple[str, ...] = ()
+    label: Annotated[str, Describe("What the step does, in a sentence; all there is to it when it names no command.")]
+    command: Annotated[
+        str,
+        Describe("The exact command to paste into a shell on the machine it names; empty for a step said in words."),
+    ] = ""
+    notes: Annotated[tuple[str, ...], Describe("What to know before or after running it, a sentence each.")] = ()
 
 
 # A problem card's own button: read what the claim rests on again, then run

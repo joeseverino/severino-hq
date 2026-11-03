@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.platform.application.tests.markup import text
+from hq.platform.core import append_only
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
@@ -169,7 +170,10 @@ class AuditHistoryPageTests(TestCase):
     def setUp(self):
         self.now = timezone.now()
         self.client.force_login(get_user_model().objects.create_user("example-operator", password="x" * 20))
-        AuditLog.objects.all().delete()
+        # The page is read from an empty log, so the sign-in that made the
+        # reader is cleared as a flush would, with the guard lifted.
+        with append_only.lifted():
+            AuditLog.objects.all().delete()
 
     def stored(self):
         ProviderInventory.objects.create(
@@ -255,57 +259,52 @@ class AuditHistoryPageTests(TestCase):
         self.assertEqual(sources("container"), ["Container"])
         self.assertContains(self.client.get(self.url()), 'value="outside"')
 
-    def test_a_run_of_like_events_is_one_line_with_its_records_behind_it(self):
+    def test_an_operation_is_one_line_with_its_records_beneath_it(self):
         for index in range(14):
-            event(ago=timedelta(minutes=10, seconds=index * 20), repr_=f"container-{index}")
+            event(ago=timedelta(minutes=10, seconds=index * 20), repr_=f"container-{index}", operation_id="sweep")
         for index in range(3):
             event("updated", ago=timedelta(hours=2, seconds=index), repr_=f"record-{index}", type_="DNS record")
         event(ago=timedelta(days=1), repr_="lonely")
 
-        found = self.rows()
+        found = [row for row in self.rows() if not row.under]
         page = self.client.get(self.url()).content.decode()
 
-        self.assertEqual([len(row.events) for row in found], [14, 3, 1])
-        self.assertIn("14 containers", page)
-        self.assertIn("3 DNS records", page)
-        for record in found[0].events:
+        # Rows of no operation are each an event of their own.
+        self.assertEqual([row.total or len(row.events) for row in found], [14, 1, 1, 1, 1])
+        # Every one it changed is counted, and the newest are listed beneath it.
+        self.assertIn("14 containers", text(page))
+        for record in found[0].items:
             self.assertIn(reverse("core:audit_detail", args=[record.pk]), page)
 
-    def test_a_run_is_counted_in_the_plural_its_type_has(self):
+    def test_what_an_operation_changed_is_counted_in_the_plural_its_type_has(self):
         """Not the label with an "s": that read "2 calendar entrys"."""
 
         for index in range(2):
-            event(ago=timedelta(minutes=10, seconds=index * 20), repr_=f"entry-{index}", type_="Calendar entry")
+            event(
+                ago=timedelta(minutes=10, seconds=index),
+                repr_=f"entry-{index}",
+                type_="Calendar entry",
+                operation_id="a",
+            )
         for index in range(2):
-            event("updated", ago=timedelta(hours=2, seconds=index), repr_=f"sweep-{index}", type_="ProviderInventory")
+            event(
+                "updated",
+                ago=timedelta(hours=2, seconds=index),
+                repr_=f"s-{index}",
+                type_="ProviderInventory",
+                operation_id="b",
+            )
 
-        page = self.client.get(self.url()).content.decode()
+        page = text(self.client.get(self.url()).content.decode())
 
         self.assertIn("2 calendar entries", page)
         # A model that declares its plural is counted in it.
         self.assertIn("2 provider inventories", page)
 
-    def test_the_same_thing_again_and_again_is_counted_as_times(self):
-        for index in range(4):
-            event("login", ago=timedelta(minutes=10, seconds=index * 20), repr_="example-operator", type_="User")
-
-        page = self.client.get(self.url()).content.decode()
-
-        self.assertIn("example-operator · 4 times", text(page))
-
-    def test_a_run_breaks_on_another_actor_a_gap_or_a_moment_between(self):
-        user = get_user_model().objects.get(username="example-operator")
-        event(ago=timedelta(minutes=1), repr_="a")
-        event(ago=timedelta(minutes=2), repr_="b", user=user)
-        event(ago=timedelta(minutes=30), repr_="c")
-        event(ago=timedelta(minutes=31), repr_="d")
-
-        self.assertEqual([len(row.events) for row in self.rows()], [1, 1, 2])
-
     def test_a_search_or_the_approval_queue_lists_rows_one_by_one(self):
         self.stored()
         for index in range(3):
-            event(ago=timedelta(minutes=index), repr_=f"container-{index}")
+            event(ago=timedelta(minutes=index), repr_=f"container-{index}", operation_id="sweep")
 
         self.assertEqual([len(row.events) for row in self.rows(action="created")], [1, 1, 1])
         self.assertEqual(self.rows(awaiting="1"), [])

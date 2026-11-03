@@ -18,11 +18,12 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 
 from .labels import human_label
 from .own_addresses import tailnet_sightings
-from .projection import complete, page_size, projection_scope
+from .projection import complete, page_size, projection_scope, window
 from .record_errors import RecordNotFound
 from .security import Principal
 lazy from . import connections, dashboard, estate, machines, request_context
 lazy from .action_items import filter_items
+lazy from .attention import readable_by
 lazy from .command_center import estate_search
 lazy from .credential_sight import credential_sight, sight
 lazy from .entity_links import entity_link
@@ -63,17 +64,17 @@ def _collection(
     """Every match, or the first page of them with how many there were; only
     the page is serialized."""
 
-    page = [serialize(item) for item in (items if limit is None else items[: page_size(limit)])]
     if limit is None:
-        return complete(page)
-    return {"items": page, "count": len(page), "total": len(items)}
+        return complete([serialize(item) for item in items])
+    page, paging = window(items, limit)
+    return {**paging, "items": [serialize(item) for item in page]}
 
 
 # ----- Estate -----------------------------------------------------------------
 
 
-def list_estate() -> dict[str, Any]:
-    """The dashboard's estate figures, each linking to the page that lists it."""
+def list_estate(*, principal: Principal) -> dict[str, Any]:
+    """The dashboard's estate figures as ``principal`` may read them, each linking to the page that lists it."""
 
     with projection_scope():
         return _collection(
@@ -86,16 +87,19 @@ def list_estate() -> dict[str, Any]:
                     "status": card.get("status", ""),
                     "url": card["url"],
                 }
-                for card in estate.cards()
+                for card in estate.cards(principal=principal)
             ]
         )
 
 
-def list_action_items(*, query: str = "", status: str = "", source: str = "", limit: int = 50) -> dict[str, Any]:
-    """The composed action queue, filtered the way the action items page filters it."""
+def list_action_items(
+    *, principal: Principal, query: str = "", status: str | None = None, source: str | None = None, limit: int = 50
+) -> dict[str, Any]:
+    """The composed action queue as ``principal`` may read it, filtered the way the action items page filters it."""
 
     with projection_scope():
-        items = filter_items(dashboard.work_queue(), query=query, status=status, source=source)
+        queue = readable_by(principal, dashboard.work_queue())
+        items = filter_items(queue, query=query, status=status or "", source=source or "")
     return _collection(items, limit)
 
 

@@ -5,14 +5,17 @@ from typing import Any
 
 lazy from django.apps import apps
 
+from hq.platform.application.labels import dotted
 from hq.platform.core.errors import UpstreamUnavailable
 
 from .capabilities import CapabilitySpec
 from .command_fields import named_records, referred
 from .contracts import route_url
 from .entity_links import kind_label
+from .field_masks import WHOLE_RECORD
 from .integration_specs import ON_ITS_PAGE
 from .integrations import integration_graph
+from .json_schemas import fields
 from .projection import MAX_PAGE_SIZE
 from .record_errors import RecordNotFound
 from .resources import ResourceError, get_resource, list_resource
@@ -42,7 +45,7 @@ def item_name(item: dict[str, Any]) -> str:
 
 def _option(item: dict[str, Any], value: str) -> CommandTargetOption:
     name = item_name(item)
-    label = f"{name} · {value}" if name and name != value else value
+    label = dotted(name, value) if name and name != value else value
     kind = item.get("kind")
     group = kind_label(kind) if isinstance(kind, str) and kind.strip() else ""
     return CommandTargetOption(value, label, group)
@@ -91,7 +94,7 @@ def record_options(
     """
 
     offered: dict[str, tuple[CommandTargetOption, ...] | None] = {}
-    for name, field in schema.get("properties", {}).items():
+    for name, field in fields(schema).items():
         declared = named_records(field)
         if declared is not None:
             offered[name] = resource_options(declared["resource"], principal=principal, key=declared.get("key", ""))
@@ -147,15 +150,14 @@ def resource_options(
             kinds_applied = True
 
     try:
-        collection = list_resource(resource.name, query, principal=principal)
+        # Whole items: an option is named by whichever of its fields names it.
+        collection = list_resource(resource.name, query, principal=principal, fields=[WHOLE_RECORD])
     except UpstreamUnavailable, AuthorizationError:
         # The source is down, not configured or not the caller's to read: the
         # value is typed instead of chosen, rather than the page failing.
         return None
     options = []
     for item in collection["items"]:
-        if not isinstance(item, dict):
-            continue
         if governed_kinds and not kinds_applied and item.get("kind") not in governed_kinds:
             continue
         raw_value = item.get(key)

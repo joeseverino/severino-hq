@@ -7,6 +7,7 @@ package secrets
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"io"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/secrets/connect"
 	"github.com/joeseverino/severino-hq/controller/secrets/connectapi"
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
@@ -109,7 +111,10 @@ type Runner struct {
 	Web    Web
 	Log    *slog.Logger
 	Now    func() time.Time
-	// Sleep waits between attempts; tests replace it.
+	// Sleep waits between attempts, and hands the Connect client its wait. It
+	// is clock.Sleep outside a test; it stays a field because the render tests
+	// reach the Connect fake over real loopback, which a synctest bubble's
+	// fake clock cannot hold.
 	Sleep func(context.Context, time.Duration) error
 	// PortFloor reads the lowest port any account may listen on
 	// (net.ipv4.ip_unprivileged_port_start). The endpoint's port must be below
@@ -248,6 +253,7 @@ func (r *Runner) read(ctx context.Context, client *connect.Client, id string) (c
 				stable = false
 				break
 			}
+			learnConcealed(item)
 			items = append(items, item)
 		}
 		after, err := client.Vault(ctx, id)
@@ -260,6 +266,19 @@ func (r *Runner) read(ctx context.Context, client *connect.Client, id string) (c
 		}
 	}
 	return connectapi.Vault{}, nil, ErrChanging
+}
+
+// learnConcealed learns the value of each field 1Password conceals, so no
+// log line of the renderer carries one (mask.Learn).
+func learnConcealed(item connectapi.FullItem) {
+	if item.Fields == nil {
+		return
+	}
+	for _, field := range *item.Fields {
+		if field.Value != nil && (field.Type == connectapi.CONCEALED || field.Type == connectapi.OTP) {
+			mask.Learn(*field.Value)
+		}
+	}
 }
 
 func (r *Runner) inputs(salt string, registry []byte) string {
@@ -472,10 +491,7 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *secrets
 
 	// Read every installed file back: the state records what is there, not
 	// what was meant to be.
-	salt, err := newSalt()
-	if err != nil {
-		return result, errors.New("no randomness for the render state")
-	}
+	salt := rand.Text()
 	next := state{SchemaVersion: stateSchemaVersion, RenderedAt: r.Now().UTC(), VaultID: *vault.Id,
 		AttributeVersion: read.AttributeVersion, Salt: salt, Inputs: r.inputs(salt, registryBytes),
 		Counts: secretstatus.Counts{ItemsRead: len(items), Connections: len(out.Document.Connections), AppVariables: out.AppVariables,

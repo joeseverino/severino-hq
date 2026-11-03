@@ -19,11 +19,11 @@ from hq.domains.receipts import validation
 from hq.domains.receipts.models import Receipt
 from hq.domains.receipts.validation import MAX_RECEIPT_BASE64_CHARS
 from hq.platform.application.capabilities import execute_capability
-from hq.platform.application.idempotency import IdempotencyRecord
 from hq.platform.application.receipts import REPLACE, UPDATE, UPLOAD
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
 from hq.platform.application.tests.markup import text
-from hq.platform.core.models import AuditLog
+from hq.platform.application.tests.writers import form_keyed
+from hq.platform.core.models import AuditLog, IdempotencyRecord
 
 GRANTED = frozenset(Capability) | OPERATOR_CAPABILITIES
 # Tokens granted everything, which a file still never arrives with.
@@ -48,7 +48,7 @@ def denials(capability: str) -> int:
 def as_principal(principal: Principal):
     """The receipt views' caller, as ``principal``."""
 
-    return mock.patch("hq.domains.receipts.views.web_principal", return_value=principal)
+    return mock.patch("hq.platform.application.web_writes.web_principal", return_value=principal)
 
 
 def operator_without(capability: str) -> Principal:
@@ -142,12 +142,14 @@ class CreateViewTests(_PrivateMedia):
     def post(self, content_type="application/pdf", content=CONTENT):
         return self.client.post(
             reverse("receipts:create"),
-            {
-                "vendor": "Example Host",
-                "amount": "12.00",
-                "notes": "",
-                "file": SimpleUploadedFile("scan.pdf", content, content_type=content_type),
-            },
+            form_keyed(
+                {
+                    "vendor": "Example Host",
+                    "amount": "12.00",
+                    "notes": "",
+                    "file": SimpleUploadedFile("scan.pdf", content, content_type=content_type),
+                }
+            ),
         )
 
     def test_an_upload_is_kept_and_recorded_under_the_operator(self):
@@ -165,7 +167,7 @@ class CreateViewTests(_PrivateMedia):
             with self.subTest(interface=principal.interface), as_principal(principal):
                 response = self.post()
 
-                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.status_code, 403)
                 self.assertTrue(response.context["form"].non_field_errors())
         self.assertFalse(Receipt.objects.exists())
         self.assertEqual(denials(UPLOAD), 3)
@@ -184,7 +186,7 @@ class CreateViewTests(_PrivateMedia):
 
     def test_the_capabilitys_refusal_is_said_on_the_form(self):
         refusal = {"ok": False, "error": {"code": "not_found", "message": "A related expense or asset was not found."}}
-        with mock.patch("hq.domains.receipts.views.execute_capability", return_value=refusal):
+        with mock.patch("hq.domains.receipts.views.execute_posted", return_value=refusal):
             response = self.post()
 
         self.assertIn("A related expense or asset was not found.", text(response))
@@ -199,7 +201,9 @@ class EditViewTests(_PrivateMedia):
         self.old = self.receipt.file.name
 
     def post(self, **fields):
-        return self.client.post(self.url, {"vendor": "Example Host", "amount": "12.00", "notes": "Paid", **fields})
+        return self.client.post(
+            self.url, form_keyed({"vendor": "Example Host", "amount": "12.00", "notes": "Paid", **fields})
+        )
 
     def a_new_file(self, content_type="image/png", content=b"\x89PNG new"):
         return SimpleUploadedFile("photo.png", content, content_type=content_type)
@@ -233,7 +237,7 @@ class EditViewTests(_PrivateMedia):
                 with self.subTest(capability=capability, interface=principal.interface), as_principal(principal):
                     response = self.post(**fields())
 
-                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.status_code, 403)
                     self.assertTrue(response.context["form"].non_field_errors())
             self.assertEqual(denials(capability), 3)
         self.receipt.refresh_from_db()
@@ -254,7 +258,7 @@ class EditViewTests(_PrivateMedia):
 
     def test_the_capabilitys_refusal_is_said_on_the_form(self):
         refusal = {"ok": False, "error": {"code": "conflict", "message": "That receipt changed after it was read."}}
-        with mock.patch("hq.domains.receipts.views.execute_capability", return_value=refusal):
+        with mock.patch("hq.domains.receipts.views.execute_posted", return_value=refusal):
             response = self.post(file=self.a_new_file())
 
         self.assertIn("That receipt changed after it was read.", text(response))
@@ -272,12 +276,12 @@ class MatchViewTests(TestCase):
         self.url = reverse("receipts:match", args=[self.receipt.pk])
 
     def link(self):
-        return self.client.post(self.url, {"expense_id": self.expense.pk}, follow=True)
+        return self.client.post(self.url, form_keyed({"expense_id": self.expense.pk}), follow=True)
 
     def test_a_link_keeps_the_details_and_is_recorded_under_the_operator(self):
         response = self.link()
 
-        self.assertIn(f"Receipt linked to {self.expense.label}", text(response))
+        self.assertIn(f"Receipt linked to {self.expense.vendor} · {self.expense.item}", text(response))
         self.receipt.refresh_from_db()
         self.assertEqual((self.receipt.related_expense, self.receipt.notes), (self.expense, "Kept"))
         updated = AuditLog.objects.get(action=AuditLog.Action.UPDATED, object_type="Receipt")
@@ -295,7 +299,7 @@ class MatchViewTests(TestCase):
 
     def test_a_refused_link_says_why(self):
         refusal = {"ok": False, "error": {"code": "conflict", "message": "That receipt changed after it was read."}}
-        with mock.patch("hq.domains.receipts.views.execute_capability", return_value=refusal):
+        with mock.patch("hq.domains.receipts.views.execute_posted", return_value=refusal):
             response = self.link()
 
         self.assertIn("That receipt changed after it was read.", text(response))

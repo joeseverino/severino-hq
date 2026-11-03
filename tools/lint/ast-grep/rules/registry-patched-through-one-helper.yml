@@ -1,0 +1,26 @@
+# The MCP tools bind their schemas from the contract's view of the resource
+# registry and answer reads from the application's. A test that patches one of
+# the two serves a kind half-way: listed but unread, or read but refused as an
+# argument, and passes or fails for that rather than for what it holds.
+# hq/platform/mcp/tests/registry.py patches both, once.
+id: registry-patched-through-one-helper
+language: python
+severity: error
+message: A test patches the resource registry by name, so only one of its two readers may see the patch.
+note: >-
+  Serve the registry with hq.platform.mcp.tests.registry: `served(registry)`
+  for a fresh ToolServer, `registry_patched(registry)` for a tool bound by
+  hand, `example_kind()` for an extension's kind.
+files:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/testing.py"
+  - "**/*_testing.py"
+ignores:
+  # Where both names are patched together.
+  - "hq/platform/mcp/tests/registry.py"
+rule:
+  any:
+    - kind: string
+      regex: \.resource_registry["']$
+    - pattern: $PATCH.object($MODULE, "resource_registry", $$$REST)

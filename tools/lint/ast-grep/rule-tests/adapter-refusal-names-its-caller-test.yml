@@ -1,0 +1,8 @@
+id: adapter-refusal-names-its-caller
+valid:
+  - 'answer = adapter_refusal(name, exc, principal=principal)'
+  - 'refusal = await sync_to_async(adapter_refusal)(tool.name, error, principal=authenticated())'
+invalid:
+  - 'answer = adapter_refusal(name, exc)'
+  - 'raise _as_protocol_error(capabilities.adapter_refusal(name, error)) from None'
+  - 'refusal = await sync_to_async(adapter_refusal)(tool.name, error)'

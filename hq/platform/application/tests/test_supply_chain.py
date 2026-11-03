@@ -311,7 +311,7 @@ class ContainerJoinTests(TestCase):
         found = relationships_for("resource:example-box-web", principal=cli_principal())
 
         (network,) = found.group("On network").items
-        self.assertEqual((network.entity.label, network.entity.detail), ("shop_default", "bridge · 172.20.0.0/16"))
+        self.assertEqual((network.entity.label, network.entity.detail), ("shop_default", "bridge\xa0· 172.20.0.0/16"))
         self.assertEqual(found.labels("Talks to"), ("app",))
 
     def test_the_container_page_shows_what_it_does_not_say_elsewhere(self):

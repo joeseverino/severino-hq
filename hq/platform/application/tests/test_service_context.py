@@ -19,7 +19,7 @@ from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..service_context import Cell, ServiceSection, sections_for
-from ..services import service_or_prospect
+from ..services import prospects
 from ..ui import MISSING
 from .markup import select, with_class
 
@@ -32,7 +32,7 @@ def a_service(hostname="probe.example.com"):
         generation=1,
         observed_generation=1,
     )
-    return service_or_prospect(hostname)
+    return prospects((hostname,))[0]
 
 
 def a_project(**fields):
@@ -188,7 +188,7 @@ class TrafficSectionTests(TestCase):
     def test_a_measured_host_gets_its_traffic_without_a_foreign_key(self):
         self._measure("probe.example.com")
         found = self.traffic()
-        self.assertEqual((found.value, found.detail), ("120 pageviews", "90 visits · counted"))
+        self.assertEqual((found.value, found.detail), ("120 pageviews", "90 visits\xa0· counted"))
 
     def test_a_host_nothing_measures_says_nothing(self):
         # Not "0 pageviews": that would read as a dead site rather than an
@@ -197,7 +197,7 @@ class TrafficSectionTests(TestCase):
 
     def test_sampling_is_carried_rather_than_presented_as_a_count(self):
         self._measure("probe.example.com", sample_interval=10)
-        self.assertEqual(self.traffic().detail, "90 visits · sampled 1 in 10")
+        self.assertEqual(self.traffic().detail, "90 visits\xa0· sampled 1 in 10")
 
     def test_another_hosts_traffic_is_not_borrowed(self):
         self._measure("someone-else.example.com", pageviews=9999)

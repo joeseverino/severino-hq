@@ -8,20 +8,28 @@ able to make carries the error mypy reports for it. ``warn_unused_ignores``
 fails the gate the day one of those stops being an error.
 """
 
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, assert_type, override
 
+from django import forms
 from django.db import models
+from django.http import HttpRequest, HttpResponse
 from django.urls import reverse_lazy
+from django.utils.functional import Promise
 
 from hq_sdk import (
     capabilities,
+    connections,
     demo,
     jobs,
+    migrations,
     money,
     outbound,
     pages,
+    plugin,
     reads,
     references,
     resources,
@@ -94,6 +102,7 @@ def sentences(registrar: str) -> None:
     assert_type(ui.ended(f"Renews through {registrar}"), str)
 
     ui.ended(None)  # type: ignore[arg-type]
+    assert_type(ui.dotted(registrar, 3, None), str)
     assert_type(validation.sentence_closes("src"), list[str])
 
 
@@ -138,11 +147,13 @@ def as_someone(principal: capabilities.Principal) -> None:
         capabilities.execute_capability("example.do", {"name": "x"}, principal=principal),
         dict[str, Any],
     )
-    assert_type(resources.list_resource("example.things", principal=principal), dict[str, Any])
+    page = resources.list_resource("example.things", principal=principal)
+    assert_type(page["items"], list[dict[str, Any]])
+    assert_type(page["count"], int)
     assert_type(resources.get_resource("example.things", 1, principal=principal), dict[str, Any])
     assert_type(
-        resources.list_resource("example.things", principal=principal, fields=["name", "parts.name"]),
-        dict[str, Any],
+        resources.list_resource("example.things", principal=principal, fields=["name", "parts.name"])["items"],
+        list[dict[str, Any]],
     )
     assert_type(resources.get_resource("example.things", 1, principal=principal, fields=("name",)), dict[str, Any])
 
@@ -152,6 +163,54 @@ def as_someone(principal: capabilities.Principal) -> None:
     resources.get_resource("example.things", 1)  # type: ignore[call-arg]
     resources.get_resource("example.things", 1, principal=principal, fields="name")  # type: ignore[arg-type]
     capabilities.execute_capability("example.do", ["x"], principal=principal)  # type: ignore[arg-type]
+
+
+def from_a_form(request: HttpRequest) -> None:
+    # A view's write runs as the signed-in person, under the key their form posted.
+    assert_type(capabilities.execute_posted(request, "example.do", {"name": "x"}), dict[str, Any])
+    assert_type(
+        capabilities.execute_posted(request, "example.do", {}, target=1, expected_updated_at="x"), dict[str, Any]
+    )
+    assert_type(testing.form_keyed({"name": "x"}), dict[str, Any])
+    assert_type(testing.form_keyed(), dict[str, Any])
+
+    capabilities.execute_posted(request, "example.do")  # type: ignore[call-arg]
+    capabilities.execute_posted(request, "example.do", {}, principal=None)  # type: ignore[call-arg]
+    testing.form_keyed(["x"])  # type: ignore[arg-type]
+
+
+def a_refused_answer(request: HttpRequest, form: forms.Form, answer: dict[str, Any]) -> HttpResponse:
+    # A refusal is said on the form or the next page, or is the whole response.
+    refusal = capabilities.refused(request, answer, form=form)
+    if refusal is not None:
+        assert_type(refusal.message, str)
+        assert_type(refusal.status, int)
+    capabilities.refused(request, answer, form)  # type: ignore[call-arg]
+    capabilities.refused(request, ["x"])  # type: ignore[arg-type]
+    return capabilities.refusal_response(answer)
+
+
+def a_person_holding() -> None:
+    # A test asks the real page gate as a person holding only the capabilities it names.
+    assert_type(testing.holding("example.read", "example.write"), AbstractContextManager[Any])
+    with testing.holding():
+        pass
+
+    testing.holding(["example.read"])  # type: ignore[arg-type]
+
+
+def catalogs(principal: capabilities.Principal) -> None:
+    # Each describes alone, or says for ``principal`` whether each entry is permitted.
+    assert_type(resources.describe_resources()["resources"][0]["name"], str)
+    assert_type(resources.describe_resources(principal=principal)["resources"][0]["permitted"], bool)
+    # One kind, with its list's whole query schema.
+    assert_type(resources.describe_resources(name="example.records")["schema_version"], int)
+    assert_type(connections.describe_connections()["schema_version"], int)
+    assert_type(connections.describe_connections(principal=principal)["connections"][0]["abilities"][0]["name"], str)
+
+    resources.describe_resources(principal)  # type: ignore[call-arg]
+    resources.describe_resources(name=1)  # type: ignore[arg-type]
+    connections.describe_connections(principal="example")  # type: ignore[arg-type]
 
 
 def looking_up(progress: jobs.Progress, *, subject: str, principal: capabilities.Principal) -> dict[str, Any]:
@@ -231,7 +290,10 @@ def a_command_that_starts_somewhere() -> None:
     assert_type(capabilities.Names("example.projects").key, str)
     assert_type(capabilities.Choices({"plain": "Plain"}.items()).options, tuple[tuple[str, str], ...])
 
+    # What only a client reading JSON needs is the second part, which a form leaves off.
+    assert_type(capabilities.Describe("The project it is for.", api="Its slug.").api, str)
     capabilities.Describe()  # type: ignore[call-arg]
+    capabilities.Describe("The project it is for.", api=None)  # type: ignore[arg-type]
     capabilities.Names(resource=1)  # type: ignore[arg-type]
     capabilities.Choices(("plain", "loud"))  # type: ignore[arg-type]
     assert_type(capabilities.Refers(Note, "about").field, str)
@@ -302,8 +364,8 @@ class Things(tables.TableListMixin, pages.PageMixin):
 
 
 class AThing(pages.PageMixin):
-    # A record's page: its list as the trail's first crumb, the record's own after it.
-    page_trail = ("Things", reverse_lazy("example:things"))
+    # A record's page two levels down: the pages above it, then the record's own.
+    page_trail = (("Example", reverse_lazy("example:home")), ("Things", reverse_lazy("example:things")))
 
     @override
     def trail_label(self, record: Any) -> str | None:
@@ -311,7 +373,8 @@ class AThing(pages.PageMixin):
 
 
 class WronglyTrailed(pages.PageMixin):
-    page_trail = "Things"  # type: ignore[assignment]
+    # One crumb written bare, not a tuple of them.
+    page_trail = ("Things", reverse_lazy("example:things"))  # type: ignore[assignment]
 
     @override
     def trail_label(self, record: Any) -> int:  # type: ignore[override]
@@ -319,7 +382,16 @@ class WronglyTrailed(pages.PageMixin):
 
 
 def a_trail(page: AThing) -> None:
-    assert_type(page.get_page_trail(), tuple[tuple[str, str], ...])
+    assert_type(page.get_page_trail(), tuple[tuple[str, str | Promise], ...])
+    # A function view passes the same lazy crumbs a class declares.
+    assert_type(
+        pages.page_context("Example", trail=AThing.page_trail)["page"].trail, tuple[tuple[str, str | Promise], ...]
+    )
+    pages.page_context("Example", trail=(("Things", reverse_lazy("example:things")),))
+    pages.page_context("Example", trail=(("Things", 1),))  # type: ignore[arg-type]
+    # An override names the crumb by the SDK's own name.
+    crumb: pages.Crumb = ("Things", reverse_lazy("example:things"))
+    assert_type(pages.page_context("Example", trail=(crumb,))["page"].trail, tuple[pages.Crumb, ...])
 
 
 class WronglyDeclared(tables.TableListMixin):
@@ -380,3 +452,107 @@ def announcements() -> None:
     assert_type(writes.WriteMessages.created_message, str)
     assert_type(WelcomedFirst.created_message, str)
     assert_type(WelcomedLast.created_message, str)
+
+
+def a_manifest() -> None:
+    # Every extension builds its navigation positionally, so a manifest class
+    # that took keywords alone would break each one.
+    item = plugin.NavigationItem("Notes", "example_notes:list", "example_notes", 40, "Example")
+    group = plugin.NavigationGroup("Example", "Notes kept to show how a group is declared.")
+    manifest = plugin.PluginManifest(
+        id="example.notes",
+        name="Example Notes",
+        version="1.0.0",
+        distribution="example-notes",
+        source_repository="example/example-notes",
+        source_workflow=".github/workflows/admit-plugin.yml",
+        api_version=plugin.PLUGIN_API_VERSION,
+        integration_provider="example_notes.plugin:integration",
+        navigation=(item,),
+        description="Notes, each with its author.",
+        navigation_groups=(group,),
+    )
+    assert_type(manifest.navigation, tuple[plugin.NavigationItem, ...])
+    assert_type(manifest.navigation_groups, tuple[plugin.NavigationGroup, ...])
+    assert_type(manifest.description, str)
+    assert_type(manifest.id, str)
+
+    manifest.id = "example.other"  # type: ignore[misc]
+    plugin.NavigationItem("Notes", "example_notes:list", "example_notes", "40")  # type: ignore[arg-type]
+    plugin.PluginManifest(id="example.notes")  # type: ignore[call-arg]
+    plugin.NavigationGroup("Example")  # type: ignore[call-arg]
+
+
+def an_attention_url() -> None:
+    # Where an extension's attention items are decided, asked for when a page links there.
+    integration = plugin.PluginIntegration(attention=tuple, attention_url=lambda: "/x/")
+    assert_type(integration.attention_url, Callable[[], str] | None)
+
+    plugin.PluginIntegration(attention=tuple, attention_url="/x/")  # type: ignore[arg-type]
+
+
+def a_gated_insight() -> None:
+    # An item about what only some capabilities may read names them; left
+    # out, every reader of the queue is shown it.
+    gated = ui.Insight("attention", "Finding", "Example is not answering", "", "", read_capabilities=("example.read",))
+    assert_type(gated.read_capabilities, tuple[str, ...])
+    ui.Insight("attention", "Finding", "Example", "", "", read_capabilities="example.read")  # type: ignore[arg-type]
+
+
+def an_insight_about_one_part() -> None:
+    # An item about one of its subject's many things names that thing, so a
+    # page about it alone leaves out its neighbors' items.
+    about = ui.Insight("attention", "Finding", "Example is restarting", "", "", part="example-web")
+    assert_type(about.part, str)
+    ui.Insight("attention", "Finding", "Example", "", "", part=("example-web",))  # type: ignore[arg-type]
+
+
+def a_list_with_its_own_fields(rows: Callable[..., dict[str, Any]]) -> None:
+    # The fields each item of a list read keeps unless the caller names its own.
+    spec = resources.ResourceSpec(
+        "example.things",
+        "Things",
+        "Example things.",
+        "example.read",
+        rows,
+        resources.ResourceQuery,
+        list_fields=("name",),
+    )
+    assert_type(spec.list_fields, tuple[str, ...])
+
+    resources.ResourceSpec("example.things", "Things", "Example things.", "example.read", list_fields="name")  # type: ignore[arg-type]
+
+
+def a_list_with_the_deployment_ceiling(rows: Callable[..., dict[str, Any]]) -> None:
+    # A list query that inherits its first ``limit`` takes the deployment's ceiling with it.
+    class Query(resources.TopQuery):
+        name: str | None = None
+
+    assert_type(Query(limit=10).limit, int)
+    resources.ResourceSpec("example.things", "Things", "Example things.", "example.read", rows, Query)
+
+    resources.TopQuery(limit="many")  # type: ignore[arg-type]
+
+
+def a_list_narrowed_by_status_and_text(rows: Callable[..., dict[str, Any]]) -> None:
+    # A list's status and text filters say what every list's do; each may be left out.
+    class Query(resources.TopQuery):
+        status: resources.StatusFilter = None
+        query: resources.TextFilter = None
+
+    narrowed = Query(status="open", query="example")
+    assert_type(narrowed.status, str | None)
+    assert_type(narrowed.query, str | None)
+    resources.ResourceSpec("example.things", "Things", "Example things.", "example.read", rows, Query)
+
+    Query(status=1)  # type: ignore[arg-type]
+    Query(query=["example"])  # type: ignore[arg-type]
+
+
+def a_capability_renamed() -> None:
+    # A plugin's migration moves the rows the host keeps under its old capability names.
+    renamed = migrations.RenameCapabilities({"example.entries": "example.entry.list"})
+    assert_type(renamed, migrations.RenameCapabilities)
+    assert_type(migrations.CAPABILITY_ROWS, tuple[str, str])
+
+    migrations.RenameCapabilities(["example.entries"])  # type: ignore[arg-type]

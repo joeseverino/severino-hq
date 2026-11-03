@@ -10,6 +10,7 @@ from django.test import Client, TestCase
 from hq.domains.control_plane.models import ProviderInventory, ReadRequest
 from hq.domains.jobs.models import Job
 from hq.platform.application.tests.host_only import host_only
+from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.bench import Seeded, seed
 from hq.platform.core.management.commands.bench_pages import (
     ACTIONS,
@@ -71,7 +72,7 @@ class AnswersBeforeTheWorkTests(TestCase):
     def post(self, name: str):
         url, action = self.exercised[name]
         action.prepare(self.seeded)
-        return self.client.post(url, action.data(self.seeded))
+        return self.client.post(url, form_keyed(action.data(self.seeded)))
 
     def stored(self) -> dict[str, object]:
         return dict(ProviderInventory.objects.values_list("kind", "updated_at"))

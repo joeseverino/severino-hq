@@ -1,0 +1,16 @@
+id: dot-typed-in-text
+valid:
+  - |
+    def name():
+        """"a · b", as a person reads it."""
+  - 'label = dotted(before, after)'
+  - '# before · after'
+  - 'unit = "mL/min·kg"'
+  - "DOT = \"\\u00a0· \""
+invalid:
+  - 'label = f"{before} · {after}"'
+  - 'line = " · ".join(parts)'
+  - 'shown("a · b")'
+  - 'html = format_html("{} &middot; {}", a, b)'
+  - 'html = format_html("{} &#183; {}", a, b)'
+  - 'message = "from " f"{a} · {b}"'

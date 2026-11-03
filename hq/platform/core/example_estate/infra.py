@@ -13,10 +13,11 @@ from hq.domains.control_plane.models import (
 )
 from hq.platform.application import readings
 from hq.platform.application.inventory_testing import store
+from hq.platform.application.labels import dotted
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import cli_principal
 
-from . import network, work
+from . import doors, network, work
 from .names import (
     ADGUARD,
     CLOUDFLARE,
@@ -125,23 +126,25 @@ def connections():
             "detail": detail,
         }
 
-    report_connections(
-        [
-            answering(
-                PORTAINER, "portainer", "https://portainer.example.com", "1 of 1 environment reachable.", [MACHINE]
-            ),
-            answering(DNS, "cloudflare_dns", "https://api.cloudflare.com/client/v4", "1 zone.", [ZONE]),
-            answering(CLOUDFLARE, "cloudflare_api", "https://api.cloudflare.com/client/v4", "1 account.", [ZONE]),
-            answering(PROXY_REF, "npm", f"http://{LAN}:81", f"{len(SERVICES)} proxy hosts."),
-            answering(ADGUARD, "adguard", f"http://{LAN}:3080", f"{len(SERVICES)} rewrites."),
-            answering(TAILSCALE, "tailscale", "https://api.tailscale.com", "3 devices."),
-            answering(SSH, "ssh", f"{MACHINE}:22", "Host key matches.", [MACHINE]),
-            answering(GITHUB, "github_app", "https://api.github.com", f"{len(work.REPOSITORIES)} repositories."),
-            answering("onepassword", "onepassword", "https://my.1password.com", "1 vault."),
-        ],
-        principal=cli_principal(),
-        controller_id="example-controller",
-    )
+    # Bound as the bridge binds a controller's report, so its rows name the controller.
+    with doors.controller("connections"):
+        report_connections(
+            [
+                answering(
+                    PORTAINER, "portainer", "https://portainer.example.com", "1 of 1 environment reachable.", [MACHINE]
+                ),
+                answering(DNS, "cloudflare_dns", "https://api.cloudflare.com/client/v4", "1 zone.", [ZONE]),
+                answering(CLOUDFLARE, "cloudflare_api", "https://api.cloudflare.com/client/v4", "1 account.", [ZONE]),
+                answering(PROXY_REF, "npm", f"http://{LAN}:81", f"{len(SERVICES)} proxy hosts."),
+                answering(ADGUARD, "adguard", f"http://{LAN}:3080", f"{len(SERVICES)} rewrites."),
+                answering(TAILSCALE, "tailscale", "https://api.tailscale.com", "3 devices."),
+                answering(SSH, "ssh", f"{MACHINE}:22", "Host key matches.", [MACHINE]),
+                answering(GITHUB, "github_app", "https://api.github.com", f"{len(work.REPOSITORIES)} repositories."),
+                answering("onepassword", "onepassword", "https://my.1password.com", "1 vault."),
+            ],
+            principal=cli_principal(),
+            controller_id="example-controller",
+        )
 
 
 def proxy():
@@ -309,7 +312,7 @@ def _weather():
                     "value": f"{min(temperatures)}–{max(temperatures)}°",
                     "detail": f"next {len(_HOURS)} hours",
                 },
-                {"label": "Rain", "value": f"Now · {_HOURS[0][1]}%", "detail": _HOURS[0][2]},
+                {"label": "Rain", "value": dotted("Now", f"{_HOURS[0][1]}%"), "detail": _HOURS[0][2]},
                 {"label": "Wind", "value": "WSW 10 to 15 mph", "detail": "NWS hourly forecast"},
             ],
             "hours": hours,
