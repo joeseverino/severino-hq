@@ -32,7 +32,7 @@ from hq.platform.core.tests.task import (
     worktree,
 )
 from tools.gate.turn import in_turn, inside, narrow
-from tools.gate.verdict import FailedTest, Gate, Step, run
+from tools.gate.verdict import REPORTS, FailedTest, Gate, Step, run
 
 ROOT = Path(__file__).resolve().parents[2]
 # Everything after it is the developer's, so a later --parallel or -k wins.
@@ -43,6 +43,41 @@ UV_RUN = ["uv", "run", "--group", "browser", "python"]
 FAILED_IMPORT = "unittest.loader._FailedTest."
 IMPORT_ERROR = "ImportError: Failed to import test module:"
 UNIMPORTED = 3
+# Imports the module each label names, as written, in the ref's environment
+# before its suite starts. The suite imports lazily (hq/config/imports.py), so a
+# name a label's module imports that the ref lacks raises only once a test, or
+# a parallel worker unpickling one, first uses it: read as a failing test, or a
+# pool whose workers die and restart. Imported here first, it reads as the
+# label that does not import, recorded as the loader records a module that
+# raised on import. A label naming no module of the tree (an option's value, a
+# directory) is left to the suite. Its arguments: the record's test prefix, its
+# exception's, the variable naming the record's folder, then the labels.
+IMPORTS = """
+import importlib, json, os, pathlib, re, sys, traceback
+prefix, said, folder, *labels = sys.argv[1:]
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hq.config.settings")
+import django
+django.setup()
+records = []
+for label in labels:
+    parts = [part for part in re.split(r"[/.]", label.removesuffix(".py")) if part]
+    found = (
+        end for end in range(len(parts), 0, -1)
+        if pathlib.Path(*parts[:end]).with_suffix(".py").is_file()
+        or pathlib.Path(*parts[:end], "__init__.py").is_file()
+    )
+    if (end := next(found, None)) is None:
+        continue
+    try:
+        importlib.import_module(".".join(parts[:end]))
+    except ImportError as error:
+        traceback.print_exc()
+        print(f"{said} {label}", flush=True)
+        records.append({"test": prefix + label, "exception": f"{said} {label}: {error}", "traceback": traceback.format_exc()})
+if records and os.environ.get(folder):
+    pathlib.Path(os.environ[folder], "imports.json").write_text(json.dumps(records))
+sys.exit(bool(records))
+"""
 # Django's default discovery pattern: a file it finds tests in on its own.
 TEST_MODULE = "test*.py"
 # The Go module, and the Go gate's command (test:controller's) up to its packages.
@@ -195,10 +230,22 @@ class Suite:
     # A suite whose run can't tell a fixture it lacks from a failing test would read that run's failure
     # as the proof it is not, so it never runs one.
     held_again: bool = True
+    # The command that imports the labels in the ref's worktree before the suite runs, or None for none.
+    imports: Callable[[list[str], Path], list[str] | None] = lambda *_: None
+
+
+def import_command(labels: list[str], tree: Path) -> list[str] | None:
+    """IMPORTS on the labels, with the ref's own interpreter, where the ref's suite is Django's (it has
+    a manage.py, whose settings IMPORTS sets up)."""
+
+    if not labels or not (tree / "manage.py").is_file():
+        return None
+    return [*UV_RUN, "-c", IMPORTS, FAILED_IMPORT, IMPORT_ERROR, REPORTS, *labels]
 
 
 def python_suite() -> Suite:
     return Suite(
+        imports=import_command,
         command=lambda args, _tree: [*UV_RUN, *TEST, *args],
         is_test=is_test_file,
         is_module=is_test_module,
@@ -296,14 +343,14 @@ def run_at(ref: str, keep: list[str], args: list[str], suite: Suite | None = Non
         events = Path(scratch, "events.json")
         if suite.events:
             os.environ[suite.events] = str(events)
-        step = run(gate.name, suite.command(args, tree), cwd=tree)
+        step = run_suite(gate.name, suite, args, labels, tree)
         unrun = suite.unrun(step, commit, labels, events)
         held = laid.replaced() if suite.held_again and step.ok and unrun is None else []
         if held:
             # The pass ran this tree's support, so the ref's own copies go back for a run that tests the ref.
             git("--literal-pathspecs", "checkout", commit, "--", *held, root=tree)
             laid = layout(present, deleted, [*keep, *held], labels, suite.is_module, suite.module, laid.new)
-            step = run(gate.name, suite.command(args, tree), cwd=tree)
+            step = run_suite(gate.name, suite, args, labels, tree)
             unrun = suite.unrun(step, commit, labels, events)
     said = laid.summary()
     keeps = (word for path in laid.kept for word in ("--keep", path))
@@ -326,6 +373,15 @@ def run_at(ref: str, keep: list[str], args: list[str], suite: Suite | None = Non
         tests=again,
     )
     return step.code
+
+
+def run_suite(name: str, suite: Suite, args: list[str], labels: list[str], tree: Path) -> Step:
+    """The suite's run in the ref's worktree, or the import of its labels when one of them does not import
+    there. An import that fails for another reason (the ref's settings) leaves the verdict to the suite."""
+
+    if (imports := suite.imports(labels, tree)) and (step := run(name, imports, cwd=tree)).unimported:
+        return step
+    return run(name, suite.command(args, tree), cwd=tree)
 
 
 def unproven(run: str) -> str:

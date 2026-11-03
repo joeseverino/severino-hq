@@ -305,6 +305,31 @@ class TestAtRefTests(GateTestCase):
         self.assertIn("cannot import name 'RENAMED'", kept)
         self.assert_nothing_left()
 
+    def test_a_label_a_lazy_suite_would_meet_unimported_only_as_its_tests_run_is_named_before_the_suite(self):
+        """The suite imports lazily, so the name the ref lacks would raise in each test (or each parallel
+        worker unpickling one); the label is imported as written first, with the ref's Django settings."""
+        self.write("manage.py", "")
+        self.write("settings.py", "SECRET_KEY = 'example'\n")
+        ref = self.commit("a Django suite")
+        self.write(
+            "tests/test_app.py",
+            "import unittest\nfrom app import RENAMED\n\n"
+            "class Case(unittest.TestCase):\n    def test_renamed(self):\n        self.assertTrue(RENAMED)\n",
+        )
+        os.environ["PYTHONPATH"] = str(CHECKOUT)
+        os.environ["DJANGO_SETTINGS_MODULE"] = "settings"
+        lazy_suite = ["-X", "lazy_imports=all", "-c", UNITTEST]
+        with patch.object(at, "UV_RUN", [sys.executable]), patch.object(at, "TEST", lazy_suite):
+            code, out = self.run_main("tests.test_app.Case", at_ref=ref)
+
+        self.assertEqual(code, at.UNIMPORTED)
+        verdict = out.strip().splitlines()[-1]
+        self.assertIn("DOES NOT IMPORT", verdict)
+        self.assertIn("tests: tests.test_app.Case", verdict)
+        kept = Path(out.strip().splitlines()[-2].rsplit(" ", 1)[-1]).read_text()
+        self.assertIn("cannot import name 'RENAMED'", kept)
+        self.assert_nothing_left()
+
     def test_a_label_that_does_not_import_names_the_proof_that_does(self):
         """No test ran on the ref's code, so the line names the run in this tree that proves the test."""
         code, out = self.run_unittest_at_old("import unittest\nfrom app import RENAMED\n")
