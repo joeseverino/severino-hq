@@ -9,35 +9,44 @@ and may not do is docs/Security.md#what-hq-enforces.
 
 import hashlib
 import json
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import timedelta
 from difflib import unified_diff
-from typing import Annotated, Any
+from typing import Annotated, Any, Final
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
-from hq.platform.application.routes import reverse
-from hq.platform.core.audit import operation_context
+from hq.platform.core.audit import audit_operation
 lazy from hq.domains.control_plane.providers import PROVIDERS
 lazy from hq.platform.core.models import AuditLog
 
 from . import derivations
 from .command_fields import Describe
 from .derivations import holds_until
+from .held_answer import HeldCall, serialize_approval
 from .payload_words import ChangeRow, changed_words, document, field_words, value_words
 from .record_errors import PolicyError, RecordNotFound, Sentence
-from .security import AuthorizationError, Principal, internal_principal, is_interactive
-lazy from . import capabilities, resources
-lazy from .agent_access import agents_paused
+from .refusal_status import refuse
+from .security import (
+    INTERNAL_INTERFACE,
+    OPERATOR_INTERFACES,
+    AuthorizationError,
+    Capability,
+    Principal,
+    internal_principal,
+    is_interactive,
+)
+lazy from . import agent_access, capabilities, resources
 lazy from .capabilities import authorize_capability, execute_approved, validate_command
 lazy from .command_forms import switch_field
 lazy from .command_targets import item_name
 lazy from .entity_links import entity_link, record_name
-lazy from .integration_specs import TARGET, capability_schema
+lazy from .integration_specs import TARGET, capability_fields
 lazy from .labels import human_label, lower_first
 lazy from .resource_capabilities import LIFECYCLE_VERBS
 lazy from .resource_operations import ACTION_CAPABILITY
@@ -257,7 +266,7 @@ def consent_gap(kind: str, *, principal: Principal) -> Sentence:
 
 def hold_for_approval(
     spec, payload: dict[str, Any], command: Any, target: Any, *, principal: Principal
-) -> dict[str, Any] | None:
+) -> HeldCall | None:
     """Hold this call for a person, or return nothing if it needs no holding.
 
     The one call site is the capability runner, immediately after authority and
@@ -279,16 +288,11 @@ def hold_for_approval(
             "would change. Check the target and ask again."
         )
     digest = fingerprint(spec.name, target, payload, subject.baseline)
-    existing = ApprovalRequest.objects.filter(
-        capability=spec.name,
-        target="" if target is None else str(target),
-        content_fingerprint=digest,
-        state=ApprovalRequest.State.PENDING,
-    ).first()
+    existing = _asked_already(spec.name, target, digest, principal)
     if existing is not None:
-        # The same ask, again. Answered with the request that is already
-        # waiting, so a caller that retries learns nothing new and creates
-        # nothing new.
+        # The same ask, again, from the same caller. Answered with the request
+        # that is already waiting, so a caller that retries learns nothing new
+        # and creates nothing new.
         return _awaiting(existing, repeated=True)
     outstanding = ApprovalRequest.objects.filter(
         requested_actor=principal.actor, state=ApprovalRequest.State.PENDING
@@ -300,33 +304,56 @@ def hold_for_approval(
             "answered."
         )
     reason = str(getattr(command, "reason", ""))[:300]
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="approval.request",
-    ):
-        # The request alone: no declaration and no operation row, so there is
-        # nothing for the controller to claim and no filter has to exclude it.
-        held = ApprovalRequest(
-            capability=spec.name,
-            target="" if target is None else str(target),
-            payload=payload,
-            resource_kind=subject.kind,
-            resource_key=subject.resource_key,
-            baseline=subject.baseline,
-            content_fingerprint=digest,
-            requested_actor=principal.actor,
-            requested_interface=principal.interface,
-            reason=reason,
-            expires_at=timezone.now() + _window(),
-        )
+    # The request alone: no declaration and no operation row, so there is
+    # nothing for the controller to claim and no filter has to exclude it.
+    held = ApprovalRequest(
+        capability=spec.name,
+        target="" if target is None else str(target),
+        payload=payload,
+        resource_kind=subject.kind,
+        resource_key=subject.resource_key,
+        baseline=subject.baseline,
+        content_fingerprint=digest,
+        requested_actor=principal.actor,
+        requested_interface=principal.interface,
+        reason=reason,
+        expires_at=timezone.now() + _window(),
+    )
+    with _its_operation(held, REQUEST, principal):
         # The audit says it as the card does.
         held.audit_said = str(asked(held))
-        held.save(force_insert=True)
+        try:
+            with transaction.atomic():
+                held.save(force_insert=True)
+        except IntegrityError:
+            # The same caller's identical ask, written between the read above
+            # and this one: answered as the repeat it is.
+            existing = _asked_already(spec.name, target, digest, principal)
+            if existing is None:
+                raise
+            return _awaiting(existing, repeated=True)
     return _awaiting(held, repeated=False)
 
 
-AWAITING_APPROVAL = "awaiting_approval"
+def _asked_already(capability: str, target: Any, digest: str, principal: Principal) -> ApprovalRequest | None:
+    """The pending request this caller already made for this exact change, if any.
+
+    Keyed on the asker as well as the change: a hold is the asker's own, so a
+    second caller asking the same thing gets its own request, read and
+    approved as itself, never a way into the first caller's.
+    """
+
+    return ApprovalRequest.objects.filter(
+        capability=capability,
+        target="" if target is None else str(target),
+        content_fingerprint=digest,
+        requested_actor=principal.actor,
+        requested_interface=principal.interface,
+        state=ApprovalRequest.State.PENDING,
+    ).first()
+
+
+AWAITING_APPROVAL: Final = "awaiting_approval"
 
 
 def is_held(result: dict[str, Any]) -> bool:
@@ -335,7 +362,7 @@ def is_held(result: dict[str, Any]) -> bool:
     return result.get("status") == AWAITING_APPROVAL
 
 
-def _awaiting(held: ApprovalRequest, *, repeated: bool) -> dict[str, Any]:
+def _awaiting(held: ApprovalRequest, *, repeated: bool) -> HeldCall:
     """What a non-interactive caller is told, which is not an error.
 
     A success with a state, because the caller has nothing to fix and nothing
@@ -359,22 +386,62 @@ def _awaiting(held: ApprovalRequest, *, repeated: bool) -> dict[str, Any]:
     }
 
 
-def serialize_approval(held: ApprovalRequest) -> dict[str, Any]:
-    return {
-        "id": str(held.id),
-        "capability": held.capability,
-        "target": held.target,
-        "resource_kind": held.resource_kind,
-        "resource_key": held.resource_key,
-        "state": held.state,
-        "requested_actor": held.requested_actor,
-        "requested_interface": held.requested_interface,
-        "reason": held.reason,
-        "requested_at": held.created_at.isoformat(),
-        "expires_at": held.expires_at.isoformat(),
-        "content_fingerprint": held.content_fingerprint,
-        "review_url": reverse("core:approval_entry", kwargs={"approval_id": held.id}),
-    }
+def asked_by(approval_id: str, *, principal: Principal) -> ApprovalRequest | None:
+    """The held request ``principal`` itself asked for, by its id, or None.
+
+    None as much for another caller's request as for an id nothing holds, so
+    a caller learns nothing of a request that is not its own.
+    """
+
+    try:
+        return ApprovalRequest.objects.filter(
+            pk=approval_id, requested_actor=principal.actor, requested_interface=principal.interface
+        ).first()
+    except ValueError, DjangoValidationError:
+        return None
+
+
+# How a request that ran nothing ended, as the refusal its caller is answered with.
+_UNAPPLIED = {
+    ApprovalRequest.State.EXPIRED: (
+        "expired",
+        (
+            "Nobody decided this change before its request lapsed, so nothing was written. "
+            "Ask again if it is still wanted."
+        ),
+    ),
+    ApprovalRequest.State.STALE: (
+        "stale",
+        (
+            "What this change acts on moved after it was asked for, so nothing was written. "
+            "Ask again if it is still wanted."
+        ),
+    ),
+}
+
+
+def outcome(held: ApprovalRequest) -> dict[str, Any] | None:
+    """What the held call answers once it is settled, or None while a person may still decide it.
+
+    Approved, it is what the call answered when it ran. Any other end is a
+    refusal in the shape a capability refuses in, so the caller reads it as
+    it would the call refused outright: declined, with the person's note, or
+    lapsed or overtaken with nothing written.
+    """
+
+    state = held.state
+    if state == ApprovalRequest.State.PENDING and held.expires_at <= derivations.clock():
+        state = ApprovalRequest.State.EXPIRED
+    if state == ApprovalRequest.State.PENDING:
+        return None
+    if state == ApprovalRequest.State.APPROVED:
+        return held.result
+    if state == ApprovalRequest.State.REJECTED:
+        note = held.decision_note.strip()
+        said = f"A person declined this change in HQ: {note}" if note else "A person declined this change in HQ."
+        return refuse("declined", said)
+    code, said = _UNAPPLIED[state]
+    return refuse(code, said)
 
 
 def lapse_expired() -> int:
@@ -384,33 +451,63 @@ def lapse_expired() -> int:
     refused by ``approve``, so this makes the record say what is already true.
     """
 
-    return ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING, expires_at__lte=timezone.now()).update(
-        state=ApprovalRequest.State.EXPIRED,
-        decided_at=timezone.now(),
-        decision_note="It expired without an answer.",
-    )
+    principal = internal_principal("approvals")
+    lapsed = 0
+    for approval_id in ApprovalRequest.objects.filter(
+        state=ApprovalRequest.State.PENDING, expires_at__lte=timezone.now()
+    ).values_list("pk", flat=True):
+        # One at a time, so each lapse is audited as part of its request.
+        with transaction.atomic():
+            held = (
+                ApprovalRequest.objects.select_for_update()
+                .filter(pk=approval_id, state=ApprovalRequest.State.PENDING, expires_at__lte=timezone.now())
+                .first()
+            )
+            if held is not None:
+                _settle(held, ApprovalRequest.State.EXPIRED, _LAPSED_NOTE, operation=LAPSE, principal=principal)
+                lapsed += 1
+    return lapsed
 
 
-def pending(*, limit: int | None = 50) -> tuple[ApprovalRequest, ...]:
-    """Every request still waiting for a person, oldest first.
+def reads_every_hold(principal: Principal) -> bool:
+    """Whether ``principal`` reads every held request, rather than only its own.
+
+    A person decides them, and HQ composes the person's queue, so both read
+    them all. Any other caller is a credential, which reads only what it asked
+    for: another caller's requests, and who made them, are not its business.
+    An allowlist, so an interface added later reads only its own.
+    """
+
+    return principal.interface in OPERATOR_INTERFACES or principal.interface == INTERNAL_INTERFACE
+
+
+def pending(*, principal: Principal, limit: int | None = 50) -> tuple[ApprovalRequest, ...]:
+    """Every request still waiting for a person that ``principal`` may read, oldest first.
 
     A read: one past its expiry is left out whether or not the sweep has
     marked it lapsed (``lapse_expired``), so it is never offered for a
     decision ``approve`` would refuse.
     """
 
-    waiting = tuple(
-        ApprovalRequest.objects.filter(
-            state=ApprovalRequest.State.PENDING, expires_at__gt=derivations.clock()
-        ).order_by("created_at")[:limit]
-    )
+    principal.require(Capability.READ)
+    waiting = ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING, expires_at__gt=derivations.clock())
+    if not reads_every_hold(principal):
+        waiting = waiting.filter(requested_actor=principal.actor, requested_interface=principal.interface)
+    waiting = tuple(waiting.order_by("created_at")[:limit])
     # The answer changes as the first of them expires.
     for held in waiting:
         holds_until(held.expires_at)
     return waiting
 
 
-def _settle(held: ApprovalRequest, state: str, note: str = "") -> None:
+def _its_operation(held: ApprovalRequest, operation: str, principal: Principal) -> AbstractContextManager[None]:
+    """Bind the operation every row of ``held``'s life is part of: its request,
+    its decision, the change it applies and its lapse share its id."""
+
+    return audit_operation(operation=operation, principal=principal, operation_id=str(held.id))
+
+
+def _settle(held: ApprovalRequest, state: str, note: str, *, operation: str, principal: Principal) -> None:
     """Record an outcome nobody chose, in its own transaction.
 
     Its own, because the two callers below go on to raise. Written inside the
@@ -419,14 +516,14 @@ def _settle(held: ApprovalRequest, state: str, note: str = "") -> None:
     means the next reader is offered a decision that cannot be taken.
     """
 
-    with transaction.atomic():
+    with _its_operation(held, operation, principal), transaction.atomic():
         held.state = state
         held.decided_at = timezone.now()
         held.decision_note = note
         held.save(update_fields=("state", "decided_at", "decision_note", "updated_at"))
 
 
-def _decidable(approval_id: str) -> ApprovalRequest:
+def _decidable(approval_id: str, principal: Principal) -> ApprovalRequest:
     try:
         held = ApprovalRequest.objects.get(pk=approval_id)
     except (ApprovalRequest.DoesNotExist, ValueError) as exc:
@@ -434,11 +531,7 @@ def _decidable(approval_id: str) -> ApprovalRequest:
     if held.state != ApprovalRequest.State.PENDING:
         raise ApprovalError(f"That request is already {held.get_state_display().lower()}.")
     if held.expires_at <= timezone.now():
-        _settle(
-            held,
-            ApprovalRequest.State.EXPIRED,
-            "It expired without an answer.",
-        )
+        _settle(held, ApprovalRequest.State.EXPIRED, _LAPSED_NOTE, operation=LAPSE, principal=principal)
         raise ApprovalError("That request expired before it was answered. Ask for it again if it is still wanted.")
     return held
 
@@ -459,22 +552,20 @@ def _require_person(principal: Principal, held: ApprovalRequest) -> None:
         raise AuthorizationError("A request cannot be approved by whoever asked for it.")
 
 
-# The surfaces an agent reaches HQ through; what one of them asked for is an
-# agent's request, and pausing agents pauses it too.
-AGENT_SURFACES = ("mcp", "api")
+def _require_asker_running(held: ApprovalRequest) -> None:
+    """Pausing agents or blocking one stops what it already asked for, not only what it asks next."""
 
-
-def _require_agents_running(held) -> None:
-    """Pausing agents stops what they already asked for, not only what they ask next."""
-
-    if held.requested_interface in AGENT_SURFACES and agents_paused():
+    if ApprovalRequest.objects.filter(agent_access.held_askers(), pk=held.pk).exists():
         raise ApprovalError(
-            "Agents are paused, and an agent asked for this. Resume agents to approve it, or decline it."
+            "The agent that asked for this is paused or blocked. Resume or allow it to approve this, or decline it."
         )
 
 
+REQUEST = "approval.request"
 APPROVE = "approval.approve"
 REJECT = "approval.reject"
+LAPSE = "approval.lapse"
+_LAPSED_NOTE = "It expired without an answer."
 
 
 @dataclass(frozen=True, slots=True)
@@ -501,16 +592,21 @@ def approve(command: ApproveCommand, *, principal: Principal) -> dict[str, Any]:
     own (``_settle``) before the refusal, and only the application is atomic.
     """
 
-    held = _decidable(command.approval_id)
+    held = _decidable(command.approval_id, principal)
+    with _its_operation(held, APPROVE, principal):
+        return _apply(held, principal)
+
+
+def _apply(held: ApprovalRequest, principal: Principal) -> dict[str, Any]:
     spec = capabilities.capability_registry().get(held.capability)
     if spec is None:
         raise ApprovalError("What this request asks for is no longer something HQ can do, so it cannot be applied.")
     _require_person(principal, held)
-    _require_agents_running(held)
+    _require_asker_running(held)
     # The approver has to be allowed to do the thing themselves. Otherwise this
     # page would be a way to run a capability the clicker does not hold.
     authorize_capability(spec, principal)
-    command = validate_command(spec, held.payload)
+    command = validate_command(spec, held.payload, held.target or None)
     current = approval_subject(spec, command, held.target or None)
     baseline = current.baseline if current is not None else {}
     if fingerprint(held.capability, held.target or None, held.payload, baseline) != (held.content_fingerprint):
@@ -518,6 +614,8 @@ def approve(command: ApproveCommand, *, principal: Principal) -> dict[str, Any]:
             held,
             ApprovalRequest.State.STALE,
             "What it would change moved after it was requested.",
+            operation=APPROVE,
+            principal=principal,
         )
         raise ApprovalError(
             "This changed after the agent asked, so approving it would apply "
@@ -536,7 +634,7 @@ def approve(command: ApproveCommand, *, principal: Principal) -> dict[str, Any]:
         locked = ApprovalRequest.objects.select_for_update().get(pk=held.pk)
         if locked.state != ApprovalRequest.State.PENDING:
             raise ApprovalError(f"That request is already {locked.get_state_display().lower()}.")
-        result = execute_approved(spec, command, locked.target or None, principal=acting)
+        result = execute_approved(spec, command, locked.target or None, principal=acting, sent=frozenset(held.payload))
         locked.state = ApprovalRequest.State.APPROVED
         locked.decided_actor = principal.actor
         locked.decided_interface = principal.interface
@@ -558,9 +656,9 @@ def approve(command: ApproveCommand, *, principal: Principal) -> dict[str, Any]:
 def reject(command: RejectCommand, *, principal: Principal) -> dict[str, Any]:
     """Refuse a held change, so the caller's request has an answer either way."""
 
-    held = _decidable(command.approval_id)
+    held = _decidable(command.approval_id, principal)
     _require_person(principal, held)
-    with transaction.atomic():
+    with _its_operation(held, REJECT, principal), transaction.atomic():
         held.state = ApprovalRequest.State.REJECTED
         held.decided_actor = principal.actor
         held.decided_interface = principal.interface
@@ -708,7 +806,7 @@ def _record_preview(spec, held: ApprovalRequest) -> ChangePreview:
         for key, value in held.payload.items()
         if key not in _CONTROL_FIELDS and value not in ("", None, [], {})
     }
-    schemas = capability_schema(spec).get("properties") or {}
+    schemas = capability_fields(spec)
     if spec.effect == DESTRUCTIVE_EFFECT:
         return _field_rows(held.baseline, {}, schemas, label="Would be deleted")
     if not held.target:
@@ -881,4 +979,4 @@ def entry_event(approval_id) -> Any:
 def awaiting_ids() -> tuple[str, ...]:
     """pending(), as audit object ids."""
 
-    return tuple(str(held.pk) for held in pending(limit=None))
+    return tuple(str(held.pk) for held in pending(principal=internal_principal("approvals"), limit=None))

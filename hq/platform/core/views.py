@@ -14,23 +14,26 @@ from django.utils import timezone
 from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
-from hq.platform.application import capability_policy, fragments
-from hq.platform.application.agent_access import SET_AGENT_ACCESS
+from hq.platform.application import agent_activity, capability_policy, fragments
+from hq.platform.application.agent_access import SET_AGENT_ACCESS, SET_AGENT_BLOCK
 from hq.platform.application.appearance import SET_THEME
 from hq.platform.application.avatars import avatar_of
-from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.command_center import command_center
+from hq.platform.application.own_devices import SET_OWN_DEVICE, devices_of
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import projection_scope
+from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.search import global_search
-from hq.platform.application.security import AuthorizationError, safe_next, web_principal
+from hq.platform.application.security import Capability, safe_next, web_principal
 from hq.platform.application.ui import counted
+from hq.platform.application.web_writes import execute_posted, refusal_response, refused
 lazy from hq.platform.application.approvals import awaiting_ids, entry_event
 lazy from hq.platform.application.connection_catalog import connection_catalog
 lazy from hq.platform.application.hq_context import hq_context
 lazy from hq.platform.application.lookup import LOOK_UP_ADDRESS, AddressCommand, stored_address
 lazy from hq.platform.application.posture import estate_posture
 lazy from hq.platform.application.request_path import request_path
+lazy from hq.platform.mcp import listing
 
 from .audit import record_event
 from .middleware import DEMO_SESSION_KEY
@@ -141,24 +144,47 @@ class AgentAccessView(View):
         requested = request.POST.get("paused")
         if requested not in {"0", "1"}:
             return HttpResponseBadRequest("paused must be 0 or 1")
-        result = execute_capability(
-            SET_AGENT_ACCESS, {"paused": requested == "1"}, principal=web_principal(request.user)
-        )
+        result = execute_posted(request, SET_AGENT_ACCESS, {"paused": requested == "1"})
         if not result["ok"]:
-            return HttpResponseForbidden(result["error"]["message"])
+            return refusal_response(result)
         return redirect(safe_next(request, fallback=reverse("dashboard")))
+
+
+class AgentBlockView(View):
+    """Block or allow one agent's client. The form sends a state, never a toggle."""
+
+    def post(self, request):
+        requested = request.POST.get("blocked")
+        client_id = request.POST.get("client_id", "")
+        if requested not in {"0", "1"} or not client_id:
+            return HttpResponseBadRequest("blocked must be 0 or 1, for a client_id")
+        result = execute_posted(request, SET_AGENT_BLOCK, {"blocked": requested == "1"}, target=client_id)
+        if not result["ok"]:
+            return refusal_response(result)
+        return redirect(safe_next(request, fallback=reverse("agent_policy")))
+
+
+class OwnDeviceView(View):
+    """Register or remove one of the signed-in person's own devices. The form sends a state."""
+
+    def post(self, request):
+        requested = request.POST.get("registered")
+        client_id = request.POST.get("client_id", "")
+        if requested not in {"0", "1"} or not client_id.strip():
+            return HttpResponseBadRequest("registered must be 0 or 1, for a client_id")
+        result = execute_posted(request, SET_OWN_DEVICE, {"registered": requested == "1"}, target=client_id)
+        # Said beside the form it came from, which keeps what was typed.
+        refused(request, result)
+        return redirect(safe_next(request, fallback=reverse("agent_policy")))
 
 
 class ThemeView(View):
     """Choose system, light or dark. The form sends a choice, never a toggle."""
 
     def post(self, request):
-        result = execute_capability(
-            SET_THEME, {"theme": request.POST.get("theme", "")}, principal=web_principal(request.user)
-        )
+        result = execute_posted(request, SET_THEME, {"theme": request.POST.get("theme", "")})
         if not result["ok"]:
-            refusal = HttpResponseBadRequest if result["error"]["code"] == "invalid_input" else HttpResponseForbidden
-            return refusal(result["error"]["message"])
+            return refusal_response(result)
         return redirect(safe_next(request, fallback=reverse("dashboard")))
 
 
@@ -188,16 +214,27 @@ class AgentPolicyView(PageMixin, TemplateView):
 
     template_name = "core/agent_policy.html"
     page_title = "Agents"
+    # The part that says what an agent finds at the MCP endpoint. Asking the
+    # server takes its SDK into the process, so it is read only when somebody
+    # opens it, or asks for it by address without script.
+    ENDPOINT_PART = "mcp_endpoint"
 
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        if fragments.requested(self.request) == self.ENDPOINT_PART or "endpoint" in self.request.GET:
+            context["endpoint"] = listing.endpoint()
+            context["endpoint_read"] = True
+            if fragments.requested(self.request):
+                return context
+        context["standings"] = agent_activity.standings()
+        context["recent_days"] = agent_activity.RECENT.days
+        context["devices"] = devices_of(self.request.user)
         context["columns"], context["groups"] = capability_policy.matrix()
         # Nearly every rule is at its default, so the page opens on the ones
         # that are not, and the rest fold under their own heading.
         context["changed_groups"], context["default_groups"] = capability_policy.split_by_default(context["groups"])
         context["default_count"] = sum(len(group.rows) for group in context["default_groups"])
-        context["agents"] = [column for column in context["columns"] if column.identity]
         # A column whose every settable rule is dormant is off as a whole, and
         # says so once in its header rather than graying each cell unexplained.
         # A row's cells are in column order, so a cell's column is its position.
@@ -219,19 +256,14 @@ class AgentPolicyView(PageMixin, TemplateView):
         ]
         context["rule_count"] = len(capability_policy.rules())
         context["awaiting_count"] = len(awaiting_ids())
-        context["refused_count"] = AuditLog.objects.filter(
-            action=AuditLog.Action.DENIED, created_at__gte=timezone.now() - timedelta(hours=24)
-        ).count()
+        context["refused_count"] = agent_activity.refused_since(timezone.now() - timedelta(hours=24))
         return context
 
     def post(self, request):
-        result = execute_capability(
-            capability_policy.SET_POLICY,
-            {"rules": capability_policy.submitted_rules(request.POST)},
-            principal=web_principal(request.user),
+        result = execute_posted(
+            request, capability_policy.SET_POLICY, {"rules": capability_policy.submitted_rules(request.POST)}
         )
-        if not result["ok"]:
-            messages.error(request, result["error"]["message"])
+        if refused(request, result):
             return redirect("agent_policy")
         changed, problems = result["changed"], result["problems"]
         for problem in problems:
@@ -364,7 +396,13 @@ class SearchView(PageMixin, TemplateView):
 
 
 class ApprovalEntryView(View):
-    """A stable link to a held request's audit entry."""
+    """A stable link to a held request's audit entry.
+
+    Read under the audit log's capability, so whether an entry exists is
+    told only to somebody who may read the entry.
+    """
+
+    required_capability = Capability.READ_AUDIT_LOG
 
     def get(self, _request, approval_id):
         event = entry_event(approval_id)
@@ -411,7 +449,7 @@ class HQView(PageMixin, TemplateView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["hq"] = hq_context(self.request)
+        context["hq"] = hq_context(self.request, principal=web_principal(self.request.user))
         context["page_aside"] = "core/_hq_status.html"
         return context
 
@@ -428,20 +466,19 @@ class PublicAddressView(View):
     def get(self, request):
         address = request.GET.get("address", "")
         context = {"address": address, "reading": None}
+        principal = web_principal(request.user)
         try:
-            context["reading"] = stored_address(AddressCommand(address=address), principal=web_principal(request.user))
-        except (ValueError, AuthorizationError) as error:
-            context["failure"] = str(error)
+            context["reading"] = stored_address(AddressCommand(address=address), principal=principal)
+        except Exception as error:  # noqa: BLE001 - every failure is said in the one refusal shape, a denial recorded
+            context["failure"] = refusal_of(error, name=LOOK_UP_ADDRESS, principal=principal).message
         return render(request, self.template_name, context)
 
     def post(self, request):
         if request.headers.get("X-Requested-With") != "XMLHttpRequest":
             return redirect("connection")
         address = request.POST.get("address", "")
-        result = execute_capability(
-            LOOK_UP_ADDRESS, {"address": address, "refresh": True}, principal=web_principal(request.user)
-        )
+        result = execute_posted(request, LOOK_UP_ADDRESS, {"address": address, "refresh": True})
         context = {"address": address, "reading": result if result["ok"] else None}
         if not result["ok"]:
-            context["failure"] = result["error"]["message"]
+            context["failure"] = refusal_of(result).message
         return render(request, self.template_name, context)

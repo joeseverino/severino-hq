@@ -1,0 +1,104 @@
+# Every interface a principal or a record names is a constant in
+# hq/platform/application/security.py. A string of its own elsewhere is a
+# second declaration: a misspelled one matches nothing and fails open, as a
+# comparison that is never true or a record no filter finds. The rule reads
+# where an interface is named: an interface keyword, a comparison with one, a
+# module constant of them, a Principal's second argument, a loop over them and
+# a dict's "interface" value. A module constant of another name holding one
+# (_AUTOMATIC = "controller") is found where it is read as an interface, since
+# the same word names other things too: an actor, an API tag, a directory.
+id: interface-named-by-its-constant
+language: python
+severity: error
+message: An interface is named outside hq.platform.application.security.
+note: Import its constant (WEB_INTERFACE, CLI_INTERFACE, MCP_INTERFACE, API_INTERFACE, JOB_INTERFACE, CONTROLLER_INTERFACE, DEVICE_INTERFACE, INTERNAL_INTERFACE), or declare a new one there.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  # Where the constants are declared.
+  - "hq/platform/application/security.py"
+rule:
+  any:
+    - kind: string
+      any:
+        # interface="mcp", requested_interface="controller", and a fallback after `or`.
+        - inside:
+            kind: keyword_argument
+            field: value
+            has: &interface-keyword
+              field: name
+              regex: ^(\w+_)?interface$
+        - inside:
+            kind: boolean_operator
+            inside:
+              kind: keyword_argument
+              field: value
+              has: *interface-keyword
+        # principal.interface == "cli", interface in ("api", "mcp").
+        - inside:
+            kind: comparison_operator
+            has: &interface-side
+              regex: (^|\.|_)interfaces?$
+              any:
+                - kind: identifier
+                - kind: attribute
+        - inside:
+            any:
+              - kind: tuple
+              - kind: set
+              - kind: list
+            inside:
+              kind: comparison_operator
+              has: *interface-side
+        # A module constant naming one, or a set of them.
+        - inside:
+            stopBy: end
+            kind: assignment
+            has:
+              field: left
+              regex: ^_?[A-Z_]*(INTERFACES?|SURFACES)$
+        # Principal("actor", "mcp", ...): the interface is its second argument.
+        - nthChild: 2
+          inside:
+            kind: argument_list
+            inside:
+              kind: call
+              has:
+                field: function
+                regex: ^(\w+\.)*(Device)?Principal$
+        # for interface in ("api", "mcp").
+        - inside:
+            stopBy: end
+            kind: for_statement
+            field: right
+            has:
+              field: left
+              regex: (^|_)interface$
+        # {"interface": "mcp"}: one of HQ's names, so a network interface's
+        # ({"interface": "tailscale0"}) is left alone.
+        - regex: ^["'](web|cli|mcp|api|job|controller|device|internal)["']$
+          inside:
+            kind: pair
+            field: value
+            has:
+              field: key
+              regex: ^["'](\w+_)?interface["']$
+    # requested_interface == _AUTOMATIC, interface=_SHELL: a constant read as
+    # an interface whose name says it is not one of security.py's.
+    - kind: identifier
+      regex: ^_?[A-Z][A-Z0-9_]*$
+      not:
+        regex: (INTERFACES?|SURFACES)$
+      any:
+        - inside:
+            kind: comparison_operator
+            has: *interface-side
+        - inside:
+            kind: keyword_argument
+            field: value
+            has: *interface-keyword

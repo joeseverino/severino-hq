@@ -432,7 +432,7 @@ def _rows(
         (view.instance.connection_ref, view.instance.endpoint) for group in groups for view in group.connections
     )
     used_for = _used_for()
-    open_problems = problem_counts()
+    open_problems = problem_counts(principal)
     rows = []
     for group in groups:
         found = []

@@ -11,6 +11,7 @@ from hq.platform.application import derivations
 from hq.platform.application.dashboard import waiting
 from hq.platform.application.derivations import counting, derive_ahead
 from hq.platform.application.projection import projection_scope
+from hq.platform.application.security import web_principal
 from hq.platform.core import ahead
 from hq.platform.core.bench import seed, unchanged_sweep
 
@@ -102,7 +103,7 @@ class SweepTests(TestCase):
 
     def _fresh_count(self) -> int:
         with projection_scope(), derivations.uncached():
-            return waiting(self.seeded.user.pk)
+            return waiting(web_principal(self.seeded.user), self.seeded.user.pk)
 
     def test_a_real_change_is_seen_by_the_very_next_request(self):
         url = reverse("action_item_count")

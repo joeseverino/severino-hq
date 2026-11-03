@@ -7,26 +7,30 @@ Unix socket, never on this application's listener.
 import asyncio
 import contextlib
 import os
+from urllib.parse import urlsplit
 
-from django.conf import settings
-from django.core.asgi import get_asgi_application
-from starlette.applications import Starlette
-from starlette.routing import Mount
 lazy from asgiref.sync import sync_to_async
+lazy from django.conf import settings
+lazy from django.core.asgi import get_asgi_application
+lazy from starlette.applications import Starlette
+lazy from starlette.middleware import Middleware
+lazy from starlette.routing import Mount, Route
 
-from hq.platform.core.network import TrustedNetworkASGI
-from hq.platform.core.static import CachedStaticFiles
+from hq.config.imports import lazily
 lazy from hq.domains.control_plane.bridge_application import application as bridge_application
-lazy from hq.platform.api import security as api_security
-lazy from hq.platform.application.agent_access import agents_paused
-lazy from hq.platform.application.agent_registry import observe
-lazy from hq.platform.application.denials import record_denial
+lazy from hq.platform.application import agent_admission, tokens
+lazy from hq.platform.application.security import MCP_INTERFACE, MCP_OPERATION
 lazy from hq.platform.core import doorbell, unix_server
 lazy from hq.platform.core.ahead import keeping
-lazy from hq.platform.mcp.identity import token_principal
-lazy from hq.platform.mcp.security import MCPBoundary
+lazy from hq.platform.core.attribution import BoundDoor
+lazy from hq.platform.core.compression import Compressed
+lazy from hq.platform.core.network import ForwardedCaller, TrustedNetworkASGI
+lazy from hq.platform.core.static import CachedStaticFiles
+lazy from hq.platform.mcp.security import MCPBoundary, ResourceMetadata, TailnetGate, metadata_url
 lazy from hq.platform.mcp.server import mcp
 
+# Before any name above is first used, which is when its module loads.
+lazily()
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hq.config.settings")
 
 django_application = get_asgi_application()
@@ -37,10 +41,10 @@ django_application = get_asgi_application()
 static_application = TrustedNetworkASGI(CachedStaticFiles(directory=settings.STATIC_ROOT, check_dir=False))
 
 
-def verify_agent_token(bearer: str):
-    """Turn a Pocket ID access token into the agent that presented it."""
+async def admit_agent(bearer: str, source: str):
+    """The machine API's own admission, for a bearer that came to /api/mcp/."""
 
-    return token_principal(api_security.verify(bearer))
+    return await sync_to_async(agent_admission.admit)(bearer, interface=MCP_INTERFACE, source=source)
 
 
 # Wired only when the machine API is configured. `is_configured` is false when
@@ -48,19 +52,7 @@ def verify_agent_token(bearer: str):
 # against, a token minted for any other API on the same Pocket ID instance
 # would verify here on signature alone. Absent means off, never "accept
 # anything", and with no other credential, off means MCP is disabled.
-mcp_verifier = verify_agent_token if api_security.is_configured() else None
-
-
-async def agents_allowed() -> bool:
-    return not await sync_to_async(agents_paused)()
-
-
-async def record_mcp_denial(**fields) -> None:
-    await sync_to_async(record_denial)(interface="mcp", **fields)
-
-
-async def observe_agent(principal) -> None:
-    await sync_to_async(observe)(principal)
+mcp_admission = admit_agent if tokens.is_configured() else None
 
 
 class StartedOnDemand:
@@ -123,15 +115,24 @@ async def mcp_serving():
 
 
 mcp_on_demand = StartedOnDemand(mcp_serving)
-mcp_application = MCPBoundary(
-    mcp_on_demand,
+mcp_gate = TailnetGate(
     allowed_hosts=settings.SEVERINO_MCP_ALLOWED_HOSTS,
     allowed_networks=settings.SEVERINO_MCP_ALLOWED_NETWORKS,
     allowed_origins=settings.SEVERINO_MCP_ALLOWED_ORIGINS,
-    verifier=mcp_verifier,
-    gate=agents_allowed,
-    on_denied=record_mcp_denial,
-    observer=observe_agent,
+)
+# Beside Django's stack, so its door binds each request here, as the request
+# middleware binds Django's.
+mcp_application = BoundDoor(
+    MCPBoundary(mcp_on_demand, gate=mcp_gate, resource=settings.SEVERINO_API_RESOURCE, admit=mcp_admission),
+    interface=MCP_INTERFACE,
+    operation=MCP_OPERATION,
+)
+# Where an MCP client finds the identity provider and the audience to ask it
+# for: the API resource's metadata, at the path RFC 9728 derives from it.
+mcp_metadata = ResourceMetadata(
+    gate=mcp_gate,
+    resource=settings.SEVERINO_API_RESOURCE if mcp_admission else "",
+    authorization_server=settings.OIDC_ISSUER,
 )
 
 
@@ -173,7 +174,7 @@ async def ringing_when_due():
 async def keeping_signing_keys():
     """Hold the identity provider's signing keys, read outside every request."""
 
-    with api_security.keeping_keys():
+    with tokens.keeping_keys():
         yield
 
 
@@ -191,10 +192,15 @@ async def lifespan(_app):
 
 application = Starlette(
     routes=[
-        Mount("/mcp", app=mcp_application),
+        # Under the API resource's path, so the one audience covers both
+        # machine doors (RFC 8707; the MCP SDK's check_resource_allowed).
+        Mount("/api/mcp", app=mcp_application),
+        Route(urlsplit(metadata_url(mcp_metadata.resource)).path, endpoint=mcp_metadata),
         # Collected assets, on the native async path and before the Django stack.
         Mount(settings.STATIC_URL.rstrip("/"), app=static_application),
-        Mount("/", app=django_application),
+        Mount("/", app=Compressed(django_application)),
     ],
+    # The caller's address and scheme, decided once for every route above.
+    middleware=[Middleware(ForwardedCaller)],
     lifespan=lifespan,
 )

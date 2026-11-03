@@ -43,6 +43,7 @@ from ..security import (
     web_principal,
 )
 from .markup import text
+from .writers import form_keyed, keyed
 
 POLICY_KEY = "access-policy"
 GATED_KIND = "tailscale.policy"
@@ -102,7 +103,7 @@ def an_operator(username: str = "operator") -> Principal:
     return web_principal(user)
 
 
-@override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
+@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class HeldRequestTests(TestCase):
     """A credential may ask. Asking is all it may do."""
 
@@ -132,12 +133,13 @@ class HeldRequestTests(TestCase):
         self.assertFalse(OperationRequest.objects.exists())
 
     def test_an_unapproved_request_cannot_be_claimed_because_it_is_not_work_yet(self):
-        execute_capability(
+        answer = execute_capability(
             "infrastructure.reconcile",
             reconcile_payload(),
             principal=mcp_principal(),
             target=POLICY_KEY,
         )
+        self.assertTrue(answer["ok"], answer)
 
         claimed = claim_next_operation("controller-example", capabilities=((GATED_KIND, "reconcile"),))
 
@@ -155,7 +157,7 @@ class HeldRequestTests(TestCase):
 
         result = execute_capability(
             "infrastructure.resource.update",
-            update_payload(policy_document("group:elsewhere")),
+            keyed(update_payload(policy_document("group:elsewhere"))),
             principal=mcp_principal(),
             target=POLICY_KEY,
         )
@@ -186,7 +188,7 @@ class HeldRequestTests(TestCase):
     def test_disabling_the_declaration_is_held_too(self):
         """Turning a declaration off is a change to what HQ asserts."""
 
-        payload = update_payload(policy_document()) | {"enabled": False}
+        payload = keyed(update_payload(policy_document())) | {"enabled": False}
 
         result = execute_capability(
             "infrastructure.resource.update",
@@ -204,11 +206,13 @@ class HeldRequestTests(TestCase):
 
         result = execute_capability(
             "infrastructure.resource.create",
-            {
-                "key": "another-policy",
-                "kind": GATED_KIND,
-                "spec": {"document": policy_document()},
-            },
+            keyed(
+                {
+                    "key": "another-policy",
+                    "kind": GATED_KIND,
+                    "spec": {"document": policy_document()},
+                }
+            ),
             principal=mcp_principal(),
         )
 
@@ -235,16 +239,17 @@ class HeldRequestTests(TestCase):
 
     def test_a_caller_cannot_bury_the_queue_it_is_waiting_on(self):
         for index in range(MAX_PENDING_PER_ACTOR):
-            execute_capability(
+            answer = execute_capability(
                 "infrastructure.resource.update",
-                update_payload(policy_document(f"group:example{index}")),
+                keyed(update_payload(policy_document(f"group:example{index}"))),
                 principal=mcp_principal(),
                 target=POLICY_KEY,
             )
+            self.assertTrue(answer["ok"], answer)
 
         refused = execute_capability(
             "infrastructure.resource.update",
-            update_payload(policy_document("group:one-too-many")),
+            keyed(update_payload(policy_document("group:one-too-many"))),
             principal=mcp_principal(),
             target=POLICY_KEY,
         )
@@ -296,11 +301,13 @@ class HeldRequestTests(TestCase):
 
         result = execute_capability(
             "infrastructure.resource.update",
-            {
-                "key": "example-rewrite",
-                "kind": UNGATED_KIND,
-                "spec": {"domain": "example.test", "answer": "192.0.2.11"},
-            },
+            keyed(
+                {
+                    "key": "example-rewrite",
+                    "kind": UNGATED_KIND,
+                    "spec": {"domain": "example.test", "answer": "192.0.2.11"},
+                }
+            ),
             principal=mcp_principal(),
             target="example-rewrite",
         )
@@ -313,7 +320,7 @@ class HeldRequestTests(TestCase):
         )
 
 
-@override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
+@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class OperatorRequestTests(TestCase):
     """A person at the web surface is the signal the gate is waiting for."""
 
@@ -357,7 +364,7 @@ class OperatorRequestTests(TestCase):
         self.assertEqual(result["status"], "awaiting_approval")
 
 
-@override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
+@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class DecisionTests(TestCase):
     """What a decision does, and what no decision can do."""
 
@@ -368,12 +375,13 @@ class DecisionTests(TestCase):
         self.resource = declare_policy()
 
     def held(self, payload=None, capability="infrastructure.reconcile"):
-        execute_capability(
+        answer = execute_capability(
             capability,
             payload or reconcile_payload(),
             principal=mcp_principal(),
             target=POLICY_KEY,
         )
+        self.assertTrue(answer["ok"], answer)
         return ApprovalRequest.objects.get()
 
     def test_approval_queues_the_work_and_the_controller_can_then_claim_it(self):
@@ -410,7 +418,7 @@ class DecisionTests(TestCase):
     def test_approving_an_amendment_applies_exactly_the_document_held(self):
         wanted = policy_document("group:elsewhere")
         held = self.held(
-            payload=update_payload(wanted),
+            payload=keyed(update_payload(wanted)),
             capability="infrastructure.resource.update",
         )
 
@@ -503,7 +511,7 @@ class DecisionTests(TestCase):
         held.save(update_fields=("expires_at",))
 
         # Before anything sweeps it: out of the queue, and refused.
-        self.assertEqual(pending(), ())
+        self.assertEqual(pending(principal=cli_principal()), ())
         held.refresh_from_db()
         self.assertEqual(held.state, ApprovalRequest.State.PENDING, "reading the queue writes nothing")
         with self.assertRaises(ApprovalError):
@@ -519,7 +527,7 @@ class DecisionTests(TestCase):
         held = self.held()
 
         self.assertEqual(lapse_expired(), 0)
-        self.assertEqual(pending(), (held,))
+        self.assertEqual(pending(principal=cli_principal()), (held,))
 
         held.expires_at = timezone.now() - timezone.timedelta(minutes=1)
         held.save(update_fields=("expires_at",))
@@ -529,7 +537,7 @@ class DecisionTests(TestCase):
         self.assertEqual(held.state, ApprovalRequest.State.EXPIRED)
 
 
-@override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
+@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class ControllerTests(TestCase):
     """The controller is not the thing this gate is about.
 
@@ -685,7 +693,7 @@ class PreviewTests(TestCase):
         self.assertEqual([(row.before, row.after) for row in shown.rows], [("192.0.2.10", "192.0.2.20")])
         self.assertEqual(shown.lines, ())
 
-    @override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
+    @override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
     def test_applying_a_declaration_is_compared_against_what_is_live(self):
         """For a reconcile the question is what happens to the world.
 
@@ -698,12 +706,13 @@ class PreviewTests(TestCase):
         resource = declare_policy()
         resource.status = {"document": policy_document("group:live")}
         resource.save(update_fields=("status",))
-        execute_capability(
+        answer = execute_capability(
             "infrastructure.reconcile",
             reconcile_payload(),
             principal=mcp_principal(),
             target=POLICY_KEY,
         )
+        self.assertTrue(answer["ok"], answer)
 
         shown = preview(ApprovalRequest.objects.get())
 
@@ -711,7 +720,7 @@ class PreviewTests(TestCase):
         self.assertEqual(said[GRANT_SOURCES], ("group:live", "group:example"))
 
 
-@override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
+@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class SurfaceTests(TestCase):
     """A held request that nobody can see is a held request nobody answers."""
 
@@ -722,19 +731,21 @@ class SurfaceTests(TestCase):
         declare_policy()
         self.user = get_user_model().objects.create_user(username="reviewer", password="test-only-password")
         self.client.force_login(self.user)
-        execute_capability(
+        answer = execute_capability(
             "infrastructure.resource.update",
-            update_payload(policy_document("group:elsewhere")),
+            keyed(update_payload(policy_document("group:elsewhere"))),
             principal=mcp_principal(),
             target=POLICY_KEY,
         )
+        self.assertTrue(answer["ok"], answer)
         self.held = ApprovalRequest.objects.get(capability="infrastructure.resource.update")
-        execute_capability(
+        answer = execute_capability(
             "infrastructure.reconcile",
             reconcile_payload(),
             principal=mcp_principal(),
             target=POLICY_KEY,
         )
+        self.assertTrue(answer["ok"], answer)
 
     def _entry(self, held):
         """A held request's own audit entry, reached the way an agent's link is."""
@@ -758,7 +769,7 @@ class SurfaceTests(TestCase):
 
         CapabilityRule.objects.create(scope="surface", subject="mcp", capability="project.create", rule="approve")
         writer = Principal("example-agent", "mcp", frozenset({Capability.READ, "write_projects"}))
-        held = execute_capability("project.create", {"name": "Held project"}, principal=writer)
+        held = execute_capability("project.create", keyed({"name": "Held project"}), principal=writer)
 
         entry = self._entry(ApprovalRequest.objects.get(pk=held["approval"]["id"]))
 
@@ -770,7 +781,9 @@ class SurfaceTests(TestCase):
         page = self.client.get(f"{reverse('core:audit_list')}?awaiting=1")
 
         self.assertEqual(len(page.context["events"]), 2)
-        self.assertContains(page, "Waiting for your approval · 2")
+        # The dot is drawn for the eye; a reader hears the count after the words.
+        self.assertIn("Waiting for your approval · 2", text(page))
+        self.assertNotIn("Waiting for your approval · 2", page.content.decode())
 
     def test_a_decision_is_offered_only_while_the_request_waits(self):
         """This card sits on a permanent record. A button on something already
@@ -811,7 +824,7 @@ class SurfaceTests(TestCase):
     def test_approving_from_the_page_applies_it(self):
         response = self.client.post(
             reverse("control_plane:approval_decision", kwargs={"approval_id": self.held.id}),
-            {"decision": "approve"},
+            form_keyed({"decision": "approve"}),
         )
 
         self.assertRedirects(response, f"{reverse('core:audit_list')}?awaiting=1")
@@ -825,7 +838,7 @@ class SurfaceTests(TestCase):
     def test_the_decision_is_audited_under_whoever_decided(self):
         self.client.post(
             reverse("control_plane:approval_decision", kwargs={"approval_id": self.held.id}),
-            {"decision": "approve"},
+            form_keyed({"decision": "approve"}),
         )
 
         decided = AuditLog.objects.get(object_type="Approval", object_id=str(self.held.id), metadata__operation=APPROVE)
@@ -837,7 +850,7 @@ class SurfaceTests(TestCase):
 
         response = self.client.post(
             reverse("control_plane:approval_decision", kwargs={"approval_id": self.held.id}),
-            {"decision": "approve"},
+            form_keyed({"decision": "approve"}),
         )
 
         said = [str(message) for message in get_messages(response.wsgi_request)]
@@ -865,7 +878,7 @@ class SurfaceTests(TestCase):
     def test_a_decision_naming_no_request_is_invalid(self):
         for payload in ({}, {"approval_id": str(self.held.id), "decision": "approve"}):
             with self.subTest(payload=payload):
-                result = execute_capability(APPROVE, payload, principal=web_principal(self.user))
+                result = execute_capability(APPROVE, keyed(payload), principal=web_principal(self.user))
 
                 self.assertEqual(result["error"]["code"], "invalid_input")
         self.held.refresh_from_db()
@@ -884,7 +897,7 @@ class SurfaceTests(TestCase):
         entries = [entry for entry in domain_attention_items() if entry["item"].eyebrow == "Approval"]
 
         self.assertEqual(len(entries), 2)
-        self.assertEqual({entry["source"] for entry in entries}, {"Audit"})
+        self.assertEqual({entry["source"] for entry in entries}, {"Waiting for approval"})
         self.assertIn(
             reverse("core:approval_entry", kwargs={"approval_id": self.held.id}),
             {entry["item"].url for entry in entries},
@@ -898,7 +911,7 @@ class SurfaceTests(TestCase):
         )
         self.assertContains(page, approve)
 
-        response = self.client.post(approve, {"next": reverse("action_items")})
+        response = self.client.post(approve, form_keyed({"next": reverse("action_items")}))
 
         self.assertRedirects(response, reverse("action_items"), fetch_redirect_response=False)
         self.held.refresh_from_db()

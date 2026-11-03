@@ -92,7 +92,7 @@ class PolicyAmendmentTests(TestCase):
         self.assertTrue(amended)
 
 
-@override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
+@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class RemoveEmptyGroupsCapabilityTests(TestCase):
     def setUp(self):
         from hq.platform.application.adoption_testing import managing_everything

@@ -31,13 +31,14 @@ from django.test.utils import CaptureQueriesContext, setup_databases, teardown_d
 from django.urls import URLPattern, reverse
 from jwt.algorithms import RSAAlgorithm
 
-from hq.platform.api.security import KEYS
 from hq.platform.application.derivations import counting, derive_ahead
 from hq.platform.application.outbound_work import SUBJECT_FIELD
 from hq.platform.application.projects import REFRESH
 from hq.platform.application.resources import describe_resources
 from hq.platform.application.routes import routed
 from hq.platform.application.security import host_capabilities
+from hq.platform.application.tokens import KEYS
+from hq.platform.application.web_writes import RETRY_KEY_FIELD, new_key
 from hq.platform.core.bench import ZONES, Seeded, seed, unchanged_sweep
 lazy from hq.domains.jobs.testing import held_jobs
 lazy from hq.platform.core.models import LinkedAccount
@@ -58,6 +59,7 @@ SKIPPED = {
     "oidc_authentication_callback": "identity provider handshake",
     "oidc_authentication_init": "identity provider handshake",
     "oidc_logout": "identity provider handshake",
+    "oidc_backchannel_logout": "the identity provider's server posts it",
     "avatar": "image bytes",
     "receipts:file": "file bytes, none are stored by the seed",
     "control_plane:certificate_download": "file bytes",
@@ -156,6 +158,7 @@ UNSAFE = {
     "receipts:create": "takes an uploaded file",
     "tool_public_address": "asks a public resolver and registry",
     "oidc_logout": "identity provider handshake",
+    "oidc_backchannel_logout": "the identity provider's server posts it",
 }
 
 
@@ -277,13 +280,13 @@ def _controller_arriving() -> Iterator[None]:
 def _post(client: Client, url: str, action: PostedAction, seeded: Seeded):
     """One post of an action over the seeded estate, undone afterwards."""
 
-    # Posted as the page's script posts it, and rolled back, so the estate every
-    # later round sees is the seeded one.
+    # Posted as the page's script posts it, with the key its form draws fresh,
+    # and rolled back, so the estate every later round sees is the seeded one.
     with transaction.atomic():
         action.prepare(seeded)
         with CaptureQueriesContext(connection) as captured:
             started = time.perf_counter()
-            response = client.post(url, action.data(seeded), headers=action.headers)
+            response = client.post(url, {**action.data(seeded), RETRY_KEY_FIELD: new_key()}, headers=action.headers)
             size = len(response.getvalue())
             took = (time.perf_counter() - started) * 1000
         transaction.set_rollback(True)
@@ -342,7 +345,7 @@ def _machine_client() -> Iterator[dict[str, str]]:
         "iat": now,
         "exp": now + timedelta(days=1),
     }
-    token = jwt.encode(claims, key, algorithm="RS256", headers={"kid": BENCH_KID})
+    token = jwt.encode(claims, key, algorithm="RS256", headers={"kid": BENCH_KID, "typ": "at+jwt"})
     published = RSAAlgorithm.to_jwk(key.public_key(), as_dict=True)
     held = KEYS.held
     KEYS.held = {BENCH_KID: jwt.PyJWK({**published, "kid": BENCH_KID, "use": "sig", "alg": "RS256"})}

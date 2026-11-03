@@ -1,0 +1,32 @@
+# What a caller may do is decided in the application, by one rule for every
+# door: each use case and catalog takes the principal and refuses, or says
+# `permitted`, through Principal.require and permits. An MCP or API adapter
+# that asks a permission itself is a second rule, one the other doors never
+# apply and the application's refusal path never records.
+id: adapters-ask-no-permission
+language: python
+severity: error
+message: An MCP or API adapter asks a principal's permission itself.
+note: Pass the principal to the application function that reads or acts, and let it refuse; a catalog's `permitted` comes from the describe_* function given the principal.
+files:
+  - "hq/platform/mcp/**"
+  - "hq/platform/api/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+rule:
+  kind: call
+  has:
+    field: function
+    any:
+      - kind: attribute
+        has:
+          field: attribute
+          regex: ^(require|permits)$
+      - kind: identifier
+        regex: ^require_all$
+      - kind: attribute
+        has:
+          field: attribute
+          regex: ^require_all$

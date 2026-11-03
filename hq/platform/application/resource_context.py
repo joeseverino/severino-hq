@@ -29,6 +29,7 @@ lazy from . import machines
 lazy from .approvals import pending
 lazy from .conditions import held_since
 lazy from .connections import connection_readings
+lazy from .security import internal_principal
 lazy from .services import certificate_use
 lazy from .topology_lenses import _STALE_AFTER
 lazy from .whereabouts import machine_link
@@ -405,7 +406,11 @@ def resource_context(resource: ManagedResource) -> ResourceContext:
         service_links=service_links(resource),
         readout_rows=readout_rows(resource),
         expiry=expiry_of(resource),
-        awaiting_approval=tuple(held for held in pending() if held.resource_key == resource.key),
+        awaiting_approval=tuple(
+            held
+            for held in pending(principal=internal_principal("resource-context"))
+            if held.resource_key == resource.key
+        ),
         resolved_spec=resolved,
         display_consumers=consumers,
         resolution_error=error,

@@ -14,7 +14,16 @@ from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND, UPL
 
 from . import action_items, pins
 from .adoption import ADOPT, ADOPT_SERVICE, AdoptCommand, AdoptServiceCommand, adopt, adopt_service
-from .agent_access import SET_AGENT_ACCESS, AgentAccessCommand, agents_paused, set_agents_paused
+from .agent_access import (
+    SET_AGENT_ACCESS,
+    SET_AGENT_BLOCK,
+    AgentAccessCommand,
+    AgentBlockCommand,
+    agents_paused,
+    blocked,
+    set_agent_blocked,
+    set_agents_paused,
+)
 from .appearance import SET_THEME, ThemeCommand, set_theme
 from .approvals import APPROVE, DESTRUCTIVE_EFFECT, REJECT, ApproveCommand, RejectCommand, approve, reject
 from .cadence import ControllerSweepCommand, request_controller_sweep
@@ -51,6 +60,7 @@ from .lookup import (
     look_up_address,
     look_up_name,
 )
+from .own_devices import SET_OWN_DEVICE, OwnDeviceCommand, set_own_device
 from .policy_fixes import request_empty_groups_removal
 from .projects import (
     DEPENDENCY_UPDATES,
@@ -64,6 +74,7 @@ from .receipts import (
     replace_receipt,
     upload_receipt,
 )
+from .records import KEPT
 from .registry_import import REQUIRED_CAPABILITIES as IMPORT_CAPABILITIES, HQImportCommand, execute_hq_import
 from .resource_operations import (
     ACTION_CAPABILITY,
@@ -79,6 +90,7 @@ from .resource_operations import (
     request_stop,
 )
 from .security import Capability
+from .sessions import SIGN_OUT, SignOutCommand, sign_out
 from .sync import HQSyncCommand, execute_hq_sync
 from .tailnet import POLICY_KIND as TAILNET_POLICY_KIND, TAILNET_KIND
 from .visit_refresh import VISIT_REFRESH, VisitRefreshCommand, request_visit_refresh
@@ -213,7 +225,7 @@ CORE_CAPABILITY_SPECS = (
     ),
     CapabilitySpec(
         "infrastructure.resource.update",
-        "Change HQ's copy of a record. HQ then applies it to the live system.",
+        f"Change HQ's copy of a record. HQ then applies it to the live system. {KEPT}",
         "remote_write",
         Capability.MANAGE_INFRASTRUCTURE,
         ManagedResourceCommand,
@@ -301,6 +313,19 @@ CORE_CAPABILITY_SPECS = (
         wants="apply HQ's settings to {target}",
     ),
     CONTROLLER_REFRESH,
+    CapabilitySpec(
+        SIGN_OUT,
+        "Sign a person out of every HQ session, when Pocket ID signs them out.",
+        "remote_write",
+        Capability.END_SESSIONS,
+        SignOutCommand,
+        sign_out,
+        execution_notes=(
+            "Find the person Pocket ID's subject signed in as; a subject nobody signed in as is done.",
+            "End every live session of theirs, leaving the account and any local password alone.",
+        ),
+        label="Sign a person out",
+    ),
     # A person's own arrangement of HQ, held only by that person in the browser
     # (security.HELD_ONLY_AT): none of it reaches a spec or the controller.
     CapabilitySpec(
@@ -536,7 +561,7 @@ CORE_CAPABILITY_SPECS = (
         target_query=(("kind", UPLOADED_CERTIFICATE_KIND),),
         execution_notes=(
             "Refuse a certificate that has expired or a key that does not match it.",
-            "Seal both with the secret store key, refusing when none is configured.",
+            "Seal the key to the controller, refusing when HQ has no sealing key.",
             "Record the names it covers and move the record on, so it is installed.",
         ),
         label="Upload a certificate",
@@ -556,7 +581,7 @@ CORE_CAPABILITY_SPECS = (
     ),
     CapabilitySpec(
         RECEIPT_REPLACE,
-        "Replace a receipt's file, and change its details with it.",
+        f"Replace a receipt's file, and change its details with it. {KEPT}",
         "remote_write",
         (records_of("receipts").write, Capability.UPLOAD_RECEIPT),
         ReceiptUploadCommand,
@@ -651,6 +676,44 @@ CORE_CAPABILITY_SPECS = (
         label="Pause or resume agents",
         variants=(("on", "Block all agents"), ("off", "Allow agents")),
         state=agents_paused,
+    ),
+    CapabilitySpec(
+        SET_AGENT_BLOCK,
+        "Block one agent's client on MCP and the machine API, or let it back in.",
+        "remote_write",
+        Capability.GOVERN_AGENTS,
+        AgentBlockCommand,
+        set_agent_blocked,
+        "key",
+        target_label="Client",
+        target_help="The client id of an agent HQ has seen.",
+        execution_notes=(
+            "Refuse a client HQ has never seen.",
+            "Set the state rather than toggle it, so asking twice changes nothing.",
+        ),
+        label="Block or allow an agent",
+        variants=(("on", "Block"), ("off", "Allow")),
+        reached_from="agent_policy",
+        state=blocked,
+    ),
+    CapabilitySpec(
+        SET_OWN_DEVICE,
+        "Register a client as one of your own devices, so its token stands as you, or remove it.",
+        "remote_write",
+        Capability.GOVERN_AGENTS,
+        OwnDeviceCommand,
+        set_own_device,
+        "key",
+        target_label="Client",
+        target_help="The client id Pocket ID registered for your device.",
+        execution_notes=(
+            "Register only for the person asking, never for someone else.",
+            "Refuse a client id Pocket ID could not have registered.",
+            "Set the state rather than toggle it, so asking twice changes nothing.",
+        ),
+        label="Register or remove your device",
+        variants=(("on", "Register"), ("off", "Remove")),
+        reached_from="agent_policy",
     ),
     CapabilitySpec(
         SET_POLICY,

@@ -8,7 +8,7 @@ from django.urls import reverse
 
 from hq.platform.application import history
 from hq.platform.application.capability_policy import Column, Group, PolicyCell, Row, Scope, split_by_default
-from hq.platform.application.tests.markup import elements, with_class
+from hq.platform.application.tests.markup import elements, with_class, within
 from hq.platform.core.models import AuditLog
 
 
@@ -54,7 +54,7 @@ class AgentRulesTests(TestCase):
     def test_the_page_opens_on_what_differs_and_folds_the_rest(self):
         page = self.page()
         (rules,) = with_class(page, "policy")
-        (folded,) = with_class(page, "section-fold")
+        (folded,) = [fold for fold in within(page, "class", "policy") if "section-fold" in fold.classes]
 
         self.assertIn("Do example.delete", rules.words)
         self.assertNotIn("Do example.delete", folded.words)
@@ -63,7 +63,7 @@ class AgentRulesTests(TestCase):
 
     def test_with_nothing_changed_every_action_is_folded_and_none_is_lost(self):
         page = self.page(groups=(Group("Example notes", (_row("example.note", None),)),))
-        (folded,) = with_class(page, "section-fold")
+        (folded,) = [fold for fold in within(page, "class", "policy") if "section-fold" in fold.classes]
 
         self.assertIn("Do example.note", folded.words)
         self.assertEqual(len(elements(page, "table")), 1)

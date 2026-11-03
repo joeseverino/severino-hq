@@ -15,10 +15,10 @@ from hq.domains.control_plane.desired_state import advance_dependents
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, controller_action_policy
-from hq.platform.core.audit import operation_context
+from hq.platform.core.audit import audit_operation
 
 from .adoption import OBSERVES_ONLY, keep_out_declaration, observes_only
-from .approvals import AGENT_SURFACES, consent_gap
+from .approvals import consent_gap
 from .asks import WAITING
 from .cadence import request_reading, ring_doorbell, swept
 from .command_fields import Describe
@@ -30,7 +30,7 @@ from .infrastructure import (
     save_managed_resource,
 )
 from .record_errors import PolicyError, RecordNotFound, Sentence
-from .security import Principal
+from .security import CONTROLLER_INTERFACE, Principal, is_agent
 from .ui import counted, ended
 lazy from . import tailnet
 lazy from .containers import Running
@@ -67,7 +67,6 @@ def serialize_operation(operation: OperationRequest) -> dict[str, Any]:
 
 # Conditions that say something is wrong, whatever the operation's own state.
 _PROBLEM_CONDITIONS = ("Degraded", "Drifted")
-_AUTOMATIC = "controller"
 # How many past operations are read to find the ones that changed something.
 HISTORY_WINDOW = 200
 
@@ -109,9 +108,9 @@ def _outcome(operation: OperationRequest) -> tuple[str, str, str]:
 def requested_by(operation: OperationRequest) -> str:
     """Who asked, as a person reads it."""
 
-    if operation.requested_interface == _AUTOMATIC:
+    if operation.requested_interface == CONTROLLER_INTERFACE:
         return "Automatic"
-    if operation.requested_interface in AGENT_SURFACES:
+    if is_agent(operation.requested_interface):
         return f"{operation.requested_actor} (agent)"
     return operation.requested_actor
 
@@ -132,7 +131,7 @@ def operation_summary(operation: OperationRequest) -> dict[str, Any]:
         "state_label": label,
         "tone": tone,
         "headline": headline,
-        "automatic": operation.requested_interface == _AUTOMATIC,
+        "automatic": operation.requested_interface == CONTROLLER_INTERFACE,
         "requested_actor": operation.requested_actor,
         "requested_interface": operation.requested_interface,
         "by": requested_by(operation),
@@ -180,7 +179,7 @@ def changes(operations: Any, limit: int) -> list[OperationRequest]:
         key = (operation.resource_id, operation.action)
         said = signature(operation)
         repeats = (
-            operation.requested_interface == _AUTOMATIC
+            operation.requested_interface == CONTROLLER_INTERFACE
             and operation.state == OperationRequest.State.SUCCEEDED
             and last.get(key) == said
         )
@@ -315,11 +314,7 @@ def request_reconcile(
 
     if PROVIDERS[resource.kind].public_effect and not public_dns_enabled():
         raise PolicyError("Public DNS changes are off on this server.")
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="infrastructure.reconcile.request",
-    ):
+    with audit_operation(operation="infrastructure.reconcile.request", principal=principal):
         return _queue_operation(
             resource,
             command,
@@ -361,11 +356,7 @@ def _forget_declaration(
     only observes. Nothing is queued and nothing is deleted at the provider.
     """
 
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="infrastructure.resource.forget",
-    ):
+    with audit_operation(operation="infrastructure.resource.forget", principal=principal):
         # The declarations inside it go too. Left behind, HQ would keep
         # reconciling records in a domain it is no longer responsible for. They
         # are forgotten rather than deleted: the records stay exactly as they
@@ -411,11 +402,7 @@ def _request_lifecycle(
     gap = unit_gap(resource)
     if gap:
         raise PolicyError(gap)
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation=f"infrastructure.{action}.request",
-    ):
+    with audit_operation(operation=f"infrastructure.{action}.request", principal=principal):
         # Which verbs exist is the capability registry's to say, so a verb the
         # controller does not implement is refused here rather than queued for
         # work nothing will claim.
@@ -518,11 +505,7 @@ def accept_observed(
     kept = {
         field: resource.spec[field] for field in PROVIDERS[resource.kind].unobservable_fields if field in resource.spec
     }
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="infrastructure.resource.accept_observed",
-    ):
+    with audit_operation(operation="infrastructure.resource.accept_observed", principal=principal):
         result = save_managed_resource(
             ManagedResourceCommand(
                 key=resource.key, kind=resource.kind, spec={**found, **kept}, enabled=resource.enabled
@@ -554,11 +537,7 @@ def request_removal(
     allowed, explanation = controller_action_policy(resource.kind, OperationRequest.Action.DELETE)
     if not allowed:
         raise PolicyError(explanation)
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="infrastructure.resource.remove",
-    ):
+    with audit_operation(operation="infrastructure.resource.remove", principal=principal):
         # Bypasses the enabled check in _queue_operation on purpose: that guard
         # exists to stop HQ converging a paused declaration, and removal is the
         # opposite of converging it. A switched-off record is exactly what is
@@ -622,11 +601,7 @@ def request_route_approval(
     """
 
     resource = _resource_for_operation(current_key)
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="tailnet.routes.approve.request",
-    ):
+    with audit_operation(operation="tailnet.routes.approve.request", principal=principal):
         return _queue_operation(
             resource,
             command,
@@ -716,11 +691,7 @@ def request_certificate_renewal(
     allowed, explanation = certificate_renewal_allowed(resource)
     if not allowed:
         raise PolicyError(explanation)
-    with operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="certificate.renew.request",
-    ):
+    with audit_operation(operation="certificate.renew.request", principal=principal):
         result = _queue_operation(
             resource,
             command,

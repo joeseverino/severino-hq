@@ -32,6 +32,8 @@ TRUSTING = (
     ("dashboard.settings.update", None, Capability.SET_PREFERENCES),
     ("appearance.theme.set", None, Capability.SET_PREFERENCES),
     ("agents.access.set", None, Capability.GOVERN_AGENTS),
+    ("agents.block.set", "example-agent", Capability.GOVERN_AGENTS),
+    ("agents.device.set", "example-device", Capability.GOVERN_AGENTS),
     ("agents.policy.set", None, Capability.GOVERN_AGENTS),
     ("github.profile.read", None, Capability.LOOK_UP_PUBLIC_RECORDS),
     ("lookup.name", None, Capability.LOOK_UP_PUBLIC_RECORDS),

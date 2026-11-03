@@ -1,9 +1,11 @@
 {% comment %}
 A part of the queue (what needs doing, the notices, what was dismissed) under
 its domains, from `action_items.by_source`: one table, a row group per domain,
-so every row shares one set of columns. An entry is one item, or a family of
-them folded under its owner's name for it: a row saying how bad, what kind and
-how many, which opens to the same rows as anywhere else. `aside_url`, where
+so every row shares one set of columns. A group's heading links where its
+domain's items are decided together, when the domain says. An entry is one
+item, or a family of them folded under its owner's name for it: a row saying
+how bad, what kind and how many, which opens to the same rows as anywhere
+else. `aside_url`, where
 the part can be dismissed, lets a family be dismissed whole. `titled="0"` when
 the card around it is already titled by its one area, so the area is not said
 twice.
@@ -12,7 +14,7 @@ twice.
   <table class="data-table queue-table">
     {% for group in groups %}
     <tbody>
-      {% if titled != 0 %}{% row_group group.label group.items|length %}{% endif %}
+      {% if titled != 0 %}{% row_group group.label group.items|length href=group.url %}{% endif %}
       {% for entry in group.entries %}
         {% if entry.folded %}
           {% with family_row=prefix|add:"-"|add:entry.id|slugify %}

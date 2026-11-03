@@ -11,6 +11,7 @@ from typing import override
 from django.core.management.base import BaseCommand
 
 from hq.platform.application.registry import audit_registry
+from hq.platform.application.security import cli_principal
 
 
 class Command(BaseCommand):
@@ -26,7 +27,7 @@ class Command(BaseCommand):
 
     @override
     def handle(self, *args, **options):
-        stats = audit_registry()
+        stats = audit_registry(principal=cli_principal())
         orphan_projects = stats["orphan_projects"]
         orphan_assets = stats["orphan_assets"]
 

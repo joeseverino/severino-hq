@@ -23,6 +23,8 @@ from .command_fields import Describe
 from .projection import projection_scope
 from .security import Principal, person
 lazy from . import dashboard
+lazy from .attention import readable_by
+lazy from .domains import attention_urls
 
 # How long a set-aside mark outlives its item. Long enough that a finding which
 # clears and returns within a sweep or two is still recognized as set aside.
@@ -137,14 +139,23 @@ def by_source(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     raising items has its section, and a family its fold, without anybody
     listing either. The queue's own order is kept: a domain appears where its
     first (and so its worst) item does, and so does a family within it. A
-    family of one is that item alone.
+    family of one is that item alone. A domain that declares where its items
+    are decided together (``PluginIntegration.attention_url``) gives its group
+    that page as ``url``.
     """
 
+    urls = attention_urls() if items else {}
     groups: dict[str, dict[str, Any]] = {}
     for item in items:
         group = groups.setdefault(
             item["source_id"],
-            {"id": item["source_id"], "label": item["source"], "items": [], "entries": {}},
+            {
+                "id": item["source_id"],
+                "label": item["source"],
+                "url": urls.get(item["source_id"], ""),
+                "items": [],
+                "entries": {},
+            },
         )
         group["items"].append(item)
         family = item.get("family", "")
@@ -271,7 +282,7 @@ def set_items_aside(command: SetAsideCommand, *, principal: Principal) -> dict[s
         dismiss_rows(user, command.rows)
         if command.keys:
             with projection_scope():
-                set_aside(user, command.keys, aside=True, current=dashboard.work_queue())
+                set_aside(user, command.keys, aside=True, current=readable_by(principal, dashboard.work_queue()))
         count = len(command.rows) + len(command.keys)
         _audit(user, "Set items aside.", count)
     return {"ok": True, "count": count}

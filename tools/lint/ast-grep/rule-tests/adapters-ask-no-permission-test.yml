@@ -1,0 +1,12 @@
+id: adapters-ask-no-permission
+valid:
+  - 'return read_models.system_health(principal=current_principal())'
+  - 'described = describe_resources(principal=request.principal)'
+  - 'refused = page_refusal(user, route)'
+  - 'required = spec.required_capabilities'
+invalid:
+  - 'current_principal().require(Capability.READ)'
+  - 'principal.require(Capability.READ)'
+  - 'allowed = request.principal.permits(*spec["required_capabilities"])'
+  - 'require_all(principal, spec.required_capabilities)'
+  - 'security.require_all(principal, spec.required_capabilities)'

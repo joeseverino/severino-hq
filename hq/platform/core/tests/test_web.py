@@ -49,11 +49,13 @@ from hq.domains.receipts.models import Receipt
 from hq.platform.application import readings, request_context
 from hq.platform.application.action_links import command_url
 from hq.platform.application.dashboard import operating_snapshot
+from hq.platform.application.labels import DOT
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.application.tests.markup import elements, hrefs, select, text, within
+from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.audit import operation_context, record_event
-from hq.platform.core.logging import JsonFormatter, reset_request_id, set_request_id
+from hq.platform.core.logging import JsonFormatter, set_request_id
 from hq.platform.core.models import AuditLog
 from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY, HQOIDCAuthenticationBackend
 
@@ -265,16 +267,12 @@ class SecurityBoundaryTests(TestCase):
 
         for request, expected in ((signed, operator), (anonymous, None), (None, None)):
             with self.subTest(request=request):
-                bound = request_context.bind(request)
-                try:
+                with request_context.bind(request):
                     row = record_event(action="example.read", required=True)
-                finally:
-                    request_context.unbind(bound)
                 self.assertEqual(row.user, expected)
 
     def test_json_logs_carry_request_correlation_without_query_strings(self):
-        token = set_request_id("request-123")
-        try:
+        with set_request_id("request-123"):
             record = logging.LogRecord(
                 "severino.request",
                 logging.INFO,
@@ -290,8 +288,6 @@ class SecurityBoundaryTests(TestCase):
             record.status = 200
             record.duration_ms = 4.2
             payload = json.loads(JsonFormatter().format(record))
-        finally:
-            reset_request_id(token)
 
         self.assertEqual(payload["request_id"], "request-123")
         self.assertEqual(payload["path"], "/search/")
@@ -303,13 +299,10 @@ class SecurityBoundaryTests(TestCase):
             release = asyncio.Event()
 
             async def worker(index, request):
-                bound = request_context.bind(request)
-                ready[index].set()
-                await release.wait()
-                try:
+                with request_context.bind(request):
+                    ready[index].set()
+                    await release.wait()
                     return request_context.current()
-                finally:
-                    request_context.unbind(bound)
 
             tasks = [
                 asyncio.create_task(worker(0, "first-request")),
@@ -387,8 +380,8 @@ class OIDCBackendTests(TestCase):
         backend = HQOIDCAuthenticationBackend()
 
         with override_settings(
-            SEVERINO_OIDC_ALLOWED_EMAILS=set(),
-            SEVERINO_OIDC_ALLOWED_GROUPS={"admins"},
+            SEVERINO_OIDC_ALLOWED_EMAILS={},
+            SEVERINO_OIDC_ROLE_GROUPS={"admins": "operator"},
         ):
             self.assertTrue(
                 backend.verify_claims(
@@ -399,14 +392,6 @@ class OIDCBackendTests(TestCase):
                     }
                 )
             )
-
-    def test_matches_existing_user_by_preferred_username_without_email(self):
-        user = User.objects.create_user(username="joe")
-        backend = HQOIDCAuthenticationBackend()
-
-        users = backend.filter_users_by_claims({"sub": "subject-1", "preferred_username": "joe", "groups": ["admins"]})
-
-        self.assertEqual(list(users), [user])
 
     @override_settings(OIDC_ISSUER="https://id.example.test")
     def test_a_signed_in_subject_keeps_its_account_whatever_it_is_renamed_to(self):
@@ -430,7 +415,10 @@ class OIDCBackendTests(TestCase):
         self.assertEqual(list(renamed), [first])
         self.assertEqual(list(impostor), [])
         self.assertEqual(
-            list(backend.filter_users_by_claims({"sub": "subject-2", "preferred_username": "sam"})), [other]
+            list(
+                backend.filter_users_by_claims({"sub": "subject-2", "email": "sam@example.com", "email_verified": True})
+            ),
+            [other],
         )
 
     def test_an_unverified_address_does_not_find_an_account(self):
@@ -445,16 +433,17 @@ class OIDCBackendTests(TestCase):
 
     def test_a_token_without_a_subject_is_not_a_sign_in(self):
         backend = HQOIDCAuthenticationBackend()
+        backend.request = type("Request", (), {"session": {}})()
 
-        with override_settings(SEVERINO_OIDC_ALLOWED_GROUPS={"admins"}):
+        with override_settings(SEVERINO_OIDC_ROLE_GROUPS={"admins": "operator"}):
             self.assertFalse(backend.verify_claims({"preferred_username": "joe", "groups": ["admins"]}))
 
     def test_allows_user_by_allowed_email(self):
         backend = HQOIDCAuthenticationBackend()
 
         with override_settings(
-            SEVERINO_OIDC_ALLOWED_EMAILS={"joe@example.com"},
-            SEVERINO_OIDC_ALLOWED_GROUPS=set(),
+            SEVERINO_OIDC_ALLOWED_EMAILS={"joe@example.com": "viewer"},
+            SEVERINO_OIDC_ROLE_GROUPS={},
         ):
             self.assertTrue(
                 backend.verify_claims(
@@ -469,11 +458,12 @@ class OIDCBackendTests(TestCase):
 
     def test_rejects_when_no_allow_rule_is_configured(self):
         backend = HQOIDCAuthenticationBackend()
+        backend.request = type("Request", (), {"session": {}})()
 
         with (
             override_settings(
-                SEVERINO_OIDC_ALLOWED_EMAILS=set(),
-                SEVERINO_OIDC_ALLOWED_GROUPS=set(),
+                SEVERINO_OIDC_ALLOWED_EMAILS={},
+                SEVERINO_OIDC_ROLE_GROUPS={},
             ),
             self.assertRaises(PermissionDenied),
         ):
@@ -506,7 +496,7 @@ class ManifestUploadTests(_AuthedTestCase):
 
         return self.client.post(
             "/docs/import/",
-            {"manifest_file": SimpleUploadedFile("manifest.json", content, "application/json")},
+            form_keyed({"manifest_file": SimpleUploadedFile("manifest.json", content, "application/json")}),
         )
 
     def test_a_file_that_is_not_utf8_is_refused_with_a_reason(self):
@@ -724,7 +714,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
             self.captureOnCommitCallbacks(execute=True),
             patch("hq.platform.application.glance.ring_glance_doorbell") as ring,
         ):
-            response = self.client.post("/dashboard/glance/")
+            response = self.client.post("/dashboard/glance/", form_keyed())
 
         self.assertEqual(response.status_code, 202)
         self.assertTrue(select(response, "data-refreshing"))
@@ -737,11 +727,13 @@ class DashboardWorkflowTests(_AuthedTestCase):
     def test_dashboard_weather_settings_are_managed_in_the_ui(self):
         response = self.client.post(
             "/dashboard/glance/settings/",
-            {
-                "infrastructure_label": "Server room",
-                "weather_point": "41.1, -87.2",
-                "weather_label": "Outside",
-            },
+            form_keyed(
+                {
+                    "infrastructure_label": "Server room",
+                    "weather_point": "41.1, -87.2",
+                    "weather_label": "Outside",
+                }
+            ),
         )
 
         self.assertRedirects(response, "/")
@@ -831,7 +823,12 @@ class DashboardWorkflowTests(_AuthedTestCase):
         found = page.context["request_connection"]
         self.assertEqual(found.summary, panel.context["connection"].summary)
         # It opens the panel, and is a plain link to it without script.
-        badge = next(each for each in select(page, "data-modal-open", "connection") if found.summary in each.text)
+        # A link's name holds the summary's parts; the dots between them are drawn, never read.
+        badge = next(
+            each
+            for each in select(page, "data-modal-open", "connection")
+            if all(part in each.text for part in found.summary.split(DOT))
+        )
         self.assertEqual(badge.attrs["href"], reverse("connection"))
         self.assertIn(found.transport, badge.text)
 
@@ -1422,8 +1419,8 @@ class AuditDetailPageTests(_AuthedTestCase):
         self.assertIn("192.0.2.2", shown)
         self.assertNotIn("{'", shown)
         self.assertNotIn("['", shown)
-        # What was recorded beside the change is named in words too.
-        self.assertEqual(set(page.context["extra"]), {"Actor", "Interface", "Operation"})
+        # Nothing else was recorded beside the change: the Who and Operation rows say the rest.
+        self.assertEqual(set(page.context["extra"]), set())
 
     def test_an_event_links_to_the_rest_of_its_operation(self):
         # The point of operation_id: one action touching several rows is one
@@ -1568,6 +1565,7 @@ class NavigationTests(TestCase):
             with self.subTest(route=entry.route):
                 request = RequestFactory().get(url)
                 request.resolver_match = resolve(url)
+                request.user = self.user
                 lit = {
                     group["label"]
                     for group in nav(request)["nav_entries"]
@@ -1601,13 +1599,11 @@ class NavigationTests(TestCase):
 
 
 class CompressedResponseTests(TestCase):
-    """A page big enough to compress reaches the server compressed, with one
-    Content-Length that is the compressed body's: h11 refuses a response
-    carrying two, which would be a 502 on every large page."""
+    """A page big enough to compress reaches the server in the smallest coding
+    the client takes, with one Content-Length that is the encoded body's: h11
+    refuses a response carrying two, which would be a 502 on every large page."""
 
-    def test_a_large_page_arrives_compressed_with_one_length(self):
-        import gzip
-
+    def _fetch(self, accepted):
         import httpx2
 
         from hq.config.asgi import application
@@ -1616,18 +1612,32 @@ class CompressedResponseTests(TestCase):
             transport = httpx2.ASGITransport(app=application, client=("100.64.0.10", 50000))
             async with (
                 httpx2.AsyncClient(transport=transport, base_url="http://testserver") as client,
-                client.stream("GET", "/accounts/login/", headers={"Accept-Encoding": "gzip"}) as response,
+                client.stream("GET", "/accounts/login/", headers={"Accept-Encoding": accepted}) as response,
             ):
                 # As sent, not as the client would decode it.
                 return response, b"".join([chunk async for chunk in response.aiter_raw()])
 
-        response, sent = async_to_sync(fetch)()
+        return async_to_sync(fetch)()
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.headers["content-encoding"], "gzip")
-        self.assertEqual(len(response.headers.get_list("content-length")), 1)
-        self.assertEqual(int(response.headers["content-length"]), len(sent))
-        self.assertIn(b"<form", gzip.decompress(sent))
+    def test_a_large_page_arrives_compressed_with_one_length(self):
+        import gzip
+
+        import brotli
+
+        # A browser's header over HTTPS, then a client of gzip alone, then none.
+        for accepted, coding, decoded in (
+            ("gzip, deflate, br, zstd", "br", brotli.decompress),
+            ("gzip", "gzip", gzip.decompress),
+            ("identity", None, bytes),
+        ):
+            with self.subTest(accepted=accepted):
+                response, sent = self._fetch(accepted)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.headers.get("content-encoding"), coding)
+                self.assertIn("Accept-Encoding", response.headers["vary"])
+                self.assertEqual(len(response.headers.get_list("content-length")), 1)
+                self.assertEqual(int(response.headers["content-length"]), len(sent))
+                self.assertIn(b"<form", decoded(sent))
 
 
 class RootIconTests(SimpleTestCase):

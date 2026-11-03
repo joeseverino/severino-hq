@@ -6,11 +6,12 @@ behind it (a sweep of what they star) knows whose account to read.
 """
 
 import hashlib
+import logging
 import re
 from collections.abc import Mapping
 from typing import Any
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from hq.platform.core.audit import record_event
@@ -22,6 +23,8 @@ GITHUB = "github"
 # column whatever length the provider's subjects are.
 SIGN_IN = "oidc"
 AUDIT_LABEL = "Linked account"
+
+logger = logging.getLogger("severino.auth")
 
 # GitHub's own rule for a login: letters, digits and single hyphens, neither
 # first nor last, at most 39 characters.
@@ -63,9 +66,19 @@ def _record(user, provider: str, login: str) -> None:
                 )
                 found.delete()
             return
-        account, created = LinkedAccount.objects.update_or_create(
-            user=user, provider=provider, defaults={"login": login, "updated_at": timezone.now()}
-        )
+        try:
+            with transaction.atomic():
+                account, created = LinkedAccount.objects.update_or_create(
+                    user=user, provider=provider, defaults={"login": login, "updated_at": timezone.now()}
+                )
+        except IntegrityError:
+            # Another person's sign-in already names it, and one account is one person's.
+            logger.warning(
+                "A sign-in claims a %s account another person holds; it is not recorded.",
+                provider,
+                extra={"event": "auth.linked_account.taken"},
+            )
+            return
         record_event(
             action=AuditLog.Action.CREATED if created else AuditLog.Action.UPDATED,
             obj=account,

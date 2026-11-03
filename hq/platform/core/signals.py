@@ -1,12 +1,16 @@
-"""Wire up login/logout audit events, and database upkeep after a migration."""
+"""Wire up login/logout audit events, a new superuser's role, database upkeep after a migration, and what a changed setting invalidates."""
 
+from django.conf import settings
 from django.contrib.auth.signals import (
     user_logged_in,
     user_logged_out,
     user_login_failed,
 )
-from django.db.models.signals import post_migrate
+from django.core.signals import setting_changed
+from django.db.models.signals import post_migrate, post_save
 from django.dispatch import receiver
+
+lazy from hq.platform.application import roles, routes
 
 from .audit import record_event
 from .database import optimize
@@ -58,9 +62,22 @@ def _on_login_failed(credentials, request=None, **kwargs):
     )
 
 
+@receiver(post_save, sender=settings.AUTH_USER_MODEL, dispatch_uid="hq.core.superuser_is_an_operator")
+def _superuser_is_an_operator(instance, created, *, raw=False, **kwargs):
+    """A superuser the host's shell makes (createsuperuser, a seed) operates HQ until a sign-in resolves its role."""
+
+    if created and not raw and instance.is_superuser:
+        roles.give_operator(instance)
+
+
 @receiver(post_migrate, dispatch_uid="hq.core.optimize_after_migrate")
 def _optimize_after_migrate(sender, using, **kwargs):
     # Sent once per app; this app's is the one that answers, so once per run.
     # Every container start migrates, which is also the daily floor.
     if sender.name == "hq.platform.core":
         optimize(using)
+
+
+@receiver(setting_changed)
+def _forget_routes(**_kwargs):
+    routes.forget()
