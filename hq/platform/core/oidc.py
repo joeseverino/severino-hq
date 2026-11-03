@@ -214,7 +214,11 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
     def get_user(self, user_id):
         """The session's person, with their role, so a request reads it without a query of its own."""
 
-        return self.UserModel.objects.select_related("person_role").filter(pk=user_id).first()
+        # get, as the library's own does: first() would order a lookup by key.
+        try:
+            return self.UserModel.objects.select_related("person_role").get(pk=user_id)
+        except self.UserModel.DoesNotExist:
+            return None
 
     @staticmethod
     def _subject_key(claims) -> str:
