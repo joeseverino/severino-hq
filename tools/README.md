@@ -13,11 +13,12 @@ carries any of it).
 | `lib/` | shell libraries the file tasks source: the heavy-gate lock, the tree export, the composed set, the source URL |
 | `pipeline/` | CI and release programs: reports, composition, image checks, the release rehearsals |
 | `structural/` | the structural bar and its baseline |
-| `lint/` | the locked lint tools (axe-core, ESLint, Redocly, Stylelint), installed by `setup:lint-tools` |
+| `lint/` | the locked lint tools (axe-core, browser-compat-data, ESLint, Redocly, Stylelint), installed by `setup:lint-tools` |
 | `tests/` | the tests of the top-level modules |
 
 The top level holds the credential minting (`credentials.py`) and the
-permission lists it and its tests read.
+permission lists it and its tests read, and `audit:image`'s reader of a
+built image (`audit_image.py`).
 
 Language: shell (POSIX sh) for a short pipeline of other programs; Python for
 anything with logic, run through `uv run`, or plain stdlib at the runner's

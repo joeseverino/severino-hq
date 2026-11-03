@@ -1,12 +1,12 @@
 # One agent's call into HQ: its own token, the pause switch, its grant, the operator's policy, then a run, a hold or a refusal, each recorded under its name.
 title: An agent's call
-subtitle: /mcp/ and /api/v2/
+subtitle: /api/mcp/ and /api/v2/
 direction: down
 
 Agent [icon: bot, note: its own access token]
 
 Doors [dashed] {
-  MCP [icon: terminal, note: /mcp/ · capped by settings]
+  MCP [icon: terminal, note: /api/mcp/ · capped by settings]
   Machine API [icon: globe, note: /api/v2/ · Idempotency-Key]
 }
 
