@@ -2,16 +2,19 @@
 
 import importlib
 import inspect
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 from django.test import tag
 
 from tools.gate import verdict as gate_verdict
-from tools.gate.tests import base
 from tools.gate.tests.base import GateTestCase
+
+REAL = gate_verdict.ROOT / "var" / "gate"
 
 
 @tag("source")
@@ -31,16 +34,31 @@ class GateIsolationTests(GateTestCase):
         self.assertEqual(loose, [])
 
     def test_a_verdict_closed_in_a_test_lands_in_its_own_folder(self):
-        self.assertNotEqual(gate_verdict.VERDICTS, base.REAL_VERDICTS)
+        self.assertNotEqual(gate_verdict.VERDICTS, REAL)
 
-    def test_a_class_that_changes_the_real_folder_fails(self):
+    def test_a_gate_a_test_runs_as_a_subprocess_keeps_its_verdict_in_the_classs_folder(self):
+        name = f"isolation-{os.getpid()}"
+        subprocess.run(
+            [sys.executable, "-m", "tools.gate.verdict", name, sys.executable, "-c", "pass"],
+            cwd=gate_verdict.ROOT,
+            check=True,
+            capture_output=True,
+        )
+
+        self.assertTrue(Path(gate_verdict.VERDICTS, f"{name}.txt").is_file())
+        self.assertFalse(Path(REAL, f"{name}.txt").exists())
+
+    def test_another_processs_write_to_the_real_folder_fails_no_class(self):
+        """Another gate (an extension's plugin check) writes there while the suite runs."""
+
         class Writes(GateTestCase):
             def test_nothing(self):
                 pass
 
-        with tempfile.TemporaryDirectory() as real, patch.object(base, "REAL_VERDICTS", Path(real)):
-            Writes.setUpClass()
-            self.addCleanup(Writes.doClassCleanups)
-            Path(real, "check.txt").write_text("[check] FAILED\n")
-            with self.assertRaisesRegex(AssertionError, "check.txt"):
-                Writes.tearDownClass()
+        Writes.setUpClass()
+        self.addCleanup(Writes.doClassCleanups)
+        REAL.mkdir(parents=True, exist_ok=True)
+        handle, planted = tempfile.mkstemp(prefix="plugin-check-", suffix=".txt", dir=REAL)
+        os.close(handle)
+        self.addCleanup(os.unlink, planted)
+        Writes.tearDownClass()

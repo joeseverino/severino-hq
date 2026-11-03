@@ -154,7 +154,9 @@ command that reruns just those. A gate whose steps queued for the
 working time.
 
 The whole verdict is kept in `var/gate/` beside the run before it, with each
-failed test's exception and traceback and each failed task's last lines. A
+failed test's exception and traceback and each failed task's last lines
+(`HQ_GATE_VERDICTS` names another folder, as a gate tool's test does for
+every process it starts). A
 gate's first line names that file, since the head of a long output is the
 part a reader shown only an excerpt of it always sees.
 
