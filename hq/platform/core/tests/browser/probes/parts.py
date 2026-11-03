@@ -110,20 +110,21 @@ HIDDEN_IN_SUMMARIES = (
 }"""
 )
 
-# Every select that opens to its choices wears HQ's chevron and no arrow of
-# the browser's own, whichever way the engine draws it (base-select or
-# native), so no two forms read as two kinds of control. The chevron is
+# Every select that opens to its choices, and every filter button that opens
+# to them, wears HQ's chevron, and a select no arrow of the browser's own,
+# whichever way the engine draws it (base-select or native), so no two forms
+# read as two kinds of control. The chevron is
 # compared with the token painted where the select sits, since its ink is
 # light-dark(). A vendored widget draws its own.
 SELECT_ARROWS = """([dropdowns, vendored]) => {
   const named = (el) => el.name || el.getAttribute('aria-label') || el.id || 'unnamed';
   return [...document.querySelectorAll(dropdowns)]
-    .filter((el) => !el.multiple && el.size <= 1 && !(vendored && el.closest(vendored)))
+    .filter((el) => !(el instanceof HTMLSelectElement && (el.multiple || el.size > 1)) && !(vendored && el.closest(vendored)))
     .flatMap((el) => {
       const style = getComputedStyle(el);
-      const own = style.appearance === 'base-select'
+      const own = el instanceof HTMLSelectElement && (style.appearance === 'base-select'
         ? getComputedStyle(el, '::picker-icon').display !== 'none'
-        : style.appearance !== 'none';
+        : style.appearance !== 'none');
       const mark = document.createElement('span');
       mark.style.setProperty('background-image', 'var(--chevron-image)');
       el.parentElement.append(mark);
@@ -131,7 +132,7 @@ SELECT_ARROWS = """([dropdowns, vendored]) => {
       mark.remove();
       return [
         own && `select ${named(el)} draws the browser's own arrow`,
-        style.backgroundImage !== chevron && `select ${named(el)} does not wear HQ's chevron`,
+        style.backgroundImage !== chevron && `${el.localName} ${named(el) === 'unnamed' ? el.textContent.trim().slice(0, 30) : named(el)} does not wear HQ's chevron`,
       ].filter(Boolean);
     });
 }"""

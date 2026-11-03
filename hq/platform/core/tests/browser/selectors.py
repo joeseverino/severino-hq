@@ -69,7 +69,7 @@ SELECTORS = {
     "link": "a[href]",
     # A select; the probes that judge one that opens to its choices leave out a
     # list box (multiple or sized), which Django's widgets mark, not a template.
-    "dropdown": "select",
+    "dropdown": "select, .table-filter-menu > button",
     # A control pressed or picked from rather than typed into: a button, a
     # disclosure's handle, a label drawn around a select or a checkbox.
     "pressed": (

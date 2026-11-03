@@ -314,21 +314,11 @@ select:not([multiple], [size]) {
   block-size: var(--control-size);
   padding-block: 0;
 }
-/* A select wears HQ's chevron, set in from its end by --chevron-inset, in
-   every browser and however it is drawn. The browser's own arrow is a filled
-   triangle where the page styles the select and the platform's glyph where it
-   does not, so two forms would read as two kinds of control. A list box stays
-   native. */
-select:not([multiple], [size]) {
-  appearance: none;
-  padding-inline-end: calc(var(--chevron-inset) + 2 * var(--chevron-size) + var(--space-3));
-  background-image: var(--chevron-image);
-  background-position:
-    calc(100% - var(--chevron-inset) - var(--chevron-size)) 50%,
-    calc(100% - var(--chevron-inset)) 50%;
-  background-size: var(--chevron-size) var(--chevron-size);
-  background-repeat: no-repeat;
-}
+/* A select wears HQ's chevron (tables.css draws it), in every browser and
+   however it is drawn. The browser's own arrow is a filled triangle where the
+   page styles the select and the platform's glyph where it does not, so two
+   forms would read as two kinds of control. A list box stays native. */
+select:not([multiple], [size]) { appearance: none; }
 /* Where the browser lets a page style its select (`base-select`), its list of
    choices is framed as HQ's other panels. */
 @supports (appearance: base-select) {
