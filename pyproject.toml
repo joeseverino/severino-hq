@@ -124,7 +124,8 @@ forbidden_modules = ["hq.platform.api", "hq.platform.mcp"]
 # The application's tests drive a call through the doors end to end.
 ignore_imports = ["hq.platform.application.tests.** -> hq.**"]
 
-# audit:dead: a read in a test does not keep a name alive. A function a
+# audit:dead: a read in a test does not keep a name alive, unless a
+# test-support module (testing.py, *_testing.py) defines it. A function a
 # decorator hands to a caller outside HQ is called: a signal receiver, a system
 # check, an exit hook, a Pydantic validator, and an @override, which its base
 # class calls. Django calls an app's AppConfig by finding it in apps.py, and a
