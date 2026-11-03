@@ -19,6 +19,7 @@ from hq.domains.control_plane.provider_adapters.tls import (
 )
 from hq.domains.control_plane.provider_spec import expiry_phrase
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 
 from .entity_links import entity_link
@@ -114,7 +115,7 @@ def _overlays(joined) -> str:
         if item.facet or not item.spec.joins_hostnames:
             continue
         counts.setdefault(item.relation, set()).update(item.hostnames)
-    return " · ".join(f"{len(names)} {_mid_sentence(relation)}" for relation, names in sorted(counts.items()))
+    return dotted(*(f"{len(names)} {_mid_sentence(relation)}" for relation, names in sorted(counts.items())))
 
 
 def _mid_sentence(phrase: str) -> str:
@@ -248,7 +249,7 @@ def security(zone) -> ZoneInsight | None:
     return ZoneInsight(
         label="Security",
         value=tls.value if tls else "TLS not read",
-        detail=" ".join(concerns) or " · ".join(facts),
+        detail=" ".join(concerns) or dotted(*facts),
         url=certificates_card.url if certificates_card is not None else "",
         # Only why a part could not be read; a readable edge is in the count.
         note=certificates_card.note if certificates_card is not None and not edge else "",

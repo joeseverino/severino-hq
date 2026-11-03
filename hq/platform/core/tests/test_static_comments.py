@@ -77,11 +77,11 @@ class SavedAssetTests(SimpleTestCase):
 class CollectedStylesheetTests(SimpleTestCase):
     """What a collect writes, read back the way the server sends it."""
 
-    def test_what_is_served_and_its_gzip_copy_are_the_files_without_comments(self):
-        import gzip
+    def test_what_is_served_and_its_one_copy_are_the_files_without_comments(self):
         import json
         import tempfile
 
+        import brotli
         from django.core.management import call_command
         from django.test import override_settings
 
@@ -93,21 +93,23 @@ class CollectedStylesheetTests(SimpleTestCase):
             collected = {
                 name: (
                     (Path(root) / paths[name]).read_bytes(),
-                    gzip.decompress((Path(root) / f"{paths[name]}.gz").read_bytes()),
+                    brotli.decompress((Path(root) / f"{paths[name]}.br").read_bytes()),
                 )
                 for name in (*SHEETS, "js/app.js")
             }
+            # Brotli is the one compressed copy: a gzip copy would be a second on disk.
+            self.assertEqual([name for name in paths.values() if (Path(root) / f"{name}.gz").exists()], [])
 
         for sheet, path in zip(SHEETS, sheet_paths(), strict=True):
             with self.subTest(sheet=sheet):
-                stylesheet, stylesheet_gzipped = collected[sheet]
+                stylesheet, stylesheet_compressed = collected[sheet]
                 source = path.read_text(encoding="utf-8")
                 # Whole: every rule the source writes, outside its comments.
                 self.assertEqual(stylesheet.count(b"{"), source.count("{") - _in_comments(source, "{"))
                 self.assertNotIn(b"/*", stylesheet)
-                self.assertEqual(stylesheet_gzipped, stylesheet)
-        script, script_gzipped = collected["js/app.js"]
+                self.assertEqual(stylesheet_compressed, stylesheet)
+        script, script_compressed = collected["js/app.js"]
         source = (Path(settings.BASE_DIR) / "static/js/app.js").read_bytes()
         self.assertGreater(len(script), len(source) // 3)
         self.assertLess(len(script), len(source))
-        self.assertEqual(script_gzipped, script)
+        self.assertEqual(script_compressed, script)

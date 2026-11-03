@@ -13,7 +13,7 @@ lazy from hq.domains.control_plane.observations import OBSERVATIONS
 from .containers import Running
 from .entity_links import EntityLink, entity_link, kind_label
 from .facts import Joined
-from .labels import lower_first
+from .labels import dotted, lower_first
 from .projection import read_once
 from .service_declarations import Claim
 from .timestamps import moment
@@ -38,7 +38,7 @@ class ReadingLine:
 
     @property
     def hint(self) -> str:
-        return f"{self.relation} · earliest expires {self.expiry}" if self.expiry else self.relation
+        return dotted(self.relation, f"earliest expires {self.expiry}") if self.expiry else self.relation
 
 
 @dataclass(frozen=True, slots=True)

@@ -9,6 +9,8 @@ draws its related records in one shape.
 from collections.abc import Iterable
 from typing import Any
 
+from hq.platform.application.labels import dotted
+
 from .entity_links import EntityLink, entity_link
 from .moments import when_day
 from .money import money
@@ -72,7 +74,7 @@ def expenses(rows: Iterable[Any]) -> Mentions:
         "Expenses",
         tuple(
             Mention(
-                entity_link("expense", str(row.pk), label=row.label), f"{when_day(row.date)} · {money(row.total_cost)}"
+                entity_link("expense", str(row.pk), label=row.label), dotted(when_day(row.date), money(row.total_cost))
             )
             for row in rows
         ),

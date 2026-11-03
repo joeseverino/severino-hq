@@ -13,18 +13,20 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from hq.platform.application.asks import APPLIES_SHORTLY, WAITING
-from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.contact_submissions import (
     DELETE,
+    MOST_SHOWN,
     REVIEW,
     find_submission,
     list_contact_submissions,
 )
+from hq.platform.application.labels import dotted
 from hq.platform.application.moments import when
 from hq.platform.application.pages import PageAction, page_context
-from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.security import safe_next
 from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import counted, ended
+from hq.platform.application.web_writes import execute_posted, refused
 
 from . import inbox
 from .forms import STATUS_CHOICES, ContactReviewForm
@@ -60,7 +62,7 @@ def contact_list(request):
         selected_status = ""
     q = request.GET.get("q", "").strip()
     current = inbox.current()
-    submissions = list_contact_submissions(status=selected_status, query=q, limit=500)["items"]
+    submissions = list_contact_submissions(status=selected_status, query=q, limit=MOST_SHOWN)["items"]
     status_tabs = [
         {"value": value, "label": label, "count": current.counts.get(value, 0)} for value, label in STATUS_CHOICES
     ]
@@ -91,10 +93,7 @@ contact_list.page_reads = ("cloudflare.contact_submission",)  # type: ignore[att
 def _review(request, pk: int, review: dict[str, str]) -> bool:
     """Queue one review; say why not when it is refused."""
 
-    result = execute_capability(REVIEW, review, principal=web_principal(request.user), target=pk)
-    if not result["ok"]:
-        messages.error(request, result["error"]["message"])
-    return result["ok"]
+    return refused(request, execute_posted(request, REVIEW, review, target=pk)) is None
 
 
 def contact_detail(request, pk: int):
@@ -128,7 +127,7 @@ def contact_detail(request, pk: int):
             "form": form,
             **page_context(
                 f"Message #{pk}",
-                " · ".join(filter(None, (submission.get("name", ""), _sent(submission)))),
+                dotted(submission.get("name", ""), _sent(submission)),
                 actions=(PageAction("Reply by email", reply),),
                 trail=(("Messages", reverse("contacts:list")),),
             ),
@@ -170,9 +169,8 @@ def contact_delete(request, pk: int):
         return redirect("contacts:list")
 
     if request.method == "POST":
-        result = execute_capability(DELETE, {"confirm": str(pk)}, principal=web_principal(request.user), target=pk)
-        if not result["ok"]:
-            messages.error(request, result["error"]["message"])
+        result = execute_posted(request, DELETE, {"confirm": str(pk)}, target=pk)
+        if refused(request, result):
             return redirect("contacts:detail", pk=pk)
         messages.success(request, f"Message deleted. {APPLIES_SHORTLY}")
         return redirect("contacts:list")
@@ -189,9 +187,7 @@ def contact_delete(request, pk: int):
             },
             **page_context(
                 f"Delete message #{pk}?",
-                " · ".join(
-                    filter(None, (_sent(submission), f"{submission.get('name', '')} ({submission.get('email', '')})"))
-                ),
+                dotted(_sent(submission), f"{submission.get('name', '')} ({submission.get('email', '')})"),
                 trail=(
                     ("Messages", reverse("contacts:list")),
                     (f"Message #{pk}", reverse("contacts:detail", args=[pk])),

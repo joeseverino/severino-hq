@@ -307,88 +307,63 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
    collapsed search above buys the headroom that keeps this width low; past it
    the sections move into a panel that opens on tap.
 
-   `:target` rather than script or a `details` widget: nothing hides the nav by
-   default, so a stylesheet that fails to load leaves every section plainly
-   visible instead of none of them. */
+   The panel is the nav's popover (base.html): the browser opens it in the top
+   layer, under the sticky header and over the page, and a press outside it or
+   Escape closes it. Open, it is the panel at any width, so a window widened
+   with it open still shows a panel until it is dismissed. */
 @media (max-width: 1080px) {
-  .nav-toggle-open { display: inline-flex; }
-  .site-header:target .nav-toggle-open,
-  .nav-is-open .nav-toggle-open { display: none; }
-  .nav-toggle-close { display: none; }
-  .site-header:target .nav-toggle-close,
-  .nav-is-open .nav-toggle-close { display: inline-flex; }
-  /* Under the header, over the page, and only while open. It has to be below
-     the header's own z-index: the header is a stacking context, so a control
-     inside it can never be raised above a backdrop that sits higher, and a
-     backdrop covering the toggle means the button that closes the menu is not
-     clickable, only the sheet on top of it. Below the header, tapping the
-     toggle closes it deliberately and tapping anywhere else closes it too. */
-  .site-header:target ~ .nav-backdrop,
-  .nav-is-open .nav-backdrop {
-    display: block; position: fixed; inset: 0; z-index: 9;
-  }
   /* Matches the collapsed search button and the account chip exactly, so it
      reads as the same kind of control as the ones beside it. */
-  .nav-toggle { grid-area: toggle; align-items: center; justify-content: center;
-    inline-size: var(--control-size); block-size: var(--control-size);
+  .nav-toggle { display: inline-flex; grid-area: toggle; align-items: center; justify-content: center;
+    inline-size: var(--control-size); block-size: var(--control-size); min-height: 0; padding: 0;
     border: 1px solid var(--bar-control-line); border-radius: var(--radius-sm);
-    background: var(--bar-control-bg); color: var(--ink-2);
+    background: var(--bar-control-bg); color: var(--ink-2); box-shadow: none;
   }
-  .nav-toggle:hover { background: var(--bar-control-bg-hover); text-decoration: none; }
+  .nav-toggle > svg { width: 15px; height: 12px; }
+  .nav-toggle:hover { border-color: var(--bar-control-line); background: var(--bar-control-bg-hover); }
   .nav-toggle:focus:not(:focus-visible) { outline: none; }
   .nav-toggle:focus-visible {
     outline: 2px solid var(--accent-2);
     outline-offset: 2px;
   }
   .primary-nav { display: none; grid-area: auto; }
-  .site-header:target .primary-nav,
-  .nav-is-open .primary-nav {
-    display: flex;
-    position: absolute;
-    top: calc(100% - 2px);
-    right: 12px;
-    z-index: 20;
-    min-width: 190px;
-    width: auto;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 1px;
-    margin: 0;
-    padding: var(--space-2);
-    max-height: calc(100dvh - var(--site-header-height) - 12px);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-pop);
-  }
-  .site-header:target .primary-nav > a,
-  .site-header:target .primary-nav .nav-group > summary,
-  .nav-is-open .primary-nav > a,
-  .nav-is-open .primary-nav .nav-group > summary {
-    min-height: 44px;
-    padding: var(--space-4) var(--space-5);
-    font-size: var(--text-md);
-  }
-
-  /* A section's own links fly out beside the list, not inside it: opened in
-     place, one would push every section below it down the panel. The list is
-     anchored to the right edge, so the room is to its left. */
-  .site-header:target .primary-nav .nav-group-panel,
-  .nav-is-open .primary-nav .nav-group-panel {
-    top: -5px;
-    right: calc(100% + 6px);
-    left: auto;
-    min-width: 168px;
-  }
-  .site-header:target .primary-nav .nav-group-panel a,
-  .nav-is-open .primary-nav .nav-group-panel a {
-    min-height: 44px;
-    display: flex;
-    align-items: center;
-  }
-
+}
+.primary-nav:popover-open {
+  display: flex;
+  position: fixed;
+  inset: calc(var(--site-header-height) - 2px) 12px auto auto;
+  min-width: 190px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+  padding: var(--space-2);
+  max-height: calc(100dvh - var(--site-header-height) - 12px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-pop);
+}
+.primary-nav:popover-open > a,
+.primary-nav:popover-open .nav-group > summary {
+  min-height: 44px;
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--text-md);
+}
+/* A section's own links fly out beside the list, not inside it: opened in
+   place, one would push every section below it down the panel. The list is
+   anchored to the right edge, so the room is to its left. */
+.primary-nav:popover-open .nav-group-panel {
+  top: -5px;
+  right: calc(100% + 6px);
+  left: auto;
+  min-width: 168px;
+}
+.primary-nav:popover-open .nav-group-panel a {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
 }
 
 @media (max-width: 860px) {
@@ -398,6 +373,7 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
      the components layer to beat page.css. */
   .site-header { --header-user: var(--control-size); gap: var(--space-4) var(--space-6); padding: var(--space-5) var(--space-7); }
   .user-menu > summary { width: var(--control-size); padding: 0; }
+  /* Gone, the name still names the summary (its aria-labelledby). */
   .user-menu .user-name { display: none; }
   .brand { font-size: var(--text-md); }
   /* The sections live in the toggle's panel from 1080px down, so the bar stays

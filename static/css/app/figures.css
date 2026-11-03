@@ -90,12 +90,13 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
   text-decoration: none;
 }
 .zone-switch a:hover { border-color: var(--ink-2); color: var(--ink); }
-.zone-switch a.active {
+.zone-switch a[aria-current] {
   background: var(--ink);
   border-color: var(--ink);
   color: var(--surface);
 }
-.zone-switch-note { font-size: var(--text-2xs); font-weight: 500; opacity: 0.75; }
+.zone-switch-note { color: var(--muted); font-size: var(--text-2xs); font-weight: 500; }
+.zone-switch a[aria-current] .zone-switch-note { color: inherit; }
 /* A record's value is data, set as code is; where it wraps is `breakable`'s. */
 .zone-value { font-family: var(--font-mono); font-size: var(--text-xs); }
 /* A status pill is a label: wrapped it grows its row, so it stays whole until its table is tight (tables.css). */
@@ -153,10 +154,10 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
   /* An engine may measure a part's max-content a fraction short of the text it draws (WebKit on Linux), so a float of no height asks the track for a pixel more and a part with room is never cut. */
   & > .part::before { content: ""; float: inline-end; inline-size: 1px; }
 }
-/* A control's label is the control's to cut, as one line at its end; a part longer than the control is held to it and cut there. */
+/* A control's label is the control's to cut, as one line at its end; a part longer than the control is held to it and cut there, set on the line by its top since a box that clips takes its bottom edge as its baseline. */
 .data-table td .btn > .token:not([data-sole]) {
   max-width: 100%;
-  & > .whole { overflow: hidden; text-overflow: ellipsis; }
+  & > .whole { overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
 }
 /* A line clamped to a preview (`.table-clamp`) is cut by its clamp, and WebKit draws a grid on a line past the clamp, so there a part is an inline box held to its column's share. */
 .data-table td :is(.attention-detail, .table-clamp) .token:not([data-sole]) > .whole:not(code *, [data-entity] *, .cut *) {
@@ -167,6 +168,11 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 /* Outside a narrow box the wrapping columns give way first; a name of plain parts holds out for its whole length up to its column's share (`--name-hold`, tables.css), and a name in a context line (`.muted`) holds out for nothing. */
 @container style(--box: whole) {
   .data-table td [data-entity]:not(strong > *, .row-gutter > *, .muted *):has(> .token[data-sole]):not(:has(> .token > .cut)) { width: max-content; max-width: var(--name-hold); }
+  /* A name the cell cuts holds out the same way, so it is cut only once its table has no column left to give way. */
+  .data-table > tbody > tr:not(.is-expanded, .row-detail) > td :is(
+    [data-entity]:not(strong > *, .row-gutter > *):has(> .token[data-sole] > .cut),
+    .token[data-sole]:not([data-entity] *, .cell-line *):has(> .cut)
+  ):not(code *, td > strong:first-child *, td > a:first-child > strong *, .cell-data *, .muted *) { width: max-content; max-width: var(--name-hold); }
 }
 /* Outside a narrow box an identifier is one line. One that breaks only at its seams holds its whole length, so its table lets a ranked column go before the name would break (tables.js); a name the cell cuts shows one line, cut. A narrow box has no column left to let go, so there it breaks at its seams again. The row's own name, free text, a preview, a context line, an identifier that wraps by design (`cell-whole`) and a phrase's word whose hyphenated parts are each cut at the cell's edge (below) wrap as they always do; `broken identifiers` in the layout survey holds the rest. */
 @container style(--box: whole) {
@@ -182,10 +188,10 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 /* A name in the muted line under the row's name is context the row shares with its neighbors: one line, cut at the cell's edge, holding out for none of it (`--cut-floor`). */
 .data-table td .muted [data-entity] { -webkit-line-clamp: 1; line-clamp: 1; }
 .data-table td .muted { --cut-lines: 1; --cut-floor: 0px; }
-/* The muted line of plain words under the row's name is one line cut at the column's edge, asking no width of its own (`contain: inline-size`) so the name alone sizes it; `narrow-only` words in it are never cut away. */
-.data-table td.row-gutter > br + .muted:not(:has([data-entity], .narrow-only)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The muted line of plain words under the row's name is one line cut at the column's edge, asking no width of its own (`contain: inline-size`) so the name alone sizes it; `narrow-only` words in it are never cut away. A chip (`code`) is a box of its own, where the line's ellipsis cannot land, so a line holding one is left to the chip's own cut. */
+.data-table td.row-gutter > br + .muted:not(:has([data-entity], .narrow-only, code)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @container style(--box: whole) {
-  .data-table td.row-gutter > br + .muted:not(:has([data-entity])) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .data-table td.row-gutter > br + .muted:not(:has([data-entity], code)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 /* A value quoted in a cell can hold a run with no seam (a link, a digest), so it breaks wherever it must and never widens its column; marked on the cell when the whole cell is such text. */
 .data-table :is(td.cell-data, td .cell-data, :is(td.cell-data, td .cell-data) .token) { overflow-wrap: anywhere; }

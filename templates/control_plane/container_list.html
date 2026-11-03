@@ -42,7 +42,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
         </thead>
         {% for heading, listed in need_sections %}
         <tbody>
-          {% if need_sections|length > 1 %}{% row_group heading listed|length %}{% endif %}
+          {% if forloop.length > 1 %}{% row_group heading listed|length %}{% endif %}
           {% for group in listed %}{% with standing=group.standing plan=group.plan %}
             <tr>
               <td class="row-gutter">

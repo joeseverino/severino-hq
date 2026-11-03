@@ -27,6 +27,7 @@ from hq.domains.control_plane.provider_adapters.tls import (
 )
 from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.labels import dotted
 
 from .connections import connections_for, reachable_through
 lazy from .tailnet_presence import observed_addresses
@@ -52,7 +53,7 @@ def proxy_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]
     # to a certificate that does not cover its names is a browser warning
     # rather than an error anything reports.
     options = [
-        (resource.key, f"{resource.key} · covers {context.hostname}")
+        (resource.key, dotted(resource.key, f"covers {context.hostname}"))
         for resource in managed
         if resource.key in covering
     ]
@@ -100,9 +101,9 @@ def tailnet_device(_context: NameContext) -> dict[str, tuple[tuple[str, str], ..
             if not name:
                 continue
             devices[name] = (
-                f"{name} · key expires {record['key_expires'][:10]}"
+                dotted(name, f"key expires {record['key_expires'][:10]}")
                 if record.get("key_expires")
-                else f"{name} · key expiry disabled"
+                else dotted(name, "key expiry disabled")
             )
     return {
         "name": tuple(sorted(devices.items())),
@@ -168,7 +169,7 @@ def container_stack(_context: NameContext) -> dict[str, tuple[tuple[str, str], .
         # Labeled with what the machine is for where HQ has been told, because
         # Portainer calls its own host "local" and that is nobody's hostname.
         "host": tuple(
-            (host, f"{host} · {described[host]}" if described.get(host) else host)
+            (host, dotted(host, described.get(host)))
             for provider in PROVIDERS[CONTAINER_KIND].connection_providers
             for host, _ in reachable_through(provider)
         ),
@@ -217,7 +218,7 @@ def _known_zones() -> tuple[tuple[str, str], ...]:
         if record.get("zone")
     }
     options = [(zone, zone) for zone in sorted(declared)]
-    options.extend((zone, f"{zone} · not managed") for zone in sorted(seen - declared))
+    options.extend((zone, dotted(zone, "not managed")) for zone in sorted(seen - declared))
     return tuple(options)
 
 

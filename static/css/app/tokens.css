@@ -45,6 +45,9 @@
   --surface-2: light-dark(#fafaf7, #1d1e22);
   --ink: light-dark(#18181b, #ececee);
   --ink-2: light-dark(#2a2a2e, #d6d6da);
+  /* Words set back that a reader still follows, on a source's tinted fill
+     as well as a surface: a day gone by. --muted reads on a surface alone. */
+  --ink-3: light-dark(#5a5a62, #a4a4ad);
   --muted: light-dark(#67676f, #a4a4ad);
   --muted-2: light-dark(#6a6a72, #97979f);
   --line: light-dark(#e6e6e1, #303238);
@@ -56,13 +59,16 @@
   --danger: light-dark(#a8261c, #f08276);
   --warn: light-dark(#9e5700, #e8a64a);
   --ok: light-dark(#1d6b35, #62c585);
-  --attn: light-dark(#b0521a, #ef9258);
+  --attn: light-dark(#a84e18, #ef9258);
 
   /* Code surface. Dark by intent, not by theme: a block of code reads as a
      quoted artifact rather than as more page. On a dark page it sinks below
-     the page instead, for the same reason. */
-  --code-bg: light-dark(#161922, #0b0c0f);
+     the page instead, for the same reason, and far enough to clear the
+     hairline step on --bg, the darkest surface a block lands on. */
+  --code-bg: light-dark(#161922, #040507);
   --code-ink: light-dark(#eaeef2, #e3e7ec);
+  /* What sits beside the code and gives way to it (its Copy button). */
+  --code-muted: light-dark(#aaaeb4, #a0a3a7);
 
   /* The border a control takes when pointed at: one step firmer than
      --line, which is the resting rule. */
@@ -156,8 +162,13 @@
      Named once here, a component asks for a tone and a new variant chooses
      one. `--tone-bg/-ink/-line` are the contract a component reads; the
      `--tone-*-*` sets below are what a variant assigns to it. The neutral
-     values are the fallbacks, so a component with no tone still renders. */
-  --tone-neutral-bg: var(--bg-tint);
+     values are the fallbacks, so a component with no tone still renders.
+
+     The neutral fill is a wash of ink over whatever is behind it, so it
+     stays a step from every surface, a tinted row included: darker in light,
+     lighter in dark. An opaque gray matches a tint of about its own
+     lightness. */
+  --tone-neutral-bg: color-mix(in srgb, var(--ink) 7%, transparent);
   --tone-neutral-ink: var(--ink-2);
   --tone-neutral-line: var(--line);
 
@@ -247,11 +258,11 @@
   --bar-control-bg: var(--surface-2);
   --bar-control-bg-hover: var(--bg-tint);
   --bar-control-line: var(--line);
-  /* The chrome a sticky part sits under. The header is one row a control tall
-     at every width (base.css), padded and ruled; a page's section nav adds
-     its own (page.css). Dense-page navigation and floating table headings
-     both consume the same inset instead of guessing it independently. */
-  --site-header-height: calc(var(--control-size) + 2 * var(--space-5) + 1px);
+  /* The chrome a sticky part sits under, each part only on a page that draws
+     it: the header (base.css) and a page's section nav (page.css). Dense-page
+     navigation and floating table headings both consume the same inset
+     instead of guessing it independently. */
+  --site-header-height: 0px;
   --page-nav-height: 0px;
   --page-nav-link-size: 32px;
   --motion-fast: 150ms;

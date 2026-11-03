@@ -8,6 +8,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.platform.core.audit import stamped
 from hq.platform.core.models import AuditLog
 
 from ..capabilities import capability_registry, execute_capability
@@ -52,7 +53,7 @@ class UnauthenticatedRefusalTests(TestCase):
 
         row = _denials().get()
         self.assertEqual(row.metadata["count"], 5)
-        self.assertEqual(row.actor_label, "unauthenticated · 100.64.0.7")
+        self.assertEqual(row.actor_label, "unauthenticated\xa0· 100.64.0.7")
 
     def test_a_different_source_is_a_different_row(self):
         for source in ("100.64.0.7", "100.64.0.8"):
@@ -61,8 +62,8 @@ class UnauthenticatedRefusalTests(TestCase):
         self.assertEqual(_denials().count(), 2)
 
     def test_the_window_closes(self):
-        record_denial(interface="api", reason="invalid_token", source="100.64.0.7", authenticated=False)
-        _denials().update(created_at=timezone.now() - timedelta(minutes=5))
+        with stamped(lambda *_: {"created_at": timezone.now() - timedelta(minutes=5)}):
+            record_denial(interface="api", reason="invalid_token", source="100.64.0.7", authenticated=False)
 
         record_denial(interface="api", reason="invalid_token", source="100.64.0.7", authenticated=False)
 
@@ -111,7 +112,7 @@ class WhoColumnTests(TestCase):
         cases = (
             (AuditLog(user=user, metadata={"actor": "example-agent"}), "op"),
             (AuditLog(metadata={"actor": "example-agent"}), "example-agent"),
-            (AuditLog(metadata={"source": "100.64.0.7"}), "unauthenticated · 100.64.0.7"),
+            (AuditLog(metadata={"source": "100.64.0.7"}), "unauthenticated\xa0· 100.64.0.7"),
             (AuditLog(metadata={}), "system"),
         )
         for row, expected in cases:

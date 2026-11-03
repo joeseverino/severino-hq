@@ -7,6 +7,7 @@ from hq.platform.application.cadence_chart import (
     CadenceWeek,
 )
 from hq.platform.application.drawings import Dot, Dots, Trend
+from hq.platform.application.labels import dotted
 from hq.platform.application.moments import (
     ago,
     span,
@@ -68,6 +69,7 @@ __all__ = [
     "WeekPlan",
     "ago",
     "counted",
+    "dotted",
     "ended",
     "line_chart",
     "span",

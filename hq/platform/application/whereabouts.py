@@ -5,6 +5,7 @@ from typing import Any
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.platform.application.labels import dotted
 
 from .entity_links import EntityLink, entity_link
 from .infrastructure import declared_machines
@@ -81,7 +82,7 @@ class Origin:
     @property
     def label(self) -> str:
         if self.container:
-            return f"{self.host} · {self.container}"
+            return dotted(self.host, self.container)
         return self.host or self.address
 
     @property
@@ -96,11 +97,11 @@ class Origin:
         if self.parked:
             return "Parked"
         if self.external:
-            named = " · ".join(self.serving)
+            named = dotted(*self.serving)
             # An address names no operator; only a reading can.
             operator = "" if self.operator == host_of(self.address) else self.operator
             if operator and named:
-                return f"{operator} · {named}"
+                return dotted(operator, named)
             return operator or named or self.address
         return self.label
 

@@ -2,10 +2,10 @@
 {% block page %}
 {% comment %}The palette's results: the part this page answers to the header's search.{% endcomment %}
 {% partialdef palette %}{% include "core/_command_center_results.html" %}{% endpartialdef %}
-<form class="filter-bar search-page-form" method="get" role="search" data-table-toolbar>
+<search><form class="filter-bar search-page-form" method="get" data-table-toolbar>
   <input type="search" name="q" value="{{ q }}" placeholder="Find anything" aria-label="Find anything" autofocus>
   <button type="submit">Search</button>
-</form>
+</form></search>
 
 <div data-search-results>
 {% if q %}

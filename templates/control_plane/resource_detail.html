@@ -23,7 +23,7 @@ held request writes nothing and queues nothing by design.
 {% if awaiting_approval %}
   <div class="notice notice-attention">
     <strong>{{ awaiting_approval|length|counted:"change waiting for your approval,changes waiting for your approval" }}</strong>
-    <p>Requested by {% for held in awaiting_approval %}<code>{{ held.requested_actor|breakable }}</code> over {% with mark=forloop.last|then:".|," %}<code>{{ held.requested_interface|breakable:mark }}</code>{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %} Nothing is written or queued yet.</p>
+    <p>Requested by {% for held in awaiting_approval %}<code>{{ held.requested_actor|breakable }}</code> {% with mark=forloop.last|then:".|," %}{{ held.requested_interface|door_words|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %} Nothing is written or queued yet.</p>
     <p><a class="btn compact primary" href="{% url 'core:audit_list' %}?awaiting=1">Review and decide</a></p>
   </div>
 {% endif %}
@@ -273,8 +273,8 @@ certificate, so the relation reads from both ends.
 <details class="control-diagnostics">
   <summary>Raw data</summary>
   <div class="two-col">
-    <section><h2>HQ's settings</h2><pre>{{ spec_json|breakable }}</pre></section>
-    <section><h2>Last reading</h2><pre>{{ diagnostic_status|breakable }}</pre></section>
+    <section><h2>HQ's settings</h2><pre tabindex="0">{{ spec_json|breakable }}</pre></section>
+    <section><h2>Last reading</h2><pre tabindex="0">{{ diagnostic_status|breakable }}</pre></section>
   </div>
 </details>
 
@@ -316,7 +316,7 @@ above it found is not a row.
               <p class="muted">{{ operation.matched|counted:"name serves,names serve" }} this certificate<span title="{{ operation.expected_fingerprint_sha256 }}"> ({{ operation.expected_fingerprint_sha256|slice:":8"|breakable }}…)</span>.</p>
             {% endif %}
             {% if operation.raw_result %}
-              <div class="operation-evidence row-below" data-label="Raw result"><pre>{{ operation.raw_result|breakable }}</pre></div>
+              <div class="operation-evidence row-below" data-label="Raw result"><pre tabindex="0">{{ operation.raw_result|breakable }}</pre></div>
             {% endif %}
           </td>
           <td>{{ operation.by|or_empty }}{% if operation.attempt_count > 1 %}<br><span class="muted">Attempt {{ operation.attempt_count|breakable }}</span>{% endif %}</td>

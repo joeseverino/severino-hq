@@ -1,5 +1,7 @@
 """Readings from the tailnet credential."""
 
+from hq.platform.application.labels import dotted
+
 from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
 
 # The routes that make a device an exit node: everything, in both families.
@@ -14,7 +16,7 @@ def _dns_title(record) -> str:
         parts.append("MagicDNS on")
     if record.get("override_local_dns"):
         parts.append("overrides local DNS")
-    return " · ".join(parts)
+    return dotted(*parts)
 
 
 class TailnetDnsRecord(ObservationRecord):

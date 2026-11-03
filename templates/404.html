@@ -6,10 +6,10 @@
   <h1>That page isn't here</h1>
   <p class="notice-body">The link may be old, or what it pointed to was deleted.</p>
   {% if user.is_authenticated %}
-  <form class="filter-bar notice-search" action="{% url 'search' %}" method="get" role="search">
+  <search><form class="filter-bar notice-search" action="{% url 'search' %}" method="get">
     <input type="search" name="q" placeholder="Find anything" aria-label="Find anything">
     <button type="submit">Search</button>
-  </form>
+  </form></search>
   {% endif %}
   <p class="page-actions">
     <a class="btn primary" href="{% url 'dashboard' %}">Back to the dashboard</a>

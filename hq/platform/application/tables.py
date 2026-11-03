@@ -3,9 +3,10 @@
 import shlex
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from typing import Any, Literal
+from typing import Any, Literal, override
 
 from django.core.exceptions import FieldDoesNotExist
+from django.core.paginator import EmptyPage, Page, Paginator
 from django.db import models
 from django.db.models import Model, Q, QuerySet, Sum
 
@@ -124,6 +125,8 @@ class TableColumn:
     so a column cannot sort one way in its header and another in the menu.
     """
 
+    # Left blank for a column of a row's controls, which shows no heading and
+    # is named "Actions" to a screen reader.
     label: str
     sort: str = ""
     # Left blank, a column of words names its two orders itself ("Status A–Z",
@@ -314,8 +317,6 @@ class TableListMixin:
             toggles.append({"name": toggle.name, "label": toggle.label, "selected": selected})
         query = self.request.GET.get("q", "")
         active_count += int(bool(query.strip()))
-        query_params = self.request.GET.copy()
-        query_params.pop("page", None)
         return {
             "query": query,
             "search_placeholder": self.table_search_placeholder,
@@ -331,7 +332,6 @@ class TableListMixin:
             "room": self.table_room,
             "selectable": self.table_selectable,
             "active_count": active_count,
-            "querystring": query_params.urlencode(),
             "empty": self.get_table_empty(),
             "empty_why": self.table_empty_why,
             "empty_remedy": self.table_empty_remedy,
@@ -367,3 +367,55 @@ class TableListMixin:
         # slices it, which is exactly the set a total should describe.
         context["table_totals"] = self.table_totals_for(self.object_list)
         return context
+
+
+class UncountedPage(Page):
+    """A page that knows whether another follows without knowing how many."""
+
+    def __init__(self, object_list: list[Any], number: int, paginator: UncountedPaginator, *, more: bool):
+        super().__init__(object_list, number, paginator)
+        self.more = more
+
+    @override
+    def has_next(self) -> bool:
+        return self.more
+
+    @override
+    def next_page_number(self) -> int:
+        return self.number + 1
+
+    @override
+    def previous_page_number(self) -> int:
+        return max(1, self.number - 1)
+
+    @override
+    def start_index(self) -> int:
+        return (self.paginator.per_page * (self.number - 1)) + 1 if self.object_list else 0
+
+    @override
+    def end_index(self) -> int:
+        return (self.paginator.per_page * (self.number - 1)) + len(self.object_list)
+
+
+class UncountedPaginator(Paginator):
+    """Pages through a list too long to count on every load.
+
+    A page reads one row past its end to learn whether another follows, so the
+    pages say "Page 3", never "of 1,262", and no load counts the whole set.
+    """
+
+    # The pages partial leaves out the total where there is none.
+    counted = False
+
+    @override
+    def validate_number(self, number: Any) -> int:
+        return self._validate_number(number, float("inf"))
+
+    @override
+    def page(self, number: Any) -> UncountedPage:
+        number = self.validate_number(number)
+        bottom = (number - 1) * self.per_page
+        rows = list(self.object_list[bottom : bottom + self.per_page + 1])
+        if not rows and number > 1:
+            raise EmptyPage(self.error_messages["no_results"])
+        return UncountedPage(rows[: self.per_page], number, self, more=len(rows) > self.per_page)

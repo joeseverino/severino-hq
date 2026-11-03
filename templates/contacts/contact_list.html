@@ -6,12 +6,12 @@
 {% if problem %}<div class="msg msg-warning">{{ problem|breakable }}{% if observed_at %} Showing the read from {{ observed_at|when }}.{% endif %}</div>{% endif %}
 {% if waiting_note %}<div class="msg msg-info">{{ waiting_note|breakable }}</div>{% endif %}
 <div class="status-tabs">
-  <a class="status-tab {% if not selected_status %}is-current{% endif %}"
+  <a class="status-tab"{% if not selected_status %} aria-current="page"{% endif %}
      href="{% url 'contacts:list' %}{% if q %}?q={{ q|urlencode }}{% endif %}">
     All <span class="count">{{ total_count|breakable }}</span>
   </a>
   {% for tab in status_tabs %}
-    <a class="status-tab {% if tab.value == selected_status %}is-current{% endif %}"
+    <a class="status-tab"{% if tab.value == selected_status %} aria-current="page"{% endif %}
        href="?status={{ tab.value }}{% if q %}&q={{ q|urlencode }}{% endif %}">
       {{ tab.label|breakable }} <span class="count">{{ tab.count|breakable }}</span>
     </a>

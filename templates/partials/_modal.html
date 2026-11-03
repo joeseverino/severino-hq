@@ -10,6 +10,12 @@ still works when the dialog does not open:
   {% include "partials/_modal.html" with id="import" title="Import records"
      lede="Known files are skipped." body_template="app/_import_form.html" %}
 
+The opener stays a link, so a middle click or a new tab opens the full page,
+and app.js turns a plain press into `showModal()`; a `command` invoker would
+make it a button. The close button is the platform's own `command="close"`
+invoker, which needs no script. Opening fires the dialog's `toggle` event,
+where fragment.js fetches what the dialog holds back.
+
 `body_template` is rendered with the surrounding context. Escape and the
 backdrop close the dialog; both are handled by the host, not by the caller.
 {% endcomment %}
@@ -21,7 +27,7 @@ backdrop close the dialog; both are handled by the host, not by the caller.
   <div class="modal-panel" tabindex="-1" autofocus>
     <div class="modal-head">
       <h2 id="modal-{{ id }}-title">{{ title|breakable }}</h2>
-      <button class="modal-close" type="button" data-modal-close aria-label="Close">&times;</button>
+      <button class="modal-close" type="button" command="close" commandfor="modal-{{ id }}" aria-label="Close">&times;</button>
     </div>
     {% if lede %}<p class="modal-lede">{{ lede|breakable }}</p>{% endif %}
     {% if body_template %}{% include body_template %}{% endif %}

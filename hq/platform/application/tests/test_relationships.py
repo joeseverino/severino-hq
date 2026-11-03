@@ -522,7 +522,7 @@ class NoRawKindsTests(TestCase):
         declaration = self.client.get(reverse("control_plane:detail", args=["example-host-0-tailnet"]))
 
         for response in (page, declaration):
-            shown = re.sub(r"<pre>.*?</pre>", "", response.content.decode(), flags=re.DOTALL)
+            shown = re.sub(r"<pre\b[^>]*>.*?</pre>", "", response.content.decode(), flags=re.DOTALL)
             self.assertNotIn(TAILNET_KIND, shown)
             self.assertNotIn("cloudflare.dns_record", shown)
         self.assertContains(declaration, kind_label(TAILNET_KIND))

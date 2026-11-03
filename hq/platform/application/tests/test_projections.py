@@ -114,7 +114,7 @@ class UiProjectionTests(TestCase):
         self.assertIn("View chart data", rendered)
         # The tooltip names its period as well as its series: hovering a bar
         # without being told which week it is answers half a question.
-        self.assertIn("Aug 10 · Run: 45 minutes", [mark.attrs["data-tip"] for mark in select(rendered, "data-tip")])
+        self.assertIn("Aug 10\xa0· Run: 45 minutes", [mark.attrs["data-tip"] for mark in select(rendered, "data-tip")])
         # No SVG <title>: that is the browser's own tooltip, which waits a
         # second or two and would double up with the host's.
         self.assertEqual(elements(rendered, "title"), [])
@@ -322,7 +322,7 @@ class LineChartTests(TestCase):
         chart = line_chart("Resting", "", self.SERIES, unit="bpm")
         rendered = render_to_string("partials/_line_chart.html", {"chart": chart})
         self.assertIn(
-            "Jan 1, 2026 · Resting heart rate: 52 bpm",
+            "Jan 1, 2026\xa0· Resting heart rate: 52 bpm",
             [mark.attrs["data-tip"] for mark in select(rendered, "data-tip")],
         )
         self.assertEqual(select(rendered, "title"), [])

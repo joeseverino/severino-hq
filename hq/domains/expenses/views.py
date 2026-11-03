@@ -14,6 +14,7 @@ from hq.platform.application import related
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import document_link
 from hq.platform.application.expenses import costs_by_category
+from hq.platform.application.labels import dotted
 from hq.platform.application.moments import when_day
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.projection import years_of
@@ -79,7 +80,7 @@ class ExpenseListView(PageMixin, TableListMixin, ListView):
         return ctx
 
 
-EXPENSES_TRAIL = ("Expenses", reverse_lazy("expenses:list"))
+EXPENSES_TRAIL = (("Expenses", reverse_lazy("expenses:list")),)
 
 
 class ExpensePage(PageMixin):
@@ -125,7 +126,7 @@ class ExpenseDetailView(PageMixin, DetailView):
 
     @override
     def get_page_lede(self):
-        return f"{when_day(self.object.date)} · {self.object.get_category_display()}"
+        return dotted(when_day(self.object.date), self.object.get_category_display())
 
     @override
     def get_page_actions(self):

@@ -24,6 +24,7 @@ from hq.domains.content.models import ContentItem
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.application.labels import dotted
 from hq.platform.application.money import money
 from hq.platform.application.ui import MISSING
 
@@ -352,14 +353,20 @@ def _totals_section(totals) -> list[str]:
         "## Totals",
         "",
         (
-            f"- Expenses: {totals['expenses_count']} records · "
-            f"{money(totals['expenses_total'])} total, "
-            f"{money(totals['expenses_deductible_total'])} estimated deductible"
+            "- "
+            + dotted(
+                f"Expenses: {totals['expenses_count']} records",
+                f"{money(totals['expenses_total'])} total, "
+                f"{money(totals['expenses_deductible_total'])} estimated deductible",
+            )
         ),
         (
-            f"- Assets purchased this year: {totals['assets_count']} · "
-            f"{money(totals['assets_total'])} total, "
-            f"{money(totals['assets_deductible_total'])} estimated deductible"
+            "- "
+            + dotted(
+                f"Assets purchased this year: {totals['assets_count']}",
+                f"{money(totals['assets_total'])} total, "
+                f"{money(totals['assets_deductible_total'])} estimated deductible",
+            )
         ),
         "",
     ]
@@ -371,14 +378,15 @@ def _category_line(row) -> str:
 
 def _expense_line(row) -> str:
     return (
-        f"- {row['date'] or MISSING} · {row['vendor']} · {row['item']} "
-        f"(`{row['category']}`) **{money(row['total_cost'])}**"
+        "- "
+        + dotted(row["date"] or MISSING, row["vendor"], row["item"])
+        + f" (`{row['category']}`) **{money(row['total_cost'])}**"
     )
 
 
 def _project_line(p) -> str:
     techs = ", ".join(p["technologies"]) if p["technologies"] else MISSING
-    return f"- **{p['name']}** (`{p['slug']}`, {p['category']}, {p['status']}) · {techs}"
+    return "- " + dotted(f"**{p['name']}** (`{p['slug']}`, {p['category']}, {p['status']})", techs)
 
 
 def _content_line(c) -> str:
@@ -389,7 +397,7 @@ def _content_line(c) -> str:
         bits.append("projects=" + ",".join(c["related_projects"]))
     if c["related_documentation"]:
         bits.append("docs=" + ",".join(c["related_documentation"]))
-    return f"- **{c['title']}** (`{c['slug']}`) · {' · '.join(bits)}"
+    return "- " + dotted(f"**{c['title']}** (`{c['slug']}`)", *bits)
 
 
 def _documentation_line(d) -> str:
@@ -405,15 +413,15 @@ def _documentation_line(d) -> str:
         bits.append(f"github=`{d['github_path']}`")
     if d["last_reviewed"]:
         bits.append(f"reviewed {d['last_reviewed']}")
-    return f"- **{d['doc_id']}** · {d['title']} · {' · '.join(bits)}"
+    return "- " + dotted(f"**{d['doc_id']}**", d["title"], *bits)
 
 
 def _asset_line(a) -> str:
-    return (
-        f"- **{a['item_name']}** (`{a['slug']}`, {a['category']}, "
-        f"{a['status']}) · {money(a['total_cost'])} on {a['purchase_date'] or MISSING} "
+    return "- " + dotted(
+        f"**{a['item_name']}** (`{a['slug']}`, {a['category']}, {a['status']})",
+        f"{money(a['total_cost'])} on {a['purchase_date'] or MISSING} "
         f"({a['business_use_percentage']}% business, "
-        f"{money(a['estimated_deductible_amount'])} deductible)"
+        f"{money(a['estimated_deductible_amount'])} deductible)",
     )
 
 

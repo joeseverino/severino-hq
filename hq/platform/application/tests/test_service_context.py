@@ -188,7 +188,7 @@ class TrafficSectionTests(TestCase):
     def test_a_measured_host_gets_its_traffic_without_a_foreign_key(self):
         self._measure("probe.example.com")
         found = self.traffic()
-        self.assertEqual((found.value, found.detail), ("120 pageviews", "90 visits · counted"))
+        self.assertEqual((found.value, found.detail), ("120 pageviews", "90 visits\xa0· counted"))
 
     def test_a_host_nothing_measures_says_nothing(self):
         # Not "0 pageviews": that would read as a dead site rather than an
@@ -197,7 +197,7 @@ class TrafficSectionTests(TestCase):
 
     def test_sampling_is_carried_rather_than_presented_as_a_count(self):
         self._measure("probe.example.com", sample_interval=10)
-        self.assertEqual(self.traffic().detail, "90 visits · sampled 1 in 10")
+        self.assertEqual(self.traffic().detail, "90 visits\xa0· sampled 1 in 10")
 
     def test_another_hosts_traffic_is_not_borrowed(self):
         self._measure("someone-else.example.com", pageviews=9999)

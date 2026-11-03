@@ -6,8 +6,8 @@ from django.utils.safestring import mark_safe
 
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.printable import Unprintable
-from hq.platform.application.tests.markup import with_class
-from hq.platform.core.templatetags.value_tags import breakable, cell_line, entity, or_empty, readout
+from hq.platform.application.tests.markup import all_elements, links, text, texts, with_class
+from hq.platform.core.templatetags.value_tags import breakable, cell_line, code_spans, entity, or_empty, readout
 
 
 def pieces(html):
@@ -35,6 +35,13 @@ def held(html):
 
 
 class BreakableTests(SimpleTestCase):
+    def test_a_dotted_line_draws_its_dot_for_the_eye_alone(self):
+        # As labels.dotted joins it.
+        html = f'<a href="/x/">{breakable("Example Host\xa0· Hosting")}</a>'
+
+        self.assertEqual(links(html), [("Example Host Hosting", "/x/")])
+        self.assertEqual(text(html), "Example Host · Hosting")
+
     def test_an_address_is_whole_and_wraps_after_its_colon(self):
         self.assertEqual(pieces(breakable("10.0.0.10:8000")), ["10.0.0.10:", "8000"])
 
@@ -122,6 +129,15 @@ class BreakableTests(SimpleTestCase):
         self.assertEqual(boxed(breakable("restart example-web now")), ["example-web"])
         self.assertEqual(boxed(breakable("example-web")), [])
 
+    def test_a_range_of_figures_in_a_phrase_is_held_on_one_line(self):
+        """A range reads as one figure: no seam inside it, and a part of its
+        own, which moves whole and breaks at its dash only when longer than
+        its line."""
+
+        printed = str(breakable("10.5–12.5 mi"))
+        self.assertNotIn('class="token"', printed)
+        self.assertEqual(wholes(printed), ["10.5–12.5"])
+
     def test_it_is_marked_a_token_and_nothing_is_one(self):
         self.assertIn('class="token"', breakable("example.com"))
         self.assertEqual(breakable(""), "")
@@ -180,12 +196,11 @@ class BreakableTests(SimpleTestCase):
 
     def test_a_cell_line_holds_each_name_in_it(self):
         """Each hyphenated name in the line is a part kept whole; the words
-        between them stay text, and the title is the line unmarked."""
+        between them stay text."""
 
         line = "example-docker-host · example-web-frontend"
         html = str(cell_line(line, "/containers/x/"))
         self.assertEqual(wholes(html), line.split(" · "))
-        self.assertIn(f'title="{line}"', html)
         self.assertIn('href="/containers/x/"', html)
         self.assertNotIn("<a", str(cell_line(line)))
 
@@ -193,6 +208,34 @@ class BreakableTests(SimpleTestCase):
         self.assertEqual(pieces(readout("app.example.com:443")), ["<code>app.", "example.com:", "443</code>"])
         self.assertEqual(readout("11"), "11")
         self.assertEqual(wholes(readout("restart example-web now")), ["example-web"])
+
+
+class CodeSpanTests(SimpleTestCase):
+    """A description's Markdown code spans read as code; nothing else in it is markup."""
+
+    def test_each_span_is_code_and_the_prose_around_it_reads_as_written(self):
+        html = code_spans("Read `hq://hq` first, then `get_resource` for one record.")
+
+        self.assertEqual(texts(html, "code"), ["hq://hq", "get_resource"])
+        self.assertEqual(text(html), "Read hq://hq first, then get_resource for one record.")
+
+    def test_markup_inside_and_outside_a_span_is_text(self):
+        html = code_spans('<b>bold</b> and `<script>alert("x")</script>` <img src=x onerror=y>')
+
+        self.assertEqual({element.tag for element in all_elements(html)} - {"span"}, {"code"})
+        self.assertEqual(texts(html, "code"), ['<script>alert("x")</script>'])
+        self.assertEqual(text(html), '<b>bold</b> and <script>alert("x")</script> <img src=x onerror=y>')
+
+    def test_a_backtick_without_its_pair_stays_a_backtick(self):
+        for written in ("An unclosed `name", "`a` and one more `", "``"):
+            with self.subTest(written):
+                html = code_spans(written)
+                self.assertEqual(text(html).count("`"), written.count("`") - 2 * len(texts(html, "code")))
+
+        self.assertEqual(texts(code_spans("An unclosed `name"), "code"), [])
+
+    def test_prose_without_a_span_is_drawn_as_breakable_draws_it(self):
+        self.assertEqual(text(code_spans("Lists every host.")), text(breakable("Lists every host.")))
 
 
 class LeadActionTests(SimpleTestCase):

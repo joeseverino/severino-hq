@@ -56,18 +56,18 @@
   <h2>Groups and tags</h2>
   {% table_region "Groups and tags" room="snug" %}
     <table class="data-table">
-      <thead><tr>{% table_heading "Name" "identifier" local_sort=tailnet.group_rows|sortable %}{% table_heading "Members" "identifier" local_sort=tailnet.group_rows|sortable %}{% table_heading "Devices" drop=1 local_sort=tailnet.group_rows|sortable %}</tr></thead>
+      <thead><tr>{% table_heading "Name" "identifier" gutter=True local_sort=tailnet.group_rows|sortable %}{% table_heading "Members" "identifier" local_sort=tailnet.group_rows|sortable %}{% table_heading "Devices" drop=1 local_sort=tailnet.group_rows|sortable %}</tr></thead>
       <tbody>
         {% for group in tailnet.policy.groups %}
           <tr>
-            <td><code>{{ group.name|breakable }}</code></td>
+            <td class="row-gutter"><code>{{ group.name|breakable }}</code>{% row_toggle %}</td>
             <td>{{ group.members|join:", "|breakable }}</td>
             <td></td>
           </tr>
         {% endfor %}
         {% for row in tailnet.tags %}
           <tr>
-            <td><code>{{ row.tag.name|breakable }}</code></td>
+            <td class="row-gutter"><code>{{ row.tag.name|breakable }}</code>{% row_toggle %}</td>
             <td><span class="muted">owned by</span> {{ row.tag.owners|join:", "|breakable }}</td>
             <td>{% for link in row.devices %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% empty %}{% if row.unworn %}<span class="muted">no device has this tag</span>{% else %}{% empty_value %}{% endif %}{% endfor %}</td>
           </tr>
@@ -134,11 +134,11 @@
     <h2>App connectors</h2>
     {% table_region "App connectors" %}
       <table class="data-table">
-        <thead><tr>{% table_heading "Name" "identifier" local_sort=tailnet.policy.app_connectors|sortable %}{% table_heading "Routed by" "identifier" local_sort=tailnet.policy.app_connectors|sortable %}{% table_heading "For" "identifier" local_sort=tailnet.policy.app_connectors|sortable %}</tr></thead>
+        <thead><tr>{% table_heading "Name" "identifier" gutter=True local_sort=tailnet.policy.app_connectors|sortable %}{% table_heading "Routed by" "identifier" local_sort=tailnet.policy.app_connectors|sortable %}{% table_heading "For" "identifier" local_sort=tailnet.policy.app_connectors|sortable %}</tr></thead>
         <tbody>
           {% for connector in tailnet.policy.app_connectors %}
             <tr>
-              <td><code>{{ connector.name|breakable }}</code></td>
+              <td class="row-gutter"><code>{{ connector.name|breakable }}</code>{% row_toggle %}</td>
               <td>{% for node in connector.connectors %}<code>{{ node|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
               <td>{% for domain in connector.domains %}{% entity "service"|entity_of:domain code=True %}{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
             </tr>

@@ -145,7 +145,7 @@ class PanelTests(TestCase):
         found = self.relationships("example-host")
 
         relation = OBSERVATIONS[DNS].relation
-        self.assertEqual(found.labels(relation), ("100.64.0.1, 192.0.2.53 · MagicDNS on",))
+        self.assertEqual(found.labels(relation), ("100.64.0.1, 192.0.2.53\xa0· MagicDNS on",))
         (item,) = found.group(relation).items
         self.assertEqual(item.source.label, TAILNET_REF)
         self.assertIsNotNone(item.observed_at)

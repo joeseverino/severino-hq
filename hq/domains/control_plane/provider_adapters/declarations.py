@@ -12,6 +12,7 @@ lazy from datetime import date
 from django.urls.converters import StringConverter
 from pydantic import Field, field_validator, model_validator
 
+from hq.platform.application.labels import dotted
 from hq.platform.application.ui import ended
 lazy from hq.platform.application.expiry import days_until
 lazy from hq.platform.application.timestamps import moment
@@ -302,11 +303,11 @@ def _authority_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tu
         days = days_until(when) if when is not None else None
         if days is not None:
             remaining = (
-                f"{expires} · {days // 365} years away"
+                dotted(expires, f"{days // 365} years away")
                 if days > 730
-                else f"{expires} · {days} days away"
+                else dotted(expires, f"{days} days away")
                 if days > 0
-                else f"{expires} · expired"
+                else dotted(expires, "expired")
             )
     return (
         ("Issues", "", str(spec.get("covers", ""))),

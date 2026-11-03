@@ -167,7 +167,7 @@ textarea.code {
    it is narrow is asked of the panel, not the screen. */
 .conn { display: grid; gap: var(--stack-gap); container: conn / inline-size; }
 .conn-pending { padding: var(--space-10) 0; }
-.conn h3 { font-size: var(--text-sm); margin: 0 0 var(--space-4); }
+.conn h2 { font-size: var(--text-sm); margin: 0 0 var(--space-4); }
 .conn-note { color: var(--muted); font-size: var(--text-xs); margin: calc(var(--space-2) * -1) 0 var(--space-5); }
 .conn-note-after { margin: var(--space-3) 0 0; }
 
@@ -212,7 +212,7 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
 }
 /* The heading as every card here has it, its count on the same line. */
 .conn-path-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); }
-.conn-path-head h3 { margin: 0; }
+.conn-path-head h2 { margin: 0; }
 .conn-path-head span { color: var(--muted); font-size: var(--text-2xs); text-align: right; }
 /* The route beside the evidence behind it, so neither leaves half a row empty. */
 .conn-aside { display: grid; gap: var(--stack-gap); }
@@ -262,7 +262,6 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
 .conn-row-note { color: var(--muted); font-size: var(--text-xs); }
 .conn-row > .conn-row-note { grid-column: 3; }
 .conn-row > :only-child, .conn-rows > :not(.conn-row) { grid-column: 1 / -1; }
-.conn-row-ignored { opacity: .6; }
 .conn-current code { font-weight: 650; }
 .conn-kind {
   font-size: var(--text-3xs); letter-spacing: .04em; padding: var(--space-1) var(--space-4); border-radius: 20px;

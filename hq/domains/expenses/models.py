@@ -8,6 +8,7 @@ lazy from django.urls import reverse
 
 from hq.domains.assets.models import PAYMENT_METHOD_CHOICES
 from hq.platform.application import business_use
+from hq.platform.application.labels import dotted
 from hq.platform.application.references import Referable, ReferenceField
 from hq.platform.core.models import TimestampedModel
 lazy from hq.platform.application.moments import when_day
@@ -119,13 +120,13 @@ class Expense(TimestampedModel):
         """What the expense is called wherever it is named: who was paid, and
         for what. When is its note (``paid_note``), never part of its name."""
 
-        return f"{self.vendor} · {self.item}"
+        return dotted(self.vendor, self.item)
 
     @property
     def paid_note(self) -> str:
         """When and how much, beside its name where something else lists it."""
 
-        return f"{when_day(self.date)} · {money(self.total_cost)}"
+        return dotted(when_day(self.date), money(self.total_cost))
 
     def get_absolute_url(self):
         return reverse("expenses:detail", args=[self.pk])

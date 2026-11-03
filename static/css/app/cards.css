@@ -30,8 +30,9 @@
   border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
 }
 .status-tab:hover { background: var(--surface-2); text-decoration: none; }
-.status-tab.is-current { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.status-tab .count { font-size: var(--text-2xs); opacity: .75; font-variant-numeric: tabular-nums; }
+.status-tab[aria-current] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.status-tab .count { color: var(--muted); font-size: var(--text-2xs); font-variant-numeric: tabular-nums; }
+.status-tab[aria-current] .count { color: inherit; }
 .row-unread td { background: var(--accent-tint); }
 .row-unread .msg-preview a, .row-unread td:first-child a { font-weight: 650; }
 .row-actions form { display: inline-block; margin: 0; }

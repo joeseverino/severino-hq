@@ -14,6 +14,7 @@ from typing import Any
 
 from django.utils import timezone
 
+from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 
 from .calendar import CalendarEvent, CalendarSource
@@ -120,8 +121,9 @@ def _registration_event(expiry: Expiry) -> CalendarEvent:
         title=f"Renew {expiry.subject}",
         starts=ends - timedelta(days=REGISTRATION_NOTICE_DAYS),
         ends=ends + timedelta(days=1),
-        detail=f"Registration expires {expiry.phrase}"
-        + ("" if expiry.auto_renew is False else " · auto-renew not known"),
+        detail=dotted(
+            f"Registration expires {expiry.phrase}", "" if expiry.auto_renew is False else "auto-renew not known"
+        ),
         url=expiry.url,
     )
 

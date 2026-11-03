@@ -5,6 +5,9 @@
   <link rel="stylesheet" href="{% static 'css/api-reference.css' %}">
 {% endblock %}
 {% block content %}
+{% comment %}The page's own title, out of sight: the viewer heads what it draws with the
+document's title, and the page is still named before it mounts or where it fails.{% endcomment %}
+<h1 class="visually-hidden">API reference</h1>
 <div class="api-reference-status" role="status">
   <p class="api-reference-loading">Loading the reference.</p>
   <p class="api-reference-failed">The reference did not load. The document itself is at <a href="{{ document_url }}">{{ document_url|breakable:"." }}</a></p>

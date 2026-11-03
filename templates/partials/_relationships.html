@@ -47,8 +47,9 @@
       <summary>Raw readings</summary>
       {% for label, source, text in relationships.readouts %}
         <details class="section-readout">
-          <summary>{{ label|breakable }}{% if source %} through {% entity source %}{% endif %}</summary>
-          <pre>{{ text|breakable }}</pre>
+          <summary>{{ label|breakable }}</summary>
+          {% if source %}<p class="muted">Through {% entity source %}</p>{% endif %}
+          <pre tabindex="0">{{ text|breakable }}</pre>
         </details>
       {% endfor %}
     </details>

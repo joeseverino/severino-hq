@@ -89,7 +89,7 @@ COLUMNS = (
     copy.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
     // Let go of what an open row holds (tables.js), so the copy is sized by
     // its content.
-    copy.querySelectorAll(':scope > thead > tr > th').forEach((heading) => heading.style.removeProperty('width'));
+    copy.querySelector(':scope > colgroup[data-held]')?.remove();
     delete copy.dataset.rowsHeld;
     const style = {
       position: 'absolute', 'inset-inline-start': '-100000px', 'inset-block-start': '0', visibility: 'hidden',

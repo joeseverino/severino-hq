@@ -21,7 +21,7 @@
   .kv, .form,
   .auth-card, .mail-stage, .mail-editor,
   .topology-workspace, .github-list, .account-facts,
-  .boxed-facts, .policy-agents > li, .relation-list,
+  .boxed-facts, .relation-list,
   .posture-gaps, .posture-repos, .machine-telemetry, .machine-telemetry-metrics, .route,
   .dashboard-counts, .dash-links) {
     border: var(--surface-border, 1px solid var(--line));
@@ -201,22 +201,29 @@
   :is(.row-expand, .row-fold) > .icon { width: 7px; height: 11px; transition: transform .12s ease; }
   :is(.row-expand, .row-fold)[aria-expanded="true"] > .icon { transform: rotate(90deg); }
   @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold) > .icon { transition: none; } }
-  /* Every clamp in the row lifted at once; the rules it lifts are each specific to a column, so this one outranks them on purpose. */
-  .data-table tr.is-expanded :is(td, th),
-  .data-table tr.is-expanded :is(td, th) *:not(.visually-hidden, .visually-hidden *) {
+  /* Every clamp in the row, and in the line beneath it, lifted at once; the rules it lifts are each specific to a column, so this one outranks them on purpose. A panel a cell shows (a popover, drawn over the page) is no part of the column, so what it says is never cut either, open row or not. */
+  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th),
+  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) *:not(.visually-hidden, .visually-hidden *),
+  .data-table :is(td, th) [popover] *:not(.visually-hidden, .visually-hidden *) {
     white-space: normal !important;
     overflow: visible !important;
     text-overflow: clip !important;
     -webkit-line-clamp: unset !important;
     line-clamp: none !important;
     max-height: none !important;
+  }
+  /* The row's own caps go with them; the line beneath and a panel keep what holds a value to their line. */
+  .data-table tr.is-expanded :is(td, th),
+  .data-table tr.is-expanded :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover] *) {
     max-width: none !important;
   }
   /* An uncut value breaks inside its held column (tables.js) rather than under the next: `anywhere` breaks count toward min-content, so a box sized to its content (a part, a code chip) does not hold out for its longest word, wider than the column. */
-  .data-table tr.is-expanded :is(td, th),
-  .data-table tr.is-expanded :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *) {
+  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th),
+  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *) {
     overflow-wrap: anywhere !important;
   }
+  /* A panel is as wide as it is drawn, so what it holds is held to its line and wraps there. */
+  .data-table :is(td, th) [popover] *:not(.visually-hidden, .visually-hidden *) { max-width: 100% !important; }
 
   /* A band too narrow for two cells is a list, like every other summary:
      each fact one row, its label and its value at the right edge, the detail

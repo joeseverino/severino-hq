@@ -20,8 +20,10 @@
 //                             and only those that changed
 //   data-fragment-links       links and forms inside the region that lead to
 //                             the region's own page are answered in place
-//   data-fragment-history     "replace" or "push": what an in-place answer
-//                             does to the address bar
+//   data-fragment-history     "replace": an in-place answer replaces the
+//                             address. Nothing restores a region's entry
+//                             on Back, so one given another value is not
+//                             answered in place
 //   data-fragment-failure     what a region says when it cannot be had
 //   data-fragment-fallback    the page that answers the same thing, offered
 //                             beside that line
@@ -40,12 +42,30 @@
 // the way to get it. A background one must not: the provider returns to the
 // address that triggered the renewal, so a renewing background fetch would
 // land the operator on the JSON that fetch wanted.
+// A write form's retry key (`{% write_token %}`) names one sending of it, so a
+// resend acts once. Once HQ has answered, the form a post came from, if it is
+// still on the page, takes a new key and asks afresh next time. An answer
+// that never arrived, or a failure of the server's own, keeps the key, so
+// sending again cannot act twice.
+const RETRY_KEY = "__retry_key";
+const spendKey = (body, response) => {
+  if (!(body instanceof FormData) || response.status >= 500) return;
+  const sent = body.get(RETRY_KEY);
+  if (!sent) return;
+  const bytes = window.crypto.getRandomValues(new Uint8Array(24));
+  const fresh = `web:${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  document.querySelectorAll(`input[name="${RETRY_KEY}"]`).forEach((field) => {
+    if (field.value === sent) field.value = fresh;
+  });
+};
+
 const hqFetch = async (input, options = {}) => {
   const { renewSession = true, ...rest } = options;
   const headers = new Headers(rest.headers);
   headers.set("X-Requested-With", "XMLHttpRequest");
   // eslint-disable-next-line no-restricted-properties -- HQ's one request, which every enhanced request crosses
   const response = await window.fetch(input, { ...rest, headers });
+  spendKey(rest.body, response);
   const refreshUrl =
     response.status === 403 ? response.headers.get("refresh_url") : "";
   if (refreshUrl && renewSession) {
@@ -221,7 +241,8 @@ const hqFragment = (() => {
   const keyOfDisclosure = (details) => details.id || details.dataset.fragmentPart || "";
 
   // What the reader did to a region outlives its replacement: the disclosures
-  // they opened, how far they scrolled inside it, and where the keyboard was.
+  // and popovers they opened, how far they scrolled inside it, and where the
+  // keyboard was.
   const within = (root, selector) => [
     ...(root.matches?.(selector) ? [root] : []),
     ...root.querySelectorAll(selector),
@@ -298,8 +319,21 @@ const hqFragment = (() => {
     return true;
   };
 
-  // Puts `nodes` where `was` stands and says what is there now.
+  // A popover is shown only while it is on the page, so one the reader had
+  // open is shown again once the element that replaces it, found by its id,
+  // is placed: a filter's panel stays open across the answer to its own box.
   const place = (was, nodes) => {
+    const raised = within(was, "[popover][id]:popover-open").map((popover) => popover.id);
+    const placed = put(was, nodes);
+    raised.forEach((id) => {
+      const popover = document.getElementById(id);
+      if (popover?.popover && !popover.matches(":popover-open")) popover.showPopover();
+    });
+    return placed;
+  };
+
+  // Puts `nodes` where `was` stands and says what is there now.
+  const put = (was, nodes) => {
     const elements = nodes.filter((node) => node.nodeType === Node.ELEMENT_NODE);
     elements.forEach((element) => carry(was, element));
     if (elements.length === 1 && byParts(was, elements[0])) return [was];
@@ -359,7 +393,7 @@ const hqFragment = (() => {
   //                      the answer no longer has is removed
   //   busy               the element marked busy; the regions by default
   //   before(page)       sees the answer before anything is placed
-  //   history, title     "push" or "replace" the address; take the answer's title
+  //   history, title     "replace" the address; take the answer's title
   //
   // Resolves true when the answer was placed, false when it was unchanged.
   // Rejects when it could not be had, with nothing on the page touched.
@@ -418,7 +452,6 @@ const hqFragment = (() => {
       if (validator && roots.length === 1) shown.set(roots[0], { url: String(url), validator });
       if (options.title && page.title) document.title = page.title;
       const landed = response.redirected ? response.url : url;
-      if (options.history === "push") window.history.pushState({}, "", landed);
       if (options.history === "replace") window.history.replaceState({}, "", landed);
       refocus(memo, roots);
       if (window.scrollX !== at[0] || window.scrollY !== at[1]) window.scrollTo(at[0], at[1]);
@@ -492,15 +525,17 @@ const hqFragment = (() => {
     });
   };
 
+  // A disclosure or a dialog that opens reads what it held back: both fire
+  // `toggle`, which does not bubble.
   document.addEventListener(
     "toggle",
     (event) => {
-      if (event.target instanceof HTMLDetailsElement && event.target.open) reveal(event.target);
+      if (event.target.open) reveal(event.target);
     },
     true,
   );
 
-  const regionFor = (control) => {
+  const declaredRegion = (control) => {
     if (control.dataset.fragmentTarget) return document.getElementById(control.dataset.fragmentTarget);
     if (control.dataset.fragmentTarget === "") return control.closest("[data-fragment]");
     const region = control.closest("[data-fragment-links]");
@@ -510,7 +545,18 @@ const hqFragment = (() => {
     if (!region || new URL(address, window.location.href).pathname !== window.location.pathname) return null;
     return region;
   };
+  // A region whose history is anything but "replace" is asked the ordinary
+  // way, since Back would show its entry's address over another answer.
+  const regionFor = (control) => {
+    const region = declaredRegion(control);
+    const history = region?.dataset.fragmentHistory;
+    return history === undefined || history === "replace" ? region : null;
+  };
 
+  // A region's answer replaces its history entry, which a navigate listener
+  // can do for a link only from a precommit handler, not in Safari yet; until
+  // then links and forms are taken here, where tables.js takes a list's in
+  // its navigate listener.
   document.addEventListener("click", (event) => {
     if (event.defaultPrevented || event.button !== 0) return;
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -533,8 +579,7 @@ const hqFragment = (() => {
     // Busy, not disabled: a disabled button drops the focus it holds. A
     // second press while the first is out is ignored.
     if (form.getAttribute("aria-busy") === "true") return;
-    const body = new FormData(form);
-    if (submitter?.name) body.set(submitter.name, submitter.value);
+    const body = new FormData(form, submitter);
     const posting = form.method === "post";
     const url = posting ? form.action : `${form.action.split("?")[0]}?${new URLSearchParams(body)}`;
     const status = form.querySelector("[data-fragment-status]") || region.querySelector("[data-fragment-status]");
@@ -597,6 +642,6 @@ const hqFragment = (() => {
   watch(document.documentElement);
   document.querySelectorAll("form[data-fragment-auto]").forEach(auto);
 
-  return { swap, reveal, fail };
+  return { swap, fail };
 })();
 window.hqFragment = hqFragment;

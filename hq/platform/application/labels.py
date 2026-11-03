@@ -1,5 +1,8 @@
 """Human labels for stable machine names: capabilities, providers, kinds."""
 
+lazy from django.utils.html import conditional_escape
+lazy from django.utils.safestring import SafeString, mark_safe
+
 _ACRONYMS = frozenset({"acl", "api", "dns", "hq", "id", "mcp", "npm", "nws", "ssh", "tls", "url", "vin", "vm"})
 
 
@@ -13,14 +16,11 @@ def human_label(name: str) -> str:
 def field_label(name: str, title: str | None = None) -> str:
     """A field as a person names it: its declared title, else its name as a
     sentence (``confirm_prune`` → "Confirm prune", ``dns_name`` → "DNS name").
+    The one labeler of a field, wherever its name is shown."""
 
-    A title Pydantic made up from the name is the name title-cased, and reads
-    as the name.
-    """
-
-    words = name.replace(".", " ").replace("_", " ").split()
-    if title and title != " ".join(word.title() for word in words):
+    if title:
         return title
+    words = name.replace(".", " ").replace("_", " ").split()
     said = " ".join(word.upper() if word in _ACRONYMS else word for word in words)
     return said[:1].upper() + said[1:]
 
@@ -66,6 +66,31 @@ def human_bytes(value: int | float) -> str:
             return f"{amount:.0f} {unit}" if unit in {"B", "KB", "MB"} else f"{amount:.1f} {unit}"
         amount /= 1024
     return "0 B"
+
+
+# The dot between two parts of one line, held to the part before it by a
+# no-break space so no line starts with it or holds it alone. {% dot %} draws
+# it as DOT_MARKUP, which hides the mark from a reader; so does `breakable`,
+# drawing text that holds it.
+DOT = "\u00a0· "
+DOT_MARKUP = '&nbsp;<span aria-hidden="true">·</span> '
+
+
+def _drawn(part: object) -> bool:
+    return part is not None and part != ""
+
+
+def dotted(*parts: object) -> str:
+    """Parts of one line of text joined by ``DOT``, leaving out an empty one."""
+
+    return DOT.join(str(part) for part in parts if _drawn(part))
+
+
+def dotted_html(*parts: object) -> SafeString:
+    """``dotted`` for markup: each part escaped unless it is markup already,
+    joined by ``{% dot %}``'s mark."""
+
+    return mark_safe(DOT_MARKUP.join(conditional_escape(part) for part in parts if _drawn(part)))
 
 
 # What running a command does, in the words every page uses for it: the search

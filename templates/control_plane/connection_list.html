@@ -29,7 +29,7 @@ part's heading shows only when there is more than one.
       </thead>
       {% for purpose, purpose_rows in connections.purposes %}
       <tbody>
-        {% if connections.purposes|length > 1 %}{% row_group purpose purpose_rows|length %}{% endif %}
+        {% if forloop.length > 1 %}{% row_group purpose purpose_rows|length %}{% endif %}
         {% for row in purpose_rows %}
           {% with connection=row.connection group=row.group %}
           <tr id="{{ connection.instance.label|connection_anchor }}">
@@ -101,10 +101,10 @@ part's heading shows only when there is more than one.
               {% endcomment %}
               <span class="connection-depends">
               {% with targets=connection.instance.targets dependencies=connection.instance.dependencies %}
-              {% for link in targets %}{% if forloop.counter == 4 and targets|length > 4 %}<span class="muted row-less">+{{ targets|length|add:"-3"|breakable }}</span>{% endif %}<span{% if forloop.counter > 3 and targets|length > 4 %} class="row-more"{% endif %}>{% if not forloop.first %}{% dot %}{% endif %}{% entity link|declared_link %}</span>{% endfor %}
+              {% for link in targets %}{% if forloop.counter == 4 and forloop.length > 4 %}<span class="muted row-less">+{{ forloop.length|add:"-3"|breakable }}</span>{% endif %}<span{% if forloop.counter > 3 and forloop.length > 4 %} class="row-more"{% endif %}>{% if not forloop.first %}{% dot %}{% endif %}{% entity link|declared_link %}</span>{% endfor %}
               {% if targets and dependencies %}<br>{% endif %}
               {% if dependencies|length > 4 %}<span class="muted row-less">{{ dependencies|length|counted:"record" }}</span>{% endif %}
-              {% for link in dependencies %}<span{% if dependencies|length > 4 %} class="row-more"{% endif %}>{% if not forloop.first %}{% dot %}{% endif %}{% entity link|declared_link code=True %}</span>{% endfor %}
+              {% for link in dependencies %}<span{% if forloop.length > 4 %} class="row-more"{% endif %}>{% if not forloop.first %}{% dot %}{% endif %}{% entity link|declared_link code=True %}</span>{% endfor %}
               {% if not targets and not dependencies %}{% empty_value %}{% endif %}
               {% endwith %}
               </span>

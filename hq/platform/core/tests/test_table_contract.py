@@ -2,7 +2,9 @@
 
 import re
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
+from django.core.paginator import Paginator
 from django.template import Context, RequestContext, Template, TemplateSyntaxError
 from django.template.autoreload import get_template_directories
 from django.test import RequestFactory, SimpleTestCase, tag
@@ -249,6 +251,20 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual([each.ancestors[-1].attrs.get("data-col") for each in kept], ["said"])
         self.assertEqual(kept[0].words, "Ask me first for this")
 
+    def test_a_kept_line_leaves_the_rows_toggle_a_child_of_its_cell(self):
+        # The stylesheet shows a cut row's toggle as the gutter cell's own child.
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>'
+            '{% table_heading "When" "status" gutter=True %}{% table_heading "Note" %}</tr></thead><tbody>'
+            '<tr><td class="row-gutter">Nov 2{% row_toggle %}</td><td>b</td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        html = _render(source)
+
+        (toggle,) = [each for each in elements(html, "button") if "data-row-toggle" in each.attrs]
+        self.assertEqual(toggle.ancestors[-1].tag, "td")
+        self.assertEqual([each.words for each in with_class(html, "kept-line")], ["Nov 2"])
+
     def test_only_a_long_cell_of_prose_or_a_status_holds_out_for_a_floor(self):
         long = "A sentence long enough to stand <em>several</em> lines tall in a narrow column"
         lines = "Two lines, each of them short<br>and the second one as short"
@@ -420,14 +436,20 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(button.attrs["aria-label"], "Sort by Name")
 
     def test_a_server_sorted_heading_links_to_its_next_order(self):
-        request = RequestFactory().get("/things/", {"sort": "name", "page": "3", "q": "a"})
+        request = RequestFactory().get("/things/", {"q": "x", "page": "3", "sort": "name"})
         html = _render('{% table_heading "Name" sort="name" %}', {"table": {"selected_sort": "name"}}, request)
         (heading,) = elements(html, "th")
         self.assertEqual(heading.attrs["aria-sort"], "ascending")
         (link,) = elements(html, "a")
-        self.assertIn("sort=-name", link.attrs["href"])
-        self.assertIn("q=a", link.attrs["href"])
-        self.assertNotIn("page=", link.attrs["href"])
+        self.assertEqual(parse_qs(urlsplit(link.attrs["href"]).query), {"q": ["x"], "sort": ["-name"]})
+
+    def test_pagination_links_keep_the_filters_and_set_the_page(self):
+        request = RequestFactory().get("/things/", {"q": "x", "sort": "name", "page": "2"})
+        paginator = Paginator(range(30), 10)
+        context = {"is_paginated": True, "page_obj": paginator.page(2), "paginator": paginator}
+        html = _render('{% include "partials/_pagination.html" %}', context, request)
+        queries = [parse_qs(urlsplit(link.attrs["href"]).query) for link in elements(html, "a")]
+        self.assertEqual(queries, [{"q": ["x"], "sort": ["name"], "page": [str(n)]} for n in (1, 3)])
 
     def test_a_hidden_label_is_still_read(self):
         html = _render('{% table_heading "Actions" css="actions-col" hidden=True %}')
@@ -484,6 +506,11 @@ class TableTagTests(SimpleTestCase):
         self.assertIn("data-folds", row.attrs)
         (toggle,) = select(html, "data-fold-toggle")
         self.assertEqual(toggle.attrs["aria-expanded"], "false")
+
+    def test_a_groups_name_links_where_its_rows_are_dealt_with_when_given_a_page(self):
+        (link,) = elements(_render('{% row_group "Policy" 2 href="/example/policy/" %}'), "a")
+        self.assertEqual((link.words, link.attrs["href"]), ("Policy", "/example/policy/"))
+        self.assertFalse(elements(_render('{% row_group "Policy" 2 %}'), "a"))
 
     def test_a_row_toggle_starts_closed(self):
         html = _render('<td class="row-gutter">a{% row_toggle %}</td>')

@@ -502,7 +502,7 @@ class ServicePageTests(TestCase):
         page = self.page("app.example.com")
 
         self.assertIn('data-tip-host="app.example.com"', page)
-        self.assertIn("example-wildcard · Example CA", page)
+        self.assertIn("example-wildcard\xa0· Example CA", page)
 
     def test_a_redirect_links_both_ends(self):
         self.assertIn(reverse("control_plane:service", args=["example.com"]), self.page("example.net"))

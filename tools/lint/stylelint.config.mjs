@@ -46,11 +46,41 @@ const strandedMark =
   "/(?<!\\\\[0-9a-f]{1,6}) (?:[·•→←↗›‹»«]|\\\\0*(?:b7|2022|2192|2190|2197|203a|2039|bb|ab)(?![0-9a-f]))/i";
 const unspokenContent = { "/^content$/": [`/^\\s*(["'])(?:(?!\\1).)+\\1\\s*$/`, strandedMark] };
 
+// What an opacity under 1 may fade: an inactive control, which WCAG 1.4.3
+// does not hold to 4.5:1, and a mark that is not text. A state is inactive
+// on the element or on what holds it: a disabled or aria-disabled control,
+// and a region aria-busy while its answer is on the way. A mark is named by
+// the compound a selector styles: a chart's shapes, lines and marks, the
+// nav's caret, the calendar's dots (a mark's, a timed line's) and a job's
+// sweep. An opacity of 0 draws nothing, so it fades nothing.
+
+// The rest of a compound: classes, attributes and pseudo-classes, each
+// argument whole, so a name inside `:is()` is not the compound's.
+const compound = String.raw`(?:::?[\w-]+(?:\([^()]*\))?|\.[\w-]+|\[[^\]]*\])*`;
+const fadedText = [
+  true,
+  {
+    inactive: [
+      "(?<!:not\\()(:disabled|\\[aria-disabled=\"true\"\\])",
+      "\\[aria-busy=\"true\"\\]",
+    ],
+    marks: [
+      `(^|[\\s>+~])(rect|path|circle|line|polyline)${compound}$`,
+      `\\.(nav-caret|chart-trend|chart-mark|route-line|month-mark)(?![-\\w])${compound}$`,
+      "\\.job-bar-unknown i$",
+      "\\.month-item::before$",
+    ],
+    animations: ["conn-pulse"],
+  },
+];
+
 export default {
+  plugins: ["./stylelint-faded-text.mjs"],
   // The app sheets share one set of tokens, so a property one sheet reads may
   // be defined in another.
   referenceFiles: ["../../static/css/app/*.css"],
   rules: {
+    "hq/faded-text": fadedText,
     // CSS resolves an undefined custom property to an invalid value without
     // an error, so a typo'd token degrades to a browser default.
     "no-unknown-custom-properties": true,

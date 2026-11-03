@@ -1,5 +1,6 @@
 """How HQ spells and compares DNS names. No Django, no registry: every layer imports it."""
 
+import ipaddress
 import re
 from collections.abc import Set as AbstractSet
 from typing import Any
@@ -33,10 +34,20 @@ def in_zone(name: Any, zone: Any) -> bool:
 
 
 def is_hostname(name: Any) -> bool:
-    """Whether a name, once normalized, is one host something could answer at."""
+    """Whether a name, once normalized, is one host something could answer at.
+
+    An address is not a name: ``192.0.2.10`` fits the label grammar, and a
+    request that used one never asked DNS anything.
+    """
 
     text = normalized_hostname(name)
-    return len(text) <= 253 and bool(_HOSTNAME.fullmatch(text))
+    if len(text) > 253 or not _HOSTNAME.fullmatch(text):
+        return False
+    try:
+        ipaddress.ip_address(text)
+    except ValueError:
+        return True
+    return False
 
 
 def certificate_covers(domain: str, names: AbstractSet[str]) -> bool:

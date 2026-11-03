@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
 <form method="post" enctype="multipart/form-data" class="form">
-  {% csrf_token %}
+  {% write_token %}
   {% include "partials/_form_errors.html" %}
   {% include "partials/_dropzone.html" with field=form.manifest_file title="Drop the manifest here" hint="A JSON list of vault documents" %}
   {% for field in form %}{% if field.name != "manifest_file" %}{{ field.as_field_group }}{% endif %}{% endfor %}
@@ -12,7 +12,7 @@
 </form>
 
 <h2>Example manifest entry</h2>
-<pre><code>{
+<pre tabindex="0"><code>{
   "doc_id": "rb-adguard-001",
   "title": "AdGuard Home Runbook",
   "path": "Infra/DNS/AdGuard Home.md",

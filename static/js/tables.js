@@ -1,6 +1,5 @@
 (() => {
   let searchTimer = null;
-  let tableLocation = `${window.location.pathname}${window.location.search}`;
 
   // Selection is keyed by row id, survives table refreshes and pagination,
   // and persists across full reloads of the same list page for the session.
@@ -97,15 +96,30 @@
   // A region's table fitted at the width the region has now. One whose
   // content changed (`changed`) may take back what left; otherwise only a
   // change of width fits again. A table whose columns are held while a row
-  // is open, or pinned while it is swapped in, is fitted as it lets them go.
+  // is open is fitted as it lets them go.
+  // Every fit passes through here, so here a table with a row open, however
+  // it was opened, is fitted as it would stand with them closed and held
+  // there: what an open row shows whole never widens a column.
   const fitIn = (region, changed = false) => {
     const table = tableIn(region);
-    if (!table || "rowsHeld" in table.dataset || pinned.has(table)) return;
+    if (!table || "rowsHeld" in table.dataset) return;
     const width = widthOf(region);
     const before = regionWidths.get(region);
     if (width === before && !changed) return;
     regionWidths.set(region, width);
-    if (width > 0) fit(table, changed || before === undefined || width > before);
+    if (width === 0) return;
+    const open = [...table.querySelectorAll(":scope > tbody > tr.is-expanded")];
+    open.forEach((row) => row.classList.remove("is-expanded"));
+    fit(table, changed || before === undefined || width > before);
+    if (open.length) {
+      holdColumns(table);
+      open.forEach((row) => row.classList.add("is-expanded"));
+    }
+    // A table that arrives, changes or comes into sight is measured for cuts
+    // as it is fitted: a fragment's, or one in a disclosure just opened. A
+    // window resized measures them once it settles (`markTablesSoon`), and
+    // what the parser draws is measured once the page has loaded.
+    if (document.readyState !== "loading" && (changed || !before)) markCut(table);
   };
   const refit = (table) => {
     if (table?.parentElement?.matches(REGION)) fitIn(table.parentElement, true);
@@ -126,6 +140,7 @@
   // same frame, which the browser raises as an error: a region the observer
   // fitted is let go until the next frame, whose first report of it is the
   // width it was just fitted at.
+  // eslint-disable-next-line no-restricted-syntax -- a region's width changed by nothing the page saw, which only a layout knows
   const fitted = new ResizeObserver((entries) => entries.forEach(({ target: region }) => {
     if (!region.isConnected) {
       fitted.unobserve(region);
@@ -137,6 +152,27 @@
     fitted.unobserve(region);
     requestAnimationFrame(() => fitted.observe(region));
   }));
+  // The browser's find reaches what a closed row holds back: the line beneath
+  // it is hidden until found, so find searches it and a match opens the row
+  // (`beforematch`, below), and the stylesheet keeps the row such a line
+  // stands in (tables.css). Set here, never by the server: a browser that
+  // does not know the value hides the line for good.
+  const findable = "onbeforematch" in document.documentElement;
+  const holdBack = (detail) => {
+    if (!findable || !detail?.matches(".data-table > tbody > tr.row-detail")) return;
+    const open = detail.previousElementSibling?.classList.contains("is-expanded") ?? false;
+    detail.querySelectorAll(":scope > td > *").forEach((part) => {
+      if (open) part.removeAttribute("hidden");
+      else if (part.getAttribute("hidden") !== "until-found") part.setAttribute("hidden", "until-found");
+    });
+  };
+  // A line arrives as the parser or a script adds it, or a cell of it.
+  const holdBackIn = (node) => {
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const detail = node.closest("tr.row-detail");
+    if (detail) holdBack(detail);
+    else node.querySelectorAll("tr.row-detail").forEach(holdBack);
+  };
   const watched = new WeakSet();
   const fitEvery = (changed = new Set()) => document.querySelectorAll(REGION).forEach((region) => {
     if (!watched.has(region)) {
@@ -145,8 +181,10 @@
     }
     fitIn(region, changed.has(region));
   });
-  new MutationObserver((changes) => fitEvery(new Set(changes.map(({ target }) => target.closest?.(REGION)))))
-    .observe(document.documentElement, { childList: true, subtree: true });
+  new MutationObserver((changes) => {
+    if (findable) changes.forEach(({ addedNodes }) => addedNodes.forEach(holdBackIn));
+    fitEvery(new Set(changes.map(({ target }) => target.closest?.(REGION))));
+  }).observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("resize", () => fitEvery());
 
   // A row can say more than it shows: a clamped name, an ellipsis, a list
@@ -160,12 +198,45 @@
   // neither makes a row "say more".
   const unseen = (el) => el.closest(".visually-hidden, [aria-hidden=true]") !== null;
 
+  // A value is cut where its text is drawn past the edge of a box that clips
+  // what it holds (`overflow: hidden` or `clip`), any box from the text up to
+  // and including its cell; a box that scrolls is not cutting. Measured on
+  // the text, which a layout places whole whatever clips it, so a run clipped
+  // by a box around its chip, or by its cell, is cut too. The boxes that cut
+  // each run, outermost last; the survey reads cut the same way (`CUTS`,
+  // probes/describe.py).
   /* eslint-disable no-restricted-syntax -- a row whose value is cut short, which only a layout knows; markCut marks it and moves nothing */
-  const isCut = (el) => {
-    if (unseen(el)) return false;
-    const style = getComputedStyle(el);
-    if (style.overflowX === "visible" && style.overflowY === "visible") return false;
-    return el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
+  const cutRange = document.createRange();
+  const clips = (value) => value === "hidden" || value === "clip";
+  const textShown = (node) => {
+    let box = node.parentElement;
+    while (box.parentElement && getComputedStyle(box).display === "contents") box = box.parentElement;
+    return box.checkVisibility({ visibilityProperty: true }) && getComputedStyle(node.parentElement).visibility === "visible";
+  };
+  const cutsIn = (cell) => {
+    const found = [];
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.data.trim() || unseen(node.parentElement) || !textShown(node)) continue;
+      cutRange.selectNodeContents(node);
+      const rects = [...cutRange.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+      if (!rects.length) continue;
+      const boxes = [];
+      for (let up = node.parentElement; up; up = up.parentElement) {
+        const style = getComputedStyle(up);
+        if (style.display !== "inline" && style.display !== "contents") {
+          const edge = up.getBoundingClientRect();
+          const left = edge.left + up.clientLeft;
+          const top = edge.top + up.clientTop;
+          const x = clips(style.overflowX) && rects.some((r) => r.left < left - 1 || r.right > left + up.clientWidth + 1);
+          const y = clips(style.overflowY) && rects.some((r) => r.top < top - 1 || r.bottom > top + up.clientHeight + 1);
+          if (x || y) boxes.push(up);
+        }
+        if (up === cell) break;
+      }
+      if (boxes.length) found.push(boxes);
+    }
+    return found;
   };
   /* eslint-enable no-restricted-syntax */
 
@@ -215,63 +286,108 @@
   // A row with a value cut short says more than it shows, which only a layout
   // can tell, so it is marked for the stylesheet to show its toggle in the
   // gutter the server's markup already keeps; the mark moves nothing.
-  const markCut = (table) => {
-    table.querySelectorAll(":scope > tbody > tr:not(.row-detail):not(.is-expanded)").forEach((row) => {
-      row.toggleAttribute("data-cut", [...row.querySelectorAll(":is(td, th) *")].some(isCut));
-    });
-  };
+  // Where its row's toggle does not show, a cut value reads whole on hover
+  // instead: its title is its text, set while it is measured cut and taken
+  // away once it is not, so no title outlives its cut. Hover text something
+  // around it already carries (a title the server wrote, a tip) is left alone.
+  const CUT_TITLE = "data-cut-title";
   // A chart's table is read whole and never opens a row.
-  const markCuts = () => {
-    document.querySelectorAll(".table-scroll:not([data-chart]) > .data-table").forEach((table) => {
-      if (!table.parentElement.parentElement?.classList.contains("chart-data")) markCut(table);
+  const marksCuts = (table) => table.parentElement?.matches(`${REGION}:not([data-chart])`)
+    && !table.parentElement.parentElement?.classList.contains("chart-data");
+  const plainText = (el) => el.textContent.replace(/[\u00ad\u200b\u2060]/g, "").replace(/\s+/g, " ").trim();
+  const hoverText = (el) => {
+    const said = el.closest(`[title]:not([${CUT_TITLE}]), [data-tip]`);
+    return said ? (said.getAttribute("title") ?? said.dataset.tip) : "";
+  };
+  const titleCuts = (row, cut) => {
+    const opens = [...row.querySelectorAll("[data-row-toggle]")].some((toggle) => toggle.checkVisibility());
+    const outermost = cut.filter((el) => !cut.some((outer) => outer !== el && outer.contains(el)));
+    const titled = new Set(opens ? [] : outermost.filter((el) => !hoverText(el).includes(plainText(el))));
+    row.querySelectorAll(`[${CUT_TITLE}]`).forEach((el) => {
+      if (titled.has(el)) return;
+      el.removeAttribute("title");
+      el.removeAttribute(CUT_TITLE);
+    });
+    titled.forEach((el) => {
+      el.title = plainText(el);
+      el.setAttribute(CUT_TITLE, "");
     });
   };
+  const markCut = (table) => {
+    if (!marksCuts(table)) return;
+    table.querySelectorAll(":scope > tbody > tr:not(.row-detail)").forEach((row) => {
+      // A run is titled on the outermost box that cuts it.
+      const cut = row.classList.contains("is-expanded") ? [] : [...new Set([...row.querySelectorAll(":scope > :is(td, th)")].flatMap(cutsIn).map((boxes) => boxes.at(-1)))];
+      if (!row.classList.contains("is-expanded")) row.toggleAttribute("data-cut", cut.length > 0);
+      titleCuts(row, cut);
+    });
+  };
+  const markCuts = () => document.querySelectorAll(`${REGION} > .data-table`).forEach(markCut);
 
   // Opening a row must not move the table. Left to itself the browser sizes
   // every column again around what the open row now shows whole, and each
   // row on the page shifts. So the columns are held at the widths they have,
   // for as long as any row is open, and let go when the last one closes or
-  // the window changes.
+  // the window changes. A fixed layout sizes its columns from its first row,
+  // which in a table without headings may be a group's one-cell heading, so
+  // the widths are held in a column group of their own, read from the
+  // headings or else from the first row that has a cell in every column.
+  const columnCells = (table) => {
+    const headings = headingsOf(table);
+    if (headings.length) return headings;
+    const rows = [...table.querySelectorAll(":scope > tbody > tr")]
+      .filter((row) => ![...row.cells].some((cell) => cell.colSpan > 1));
+    const most = Math.max(0, ...rows.map((row) => row.cells.length));
+    return [...(rows.find((row) => row.cells.length === most)?.cells ?? [])];
+  };
+  const heldColumns = (table) => table.querySelector(":scope > colgroup[data-held]");
   const holdColumns = (table) => {
     if ("rowsHeld" in table.dataset) return;
-    const headings = headingsOf(table);
-    if (!headings.length) return;
+    // A column that left draws no box, and a column of the group stands for
+    // each column that is drawn, in order.
     /* eslint-disable no-restricted-syntax -- every column at the width the reader saw while a row is open */
-    const widths = headings.map((heading) => heading.getBoundingClientRect().width);
+    const widths = columnCells(table).filter((cell) => cell.getClientRects().length)
+      .map((cell) => cell.getBoundingClientRect().width);
     table.style.width = `${table.getBoundingClientRect().width}px`;
     /* eslint-enable no-restricted-syntax */
-    headings.forEach((heading, index) => {
-      if (widths[index]) heading.style.width = `${widths[index]}px`;
-    });
+    const columns = document.createElement("colgroup");
+    columns.dataset.held = "";
+    columns.append(...widths.map((width) => {
+      const column = document.createElement("col");
+      if (width) column.style.width = `${width}px`;
+      return column;
+    }));
+    if (table.caption) table.caption.after(columns);
+    else table.prepend(columns);
     table.style.tableLayout = "fixed";
     table.dataset.rowsHeld = "";
   };
   const releaseColumns = (table) => {
     if (!("rowsHeld" in table.dataset)) return;
-    headingsOf(table).forEach((heading) => {
-      heading.style.width = "";
-    });
+    heldColumns(table)?.remove();
     table.style.width = "";
     table.style.tableLayout = "";
     delete table.dataset.rowsHeld;
   };
 
-  document.addEventListener("click", (event) => {
-    const button = event.target.closest(".row-expand");
-    if (!button) return;
-    const row = button.closest("tr");
-    const expanding = !row.classList.contains("is-expanded");
+  // Opens or closes a row's own line. `button` is its toggle, which a row
+  // that heads a fold has none of.
+  const setExpanded = (row, expanding, button = null) => {
     const table = row.closest("table");
     // Held before anything in the row changes, so what is held is the table
     // as the reader was looking at it.
     if (expanding) holdColumns(table);
     row.classList.toggle("is-expanded", expanding);
+    holdBack(row.nextElementSibling);
     if (!table.querySelector(":scope > tbody > tr.is-expanded")) {
       releaseColumns(table);
       refit(table);
     }
-    button.setAttribute("aria-expanded", String(expanding));
-    button.setAttribute("aria-label", expanding ? "Show less of this row" : "Show all of this row");
+    // An open row shows its values whole, so it keeps no title for a cut;
+    // closed again, it is measured for them.
+    markCut(table);
+    button?.setAttribute("aria-expanded", String(expanding));
+    button?.setAttribute("aria-label", expanding ? "Show less of this row" : "Show all of this row");
     // Open what was folded, and on the way back close only what this opened.
     row.querySelectorAll(":is(td, th) details").forEach((details) => {
       if (expanding && !details.open) {
@@ -282,16 +398,34 @@
         delete details.dataset.rowOpened;
       }
     });
+  };
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest(".row-expand");
+    if (!button) return;
+    const row = button.closest("tr");
+    setExpanded(row, !row.classList.contains("is-expanded"), button);
+  });
+
+  // Find matched in a closed row's line: the row opens, so the match shows
+  // where it belongs.
+  document.addEventListener("beforematch", (event) => {
+    const toggle = event.target.closest("tr.row-detail")?.previousElementSibling?.querySelector(".row-expand");
+    if (toggle && toggle.getAttribute("aria-expanded") !== "true") toggle.click();
   });
 
   // A row that heads rows folded under it (`data-folds`, its rows naming it
   // in `data-folded`) opens and closes them from anywhere on it but its own
   // controls. Closing it closes any of its rows that were open, so no line is
-  // left beneath a row that is not there.
+  // left beneath a row that is not there. Its fold stands where its own
+  // toggle would, so what its columns that left hold opens with its rows.
   const foldedUnder = (head) =>
     head.closest("tbody").querySelectorAll(`:scope > tr[data-folded="${CSS.escape(head.id)}"]`);
   const setFold = (head, opening) => {
     head.querySelector("[data-fold-toggle]")?.setAttribute("aria-expanded", String(opening));
+    const line = head.nextElementSibling?.matches(".row-detail") ? head.nextElementSibling : null;
+    if (head.classList.contains("is-expanded") ? !opening : opening && line?.querySelector("[data-dropped]")) {
+      setExpanded(head, opening);
+    }
     foldedUnder(head).forEach((row) => {
       if (!opening && row.classList.contains("is-expanded")) row.querySelector(".row-expand")?.click();
       row.toggleAttribute("data-open", opening);
@@ -366,17 +500,12 @@
     sortRows(table, heading.cellIndex, next);
   });
 
-  // A table held while its rows are open is fitted again as it would stand
-  // with them closed, the width the window now gives it, and held there.
+  // A table held while its rows are open is let go and fitted again at the
+  // width the window now gives it, which holds it again (`fitIn`).
   const settleOpenRows = () => {
     document.querySelectorAll(".data-table[data-rows-held]").forEach((table) => {
       releaseColumns(table);
-      const open = [...table.querySelectorAll(":scope > tbody > tr.is-expanded")];
-      open.forEach((row) => row.classList.remove("is-expanded"));
       refit(table);
-      if (!open.length) return;
-      holdColumns(table);
-      open.forEach((row) => row.classList.add("is-expanded"));
     });
   };
 
@@ -389,17 +518,6 @@
     window.clearTimeout(rowsTimer);
     rowsTimer = window.setTimeout(markTables, 120);
   };
-
-
-  // A filter's menu that was open when one of its options was ticked is open
-  // in the answer too, so the next option is a press away and the keyboard
-  // stays on the box it ticked.
-  function keepFilterOpen(next) {
-    document.querySelectorAll("[data-table-toolbar] details[data-menu][open] input[name]").forEach((input) => {
-      const menu = next.querySelector(`[data-table-toolbar] input[name="${CSS.escape(input.name)}"]`)?.closest("details[data-menu]");
-      if (menu) menu.open = true;
-    });
-  }
 
   window.addEventListener("resize", markTablesSoon);
   // Whether a value is cut depends on the face it is drawn in, and so does
@@ -464,38 +582,6 @@
     });
   }
 
-  // Auto table layout recomputes column widths from whichever rows are
-  // visible, so sorting or paging makes columns jitter. The incoming table is
-  // pinned to the current widths while it is swapped in, and let go once it
-  // is in, so it fits its region again as the window changes.
-  const pinned = new WeakSet();
-  const unpin = (table) => {
-    if (!pinned.has(table)) return;
-    pinned.delete(table);
-    table.querySelectorAll("thead th").forEach((heading) => heading.style.removeProperty("width"));
-    table.style.removeProperty("table-layout");
-    refit(table);
-  };
-  function pinColumnWidths(next) {
-    const currentTables = document.querySelectorAll(".table-scroll table");
-    const nextTables = next.querySelectorAll(".table-scroll table");
-    currentTables.forEach((table, tableIndex) => {
-      const nextTable = nextTables[tableIndex];
-      if (!nextTable) return;
-      const currentHeads = table.querySelectorAll("thead th");
-      const nextHeads = nextTable.querySelectorAll("thead th");
-      if (!currentHeads.length || currentHeads.length !== nextHeads.length) return;
-      giveWay(nextTable, gaveWay.get(table) ?? 0);
-      currentHeads.forEach((th, index) => {
-        // eslint-disable-next-line no-restricted-syntax -- the columns of a table a sort, search or page turn swaps in
-        const width = th.getBoundingClientRect().width;
-        if (width) nextHeads[index].style.width = `${width}px`;
-      });
-      nextTable.style.tableLayout = "fixed";
-      pinned.add(nextTable);
-    });
-  }
-
   function tableUrl(form) {
     const params = new URLSearchParams(new FormData(form));
     return `${window.location.pathname}?${params.toString()}`;
@@ -512,23 +598,17 @@
     "[data-search-results]",
   ];
 
-  // The fetch, the swap, focus and the address bar are the fragment
-  // primitive's. This adds only what a table knows: the columns it is holding.
-  async function refreshTable(url, { history = "push" } = {}) {
+  // The fetch, the swap and focus are the fragment primitive's; the address
+  // bar is the navigation's, already at `url`. The table it brings in is
+  // fitted, before its first frame, as every change to the page is.
+  async function refreshTable(url) {
     try {
       await hqFragment.swap(TABLE_PARTS, {
         url,
         strict: false,
         busy: document.querySelector("main"),
-        before: (next) => {
-          keepFilterOpen(next);
-          pinColumnWidths(next);
-        },
         title: true,
-        history,
       });
-      tableLocation = `${window.location.pathname}${window.location.search}`;
-      document.querySelectorAll(".table-scroll table").forEach(unpin);
       initializeSelection();
       markTables();
     } catch (error) {
@@ -536,11 +616,31 @@
     }
   }
 
-  document.addEventListener("submit", (event) => {
-    const form = event.target.closest("[data-table-toolbar]");
-    if (!form) return;
-    event.preventDefault();
-    refreshTable(tableUrl(form));
+  // Marks the navigation a typed search asks for, which replaces the search
+  // before it rather than adding to Back.
+  const TABLE = Symbol("table");
+  const formOf = (element) => (element instanceof HTMLFormElement ? element : element?.form);
+
+  // A list's links, its toolbar and Back and Forward between its answers are
+  // navigations this page answers in place. The history API's own writes, a
+  // fragment's (`hashChange`) and every other navigation are the browser's.
+  const answersInPlace = (event) => {
+    if (!event.canIntercept || event.hashChange || event.downloadRequest !== null) return false;
+    if (event.info === TABLE) return true;
+    if (event.navigationType === "traverse") return Boolean(document.querySelector("[data-table-results]"));
+    const source = event.sourceElement;
+    return Boolean(
+      source?.matches("a.table-sort-link, .pagination a") || formOf(source)?.matches("[data-table-toolbar]"),
+    );
+  };
+
+  window.navigation?.addEventListener("navigate", (event) => {
+    if (!answersInPlace(event)) return;
+    const url = event.destination.url;
+    // Focus stays on what was pressed and the page where it was read; a
+    // traverse is put back where the entry was left once its rows are in.
+    const scroll = event.navigationType === "traverse" ? "after-transition" : "manual";
+    event.intercept({ focusReset: "manual", scroll, handler: () => refreshTable(url) });
   });
 
   document.addEventListener("input", (event) => {
@@ -553,25 +653,16 @@
       const form = input.isConnected
         ? input.form
         : document.querySelector("[data-table-toolbar]");
-      if (form) refreshTable(tableUrl(form), { history: "replace" });
+      if (form) window.navigation?.navigate(tableUrl(form), { history: "replace", info: TABLE });
     }, 250);
   });
 
+  // A box ticked or an option chosen asks at once, as the form's own submit.
   document.addEventListener("change", (event) => {
     const control = event.target.closest(
       "[data-table-toolbar] input[type=checkbox], [data-table-toolbar] select",
     );
-    if (control) refreshTable(tableUrl(control.form));
-  });
-
-  document.addEventListener("click", (event) => {
-    // Leave modified clicks (new tab, window, download) to the browser.
-    if (event.defaultPrevented || event.button !== 0) return;
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const link = event.target.closest("a.table-sort-link, .pagination a");
-    if (!link) return;
-    event.preventDefault();
-    refreshTable(link.href);
+    control?.form.requestSubmit();
   });
 
   // "/" focuses search from anywhere on a list page, GitHub-style.
@@ -583,16 +674,6 @@
     event.preventDefault();
     search.focus();
     search.select();
-  });
-
-  window.addEventListener("popstate", () => {
-    const nextLocation = `${window.location.pathname}${window.location.search}`;
-    // The mobile navigation and other lightweight disclosures use fragments.
-    // Chromium emits popstate for those history entries too; a fragment cannot
-    // change table data, so it must never trigger a fetch or DOM replacement.
-    if (nextLocation === tableLocation) return;
-    tableLocation = nextLocation;
-    refreshTable(window.location.href, { history: "none" });
   });
 
   document.addEventListener("DOMContentLoaded", () => {

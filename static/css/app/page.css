@@ -14,7 +14,7 @@
    its class to one of these lists. Adding a component means reading the
    contract, not restating the colors. */
 
-.pill-active, .pill-published, .pill-created, .pill-uploaded, .pill-public,
+.pill-active, .pill-published, .pill-created, .pill-uploaded, .pill-public, .pill-done,
 .pill-replied, .pill-reachable, .pill-good, .msg-success, .conn-kind-tailnet,
 .connection-state-reachable, .connection-state-ready, .connection-state-good, .tone-good {
   --tone-bg: var(--tone-positive-bg);
@@ -270,10 +270,9 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .page-head > .btn + .btn, .page-head > form + form { margin-left: 0; }
 
 /* ── Sections menu ──────────────────────────────────────────────── */
-/* Both controls belong to the phone layout only. Nothing here hides the nav:
-   the collapse is added by the narrow breakpoint, so every wider screen (and
-   any screen whose stylesheet failed to load) gets the links unconditionally. */
-.nav-toggle, .nav-backdrop { display: none; }
+/* The button belongs to the narrow layout only; a wide screen sets the
+   sections in the header's row (base.css). */
+.nav-toggle { display: none; }
 
 /* ── Buttons ────────────────────────────────────────────────────── */
 
@@ -315,7 +314,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    is hit through an area at least that size (WCAG 2.5.8) without moving
    anything: the area is the control's own, hung over the space beside it,
    where no other control is. The browser gate measures every control
-   (`every_control_is_big_enough_to_hit`). A finger is not a cursor: where
+   (docs/Design.md, "A control is big enough to hit"). A finger is not a cursor: where
    the pointer is coarse the area grows, and a calendar's marks and bars,
    packed too close for one under a mouse, are given one too. */
 :is(.table-sort-link, .subtle-link, .pagination a, .month-date, .pin-toggle, a.kpi-dot, .kpi a.value, .posture-meter) { position: relative; }

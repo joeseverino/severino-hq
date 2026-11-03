@@ -16,6 +16,7 @@ from hq.domains.receipts.models import Receipt
 from hq.domains.receipts.validation import MAX_RECEIPT_BYTES, validate_receipt_file
 from hq.platform.application.record_errors import InputError
 from hq.platform.application.tests.markup import links, text
+from hq.platform.application.tests.writers import form_keyed
 
 
 def _receipt(**fields):
@@ -58,7 +59,7 @@ class ReceiptLinkTests(TestCase):
 
         self.assertContains(response, "Already linked to")
         # Said on its own, the expense names who was paid as well as for what.
-        self.assertIn((self.expense.label, self.expense.get_absolute_url()), links(response))
+        self.assertIn((f"{self.expense.vendor} {self.expense.item}", self.expense.get_absolute_url()), links(response))
 
     def test_the_page_says_the_file_type_as_a_word(self):
         receipt = _receipt(vendor="Example Host")
@@ -114,7 +115,7 @@ class ReceiptEditTests(TestCase):
         self.receipt.file.save("scan.pdf", ContentFile(b"%PDF-1.4"))
 
     def _edit(self, **fields):
-        return self.client.post(reverse("receipts:edit", args=[self.receipt.pk]), _edit_post(**fields))
+        return self.client.post(reverse("receipts:edit", args=[self.receipt.pk]), form_keyed(_edit_post(**fields)))
 
     def test_an_edit_without_a_new_file_saves(self):
         stored = self.receipt.file.name

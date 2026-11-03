@@ -4,9 +4,8 @@
 
 /* ----- Derived topology ------------------------------------------------- */
 
-/* A lens is chosen by following a link, so these are the shared chip primitive
-   with one modifier for the current choice. aria-current carries it for anyone
-   the border weight does not reach. */
+/* A lens is chosen by following a link, so these are the shared chip primitive,
+   whose current choice is drawn from its aria-current. */
 .topology-lens-note { margin: 0 0 var(--space-5); font-size: var(--text-sm); }
 .topology-trace-bar {
   display: flex; flex-wrap: wrap; gap: var(--space-5) var(--space-8); align-items: center;
@@ -50,9 +49,9 @@
    inside a size container Chrome restyles them once the container is measured
    and runs their transitions from nothing (docs/Design.md). */
 @media (min-width: 1180px) {
-  .topology-stage.has-detail { grid-template-columns: minmax(0, 1fr) minmax(320px, 34%); }
+  .topology-stage:has(> .topology-detail:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(320px, 34%); }
   /* Beside a map the page scrolls, the details stay in view. */
-  .topology-stage.has-detail .topology-detail {
+  .topology-stage > .topology-detail:not([hidden]) {
     position: sticky; top: var(--site-header-height); align-self: start;
     max-height: calc(100vh - var(--site-header-height)); overflow-y: auto; border-top: 0; border-left: 1px solid var(--line);
   }
@@ -189,7 +188,7 @@
 }
 .topology-relation .pill { flex: 0 0 auto; }
 .btn.compact { min-height: 30px; padding: var(--space-2) var(--space-4); font-size: var(--text-xs); }
-.topology-node.is-selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
+.topology-node:has(> [aria-current]) { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
 .topology-node.is-related { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .topology-node[hidden], .topology-lane[hidden] { display: none; }
 .topology-relations { margin-top: var(--space-6); }
@@ -267,7 +266,7 @@
   text-decoration: none; background: var(--bg);
 }
 .chip:hover { color: var(--accent); border-color: var(--accent); }
-.chip.is-current { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.chip[aria-current] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
 .reading-note { margin: calc(var(--space-3) * -1) 0 var(--stack-gap); font-size: var(--text-sm); }
 
@@ -329,7 +328,7 @@
 .approval-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-10); }
 .approval-actions form { margin: 0; }
 
-/* Agents: the state and its one control, then every rule in a table. */
+/* Agents: the state and its one control, each agent with its own block, then every rule in a table. */
 .agent-state { display: grid; gap: var(--space-6); }
 .agent-state-main { display: flex; align-items: center; gap: var(--space-6); }
 .agent-state-main > .btn { margin: 0 0 0 auto; }
@@ -338,14 +337,19 @@
 .agent-state-copy h2 { margin: 0; color: var(--ink); font-size: var(--text-lg); font-weight: 650; letter-spacing: 0; text-transform: none; }
 .agent-state-copy p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); }
 .agent-state-facts { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-10); margin: 0; padding-top: var(--space-6); border-top: 1px solid var(--line-2); color: var(--muted); font-size: var(--text-sm); }
-.agent-state-facts a { color: var(--muted); }
+/* Each fact that links is a line a target tall (`--target-min`), since they wrap onto lines of their own on a phone. */
+.agent-state-facts a { color: var(--muted); line-height: var(--target-min); }
 .agent-state-facts a:hover { color: var(--ink); }
 .policy-dormant-note { margin-left: auto; color: var(--muted-2); }
 .agent-state-facts strong { color: var(--ink); font-variant-numeric: tabular-nums; }
-.policy-agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
-.policy-agents > li { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--surface-inset, var(--space-5) var(--space-6)); font-size: var(--text-xs); }
-.policy-agent-name { font-size: var(--text-md); font-weight: 600; color: var(--ink); }
-.policy-none { margin: 0; font-size: var(--text-sm); }
+/* An agent's latest events, under its row: one line each, newest first. */
+.agent-events { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+/* A person's devices are a few short names and one field, so the card is narrowed to them. */
+.own-devices { max-inline-size: var(--measure); }
+/* What the MCP server tells an agent first: prose in paragraphs, so it keeps the measure. */
+.mcp-instructions { display: grid; gap: var(--space-4); max-inline-size: var(--measure); }
+.mcp-instructions > p { margin: 0; }
+.mcp-endpoint { display: grid; gap: var(--stack-gap); }
 .policy { display: grid; gap: var(--stack-gap); }
 .policy-table .policy-select { width: 100%; max-width: 11rem; }
 .policy-off { display: block; color: var(--muted-2); font-size: var(--text-3xs); font-weight: 500; letter-spacing: 0; text-transform: none; }
@@ -360,7 +364,7 @@
 .policy-select.rule-allow { color: var(--ok); border-color: currentColor; }
 .policy-select.rule-approve { color: var(--warn); border-color: currentColor; }
 .policy-select.rule-deny { color: var(--danger); border-color: currentColor; }
-.policy-select.is-dormant { opacity: .5; }
+.policy-select.is-dormant { color: var(--muted-2); }
 /* A save button pinned to the bottom of a long form. It shows once the form
    has changed, and holds its room until then, so showing moves nothing:
    app.js marks the form clean on load and the first edit clears the mark.

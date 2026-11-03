@@ -88,6 +88,9 @@ class _Cell:
     text: list[str] = field(default_factory=list)
     controls: bool = False
     parts: list[_Part] = field(default_factory=list)
+    # Where the row's toggle starts, last in the cell that names the row: the
+    # cell's kept line ends there, so the toggle stays the cell's own child.
+    toggle: tuple[int, int] | None = None
 
 
 @dataclass(slots=True)
@@ -196,6 +199,8 @@ class _Cells(HTMLParser):
             self.cell.line = 0
         if tag in _CONTROLS:
             self.cell.controls = True
+        if "data-row-toggle" in given and self.cell.toggle is None and len(self.open) == 1:
+            self.cell.toggle = self.getpos()
         # The line the region wraps a kept cell in is its own mark, read again
         # when the page is: what the cell holds is inside it.
         if tag != "br" and self.unsaid is None and "kept-line" not in classes and "empty-value" not in classes:
@@ -305,7 +310,7 @@ class _Cells(HTMLParser):
                 # One `.kept-line`, which the stylesheet holds whole up to the
                 # column's share of its region and lets wrap past that.
                 if body and kept and cell.closed and not cell.says_nothing and not long:
-                    self.held.append((cell.opened, cell.closed))
+                    self.held.append((cell.opened, cell.toggle or cell.closed))
                 if body and index != named and kinds.get(index) in ("prose", "status") and long:
                     marks.append(" data-long")
             if marks:
@@ -587,16 +592,13 @@ def table_region(parser: Any, token: Any) -> RegionNode:
 
 
 def _server_sort(context: Any, ascending: str, descending: str) -> dict[str, str]:
-    """A list's own sort for this column: where the link goes and which way it stands."""
+    """A list's own sort for this column: the order its link asks for and which way it stands."""
 
     current = context["table"]["selected_sort"]
     descending = descending or f"-{ascending}"
     next_sort = descending if current == ascending else ascending
-    params = context["request"].GET.copy()
-    params["sort"] = next_sort
-    params.pop("page", None)
     return {
-        "url": f"?{params.urlencode()}",
+        "next": next_sort,
         "direction": "ascending" if current == ascending else "descending" if current == descending else "none",
         "next_direction": "descending" if next_sort == descending else "ascending",
     }
@@ -660,15 +662,16 @@ def sortable(rows: Any) -> bool:
 
 
 @register.inclusion_tag("partials/_row_group.html")
-def row_group(label: str, count: int | None = None, *, folds: str = "") -> dict[str, Any]:
+def row_group(label: str, count: int | None = None, *, folds: str = "", href: str = "") -> dict[str, Any]:
     """The heading row of one group of a table's rows, first in that group's
     ``tbody``: its name and, given one, how many rows it holds. It spans every
     column, which its region counts from the table's headings, and its name
     keeps the edge of the rows' names. ``folds`` is the row's id when the group
     starts folded away: its rows name it in ``data-folded``, and its toggle
-    stands in the rows' gutter."""
+    stands in the rows' gutter. ``href`` is the page the group's rows are
+    dealt with on together, which its name links to."""
 
-    return {"label": label, "count": count, "folds": folds}
+    return {"label": label, "count": count, "folds": folds, "href": href}
 
 
 @register.inclusion_tag("partials/_row_toggle.html")

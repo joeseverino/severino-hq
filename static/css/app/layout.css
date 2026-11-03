@@ -150,6 +150,11 @@
 
 /* What sits beside the heading takes the next line when the two do not fit. */
 .section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); margin-bottom: var(--space-6); }
+/* A heading after a form, a table or a list in the same container starts a
+   section of its own, so it stands as far from what is above it as stacked
+   sections do. Kept at the class's weight, so a container that spaces its
+   parts by a gap still clears it. */
+.section-head:where(:not(:first-child)) { margin-block-start: var(--stack-gap); }
 .section-head h2 { margin: 0; flex: 1; }
 /* A heading with a line under it holds what sits beside it to its first line. */
 .section-head:has(> hgroup) { align-items: flex-start; }
@@ -245,7 +250,11 @@
 .month-grid tr:last-child > .month-day { border-bottom: 1px solid var(--line-2); }
 .month-day.is-weekend { background: color-mix(in srgb, var(--bg-tint) 45%, transparent); }
 .month-day.is-outside .month-date { color: var(--muted-2); }
-.month-day.is-past :is(.month-span, .month-item, .month-mark) { opacity: .62; }
+/* A day gone by recedes: its words set back in --ink-3, which clears 4.5:1
+   on every source's fill as words still followed must, its dots fainter. */
+.month-day.is-past :is(.month-span, .month-item) { color: var(--ink-3); }
+.month-day.is-past .month-span.is-start { border-left-color: color-mix(in srgb, var(--source) 62%, var(--surface)); }
+.month-day.is-past .month-mark, .month-day.is-past .month-item::before { opacity: .62; }
 .month-day.is-selected { box-shadow: inset 0 0 0 2px var(--accent); }
 /* The date and the day's marks share one row, so marks take no height of
    their own and the bars under them stay level across the week. */
@@ -278,14 +287,16 @@
   opacity: .6;
 }
 /* A span is one bar across its days: rounded only where it starts and ends,
-   titled where it starts or where a week begins. A gap holds the lane open. */
+   titled where it starts or where a week begins. A gap holds the lane open.
+   Its tint is strong enough that the palest source still shows on a
+   weekend's fill. */
 .month-span {
   display: block;
   height: 1.25rem;
   margin: 0 calc(-1 * var(--space-2)) var(--space-1);
   padding: 0 var(--space-3);
   overflow: hidden;
-  background: color-mix(in srgb, var(--source) 18%, var(--surface));
+  background: color-mix(in srgb, var(--source) 22%, var(--surface));
   color: var(--ink);
   font-size: var(--text-2xs);
   font-weight: 600;
@@ -318,7 +329,7 @@
 .month-item time { color: var(--muted); font-variant-numeric: tabular-nums; }
 .month-item:hover > span { color: var(--accent); }
 /* All day: a filled block in its color, as a one-day bar. */
-.month-item.is-all-day { padding: 0 var(--space-3); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--source) 18%, var(--surface)); font-weight: 600; }
+.month-item.is-all-day { padding: 0 var(--space-3); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--source) 22%, var(--surface)); font-weight: 600; }
 .month-item.is-all-day::before { content: none; }
 .month-more { display: block; color: var(--muted); font-size: var(--text-3xs); font-weight: 600; text-decoration: none; }
 .month-more:hover { color: var(--accent); }
@@ -449,7 +460,7 @@
 }
 .calendar-nav a:hover { color: var(--accent); border-color: var(--accent); }
 /* The disabled end of the range keeps its box so the pair does not shift. */
-.calendar-nav span { opacity: .35; }
+.calendar-nav [aria-disabled="true"] { opacity: .35; }
 .calendar-description { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.45; }
 .calendar-legend {
   display: flex;

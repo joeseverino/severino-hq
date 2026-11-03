@@ -1,6 +1,6 @@
 {% extends "page.html" %}
 {% block page %}
-<form class="filter-bar" method="get" role="search">
+<search><form class="filter-bar" method="get">
   <input type="search" name="q" value="{{ action_query }}" placeholder="Filter what needs you" aria-label="Filter what needs you">
   <select name="status" aria-label="Urgency">
     <option value="">Any urgency</option>
@@ -14,7 +14,7 @@
   {% if action_about %}<input type="hidden" name="about" value="{{ action_about }}">{% endif %}
   <button class="btn" type="submit">Filter</button>
   {% if action_query or action_status or action_source or action_about %}<a class="btn ghost" href="{% url 'action_items' %}">Clear filters</a>{% endif %}
-</form>
+</form></search>
 
 {% comment %}
 What waits on the reader, under the domain that raised it. An item is open
@@ -24,12 +24,13 @@ comes back on its own only if it gets worse.
 {% endcomment %}
 {% comment %}
 The page is titled Needs you, so its card is titled by what it holds: the one
-area when there is one, else that it is a list of what to do.
+area when there is one, linked as its group's heading would be, else that it
+is a list of what to do.
 {% endcomment %}
 {% if action_groups %}
 {% url 'action_items_set_aside' as set_aside_url %}{% url 'action_items_bring_back' as bring_back_url %}
 {% card css="action-items-card" data_triage_routes=True data_dismiss=set_aside_url data_restore=bring_back_url %}
-  {% section_head %}{% if action_groups|length == 1 %}{{ action_groups.0.label|breakable }}{% elif action_query or action_status or action_source or action_about %}Matches{% else %}To do{% endif %} <span class="count" data-queue-count>{{ action_item_total|breakable }}</span>{% aside %}{% post_button "Dismiss all" aside_all_url css="btn compact ghost" %}{% endsection_head %}
+  {% section_head %}{% if action_groups|length == 1 %}{% with area=action_groups.0 %}{% if area.url %}<a href="{{ area.url }}">{{ area.label|breakable }}</a>{% else %}{{ area.label|breakable }}{% endif %}{% endwith %}{% elif action_query or action_status or action_source or action_about %}Matches{% else %}To do{% endif %} <span class="count" data-queue-count>{{ action_item_total|breakable }}</span>{% aside %}{% post_button "Dismiss all" aside_all_url css="btn compact ghost" %}{% endsection_head %}
   {% include "partials/_queue_groups.html" with groups=action_groups prefix="queue" aside_url=aside_all_url titled=action_groups|length|add:"-1" %}
 {% endcard %}
 {% elif action_query or action_status or action_source or action_about %}

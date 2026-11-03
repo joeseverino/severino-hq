@@ -16,6 +16,7 @@ from typing import Any
 
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
+from hq.platform.application.labels import dotted
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.observations.host import TAILNET_LOCK_KIND
 lazy from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
@@ -386,7 +387,7 @@ class Policy:
             rows.append(
                 (
                     "Tailnet lock",
-                    (f"On · {counted(keys, 'signing key', 'signing keys')}" if self.lock.get("enabled") else "Off"),
+                    (dotted("On", counted(keys, "signing key", "signing keys")) if self.lock.get("enabled") else "Off"),
                 )
             )
         return tuple(rows)

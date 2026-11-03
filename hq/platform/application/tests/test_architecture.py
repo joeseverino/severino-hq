@@ -1,31 +1,34 @@
 import ast
-import gzip
 import re
+import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import brotli
 import httpx2
 from asgiref.sync import async_to_sync
-from django.test import SimpleTestCase, override_settings, tag
+from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied
+from django.http import HttpResponse
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings, tag
 from starlette.staticfiles import StaticFiles
 
+from hq.platform.application.routes import routed
+from hq.platform.application.security import operator_capabilities
+from hq.platform.application.tables import TableListMixin
+from hq.platform.core.compression import Compressed
+from hq.platform.core.middleware import LoginRequiredMiddleware
 from hq.platform.core.network import TrustedNetworkASGI
 from hq.platform.core.static import CachedStaticFiles
 from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
+from hq.platform.core.test_runner import no_default_role
 from hq_sdk import validation
 from hq_sdk.validation import _cell_markup_pins
 
 from .source import parsed, source_files, template_files
-
-
-def view_modules(root: Path) -> list[Path]:
-    """Every web view module: ``views.py`` and the ``*_views.py`` split from one."""
-
-    found = {*source_files(root, "views.py"), *source_files(root, "*_views.py")}
-    assert found, "No view modules were scanned"
-    return sorted(path for path in found if not path.name.startswith("test") and "tests" not in path.parts)
+from .test_view_writes import routed_modules, shown
 
 
 def _is_address(text: str, found: re.Match[str]) -> bool:
@@ -55,9 +58,11 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         self.assertIsInstance(static_route.app.app, StaticFiles)
         self.assertIsInstance(static_route.app.app, CachedStaticFiles)
         self.assertEqual(django_route.path, "")
-        # Django's own stack, compressed by Django's own middleware.
-        self.assertIs(django_route.app, asgi.django_application)
-        self.assertIn("django.middleware.gzip.GZipMiddleware", settings.MIDDLEWARE)
+        # Django's own stack, with one compressor around it and none inside,
+        # so no answer is encoded twice or by the coding a client takes least.
+        self.assertIsInstance(django_route.app, Compressed)
+        self.assertIs(django_route.app.app, asgi.django_application)
+        self.assertEqual([name for name in settings.MIDDLEWARE if "gzip" in name.lower()], [])
 
     def test_static_assets_have_one_server(self):
         from django.conf import settings
@@ -72,19 +77,19 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
             async with httpx2.AsyncClient(transport=transport, base_url="http://testserver") as client:
                 return await client.get(
                     "/bundle.0123456789ab.css",
-                    headers={"Accept-Encoding": "gzip"},
+                    headers={"Accept-Encoding": "gzip, br"},
                 )
 
         with TemporaryDirectory() as directory:
             Path(directory, "bundle.0123456789ab.css").write_text("a" * 2000, encoding="utf-8")
-            compressed = gzip.compress(b"a" * 2000, mtime=0)
-            Path(directory, "bundle.0123456789ab.css.gz").write_bytes(compressed)
+            compressed = brotli.compress(b"a" * 2000)
+            Path(directory, "bundle.0123456789ab.css.br").write_bytes(compressed)
             manifest = SimpleNamespace(hashed_files={"bundle.css": "bundle.0123456789ab.css"})
             with patch("hq.platform.core.static.staticfiles_storage", manifest):
                 response = async_to_sync(request)(directory)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.headers["content-encoding"], "gzip")
+        self.assertEqual(response.headers["content-encoding"], "br")
         # The copy collectstatic wrote, byte for byte: nothing compressed it again.
         self.assertEqual(response.headers["content-length"], str(len(compressed)))
         self.assertEqual(response.text, "a" * 2000)
@@ -96,50 +101,24 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
     @tag("source", "tree")
     def test_paginated_list_views_use_the_shared_table_engine(self):
         root = Path(__file__).resolve().parents[4]
-        violations = []
-        for source_path in view_modules(root):
-            tree = parsed(source_path)
-            for node in tree.body:
-                if not isinstance(node, ast.ClassDef):
-                    continue
-                is_paginated = any(
-                    isinstance(item, ast.Assign)
-                    and any(isinstance(target, ast.Name) and target.id == "paginate_by" for target in item.targets)
-                    for item in node.body
-                )
-                bases = {base.id for base in node.bases if isinstance(base, ast.Name)}
-                if is_paginated and "TableListMixin" not in bases:
-                    violations.append(f"{source_path.relative_to(root)}:{node.name}")
+        modules = routed_modules(root)
+        loaded = {
+            Path(module.__file__).resolve(): module
+            for module in list(sys.modules.values())
+            if module and getattr(module, "__file__", None)
+        }
+        # A class declaring its page size, read as Python resolves it, so an engine reached through a mixin counts.
+        paginated = {
+            f"{shown(root, source_path)}:{name}": value
+            for source_path in modules
+            for name, value in vars(loaded[source_path]).items()
+            if isinstance(value, type)
+            and value.__module__ == loaded[source_path].__name__
+            and "paginate_by" in vars(value)
+        }
 
-        self.assertEqual(violations, [])
-
-    @tag("source", "tree")
-    def test_every_module_defining_a_view_is_one_these_checks_read(self):
-        """A view split into its own module must not step outside the checks.
-
-        The check above and lint:ast-grep's views-write-no-model read the
-        files ``view_modules`` names. Any module under a Django app that
-        subclasses a ``...View`` is a view module, and it is held to the same
-        rules only if it is in that set.
-        """
-
-        root = Path(__file__).resolve().parents[4]
-        read = set(view_modules(root))
-        escaped = []
-        for source_path in source_files(root, "*.py"):
-            if source_path.name.startswith("test") or source_path in read:
-                continue
-            tree = parsed(source_path)
-            if any(
-                isinstance(node, ast.ClassDef)
-                and any(
-                    (base.id if isinstance(base, ast.Name) else getattr(base, "attr", "")).endswith("View")
-                    for base in node.bases
-                )
-                for node in tree.body
-            ):
-                escaped.append(str(source_path.relative_to(root)))
-        self.assertEqual(escaped, [])
+        self.assertTrue(paginated, "the walk found no paginated view")
+        self.assertEqual([name for name, view in paginated.items() if not issubclass(view, TableListMixin)], [])
 
 
 @tag("source", "tree")
@@ -489,7 +468,12 @@ class StyleContractTests(SimpleTestCase):
                 if term in lowered:
                     findings.append(f"{name}: deployment term #{index + 1}")
 
-        self.assertEqual(findings, [], f"reachable endpoints in tracked files: {findings}")
+        self.assertEqual(
+            findings,
+            [],
+            f"reachable endpoints in tracked files: {findings}. A dotted number that is not an address,"
+            " such as a specification's section, passes written as section-3.1.3.7.",
+        )
 
     def test_images_live_where_images_belong(self):
         """A screenshot taken while debugging is not an asset of this project.
@@ -883,12 +867,17 @@ class PostButtonTests(SimpleTestCase):
         return Template(source).render(Context(context))
 
     def test_it_targets_the_shared_form_with_its_own_action(self):
-        html = self.render('{% post_button "Move up" "/things/7/" value="up" title="Move up" %}')
+        html = self.render('{% post_button "↑" "/things/7/" value="up" title="Move up" %}')
         self.assertIn('form="hq-post"', html)
         self.assertIn('formaction="/things/7/"', html)
         self.assertIn('name="action" value="up"', html)
         self.assertIn('aria-label="Move up"', html)
         self.assertNotIn("disabled", html)
+
+    def test_a_button_of_words_is_named_by_them(self):
+        html = self.render('{% post_button "Check again" "/check/" title="Read the record again, then check it" %}')
+        self.assertIn('title="Read the record again, then check it"', html)
+        self.assertNotIn("aria-label", html)
 
     def test_it_can_be_disabled(self):
         html = self.render('{% post_button "Refresh" "/sync/" disabled=True %}')
@@ -1404,7 +1393,7 @@ class RuntimeDependencyTests(SimpleTestCase):
 
 
 def _restated_trails(tree: ast.AST) -> list[int]:
-    """Lines of a ``get_page_trail`` that only returns crumbs or a ``record_trail`` call."""
+    """Lines of a ``get_page_trail`` whose one statement returns a tuple of crumbs, starred parts and all."""
 
     found = []
     for node in ast.walk(tree):
@@ -1417,12 +1406,7 @@ def _restated_trails(tree: ast.AST) -> list[int]:
         ]
         if len(body) != 1 or not isinstance(body[0], ast.Return):
             continue
-        value = body[0].value
-        is_crumbs = isinstance(value, ast.Tuple)
-        is_record_trail = (
-            isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "record_trail"
-        )
-        if is_crumbs or is_record_trail:
+        if isinstance(body[0].value, ast.Tuple):
             found.append(node.lineno)
     return found
 
@@ -1431,15 +1415,66 @@ def _restated_trails(tree: ast.AST) -> list[int]:
 class PageTrailTests(SimpleTestCase):
     """A view says its trail with ``page_trail`` and ``trail_label``, not a ``get_page_trail`` that restates them.
 
-    An override stays for a trail the mixin cannot say: one built from the
-    request or from several statements.
+    ``page_trail`` holds every crumb above the record, so a page several
+    levels down declares them too, the pages above it spread in
+    (``(*ABOVE, crumb)``). An override stays for a trail the mixin cannot say:
+    one built from the request or from several statements.
     """
 
     def test_no_view_overrides_get_page_trail_to_say_what_the_mixin_says(self):
         root = Path(__file__).resolve().parents[4]
         self.assertEqual(_restated_trails(ast.parse("def get_page_trail(self):\n    return (A,)")), [1])
+        self.assertEqual(_restated_trails(ast.parse("def get_page_trail(self):\n    return (*ABOVE, (L, U))")), [1])
         self.assertEqual(_restated_trails(ast.parse("def get_page_trail(self):\n    x = 1\n    return (x,)")), [])
         restated = [
-            f"{path.relative_to(root)}:{line}" for path in view_modules(root) for line in _restated_trails(parsed(path))
+            f"{shown(root, path)}:{line}" for path in routed_modules(root) for line in _restated_trails(parsed(path))
         ]
         self.assertEqual(restated, [], "declare page_trail (and trail_label) on the view")
+
+
+class PageReadCapabilityTests(TestCase):
+    """Every page the URL configuration routes reads under one capability, refused before its view runs.
+
+    Walked from the URL configuration in force, function views and every
+    installed extension's included, so a page added anywhere is held.
+    A route that answers without a session (``login_not_required``)
+    authorizes its own requests and is read as declared.
+    """
+
+    def _pages(self):
+        pages = [each for each in routed() if getattr(each.pattern.callback, "login_required", True)]
+        self.assertTrue(pages, "No routed page was found")
+        return pages
+
+    def _opened(self, user, each) -> bool:
+        request = RequestFactory().get(each.path)
+        request.user = user
+        try:
+            LoginRequiredMiddleware(lambda _request: HttpResponse()).process_view(
+                request, each.pattern.callback, (), {}
+            )
+        except PermissionDenied:
+            return False
+        return True
+
+    def test_a_person_who_holds_nothing_opens_no_page(self):
+        with no_default_role():
+            nobody = get_user_model().objects.create_user("nobody")
+        opened = [
+            f"{each.path} {each.view.__module__}.{each.view.__qualname__}"
+            for each in self._pages()
+            if self._opened(nobody, each)
+        ]
+        self.assertEqual(opened, [], "these pages read without a capability")
+
+    def test_each_page_reads_under_one_capability_an_operator_opens(self):
+        from hq.platform.application.pages import page_capability
+
+        operator = get_user_model().objects.create_user("operator")
+        held = operator_capabilities()
+        wrong = [
+            each.path
+            for each in self._pages()
+            if page_capability(each.pattern.callback) not in held or not self._opened(operator, each)
+        ]
+        self.assertEqual(wrong, [])

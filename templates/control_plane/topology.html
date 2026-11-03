@@ -12,11 +12,11 @@
       <span class="muted">{{ topology_trace_label|breakable }}{% dot %}{{ topology_trace.depth|counted:"step" }}</span>
     </div>
     <nav class="topology-trace-controls" aria-label="Direction">
-      {% for item in trace_direction_links %}<a class="scope-chip{% if topology_trace.direction == item.name %} is-active{% endif %}" href="{{ item.url }}"{% if topology_trace.direction == item.name %} aria-current="page"{% endif %}>{{ item.label|breakable }}</a>{% endfor %}
+      {% for item in trace_direction_links %}<a class="scope-chip" href="{{ item.url }}"{% if topology_trace.direction == item.name %} aria-current="page"{% endif %}>{{ item.label|breakable }}</a>{% endfor %}
     </nav>
     <nav class="topology-trace-controls" aria-label="Steps">
       <span class="muted">Steps</span>
-      {% for item in trace_depth_links %}<a class="scope-chip{% if topology_trace.depth == item.depth %} is-active{% endif %}" href="{{ item.url }}"{% if topology_trace.depth == item.depth %} aria-current="page"{% endif %}>{{ item.depth|breakable }}</a>{% endfor %}
+      {% for item in trace_depth_links %}<a class="scope-chip" href="{{ item.url }}"{% if topology_trace.depth == item.depth %} aria-current="page"{% endif %}>{{ item.depth|breakable }}</a>{% endfor %}
     </nav>
     <a class="btn ghost compact" href="{{ trace_reset_url }}">Clear</a>
   </section>
@@ -59,7 +59,7 @@
   <p class="topology-hint muted"><span aria-live="polite" data-topology-status>{{ topology_shown|breakable }} of {{ topology_total|breakable }} shown. Press a count of links to see only what it connects to.</span>
     {% if topology_left_out %}<a href="{% url 'control_plane:topology' %}?all=1#map">Show {{ topology_left_out|breakable }} more</a>{% elif topology_everything %}<a href="{% url 'control_plane:topology' %}#map">Show fewer</a>{% endif %}</p>
 
-  <div class="topology-stage{% if topology_detail %} has-detail{% endif %}" data-topology-stage>
+  <div class="topology-stage">
   <div class="topology-map" id="map" tabindex="-1" role="region" aria-label="Topology lanes">
     {% for group in topology_groups %}{% if group.items %}
       <section class="topology-lane" data-topology-lane="{{ group.kind }}" aria-labelledby="topology-{{ group.kind }}">
@@ -74,7 +74,7 @@
               the panel beside the lanes, never inside the card.
             {% endcomment %}
             <article
-              class="topology-node topology-node-{{ item.node.kind }} is-{{ item.node.status }}{% if item.node.id == focus_node %} is-selected{% endif %}"
+              class="topology-node topology-node-{{ item.node.kind }} is-{{ item.node.status }}"
               data-topology-node="{{ item.node.id }}"
               data-topology-node-kind="{{ item.node.kind }}"
               data-topology-neighbors="{{ item.neighbors }}"

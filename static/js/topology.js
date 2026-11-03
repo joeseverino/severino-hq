@@ -9,7 +9,6 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
   const nodes = [...workspace.querySelectorAll("[data-topology-node]")];
   const lanes = [...workspace.querySelectorAll("[data-topology-lane]")];
   const map = workspace.querySelector(".topology-map");
-  const stage = workspace.querySelector("[data-topology-stage]");
   const detail = workspace.querySelector("[data-topology-detail]");
   const ledger = document.getElementById(workspace.dataset.topologyLedger);
   const edges = [...(ledger?.querySelectorAll("[data-topology-edge]") || [])];
@@ -45,7 +44,6 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
   const showDetail = (shown) => {
     if (!detail) return;
     detail.hidden = !shown;
-    stage?.classList.toggle("has-detail", shown);
   };
 
   // The selected node's body, from the same view a focused page renders.
@@ -88,7 +86,6 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
       const matchesFilter = passesToolbar(node);
       const inNeighborhood = !selected || id === focused || related.has(id);
       node.hidden = !matchesFilter || !inNeighborhood;
-      node.classList.toggle("is-selected", id === focused);
       node.classList.toggle("is-related", related.has(id));
       const select = node.querySelector("[data-topology-select]");
       if (id === focused) select?.setAttribute("aria-current", "true");

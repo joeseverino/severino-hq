@@ -22,7 +22,7 @@
   {% if section.folded %}<details class="section-fold"><summary><h2>{{ section.label|breakable }} <span class="heading-aside">{{ section.records|length }}</span></h2></summary>{% else %}<h2>{{ section.label|breakable }}</h2>{% endif %}
   {% table_region section.label %}
     <table class="data-table{% if section.compact %} compact-table{% endif %}">
-      <thead><tr>{% for column in section.columns %}{% if forloop.first %}{% table_heading column local_sort=section.records|sortable gutter=True %}{% elif section.columns|length > 2 %}{% table_heading column local_sort=section.records|sortable drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=section.records|sortable %}{% endif %}{% endfor %}</tr></thead>
+      <thead><tr>{% for column in section.columns %}{% if forloop.first %}{% table_heading column local_sort=section.records|sortable gutter=True %}{% elif forloop.length > 2 %}{% table_heading column local_sort=section.records|sortable drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=section.records|sortable %}{% endif %}{% endfor %}</tr></thead>
       <tbody>
         {% for record in section.records %}
           <tr>
@@ -49,7 +49,7 @@
   {% for label, text in section.readouts %}
     <details class="section-readout">
       <summary>{{ label|breakable }}</summary>
-      <pre>{{ text|breakable }}</pre>
+      <pre tabindex="0">{{ text|breakable }}</pre>
     </details>
   {% endfor %}
   {% for label, url in section.actions %}
