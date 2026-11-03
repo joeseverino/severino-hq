@@ -2,3 +2,17 @@
 static/vendor/** -whitespace linguist-vendored
 # A test sealing seed is 32 raw bytes, so a diff names it and never prints it.
 controller/runtime/testdata/seal/*.seed binary
+# Each file `mise run fix` writes from its source, which a lint:drift-* gate
+# or lint:controller holds to it: GitHub folds them in a diff, and audit:churn
+# leaves them out (tools/tests/test_generated_files.py holds this list to the
+# writers).
+hq_sdk/contract.json linguist-generated
+hq_sdk/text_examples.json linguist-generated
+hq/platform/api/hq-api.openapi.json linguist-generated
+hq/platform/api/openapi-examples.json linguist-generated
+controller/api/hq-controller.openapi.json linguist-generated
+controller/api/hq-connections.openapi.json linguist-generated
+hq/config/controller-connections.json linguist-generated
+controller/**/*.gen.go linguist-generated
+docs/Connections.md linguist-generated
+static/fonts/inter/inter-variable-latin.woff2 linguist-generated

@@ -1,0 +1,34 @@
+#!/bin/sh
+#MISE description="Each tracked source file's commits since a date, most first, generated and vendored files (.gitattributes) left out; reach for it to find where change concentrates before a refactor or a split; read-only"
+#MISE hide=true
+#USAGE arg "<since>" help="A date git log --since reads (2026-10-01, 3.months)"
+
+# git counts the commits itself: one name for each file a commit touched,
+# merges contributing none, and the files .gitattributes marks
+# linguist-generated or linguist-vendored left out by its own pathspec. A
+# file no longer tracked is dropped, so a rename counts under its new name
+# only from the rename on. Names come NUL-separated, so git never quotes one.
+set -euf
+
+since="${usage_since:?}"
+case "${since}" in
+-* | *[!A-Za-z0-9.:\ -]*)
+    printf 'audit:churn: %s is not a date of letters, digits, spaces and . : -\n' "${since}" >&2
+    exit 2
+    ;;
+esac
+
+work="$(mktemp -d)"
+trap 'rm -rf "${work}"' EXIT
+
+git ls-files -z >"${work}/tracked.z"
+tr '\0' '\n' <"${work}/tracked.z" >"${work}/tracked"
+git log -z --since="${since}" --format= --name-only -- . \
+    ':(exclude,attr:linguist-generated)' ':(exclude,attr:linguist-vendored)' >"${work}/touched.z"
+tr '\0' '\n' <"${work}/touched.z" | grep -v '^$' | sort | uniq -c >"${work}/counted" || true
+# One line per file, the most commits first and then by path, so two runs
+# are compared by a diff. The closing line holds the totals.
+awk 'NR == FNR { tracked[$0] = 1; next } { n = $1; sub(/^ *[0-9]+ /, ""); if ($0 in tracked) printf "%d\t%s\n", n, $0 }' \
+    "${work}/tracked" "${work}/counted" | sort -t "$(printf '\t')" -k1,1nr -k2,2 >"${work}/listed"
+cat "${work}/listed"
+printf '%s files changed since %s\n' "$(wc -l <"${work}/listed" | tr -d ' ')" "${since}"
