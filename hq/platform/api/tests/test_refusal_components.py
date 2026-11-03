@@ -10,7 +10,7 @@ from django.test import SimpleTestCase
 
 from hq.platform.application.refusal_status import REFUSAL_STATUS
 
-from .. import openapi, views
+from .. import openapi, refusal_names, views
 from ..fragments import pascal as _pascal
 
 
@@ -68,10 +68,12 @@ class RefusalComponentTests(SimpleTestCase):
         endpoint = _by_status(views.ENDPOINT_CODES)
         sets = {(status, codes) for status, codes in endpoint.items()}
         sets |= {(status, frozenset({code})) for code, status in REFUSAL_STATUS.items() if status not in endpoint}
-        sets |= {(status, codes) for kind in openapi.call_kinds() for status, codes in _by_status(kind.codes).items()}
+        sets |= {
+            (status, codes) for kind in refusal_names.call_kinds() for status, codes in _by_status(kind.codes).items()
+        }
         names: dict[str, tuple[int, frozenset[str]]] = {}
         for status, codes in sorted(sets, key=lambda answered: (answered[0], sorted(answered[1]))):
-            name = openapi.refusal_name(status, sorted(codes))
+            name = refusal_names.refusal_name(status, sorted(codes))
             with self.subTest(name=name):
                 self.assertNotIn(name, names, (status, sorted(codes)))
                 self.assertLessEqual(len(name), 40)
@@ -80,7 +82,7 @@ class RefusalComponentTests(SimpleTestCase):
     def test_a_set_no_kind_of_call_answers_fails_the_build_naming_it(self):
         # Two codes at a status no endpoint answers, that no one kind of call answers together.
         with self.assertRaisesRegex(openapi.OpenAPIError, "target_not_allowed.*target_required"):
-            openapi.refusal_name(400, ["target_not_allowed", "target_required"])
+            refusal_names.refusal_name(400, ["target_not_allowed", "target_required"])
 
     def test_a_refusal_of_several_codes_is_named_for_its_kind_and_status_never_its_codes(self):
         for status, _, schema_name, schema in self._answered():

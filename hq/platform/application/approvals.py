@@ -28,7 +28,7 @@ lazy from hq.platform.core.models import AuditLog
 from . import derivations
 from .command_fields import Describe
 from .derivations import holds_until
-from .held_answer import HeldCall, serialize_approval
+from .held_answer import ApprovalApplied, ApprovalRejected, HeldCall, serialize_approval
 from .payload_words import ChangeRow, changed_words, document, field_words, value_words
 from .record_errors import PolicyError, RecordNotFound, Sentence
 from .refusal_status import refuse
@@ -595,7 +595,7 @@ class RejectCommand:
     note: Annotated[str, Describe("What to tell whoever asked.")] = ""
 
 
-def approve(command: ApproveCommand, *, principal: Principal) -> dict[str, Any]:
+def approve(command: ApproveCommand, *, principal: Principal) -> ApprovalApplied:
     """Agree to a held change and run exactly the call that was held.
 
     The replay runs under a principal that names whoever asked and who allowed
@@ -609,7 +609,7 @@ def approve(command: ApproveCommand, *, principal: Principal) -> dict[str, Any]:
         return _apply(held, principal)
 
 
-def _apply(held: ApprovalRequest, principal: Principal) -> dict[str, Any]:
+def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
     spec = capabilities.capability_registry().get(held.capability)
     if spec is None:
         raise ApprovalError("What this request asks for is no longer something HQ can do, so it cannot be applied.")
@@ -670,7 +670,7 @@ def _apply(held: ApprovalRequest, principal: Principal) -> dict[str, Any]:
     return {"ok": True, "approved": str(locked.id), "result": result}
 
 
-def reject(command: RejectCommand, *, principal: Principal) -> dict[str, Any]:
+def reject(command: RejectCommand, *, principal: Principal) -> ApprovalRejected:
     """Refuse a held change, so the caller's request has an answer either way."""
 
     held = _decidable(command.approval_id, principal)

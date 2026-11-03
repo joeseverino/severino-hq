@@ -5,7 +5,7 @@ A record domain's delete is built from its declaration by
 """
 
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Literal, TypedDict
 
 from django.db import transaction
 
@@ -25,6 +25,21 @@ class DeleteCommand:
     confirm: Annotated[str, Describe("The record's identifier again, to confirm the delete.")]
 
 
+class DeletedPart(TypedDict):
+    """The record the call deleted."""
+
+    type: Annotated[str, Describe("What type of record it was, such as `asset`.")]
+    target: Annotated[str, Describe("The identifier the call named it by.")]
+    label: Annotated[str, Describe("What it was called.")]
+
+
+class RecordDeleted(TypedDict):
+    """A record deleted for good."""
+
+    ok: Literal[True]
+    deleted: DeletedPart
+
+
 def delete_record(
     model,
     *,
@@ -37,7 +52,7 @@ def delete_record(
     type_name: str,
     expected_updated_at: str | None = None,
     after_commit=None,
-) -> dict[str, Any]:
+) -> RecordDeleted:
     principal.require(capability)
     if command.confirm != target:
         raise ValueError(f"confirm must exactly match target {target!r}")
@@ -57,7 +72,9 @@ def delete_record(
     }
 
 
-def delete_calendar_entry(command, *, principal, current_key, expected_updated_at=None):
+def delete_calendar_entry(
+    command: DeleteCommand, *, principal: Principal, current_key: str, expected_updated_at: str | None = None
+) -> RecordDeleted:
     target = str(current_key)
     return delete_record(
         Entry,

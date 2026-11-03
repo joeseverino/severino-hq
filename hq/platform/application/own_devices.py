@@ -4,7 +4,7 @@ device's standing HQ keeps (docs/Security.md#agents)."""
 import logging
 import re
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Literal, TypedDict
 
 from django.db import DatabaseError, transaction
 
@@ -62,7 +62,15 @@ class OwnDeviceCommand:
     registered: Annotated[bool, Describe("Whether the client is registered as your own device.")]
 
 
-def set_own_device(command: OwnDeviceCommand, *, principal: Principal, current_key: str) -> dict[str, Any]:
+class OwnDeviceSet(TypedDict):
+    """One client's place among your own devices, as the call left it."""
+
+    ok: Literal[True]
+    client_id: Annotated[str, Describe("The client the call added or removed, by its client id.")]
+    registered: Annotated[bool, Describe("Whether the client is one of your own devices now.")]
+
+
+def set_own_device(command: OwnDeviceCommand, *, principal: Principal, current_key: str) -> OwnDeviceSet:
     """Register a client as the signed-in person's device, or remove it. Set, not toggled.
 
     Only for the person doing it: nobody registers a device for someone else.

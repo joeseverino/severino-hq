@@ -37,7 +37,8 @@ from .security import Principal
 lazy from .delivery_progress import deploying_label
 lazy from .locate import names_by_connection
 lazy from .resource_capabilities import kind_converges
-lazy from .resource_operations import queue_reconcile
+lazy from .resource_operations import OperationItem, ResourceSaved, queue_reconcile
+lazy from .resource_records import HealthPart, ManagedResourceItem
 
 # Each field a managed record is created and updated by, said once for both.
 type ManagedResourceKey = Annotated[str, Describe("The key the record is stored under.")]
@@ -201,7 +202,7 @@ def suggest_key(kind: str, spec: dict[str, Any]) -> str:
     return base
 
 
-def serialize_resource(resource: ManagedResource) -> dict[str, Any]:
+def serialize_resource(resource: ManagedResource) -> ManagedResourceItem:
     provider = PROVIDERS.get(resource.kind)
     health = resource_health(resource)
     return {
@@ -256,7 +257,7 @@ def is_drifted(resource: ManagedResource) -> bool:
     )
 
 
-def resource_health(resource: ManagedResource) -> dict[str, str]:
+def resource_health(resource: ManagedResource) -> HealthPart:
     active = {condition.get("type"): condition for condition in resource.conditions if condition.get("status") is True}
     for condition_type, state, label in (
         ("Drifted", "drifted", DRIFT_LABEL),
@@ -404,7 +405,7 @@ def save_managed_resource(
     expected_updated_at: str | None = None,
     copied_from_live: bool = False,
     sent: frozenset[str] | None = None,
-) -> dict[str, Any]:
+) -> ResourceSaved:
     """Write one declaration, for a caller the capability runner or HQ itself authorized.
 
     An update writes the fields it was ``sent`` over the record as locked, and
@@ -476,7 +477,7 @@ def save_managed_resource(
     }
 
 
-def _apply_saved(resource: ManagedResource, *, principal: Principal) -> dict[str, Any] | None:
+def _apply_saved(resource: ManagedResource, *, principal: Principal) -> OperationItem | None:
     """Queue the reconcile that applies a saved declaration, as the operation queued.
 
     Only for a kind the controller applies on its own, which it would queue at

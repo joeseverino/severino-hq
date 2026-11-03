@@ -8,11 +8,13 @@ controller applies it only through a connection that manages.
 """
 
 import json
-from typing import Any
+from typing import Annotated, Any
 
 lazy from hq.domains.control_plane.models import ManagedResource
 
+from .describe import Describe
 from .record_errors import PolicyError, RecordNotFound
+from .resource_operations import ResourceSaved
 from .security import Principal
 from .ui import counted
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
@@ -111,13 +113,19 @@ def policy_without_empty_groups(document: str) -> tuple[str, str]:
     return json.dumps(parsed), summary
 
 
+class EmptyGroupsRemoved(ResourceSaved):
+    """The tailnet policy as saved without its empty groups, and what that changes."""
+
+    change: Annotated[str, Describe("What leaving the empty groups out changes, in a sentence.")]
+
+
 def request_empty_groups_removal(
     command,
     *,
     principal: Principal,
     current_key: str,
     expected_updated_at: str | None = None,
-) -> dict[str, Any]:
+) -> EmptyGroupsRemoved:
     """Remove the empty groups the policy still grants, as a proposed policy change."""
 
     del command

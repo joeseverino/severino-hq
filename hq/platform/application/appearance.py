@@ -6,7 +6,7 @@ lets a chosen theme paint on the first frame with no script.
 """
 
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Literal, TypedDict
 
 from django.db import transaction
 from django.utils import timezone
@@ -17,6 +17,8 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import Appearance, AuditLog
 
 from .command_fields import Choices, Describe
+from .describe import listed
+from .ui import ended
 
 Theme = Appearance.Theme
 AUDIT_LABEL = "Appearance"
@@ -40,7 +42,14 @@ class ThemeCommand:
     theme: Annotated[str, Choices(Theme.choices), Describe("The theme to draw your pages in.")]
 
 
-def set_theme(command: ThemeCommand, *, principal: Principal) -> dict[str, Any]:
+class ThemeSet(TypedDict):
+    """The theme the person's pages are drawn in, as the call left it."""
+
+    ok: Literal[True]
+    theme: Annotated[str, Describe(ended(f"The theme now set: {listed(Theme.values)}"))]
+
+
+def set_theme(command: ThemeCommand, *, principal: Principal) -> ThemeSet:
     """Set, not cycle, so a repeated request cannot undo itself. People only."""
 
     user = person(principal)

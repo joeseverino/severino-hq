@@ -16,7 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from hq.platform.core.tests.task import git, usage
+from hq.platform.core.tests.task import RefError, git, usage
 from tools.gate.verdict import Gate, Step, run
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -179,11 +179,31 @@ class GitHub:
         return ok
 
 
-def github_gates() -> bool:
+def checked_commit() -> str:
+    """The commit GitHub checked for HEAD, or "": HEAD once a remote branch
+    holds it, else its upstream's tip when that tip's tree is HEAD's, as a
+    branch sent up as one commit over the remote's tip leaves it."""
+
     (sha,) = git("rev-parse", "HEAD")
-    if not git("branch", "-r", "--contains", sha):
-        print("HEAD is not pushed, so GitHub has checked nothing of it.", file=sys.stderr)
+    if git("branch", "-r", "--contains", sha):
+        return sha
+    try:
+        (upstream,) = git("rev-parse", "@{upstream}")
+    except RefError:
+        return ""
+    return upstream if git("rev-parse", "HEAD^{tree}") == git("rev-parse", f"{upstream}^{{tree}}") else ""
+
+
+def github_gates() -> bool:
+    sha = checked_commit()
+    if not sha:
+        print(
+            "HEAD is not pushed, and no upstream tip holds its tree, so GitHub has checked nothing of it.",
+            file=sys.stderr,
+        )
         return False
+    if [sha] != git("rev-parse", "HEAD"):
+        print(f"HEAD's tree is the upstream tip's, {sha[:12]}, which GitHub checked.")
     repository = gh("repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner").strip()
     github = GitHub(sha, repository)
     deadline = time.monotonic() + int(os.environ.get("CHECK_REMOTE_TIMEOUT", "3600"))

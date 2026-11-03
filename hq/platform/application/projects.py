@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, fields, replace
 from datetime import datetime
 from functools import partial
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -21,6 +21,7 @@ from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
 from hq.domains.projects.models import Project
 from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
+lazy from hq.domains.projects.specs import ProjectRecord
 lazy from hq.platform.application.routes import reverse
 
 from .command_fields import Describe
@@ -31,8 +32,8 @@ from .projection import addressable, iso, listing, projection_scope, read_once
 from .record_errors import RecordConflict, RecordNotFound
 from .record_fields import Notes, PublishedUrl, Slug
 from .record_links import linked
-from .record_saves import Held, held, linked_saver
-from .refusal_status import refusal_of, refuse
+from .record_saves import Held, held, linked_saver, saved_type
+from .refusal_status import RefusalEnvelope, refusal_of, refuse
 from .security import Principal
 from .standards import MET
 from .ui import counted
@@ -44,6 +45,7 @@ lazy from .entity_links import EntityLink, entity_link
 lazy from .github_estate import Repository, repositories, repository_for
 lazy from .github_posture import STANDARD, posture_of
 lazy from .plugins import installed_plugins
+lazy from .record_answers import DependencyUpdatesSet
 lazy from .timestamps import moment
 
 type ProjectName = Annotated[str, Describe("What the project is called.")]
@@ -424,7 +426,7 @@ def set_dependency_updates(
     principal: Principal,
     current_slug: str,
     expected_updated_at: str | None = None,
-) -> dict[str, Any]:
+) -> DependencyUpdatesSet | RefusalEnvelope:
     """Opt a project's repository in to dependency updates, or out.
 
     Only a project that names a repository, and turning updates on only while
@@ -441,7 +443,8 @@ def set_dependency_updates(
         project.dependency_updates = command.dependency_updates
         project.full_clean()
         project.save()
-    return {"ok": True, "project": serialize_project(project, relationships=True)}
+    # A project serialized with its relationships is its record, as a read of one answers it.
+    return {"ok": True, "project": cast(ProjectRecord, serialize_project(project, relationships=True))}
 
 
 def _updates_refusal(project: Project, *, enabling: bool) -> str:
@@ -459,13 +462,17 @@ def _updates_refusal(project: Project, *, enabling: bool) -> str:
     return f'Dependency updates need the repository check "{check.label}" ({check.id}) to pass first. {check.fix}'
 
 
+# What a project's save answers, read off its record type (``saved_type``).
+type ProjectSaved = saved_type("projects")
+
+
 def upsert_project(
     command: ProjectCommand,
     *,
     principal: Principal,
     expected_updated_at: str | None = None,
     sent: frozenset[str] | None = None,
-) -> dict[str, Any]:
+) -> ProjectSaved:
     """Idempotently create or update a project by its command slug."""
 
     return upsert_by_slug(

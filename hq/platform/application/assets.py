@@ -13,7 +13,7 @@ from .entity_links import EntityLink, entity_link
 from .projection import addressable, iso, listing
 from .record_fields import Notes, Slug, TotalCost
 from .record_links import linked
-from .record_saves import Held, Link, linked_saver
+from .record_saves import Held, Link, linked_saver, saved_type
 from .security import Principal
 from .upserts import upsert_by_slug
 lazy from . import zones
@@ -100,13 +100,17 @@ save_asset = linked_saver(
 )
 
 
+# What an asset's save answers, read off its record type (``saved_type``).
+type AssetSaved = saved_type("assets")
+
+
 def upsert_asset(
     command: AssetCommand,
     *,
     principal: Principal,
     expected_updated_at: str | None = None,
     sent: frozenset[str] | None = None,
-) -> dict[str, Any]:
+) -> AssetSaved:
     """Idempotently create or update an asset by its command slug."""
 
     return upsert_by_slug(

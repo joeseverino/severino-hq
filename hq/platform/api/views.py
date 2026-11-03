@@ -9,7 +9,7 @@ quietly changed meaning.
 import json
 import re
 from collections.abc import Callable, Iterable, Mapping
-from typing import Annotated, Any, Concatenate, TypedDict, cast
+from typing import Annotated, Any, Concatenate, TypedDict, Union, cast, get_args, get_type_hints
 
 from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser
@@ -45,6 +45,7 @@ from hq.platform.application.integration_specs import (
     IDEMPOTENCY_HEADER,
     RESERVED_QUERY_FIELD,
     CapabilitySpec,
+    answer_type,
 )
 from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.pages import page_refusal
@@ -736,7 +737,34 @@ def call_codes(doors: Iterable[Door]) -> frozenset[str]:
     return ENDPOINT_CODES | answered_by(Door.BODY, *doors)
 
 
-# What a call answers under ``data``: the capability's own result, or that it waits for a person.
+def capability_data(spec: CapabilitySpec) -> Any | None:
+    """What a call of ``spec`` answers under ``data``: its result less the
+    ``ok`` the envelope says beside it, or that it waits for a person where it
+    changes something; None where its result names no shape (``answer_type``)."""
+
+    answer = answer_type(spec)
+    if answer is None:
+        return None
+    members = tuple(_without_outcome(member) for member in get_args(answer) or (answer,))
+    if spec.effect != "read":
+        # A read is never held for a person (``capability_policy.set_rule``).
+        members += (AwaitingApproval,)
+    return members[0] if len(members) == 1 else Union[members]  # noqa: UP007 - built from a tuple of types
+
+
+def _without_outcome(kind: Any) -> Any:
+    """``kind`` without its ``ok`` field, under its own name and words, as ``execute`` sends it."""
+
+    hints = get_type_hints(kind, include_extras=True)
+    if "ok" not in hints:
+        return kind
+    data: Any = TypedDict(kind.__name__, {name: hint for name, hint in hints.items() if name != "ok"})  # type: ignore[misc]  # its name is the type it is built from
+    data.__doc__, data.__module__ = kind.__doc__, kind.__module__
+    return data
+
+
+# What a call answers under ``data`` where its capability names no shape of
+# its own: an object, or that it waits for a person.
 type CapabilityAnswer = Annotated[
     dict[str, Any] | AwaitingApproval,
     Field(description="What the capability answers, in the shape its command names, or that it waits for a person."),

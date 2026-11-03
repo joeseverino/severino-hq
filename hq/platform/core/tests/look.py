@@ -14,7 +14,9 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
+from collections.abc import Callable
 from contextlib import ExitStack, suppress
 from pathlib import Path
 from typing import override
@@ -38,8 +40,10 @@ from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.reference import (
     REFERENCE,
     REFERENCE_DARK,
+    OpenedTag,
     draw_whole_reference,
     open_tag,
+    opened_operation,
     opened_walk,
     render_reference,
     served_document,
@@ -48,7 +52,7 @@ from hq.platform.core.tests.browser.reference import (
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.shots import TALLEST, shoot_page
 from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
-from hq.platform.core.tests.browser.survey import AUDIT, survey_checks
+from hq.platform.core.tests.browser.survey import AUDIT, palette_probes, survey_checks
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN
 from hq.platform.core.tests.look_records import EstatePages
 from hq.platform.core.tests.look_report import (
@@ -87,6 +91,8 @@ REFERENCE_PAGES = (REFERENCE, REFERENCE_DARK)
 # What the console errors, uncaught errors and policy refusals a page had are
 # reported as: judged as a rule's findings are, so only a new one fails against a base.
 _ERRORS = "the error check"
+# A run's verdict when a file changed while it ran.
+TREE_CHANGED = "the tree changed while dev:look ran; its shots and verdict mix two trees"
 
 # Request headers the browser sends that are not the view's to read. The
 # answer goes back with its type alone, so it is never asked to be compressed.
@@ -265,6 +271,93 @@ def _bands(height: int, band: int) -> list[tuple[int, int]]:
     return [(top, min(band, height - top)) for top in range(0, height, band)]
 
 
+# A shot file by its name, and the part of the page it holds, as its top and height.
+type Band = tuple[str, float, float]
+
+# What stands for an element ``--eval``'s script returned, by its place among
+# them, until its box is read once the shot is taken.
+_ELEMENT = "dev:look element"
+# The script's value with each element in it, at any depth of arrays and
+# plain objects, kept in the page and stood for by its place.
+_RETURNED = """([value, marker]) => {
+  const returned = (window.lookReturned = []);
+  const made = new Map();
+  const walk = (item) => {
+    if (item instanceof Element) return {[marker]: returned.push(item) - 1};
+    if (item instanceof NodeList || item instanceof HTMLCollection) item = [...item];
+    if (item === null || typeof item !== 'object') return item;
+    if (made.has(item)) return made.get(item);
+    if (Array.isArray(item)) {
+      const out = [];
+      made.set(item, out);
+      item.forEach((each) => out.push(walk(each)));
+      return out;
+    }
+    if (Object.getPrototypeOf(item) !== Object.prototype) return item;
+    const out = {};
+    made.set(item, out);
+    Object.entries(item).forEach(([key, each]) => { out[key] = walk(each); });
+    return out;
+  };
+  return walk(value);
+}"""
+# Each element kept, named, with its box from the top of what ``frame``
+# scrolls, or the page's without one, and whether a reader sees it at all.
+_RETURNED_BOXES = """(frame) => {
+  const scroller = frame && document.querySelector(frame);
+  const origin = scroller
+    ? scroller.getBoundingClientRect().top + scroller.clientTop - scroller.scrollTop
+    : -window.scrollY;
+  return (window.lookReturned ?? []).map((el) => {
+    const box = el.getBoundingClientRect();
+    const classes = [...el.classList].slice(0, 2).map((name) => `.${name}`).join('');
+    return {
+      named: `${el.localName}${el.id ? `#${el.id}` : ''}${classes}`,
+      top: box.top - origin,
+      bottom: box.bottom - origin,
+      shown: el.checkVisibility(),
+    };
+  });
+}"""
+# The box of the operation whose id in the viewer ends with ``suffix``
+# (`/<METHOD><path>`), from the top of the page, as the returned elements'.
+_OPERATION_BOX = """([root, suffix]) => [...document.querySelector(root).querySelectorAll('[id*="/tag/"]')]
+  .filter((el) => el.id.endsWith(suffix)).slice(0, 1).map((el) => {
+    const box = el.getBoundingClientRect();
+    return {top: box.top + window.scrollY, bottom: box.bottom + window.scrollY, shown: el.checkVisibility()};
+  })"""
+# The part of the page the window shows, as its top and height.
+_WINDOW_SHOWS = "() => [window.scrollY, window.innerHeight]"
+
+
+def _shown_in(box: dict, bands: list[Band]) -> str:
+    """Which of the shot files ``bands`` names show ``box``: the one, or the
+    first and last of those it spans."""
+
+    if not box["shown"]:
+        return "not shown"
+    top, bottom = box["top"], max(box["bottom"], box["top"] + 1)
+    files = [file for file, at, tall in bands if top < at + tall and bottom > at]
+    if not files:
+        return "in no shot, outside what they hold"
+    return f"in {files[0]}" + (f" to {files[-1]}" if len(files) > 1 else "")
+
+
+def _placed(value, boxes: Callable[[], list[dict]], bands: list[Band]):
+    """``value`` with each element the script returned said as what it is
+    and the shot file that shows it, ``boxes`` read from the page only when
+    there is one."""
+
+    if isinstance(value, dict):
+        if set(value) == {_ELEMENT}:
+            box = boxes()[value[_ELEMENT]]
+            return f"{box['named']}, {_shown_in(box, bands)}"
+        return {key: _placed(item, boxes, bands) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_placed(item, boxes, bands) for item in value]
+    return value
+
+
 def _write_found(path: Path, found: Found, measured: Measured, errors: Found) -> None:
     entries = [
         {
@@ -299,6 +392,40 @@ def _commit(ref: str) -> str:
         changed = subprocess.run([*git, "status", "--porcelain"], capture_output=True, text=True, check=False).stdout
         said += " with uncommitted changes" if changed.strip() else ""
     return said
+
+
+def tree_of(root: Path) -> str:
+    """The checkout at ``root`` as one git tree id: every file in it but those
+    git ignores, untracked ones too, so two checkouts that differ in any file
+    name different trees. It is written from an index and an object store of
+    its own, the checkout's objects read beside them, so the checkout's index
+    and objects are left as they were."""
+
+    objects = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--path-format=absolute", "--git-path", "objects"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    with tempfile.TemporaryDirectory() as folder:
+        Path(folder, "objects").mkdir()
+        env = os.environ | {
+            "GIT_INDEX_FILE": str(Path(folder, "index")),
+            "GIT_OBJECT_DIRECTORY": str(Path(folder, "objects")),
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES": objects,
+        }
+        subprocess.run(["git", "-C", str(root), "add", "--all"], env=env, capture_output=True, check=True)
+        written = subprocess.run(
+            ["git", "-C", str(root), "write-tree"], env=env, capture_output=True, text=True, check=True
+        )
+        return written.stdout.strip()
+
+
+def changed_since(tree: str, root: Path) -> str:
+    """The run's refusal when the checkout at ``root`` is no longer ``tree``,
+    the one it began on: its pages were drawn from both."""
+
+    return "" if tree_of(root) == tree else TREE_CHANGED
 
 
 def _relay(command: list[str], sink, ref: str, **options) -> None:
@@ -462,6 +589,17 @@ def _rules() -> list[str]:
     )
 
 
+def no_rule(rule: str) -> str:
+    """Why ``--rule`` refuses ``rule``: a check of the survey is no rule of its
+    own, so the refusal names the gate test that holds it."""
+
+    said = f"No rule named {rule!r}."
+    if rule in survey_checks("/", PHONE_SCREEN[0]):
+        held = "every_palette_check_holds" if rule in palette_probes() else "every_layout_check_holds"
+        said += f" {rule!r} is a check of the survey, held by {held}: --rule {held}, or --rule survey for every check."
+    return f"{said} Rules: {', '.join(_rules())}"
+
+
 def _pages(asked: tuple[str, ...]) -> list[str]:
     """The pages ``asked`` names, ``all`` and ``estate/all`` spelled out, an
     estate page by its name; one dev:look cannot draw is refused."""
@@ -485,6 +623,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     @classmethod
     def setUpClass(cls):
+        # The tree the run draws from, held to the end (`changed_since`).
+        cls.tree = tree_of(Path(settings.BASE_DIR))
         cls.clock_at = float(_asked().text(_CLOCK) or round(time.time()))
         # What was asked is checked before the base is looked at, which takes a
         # while: the seed first, as a record's page is found in its estate.
@@ -494,7 +634,11 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             raise AssertionError(f"--seed: {unknown}") from None
         cls.asked = _pages(_asked().repeated("pages"))
         if (rule := cls.rule_asked()) and rule not in _rules():
-            raise AssertionError(f"No rule named {rule!r}. Rules: {', '.join(_rules())}")
+            raise AssertionError(no_rule(rule))
+        if _asked().text("operation") and not set(cls.asked) & set(REFERENCE_PAGES):
+            raise AssertionError(
+                f"--operation opens an operation of the API reference: name {' or '.join(REFERENCE_PAGES)}"
+            )
         # The base next, while nothing of this run's holds memory but Django.
         ref = _asked().text("base")
         cls.base, cls.base_measured, cls.base_errors = _look_at(ref, rule, cls.clock_at) if ref else (None, {}, {})
@@ -654,8 +798,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         unanswered = [f"{name} answered {status}, not 200" for name, status in self.unanswered.items()]
         base = f", the base's in {_shown(this_run() / BASE_OUT)}/" if self.base is not None else ""
         shots = f"Screenshots in {_shown(this_run())}/{base}"
-        print(*printed, *unanswered, shots, sep="\n", flush=True)
-        return failed + unanswered
+        # Last, as it voids every verdict before it.
+        changed = [said] if (said := changed_since(self.tree, Path(settings.BASE_DIR))) else []
+        print(*printed, *unanswered, shots, *changed, sep="\n", flush=True)
+        return failed + unanswered + changed
 
     def look_at_every_page(self, widths, rule) -> Found:
         """Each page at each width, said as it starts, so a look that hangs
@@ -697,12 +843,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.refusals_so_far()
 
     def asked_for(self):
-        """The widths and rule the task was given, each checked, and the CSS it
-        adds."""
+        """The widths and rule the task was given, and the CSS it adds."""
 
         widths = [int(width) for width in _listed("widths")] or [PHONE_SCREEN[0], 820, 1360]
         rule = self.rule_asked()
-        self.assertTrue(not rule or callable(getattr(self, rule, None)), f"No rule named {rule!r}")
         self.css = _css(_asked().text("css"))
         self.script = _script(_asked().text("eval"))
         self.dialogs = _listed("dialog")
@@ -716,11 +860,12 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if refused := self.refused(name, width):
             return self.shoot_failure(name, width, refused)
         self.draw_as_asked(name, width)
-        # After --open and --expand, so it reads the page the shot shows, and
-        # before the shot, so what a script changes is seen.
-        if self.script:
-            self.evaluate_script(name, width)
-        self.screenshot(name, width)
+        opened = self.open_operation(name, width) if self.on_reference and _asked().text("operation") else None
+        shows = f"with {opened.label} opened" if opened else ""
+        # After --open, --expand and --operation, so it reads the page the shot shows.
+        bands = self.take_shot(name, width, lambda: self.screenshot(name, width, shows=shows), shows=shows)
+        if opened:
+            self.say_where(opened, bands)
         if _asked().switch("columns"):
             self.measure_columns(name, width)
         self.width = width
@@ -751,11 +896,11 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         for (label, slug), alike in self.each_popover_kind():
             self.settle()
             named = f"{label} and {alike} like it" if alike else label
-            if self.script:
-                self.evaluate_script(name, width, f"popover-{slug}", f"with {named} shown")
-            shot = self.shoot_popover(name, width, slug)
+            shows = f"with {named} shown"
+            self.take_shot(
+                name, width, functools.partial(self.shoot_popover, name, width, slug, shows), f"popover-{slug}", shows
+            )
             said = self.judged(name, width, rule)
-            self.shots.append((shot, f"with {named} shown"))
             # A finding names what was shown and leaves the path to the shot
             # line beside it, since a base's shots lie elsewhere and a finding
             # is matched with the base's by its words.
@@ -777,21 +922,22 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             undrawn = open_tag(self.page, opened)
             self.settle()
             shows = f"with {opened.label} opened"
-            if self.script:
-                self.evaluate_script(name, width, f"open-{opened.name}", shows)
-            self.screenshot(name, width, f"open-{opened.name}", shows)
+            part = f"open-{opened.name}"
+            self.take_shot(name, width, functools.partial(self.screenshot, name, width, part, shows), part, shows)
             said = [f"the viewer drew nothing for {', '.join(undrawn)}"] if undrawn else []
             said += self.judged(name, width, rule) if rule else []
             found += [f"{shows}: {line}" for line in unmatched(said, beneath)]
         return found
 
-    def shoot_popover(self, name, width, popover) -> str:
+    def shoot_popover(self, name, width, popover, shows) -> list[Band]:
         """The window with ``popover`` shown (``<page>-<width>.popover-<id>.png``),
-        where it sits, by the path a reader names it."""
+        where it sits, which ``shows`` says; the part of the page it holds."""
 
         shot = _shot(name, width, f"popover-{popover}")
         self.page.screenshot(path=shot, animations="disabled")
-        return _shown(shot)
+        self.shots.append((_shown(shot), shows))
+        top, tall = self.page.evaluate(_WINDOW_SHOWS)
+        return [(shot.name, top, tall)]
 
     def with_each_dialog(self, name, width, rule, beneath) -> list[str]:
         """Each dialog ``--dialog`` names, or every one the page declares for
@@ -813,9 +959,14 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             stall_watch.mark(f"dev:look {name} at {width} with #modal-{dialog} open")
             if not self.open_dialog(name, width, dialog):
                 continue
-            self.shoot_dialog(name, width, dialog)
-            if self.script:
-                self.evaluate_script(name, width, f"dialog-{dialog}", f"with #modal-{dialog} open")
+            self.take_shot(
+                name,
+                width,
+                functools.partial(self.shoot_dialog, name, width, dialog),
+                f"dialog-{dialog}",
+                f"with #modal-{dialog} open",
+                frame=f"#modal-{dialog}",
+            )
             if rule:
                 said = self.judged(name, width, rule)
                 found += [f"with #modal-{dialog} open: {line}" for line in unmatched(said, beneath)]
@@ -852,21 +1003,27 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             self.open_everything(name, width)
         return True
 
-    def shoot_dialog(self, name, width, dialog):
+    def shoot_dialog(self, name, width, dialog) -> list[Band]:
         """The window with ``dialog`` open and, when it scrolls within itself,
         the same scrolled down a band at a time, overlapping so a sticky head
-        hides nothing (``.band-01.png``)."""
+        hides nothing (``.band-01.png``); the part of the dialog each holds,
+        from the top of what it scrolls."""
 
         shot = _shot(name, width, f"dialog-{dialog}")
         self.page.screenshot(path=shot, animations="disabled")
         tall, band = self.page.evaluate(_DIALOG_EXTENT, dialog)
         tops = [*range(0, tall - band, band * 3 // 4), tall - band] if tall > band else []
+        bands = [(shot.name, 0, band)]
         for number, top in enumerate(tops, start=1):
             self.page.evaluate(_DIALOG_SCROLL, [dialog, top])
-            self.page.screenshot(path=shot.with_name(f"{shot.stem}.band-{number:02}.png"), animations="disabled")
+            cut = shot.with_name(f"{shot.stem}.band-{number:02}.png")
+            self.page.screenshot(path=cut, animations="disabled")
+            bands.append((cut.name, top, band))
         if tops:
             self.page.evaluate(_DIALOG_SCROLL, [dialog, 0])
         self.shots.append((_shown(shot), _with(f"#modal-{dialog} open", len(tops))))
+        # Cut in bands, a part is named by its band, as a page's is.
+        return bands[1:] or bands
 
     def close_dialog(self, dialog):
         """``dialog`` closed with Escape, and the menus opened to reach it
@@ -903,6 +1060,30 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             self.open_everything(name, width)
         if _asked().switch("expand"):
             self.expand_rows()
+
+    def open_operation(self, name, width) -> OpenedTag:
+        """The operation ``--operation`` names opened on the reference as a
+        reader opens it: its tag shown, and its body and every response
+        opened with each property in them. An operation's own anchor would
+        land on the reference's introduction, and its parts stay closed."""
+
+        try:
+            opened = opened_operation(served_document(self.page), _asked().text("operation"))
+        except LookupError as unknown:
+            raise AssertionError(f"--operation: {unknown}") from None
+        if undrawn := open_tag(self.page, opened):
+            print(f"{name} at {width}: the viewer drew nothing for {', '.join(undrawn)}", flush=True)
+        self.settle()
+        return opened
+
+    def say_where(self, opened, bands):
+        """The shot of ``opened`` captioned with the files that show it."""
+
+        method, path = opened.name.split(" ", 1)
+        boxes = self.page.evaluate(_OPERATION_BOX, [SELECTORS["reference"], f"/{method}{path}"])
+        shown = _shown_in(boxes[0], bands) if boxes else "not drawn by the viewer"
+        path, caption = self.shots[-1]
+        self.shots[-1] = (path, f"{caption}, {opened.name} {shown}")
 
     def expand_rows(self):
         """Every row a reader can open, opened: only the toggles a reader can
@@ -943,13 +1124,14 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
                 print(f"{name} at {width}: --open left a region loading ({str(waited).splitlines()[0]})", flush=True)
                 return
 
-    def screenshot(self, name, width, part="", shows=""):
+    def screenshot(self, name, width, part="", shows="") -> list[Band]:
         """The whole page, or a ``part`` of it open that ``shows`` says, and,
         when it is taller than the window, the same cut into window-sized
         bands beside it, so each can be read at once, each to ``TALLEST``
         at most (``shoot_page``). Shot once its extent holds still; one
         that never does is shot as it stands, with no bands, and the shot
-        says so."""
+        says so. The part of the page each file holds: its bands, or the
+        shot when it has none."""
 
         shot = _shot(name, width, part)
         try:
@@ -959,19 +1141,16 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             cut = shoot_page(self.page, shot, animations="disabled")
             said = f"its height never held still, so no bands ({str(moving).splitlines()[0]})"
             self.shots.append((_shown(shot), ", ".join(filter(None, [shows, cut, said]))))
-            return
+            return [(shot.name, 0, TALLEST)]
         cut = shoot_page(self.page, shot, extent=(wide, tall), animations="disabled")
         shows = ", ".join(filter(None, [shows, cut]))
         bands = _bands(min(tall, TALLEST), self.page.viewport_size["height"])
+        files = []
         for number, band in enumerate(bands, start=1):
-            shoot_page(
-                self.page,
-                shot.with_name(f"{shot.stem}.band-{number:02}.png"),
-                extent=(wide, tall),
-                band=band,
-                animations="disabled",
-            )
+            files.append((shot.with_name(f"{shot.stem}.band-{number:02}.png"), *band))
+            shoot_page(self.page, files[-1][0], extent=(wide, tall), band=band, animations="disabled")
         self.shots.append((_shown(shot), _with(shows, len(bands))))
+        return [(path.name, top, height) for path, top, height in files] or [(shot.name, 0, min(tall, TALLEST))]
 
     def shoot_failure(self, name, width, said) -> list[str]:
         """``said`` as the finding, with the page as it stands kept beside the
@@ -1006,22 +1185,46 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.measured.setdefault((name, width), {})["columns"] = said
         print(self.beside_base(name, width, "columns", said), flush=True)
 
-    def evaluate_script(self, name, width, state="", shows=""):
-        """What ``--eval``'s script returns on the page as one shot shows it,
-        ``state`` that shot's suffix and ``shows`` what it shows, printed and
-        kept beside it (``.eval.txt``): a computed style or an ancestor chain
-        read in one command. One that throws says so and the look goes on."""
+    def evaluate_script(self, where, width) -> tuple[str, object]:
+        """``--eval``'s script run on the page as it stands: what it threw, as
+        a line under ``where``, or what it returned, each element in it kept
+        in the page to be measured once the shot is taken."""
 
-        where = f"{name} {shows}" if shows else name
         try:
-            said = _evaluated(where, width, self.page.evaluate(self.script))
-        except BrowserError as threw:
-            said = f"{where} at {width}: --eval threw ({str(threw).splitlines()[0]})"
+            # A handle, so an element the script returns stays the page's.
+            handle = self.page.evaluate_handle(self.script)
+            returned = self.page.evaluate(_RETURNED, [handle, _ELEMENT])
+            handle.dispose()
+        except BrowserError as broke:
+            return f"{where} at {width}: --eval threw ({str(broke).splitlines()[0]})", None
+        return "", returned
+
+    def take_shot(self, name, width, take, state="", shows="", frame=None) -> list[Band]:
+        """One shot ``take`` takes, with ``--eval``'s script run first on the
+        page it shoots, ``state`` that shot's suffix and ``shows`` what it
+        shows, and what the script returns printed and kept beside it
+        (``.eval.txt``): a computed style or an ancestor chain read in one
+        command. An element it returns is said as the shot file that shows
+        it, the band where the shot is cut in bands (``take`` says what each
+        holds, from the top of ``frame``'s scrolled content, or the page's).
+        The page is settled after the script, so the shot draws what it
+        changed. One that throws says so and the look goes on. What ``take``
+        said each file holds."""
+
+        if not self.script:
+            return take()
+        where = f"{name} {shows}" if shows else name
+        threw, returned = self.evaluate_script(where, width)
+        self.settle()
+        bands = take()
+        boxes = functools.cache(lambda: self.page.evaluate(_RETURNED_BOXES, frame))
+        said = threw or _evaluated(where, width, _placed(returned, boxes, bands))
         shot = _shot(name, width, state)
         shot.with_name(shot.stem + ".eval.txt").write_text(said + "\n", encoding="utf-8")
         kind = f"eval {state}" if state else "eval"
         self.measured.setdefault((name, width), {})[kind] = said
         print(self.beside_base(name, width, kind, said), flush=True)
+        return bands
 
     def tables(self, name):
         """What each table shows here, printed and kept beside the screenshot

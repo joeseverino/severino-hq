@@ -11,12 +11,9 @@ import json
 import re
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from dataclasses import dataclass
-from functools import cache
 from http import HTTPStatus
-from itertools import product
 from pathlib import Path
-from typing import Any, TypeAliasType
+from typing import Any, TypeAliasType, get_args
 
 from django.urls import URLPattern, reverse
 
@@ -29,17 +26,18 @@ from hq.platform.application.integration_specs import (
     IDEMPOTENCY_FIELD_SCHEMA,
     IDEMPOTENCY_HEADER,
     RESERVED_QUERY_FIELD,
+    CapabilitySpec,
 )
 from hq.platform.application.json_schemas import LOCAL, json_schema, json_schemas
-from hq.platform.application.labels import lower_first
 from hq.platform.application.plugins import NavigationItem
-from hq.platform.application.refusal_status import LATER_CODES, REFUSAL_STATUS, call_doors
+from hq.platform.application.refusal_status import LATER_CODES
 from hq.platform.application.resources import describe_resources, resource_registry
 from hq.platform.application.security import API_INTERFACE, Principal
 lazy from hq.platform.application.routes import routed
 
 from . import urls, views
 from .fragments import OpenAPIError, pascal as _pascal
+from .refusal_names import LATER_STATUSES, codes_by_status, refusal_name
 
 OPENAPI_VERSION = "3.2.0"
 DOCUMENT_PATH = Path(__file__).with_name("hq-api.openapi.json")
@@ -298,102 +296,6 @@ class _Tags:
         return tags
 
 
-def _codes_by_status(codes: Iterable[str]) -> dict[int, list[str]]:
-    """Each status ``codes`` answer at, with the codes answered there, by REFUSAL_STATUS."""
-
-    statuses: dict[int, list[str]] = {}
-    for code in sorted(codes):
-        statuses.setdefault(REFUSAL_STATUS[code], []).append(code)
-    return dict(sorted(statuses.items()))
-
-
-_LATER_STATUSES = frozenset(_codes_by_status(LATER_CODES))
-
-
-@dataclass(frozen=True, slots=True)
-class CallKind:
-    """A kind of call whose codes the document names a refusal for: its words, by axis, and its codes.
-
-    A call by any name is ``general``: it may be any capability's call, so it
-    names a set only where no particular kind answers exactly that set.
-    """
-
-    words: tuple[tuple[str, str], ...]
-    codes: frozenset[str]
-    general: bool = False
-
-    def at(self, status: int) -> frozenset[str]:
-        return frozenset(_codes_by_status(self.codes).get(status, ()))
-
-
-# The axes a kind's words come in, in the order a name says them. A call's
-# subject word, "Call", is said only when no other word is.
-_AXES = ("target", "check", "effect", "subject")
-_CALL = ("subject", "Call")
-
-
-@cache
-def call_kinds() -> tuple[CallKind, ...]:
-    """Every kind of call the API answers beyond what every endpoint does: a
-    resource read, a capability's call by what it declares, and a call by any name."""
-
-    calls = tuple(
-        CallKind(
-            (
-                ("target", "Targeted" if targeted else "Untargeted"),
-                ("check", "StaleChecked" if stale_write else "Unchecked"),
-                ("effect", "Change" if changes else "Read"),
-                _CALL,
-            ),
-            views.call_codes(call_doors(targeted=targeted, stale_write=stale_write, changes=changes)),
-        )
-        for targeted, stale_write, changes in product((True, False), repeat=3)
-    )
-    resource = CallKind((("subject", "ResourceRead"),), views.ENDPOINT_CODES | views.RESOURCE_CODES)
-    return (*calls, resource, CallKind((("subject", "AnyCall"),), views.execute_codes(None), general=True))
-
-
-def refusal_name(status: int, codes: list[str]) -> str:
-    """The component name for refusing at ``status`` with ``codes``, from them alone.
-
-    The set every endpoint answers there is named for the status; one code at
-    a status no endpoint answers, for that code; any other set, for the kind
-    of call that answers exactly it: the words the kinds answering it share,
-    then the status. Two operations answering the same codes so share one
-    response, and no order of routes moves a name. A set no kind answers fails
-    the build here, and a name two sets reach fails it in ``refusal``.
-    """
-
-    phrase = _pascal(HTTPStatus(status).phrase)
-    answered = frozenset(codes)
-    shared = frozenset(_codes_by_status(views.ENDPOINT_CODES).get(status, ()))
-    if answered == shared:
-        return phrase
-    if len(answered) == 1 and not shared:
-        return _pascal(codes[0])
-    said = _kind_words(status, answered)
-    if not said:
-        raise OpenAPIError(
-            f"No one kind of call answers {status} with exactly {sorted(answered)}, so its refusal has no name: "
-            "declare it as a kind in openapi.call_kinds."
-        )
-    return "".join(said) + phrase
-
-
-def _kind_words(status: int, answered: frozenset[str]) -> list[str]:
-    """The words every kind answering ``status`` with exactly ``answered`` shares, in ``_AXES`` order."""
-
-    kinds = [kind for kind in call_kinds() if kind.at(status) == answered]
-    named = [kind for kind in kinds if not kind.general] or kinds
-    if not named:
-        return []
-    common = {word for word in named[0].words if all(word in kind.words for kind in named[1:])}
-    said = sorted(common, key=lambda word: _AXES.index(word[0]))
-    if said != [_CALL]:
-        said = [word for word in said if word != _CALL]
-    return [word for _, word in said]
-
-
 def _json_content(schema: dict[str, Any], examples: dict[str, Any] | None = None) -> dict[str, Any]:
     media: dict[str, Any] = {"schema": schema}
     if examples:
@@ -497,7 +399,7 @@ class _Builder:
             )
             success = self.component("responses", self.responses, name, {**success, "content": _json_content(schema)})
         responses: dict[str, Any] = {"200": success}
-        for status, answered in _codes_by_status(codes).items():
+        for status, answered in codes_by_status(codes).items():
             name = self.refusal(status, answered)
             if str(status) in recorded:
                 example = self.recorded(f"{operation_id}{_pascal(HTTPStatus(status).phrase)}", recorded[str(status)])
@@ -518,7 +420,7 @@ class _Builder:
         detail = self.components.schemas["ErrorDetail"]
         properties = dict(detail["properties"])
         properties["code"] = {**properties["code"], **({"const": codes[0]} if len(codes) == 1 else {"enum": codes})}
-        later = status in _LATER_STATUSES
+        later = status in LATER_STATUSES
         # Only a code that says "later" carries a wait; where every code here does, it always comes.
         waits = later and set(codes) <= LATER_CODES
         if not later:
@@ -715,12 +617,27 @@ class _Builder:
                 parameters=([{"$ref": "#/components/parameters/IdempotencyKey"}] if spec["effect"] != "read" else []),
                 requestBody=_body(body),
                 codes=views.execute_codes(registry[name]),
+                answer=self.answer_of(registry[name]),
                 **{
                     "x-hq-capability": name,
                     EFFECT_EXTENSION: spec["effect"],
                     "x-hq-required-capabilities": spec["required_capabilities"],
                 },
             )
+
+    def answer_of(self, spec: CapabilitySpec) -> tuple[str, dict[str, Any]] | None:
+        """A capability's answer where its handler names one, under the name of its result type.
+
+        None leaves the view's object, for a handler whose result is a plain mapping.
+        """
+
+        data = views.capability_data(spec)
+        if data is None:
+            return None
+        kinds = [kind for kind in get_args(data) if kind is not views.AwaitingApproval]
+        name = "".join(kind.__name__ for kind in kinds) or data.__name__
+        schema = self.components.typed({spec.name: data})[spec.name]
+        return (name if spec.effect == "read" else f"{name}OrHeld"), schema
 
     def resource_list_paths(self, template: str, method: str, view: Any) -> None:
         self.operation(
@@ -747,8 +664,9 @@ class _Builder:
                 view,
                 f"list{_pascal(name)}",
                 self.tags.of_resource(name),
-                # Titled by what it does, so it never reads as its section's name.
-                summary=f"List {lower_first(spec['label'])}",
+                # Titled as a read of one is, so it never reads as its section's
+                # name or as a bare verb.
+                summary=f"{spec['label']}: the list",
                 description=spec["summary"],
                 # Emit usable client filters and retain the whole strict query contract.
                 parameters=[

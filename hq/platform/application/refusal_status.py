@@ -14,7 +14,7 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Annotated, Any, NotRequired, TypedDict
+from typing import Annotated, Any, NotRequired, TypedDict, TypeIs
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from pydantic import Field, ValidationError as PydanticValidationError
@@ -289,6 +289,12 @@ def refuse(code: str, message: str, details: Any = None) -> dict[str, Any]:
     """A refusal's envelope, built where the refusal is decided."""
 
     return Refusal(code, message, details).answer()
+
+
+def refused(answer: Mapping[str, object]) -> TypeIs[RefusalEnvelope]:
+    """Whether a capability's answer is its refusal, so the rest of it reads as the success it is."""
+
+    return answer.get("ok") is False
 
 
 def next_call(tool: str, **arguments: Any) -> dict[str, Any]:

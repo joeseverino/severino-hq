@@ -10,7 +10,7 @@ one control (``partials/_ask.html``) and one script behavior follow all of it.
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any, TypedDict
 
 from django.contrib import messages
 from django.core import signing
@@ -22,6 +22,7 @@ lazy from hq.domains.control_plane.models import ProviderConnection, ProviderInv
 lazy from hq.domains.control_plane.providers import registry_label
 lazy from hq.domains.control_plane.reading_parts import WHOLE, refused_parts
 
+from .describe import Describe, listed
 from .moments import duration
 from .routes import reverse
 from .ui import ended
@@ -58,6 +59,17 @@ WATCH_SECONDS = 60 * 60
 WATCH_LIMIT = 4000
 
 
+class StandingAnswer(TypedDict):
+    """How one piece of asked-for work stands."""
+
+    state: Annotated[str, Describe(ended(f"Where the work stands: {listed((IDLE, QUEUED, RUNNING, DONE, FAILED))}"))]
+    label: Annotated[str, Describe("Where it stands, in the words a page shows.")]
+    live: Annotated[bool, Describe("Whether the work is still under way.")]
+    note: Annotated[str, Describe("What the work is doing, or how it ended, in a sentence.")]
+    seconds: Annotated[int, Describe("How long ago the work was asked for, in whole seconds; 0 when it was not.")]
+    percent: Annotated[int | None, Describe("How far along the work is, where it knows; null where it does not.")]
+
+
 @dataclass(frozen=True, slots=True)
 class Standing:
     """How one piece of asked-for work stands; a status resource answers with ``as_json``."""
@@ -86,7 +98,7 @@ class Standing:
             return 0
         return max(0, int((timezone.now() - self.since).total_seconds()))
 
-    def as_json(self) -> dict[str, Any]:
+    def as_json(self) -> StandingAnswer:
         return {
             "state": self.state,
             "label": self.label,

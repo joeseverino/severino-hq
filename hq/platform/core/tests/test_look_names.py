@@ -1,6 +1,8 @@
 """dev:look reaches a record's page of the estate it draws, by the route that
 takes the record or by a template the page draws, and a name it refuses is
-answered with names it takes, one a line, each as it is typed."""
+answered with names it takes, one a line, each as it is typed; a rule it
+refuses that is a check of the survey is answered with the gate test that
+holds it."""
 
 import os
 from unittest import mock
@@ -41,6 +43,22 @@ class RefusedNamesTests(SimpleTestCase):
                 self.assertLessEqual(expected, set(offers))
                 for offer in offers:
                     self.assertEqual(len(_named(offer)), 1, offer)
+
+
+class RefusedRuleTests(SimpleTestCase):
+    def test_a_check_of_the_survey_is_answered_with_the_gate_test_that_holds_it(self):
+        # A palette check is held in the dark palette too, by its own test.
+        cases = (("contrast", "every_palette_check_holds"), ("sideways", "every_layout_check_holds"))
+        for check, holder in cases:
+            with self.subTest(check=check):
+                said = look.no_rule(check)
+                self.assertIn(f"--rule {holder}", said)
+                self.assertIn(holder, look._rules())
+
+    def test_a_name_that_is_no_check_names_no_gate_test(self):
+        said = look.no_rule("example-no-such-check")
+
+        self.assertNotIn("--rule every_", said)
 
 
 class EveryPageTests(SimpleTestCase):

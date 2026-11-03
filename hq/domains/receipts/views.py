@@ -196,7 +196,7 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
 
         if expense_id:
             expense = get_object_or_404(Expense, pk=expense_id)
-            details = serialize_receipt(receipt)
+            details = dict(serialize_receipt(receipt))
             result = execute_posted(
                 request,
                 UPDATE,

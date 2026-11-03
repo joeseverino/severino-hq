@@ -267,7 +267,7 @@ class _Looker:
     css, script, dialogs, on_reference = "", "() => document.title", [], False
 
     def __init__(self, page):
-        self.page, self.read = page, {}
+        self.page, self.read, self.measured, self.base = page, {}, {}, None
 
     def __getattr__(self, name):
         return getattr(look.Look, name).__get__(self)
@@ -278,11 +278,14 @@ class _Looker:
     def refused(self, _name, _width):
         return ""
 
-    def evaluate_script(self, _name, _width):
+    def evaluate_script(self, _where, _width):
         self.read["eval"] = self.page.seen()
+        # A script that reads a value, and no element.
+        return "", "Example"
 
-    def screenshot(self, _name, _width):
+    def screenshot(self, name, _width, **_shows):
         self.read["shot"] = self.page.seen()
+        return [(f"{name}.png", 0, 1)]
 
 
 @tag("source")
@@ -294,6 +297,7 @@ class EvalOrderTests(SimpleTestCase):
             tempfile.TemporaryDirectory() as out,
             mock.patch.object(look, "this_run", lambda: Path(out)),
             mock.patch.dict(os.environ, asked),
+            mock.patch("sys.stdout", new_callable=io.StringIO),
         ):
             looker = _Looker(page)
             looker.look("example", 402, "")
@@ -384,6 +388,7 @@ class _Opener:
     open_dialog = look.Look.open_dialog
     shoot_dialog = look.Look.shoot_dialog
     close_dialog = look.Look.close_dialog
+    take_shot = look.Look.take_shot
     script = ""
 
     def __init__(self, page, dialogs):
@@ -806,6 +811,8 @@ class _Unanswered:
     def __init__(self):
         self.base, self.base_errors, self.errors = None, {}, {("estate/example", 402): []}
         self.unanswered = {"estate/example": 404}
+        # The tree the run began on, unchanged at its close.
+        self.tree = "example-tree"
 
 
 @tag("source")
@@ -815,6 +822,7 @@ class UnansweredTests(SimpleTestCase):
             tempfile.TemporaryDirectory() as folder,
             override_settings(BASE_DIR=folder),
             mock.patch.object(look, "this_run", lambda: Path(folder, "var", "look", "example-run")),
+            mock.patch.object(look, "tree_of", lambda _root: "example-tree"),
             mock.patch.dict(os.environ, ASKED, clear=True),
             mock.patch("sys.stdout", new_callable=io.StringIO) as said,
         ):

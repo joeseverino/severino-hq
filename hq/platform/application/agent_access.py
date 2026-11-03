@@ -3,7 +3,7 @@ every agent, and a person's block on one client."""
 
 import logging
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Literal, TypedDict
 
 from django.db import DatabaseError, transaction
 from django.db.models import Q, QuerySet
@@ -127,7 +127,14 @@ class AgentAccessCommand:
     paused: Annotated[bool, Describe("Whether every agent is paused.")]
 
 
-def set_agents_paused(command: AgentAccessCommand, *, principal: Principal) -> dict[str, Any]:
+class AgentsPaused(TypedDict):
+    """Whether agents are paused, as the call left it."""
+
+    ok: Literal[True]
+    paused: Annotated[bool, Describe("Whether every agent is paused now.")]
+
+
+def set_agents_paused(command: AgentAccessCommand, *, principal: Principal) -> AgentsPaused:
     """Set, not toggle, so a repeated request cannot undo itself. People only."""
 
     user = person(principal)
@@ -158,7 +165,15 @@ class AgentBlockCommand:
     blocked: Annotated[bool, Describe("Whether the client is blocked.")]
 
 
-def set_agent_blocked(command: AgentBlockCommand, *, principal: Principal, current_key: str) -> dict[str, Any]:
+class AgentBlocked(TypedDict):
+    """One client's block, as the call left it."""
+
+    ok: Literal[True]
+    client_id: Annotated[str, Describe("The client the call blocked or allowed, by its client id.")]
+    blocked: Annotated[bool, Describe("Whether the client is blocked now.")]
+
+
+def set_agent_blocked(command: AgentBlockCommand, *, principal: Principal, current_key: str) -> AgentBlocked:
     """Block or allow one client HQ has seen, by its client id. Set, not toggled. People only."""
 
     user = person(principal)

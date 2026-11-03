@@ -5,7 +5,7 @@ import hashlib
 from dataclasses import dataclass
 from datetime import date as Date
 from decimal import Decimal
-from typing import Annotated, Any
+from typing import Annotated, Any, TypedDict
 
 from django.core.files.uploadedfile import SimpleUploadedFile, UploadedFile
 from django.db import transaction
@@ -17,6 +17,7 @@ from hq.domains.receipts.models import Receipt
 from hq.domains.receipts.validation import MAX_RECEIPT_BASE64_CHARS, validate_receipt_file
 from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
+lazy from hq.domains.receipts.specs import ReceiptRow
 
 from .command_fields import Describe, Names
 from .integration_specs import Kept, keeps
@@ -25,6 +26,7 @@ from .record_errors import InputError, RecordNotFound
 from .record_fields import Notes
 from .record_saves import Held, as_sent, found, held, written
 from .security import Principal
+lazy from .record_answers import ReceiptSaved, ReceiptUploaded
 
 UPLOAD = "receipt.upload"
 REPLACE = "receipt.replace"
@@ -74,7 +76,7 @@ _KEPT = Kept(_stored)
 _REPLACED = Kept(_stored, always_sent=frozenset({"file"}))
 
 
-def serialize_receipt(receipt: Receipt) -> dict[str, Any]:
+def serialize_receipt(receipt: Receipt) -> ReceiptRow:
     return {
         "id": receipt.id,
         "original_filename": receipt.original_filename,
@@ -86,8 +88,8 @@ def serialize_receipt(receipt: Receipt) -> dict[str, Any]:
         "notes": receipt.notes,
         "related_expense": receipt.related_expense_id,
         "related_asset": receipt.related_asset.slug if receipt.related_asset else None,
-        "uploaded_at": iso(receipt.uploaded_at),
-        "updated_at": iso(receipt.updated_at),
+        "uploaded_at": receipt.uploaded_at.isoformat(),
+        "updated_at": receipt.updated_at.isoformat(),
     }
 
 
@@ -144,7 +146,7 @@ def _hold_file(receipt: Receipt, upload: UploadedFile) -> None:
     receipt.size_bytes = upload.size or 0
 
 
-def _uploaded(receipt: Receipt, sha256: str) -> dict[str, Any]:
+def _uploaded(receipt: Receipt, sha256: str) -> StoredReceiptFile:
     """Record the file's arrival by name, size and digest, and answer the same."""
 
     told = {"name": receipt.original_filename, "size_bytes": receipt.size_bytes, "sha256": sha256}
@@ -158,6 +160,14 @@ def _uploaded(receipt: Receipt, sha256: str) -> dict[str, Any]:
     return told
 
 
+class StoredReceiptFile(TypedDict):
+    """The file a receipt holds, as it arrived."""
+
+    name: Annotated[str, Describe("The file's name, as uploaded.")]
+    size_bytes: Annotated[int, Describe("The file's size, in bytes.")]
+    sha256: Annotated[str, Describe("The file's SHA-256 digest, in hex.")]
+
+
 @keeps(_KEPT)
 @transaction.atomic
 def update_receipt(
@@ -167,7 +177,7 @@ def update_receipt(
     current_id: int,
     expected_updated_at: str | None = None,
     sent: frozenset[str] | None = None,
-) -> dict[str, Any]:
+) -> ReceiptSaved:
     with audit_operation(operation=UPDATE, principal=principal):
         receipt = _save(command, current_id=current_id, expected_updated_at=expected_updated_at, sent=sent)
     return {"ok": True, "created": False, "receipt": serialize_receipt(receipt)}
@@ -182,7 +192,7 @@ def replace_receipt(
     current_id: int,
     expected_updated_at: str | None = None,
     sent: frozenset[str] | None = None,
-) -> dict[str, Any]:
+) -> ReceiptUploaded:
     """The ``receipt.replace`` capability, which authorizes it."""
 
     del principal
@@ -192,7 +202,7 @@ def replace_receipt(
 
 
 @transaction.atomic
-def upload_receipt(command: ReceiptUploadCommand, *, principal: Principal) -> dict[str, Any]:
+def upload_receipt(command: ReceiptUploadCommand, *, principal: Principal) -> ReceiptUploaded:
     """The ``receipt.upload`` capability, which authorizes it."""
 
     del principal

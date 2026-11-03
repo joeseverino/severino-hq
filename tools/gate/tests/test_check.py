@@ -9,6 +9,7 @@ from unittest import mock
 
 from django.test import tag
 
+from hq.platform.core.tests.task import RefError
 from tools.gate import check
 from tools.gate.tests.base import GateTestCase
 
@@ -73,3 +74,51 @@ class SettleTests(GateTestCase):
             mock.patch.object(check.time, "sleep", self.fail),
         ):
             self.assertTrue(github.settle(time.monotonic() + 3600, 30))
+
+
+def _repository(answers: dict[str, list[str] | None]):
+    """A git that answers each command by its arguments, refusing one answered None."""
+
+    def git(*args: str) -> list[str]:
+        answer = answers[" ".join(args)]
+        if answer is None:
+            raise RefError("no upstream configured")
+        return answer
+
+    return git
+
+
+@tag("source")
+class CheckedCommitTests(GateTestCase):
+    def checked(self, answers: dict[str, list[str] | None]) -> str:
+        with mock.patch.object(check, "git", _repository(answers)):
+            return check.checked_commit()
+
+    def test_a_head_a_remote_branch_holds_is_the_commit_checked(self):
+        self.assertEqual(self.checked({"rev-parse HEAD": [SHA], f"branch -r --contains {SHA}": ["origin/main"]}), SHA)
+
+    def test_an_unpushed_head_is_read_through_the_upstream_tip_holding_its_tree(self):
+        tip = "b" * 40
+        answers = {
+            "rev-parse HEAD": [SHA],
+            f"branch -r --contains {SHA}": [],
+            "rev-parse @{upstream}": [tip],
+            "rev-parse HEAD^{tree}": ["c" * 40],
+            f"rev-parse {tip}^{{tree}}": ["c" * 40],
+        }
+
+        self.assertEqual(self.checked(answers), tip)
+
+    def test_an_upstream_tip_with_another_tree_or_no_upstream_checks_nothing(self):
+        tip = "b" * 40
+        another = {
+            "rev-parse HEAD": [SHA],
+            f"branch -r --contains {SHA}": [],
+            "rev-parse @{upstream}": [tip],
+            "rev-parse HEAD^{tree}": ["c" * 40],
+            f"rev-parse {tip}^{{tree}}": ["d" * 40],
+        }
+        none = {"rev-parse HEAD": [SHA], f"branch -r --contains {SHA}": [], "rev-parse @{upstream}": None}
+        for case, answers in (("another tree", another), ("no upstream", none)):
+            with self.subTest(case):
+                self.assertEqual(self.checked(answers), "")

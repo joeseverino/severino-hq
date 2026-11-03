@@ -8,7 +8,7 @@ key move, the pair otherwise pasted into a provider's form by hand.
 """
 
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, TypedDict
 
 from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm
@@ -82,13 +82,23 @@ def _names(certificate: x509.Certificate) -> list[str]:
     return [name.lower() for name in extension.value.get_values_for_type(x509.DNSName)]
 
 
+class CertificateStored(TypedDict):
+    """The certificate HQ now holds for a record, told without the material itself."""
+
+    ok: Literal[True]
+    resource: Annotated[str, Describe("The key of the certificate record that holds the pair.")]
+    fingerprint_sha256: Annotated[str, Describe("The uploaded certificate's SHA-256 fingerprint.")]
+    not_after: Annotated[str, Describe("When the uploaded certificate expires, an ISO 8601 date-time.")]
+    domains: Annotated[list[str], Describe("The names the uploaded certificate covers.")]
+
+
 @transaction.atomic
 def store_certificate(
     command: UploadCertificateCommand,
     *,
     principal: Principal,
     current_key: str,
-) -> dict[str, Any]:
+) -> CertificateStored:
     """Hold an uploaded pair against an existing certificate declaration.
 
     The ``certificate.upload`` capability, which authorizes it. The key is

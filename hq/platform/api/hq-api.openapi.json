@@ -2822,7 +2822,7 @@
         "style": "form"
       },
       "Fields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` alone keeps every field. Absent, a list keeps the fields it names as `operations.list.fields` where its records are described), and a read of one record the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` alone keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
         "name": "fields",
@@ -2998,6 +2998,30 @@
       }
     },
     "responses": {
+      "AddressLookedUpSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/AddressLookedUp"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
       "AgendaItemPageSuccess": {
         "content": {
           "application/json": {
@@ -3062,6 +3086,37 @@
               "properties": {
                 "data": {
                   "$ref": "#/components/schemas/AssetRecord"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "AssetSavedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AssetSaved"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
                 },
                 "ok": {
                   "$ref": "#/components/schemas/Outcome",
@@ -3147,6 +3202,92 @@
           }
         }
       },
+      "ContactDeletedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ContactDeleted"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "ContactReviewedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ContactReviewed"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "ContactSubmissionPageSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/ContactSubmissionPage"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
       "ContactSubmissionRowPageSuccess": {
         "content": {
           "application/json": {
@@ -3231,6 +3372,68 @@
         },
         "description": "Success."
       },
+      "ContentSavedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ContentSaved"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "ControllerSweepRequestedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ControllerSweepRequested"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
       "CredentialRecordSuccess": {
         "content": {
           "application/json": {
@@ -3239,6 +3442,99 @@
               "properties": {
                 "data": {
                   "$ref": "#/components/schemas/CredentialRecord"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "DependencyUpdatesSetOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DependencyUpdatesSet"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "DocumentationSavedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DocumentationSaved"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "DocumentationSyncedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DocumentationSynced"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
                 },
                 "ok": {
                   "$ref": "#/components/schemas/Outcome",
@@ -3279,6 +3575,37 @@
         },
         "description": "Success."
       },
+      "EmptyGroupsRemovedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/EmptyGroupsRemoved"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
       "EntryRecordSuccess": {
         "content": {
           "application/json": {
@@ -3287,6 +3614,68 @@
               "properties": {
                 "data": {
                   "$ref": "#/components/schemas/EntryRecord"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "EntrySavedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/EntrySaved"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "ExpenseSavedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ExpenseSaved"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
                 },
                 "ok": {
                   "$ref": "#/components/schemas/Outcome",
@@ -3312,6 +3701,68 @@
           }
         },
         "description": "Forbidden."
+      },
+      "HqImportedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/HqImported"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "HqSyncedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/HqSynced"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
       },
       "InternalServerError": {
         "content": {
@@ -3367,6 +3818,30 @@
         },
         "description": "Method Not Allowed."
       },
+      "NameLookedUpSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/NameLookedUp"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
       "NotFound": {
         "content": {
           "application/json": {
@@ -3385,6 +3860,37 @@
               "properties": {
                 "data": {
                   "type": "object"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "ObservedAcceptedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ObservedAccepted"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
                 },
                 "ok": {
                   "$ref": "#/components/schemas/Outcome",
@@ -3422,6 +3928,102 @@
         },
         "description": "Success."
       },
+      "OperationQueuedDeclarationForgottenOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperationQueued"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeclarationForgotten"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "OperationQueuedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperationQueued"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "PanelsRefreshRequestedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PanelsRefreshRequested"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
       "PathRecordSuccess": {
         "content": {
           "application/json": {
@@ -3430,6 +4032,68 @@
               "properties": {
                 "data": {
                   "$ref": "#/components/schemas/PathRecord"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "ProfileReadRequestedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ProfileReadRequested"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "ProjectSavedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ProjectSaved"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
                 },
                 "ok": {
                   "$ref": "#/components/schemas/Outcome",
@@ -3466,6 +4130,68 @@
         },
         "description": "Forbidden."
       },
+      "ReceiptSavedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ReceiptSaved"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "RecordDeletedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/RecordDeleted"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
       "RelationshipsRecordSuccess": {
         "content": {
           "application/json": {
@@ -3474,6 +4200,37 @@
               "properties": {
                 "data": {
                   "$ref": "#/components/schemas/RelationshipsRecord"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "RenewalQueuedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/RenewalQueued"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
                 },
                 "ok": {
                   "$ref": "#/components/schemas/Outcome",
@@ -3543,6 +4300,99 @@
           }
         },
         "description": "Not Found."
+      },
+      "ResourceSavedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ResourceSaved"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "RunRequestedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/RunRequested"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "ServiceAdoptedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ServiceAdopted"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
       },
       "ServiceRecordSuccess": {
         "content": {
@@ -3666,6 +4516,99 @@
               "properties": {
                 "data": {
                   "$ref": "#/components/schemas/UpgradeRecord"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "VisitRefreshedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/VisitRefreshed"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "WorkRequestedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WorkRequested"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "ZoneAdoptedOrHeldSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ZoneAdopted"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AwaitingApproval"
+                    }
+                  ]
                 },
                 "ok": {
                   "$ref": "#/components/schemas/Outcome",
@@ -3856,6 +4799,52 @@
         ],
         "type": "object"
       },
+      "AddressLookedUp": {
+        "additionalProperties": false,
+        "description": "What the public internet says about one address, or HQ where it is not public.",
+        "properties": {
+          "address": {
+            "description": "The address asked about, as HQ normalized it.",
+            "type": "string"
+          },
+          "allocation": {
+            "$ref": "#/components/schemas/Allocation"
+          },
+          "arpa": {
+            "description": "Its reverse DNS name; absent when that could not be read.",
+            "type": "string"
+          },
+          "hostnames": {
+            "description": "The names its reverse DNS gives it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "note": {
+            "description": "What HQ or a registry says beside the answer, such as that no PTR record exists; empty for none.",
+            "type": "string"
+          },
+          "observed_at": {
+            "$ref": "#/components/schemas/ObservedAt"
+          },
+          "resolver": {
+            "description": "The resolver that answered for its reverse DNS; absent when that could not be read.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Which IP version it is, 4 or 6.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "address",
+          "version",
+          "hostnames",
+          "note"
+        ],
+        "type": "object"
+      },
       "AgendaItem": {
         "additionalProperties": false,
         "description": "One thing on the calendar in the span, from whichever source holds it.",
@@ -3918,6 +4907,44 @@
         "maximum": 500,
         "minimum": 1,
         "type": "integer"
+      },
+      "Allocation": {
+        "additionalProperties": false,
+        "description": "Who an address was allocated to, as the registry that allocated it says; empty when it could not be read.",
+        "properties": {
+          "country": {
+            "description": "The country the registry files it under, as a two-letter code.",
+            "type": "string"
+          },
+          "handle": {
+            "description": "The registry's handle for the allocation.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The registry's name for the allocation.",
+            "type": "string"
+          },
+          "organization": {
+            "description": "The organization it was allocated to.",
+            "type": "string"
+          },
+          "prefixes": {
+            "description": "The allocation as CIDR prefixes.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "range": {
+            "description": "The first and last address of the allocation.",
+            "type": "string"
+          },
+          "type": {
+            "description": "The type of allocation, as the registry says it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       },
       "AnyCallBadRequestRefusal": {
         "additionalProperties": false,
@@ -4000,6 +5027,18 @@
           "error"
         ],
         "type": "object"
+      },
+      "Applying": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/OperationItem"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "The operation queued to apply the change at once; null where none was.",
+        "title": "Applying"
       },
       "AssetCommand": {
         "additionalProperties": false,
@@ -4366,6 +5405,23 @@
             "description": "When its warranty ends, an ISO 8601 date; null for none recorded."
           }
         },
+        "type": "object"
+      },
+      "AssetSaved": {
+        "additionalProperties": false,
+        "description": "The asset as saved, and whether the call created it.",
+        "properties": {
+          "asset": {
+            "$ref": "#/components/schemas/AssetRecord"
+          },
+          "created": {
+            "$ref": "#/components/schemas/Created"
+          }
+        },
+        "required": [
+          "created",
+          "asset"
+        ],
         "type": "object"
       },
       "AssetUpdateRequest": {
@@ -5753,6 +6809,68 @@
         },
         "type": "object"
       },
+      "ContactDeleted": {
+        "additionalProperties": false,
+        "description": "A message the contact inbox was asked to delete.",
+        "properties": {
+          "deleted": {
+            "$ref": "#/components/schemas/ContactDeletedPart"
+          },
+          "queued": {
+            "const": true,
+            "description": "That the delete was handed to the inbox; absent when nothing was asked.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "type": "object"
+      },
+      "ContactDeletedPart": {
+        "additionalProperties": false,
+        "description": "The message the call asked to delete.",
+        "properties": {
+          "already_absent": {
+            "description": "Whether it was already gone, or already waiting to be deleted, so nothing new was asked.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "The id of the message to delete.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "already_absent"
+        ],
+        "type": "object"
+      },
+      "ContactReviewed": {
+        "additionalProperties": false,
+        "description": "A message's review, handed to the contact inbox to keep.",
+        "properties": {
+          "id": {
+            "description": "The id of the message reviewed.",
+            "type": "integer"
+          },
+          "queued": {
+            "const": true,
+            "description": "That the review was handed to the inbox.",
+            "type": "boolean"
+          },
+          "status": {
+            "description": "The review status the message was given.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "queued"
+        ],
+        "type": "object"
+      },
       "ContactSubmissionDeleteRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -5830,6 +6948,37 @@
           }
         },
         "required": [],
+        "type": "object"
+      },
+      "ContactSubmissionPage": {
+        "additionalProperties": false,
+        "description": "One page of the contact inbox's messages that match.",
+        "properties": {
+          "count": {
+            "description": "How many messages this page holds.",
+            "type": "integer"
+          },
+          "items": {
+            "description": "The messages on this page.",
+            "items": {
+              "$ref": "#/components/schemas/ContactSubmissionRow"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "How many messages match, on every page.",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "Whether more messages follow this page.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "count",
+          "total"
+        ],
         "type": "object"
       },
       "ContactSubmissionReviewRequest": {
@@ -6346,6 +7495,23 @@
         },
         "type": "object"
       },
+      "ContentSaved": {
+        "additionalProperties": false,
+        "description": "The content item as saved, and whether the call created it.",
+        "properties": {
+          "content": {
+            "$ref": "#/components/schemas/ContentRow"
+          },
+          "created": {
+            "$ref": "#/components/schemas/Created"
+          }
+        },
+        "required": [
+          "created",
+          "content"
+        ],
+        "type": "object"
+      },
       "ContentTitle": {
         "description": "What it is called.",
         "type": "string"
@@ -6488,6 +7654,45 @@
         ],
         "type": "object"
       },
+      "ControllerSweepRequested": {
+        "additionalProperties": false,
+        "description": "The controller, woken to read the estate, and why a full read is due or not.",
+        "properties": {
+          "due": {
+            "description": "Whether a read of every connection was due.",
+            "type": "boolean"
+          },
+          "message": {
+            "description": "What asking did, in the sentence a page shows for it.",
+            "type": "string"
+          },
+          "read_now": {
+            "description": "What the controller reads at once, by its connection or kind; empty when the call named nothing.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why a full read is due or not, in a sentence.",
+            "type": "string"
+          },
+          "requested": {
+            "const": true,
+            "description": "That the controller was woken.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "requested",
+          "due",
+          "reason",
+          "read_now",
+          "message"
+        ],
+        "type": "object"
+      },
+      "Created": {
+        "description": "Whether the call created the record, rather than changing one HQ held.",
+        "type": "boolean"
+      },
       "CredentialRecord": {
         "additionalProperties": false,
         "description": "What one service's credential reads, each reading or listing it sees.",
@@ -6586,6 +7791,38 @@
         },
         "type": "object"
       },
+      "DeclarationForgotten": {
+        "additionalProperties": false,
+        "description": "A record HQ stopped managing, left as it is at its provider.",
+        "properties": {
+          "forgotten": {
+            "description": "The key of the record HQ stopped managing.",
+            "type": "string"
+          },
+          "queued": {
+            "const": false,
+            "description": "That nothing was queued, since the service holding it is left as it is.",
+            "type": "boolean"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/OperationReason"
+          },
+          "released": {
+            "description": "The keys of the records inside it that HQ stopped managing too.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "queued",
+          "forgotten",
+          "released",
+          "reason"
+        ],
+        "type": "object"
+      },
       "DeductibleAmount": {
         "description": "An estimate of what may be deducted: `total_cost` times `business_use_percentage`, rounded to the cent, as a decimal string.",
         "type": "string"
@@ -6604,6 +7841,43 @@
         },
         "required": [
           "confirm"
+        ],
+        "type": "object"
+      },
+      "DeletedPart": {
+        "additionalProperties": false,
+        "description": "The record the call deleted.",
+        "properties": {
+          "label": {
+            "description": "What it was called.",
+            "type": "string"
+          },
+          "target": {
+            "description": "The identifier the call named it by.",
+            "type": "string"
+          },
+          "type": {
+            "description": "What type of record it was, such as `asset`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "target",
+          "label"
+        ],
+        "type": "object"
+      },
+      "DependencyUpdatesSet": {
+        "additionalProperties": false,
+        "description": "The project, with its dependency updates as the call left them.",
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectRecord"
+          }
+        },
+        "required": [
+          "project"
         ],
         "type": "object"
       },
@@ -6906,6 +8180,36 @@
         },
         "type": "object"
       },
+      "DocumentationSaved": {
+        "additionalProperties": false,
+        "description": "The document as saved, and whether the call created it.",
+        "properties": {
+          "created": {
+            "$ref": "#/components/schemas/Created"
+          },
+          "documentation": {
+            "$ref": "#/components/schemas/DocumentationRow"
+          }
+        },
+        "required": [
+          "created",
+          "documentation"
+        ],
+        "type": "object"
+      },
+      "DocumentationSync": {
+        "additionalProperties": false,
+        "description": "What syncing the vault's docs into HQ did.",
+        "properties": {
+          "stats": {
+            "$ref": "#/components/schemas/SyncStats"
+          }
+        },
+        "required": [
+          "stats"
+        ],
+        "type": "object"
+      },
       "DocumentationSyncRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -6953,6 +8257,19 @@
         },
         "required": [
           "payload"
+        ],
+        "type": "object"
+      },
+      "DocumentationSynced": {
+        "additionalProperties": false,
+        "description": "What syncing the vault's docs into HQ did, as the command answers it.",
+        "properties": {
+          "stats": {
+            "$ref": "#/components/schemas/SyncStats"
+          }
+        },
+        "required": [
+          "stats"
         ],
         "type": "object"
       },
@@ -7243,6 +8560,32 @@
         },
         "type": "object"
       },
+      "EmptyGroupsRemoved": {
+        "additionalProperties": false,
+        "description": "The tailnet policy as saved without its empty groups, and what that changes.",
+        "properties": {
+          "applying": {
+            "$ref": "#/components/schemas/Applying"
+          },
+          "change": {
+            "description": "What leaving the empty groups out changes, in a sentence.",
+            "type": "string"
+          },
+          "created": {
+            "$ref": "#/components/schemas/Created"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/ManagedResourceItem"
+          }
+        },
+        "required": [
+          "created",
+          "resource",
+          "applying",
+          "change"
+        ],
+        "type": "object"
+      },
       "EntityLink": {
         "description": "A name, and the page it opens, when there is one.",
         "properties": {
@@ -7388,6 +8731,23 @@
             "type": "array"
           }
         },
+        "type": "object"
+      },
+      "EntrySaved": {
+        "additionalProperties": false,
+        "description": "The calendar entry as saved, and whether the call created it.",
+        "properties": {
+          "created": {
+            "$ref": "#/components/schemas/Created"
+          },
+          "entry": {
+            "$ref": "#/components/schemas/EntryRecord"
+          }
+        },
+        "required": [
+          "created",
+          "entry"
+        ],
         "type": "object"
       },
       "ErrorDetail": {
@@ -7789,6 +9149,23 @@
             "$ref": "#/components/schemas/ExpenseVendor"
           }
         },
+        "type": "object"
+      },
+      "ExpenseSaved": {
+        "additionalProperties": false,
+        "description": "The expense as saved, and whether the call created it.",
+        "properties": {
+          "created": {
+            "$ref": "#/components/schemas/Created"
+          },
+          "expense": {
+            "$ref": "#/components/schemas/ExpenseRow"
+          }
+        },
+        "required": [
+          "created",
+          "expense"
+        ],
         "type": "object"
       },
       "ExpenseUpdateRequest": {
@@ -8405,6 +9782,40 @@
         "required": [],
         "type": "object"
       },
+      "HqImported": {
+        "additionalProperties": false,
+        "description": "What importing the document did, or would do where it was only checked.",
+        "properties": {
+          "assets": {
+            "description": "Each asset in the document, in its order.",
+            "items": {
+              "$ref": "#/components/schemas/ImportedRecord"
+            },
+            "type": "array"
+          },
+          "check_only": {
+            "description": "Whether the import was only checked, so nothing was saved.",
+            "type": "boolean"
+          },
+          "projects": {
+            "description": "Each project in the document, in its order.",
+            "items": {
+              "$ref": "#/components/schemas/ImportedRecord"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ImportSummary"
+          }
+        },
+        "required": [
+          "check_only",
+          "projects",
+          "assets",
+          "summary"
+        ],
+        "type": "object"
+      },
       "HqSyncRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -8455,6 +9866,19 @@
         ],
         "type": "object"
       },
+      "HqSynced": {
+        "additionalProperties": false,
+        "description": "What syncing HQ from the vault did, each part under its own name.",
+        "properties": {
+          "documentation": {
+            "$ref": "#/components/schemas/DocumentationSync"
+          }
+        },
+        "required": [
+          "documentation"
+        ],
+        "type": "object"
+      },
       "IdempotencyKey": {
         "description": "One key per logical change, kept when it is retried: a repeat returns the first result instead of acting again. It is sent as the payload's `idempotency_key` or the `Idempotency-Key` header; a change needs one of the two, and is refused `idempotency_key_required` with neither. Only the host's shell is not asked.",
         "examples": [
@@ -8480,6 +9904,61 @@
         "required": [
           "tag",
           "digest"
+        ],
+        "type": "object"
+      },
+      "ImportSummary": {
+        "additionalProperties": false,
+        "description": "How many records the import creates, updates and leaves as they are, and how many values it keeps.",
+        "properties": {
+          "created": {
+            "description": "How many records it creates.",
+            "type": "integer"
+          },
+          "kept": {
+            "description": "How many stored values it keeps in place of the ones offered.",
+            "type": "integer"
+          },
+          "unchanged": {
+            "description": "How many records it leaves as they are.",
+            "type": "integer"
+          },
+          "updated": {
+            "description": "How many records it updates.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "created",
+          "updated",
+          "unchanged",
+          "kept"
+        ],
+        "type": "object"
+      },
+      "ImportedRecord": {
+        "additionalProperties": false,
+        "description": "One record of the document, and what the import does with it.",
+        "properties": {
+          "kept": {
+            "description": "The stored values it keeps in place of the ones offered.",
+            "items": {
+              "$ref": "#/components/schemas/KeptValue"
+            },
+            "type": "array"
+          },
+          "outcome": {
+            "description": "What the import does with it: `created`, `updated` or `unchanged`.",
+            "type": "string"
+          },
+          "slug": {
+            "$ref": "#/components/schemas/RecordSlug"
+          }
+        },
+        "required": [
+          "slug",
+          "outcome",
+          "kept"
         ],
         "type": "object"
       },
@@ -8896,6 +10375,30 @@
         "required": [
           "ok",
           "error"
+        ],
+        "type": "object"
+      },
+      "KeptValue": {
+        "additionalProperties": false,
+        "description": "A stored value the import kept in place of the one the document offered.",
+        "properties": {
+          "field": {
+            "description": "The field whose stored value was kept.",
+            "type": "string"
+          },
+          "kept": {
+            "description": "The value HQ kept, as text.",
+            "type": "string"
+          },
+          "offered": {
+            "description": "The value the document offered, as text.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "kept",
+          "offered"
         ],
         "type": "object"
       },
@@ -9438,6 +10941,62 @@
         ],
         "type": "object"
       },
+      "NameAnswer": {
+        "additionalProperties": false,
+        "description": "One record a resolver returned for a name.",
+        "properties": {
+          "name": {
+            "description": "The name the record is for.",
+            "type": "string"
+          },
+          "type": {
+            "description": "The record's type, such as `A` or `MX`.",
+            "type": "string"
+          },
+          "value": {
+            "description": "What the record holds, in one line.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name",
+          "value"
+        ],
+        "type": "object"
+      },
+      "NameLookedUp": {
+        "additionalProperties": false,
+        "description": "What a resolver outside this network returns for a name.",
+        "properties": {
+          "answers": {
+            "description": "Each record the resolver returned.",
+            "items": {
+              "$ref": "#/components/schemas/NameAnswer"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "The hostname asked about, as HQ normalized it.",
+            "type": "string"
+          },
+          "resolver": {
+            "description": "The public resolver that answered.",
+            "type": "string"
+          },
+          "resolves": {
+            "description": "Whether the name has any record at all.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "resolver",
+          "answers",
+          "resolves"
+        ],
+        "type": "object"
+      },
       "NextPage": {
         "description": "Where the page after a list's is read from.",
         "properties": {
@@ -9490,6 +11049,31 @@
         "description": "Anything else worth keeping.",
         "type": "string"
       },
+      "ObservedAccepted": {
+        "additionalProperties": false,
+        "description": "The record as saved from what its provider holds, and why that was asked.",
+        "properties": {
+          "applying": {
+            "$ref": "#/components/schemas/Applying"
+          },
+          "created": {
+            "$ref": "#/components/schemas/Created"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/OperationReason"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/ManagedResourceItem"
+          }
+        },
+        "required": [
+          "created",
+          "resource",
+          "applying",
+          "reason"
+        ],
+        "type": "object"
+      },
       "ObservedAt": {
         "description": "When it was last read from its source, an ISO 8601 date-time.",
         "type": "string"
@@ -9508,6 +11092,114 @@
           }
         },
         "type": "object"
+      },
+      "OperationItem": {
+        "additionalProperties": false,
+        "description": "One operation asked of the controller, as it stands.",
+        "properties": {
+          "action": {
+            "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop` or `approve-routes`.",
+            "type": "string"
+          },
+          "attempt_count": {
+            "description": "How many times a controller has tried it.",
+            "type": "integer"
+          },
+          "claimed_by": {
+            "description": "The controller working on it; empty while none is.",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it finished, an ISO 8601 date-time; null until it has."
+          },
+          "created_at": {
+            "description": "When it was asked for, an ISO 8601 date-time.",
+            "type": "string"
+          },
+          "id": {
+            "description": "The operation's id.",
+            "type": "string"
+          },
+          "lease_expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the controller's hold on it lapses, an ISO 8601 date-time; null while none holds it."
+          },
+          "reason": {
+            "$ref": "#/components/schemas/OperationReason"
+          },
+          "requested_actor": {
+            "description": "Who asked for it, by the name HQ knows them by.",
+            "type": "string"
+          },
+          "requested_interface": {
+            "description": "Which door it was asked through, such as `api` or `web`.",
+            "type": "string"
+          },
+          "resource": {
+            "description": "The key of the record it acts on.",
+            "type": "string"
+          },
+          "result": {
+            "description": "What the controller reported of its run; empty until it has run.",
+            "type": "object"
+          },
+          "state": {
+            "description": "Where it stands: `queued`, `claimed`, `succeeded`, `failed` or `cancelled`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "resource",
+          "action",
+          "state",
+          "reason",
+          "requested_actor",
+          "requested_interface",
+          "created_at",
+          "completed_at",
+          "claimed_by",
+          "lease_expires_at",
+          "attempt_count",
+          "result"
+        ],
+        "type": "object"
+      },
+      "OperationQueued": {
+        "additionalProperties": false,
+        "description": "An operation asked of the controller, and whether this call queued it.",
+        "properties": {
+          "operation": {
+            "$ref": "#/components/schemas/OperationItem"
+          },
+          "queued": {
+            "$ref": "#/components/schemas/Queued"
+          }
+        },
+        "required": [
+          "queued",
+          "operation"
+        ],
+        "type": "object"
+      },
+      "OperationReason": {
+        "description": "Why it is done, in the asker's words; empty for none.",
+        "type": "string"
       },
       "OperatorStep": {
         "additionalProperties": false,
@@ -9607,6 +11299,28 @@
         ],
         "type": "object"
       },
+      "PanelsRefreshRequested": {
+        "additionalProperties": false,
+        "description": "The dashboard panels asked to be read again.",
+        "properties": {
+          "requested": {
+            "description": "The panels asked to be read again, by id.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "requested_at": {
+            "description": "When they were asked for, an ISO 8601 date-time.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requested",
+          "requested_at"
+        ],
+        "type": "object"
+      },
       "PathRecord": {
         "additionalProperties": false,
         "description": "The path a request for a hostname takes, hop by hop on each route.",
@@ -9697,6 +11411,25 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ProfileReadRequested": {
+        "additionalProperties": false,
+        "description": "A read of a GitHub profile, asked for now.",
+        "properties": {
+          "asked_at": {
+            "description": "When the read was asked for, an ISO 8601 date-time.",
+            "type": "string"
+          },
+          "login": {
+            "description": "The GitHub account to read, by its login.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "login",
+          "asked_at"
+        ],
         "type": "object"
       },
       "ProjectCommand": {
@@ -10082,6 +11815,23 @@
         },
         "type": "object"
       },
+      "ProjectSaved": {
+        "additionalProperties": false,
+        "description": "The project as saved, and whether the call created it.",
+        "properties": {
+          "created": {
+            "$ref": "#/components/schemas/Created"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectRecord"
+          }
+        },
+        "required": [
+          "created",
+          "project"
+        ],
+        "type": "object"
+      },
       "ProjectUpdateRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -10224,6 +11974,10 @@
       "PublishedUrl": {
         "description": "Where it is published.",
         "type": "string"
+      },
+      "Queued": {
+        "description": "Whether this call queued it; false when the same one was already waiting.",
+        "type": "boolean"
       },
       "ReadConflictRefusal": {
         "additionalProperties": false,
@@ -10582,6 +12336,23 @@
         },
         "type": "object"
       },
+      "ReceiptSaved": {
+        "additionalProperties": false,
+        "description": "The receipt as saved, and whether the call created it.",
+        "properties": {
+          "created": {
+            "$ref": "#/components/schemas/Created"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ReceiptRow"
+          }
+        },
+        "required": [
+          "created",
+          "receipt"
+        ],
+        "type": "object"
+      },
       "ReceiptUpdateRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -10680,6 +12451,19 @@
         ],
         "type": "object"
       },
+      "RecordDeleted": {
+        "additionalProperties": false,
+        "description": "A record deleted for good.",
+        "properties": {
+          "deleted": {
+            "$ref": "#/components/schemas/DeletedPart"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "type": "object"
+      },
       "RecordSlug": {
         "description": "Its address in HQ, unique among records of its type: what its page and its links name it by.",
         "type": "string"
@@ -10753,6 +12537,47 @@
             "type": "array"
           }
         },
+        "type": "object"
+      },
+      "RenewalAllowed": {
+        "additionalProperties": false,
+        "description": "That the renewal is allowed, and why.",
+        "properties": {
+          "allowed": {
+            "const": true,
+            "description": "That renewing it is allowed.",
+            "type": "boolean"
+          },
+          "explanation": {
+            "description": "Why renewing it is allowed, in a sentence.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "allowed",
+          "explanation"
+        ],
+        "type": "object"
+      },
+      "RenewalQueued": {
+        "additionalProperties": false,
+        "description": "A certificate renewal asked of the controller, and why it is allowed.",
+        "properties": {
+          "operation": {
+            "$ref": "#/components/schemas/OperationItem"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/RenewalAllowed"
+          },
+          "queued": {
+            "$ref": "#/components/schemas/Queued"
+          }
+        },
+        "required": [
+          "queued",
+          "operation",
+          "policy"
+        ],
         "type": "object"
       },
       "RequestTooLargeRefusal": {
@@ -11013,6 +12838,27 @@
         ],
         "type": "object"
       },
+      "ResourceSaved": {
+        "additionalProperties": false,
+        "description": "A managed record as saved, and the reconcile queued to apply it.",
+        "properties": {
+          "applying": {
+            "$ref": "#/components/schemas/Applying"
+          },
+          "created": {
+            "$ref": "#/components/schemas/Created"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/ManagedResourceItem"
+          }
+        },
+        "required": [
+          "created",
+          "resource",
+          "applying"
+        ],
+        "type": "object"
+      },
       "RetryAfter": {
         "description": "Whole seconds until asking again can succeed; the `Retry-After` header repeats it.",
         "minimum": 1,
@@ -11113,6 +12959,26 @@
           "connections",
           "topology",
           "findings"
+        ],
+        "type": "object"
+      },
+      "RunRequested": {
+        "additionalProperties": false,
+        "description": "A dependency update run, asked for now.",
+        "properties": {
+          "asked_at": {
+            "description": "When the run was asked for, an ISO 8601 date-time.",
+            "type": "string"
+          },
+          "requested": {
+            "const": true,
+            "description": "That a run was asked for.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "requested",
+          "asked_at"
         ],
         "type": "object"
       },
@@ -11279,6 +13145,28 @@
           "operator_steps",
           "no_help_reason",
           "since"
+        ],
+        "type": "object"
+      },
+      "ServiceAdopted": {
+        "additionalProperties": false,
+        "description": "The records behind one hostname, taken under HQ's management.",
+        "properties": {
+          "adopted": {
+            "description": "The keys of the records adopted.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "hostname": {
+            "description": "The name whose records were adopted.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hostname",
+          "adopted"
         ],
         "type": "object"
       },
@@ -11478,6 +13366,10 @@
           "effect",
           "auto"
         ],
+        "type": "object"
+      },
+      "SyncStats": {
+        "description": "How the sync went: how many docs it created, updated and skipped, the links naming a record HQ does not hold, and the orphans found or pruned where asked.",
         "type": "object"
       },
       "Tailnet": {
@@ -12630,6 +14522,65 @@
         ],
         "type": "object"
       },
+      "VisitRefreshed": {
+        "additionalProperties": false,
+        "description": "How the readings behind a page stand, as the command answers it.",
+        "properties": {
+          "label": {
+            "description": "Where it stands, in the words a page shows.",
+            "type": "string"
+          },
+          "live": {
+            "description": "Whether the work is still under way.",
+            "type": "boolean"
+          },
+          "note": {
+            "description": "What the work is doing, or how it ended, in a sentence.",
+            "type": "string"
+          },
+          "percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How far along the work is, where it knows; null where it does not."
+          },
+          "requested": {
+            "description": "The readings this call asked for, by type; empty when none was due or no controller is near.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "seconds": {
+            "description": "How long ago the work was asked for, in whole seconds; 0 when it was not.",
+            "type": "integer"
+          },
+          "state": {
+            "description": "Where the work stands: `idle`, `queued`, `running`, `done` or `failed`.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Where to follow the readings while one is under way; empty when none is.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "label",
+          "live",
+          "note",
+          "seconds",
+          "percent",
+          "requested",
+          "status"
+        ],
+        "type": "object"
+      },
       "WebRoute": {
         "anyOf": [
           {
@@ -12641,6 +14592,33 @@
         ],
         "description": "The page of HQ's web interface that shows it, by its route name such as `projects:list`; null for none.",
         "title": "Web route"
+      },
+      "WorkRequested": {
+        "additionalProperties": false,
+        "description": "Work asked of HQ, and the job doing it.",
+        "properties": {
+          "job": {
+            "description": "The id of the job doing it; absent when another job holds the work.",
+            "type": "string"
+          },
+          "message": {
+            "description": "What asking did, in a sentence.",
+            "type": "string"
+          },
+          "result": {
+            "description": "What the work answered, where the call waited for it to end, as a command line does.",
+            "type": "object"
+          },
+          "started": {
+            "description": "Whether this call started the work; false when it was already running.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "started",
+          "message"
+        ],
+        "type": "object"
       },
       "WorkflowOutcome": {
         "additionalProperties": false,
@@ -12731,6 +14709,27 @@
           "label",
           "summary",
           "state"
+        ],
+        "type": "object"
+      },
+      "ZoneAdopted": {
+        "additionalProperties": false,
+        "description": "A domain taken under HQ's management, and the records in it taken on with it.",
+        "properties": {
+          "adopted": {
+            "description": "The keys of the domain's records adopted with it; empty when none could be.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/ManagedResourceItem"
+          }
+        },
+        "required": [
+          "resource",
+          "adopted"
         ],
         "type": "object"
       },
@@ -12985,7 +14984,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/AssetSavedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -13053,7 +15052,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/RecordDeletedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -13137,7 +15136,14 @@
                   "additionalProperties": false,
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/CapabilityAnswer"
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/AssetSaved"
+                        },
+                        {
+                          "$ref": "#/components/schemas/AwaitingApproval"
+                        }
+                      ]
                     },
                     "ok": {
                       "$ref": "#/components/schemas/Outcome",
@@ -13220,7 +15226,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/AssetSavedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -13288,7 +15294,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/EntrySavedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -13356,7 +15362,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/RecordDeletedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -13424,7 +15430,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/EntrySavedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -13492,7 +15498,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/RenewalQueuedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -13560,7 +15566,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ContactDeletedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -13624,7 +15630,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ContactSubmissionPageSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedReadBadRequest"
@@ -13692,7 +15698,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ContactReviewedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -13760,7 +15766,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ContentSavedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -13828,7 +15834,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/RecordDeletedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -13896,7 +15902,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ContentSavedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -13964,7 +15970,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/PanelsRefreshRequestedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -14032,7 +16038,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/PanelsRefreshRequestedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -14100,7 +16106,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/DocumentationSavedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -14168,7 +16174,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/RecordDeletedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -14236,7 +16242,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/DocumentationSyncedOrHeldSuccess"
           },
           "400": {
             "content": {
@@ -14316,7 +16322,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/DocumentationSavedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -14384,7 +16390,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ExpenseSavedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -14452,7 +16458,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/RecordDeletedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -14520,7 +16526,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ExpenseSavedOrHeldSuccess"
           },
           "400": {
             "content": {
@@ -14612,7 +16618,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ProfileReadRequestedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -14681,7 +16687,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/HqImportedOrHeldSuccess"
           },
           "400": {
             "content": {
@@ -14762,7 +16768,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/HqSyncedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -14830,7 +16836,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ControllerSweepRequestedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -14898,7 +16904,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ObservedAcceptedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -14966,7 +16972,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ResourceSavedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -15034,7 +17040,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ResourceSavedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -15102,7 +17108,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/OperationQueuedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -15182,7 +17188,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/OperationQueuedDeclarationForgottenOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -15250,7 +17256,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/OperationQueuedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -15318,7 +17324,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/OperationQueuedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -15386,7 +17392,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/OperationQueuedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -15454,7 +17460,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ResourceSavedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -15522,7 +17528,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ServiceAdoptedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -15590,7 +17596,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ZoneAdoptedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -15654,7 +17660,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/AddressLookedUpSuccess"
           },
           "400": {
             "content": {
@@ -15730,7 +17736,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/NameLookedUpSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedReadBadRequest"
@@ -15814,7 +17820,14 @@
                   "additionalProperties": false,
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/CapabilityAnswer"
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/ProjectSaved"
+                        },
+                        {
+                          "$ref": "#/components/schemas/AwaitingApproval"
+                        }
+                      ]
                     },
                     "ok": {
                       "$ref": "#/components/schemas/Outcome",
@@ -15974,7 +17987,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/RecordDeletedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -16042,7 +18055,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/RunRequestedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -16111,7 +18124,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/DependencyUpdatesSetOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -16191,7 +18204,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/WorkRequestedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -16275,7 +18288,14 @@
                   "additionalProperties": false,
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/CapabilityAnswer"
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/ProjectSaved"
+                        },
+                        {
+                          "$ref": "#/components/schemas/AwaitingApproval"
+                        }
+                      ]
                     },
                     "ok": {
                       "$ref": "#/components/schemas/Outcome",
@@ -16406,7 +18426,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ProjectSavedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -16474,7 +18494,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/RecordDeletedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -16542,7 +18562,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ReceiptSavedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -16610,7 +18630,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/EmptyGroupsRemovedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -16678,7 +18698,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/ResourceSavedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -16746,7 +18766,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/OperationQueuedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/TargetedChangeBadRequest"
@@ -16814,7 +18834,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityAnswerSuccess"
+            "$ref": "#/components/responses/VisitRefreshedOrHeldSuccess"
           },
           "400": {
             "$ref": "#/components/responses/UntargetedChangeBadRequest"
@@ -17583,7 +19603,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List needs you",
+        "summary": "Needs you: the list",
         "tags": [
           "hq.dashboard"
         ],
@@ -17710,7 +19730,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List analytics",
+        "summary": "Analytics: the list",
         "tags": [
           "hq.analytics"
         ],
@@ -17828,7 +19848,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List assets",
+        "summary": "Assets: the list",
         "tags": [
           "hq.assets"
         ],
@@ -17974,7 +19994,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List calendar",
+        "summary": "Calendar: the list",
         "tags": [
           "hq.calendar"
         ],
@@ -18118,7 +20138,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List connection status",
+        "summary": "Connection status: the list",
         "tags": [
           "hq.connections"
         ],
@@ -18294,7 +20314,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List contact submissions",
+        "summary": "Contact submissions: the list",
         "tags": [
           "hq.contacts"
         ],
@@ -18432,7 +20452,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List containers",
+        "summary": "Containers: the list",
         "tags": [
           "hq.containers"
         ],
@@ -18597,7 +20617,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List content",
+        "summary": "Content: the list",
         "tags": [
           "hq.content"
         ],
@@ -18680,7 +20700,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List credential access",
+        "summary": "Credential access: the list",
         "tags": [
           "hq.connections"
         ],
@@ -18846,7 +20866,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List docs",
+        "summary": "Docs: the list",
         "tags": [
           "hq.docs"
         ],
@@ -18935,7 +20955,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List domains",
+        "summary": "Domains: the list",
         "tags": [
           "hq.zones"
         ],
@@ -19067,7 +21087,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List estate",
+        "summary": "Estate: the list",
         "tags": [
           "hq.dashboard"
         ],
@@ -19222,7 +21242,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List expenses",
+        "summary": "Expenses: the list",
         "tags": [
           "hq.expenses"
         ],
@@ -19305,7 +21325,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List HQ",
+        "summary": "HQ: the list",
         "tags": [
           "hq.self"
         ],
@@ -19464,7 +21484,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List records",
+        "summary": "Records: the list",
         "tags": [
           "hq.infrastructure"
         ],
@@ -19640,7 +21660,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List machines",
+        "summary": "Machines: the list",
         "tags": [
           "hq.machines"
         ],
@@ -19875,7 +21895,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List projects",
+        "summary": "Projects: the list",
         "tags": [
           "hq.projects"
         ],
@@ -20098,7 +22118,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List readings",
+        "summary": "Readings: the list",
         "tags": [
           "hq.connections"
         ],
@@ -20274,7 +22294,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List receipts",
+        "summary": "Receipts: the list",
         "tags": [
           "hq.receipts"
         ],
@@ -20406,7 +22426,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List request path",
+        "summary": "Request path: the list",
         "tags": [
           "hq.connections"
         ],
@@ -20505,7 +22525,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List search",
+        "summary": "Search: the list",
         "tags": [
           "hq.search"
         ],
@@ -20637,7 +22657,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List services",
+        "summary": "Services: the list",
         "tags": [
           "hq.services"
         ],
@@ -20769,7 +22789,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List tailnet",
+        "summary": "Tailnet: the list",
         "tags": [
           "hq.tailnet"
         ],
@@ -20858,7 +22878,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List upgrades",
+        "summary": "Upgrades: the list",
         "tags": [
           "hq.containers"
         ],

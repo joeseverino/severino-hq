@@ -58,13 +58,14 @@ class HeldAnswerTests(TestCase):
                 scope=CapabilityRule.Scope.AGENT, subject=subject, capability="project.create", rule="approve"
             )
 
-    def test_every_capability_offers_the_held_answer_beside_its_own(self):
+    def test_every_capability_that_changes_something_offers_the_held_answer_beside_its_own(self):
+        # A read is never held for a person (``capability_policy.set_rule``).
         document = openapi.document()
         calls = {
             path: operation
             for path, operations in document["paths"].items()
             for operation in operations.values()
-            if "x-hq-capability" in operation
+            if "x-hq-capability" in operation and operation[openapi.EFFECT_EXTENSION] != "read"
         }
         self.assertTrue(calls)
         for path, operation in calls.items():

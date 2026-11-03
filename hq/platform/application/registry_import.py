@@ -7,7 +7,7 @@ value wins over an imported one: docs/Derived-Facts.md#one-time-import.
 """
 
 from dataclasses import asdict, dataclass, field, fields
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
@@ -18,12 +18,14 @@ from hq.domains.projects.models import Project
 from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
 
+from .answer_fields import RecordSlug
 from .assets import AssetCommand, upsert_asset
 from .command_fields import Describe
+from .describe import listed
 from .domains import records_of
 from .projects import ProjectCommand, upsert_project
 from .record_errors import RecordConflict, RecordNotFound
-from .refusal_status import refuse
+from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal, require_all
 from .ui import counted, ended
 
@@ -262,7 +264,46 @@ def _report(planned: list[_Planned]) -> list[dict[str, Any]]:
     return [{"slug": item.slug, "outcome": item.outcome, "kept": item.kept} for item in planned]
 
 
-def import_registry(command: HQImportCommand, *, principal: Principal) -> dict[str, Any]:
+# What the import does with each record of the document.
+OUTCOMES = ("created", "updated", "unchanged")
+
+
+class KeptValue(TypedDict):
+    """A stored value the import kept in place of the one the document offered."""
+
+    field: Annotated[str, Describe("The field whose stored value was kept.")]
+    kept: Annotated[str, Describe("The value HQ kept, as text.")]
+    offered: Annotated[str, Describe("The value the document offered, as text.")]
+
+
+class ImportedRecord(TypedDict):
+    """One record of the document, and what the import does with it."""
+
+    slug: RecordSlug
+    outcome: Annotated[str, Describe(ended(f"What the import does with it: {listed(OUTCOMES)}"))]
+    kept: Annotated[list[KeptValue], Describe("The stored values it keeps in place of the ones offered.")]
+
+
+class ImportSummary(TypedDict):
+    """How many records the import creates, updates and leaves as they are, and how many values it keeps."""
+
+    created: Annotated[int, Describe("How many records it creates.")]
+    updated: Annotated[int, Describe("How many records it updates.")]
+    unchanged: Annotated[int, Describe("How many records it leaves as they are.")]
+    kept: Annotated[int, Describe("How many stored values it keeps in place of the ones offered.")]
+
+
+class HqImported(TypedDict):
+    """What importing the document did, or would do where it was only checked."""
+
+    ok: Literal[True]
+    check_only: Annotated[bool, Describe("Whether the import was only checked, so nothing was saved.")]
+    projects: Annotated[list[ImportedRecord], Describe("Each project in the document, in its order.")]
+    assets: Annotated[list[ImportedRecord], Describe("Each asset in the document, in its order.")]
+    summary: ImportSummary
+
+
+def import_registry(command: HQImportCommand, *, principal: Principal) -> HqImported | RefusalEnvelope:
     """Validate the whole document, then upsert every record or none."""
 
     require_all(principal, REQUIRED_CAPABILITIES)
@@ -278,10 +319,7 @@ def import_registry(command: HQImportCommand, *, principal: Principal) -> dict[s
     if problems:
         return _refused(f"{counted(len(problems), 'record')} refused. Nothing was imported.", problems)
 
-    summary = {
-        outcome: sum(item.outcome == outcome for item in (*projects, *assets))
-        for outcome in ("created", "updated", "unchanged")
-    }
+    summary = {outcome: sum(item.outcome == outcome for item in (*projects, *assets)) for outcome in OUTCOMES}
     summary["kept"] = sum(len(item.kept) for item in (*projects, *assets))
     result = {
         "ok": True,
@@ -315,5 +353,5 @@ def execute_hq_import(
     command: HQImportCommand,
     *,
     principal: Principal,
-) -> dict[str, Any]:
+) -> HqImported | RefusalEnvelope:
     return import_registry(command, principal=principal)

@@ -9,7 +9,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from itertools import count
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.db import transaction
 from django.db.models import Q
@@ -34,6 +34,8 @@ from .record_saves import Held, as_sent, found, held, written
 from .security import Capability, Principal, person
 from .ui import counted
 lazy from . import calendar
+lazy from .calendar_specs import EntryRecord
+lazy from .record_answers import EntrySaved
 lazy from .references import dangling
 
 _ENTRY = Held("That calendar event was not found.", "This event changed after it was read.")
@@ -219,7 +221,7 @@ class EntryCommand:
     about: Annotated[str, Refers(Entry, "about"), Describe("What the entry is about, as type:identity.")] = ""
 
 
-def serialize_entry(entry: Entry) -> dict[str, Any]:
+def serialize_entry(entry: Entry) -> EntryRecord:
     return {
         "uid": str(entry.uid),
         "title": entry.title,
@@ -256,7 +258,7 @@ def save_entry(
     current_key: str | None = None,
     expected_updated_at: str | None = None,
     sent: frozenset[str] | None = None,
-) -> dict[str, Any]:
+) -> EntrySaved:
     principal.require(Capability.WRITE_CALENDAR)
     operation = "calendar.entry.create" if current_key is None else "calendar.entry.update"
     with audit_operation(operation=operation, principal=principal):
@@ -292,8 +294,15 @@ class SourceChoiceCommand:
     shown: Annotated[bool, Describe("Whether the month shows it.")]
 
 
+class SourcesChosen(TypedDict):
+    """Which calendar sources the person shows, as the call left them."""
+
+    ok: Literal[True]
+    choices: Annotated[dict[str, bool], Describe("Whether each calendar source is shown, by its name.")]
+
+
 @transaction.atomic
-def choose_source(command: SourceChoiceCommand, *, principal: Principal) -> dict[str, Any]:
+def choose_source(command: SourceChoiceCommand, *, principal: Principal) -> SourcesChosen:
     """Check or uncheck one source for the signed-in person.
 
     Not audited: a view preference is the person arranging their own page,

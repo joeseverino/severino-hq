@@ -9,7 +9,7 @@ operator stops managing leaves, are docs/Derived-Facts.md#adoption.
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.db import transaction
 lazy from django.core.exceptions import ValidationError
@@ -31,6 +31,7 @@ lazy from .infrastructure import (
     save_managed_resource,
     suggest_key,
 )
+lazy from .resource_operations import ResourceSaved
 
 # The capabilities that adopt, by name, for the pages that offer them.
 ADOPT = "infrastructure.resource.adopt"
@@ -337,12 +338,20 @@ class AdoptServiceCommand:
     hostname: Annotated[str, Names("services"), Describe("The hostname whose live records to manage in HQ.")]
 
 
+class ServiceAdopted(TypedDict):
+    """The records behind one hostname, taken under HQ's management."""
+
+    ok: Literal[True]
+    hostname: Annotated[str, Describe("The name whose records were adopted.")]
+    adopted: Annotated[list[str], Describe("The keys of the records adopted.")]
+
+
 @transaction.atomic
 def adopt_service(
     command: AdoptServiceCommand,
     *,
     principal: Principal,
-) -> dict[str, Any]:
+) -> ServiceAdopted:
     """Adopt every unmanaged record behind one hostname, or none of them.
 
     A hostname is the unit an operator is thinking about: its DNS record and
@@ -390,7 +399,7 @@ def adopt(
     command: AdoptCommand,
     *,
     principal: Principal,
-) -> dict[str, Any]:
+) -> ResourceSaved:
     """Bring a record the provider already holds under HQ's management.
 
     The spec is the live record, read again here rather than posted by a form

@@ -1,5 +1,6 @@
 """The API reference: a vendored viewer, held to the rules its frame and palette must keep."""
 
+import difflib
 import hashlib
 import json
 import re
@@ -150,7 +151,6 @@ def opened_walk(document):
     walk drew: a schema the tags share is opened once, where it is first
     met, and judged there."""
 
-    summary = {tag["name"]: tag for tag in document["tags"]}
     operations: dict[str, list[tuple[str, str, dict[str, Any]]]] = {}
     for path, item in document["paths"].items():
         for method, operation in item.items():
@@ -162,23 +162,54 @@ def opened_walk(document):
             continue
         parts = []
         for method, path, operation in operations[tag["name"]]:
-            drawn = [(".body", operation["requestBody"])] if "requestBody" in operation else []
-            drawn += [(f".responses.{status}", response) for status, response in operation["responses"].items()]
-            for where, part in drawn:
+            for where, part in _drawn(operation):
                 key = _schema_key(document, part)
                 if key and key not in seen:
                     seen.add(key)
                     parts.append(f"/{method}{path}{where}")
-        group = summary.get(tag.get("parent", ""))
-        walk.append(
-            OpenedTag(
-                name=tag["name"],
-                label=f"{group['summary']} / {tag['summary']}" if group else tag["summary"],
-                tags=tuple(scalar_slug(name) for name in ([group["name"]] if group else []) + [tag["name"]]),
-                parts=tuple(parts),
-            )
-        )
+        walk.append(_opened(document, tag["name"], tag["name"], "", parts))
     return walk
+
+
+def _drawn(operation):
+    """The parts of ``operation`` the viewer opens, its body and each
+    response, by the end of the id it gives each after the operation's own."""
+
+    drawn = [(".body", operation["requestBody"])] if "requestBody" in operation else []
+    return drawn + [(f".responses.{status}", response) for status, response in operation["responses"].items()]
+
+
+def _opened(document, tag_name, name, label, parts):
+    """``parts`` of the tag ``tag_name`` opened, under ``name``, labeled as
+    the sidebar names the tag (its group first), after ``label`` if given."""
+
+    summary = {tag["name"]: tag for tag in document["tags"]}
+    tag = summary[tag_name]
+    group = summary.get(tag.get("parent", ""))
+    sidebar = f"{group['summary']} / {tag['summary']}" if group else tag["summary"]
+    return OpenedTag(
+        name=name,
+        label=f"{label} in {sidebar}" if label else sidebar,
+        tags=tuple(scalar_slug(each) for each in ([group["name"]] if group else []) + [tag_name]),
+        parts=tuple(parts),
+    )
+
+
+def opened_operation(document, asked):
+    """The operation ``asked`` (``GET /api/v2/...``) opened alone: its tag,
+    and its body and every response with each property in them, whatever
+    another operation draws. One the document does not hold is refused with
+    the operations it does nearest the name."""
+
+    method, _, path = asked.strip().partition(" ")
+    operation = document["paths"].get(path.strip(), {}).get(method.lower())
+    if operation is None:
+        held = [f"{verb.upper()} {at}" for at, item in document["paths"].items() for verb in item]
+        nearest = difflib.get_close_matches(asked, held, n=8, cutoff=0.5)
+        raise LookupError(f"no operation {asked!r} in the API document; it holds " + (", ".join(nearest) or "none"))
+    path, method = path.strip(), method.upper()
+    parts = [f"/{method}{path}{where}" for where, _ in _drawn(operation)]
+    return _opened(document, operation["tags"][0], f"{method} {path}", f"{method} {path}", parts)
 
 
 # One round of opening a tag: the "Show More" of each of its slugs, then each

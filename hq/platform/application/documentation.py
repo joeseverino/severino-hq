@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from datetime import date
 from functools import partial
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, TypedDict, final
 
 from hq.domains.docs_index.importer import (
     import_manifest_data,
@@ -23,7 +23,7 @@ from .record_errors import PolicyError
 from .record_fields import Notes, PublishedAt
 from .record_saves import Held, Link, linked_saver
 from .references import Mention, Mentions
-from .refusal_status import refuse
+from .refusal_status import RefusalEnvelope, refuse
 from .security import Capability, Principal
 from .sensitivity import safe_records
 from .ui import counted
@@ -201,6 +201,29 @@ save_documentation = linked_saver(
 )
 
 
+# What a sync of the vault's docs answers under every name it is published by.
+type SyncStats = Annotated[
+    dict[str, Any],
+    Describe(
+        "How the sync went: how many docs it created, updated and skipped, the links naming a record "
+        "HQ does not hold, and the orphans found or pruned where asked."
+    ),
+]
+
+
+class DocumentationSync(TypedDict):
+    """What syncing the vault's docs into HQ did."""
+
+    stats: SyncStats
+
+
+@final
+class DocumentationSynced(DocumentationSync):
+    """What syncing the vault's docs into HQ did, as the command answers it."""
+
+    ok: Literal[True]
+
+
 def sync_documentation(
     manifest: list[dict[str, Any]],
     *,
@@ -209,7 +232,7 @@ def sync_documentation(
     report_orphans: bool = False,
     prune_orphans: bool = False,
     confirm_prune: bool = False,
-) -> dict[str, Any]:
+) -> DocumentationSynced | RefusalEnvelope:
     """Validate and atomically synchronize vault metadata into HQ."""
 
     principal.require(Capability.SYNC_DOCUMENTATION)
@@ -245,7 +268,7 @@ def execute_documentation_sync(
     command: DocumentationSyncCommand,
     *,
     principal: Principal,
-) -> dict[str, Any]:
+) -> DocumentationSynced | RefusalEnvelope:
     return sync_documentation(
         command.manifest,
         principal=principal,

@@ -8,7 +8,7 @@ for D1.
 """
 
 from dataclasses import dataclass
-from typing import Annotated, Any, get_args
+from typing import Annotated, Any, Literal, NotRequired, TypedDict, get_args
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -31,6 +31,7 @@ from .record_errors import PolicyError, RecordNotFound
 from .record_saves import written
 from .resource_operations import queue_reconcile
 from .security import Principal
+lazy from .record_answers import ContactSubmissionPage
 
 CONTACT_STATUSES = frozenset(get_args(ContactStatus))
 ASSIGNEE_LENGTH = 120
@@ -106,16 +107,22 @@ def execute_contact_list(
     command: ContactListCommand,
     *,
     principal: Principal,
-) -> dict[str, Any]:
+) -> ContactSubmissionPage:
     del principal
-    return {
+    listed = list_contact_submissions(
+        status=command.status,
+        query=command.query,
+        limit=command.limit,
+    )
+    page: ContactSubmissionPage = {
         "ok": True,
-        **list_contact_submissions(
-            status=command.status,
-            query=command.query,
-            limit=command.limit,
-        ),
+        "items": listed["items"],
+        "count": listed["count"],
+        "total": listed["total"],
     }
+    if "truncated" in listed:
+        page["truncated"] = listed["truncated"]
+    return page
 
 
 def _unconfirmed(spec: dict[str, Any], current: inbox.Inbox) -> dict[str, Any]:
@@ -189,6 +196,15 @@ def _review_of(submission: dict[str, Any]) -> dict[str, Any]:
     return {name: submission.get(name) or "" for name in inbox.REVIEWED}
 
 
+class ContactReviewed(TypedDict):
+    """A message's review, handed to the contact inbox to keep."""
+
+    ok: Literal[True]
+    id: Annotated[int, Describe("The id of the message reviewed.")]
+    status: Annotated[str, Describe("The review status the message was given.")]
+    queued: Annotated[Literal[True], Describe("That the review was handed to the inbox.")]
+
+
 @keeps(Kept(lambda current_id: _review_of(_submission(current_id, inbox.current()))))
 @transaction.atomic
 def execute_contact_review(
@@ -197,7 +213,7 @@ def execute_contact_review(
     principal: Principal,
     current_id: int,
     sent: frozenset[str] | None = None,
-) -> dict[str, Any]:
+) -> ContactReviewed:
     current = inbox.current()
     before = _submission(current_id, current)
     review = {
@@ -223,13 +239,32 @@ def execute_contact_review(
     return {"ok": True, "id": current_id, "status": status, "queued": True}
 
 
+class ContactDeletedPart(TypedDict):
+    """The message the call asked to delete."""
+
+    id: Annotated[int, Describe("The id of the message to delete.")]
+    already_absent: Annotated[
+        bool, Describe("Whether it was already gone, or already waiting to be deleted, so nothing new was asked.")
+    ]
+
+
+class ContactDeleted(TypedDict):
+    """A message the contact inbox was asked to delete."""
+
+    ok: Literal[True]
+    deleted: ContactDeletedPart
+    queued: NotRequired[
+        Annotated[Literal[True], Describe("That the delete was handed to the inbox; absent when nothing was asked.")]
+    ]
+
+
 @transaction.atomic
 def execute_contact_delete(
     command: ContactDeleteCommand,
     *,
     principal: Principal,
     current_id: int,
-) -> dict[str, Any]:
+) -> ContactDeleted:
     if command.confirm != str(current_id):
         raise ValidationError({"confirm": ValidationError("Must match the message.", code="invalid")})
     current = inbox.current()

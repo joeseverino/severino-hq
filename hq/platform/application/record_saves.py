@@ -7,9 +7,11 @@ Each domain declares its ``save`` with ``linked_saver``, saying only what is its
 own; any other write that changes a record the caller read holds it with ``held``.
 """
 
+from annotationlib import Format, call_annotate_function
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, fields
-from typing import Any
+from functools import cache
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
@@ -17,12 +19,42 @@ from django.db.models import Model
 
 from hq.platform.core.audit import audit_operation
 
+from .describe import Describe
 from .domains import Records, load, records_of
 from .integration_specs import TARGET_KINDS, Kept, keeps
 from .record_errors import RecordConflict, RecordNotFound, Sentence
 from .security import Principal
+lazy from .resources import resource_registry
 
 Save = Callable[..., dict[str, Any]]
+
+# What a save says of the record it wrote, for every kind of record alike.
+type Created = Annotated[bool, Describe("Whether the call created the record, rather than changing one HQ held.")]
+
+
+@cache
+def saved_type(resource: str) -> Any:
+    """What a save of ``resource`` answers: the record as a read of one
+    answers it, under the domain's noun, and whether the call created it.
+
+    Read off the resource's declared record type, so a domain declares the
+    shape of its record once and its save answers in it.
+    """
+
+    records = records_of(resource)
+    spec = resource_registry()[resource]
+    record = spec.record_type or spec.row_type
+    saved: Any = TypedDict(  # type: ignore[operator]
+        _saved_name(records),
+        {"ok": Literal[True], "created": Created, records.noun: record},
+    )
+    saved.__doc__ = f"The {records.title or records.noun} as saved, and whether the call created it."
+    saved.__module__ = __name__
+    return saved
+
+
+def _saved_name(records: Records) -> str:
+    return "".join(part.title() for part in records.noun.split("_")) + "Saved"
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,6 +178,16 @@ def linked_saver(
             return {"ok": True, "created": current is None, records.noun: serialize(record)}
 
     save.__name__ = save.__qualname__ = f"save_{records.noun}"
+    declared = save.__annotate__
+
+    def annotate(wanted: Format) -> dict[str, Any]:
+        # Its answer is named for the record type the registry holds, read
+        # only once a value is asked for: a spec is validated by the names alone.
+        annotations = dict(call_annotate_function(declared, wanted)) if declared else {}
+        annotations["return"] = _saved_name(records) if wanted == Format.STRING else saved_type(resource)
+        return annotations
+
+    save.__annotate__ = annotate
     return save
 
 

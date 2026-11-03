@@ -1,6 +1,6 @@
 """What a call held for a person answers, typed once for every door that publishes it."""
 
-from typing import Annotated, Literal, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
 from hq.domains.control_plane.models import ApprovalRequest
 from hq.platform.application.routes import reverse
@@ -55,6 +55,21 @@ class HeldCall(AwaitingApproval):
     """A held call as the capability runner answers it: ``ok``, since nothing failed."""
 
     ok: Literal[True]
+
+
+class ApprovalApplied(TypedDict):
+    """A held change a person agreed to, and what it answered when it ran."""
+
+    ok: Literal[True]
+    approved: Annotated[str, Describe("The id of the request approved.")]
+    result: Annotated[dict[str, Any], Describe("What the held call answered when it ran, in its own command's shape.")]
+
+
+class ApprovalRejected(TypedDict):
+    """A held change a person declined, so nothing it asked was done."""
+
+    ok: Literal[True]
+    rejected: Annotated[str, Describe("The id of the request rejected.")]
 
 
 def serialize_approval(held: ApprovalRequest) -> HeldRequest:

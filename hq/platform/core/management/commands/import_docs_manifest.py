@@ -19,6 +19,7 @@ from hq.domains.docs_index.importer import (
 )
 from hq.platform.application.documentation import sync_documentation
 from hq.platform.application.record_errors import PolicyError
+from hq.platform.application.refusal_status import refusal_of, refused
 from hq.platform.application.security import cli_principal
 from hq.platform.application.ui import counted
 
@@ -124,8 +125,8 @@ class Command(BaseCommand):
             )
         except (ManifestImportError, PolicyError) as exc:
             raise CommandError(str(exc)) from exc
-        if not result["ok"]:
-            raise CommandError(f"Manifest validation failed: {result['problems']}")
+        if refused(result):
+            raise CommandError(f"Manifest validation failed: {refusal_of(result).message}")
         return result["stats"]
 
     def _report_orphans(self, stats, *, pruned: bool) -> None:

@@ -5,12 +5,13 @@ credentials reach, so no document describes it.
 """
 
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.db import transaction
 
 from .command_fields import Describe
-from .documentation import ConfirmPrune, PruneOrphans, UpdateExisting, sync_documentation
+from .documentation import ConfirmPrune, DocumentationSync, PruneOrphans, UpdateExisting, sync_documentation
+from .refusal_status import RefusalEnvelope, refused
 from .security import Principal
 
 
@@ -23,12 +24,19 @@ class HQSyncCommand:
     confirm_prune: ConfirmPrune = False
 
 
+class HqSynced(TypedDict):
+    """What syncing HQ from the vault did, each part under its own name."""
+
+    ok: Literal[True]
+    documentation: DocumentationSync
+
+
 @transaction.atomic
 def execute_hq_sync(
     command: HQSyncCommand,
     *,
     principal: Principal,
-) -> dict[str, Any]:
+) -> HqSynced | RefusalEnvelope:
     """Apply the whole manifest or none of it."""
 
     documentation = sync_documentation(
@@ -39,7 +47,7 @@ def execute_hq_sync(
         prune_orphans=command.prune_orphans,
         confirm_prune=command.confirm_prune,
     )
-    if not documentation["ok"]:
+    if refused(documentation):
         transaction.set_rollback(True)
         return documentation
-    return {"ok": True, "documentation": documentation}
+    return {"ok": True, "documentation": {"stats": documentation["stats"]}}

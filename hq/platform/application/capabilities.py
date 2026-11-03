@@ -539,7 +539,7 @@ def _run(
         # Robust: a write that committed does not fail for a hint that could
         # not be given.
         transaction.on_commit(ask_soon, robust=True)
-    return result
+    return dict(result)
 
 
 def execute_approved(

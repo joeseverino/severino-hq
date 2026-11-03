@@ -16,7 +16,7 @@ from django.forms import ModelForm
 
 from hq.platform.core.audit import audit_operation
 
-from .deletion import DeleteCommand, delete_record
+from .deletion import DeleteCommand, RecordDeleted, delete_record
 from .domains import Records, host_records, load, records_of
 from .integration_specs import TARGET, TARGET_KINDS, CapabilitySpec
 from .json_schemas import choices
@@ -32,7 +32,7 @@ _VERBS = frozenset({"create", "upsert", "update", "delete"})
 KEPT = "A field left out keeps its value."
 
 
-def deleter(resource: str) -> Callable[..., dict[str, Any]]:
+def deleter(resource: str) -> Callable[..., RecordDeleted]:
     """The confirmed delete for one record domain, in the host call contract."""
 
     def delete(
@@ -41,7 +41,7 @@ def deleter(resource: str) -> Callable[..., dict[str, Any]]:
         principal: Principal,
         expected_updated_at: str | None = None,
         **target: Any,
-    ) -> dict[str, Any]:
+    ) -> RecordDeleted:
         records = records_of(resource)
         keyword = TARGET_KINDS[records.target].keyword
         if set(target) != {keyword}:
@@ -169,7 +169,7 @@ def save_form(form: ModelForm[Any], *, principal: Principal) -> Any:
         return form.save()
 
 
-def delete_instance(instance: Any, *, principal: Principal) -> dict[str, Any]:
+def delete_instance(instance: Any, *, principal: Principal) -> RecordDeleted:
     """Delete one record the web already holds, through its declared deleter.
 
     The person confirmed on the page, so the confirmation is the record's own

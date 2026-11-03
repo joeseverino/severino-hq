@@ -14,7 +14,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal, TypedDict
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -601,11 +601,25 @@ def request_reading(kind: str) -> bool:
     return ring_doorbell()
 
 
+class ControllerSweepRequested(TypedDict):
+    """The controller, woken to read the estate, and why a full read is due or not."""
+
+    ok: Literal[True]
+    requested: Annotated[Literal[True], Describe("That the controller was woken.")]
+    due: Annotated[bool, Describe("Whether a read of every connection was due.")]
+    reason: Annotated[str, Describe("Why a full read is due or not, in a sentence.")]
+    read_now: Annotated[
+        str,
+        Describe("What the controller reads at once, by its connection or kind; empty when the call named nothing."),
+    ]
+    message: Annotated[str, Describe("What asking did, in the sentence a page shows for it.")]
+
+
 def request_controller_sweep(
     command: ControllerSweepCommand,
     *,
     principal: Principal,
-) -> dict[str, object]:
+) -> ControllerSweepRequested:
     """Wake the pull-based controller; with a subject, have it read that now."""
 
     del principal
@@ -622,8 +636,8 @@ def request_controller_sweep(
     return {
         "ok": True,
         "requested": True,
-        "due": verdict["due"],
-        "reason": verdict["reason"],
+        "due": bool(verdict["due"]),
+        "reason": str(verdict["reason"]),
         "read_now": _read_label(subject),
         "message": _sweep_message(subject, due=bool(verdict["due"])),
     }

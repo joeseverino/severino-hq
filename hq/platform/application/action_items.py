@@ -10,7 +10,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -267,7 +267,7 @@ def _audit(user, message: str, count: int) -> None:
     )
 
 
-def set_items_aside(command: SetAsideCommand, *, principal: Principal) -> dict[str, Any]:
+def set_items_aside(command: SetAsideCommand, *, principal: Principal) -> ItemsActedOn:
     """Set items aside for the person asking: the ``action_item.set_aside`` capability.
 
     A row names itself and its revision, so it needs no queue. Items named by
@@ -288,7 +288,14 @@ def set_items_aside(command: SetAsideCommand, *, principal: Principal) -> dict[s
     return {"ok": True, "count": count}
 
 
-def restore(command: RestoreCommand, *, principal: Principal) -> dict[str, Any]:
+class ItemsActedOn(TypedDict):
+    """How many items the call set aside or brought back."""
+
+    ok: Literal[True]
+    count: Annotated[int, Describe("How many items it set aside or brought back.")]
+
+
+def restore(command: RestoreCommand, *, principal: Principal) -> ItemsActedOn:
     """Bring set-aside items back for the person asking: the ``action_item.restore`` capability."""
 
     user = person(principal)

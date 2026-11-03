@@ -8,7 +8,7 @@ Operators are never subject to policy.
 """
 
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Literal, TypedDict
 
 from django.db import transaction
 from django.db.models import Q
@@ -415,7 +415,17 @@ class PolicyCommand:
     rules: Annotated[tuple[RuleCell, ...], Describe("The policy cells to set, each one rule.")]
 
 
-def apply_changes(command: PolicyCommand, *, principal: Principal) -> dict[str, Any]:
+class PolicyApplied(TypedDict):
+    """What applying the rules changed, and why any rule was left as it was."""
+
+    ok: Literal[True]
+    changed: Annotated[int, Describe("How many rules changed.")]
+    problems: Annotated[
+        list[str], Describe("Why each rule left as it was could not change, a sentence each; empty when none was.")
+    ]
+
+
+def apply_changes(command: PolicyCommand, *, principal: Principal) -> PolicyApplied:
     """Apply the cells that differ from what holds, each on its own.
 
     ``changed`` counts what moved; ``problems`` says why each refused cell was

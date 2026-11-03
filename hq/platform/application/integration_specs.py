@@ -6,7 +6,7 @@ from annotationlib import Format
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import cache
-from typing import Any, is_typeddict
+from typing import Any, TypeAliasType, Union, get_args, get_origin, is_typeddict
 
 from pydantic import BaseModel
 
@@ -16,6 +16,7 @@ from .security import Capability
 from .ui import ended
 lazy from . import records
 lazy from .labels import human_label, lower_first
+lazy from .refusal_status import RefusalEnvelope
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,7 +203,7 @@ class CapabilitySpec:
     effect: str
     required_capability: Capability | str | tuple[Capability | str, ...]
     command_type: type
-    handler: Callable[..., dict[str, Any]]
+    handler: Callable[..., Mapping[str, Any]]
     target_kind: str | None = None
     subject_resource: str | None = None
     target_label: str = ""
@@ -283,6 +284,35 @@ class CapabilitySpec:
         return requested(self.words(), subject, again=again)
 
 
+def answer_type(spec: CapabilitySpec) -> Any | None:
+    """What ``spec`` answers when it runs, the TypedDict its handler's return
+    annotation names, or None where that names no precise shape.
+
+    The annotation is the one declaration of a capability's result, so every
+    door that publishes it reads it from there. A refusal the handler returns
+    rather than raises (``RefusalEnvelope``) is the runner's to answer, so it
+    is no part of the result. A plain dict, or an annotation that cannot be
+    resolved (an extension's name for a type it cannot import here), answers
+    None: such a capability is published as answering an object, and never
+    fails the document that lists it.
+    """
+
+    try:
+        declared = inspect.signature(spec.handler, eval_str=True).return_annotation
+        while isinstance(declared, TypeAliasType):
+            declared = declared.__value__
+    except Exception:  # noqa: BLE001 - whatever an extension's annotation raises, its answer is an object
+        return None
+    members = tuple(
+        member
+        for member in (get_args(declared) if get_origin(declared) is Union else (declared,))
+        if member is not RefusalEnvelope
+    )
+    if not members or not all(is_typeddict(member) for member in members):
+        return None
+    return members[0] if len(members) == 1 else Union[members]  # noqa: UP007 - built from a tuple of types
+
+
 def requested(words: str, subject: str = "", *, again: bool = False) -> str:
     """What a press of the button saying ``words`` says once its work is asked
     for: the one sentence every action's toast is."""
@@ -298,8 +328,8 @@ RESERVED_QUERY_FIELD = "fields"
 FIELD_MASK = (
     "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only "
     "the part named inside it, in every element of a list (`items.waiting`); `*` alone keeps every field. "
-    "Absent, a list keeps the fields it names as `operations.list.fields` where its records are "
-    "described), and a read of one record the whole record."
+    "Absent, a list keeps the fields its description in `describe_resources` names as "
+    "`operations.list.fields`, and a read of one record keeps the whole record."
 )
 # The query field a page past the first is asked by, read by the resource
 # layer around the handler (application.resources) and never passed to it.

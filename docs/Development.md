@@ -563,7 +563,13 @@ The look keeps its test database in `var/dev-look/` through Django's
 
 A look holds still: the page's clock is frozen at the moment the run began
 (its `--base` run shares that instant), and each screenshot is taken with
-animations finished.
+animations finished. A file that changes in the checkout while the run draws
+(any file git does not ignore) fails it, since its shots and verdict would mix
+two trees.
+
+`--operation 'GET /api/v2/...'` on `api/docs` opens that one operation before
+the shot: its tag, and its body and every response with each property in
+them. The shot's line names the band files that show it.
 
 `--open` opens disclosures round after round until nothing more opens, then
 shows one popover of each kind on its own, shot as
@@ -609,8 +615,12 @@ under this checkout's, marked with the ref.
 
 `--eval` takes a file holding a function, called with nothing, or one
 expression. What it returns prints under the page and width (as JSON unless
-it is text) and is kept beside the screenshot as `.eval.txt`. A computed
-style, or an element's chain of ancestors with their widths:
+it is text) and is kept beside the screenshot as `.eval.txt`. An element in
+it, at any depth of arrays and plain objects, prints as its tag, id and
+classes and the shot file that shows it: the band (`.band-NN.png`) whose part
+of the page holds its box, or "not shown". The page settles after the script,
+so the screenshot draws what it changed. A computed style, or an element's
+chain of ancestors with their widths:
 
 ```js
 () => {

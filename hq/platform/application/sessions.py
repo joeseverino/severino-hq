@@ -1,7 +1,7 @@
 """Ending every HQ session a person holds, wherever they are signed in."""
 
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Literal, TypedDict
 
 from django.conf import settings
 from django.contrib.auth import SESSION_KEY
@@ -27,7 +27,14 @@ class SignOutCommand:
     subject: Annotated[str, Describe("Pocket ID's subject for the person it signed out.")]
 
 
-def sign_out(command: SignOutCommand, *, principal: Principal) -> dict[str, Any]:
+class SessionsEnded(TypedDict):
+    """The sessions ended for the person the identity provider signed out."""
+
+    ok: Literal[True]
+    sessions: Annotated[int, Describe("How many sessions the call ended.")]
+
+
+def sign_out(command: SignOutCommand, *, principal: Principal) -> SessionsEnded:
     """End every session of the person the identity provider signed out, by its subject.
 
     A subject no sign-in names has no session here to end, so nothing is done.
