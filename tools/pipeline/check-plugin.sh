@@ -42,10 +42,13 @@ fi
 
 # The host's structural rule on text a person reads holds the package's
 # source as it holds the host's: the rule's scope names src/, read from the
-# package root. The ast-grep is the host's pin, mise's install of it beside a
-# host checkout, or the one on the PATH where there is no mise.
-ast_grep=$(mise -C "$hq_root" which ast-grep 2>/dev/null) || ast_grep=$(command -v ast-grep) || {
-    echo "ast-grep is not installed: \`mise -C $hq_root install ast-grep\` installs the host's pin." >&2
+# package root. The ast-grep is the host's pin, which mise installs where it is
+# missing (an extension's CI sets up only uv), or the one on the PATH where
+# mise has no pin. It runs here, since the scope is read from where it runs.
+pinned() { mise -C "$hq_root" which ast-grep 2>/dev/null; }
+ast_grep=$(pinned) || { mise -C "$hq_root" install --quiet ast-grep 2>/dev/null && ast_grep=$(pinned); } \
+    || ast_grep=$(command -v ast-grep) || {
+    echo "ast-grep is not installed: \`mise -C $hq_root install ast-grep\` installs the host's pin, or says why it cannot." >&2
     exit 1
 }
 "$ast_grep" scan -c "$hq_root/tools/lint/ast-grep/sgconfig.yml" --filter '^dot-typed-in-text$' --report-style medium src

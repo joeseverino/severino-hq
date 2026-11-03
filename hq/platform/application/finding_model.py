@@ -9,11 +9,12 @@ import shlex
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, NotRequired, TypedDict
+from typing import Annotated, Any, NotRequired, TypedDict
 
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink
+from .command_fields import Describe
 from .core_capabilities import CONTROLLER_REFRESH
 from .timestamps import moment
 from .topology_model import Topology, TopologyNode
@@ -245,9 +246,12 @@ def built_findings(fields: tuple[dict[str, Any], ...]) -> tuple[Finding, ...]:
 class OperatorStep:
     """A command an operator runs on their own machine. HQ never runs it."""
 
-    label: str
-    command: str = ""
-    notes: tuple[str, ...] = ()
+    label: Annotated[str, Describe("What the step does, in a sentence; all there is to it when it names no command.")]
+    command: Annotated[
+        str,
+        Describe("The exact command to paste into a shell on the machine it names; empty for a step said in words."),
+    ] = ""
+    notes: Annotated[tuple[str, ...], Describe("What to know before or after running it, a sentence each.")] = ()
 
 
 # A problem card's own button: read what the claim rests on again, then run

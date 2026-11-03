@@ -3784,42 +3784,52 @@
         "type": "object"
       },
       "ActionLink": {
-        "description": "One safe route from observed state to an existing HQ use case.\n\n``refusal`` is why the command would be refused if it were asked for now,\nin its own words: the link is drawn unusable with it, never offered as a\npress that fails.",
+        "description": "One safe route from observed state to an existing HQ use case.",
         "properties": {
           "capability": {
             "default": "",
+            "description": "The command it runs, by its name in the command catalog; empty for a link to a page.",
             "type": "string"
           },
           "effect": {
+            "description": "What following it does: `read` for a link that only opens a page, else its command's effect, `remote_write`, `infrastructure_change` or `destructive`.",
             "type": "string"
           },
           "label": {
+            "description": "The words on the link or button: its command's own, where it runs one.",
             "type": "string"
           },
           "method": {
             "default": "GET",
+            "description": "`GET` to open `url`, `POST` to submit to it.",
             "type": "string"
           },
           "name": {
+            "description": "What the link is for, such as `remedy`, `verify` or `topology`, which a page places it by.",
             "type": "string"
           },
           "reason": {
             "default": "",
+            "description": "Why it is offered here, in a sentence; empty when that goes without saying.",
             "type": "string"
           },
           "recommended": {
             "default": false,
+            "description": "Whether it is the press to make first.",
             "type": "boolean"
           },
           "refusal": {
             "default": "",
+            "description": "Why its command would be refused if asked for now, in the command's words: set, the link is shown unusable with it. Empty when it would run.",
             "type": "string"
           },
           "target": {
             "default": "",
+            "description": "The record its command runs on; empty when the command takes none.",
             "type": "string"
           },
           "url": {
+            "description": "Where it goes, a page or the command it submits to, requested with `method`.",
             "type": "string"
           }
         },
@@ -7038,33 +7048,41 @@
         "properties": {
           "detail": {
             "default": "",
+            "description": "What a reading's record is, in a few words beside its name.",
             "type": "string"
           },
           "external": {
             "default": false,
+            "description": "Whether `url` leaves HQ, such as for a service's console.",
             "type": "boolean"
           },
           "identity": {
             "default": "",
+            "description": "What the type's page is addressed by, and what to match on: a record's key, a machine's name. Empty for a reading's record.",
             "type": "string"
           },
           "kind": {
             "default": "",
+            "description": "The type of the thing named, such as `machine` or a record's type in the registry.",
             "type": "string"
           },
           "kind_label": {
             "default": "",
+            "description": "What that type is called in a sentence.",
             "type": "string"
           },
           "label": {
+            "description": "The name a person reads; never matched on, since `identity` is what addresses it.",
             "type": "string"
           },
           "title": {
             "default": "",
+            "description": "The other names this one link stands for, shown on hover. Empty for none.",
             "type": "string"
           },
           "url": {
             "default": "",
+            "description": "The page the name opens: a path in HQ, or an outside address. Empty for none.",
             "type": "string"
           }
         },
@@ -7760,11 +7778,15 @@
       },
       "FindingEvidence": {
         "additionalProperties": false,
+        "description": "One line of what a finding rests on.",
         "properties": {
           "label": {
+            "description": "What this line of evidence is, as a problem card labels it.",
             "type": "string"
           },
-          "value": {}
+          "value": {
+            "description": "What was found, most often a name or a sentence."
+          }
         },
         "required": [
           "label",
@@ -7777,6 +7799,7 @@
         "description": "What ``findings`` answers.",
         "properties": {
           "findings": {
+            "description": "The problems, most severe first, as far as the floor and the limit let through.",
             "items": {
               "$ref": "#/components/schemas/SerializedFinding"
             },
@@ -7790,7 +7813,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The rule the read was narrowed to; null for every rule's."
           },
           "schema_version": {
             "const": 2,
@@ -7810,20 +7834,25 @@
       },
       "FindingsSummary": {
         "additionalProperties": false,
+        "description": "How many problems there are, and how many came back.",
         "properties": {
           "findings": {
+            "description": "How many problems there are in all, counted before the floor and the limit.",
             "type": "integer"
           },
           "returned": {
+            "description": "How many came back in the list.",
             "type": "integer"
           },
           "severities": {
             "additionalProperties": {
               "type": "integer"
             },
+            "description": "How many there are at each severity, by severity.",
             "type": "object"
           },
           "truncated": {
+            "description": "Whether the limit held back some that the floor let through.",
             "type": "boolean"
           }
         },
@@ -8609,14 +8638,18 @@
       },
       "LensEntry": {
         "additionalProperties": false,
+        "description": "A fixed question the graph can be narrowed to.",
         "properties": {
           "label": {
+            "description": "The question, in a few words.",
             "type": "string"
           },
           "name": {
+            "description": "What to pass as `lens` to ask it.",
             "type": "string"
           },
           "summary": {
+            "description": "What its answer holds, in a sentence.",
             "type": "string"
           }
         },
@@ -9164,13 +9197,16 @@
         "properties": {
           "command": {
             "default": "",
+            "description": "The exact command to paste into a shell on the machine it names; empty for a step said in words.",
             "type": "string"
           },
           "label": {
+            "description": "What the step does, in a sentence; all there is to it when it names no command.",
             "type": "string"
           },
           "notes": {
             "default": [],
+            "description": "What to know before or after running it, a sentence each.",
             "items": {
               "type": "string"
             },
@@ -10639,24 +10675,29 @@
         "description": "One finding as every machine door carries it.",
         "properties": {
           "affected_scopes": {
+            "description": "Other record types or reading types it bears on.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "evidence": {
+            "description": "What it rests on, a labeled line each.",
             "items": {
               "$ref": "#/components/schemas/FindingEvidence"
             },
             "type": "array"
           },
           "explanation": {
+            "description": "Why it matters and what it rests on, in sentences.",
             "type": "string"
           },
           "id": {
+            "description": "The problem's id, the same at every read while it is open; its workflow's outcome names it.",
             "type": "string"
           },
           "investigations": {
+            "description": "Where in the topology to look around its subject: its neighborhood and what it affects.",
             "items": {
               "$ref": "#/components/schemas/ActionLink"
             },
@@ -10670,27 +10711,32 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Why HQ can neither run a fix nor name an exact command for it; null when it can do either."
           },
           "offers": {
+            "description": "Reads of its subject this reader may run before acting.",
             "items": {
               "$ref": "#/components/schemas/ActionLink"
             },
             "type": "array"
           },
           "operator_steps": {
+            "description": "What a person does by hand to resolve it, in order. HQ never runs these.",
             "items": {
               "$ref": "#/components/schemas/OperatorStep"
             },
             "type": "array"
           },
           "remedies": {
+            "description": "The commands that would fix it which this reader may run, none of them destructive.",
             "items": {
               "$ref": "#/components/schemas/SuggestedRemedy"
             },
             "type": "array"
           },
           "rule": {
+            "description": "The rule that found it, as the `rule` filter takes it.",
             "type": "string"
           },
           "scope": {
@@ -10701,9 +10747,11 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The record type, reading type or check it is about as a whole; null when it has none."
           },
           "severity": {
+            "description": "How serious it is: `serious`, `attention`, `neutral` or `good`, most severe first.",
             "type": "string"
           },
           "since": {
@@ -10714,7 +10762,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "When it was first seen open, an ISO 8601 instant; null where no read has recorded it."
           },
           "subject": {
             "anyOf": [
@@ -10724,9 +10773,11 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The id of the topology node it is about; null when it is about a type or a check as a whole."
           },
           "title": {
+            "description": "The problem, in a line.",
             "type": "string"
           },
           "workflow": {
@@ -10737,7 +10788,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The plan that resolves it, a fix and then the check that confirms it; null when it has neither."
           }
         },
         "required": [
@@ -10935,18 +10987,24 @@
         "description": "A capability that would answer a finding, and the target it runs on.",
         "properties": {
           "auto": {
+            "description": "Whether the controller runs it unattended. A problem only proposes, so it reads false.",
             "type": "boolean"
           },
           "capability": {
+            "description": "The command that would fix it, run with `target` as its target.",
             "type": "string"
           },
           "effect": {
+            "description": "What running it does, in its command's own terms: `read`, `remote_write` or `infrastructure_change`. A `destructive` one is never suggested.",
             "type": "string"
           },
           "label": {
+            "description": "What running it does here, in the remedy's own words or its command's.",
             "type": "string"
           },
-          "target": {}
+          "target": {
+            "description": "The record the command runs on."
+          }
         },
         "required": [
           "capability",
@@ -11252,6 +11310,7 @@
         "description": "What ``topology`` answers: the graph a lens or a trace narrows to, or,\nasked for neither, its counts and the lenses that would narrow it.",
         "properties": {
           "edges": {
+            "description": "The relationships between the selected nodes, both ends among them.",
             "items": {
               "$ref": "#/components/schemas/TopologyEdge"
             },
@@ -11265,15 +11324,18 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The lens the graph was narrowed to; null when none was asked for."
           },
           "lenses": {
+            "description": "Every lens there is, given only when neither a lens nor a focus was.",
             "items": {
               "$ref": "#/components/schemas/LensEntry"
             },
             "type": "array"
           },
           "nodes": {
+            "description": "The things a lens or a trace selected; absent when neither was asked for.",
             "items": {
               "$ref": "#/components/schemas/TopologyNode"
             },
@@ -11294,7 +11356,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The trace the graph was narrowed to; null without a focus."
           }
         },
         "required": [
@@ -11310,10 +11373,12 @@
         "properties": {
           "detail": {
             "default": "",
+            "description": "What its reading names, in a few words; empty without a reading.",
             "type": "string"
           },
           "entities": {
             "default": [],
+            "description": "Each record its reading stands for, as a link; empty without a reading.",
             "items": {
               "$ref": "#/components/schemas/EntityLink"
             },
@@ -11321,15 +11386,19 @@
           },
           "facet": {
             "default": "",
+            "description": "What its reading supplies: `runtime`, `network`, `dns`, `proxy`, `certificate` or `registration`; empty for an overlay that supplies none.",
             "type": "string"
           },
           "id": {
+            "description": "The relationship's id, stable while both ends and the relation hold.",
             "type": "string"
           },
           "kind": {
+            "description": "The relation: `runs_on`, `runs`, `talks_to`, `contains`, `redirects_to`, `reaches`, `stands_for`, `on_tailnet`, `declared_by`, `carries`, `used_by`, `enables`, `governs` or `reading`, the last for one a reading supports.",
             "type": "string"
           },
           "label": {
+            "description": "The relation as it reads from the source, such as `Runs on`.",
             "type": "string"
           },
           "observed_at": {
@@ -11337,17 +11406,21 @@
             "type": "string"
           },
           "source": {
+            "description": "The id of the node it reads from.",
             "type": "string"
           },
           "source_kind": {
             "default": "",
+            "description": "The type of reading the relationship rests on; empty for one HQ's records state.",
             "type": "string"
           },
           "status": {
             "default": "neutral",
+            "description": "How the relationship stands: `serious`, `attention`, `neutral` or `good`.",
             "type": "string"
           },
           "target": {
+            "description": "The id of the node it points to.",
             "type": "string"
           }
         },
@@ -11365,6 +11438,7 @@
         "properties": {
           "actions": {
             "default": [],
+            "description": "What the reader may do from here, each already checked against the reader's permissions.",
             "items": {
               "$ref": "#/components/schemas/ActionLink"
             },
@@ -11372,22 +11446,27 @@
           },
           "connection_ref": {
             "default": "",
+            "description": "A connection node's ref, unique only within the controller that reported it. Empty otherwise.",
             "type": "string"
           },
           "controller_id": {
             "default": "",
+            "description": "The controller that reported a connection node; with `connection_ref` it names the connection. Empty otherwise.",
             "type": "string"
           },
           "declared_revision": {
             "default": 0,
+            "description": "Which version of HQ's copy of the record HQ last asked for, counting up from 1 as the copy changes; 0 on a node HQ keeps no copy of.",
             "type": "integer"
           },
           "detail": {
             "default": "",
+            "description": "A line on why it stands as it does; empty when there is nothing to add.",
             "type": "string"
           },
           "facts": {
             "default": [],
+            "description": "What a read found that HQ's copy does not carry, as `[name, value]` pairs; a name may repeat.",
             "items": {
               "maxItems": 2,
               "minItems": 2,
@@ -11404,24 +11483,30 @@
             "type": "array"
           },
           "id": {
+            "description": "Names this node for the rest of the answer and later reads: an edge's source and target, a trace's focus, a problem's subject. Stable while the thing it stands for exists.",
             "type": "string"
           },
           "kind": {
+            "description": "What sort of thing it is: `controller`, `connection`, `machine`, `service`, `zone`, `ability`, `resource`, `registry`, `target` or `dependency`.",
             "type": "string"
           },
           "kind_key": {
             "default": "",
+            "description": "What it is an instance of: a record's type, or the connection family that added it. Nodes alike in this are siblings.",
             "type": "string"
           },
           "label": {
+            "description": "The key HQ files it under, which a command or a record's page is addressed by: a record's key, a machine's name, a hostname.",
             "type": "string"
           },
           "managed": {
             "default": true,
+            "description": "Whether HQ keeps the live system to its copy; false, a difference is no problem.",
             "type": "boolean"
           },
           "name": {
             "default": "",
+            "description": "What a person calls it, where that differs from `label`: the name a record stands for. Empty when `label` already reads as that name.",
             "type": "string"
           },
           "observed_at": {
@@ -11430,10 +11515,12 @@
           },
           "observed_revision": {
             "default": 0,
+            "description": "Which version of HQ's copy was last applied and confirmed back, 0 until one has been. When it equals `declared_revision`, a difference the live system still shows lies in HQ's copy.",
             "type": "integer"
           },
           "on_demand": {
             "default": false,
+            "description": "Whether it is expected to be absent most of the time, so a read not finding it is no problem.",
             "type": "boolean"
           },
           "pageviews": {
@@ -11445,14 +11532,17 @@
                 "type": "null"
               }
             ],
-            "default": null
+            "default": null,
+            "description": "Pages served under this hostname over the last 7 days; null, never 0, when nothing measures it."
           },
           "provider": {
             "default": "",
+            "description": "The service a connection node reads, such as `tailscale`, which its readings are matched by; `subtitle` names it in words. Empty on any other node.",
             "type": "string"
           },
           "read_capabilities": {
             "default": [],
+            "description": "The permissions a reader must hold to be told about it: for what a service reported, its connection family's own.",
             "items": {
               "type": "string"
             },
@@ -11460,25 +11550,31 @@
           },
           "reason": {
             "default": "",
+            "description": "The reason on its current condition, verbatim, saying whether a read of the live system wrote it or applying HQ's copy did, which no read has confirmed since.",
             "type": "string"
           },
           "status": {
             "default": "neutral",
+            "description": "How it stands: `serious`, `attention`, `neutral` or `good`.",
             "type": "string"
           },
           "status_label": {
             "default": "",
+            "description": "How it stands, in the words a page shows beside it.",
             "type": "string"
           },
           "subtitle": {
+            "description": "What it is, in a few words under its name, such as the service it reads.",
             "type": "string"
           },
           "summary": {
             "default": "",
+            "description": "What the record holds, shortened, when another record goes by the same name: what tells the two apart. Empty otherwise.",
             "type": "string"
           },
           "unconfirmed_fields": {
             "default": [],
+            "description": "Fields HQ's copy sets that the last read did not report back, leaving out those the service cannot report: set, but never checked.",
             "items": {
               "type": "string"
             },
@@ -11486,6 +11582,7 @@
           },
           "url": {
             "default": "",
+            "description": "Where it is shown: a path in HQ, or an outside address such as a service's console. Empty for none.",
             "type": "string"
           },
           "visits": {
@@ -11497,7 +11594,8 @@
                 "type": "null"
               }
             ],
-            "default": null
+            "default": null,
+            "description": "Visits to this hostname over the last 7 days; null when nothing measures them."
           }
         },
         "required": [
@@ -11510,17 +11608,21 @@
       },
       "TopologySummary": {
         "additionalProperties": false,
+        "description": "How much the graph holds.",
         "properties": {
           "edges": {
+            "description": "How many relationships the graph holds for this reader.",
             "type": "integer"
           },
           "kinds": {
             "additionalProperties": {
               "type": "integer"
             },
+            "description": "How many nodes of each type, by type.",
             "type": "object"
           },
           "nodes": {
+            "description": "How many nodes the graph holds for this reader.",
             "type": "integer"
           }
         },
@@ -11548,15 +11650,19 @@
         "description": "A trace from one node: which way it followed the edges, how far, and each node it reached.",
         "properties": {
           "depth": {
+            "description": "The most edges it followed from the focus.",
             "type": "integer"
           },
           "direction": {
+            "description": "Which way it followed the edges, `inbound`, `outbound` or `both`: `outbound` goes from source to target, toward what the focus depends on, and `inbound` goes back, toward what depends on it.",
             "type": "string"
           },
           "focus": {
+            "description": "The id of the node the trace started from.",
             "type": "string"
           },
           "hops": {
+            "description": "Every node it reached, nearest first.",
             "items": {
               "$ref": "#/components/schemas/TraceHop"
             },
@@ -11573,11 +11679,14 @@
       },
       "TraceHop": {
         "additionalProperties": false,
+        "description": "One node a trace reached, and how far from its focus.",
         "properties": {
           "hop": {
+            "description": "How many edges it lies from the focus, which is 0.",
             "type": "integer"
           },
           "node": {
+            "description": "The id of a node the trace reached, as `nodes` lists it.",
             "type": "string"
           }
         },
@@ -12010,12 +12119,15 @@
         "description": "The observable fact that completes a workflow.",
         "properties": {
           "claim_id": {
+            "description": "The id of the problem whose absence completes it, as the problem's own `id` gives it.",
             "type": "string"
           },
           "kind": {
+            "description": "What completes it: `claim_absent`, once the problem it resolves is no longer reported.",
             "type": "string"
           },
           "label": {
+            "description": "The outcome in words; empty when its type says it.",
             "type": "string"
           }
         },
@@ -12031,15 +12143,18 @@
         "description": "A contextual route from evidence to action to observed resolution.",
         "properties": {
           "id": {
+            "description": "The plan's id, the same at every read of the problem it resolves.",
             "type": "string"
           },
           "label": {
+            "description": "The plan's heading, such as `What to do`.",
             "type": "string"
           },
           "outcome": {
             "$ref": "#/components/schemas/WorkflowOutcome"
           },
           "steps": {
+            "description": "Its steps, in the order they are taken.",
             "items": {
               "$ref": "#/components/schemas/WorkflowStep"
             },
@@ -12060,21 +12175,26 @@
         "properties": {
           "actions": {
             "default": [],
+            "description": "The links that carry it out, each through its command's own route.",
             "items": {
               "$ref": "#/components/schemas/ActionLink"
             },
             "type": "array"
           },
           "label": {
+            "description": "The step's heading; empty for an instruction its summary says alone.",
             "type": "string"
           },
           "phase": {
+            "description": "What the step is: `act` runs a remedy, `verify` checks it worked, `run` is an exact command the operator runs, `do` an instruction in words, `cannot` why it cannot be done from HQ.",
             "type": "string"
           },
           "state": {
+            "description": "Where it stands: `recommended` to do now, `after_action` once the step before is done, `available` at any time, `operator` for a person to do by hand, `blocked` where it cannot be done.",
             "type": "string"
           },
           "summary": {
+            "description": "The step in full: the command of a `run` step, the instruction of a `do` step, the reason of a `cannot` step. Empty when its label says it.",
             "type": "string"
           }
         },

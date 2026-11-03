@@ -55,6 +55,7 @@ from .topology_lenses import (
     lens_for,
 )
 from .topology_model import (
+    NODE_KIND_ORDER,
     Topology,
     TopologyEdge,
     TopologyNode,
@@ -68,19 +69,6 @@ lazy from .adoption import manages_through
 lazy from .hq_self import serving
 lazy from .posture import estate_posture
 lazy from .topology_estate import add_estate
-
-_KIND_ORDER = {
-    "controller": 0,
-    "connection": 1,
-    "machine": 2,
-    "service": 3,
-    "zone": 4,
-    "ability": 5,
-    "resource": 6,
-    "registry": 7,
-    "target": 8,
-    "dependency": 9,
-}
 
 
 def _focus_url(node_id: str) -> str:
@@ -575,7 +563,7 @@ def _derive(principal: Principal) -> Topology:
     ordered_nodes = tuple(
         sorted(
             nodes.values(),
-            key=lambda node: (_KIND_ORDER.get(node.kind, 99), node.label.casefold(), node.id),
+            key=lambda node: (NODE_KIND_ORDER.get(node.kind, 99), node.label.casefold(), node.id),
         )
     )
     ordered_edges = tuple(sorted(edges.values(), key=lambda edge: (edge.kind, edge.source, edge.target)))

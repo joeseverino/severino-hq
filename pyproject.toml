@@ -86,6 +86,14 @@ name = "The workflow contracts are a leaf: they import nothing of HQ"
 type = "forbidden"
 source_modules = ["hq.platform.application.workflow_contracts"]
 forbidden_modules = ["hq.**"]
+# The field description marker, a leaf held to importing nothing of HQ below.
+ignore_imports = ["hq.platform.application.workflow_contracts -> hq.platform.application.describe"]
+
+[[tool.importlinter.contracts]]
+name = "The field description marker is a leaf: it imports nothing of HQ"
+type = "forbidden"
+source_modules = ["hq.platform.application.describe"]
+forbidden_modules = ["hq.**"]
 
 [[tool.importlinter.contracts]]
 name = "The UI primitives never reach the workflow engine"

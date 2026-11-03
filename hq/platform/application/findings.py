@@ -47,6 +47,7 @@ from .action_links import (
     read_now_link,
     topology_investigation_links,
 )
+from .command_fields import Describe
 from .contracts import route_url
 from .derivations import derivation, present
 from .derived_inputs import ESTATE_READS, estate_variant
@@ -69,8 +70,10 @@ from .security import Capability, Principal
 from .topology import derive_topology
 from .topology_model import (
     JOINED_KINDS,
+    STANDINGS,
     Topology,
     TopologyNode,
+    one_of,
 )
 from .ui import ended
 from .workflows import (
@@ -557,7 +560,7 @@ def derive_findings(topology: Topology, *, principal: Principal, rule: str = "")
 
 
 # Most severe first: the order findings are served in and a floor reads.
-SEVERITIES = ("serious", "attention", "neutral", "good")
+SEVERITIES = STANDINGS
 
 
 def _rank(severity: str) -> int:
@@ -599,39 +602,77 @@ def rule_of(item_key: str) -> str:
 
 
 class FindingEvidence(TypedDict):
-    label: str
-    value: Any
+    """One line of what a finding rests on."""
+
+    label: Annotated[str, Describe("What this line of evidence is, as a problem card labels it.")]
+    value: Annotated[Any, Describe("What was found, most often a name or a sentence.")]
 
 
 class SuggestedRemedy(TypedDict):
     """A capability that would answer a finding, and the target it runs on."""
 
-    capability: str
-    target: Any
-    label: str
-    effect: str
-    auto: bool
+    capability: Annotated[str, Describe("The command that would fix it, run with `target` as its target.")]
+    target: Annotated[Any, Describe("The record the command runs on.")]
+    label: Annotated[str, Describe("What running it does here, in the remedy's own words or its command's.")]
+    effect: Annotated[
+        str,
+        Describe(
+            "What running it does, in its command's own terms: `read`, `remote_write` or "
+            "`infrastructure_change`. A `destructive` one is never suggested."
+        ),
+    ]
+    auto: Annotated[
+        bool,
+        Describe("Whether the controller runs it unattended. A problem only proposes, so it reads false."),
+    ]
 
 
 class SerializedFinding(TypedDict):
     """One finding as every machine door carries it."""
 
-    id: str
-    rule: str
-    subject: str | None
-    scope: str | None
-    affected_scopes: list[str]
-    title: str
-    severity: str
-    explanation: str
-    evidence: list[FindingEvidence]
-    remedies: list[SuggestedRemedy]
-    offers: list[WrittenAction]
-    investigations: list[WrittenAction]
-    workflow: WrittenWorkflow | None
-    operator_steps: list[Annotated[dict[str, Any], Written(OperatorStep)]]
-    no_help_reason: str | None
-    since: str | None
+    id: Annotated[
+        str,
+        Describe("The problem's id, the same at every read while it is open; its workflow's outcome names it."),
+    ]
+    rule: Annotated[str, Describe("The rule that found it, as the `rule` filter takes it.")]
+    subject: Annotated[
+        str | None,
+        Describe("The id of the topology node it is about; null when it is about a type or a check as a whole."),
+    ]
+    scope: Annotated[
+        str | None,
+        Describe("The record type, reading type or check it is about as a whole; null when it has none."),
+    ]
+    affected_scopes: Annotated[list[str], Describe("Other record types or reading types it bears on.")]
+    title: Annotated[str, Describe("The problem, in a line.")]
+    severity: Annotated[str, Describe(f"How serious it is: {one_of(SEVERITIES)}, most severe first.")]
+    explanation: Annotated[str, Describe("Why it matters and what it rests on, in sentences.")]
+    evidence: Annotated[list[FindingEvidence], Describe("What it rests on, a labeled line each.")]
+    remedies: Annotated[
+        list[SuggestedRemedy],
+        Describe("The commands that would fix it which this reader may run, none of them destructive."),
+    ]
+    offers: Annotated[list[WrittenAction], Describe("Reads of its subject this reader may run before acting.")]
+    investigations: Annotated[
+        list[WrittenAction],
+        Describe("Where in the topology to look around its subject: its neighborhood and what it affects."),
+    ]
+    workflow: Annotated[
+        WrittenWorkflow | None,
+        Describe("The plan that resolves it, a fix and then the check that confirms it; null when it has neither."),
+    ]
+    operator_steps: Annotated[
+        list[Annotated[dict[str, Any], Written(OperatorStep)]],
+        Describe("What a person does by hand to resolve it, in order. HQ never runs these."),
+    ]
+    no_help_reason: Annotated[
+        str | None,
+        Describe("Why HQ can neither run a fix nor name an exact command for it; null when it can do either."),
+    ]
+    since: Annotated[
+        str | None,
+        Describe("When it was first seen open, an ISO 8601 instant; null where no read has recorded it."),
+    ]
 
 
 def serialize_finding(finding: Finding) -> SerializedFinding:
@@ -695,11 +736,12 @@ FINDINGS_SCHEMA_VERSION = 2
 
 
 class FindingsSummary(TypedDict):
-    # Every finding raised, counted before the floor and the limit.
-    findings: int
-    severities: dict[str, int]
-    returned: int
-    truncated: bool
+    """How many problems there are, and how many came back."""
+
+    findings: Annotated[int, Describe("How many problems there are in all, counted before the floor and the limit.")]
+    severities: Annotated[dict[str, int], Describe("How many there are at each severity, by severity.")]
+    returned: Annotated[int, Describe("How many came back in the list.")]
+    truncated: Annotated[bool, Describe("Whether the limit held back some that the floor let through.")]
 
 
 # Closed, the findings within it too: every field is HQ's own, so one a
@@ -709,9 +751,12 @@ class Findings(TypedDict):
     """What ``findings`` answers."""
 
     schema_version: Annotated[int, WithJsonSchema(shape_version(FINDINGS_SCHEMA_VERSION))]
-    rule: str | None
+    rule: Annotated[str | None, Describe("The rule the read was narrowed to; null for every rule's.")]
     summary: FindingsSummary
-    findings: list[SerializedFinding]
+    findings: Annotated[
+        list[SerializedFinding],
+        Describe("The problems, most severe first, as far as the floor and the limit let through."),
+    ]
 
 
 def findings(*, principal: Principal, **narrowing: object) -> Findings:

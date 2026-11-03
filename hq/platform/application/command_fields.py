@@ -16,6 +16,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from .describe import Describe
+
 # Lazy: it loads pydantic, which declaring a command does not.
 lazy from .json_schemas import choices
 
@@ -28,17 +30,6 @@ if TYPE_CHECKING:
 NAMES_RECORDS = "x-hq-records"
 # The JSON Schema extension a field holding a model's reference carries.
 REFERS = "x-hq-reference"
-
-
-@dataclass(frozen=True, slots=True)
-class Describe:
-    """What a field is, in a sentence a person reads beside it:
-    ``notes: Annotated[str, Describe("Anything else worth keeping.")]``."""
-
-    text: str
-
-    def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
-        return {**handler(schema), "description": self.text}
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,3 +103,7 @@ def referred(schema: dict[str, Any]) -> tuple[str, str] | None:
 
     declared = schema.get(REFERS)
     return (declared["model"], declared["field"]) if isinstance(declared, dict) else None
+
+
+# Every marker is imported from here, Describe too, though it lives in a leaf of its own.
+__all__ = ["NAMES_RECORDS", "REFERS", "Choices", "Describe", "Names", "Refers", "named_records", "referred"]
