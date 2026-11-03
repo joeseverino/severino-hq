@@ -23,6 +23,8 @@ OPTION_VALUES = {"-j", "--jobs", "-C", "--cd", "-o", "--output", "-s", "--shell"
 STAND_IN = re.compile(r"[$%<>{}\[\]]|^$")
 # Names in a fixture's own mise config, which no task of this checkout's is.
 FIXTURE_TASKS = {
+    # The dead reference this file's own test shows on its line.
+    ("tools/tests/test_task_references.py", "of"),
     # The throwaway configs the heavy turn's suite builds: a holder, and a
     # heavy task run from inside another, and two heavy tasks asked together.
     ("tests/shell/test-heavy.sh", "example-holder"),
@@ -102,16 +104,33 @@ SECOND_JOBS = {"build-verify": "build"}
 GATE_JOBS = {"lint", "test", "browser", "build", "scan"}
 
 
+def where_named(path: str, text: str, name: str) -> list[str]:
+    """Each line of ``text`` where a ``mise run`` command names ``name``, as
+    path:line: text, or the path alone when the command spans lines."""
+
+    lines = [
+        f"{path}:{number}: {line.strip()}"
+        for number, line in enumerate(text.splitlines(), 1)
+        if name in named_tasks(line)
+    ]
+    return lines or [f"{path}: {name}"]
+
+
 @tag("source", "tree")
 class TaskReferenceTests(SimpleTestCase):
     def test_every_task_a_tracked_file_names_exists(self):
         """A task renamed or retired leaves no command that names it: in a
         workflow, a doc, a message, a test or a script."""
         tasks = set(mise_tasks())
-        named = [(path, name) for path, text in tracked_texts() for name in named_tasks(text)]
+        texts = dict(tracked_texts())
+        named = [(path, name) for path, text in texts.items() for name in named_tasks(text)]
         self.assertGreater(len(named), 100)
         dead = sorted({(path, name) for path, name in named if not a_task(name, tasks)} - FIXTURE_TASKS)
-        self.assertEqual(dead, [], "each names a task that does not exist")
+        self.assertEqual(
+            [line for path, name in dead for line in where_named(path, texts[path], name)],
+            [],
+            "each line runs `mise run` on a task that does not exist; in prose, reword it so no task name follows",
+        )
 
 
 @tag("source")
@@ -126,6 +145,15 @@ class CommandLineTests(SimpleTestCase):
         self.assertTrue(a_task("lint:*", {"lint:ruff"}))
         self.assertFalse(a_task("lint:*", {"lint:a:b"}))
         self.assertFalse(a_task("checks:*", {"lint:ruff"}))
+
+    def test_a_dead_reference_is_shown_on_its_line(self):
+        text = "Runs the suite.\nThe gate is one mise run of every suite.\n"
+        self.assertEqual(
+            where_named("tools/example.py", text, "of"),
+            ["tools/example.py:2: The gate is one mise run of every suite."],
+        )
+        # A name no one line holds, as in a command split across lines, names its file alone.
+        self.assertEqual(where_named("a.yml", "mise run lint", "fast"), ["a.yml: fast"])
 
 
 @tag("source")

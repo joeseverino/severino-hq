@@ -1,6 +1,8 @@
-"""Where a CI run's time went: each job's and step's seconds, and the critical path.
+"""Where a CI run's time went: each job's and step's seconds, how long after its
+last step each job was marked done, and the critical path.
 
-`mise run ci:timings <run>`, read-only: one `gh run view <run> --json jobs`.
+`mise run audit:ci-timings <run>...`, read-only:
+one `gh run view <run> --json jobs` a run.
 """
 
 from __future__ import annotations
@@ -26,6 +28,15 @@ class Span:
 @dataclass(frozen=True)
 class Job(Span):
     steps: tuple[Span, ...]
+
+    @property
+    def end_lag(self) -> int:
+        """Seconds between the job's last step and GitHub marking it done: the
+        platform's time, which no step of the repository's spent."""
+
+        if not self.steps:
+            return 0
+        return int((self.end - max(step.end for step in self.steps)).total_seconds())
 
 
 def when(text: str) -> datetime:
@@ -77,26 +88,39 @@ def report(found: list[Job]) -> str:
     origin = min(job.start for job in found)
     lines = []
     for job in found:
-        lines.append(f"{job.seconds:5d}s  {job.name}  (+{int((job.start - origin).total_seconds())}s)")
+        offset = int((job.start - origin).total_seconds())
+        lines.append(f"{job.seconds:5d}s  {job.name}  (+{offset}s, end lag {job.end_lag}s)")
         lines.extend(f"         {step.seconds:5d}s  {step.name}" for step in job.steps)
     path = critical_path(found)
     wall = int((path[-1].end - origin).total_seconds())
     lines.append("")
-    lines.append("Critical path: " + " -> ".join(f"{job.name} {job.seconds}s" for job in path) + f" = {wall}s")
+    chain = " -> ".join(f"{job.name} {job.seconds}s" for job in path)
+    lag = sum(job.end_lag for job in path)
+    lines.append(f"Critical path: {chain} = {wall}s, {lag}s of it end lag")
     return "\n".join(lines) + "\n"
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 1:
-        print("usage: ci_timings.py <run>", file=sys.stderr)
+    """Each run's report, headed by its id when there are several. A word that is
+    not a run id is refused before gh runs, so none can reach it as a flag."""
+
+    if not argv:
+        print("usage: ci_timings.py <run>...", file=sys.stderr)
         return 2
-    answer = subprocess.run(
-        ["gh", "run", "view", argv[0], "--json", "jobs"], capture_output=True, text=True, check=False
-    )
-    if answer.returncode != 0:
-        print(answer.stderr.strip(), file=sys.stderr)
-        return 1
-    sys.stdout.write(report(jobs(json.loads(answer.stdout))))
+    for run in argv:
+        if not (run.isascii() and run.isdigit()):
+            print(f"ci_timings: {run} is not a run id, the number gh run list prints", file=sys.stderr)
+            return 2
+    for index, run in enumerate(argv):
+        answer = subprocess.run(
+            ["gh", "run", "view", run, "--json", "jobs"], capture_output=True, text=True, check=False
+        )
+        if answer.returncode != 0:
+            print(answer.stderr.strip(), file=sys.stderr)
+            return 1
+        if len(argv) > 1:
+            sys.stdout.write(("\n" if index else "") + f"Run {run}\n")
+        sys.stdout.write(report(jobs(json.loads(answer.stdout))))
     return 0
 
 

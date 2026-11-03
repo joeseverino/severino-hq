@@ -44,8 +44,12 @@ class GraphToolTests(SimpleTestCase):
 
 
 class CompareTests(SimpleTestCase):
-    def bar(self, rows: list[list[str]], baseline: list[str]) -> tuple[int, str]:
+    def bar(self, rows: list[list[str]], baseline: list[str], asked: Usage | None = None) -> tuple[int, str]:
         """The bar's verdict on a graph answering with these rows, against this baseline."""
+        return self.run_bar(rows, baseline, asked or Usage({}))[:2]
+
+    def run_bar(self, rows: list[list[str]], baseline: list[str], asked: Usage) -> tuple[int, str, str]:
+        """The bar's verdict, standard error and standard output."""
 
         with tempfile.TemporaryDirectory() as folder, ExitStack() as stack:
             root = Path(folder)
@@ -66,8 +70,34 @@ class CompareTests(SimpleTestCase):
             }.items():
                 stack.enter_context(patch.object(bar, name, value))
             err = stack.enter_context(patch("sys.stderr", new_callable=io.StringIO))
-            stack.enter_context(patch("sys.stdout", new_callable=io.StringIO))
-            return bar.main(Usage({})), err.getvalue()
+            out = stack.enter_context(patch("sys.stdout", new_callable=io.StringIO))
+            return bar.main(asked), err.getvalue(), out.getvalue()
+
+    def test_pairs_lists_every_pair_with_what_explains_it_and_keeps_the_verdict(self):
+        explained = "dict projections over disjoint keys"
+        third = [["pkg/c.py", "gamma", "", FP]]
+        with patch.object(
+            classify.Classifier, "pair", lambda _, a, b: explained if "pkg/c.py" in (a.path, b.path) else None
+        ):
+            for baseline, verdict in (([], 1), ([PAIR], 0)):
+                with self.subTest(baseline=baseline):
+                    code, _, out = self.run_bar(OUTSIDE + third + INSIDE, baseline, Usage({"pairs": "true"}))
+
+                    self.assertEqual(code, verdict)
+                    listed = [line for line in out.splitlines() if " <> " in line]
+                    self.assertEqual(listed, sorted(listed))
+                    self.assertEqual(
+                        listed,
+                        [
+                            f"{PAIR.removeprefix('similar ')}\tunexplained",
+                            f"pkg/a.py::alpha <> pkg/c.py::gamma\t{explained}",
+                            f"pkg/b.py::beta <> pkg/c.py::gamma\t{explained}",
+                        ],
+                    )
+                    # A pair inside tests is never listed.
+                    self.assertNotIn("test_alpha", out)
+        # Without the switch the bar lists no pair that passes.
+        self.assertNotIn(" <> ", self.run_bar(OUTSIDE + INSIDE, [PAIR], Usage({}))[2])
 
     def test_a_pair_the_baseline_does_not_list_fails_and_is_named(self):
         code, err = self.bar(OUTSIDE + INSIDE, baseline=[])

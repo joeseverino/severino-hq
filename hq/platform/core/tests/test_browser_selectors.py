@@ -180,7 +180,12 @@ class BrowserGateSelectorTests(SimpleTestCase):
                 for selector in audit_selectors(node.value)
                 if any(kind != "attribute" for kind, _ in tokens(selector))
             )
-        self.assertEqual(offences, [])
+        self.assertEqual(
+            offences,
+            [],
+            "each of these names a class or an id outside SELECTORS: add it to SELECTORS "
+            "(hq/platform/core/tests/browser/selectors.py) and pass it to the probe as an argument",
+        )
 
 
 @tag("source", "tree")

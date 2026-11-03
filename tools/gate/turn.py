@@ -39,7 +39,8 @@ def narrow(argv: list[str]) -> bool:
         django.setup()
         options = vars(TestCommand().create_parser("manage.py", "test").parse_args(argv))
         labels = options.pop("args")
-        if not labels or any(map(names_a_tree, labels)):
+        # A serial run is one process however many tests it loads.
+        if options["parallel"] != 1 and (not labels or any(map(names_a_tree, labels))):
             return False
         # One suite, not a parallel run's partition of it, loaded without a word: the run says what it found.
         runner = get_runner(settings, options["testrunner"])(**(options | {"parallel": 1, "verbosity": 0}))

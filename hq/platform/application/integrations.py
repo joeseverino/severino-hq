@@ -4,7 +4,7 @@ from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cache
 from typing import Any
 
@@ -26,7 +26,7 @@ lazy from .core_capabilities import CORE_CAPABILITY_SPECS
 lazy from .domains import host_specs
 lazy from .plugins import plugin_capability_specs, plugin_search_definitions
 lazy from .records import capability_specs as record_capability_specs
-lazy from .resources import CORE_RESOURCE_SPECS
+lazy from .resources import core_resource_specs
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,12 +51,18 @@ class IntegrationGraph:
     resources: Mapping[str, ResourceSpec]
     connections: Mapping[str, ConnectionSpec]
     search: Mapping[str, SearchDefinition]
+    # ``search`` by the model each indexes. Every save asks it, so it is built
+    # with the graph and cleared with it.
+    search_models: Mapping[type, SearchDefinition] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "capabilities", frozendict(dict(self.capabilities)))
         object.__setattr__(self, "resources", frozendict(dict(self.resources)))
         object.__setattr__(self, "connections", frozendict(dict(self.connections)))
         object.__setattr__(self, "search", frozendict(dict(self.search)))
+        object.__setattr__(
+            self, "search_models", frozendict({definition.model: definition for definition in self.search.values()})
+        )
 
 
 def _index[Spec](
@@ -311,7 +317,7 @@ def _compiled_integration_graph() -> IntegrationGraph:
             *plugin_capability_specs(),
             *outbound_work.capability_specs(),
         ),
-        resources=(*CORE_RESOURCE_SPECS, *host_specs("resources"), *plugins.plugin_resource_specs()),
+        resources=(*core_resource_specs(), *host_specs("resources"), *plugins.plugin_resource_specs()),
         connections=(*host_specs("connections"), *plugins.plugin_connection_specs()),
         search=plugin_search_definitions(),
     )
@@ -332,8 +338,5 @@ def clear_integration_graph_cache() -> None:
 def override_integration_graph(graph: IntegrationGraph) -> Iterator[None]:
     """Install an explicit graph for one test or isolated composition proof."""
 
-    token = _GRAPH_OVERRIDE.set(graph)
-    try:
+    with _GRAPH_OVERRIDE.set(graph):
         yield
-    finally:
-        _GRAPH_OVERRIDE.reset(token)

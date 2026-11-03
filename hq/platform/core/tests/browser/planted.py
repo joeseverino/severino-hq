@@ -1,0 +1,249 @@
+"""Every check the survey runs, proven able to fail: the smallest defect that
+makes each one find something, planted on a probe page of its own. A check
+with no plant here is one nothing shows can fail, so a new check lands with
+its plant (test_browser_probes holds the two lists to each other)."""
+
+import json
+from dataclasses import dataclass, field
+from typing import Any, override
+
+from hq.platform.application.pages import Page, PageAction
+from hq.platform.core.tests.browser.gate import add_css, with_script
+from hq.platform.core.tests.browser.layout import LayoutBrowserTests
+from hq.platform.core.tests.browser.reading import probe
+from hq.platform.core.tests.browser.widths import WIDE
+
+
+@dataclass(frozen=True)
+class Plant:
+    """A defect as markup on a probe page.
+
+    ``css`` is added once the page is drawn, for a rule on a part a partial
+    writes; ``then`` runs once it is drawn, for a defect that is a change
+    rather than markup, which ``scripted`` runs with script on. ``path`` is
+    the page the survey reads it as, for a check it runs on one page only.
+    ``values`` are what the markup prints (``probe``'s)."""
+
+    markup: str
+    css: str = ""
+    then: str = ""
+    scripted: bool = False
+    path: str = ""
+    values: dict[str, Any] = field(default_factory=dict)
+
+
+_LINES = "Example words enough to run over several lines of a narrow box"
+
+_TABLE = '<table class="data-table" style="table-layout: fixed; inline-size: 10rem"><tbody><tr><td>{}</td></tr></tbody></table>'
+
+# Each check of the survey, by name, and its smallest defect.
+PLANTS = {
+    # A box that hides what it holds past its edge, as clipped-content finds a card.
+    "sideways": Plant(
+        '<div class="card" style="inline-size: 8rem; overflow: hidden">'
+        '<span style="white-space: nowrap">Example value far wider than its box</span></div>'
+    ),
+    "cells": Plant(_TABLE.format('<div style="inline-size: 20rem">Example</div>')),
+    "broken words": Plant(
+        _TABLE.format('<span style="display: block; inline-size: 3ch; word-break: break-all">Example</span>')
+    ),
+    "words broken in text": Plant('<p style="inline-size: 3ch; word-break: break-all">Example</p>'),
+    # A host name drawn on two lines of a cell, in a table with nothing to let go.
+    "broken identifiers": Plant(
+        _TABLE.format(
+            '<span style="display: block; inline-size: 5ch"><span class="token" data-sole style="white-space: normal">'
+            "status.<wbr>example.com</span></span>"
+        )
+    ),
+    "overlaps": Plant(
+        '<div style="display: grid"><div style="grid-area: 1 / 1; block-size: 3rem"></div>'
+        '<div style="grid-area: 1 / 1; block-size: 3rem"></div></div>'
+    ),
+    "into a neighbor": Plant(
+        '<div style="display: flex"><div style="flex: none; inline-size: 6rem">'
+        '<span style="display: inline-block; inline-size: 12rem; background: #888">Example</span></div>'
+        '<div style="flex: none; inline-size: 6rem">Example</div></div>'
+    ),
+    "overlapping text": Plant(
+        '<div style="position: relative"><p style="position: absolute; inset: 0; margin: 0">Example one</p>'
+        '<p style="margin: 0">Example two</p></div>'
+    ),
+    "tables": Plant(_TABLE.format("Example").replace('style="', 'style="display: block; ', 1)),
+    "tables fit": Plant(
+        '<div class="table-scroll" style="inline-size: 10rem"><table class="data-table" style="min-inline-size: 20rem">'
+        "<tbody><tr><td>Example</td></tr></tbody></table></div>"
+    ),
+    # A column hidden while a cell still spans it, so the table keeps its width.
+    "unseen columns": Plant(
+        '<div class="table-scroll"><table class="data-table" style="inline-size: 100%">'
+        '<colgroup><col><col style="inline-size: 50%"></colgroup><thead><tr>'
+        '<th>Example</th><th style="display: none">Gone</th></tr></thead><tbody>'
+        '<tr><td>Example</td><td style="display: none">Gone</td></tr>'
+        '<tr><td colspan="2">Example spanning both</td></tr></tbody></table></div>'
+    ),
+    "control labels": Plant(
+        '<button type="button" style="inline-size: 2rem; white-space: nowrap">Example label</button>'
+    ),
+    "cell labels": Plant(
+        _TABLE.format(
+            '<span style="display: inline-block; inline-size: 2rem; white-space: nowrap">Example label</span>'
+        )
+    ),
+    # Two targets far under 24px, side by side.
+    "small targets": Plant(
+        '<div><a href="#" style="display: inline-block; font-size: 8px; line-height: 8px">x</a>'
+        '<a href="#" style="display: inline-block; font-size: 8px; line-height: 8px">y</a></div>'
+    ),
+    # A clamp the box's display leaves inert.
+    "past the clamp": Plant(f'<p style="display: block; -webkit-line-clamp: 1; inline-size: 8rem">{_LINES}</p>'),
+    "cut decisions": Plant(
+        '<p class="attention-detail" data-whole style="max-block-size: 1.5em; overflow: hidden; inline-size: 8rem">'
+        f"{_LINES}</p>"
+    ),
+    # A name in a sentence cut at a cap, as a cell cuts its own identifier.
+    "cut code in text": Plant(
+        '<p>Example <code style="display: inline-block; max-inline-size: 4ch; overflow: hidden; white-space: nowrap">'
+        "example_identifier</code> words.</p>"
+    ),
+    # A short name cut in a table with room to spare.
+    "cut with room": Plant(
+        '<div class="table-scroll"><table class="data-table"><tbody><tr><td>'
+        '<span class="token" data-sole style="display: inline-block; max-inline-size: 3ch; overflow: hidden; '
+        'white-space: nowrap">example-name</span></td><td>Example</td></tr></tbody></table></div>'
+    ),
+    # A value cut with an ellipsis in a row with no toggle to open it.
+    "cut and closed": Plant(
+        _TABLE.format(
+            '<span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">'
+            "an-example-value-far-too-long-for-its-cell</span>"
+        )
+    ),
+    # The same in a row drawn open, held past the stylesheet's lifting of an
+    # open row's cuts.
+    "cut when open": Plant(
+        _TABLE.replace("<tr>", '<tr class="is-expanded">').format(
+            '<span style="display: block; overflow: hidden !important; text-overflow: ellipsis !important; '
+            'white-space: nowrap !important">an-example-value-far-too-long-for-its-cell</span>'
+        )
+    ),
+    "changes": Plant(
+        '<p>Example {% include "partials/_change.html" with from="1.0" to="2.0" %}</p>',
+        css=".change-arrow { position: relative; inset-block-start: .2em; }",
+    ),
+    "chips": Plant('<p>Example words <code style="vertical-align: -.2em">example</code> and more words</p>'),
+    # A name cut where it overruns, set in a line on the bottom edge it clips at.
+    "raised text": Plant(
+        '<p>Example words <span style="display: inline-block; overflow: hidden">example-name</span> and more</p>'
+    ),
+    # A head whose lead control is hidden, which the menu never holds.
+    "heads": Plant(
+        '{% include "partials/_page_head.html" %}',
+        css=".page-actions > :first-child { display: none; }",
+        values={
+            "page": Page(
+                title="Example", actions=tuple(PageAction(name, f"/{name}/") for name in ("One", "Two", "Three"))
+            )
+        },
+    ),
+    # A section's heading set flush under the paragraph before it.
+    "section heads": Plant(
+        '<div><p style="margin: 0">Example</p><div class="section-head" style="margin-block-start: 0">'
+        "<h2>Example</h2></div><p>Example</p></div>"
+    ),
+    "dialogs": Plant('{% include "partials/_modal.html" with id="orphan" title="Orphan" %}'),
+    # A list of names wrapping beside another pair of a four-column list.
+    "lists of facts": Plant(
+        '<dl class="kv" style="grid-template-columns: 5rem 6rem 5rem 6rem"><dt>Names</dt><dd style="grid-column: auto">'
+        '<span class="code-list"><code>example-one</code><code>example-two</code><code>example-three</code></span>'
+        "</dd><dt>Other</dt><dd>Example</dd></dl>"
+    ),
+    "gutter": Plant('<div style="inline-size: calc(100% + 2rem)">Example</div>'),
+    # A box cut to four lines that scrolls the rest, with no cap that says so.
+    "audit": Plant(
+        '<div style="display: flex; flex-direction: column; block-size: 4rem">'
+        f'<div style="overflow: auto">{"<br>".join(["Example"] * 5)}</div></div>'
+    ),
+    # A block let in above the page once it is drawn: an engine that keeps no
+    # record of layout shifts (WebKit) has nothing to say, so Chromium's legs
+    # are where this one is proven.
+    "layout shifts": Plant(
+        "<p>Example</p>",
+        then="""() => {
+          const block = document.createElement('div');
+          block.style.setProperty('block-size', '600px');
+          document.querySelector('main').prepend(block);
+        }""",
+        scripted=True,
+    ),
+    "axe": Plant('<button type="button"></button>'),
+    # A reading's line drawn under its mark, on the one page the survey reads them.
+    "readings": Plant(
+        '<div class="dash-readings"><div class="glance-panel-head" style="display: block">'
+        '<span class="glance-symbol">x</span><span style="display: block">Example reading</span></div></div>',
+        path="/",
+    ),
+    "contrast": Plant('<p style="color: #c8c8c8; background: #fff">Example words too faint to read</p>'),
+    "fields": Plant(
+        '<input type="text" aria-label="Example" style="border: 1px solid #fafafa; background: transparent">'
+    ),
+    "button edges": Plant('<button type="button" style="border: 1px solid var(--field-line)">Example</button>'),
+    # A fill the light palette shows and the dark one drops.
+    "fills": Plant('<p><span style="background: light-dark(#ccc, transparent)">Example</span></p>'),
+}
+
+_BARE = "planted/bare"
+
+
+def _said(finding):
+    """A finding as a value a set holds: the audit's are dicts."""
+
+    return json.dumps(finding, sort_keys=True)
+
+
+def page_of(check):
+    return f"planted/{check.replace(' ', '-')}"
+
+
+class PlantedBrowserTests(LayoutBrowserTests):
+    """Each check of the survey finds in its plant what it does not find on
+    the bare probe page, so what it finds is the plant's."""
+
+    @classmethod
+    @override
+    def render(cls):
+        pages = {page_of(check): probe(plant.markup, **plant.values) for check, plant in PLANTS.items()}
+        return {**pages, _BARE: probe("")}
+
+    def found(self, name, plant):
+        self.open(name, WIDE)
+        if plant.css:
+            add_css(self.page, plant.css)
+        if plant.then:
+            self.settle()
+            self.page.evaluate(plant.then)
+            self.settle()
+        return self.findings(plant.path or name, WIDE)
+
+    def assert_each_found(self, scripted):
+        bare: dict[str, dict] = {}
+        for check, plant in PLANTS.items():
+            if plant.scripted != scripted:
+                continue
+            with self.subTest(check=check):
+                if plant.path not in bare:
+                    bare[plant.path] = self.found(_BARE, Plant("", path=plant.path))
+                found = self.found(page_of(check), plant)
+                if check == "layout shifts" and not self.records_layout_shifts():
+                    continue
+                planted = set(map(_said, found.get(check, []))) - set(map(_said, bare[plant.path].get(check, [])))
+                self.assertTrue(planted, f"{check} finds nothing of its plant: {found}")
+
+    def records_layout_shifts(self):
+        return self.page.evaluate("() => PerformanceObserver.supportedEntryTypes.includes('layout-shift')")
+
+    def test_each_check_finds_its_plant_with_script_off(self):
+        self.assert_each_found(scripted=False)
+
+    @with_script
+    def test_each_check_finds_its_plant_with_script_on(self):
+        self.assert_each_found(scripted=True)

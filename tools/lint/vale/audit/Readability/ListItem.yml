@@ -1,0 +1,6 @@
+extends: metric
+message: "%s"
+level: suggestion
+scope: list
+formula: words
+condition: "> 0"

@@ -1,28 +1,25 @@
 #!/bin/sh
-#MISE description="Every shell file parses and passes shellcheck; the shell suites pass"
-#MISE env={SEVERINO_HEAVY_BOUND="30m"}
+#MISE description="Each shell suite named, under every shell its first line calls for: what lint:shell and mise run test run a suite through"
 #MISE hide=true
+#MISE quiet=true
+#USAGE arg "<suite>..." var=#true help="The suites, tests/shell/test-*.sh, here or in another tree"
 set -eu
-# shellcheck source=tools/lib/heavy-turn.sh
-. ./tools/lib/heavy-turn.sh
 
-sources="$(tools/gate/shell-sources.sh)"
-# A file that does not parse in the dialect its first line names fails shellcheck.
-# shellcheck disable=SC2086  # one path per word
-shellcheck -x $sources
 # A /bin/sh suite runs under each shell /bin/sh is somewhere: the Mac's, and
 # dash, Linux's (CI's and the hosts'), wherever it is installed. The suite
 # finds its shell in SHELL_UNDER_TEST, to run the script it tests there too.
 # Any other suite runs as its first line says.
 shells=/bin/sh
 [ ! -x /bin/dash ] || shells="${shells} /bin/dash"
+# mise hands the suites over shell-quoted, one word each.
+eval "set -- ${usage_suite:-}"
 # Each run is a task of its own, lint:shell:suite with its shell and suite, so
 # mise runs them side by side (each suite uses its own temporary directory),
 # keeps each one's output together in the order asked, and names every run
 # that failed.
-set --
-for suite in tests/shell/test-*.sh; do
-    IFS= read -r first <"$suite"
+for suite in "$@"; do
+    first=
+    IFS= read -r first <"$suite" || :
     if [ "$first" = "#!/bin/sh" ]; then
         for shell in $shells; do
             set -- "$@" ::: lint:shell:suite "$shell" "$suite"
@@ -30,6 +27,7 @@ for suite in tests/shell/test-*.sh; do
     else
         set -- "$@" ::: lint:shell:suite - "$suite"
     fi
+    shift
 done
 shift
 exec mise run --output keep-order --continue-on-error "$@"

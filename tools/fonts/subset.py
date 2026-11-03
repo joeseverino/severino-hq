@@ -1,8 +1,9 @@
 """The served Inter: the release's variable font cut to what HQ prints and the
 features its stylesheets ask for.
 
-`mise run fix` writes SERVED from Inter's own release (UPSTREAM beside this
-file), and lint:drift-font fails when SERVED is behind (`--check`).
+Run as a module, a step of `mise run fix`, it writes SERVED from Inter's own
+release (UPSTREAM beside this file), and lint:drift-font fails when SERVED is
+behind (`--check`).
 """
 
 import argparse
@@ -129,8 +130,11 @@ def main() -> int:
     built = build()
     name = SERVED.relative_to(ROOT)
     if check:
-        if SERVED.read_bytes() != built:
-            print(f"{name} is behind its source; run `mise run fix` and commit the result.", file=sys.stderr)
+        if not SERVED.exists() or SERVED.read_bytes() != built:
+            print(
+                f"{name} is behind its source; run `uv run python -m tools.fonts.subset` and commit the result.",
+                file=sys.stderr,
+            )
             return 1
         print(f"{name} is current.")
         return 0

@@ -1,0 +1,14 @@
+#!/bin/sh
+#MISE description="Each module's and package's own share of HQ's Python memory at boot and after a pass over the navigation's pages, ranked, with the totals; kept as var/perf/memory-*.json"
+#MISE hide=true
+#MISE extends="django"
+#USAGE flag "--seed <name>" default="showcase" help="The data set the database is seeded with, as dev:scratch --seed names it (hq/platform/core/seeds.py)"
+#USAGE flag "--host-alone" help="Measure the host with no extension composed; without it, the set dev:scratch composes"
+#USAGE flag "--top <n>" default="25" help="Rows in each table"
+
+# The harness is tools/perf/memory.py, which composes the extensions from
+# HQ_LOCAL_PLUGINS and HQ_LOCAL_PYTHONPATH as dev:scratch does. Its probe is
+# one server process, so it runs outside the heavy turn.
+set -eu
+
+exec uv run python -m tools.perf.memory

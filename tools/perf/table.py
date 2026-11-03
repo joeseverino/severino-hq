@@ -9,7 +9,7 @@ and the table it summarizes is kept beside it.
 from collections.abc import Callable
 from typing import Any
 
-from tools.perf.measure import past_spread
+from tools.perf.measure import TYPES, past_spread, uncompressed
 
 Report = dict[str, Any]
 Read = Callable[[dict[str, Any]], float | None]
@@ -28,13 +28,28 @@ PAIRED: tuple[tuple[str, Read, int], ...] = (
     ("spread ms", lambda server: server.get("spread_ms"), 2),
 )
 PAST = "moved"
+
+
+def _wire(read: Read) -> Read:
+    """``read`` of a visit's wire bytes, or None when its first load came uncompressed: those bytes
+    are a live server's, and no first load production serves."""
+
+    return lambda seen: None if uncompressed(seen["first"]) else read(seen)
+
+
+# Each type's column heading, beside the first load's total.
+SHORT = {"document": "doc", "stylesheet": "css", "script": "js", "font": "font", "image": "img"}
 # The browser's, read from a page's `browser[width]`.
 BROWSER: tuple[tuple[str, Read, int], ...] = (
-    ("first KB", lambda seen: _kilobytes(seen["first"]["bytes"]), 1),
+    ("first KB", _wire(lambda seen: _kilobytes(seen["first"]["bytes"])), 1),
+    *(
+        (f"{SHORT[kind]} KB", _wire(lambda seen, kind=kind: _kilobytes(seen["first"]["by_type"][kind])), 1)
+        for kind in TYPES
+    ),
     ("first req", lambda seen: seen["first"]["requests"], 0),
     ("first FCP ms", lambda seen: seen["first"]["fcp_ms"], 0),
     ("first LCP ms", lambda seen: seen["first"]["lcp_ms"], 0),
-    ("repeat KB", lambda seen: _kilobytes(seen["repeat"]["bytes"]), 1),
+    ("repeat KB", _wire(lambda seen: _kilobytes(seen["repeat"]["bytes"])), 1),
     ("repeat req", lambda seen: seen["repeat"]["requests"], 0),
     ("repeat FCP ms", lambda seen: seen["repeat"]["fcp_ms"], 0),
     ("repeat LCP ms", lambda seen: seen["repeat"]["lcp_ms"], 0),
@@ -151,11 +166,14 @@ def _totals(report: Report, base: Report | None, width: str, *, first: bool) -> 
     return ["total" if first else "", width, *server, *browser]
 
 
-def aligned(rows: list[list[str]]) -> list[str]:
+def aligned(rows: list[list[str]], left: frozenset[int] = frozenset({0})) -> list[str]:
+    """The rows as columns two spaces apart, the ``left`` columns' words left-aligned and every
+    other column's right-aligned under its header."""
+
     sizes = [max(len(row[column]) for row in rows) for column in range(len(rows[0]))]
     return [
         "  ".join(
-            cell.ljust(size) if column == 0 else cell.rjust(size)
+            cell.ljust(size) if column in left else cell.rjust(size)
             for column, (cell, size) in enumerate(zip(row, sizes, strict=True))
         ).rstrip()
         for row in rows
@@ -179,7 +197,20 @@ def _title(report: Report, base: Report | None) -> str:
         title += f", beside {base['commit']}, the two servers asked in turn"
     if memory := (report.get("memory") or {}).get("measured"):
         title += f"; memory is {memory}"
+    if any(_live(each) for each in (report, base) if each):
+        title += f"; {LIVE}"
     return title
+
+
+LIVE = "static came uncompressed, as a live server sends it, so no load's bytes are shown"
+
+
+def _live(report: Report) -> bool:
+    """Whether any of the report's first loads came uncompressed."""
+
+    return any(
+        uncompressed(seen.get("first") or {}) for entry in report["pages"] for seen in entry.get("browser", {}).values()
+    )
 
 
 def _table(report: Report, base: Report | None, *, every_page: bool) -> list[str]:

@@ -2,10 +2,10 @@
 
 from django.db import transaction
 
+from hq.platform.application.resources import resource_search_definitions
 from hq.platform.application.search_contracts import SearchDefinition
 
 from .models import SearchDocument
-from .registry import DEFINITIONS
 
 
 def index_instance(definition: SearchDefinition, instance) -> None:
@@ -40,7 +40,7 @@ def remove_instance(definition: SearchDefinition, instance) -> None:
 def rebuild_search_index() -> dict[str, int]:
     SearchDocument.objects.all().delete()
     counts = {}
-    for definition in DEFINITIONS:
+    for definition in resource_search_definitions():
         documents = [
             SearchDocument(
                 scope=definition.scope,

@@ -75,3 +75,12 @@ def run_files() -> frozenset[str]:
     """Every file of this checkout a task's run names, from its root."""
 
     return frozenset(path.relative_to(ROOT).as_posix() for task in mise_tasks().values() for path in runs(task))
+
+
+def takes_the_turn(task: dict[str, Any]) -> bool:
+    """Whether every run of the task holds the machine's heavy turn (tools/lib/heavy.sh):
+    its shell is the wrapper, or its file sources the line that runs it again under it."""
+
+    return (task["shell"] or "").startswith("tools/lib/heavy.sh ") or bool(
+        task["file"] and re.search(r"(?m)^\. .*tools/lib/heavy-turn\.sh\"?$", body(task))
+    )

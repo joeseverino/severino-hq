@@ -2,7 +2,6 @@
 measurement finishes, a failure recorded beside the numbers that did not fail."""
 
 import contextlib
-import copy
 import io
 import json
 import tempfile
@@ -94,6 +93,8 @@ class Measured(SimpleTestCase):
         self.out = Path(folder.name)
         self.passed = []
         self.server_times = ServerTimes()
+        # The machine's load average as each measurement reads it.
+        self.load = 4.5
 
         def one_pass(_url, _cookie, pages):
             self.passed.append(pages)
@@ -104,6 +105,7 @@ class Measured(SimpleTestCase):
             mock.patch.object(report.measure, "one_pass", one_pass),
             mock.patch.object(report.measure, "server_times", self.server_times),
             mock.patch.object(report, "chromium", no_chromium),
+            mock.patch.object(report.os, "getloadavg", lambda: (self.load, self.load, self.load)),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -230,7 +232,9 @@ class BesideABaseTests(Measured):
         self.assertIn("cold start", base.asked)
         self.assertIn("cold start", here.asked)
 
-    def test_a_kept_base_stands_in_for_all_but_server_time_which_is_asked_of_its_server_again(self):
+    def browsing(self) -> None:
+        """Chromium answering every page, so a run measures every number and is kept complete."""
+
         seen = {"first": {}, "repeat": {}, "script_ms": 1.0, "long_tasks": 0, "long_task_ms": 0, "cls": 0}
         for patcher in (
             mock.patch.object(report, "chromium", contextlib.nullcontext),
@@ -240,6 +244,9 @@ class BesideABaseTests(Measured):
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
+
+    def test_a_kept_base_stands_in_for_all_but_server_time_which_is_asked_of_its_server_again(self):
+        self.browsing()
         previous, _ = self.measure(FakeTarget(), base=FakeTarget())
         base = FakeTarget()
         kept_before = previous.doc["base"]["cold_start"]
@@ -250,6 +257,67 @@ class BesideABaseTests(Measured):
         self.assertNotIn("cold start", base.asked, "the kept report's cold start stands")
         self.assertEqual(kept.doc["base"]["cold_start"], kept_before)
         self.assertEqual(self.server_times.asked[-1], ["base", "here"])
+
+    def test_each_side_keeps_the_load_its_numbers_were_measured_under(self):
+        self.load = 6.25
+
+        kept, _ = self.measure(FakeTarget(), base=FakeTarget())
+
+        self.assertEqual((kept.doc["base"]["load"], kept.doc["here"]["load"]), (6.25, 6.25))
+
+    def test_a_base_kept_under_a_load_unlike_the_load_now_is_measured_again(self):
+        self.browsing()
+        self.load = 13.5
+        self.measure(FakeTarget(), base=FakeTarget())
+        self.load = 4.5
+        base = FakeTarget()
+
+        kept, _ = self.measure(FakeTarget(), base=base)
+
+        self.assertNotIn("base_reused_from", kept.doc)
+        self.assertIn("cold start", base.asked)
+        self.assertEqual(kept.doc["base"]["load"], 4.5)
+
+    def test_a_base_kept_with_no_load_is_measured_again(self):
+        self.browsing()
+        previous, _ = self.measure(FakeTarget(), base=FakeTarget())
+        doc = json.loads(previous.path.read_text(encoding="utf-8"))
+        for side in ("base", "here"):
+            doc[side].pop("load", None)
+        previous.path.write_text(json.dumps(doc), encoding="utf-8")
+        base = FakeTarget()
+
+        kept, _ = self.measure(FakeTarget(), base=base)
+
+        self.assertNotIn("base_reused_from", kept.doc)
+        self.assertIn("cold start", base.asked)
+
+    def test_a_kept_base_lends_none_of_its_server_time(self):
+        self.browsing()
+        previous, _ = self.measure(FakeTarget(), base=FakeTarget())
+        doc = json.loads(previous.path.read_text(encoding="utf-8"))
+        doc["base"]["pages"][0]["server"]["p50_ms"] = 99.0
+        previous.path.write_text(json.dumps(doc), encoding="utf-8")
+        failing = mock.patch.object(report.measure, "server_times", mock.Mock(side_effect=OSError("refused")))
+
+        with failing:
+            kept, _ = self.measure(FakeTarget(), base=FakeTarget())
+
+        self.assertEqual(kept.doc["base_reused_from"], previous.name)
+        self.assertNotIn("p50_ms", kept.doc["base"]["pages"][0]["server"])
+        self.assertEqual(kept.doc["base"]["pages"][0]["server"]["queries"], 7)
+
+    def test_the_closing_line_names_both_loads_beside_the_run_a_base_is_kept_from(self):
+        self.browsing()
+        self.load = 5.0
+        previous, _ = self.measure(FakeTarget(), base=FakeTarget())
+        self.load = 4.5
+
+        kept, _ = self.measure(FakeTarget(), base=FakeTarget())
+        with mock.patch.object(report, "ROOT", self.out):
+            said = report.closing(kept, kept.doc["here"], kept.doc["base"])
+
+        self.assertRegex(said, rf"kept from run {previous.name}\b[^;:]*\b5\.0\b[^;:]*\b4\.5\b")
 
     def test_a_base_that_will_not_start_leaves_here_measured_alone(self):
         here = FakeTarget()
@@ -317,11 +385,22 @@ class KeptTests(SimpleTestCase):
         self.addCleanup(folder.cleanup)
         self.out = Path(folder.name)
 
-    def kept(self, commit: str, plan: dict, *, failures=(), finished="2026-10-24T10:00:00+00:00") -> runs.Run:
+    def kept(
+        self,
+        commit: str,
+        plan: dict,
+        *,
+        failures=(),
+        finished="2026-10-24T10:00:00+00:00",
+        load: float | None = 4.5,
+        formatted: bool = True,
+    ) -> runs.Run:
         kept = runs.Run.start(self.out, f"{commit}-dev-scratch", plan=plan)
         side = runs.side(commit, plan)
         pages = [{"page": page, "server": {"p50_ms": 3.0 + at}} for at, page in enumerate(plan["pages"])]
-        side.update(failures=list(failures), finished_at=finished, pages=pages)
+        side.update(failures=list(failures), finished_at=finished, pages=pages, load=load)
+        if not formatted:
+            side.pop("format", None)
         kept.doc["here"] = side
         kept.save()
         return kept
@@ -339,46 +418,57 @@ class KeptTests(SimpleTestCase):
     def test_a_complete_report_of_the_commit_under_the_same_plan_is_found(self):
         self.kept("0123456789ab", PLAN.key())
 
-        found = runs.saved(self.out, "0123456789ab", PLAN.key())
+        found = runs.saved(self.out, "0123456789ab", PLAN.key(), 4.5)
 
         self.assertIsNotNone(found)
         self.assertEqual(found[1]["pages"][0]["server"]["p50_ms"], 3.0)
 
-    def test_a_report_of_another_data_set_stands_in_for_nothing(self):
-        self.kept("0123456789ab", PLAN.key())
+    def test_of_the_reports_kept_the_latest_measured_under_a_load_alike_the_load_now_stands_in(self):
+        alike = self.kept("0123456789ab", PLAN.key(), load=5.0)
+        self.kept("0123456789ab", PLAN.key(), finished="2026-10-24T11:00:00+00:00", load=13.5)
 
-        self.assertIsNone(runs.saved(self.out, "0123456789ab", PLAN.key() | {"seed": "scale"}))
+        source, found = runs.saved(self.out, "0123456789ab", PLAN.key(), 4.5)
 
-    def test_another_plan_a_failure_or_an_unfinished_run_stands_in_for_nothing(self):
-        other = copy.deepcopy(PLAN.key()) | {"requests": 20}
-        self.kept("0123456789ab", other)
-        self.kept("0123456789ab", PLAN.key(), failures=[{"step": "browser", "error": "x"}])
-        self.kept("0123456789ab", PLAN.key(), finished=None)
+        self.assertEqual((source, found["load"]), (alike.name, 5.0))
+        self.assertIsNone(runs.saved(self.out, "0123456789ab", PLAN.key(), 9.0), "neither is alike load 9")
 
-        self.assertIsNone(runs.saved(self.out, "0123456789ab", PLAN.key()))
-        self.assertIsNone(runs.saved(self.out, "ba9876543210", other))
+    def test_a_report_kept_unlike_the_ask_in_any_way_its_numbers_rest_on_stands_in_for_nothing(self):
+        commit, plan = "0123456789ab", PLAN.key()
+        other = plan | {"requests": 20}
+        image = report.Plan(**{**vars(PLAN), "image": True})
+        # A report kept before its plan said how memory was measured.
+        unmeasured = {name: value for name, value in image.key().items() if name != "memory"}
+        # Why, the plan kept and how, and the commit and plan asked for.
+        cases = (
+            ("it kept no load", plan, {"load": None}, commit, plan),
+            ("another data set", plan, {}, commit, plan | {"seed": "scale"}),
+            ("its numbers were computed another way", plan, {"formatted": False}, commit, plan),
+            ("another plan", other, {}, commit, plan),
+            ("another commit", other, {}, "ba9876543210", other),
+            ("a failure", plan, {"failures": [{"step": "browser", "error": "x"}]}, commit, plan),
+            ("an unfinished run", plan, {"finished": None}, commit, plan),
+            ("fewer pages", plan | {"pages": ["/contacts/"]}, {}, commit, plan),
+            ("memory measured otherwise", unmeasured, {}, commit, image.key()),
+            ("its browser waited otherwise", plan | {"browser_waits_for": "networkidle"}, {}, commit, plan),
+        )
+        for why, kept_plan, how, asked_commit, asked_plan in cases:
+            with self.subTest(why), tempfile.TemporaryDirectory() as folder:
+                self.out = Path(folder)
+                self.kept(commit, kept_plan, **how)
+
+                self.assertIsNone(runs.saved(self.out, asked_commit, asked_plan, 4.5))
 
     def test_a_report_of_more_pages_stands_in_for_any_of_them_holding_just_those(self):
         every = PLAN.key() | {"pages": ["/", "/hq/", "/contacts/"]}
         self.kept("0123456789ab", every)
         one = PLAN.key() | {"pages": ["/contacts/"]}
 
-        source, found = runs.saved(self.out, "0123456789ab", one)
+        source, found = runs.saved(self.out, "0123456789ab", one, 4.5)
 
         self.assertEqual([entry["page"] for entry in found["pages"]], ["/contacts/"])
         self.assertEqual(found["pages"][0]["server"]["p50_ms"], 5.0)
         self.assertEqual(found["plan"], one, "kept again, it stands in for the pages it holds and no more")
         self.assertTrue(source)
-
-    def test_a_report_of_fewer_pages_stands_in_for_nothing_more(self):
-        self.kept("0123456789ab", PLAN.key() | {"pages": ["/contacts/"]})
-
-        self.assertIsNone(runs.saved(self.out, "0123456789ab", PLAN.key()))
-
-    def test_a_report_whose_browser_waited_otherwise_stands_in_for_nothing(self):
-        self.kept("0123456789ab", PLAN.key() | {"browser_waits_for": "networkidle"})
-
-        self.assertIsNone(runs.saved(self.out, "0123456789ab", PLAN.key()))
 
 
 class SeedTests(SimpleTestCase):

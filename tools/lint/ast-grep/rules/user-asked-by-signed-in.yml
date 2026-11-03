@@ -7,7 +7,14 @@ language: python
 severity: error
 message: Whether a request has a user is asked outside request_identity.signed_in.
 note: Ask request_identity.signed_in(request).
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
 ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
   - "**/platform/application/request_identity.py"
 rule:
   any:

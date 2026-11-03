@@ -48,5 +48,8 @@ class Command(BaseCommand):
                 ending="",
             )
         if stale:
-            raise CommandError(f"{', '.join(stale)} is behind the registry; run `mise run fix` and commit the result.")
+            raise CommandError(
+                f"{', '.join(stale)} is behind the registry; run `mise run manage -- bridge_contract`, then "
+                "`go generate ./...` in controller/ for the Go types generated from these, and commit the result."
+            )
         self.stdout.write("The controller's contracts are current.")

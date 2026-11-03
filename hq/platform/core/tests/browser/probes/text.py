@@ -1,6 +1,6 @@
 """Probes of running text: broken words, text that overlaps and text past its clamp."""
 
-from hq.platform.core.tests.browser.probes.describe import DESCRIBE, LINES, PAINTED_PART
+from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, LINES, PAINTED_PART, TEXT_SHOWN
 
 # A plain word split across lines inside a table cell: its column was given
 # less than the word, because another column's content took the width. A word
@@ -9,6 +9,7 @@ from hq.platform.core.tests.browser.probes.describe import DESCRIBE, LINES, PAIN
 BROKEN_WORDS = (
     "() => {"
     + DESCRIBE
+    + TEXT_SHOWN
     + """
   const found = [];
   const range = document.createRange();
@@ -28,14 +29,17 @@ BROKEN_WORDS = (
   for (const cell of document.querySelectorAll('main td')) {
     const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      if (!node.parentElement.checkVisibility()) continue;
+      if (!textShown(node)) continue;
       const line = lineOf(node, cell);
       for (const run of node.textContent.matchAll(/\\S+/g)) {
         const wide = across(node, run.index, run.index + run[0].length).reduce((sum, r) => sum + r.width, 0) > line;
         for (const match of run[0].matchAll(/[A-Za-z]{4,}/g)) {
           const at = run.index + match.index;
           const lines = new Set(across(node, at, at + match[0].length).map((r) => Math.round(r.top)));
-          if (lines.size > 1 && !(wide && match[0].length < run[0].length)) found.push(`${describe(cell)} breaks "${match[0]}"`);
+          // A run wider than its line is cut in a closed row and broken in
+          // an open one, which is how the row shows it whole.
+          const shownWhole = wide && node.parentElement.closest('tr:has(> * > [aria-expanded="true"]), tr:has(> * > [aria-expanded="true"]) + tr[data-row-detail]');
+          if (lines.size > 1 && !shownWhole && !(wide && match[0].length < run[0].length)) found.push(`${describe(cell)} breaks "${match[0]}"`);
         }
       }
     }
@@ -48,10 +52,13 @@ BROKEN_WORDS = (
 # A word or a number of running text broken across lines: neither ever
 # breaks. A number is a figure with its sign and currency mark ("\u2212$1,243.52",
 # "+5%"), which UAX #14 lets a line end inside (between the sign and the mark,
-# both class PR) unless the writer glues them.
+# both class PR) unless the writer glues them. One inside a run with no space
+# in it (a digest, a key) that is itself wider than its line is where that run
+# had to break, as BROKEN_WORDS counts it.
 BROKEN_WORDS_IN_TEXT = (
     "(identifier) => {"
     + DESCRIBE
+    + TEXT_SHOWN
     + r"""
   const WORD = /[A-Za-z]{4,}/g;
   // A figure standing on its own (not the digits inside a word), with what
@@ -59,17 +66,31 @@ BROKEN_WORDS_IN_TEXT = (
   const NUMBER = /(?<![\p{L}\p{N}_.,$\u00a3\u20ac\u2060+\u2212])(?:[+\u2212]\u2060?)?[$\u00a3\u20ac]?\d(?:[\d,.]*\d)?%?/gu;
   const main = document.querySelector('main');
   const range = document.createRange();
+  const across = (node, start, end) => {
+    range.setStart(node, start);
+    range.setEnd(node, end);
+    return [...range.getClientRects()].filter((r) => r.width);
+  };
+  // The line a run lays out in is its box's: the nearest one that is not inline.
+  const lineOf = (el) => {
+    let box = el;
+    while (box !== main && ['inline', 'contents'].includes(getComputedStyle(box).display)) box = box.parentElement;
+    const style = getComputedStyle(box);
+    return box.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  };
   const found = [];
   const words = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
   for (let node = words.nextNode(); node; node = words.nextNode()) {
     const el = node.parentElement;
-    if (el.closest(identifier) || el.closest('pre, script, style, template') || !el.checkVisibility()) continue;
+    if (el.closest(identifier) || el.closest('pre, script, style, template') || !textShown(node)) continue;
+    const runs = [...node.data.matchAll(/\S+/g)];
     for (const [kind, pattern] of [['word', WORD], ['number', NUMBER]]) {
       for (const token of node.data.matchAll(pattern)) {
-        range.setStart(node, token.index);
-        range.setEnd(node, token.index + token[0].length);
-        const lines = new Set([...range.getClientRects()].filter((r) => r.width).map((r) => Math.round(r.top)));
-        if (lines.size > 1) found.push(`${describe(el)} breaks the ${kind} "${token[0].replace(/\u2060/g, '')}"`);
+        const lines = new Set(across(node, token.index, token.index + token[0].length).map((r) => Math.round(r.top)));
+        if (lines.size < 2) continue;
+        const run = runs.find((r) => r.index <= token.index && token.index < r.index + r[0].length);
+        const wide = across(node, run.index, run.index + run[0].length).reduce((sum, r) => sum + r.width, 0) > lineOf(el);
+        if (!(wide && token[0].length < run[0].length)) found.push(`${describe(el)} breaks the ${kind} "${token[0].replace(/\u2060/g, '')}"`);
       }
     }
   }
@@ -142,19 +163,23 @@ PAST_THE_CLAMP = (
 )
 
 
-# What a card's own buttons decide, cut short anywhere: wider or taller than
-# its box shows. Approving on half of what a change does is not deciding it.
+# Text in a box that is never cut, by any box up to and including that one
+# (`CUTS`), marked or not: what a card's own buttons decide (approving on half
+# of what a change does is not deciding it), or a name in a sentence. `runs`
+# narrows which text in the box counts.
 CUT_DECISIONS = (
-    "(selector) => {"
+    "([boxes, runs, unseen]) => {"
     + DESCRIBE
+    + CUTS
     + r"""
   const found = [];
-  for (const el of document.querySelectorAll(`main ${selector}`)) {
+  for (const el of document.querySelectorAll(`main ${boxes}`)) {
     if (!el.checkVisibility()) continue;
-    if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1)
-      found.push(`${describe(el)} "${el.textContent.trim().slice(0, 40)}" is cut short`);
+    for (const {node, boxes: by} of cutsIn(el, unseen)) {
+      if (node.parentElement.closest(runs)) found.push(`${describe(by.at(-1))} "${by.at(-1).textContent.trim().slice(0, 40)}" is cut short`);
+    }
   }
-  return found;
+  return [...new Set(found)];
 }"""
 )
 
@@ -263,6 +288,35 @@ CHIPS_OFF_THEIR_LINE = (
       if (its < line.top - 0.5 || its > line.bottom + 0.5 || !others.some((other) => sameLine(other, line))) continue;
       if (Math.abs(at - its) > 0.5) found.push(`${name} sits ${(at - its).toFixed(1)}px off the baseline of the line it ${where} on`);
     }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
+# A block box set in a line that clips what it holds takes its bottom margin
+# edge as its baseline (CSS 2.1 §10.8.1), so on the line's baseline its text
+# rides a descent above the words beside it. That is an inline block (and
+# Chromium's inline -webkit-box) whose overflow is anything but visible, `clip`
+# included since WebKit counts it; an inline flex or grid box takes its items'
+# baseline whatever its overflow, and `baseline-source`, which Chromium honors
+# there, WebKit does not. It is read from the style each box that draws text
+# ends up with (a select's options are not drawn in it), since its display and
+# its overflow come from different rules: `vertical-align: top` or `bottom`
+# sets it on the line by its edges instead.
+RAISED_TEXT = (
+    "(unseen) => {"
+    + DESCRIBE
+    + BASELINES
+    + r"""
+  const found = [];
+  const edges = ['top', 'bottom', 'middle', 'text-top', 'text-bottom'];
+  for (const el of document.querySelectorAll('body *')) {
+    const style = getComputedStyle(el);
+    if (!['inline-block', '-webkit-inline-box'].includes(style.display) || edges.includes(style.verticalAlign)) continue;
+    if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
+    if (!el.checkVisibility() || !drawn(el).length) continue;
+    found.push(`${describe(el)} "${el.textContent.trim().slice(0, 40)}" rides above its line (${style.display}, overflow ${style.overflowX} ${style.overflowY}, vertical-align ${style.verticalAlign})`);
   }
   return [...new Set(found)];
 }"""

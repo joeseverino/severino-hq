@@ -16,9 +16,10 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import override
 
-from django.test import SimpleTestCase
+from django.test import Client, SimpleTestCase, override_settings
 
 from hq.config.sandbox import sweep_abandoned
+from hq.platform.application import agent_limits
 from hq.platform.core.test_runner import (
     BROWSER_TESTS,
     DEFAULT_STALL_SECONDS,
@@ -132,7 +133,7 @@ class ClassTimeTests(SimpleTestCase):
         slow, quick = _timed_classes(clock)
         loader = unittest.defaultTestLoader
         tests = [*loader.loadTestsFromTestCase(slow), *loader.loadTestsFromTestCase(quick)]
-        with unittest.mock.patch("hq.platform.core.test_runner.time.monotonic", lambda: clock[0]):
+        with unittest.mock.patch("hq.platform.core.test_runner.monotonic", lambda: clock[0]):
             ClassTimedSuite(tests).run(result)
         return tests
 
@@ -190,20 +191,18 @@ class FailureRecordTests(SimpleTestCase):
     """Each failed test reaches the gate running the suite as the result saw
     it, whether it ran here or in a parallel worker."""
 
-    def run_failing(self, result, *, subtests=True):
+    def run_failing(self, result):
         tests = list(unittest.defaultTestLoader.loadTestsFromTestCase(_failing_class()))
-        tests = [test for test in tests if subtests or test._testMethodName != "test_subtests"]
         unittest.TestSuite(tests).run(result)
         return tests
 
-    def assert_recorded(self, result, *, subtests=True):
+    def assert_recorded(self, result):
         failed = {each.test.rsplit(".", 1)[-1]: each for each in vars(result)["failed"].values()}
-        self.assertEqual(set(failed), {"test_compares", "test_raises", *(["test_subtests"] if subtests else [])})
+        self.assertEqual(set(failed), {"test_compares", "test_raises", "test_subtests"})
         self.assertEqual(failed["test_compares"].exception, "AssertionError: 'expected' != 'found'")
         self.assertEqual(failed["test_raises"].exception, "LookupError: no example.invalid record")
         self.assertIn('raise LookupError("no example.invalid record")', failed["test_raises"].traceback)
-        if subtests:
-            self.assertEqual(failed["test_subtests"].exception, "AssertionError: 0 != -1")
+        self.assertEqual(failed["test_subtests"].exception, "AssertionError: 0 != -1")
 
     def test_a_serial_run_records_each_failed_test_once(self):
         result = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
@@ -212,15 +211,15 @@ class FailureRecordTests(SimpleTestCase):
         self.assert_recorded(result)
 
     def test_a_workers_failures_reach_the_parent_with_their_tracebacks(self):
-        # A worker pickles a failed subtest's test, which a class local to a
-        # function cannot be; the parent records a subtest as a serial run does.
+        # A class local to a function does not pickle, so this holds that a
+        # worker sends none of a failed subtest's case.
         worker = CompositionRemoteResult()
-        tests = self.run_failing(worker, subtests=False)
+        tests = self.run_failing(worker)
 
         parent = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
         for event in pickle.loads(pickle.dumps(worker.events)):
             FileClonedParallelSuite.handle_event(None, parent, tests, event)
-        self.assert_recorded(parent, subtests=False)
+        self.assert_recorded(parent)
 
     def run_suite(self, folder: str | None):
         suite = unittest.defaultTestLoader.loadTestsFromTestCase(_failing_class())
@@ -243,6 +242,85 @@ class FailureRecordTests(SimpleTestCase):
             self.run_suite(None)
 
         write.assert_not_called()
+
+
+class _Held:
+    """Cases a test runs on its own, kept off the module so discovery never
+    runs them, and importable by name so a spawned worker can unpickle them."""
+
+    class ClientPages(unittest.TestCase):
+        """A case holding a test client ready to serve, whose handler does not
+        pickle. Not a SimpleTestCase, which leaves such an attribute out when
+        it is pickled."""
+
+        def setUp(self):
+            self.client = Client()
+            self.client.handler.load_middleware()
+
+        def test_each(self):
+            for page in ("first", "second"):
+                with self.subTest(page=page):
+                    self.assertEqual(page, "first", "example.invalid page")
+
+        def test_passes(self):
+            pass
+
+
+def report_both_ways(path: str) -> None:
+    """Run ``_Held.ClientPages`` serially and in two workers, and write what each result lists to ``path``."""
+
+    import django
+
+    django.setup()
+    report = {}
+    for way in ("serial", "parallel"):
+        tests = list(unittest.defaultTestLoader.loadTestsFromTestCase(_Held.ClientPages))
+        result = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
+        if way == "serial":
+            ClassTimedSuite(tests).run(result)
+        else:
+            suite = FileClonedParallelSuite([ClassTimedSuite([test]) for test in tests], processes=2)
+            suite.serialized_aliases = suite.used_aliases = set()
+            suite.run(result)
+        report[way] = {
+            "failures": [[str(test), test.id(), printed] for test, printed in result.failures],
+            "errors": [[str(test), printed] for test, printed in result.errors],
+            "successful": result.wasSuccessful(),
+            "failed": sorted(vars(result).get("failed", {})),
+        }
+    Path(path).write_text(json.dumps(report))
+
+
+class ParallelSubtestTests(SimpleTestCase):
+    """A failed subtest in a parallel worker reaches the run's result under its
+    own name, as a serial run reports it, though its case does not pickle."""
+
+    def test_a_subtest_whose_case_holds_a_client_is_reported_as_a_serial_run_reports_it(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder, "report.json")
+            # Its own process: a parallel worker, as this test may run in, may
+            # not start workers of its own.
+            ran = subprocess.run(
+                [sys.executable, "-c", f"from {__name__} import report_both_ways; report_both_ways({str(path)!r})"],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                check=False,
+            )
+            self.assertEqual(ran.returncode, 0, ran.stderr[-4000:])
+            report = json.loads(path.read_text())
+
+        serial, parallel = report["serial"], report["parallel"]
+        self.assertEqual(
+            [each[:2] for each in parallel["failures"]], [each[:2] for each in serial["failures"]], parallel
+        )
+        [(name, test_id, printed)] = parallel["failures"]
+        self.assertIn("page='second'", name)
+        self.assertIn("page='second'", test_id)
+        self.assertIn("example.invalid page", printed)
+        self.assertEqual(parallel["errors"], [])
+        self.assertFalse(parallel["successful"])
+        self.assertEqual(parallel["failed"], serial["failed"])
 
 
 class _Marks(StallWatch):
@@ -302,6 +380,18 @@ class StallWatchTests(SimpleTestCase):
             watch.report("example.Tests.test_it")
 
         self.assertIn("waiting_on_the_browser", self.written(watch))
+
+    def test_a_test_that_patches_the_clock_is_not_stalled_by_it(self):
+        # As a test that fakes time.monotonic from its setUp leaves the watch:
+        # its deadline set on the real clock, then woken under the fake one.
+        watch = self.watch(60)
+        with watch.watching():
+            watch.mark("example.Tests.test_clocked")
+            with unittest.mock.patch("time.monotonic", lambda: 10.0**12):
+                with watch.watching():
+                    pass
+                threading.Event().wait(0.2)
+        self.assertNotIn("example.Tests.test_clocked", self.written(watch))
 
     def test_a_mark_left_unfollowed_fails_what_it_marked_after_its_report(self):
         watch = self.watch(0.01)
@@ -414,3 +504,31 @@ class BrowserTestTests(SimpleTestCase):
             pass
 
         self.assertTrue(drives_a_browser(Drawn("test_it")))
+
+
+@override_settings(SEVERINO_AGENT_CALLS_PER_MINUTE=1, SEVERINO_AGENT_CALLS_AT_ONCE_OVERALL=1)
+class AgentLimitsIsolationTests(SimpleTestCase):
+    """A test reads the agent limits as if no test ran before it in the process."""
+
+    def test_a_reader_after_a_test_that_left_a_call_and_a_spent_rate_finds_neither(self):
+        left = []
+
+        class Leaving(unittest.TestCase):
+            def test_it(self):
+                agent_limits.LIMITS.take("example-left")
+                left.append((agent_limits.LIMITS, agent_limits.LIMITS.occupy("example-left")))
+
+        class Reading(unittest.TestCase):
+            def test_it(self):
+                self.assertEqual(agent_limits.LIMITS.held(), 0)
+                self.assertIsInstance(agent_limits.LIMITS.occupy("example-next"), agent_limits.Slot)
+
+        result = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
+        unittest.TestSuite([Leaving("test_it"), Reading("test_it")]).run(result)
+
+        self.assertTrue(result.wasSuccessful(), result.failures)
+        [(taken_from, slot)] = left
+        slot.__exit__(None, None, None)
+        self.assertIsInstance(
+            taken_from.occupy("example-other"), agent_limits.Slot, "the call left running gives back to its own set"
+        )

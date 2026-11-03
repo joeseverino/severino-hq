@@ -5,6 +5,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 echo "==> gofmt"
+# gofmt itself, over every file: golangci-lint fmt never walks a testdata,
+# vendor or dot directory, whatever its config says.
 out=$(gofmt -l .)
 if [ -n "$out" ]; then
     echo "Files need formatting:"
@@ -23,17 +25,29 @@ if [ -n "$fixdiff" ]; then
 fi
 
 echo "==> generated types match their specs"
-# Regenerate in place; a generated file that is stale, or that generate writes
-# anew (deleted from the index, or never added), differs from the index.
+# Regenerate in place and compare with the tree as it stood before, recorded in
+# a scratch index, so a regenerated file not yet committed passes and only what
+# generate changes or writes anew is stale. A generated file git does not track
+# fails too, since CI's checkout would not have it.
 if [ -z "$(git ls-files '*.gen.go')" ]; then
     echo "no *.gen.go found under controller/." >&2
     exit 1
 fi
+before=$(mktemp)
+trap 'rm -f "$before"' EXIT
+cp "$(git rev-parse --git-path index)" "$before"
+GIT_INDEX_FILE=$before git add --all -- '*.gen.go'
 go generate ./...
-drift=$(git ls-files --modified --others --exclude-standard -- '*.gen.go')
+drift=$(GIT_INDEX_FILE=$before git ls-files --modified --others --exclude-standard -- '*.gen.go')
 if [ -n "$drift" ]; then
     printf '%s\n' "$drift" >&2
     echo "Generated files differ from their specs. Run: go generate ./... (in controller/) and commit the result." >&2
+    exit 1
+fi
+untracked=$(git ls-files --others --exclude-standard -- '*.gen.go')
+if [ -n "$untracked" ]; then
+    printf '%s\n' "$untracked" >&2
+    echo "Generated files git does not track. Run: git add them." >&2
     exit 1
 fi
 

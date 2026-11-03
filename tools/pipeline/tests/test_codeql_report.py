@@ -1,4 +1,4 @@
-"""A CodeQL analysis passes only when it ran and left no alert the config keeps."""
+"""A CodeQL analysis passes only when it ran and left no alert."""
 
 import json
 import shutil
@@ -38,15 +38,15 @@ def run(*results):
 
 @tag("source")
 class CodeQLReportTests(SimpleTestCase):
-    """scan:codeql's jq filter, run as the task runs it, excluded rules as `--args`."""
+    """scan:codeql's jq filter, run as the task runs it."""
 
-    def judge(self, data, *rules) -> int:
+    def judge(self, data) -> int:
         jq = shutil.which("jq")
         self.assertTrue(jq, "mise.toml pins jq")
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "codeql.sarif"
             path.write_text(json.dumps(data))
-            command = [str(jq), "-r", "-f", str(REPORT), str(path), "--args", *rules]
+            command = [str(jq), "-r", "-f", str(REPORT), str(path)]
             return subprocess.run(command, capture_output=True, check=False).returncode
 
     def test_a_run_with_no_results_passes(self):
@@ -60,10 +60,5 @@ class CodeQLReportTests(SimpleTestCase):
     def test_an_alert_fails(self):
         self.assertNotEqual(self.judge(sarif(run(result("py/sql-injection")))), 0)
 
-    def test_an_alert_on_an_excluded_rule_passes(self):
-        self.assertEqual(self.judge(sarif(run(result("py/unused-import"))), "py/unused-import"), 0)
-
-    def test_only_the_excluded_rules_drop(self):
-        alerts = sarif(run(result("py/unused-import")), run(result("py/sql-injection")))
-        self.assertNotEqual(self.judge(alerts, "py/unused-import", "py/cyclic-import"), 0)
-        self.assertEqual(self.judge(alerts, "py/unused-import", "py/sql-injection"), 0)
+    def test_an_alert_in_any_run_fails(self):
+        self.assertNotEqual(self.judge(sarif(run(), run(result("py/unused-import")))), 0)

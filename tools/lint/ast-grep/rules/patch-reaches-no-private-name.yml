@@ -30,6 +30,11 @@ utils:
   private-identifier:
     kind: identifier
     regex: ^_[A-Za-z]
+files:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/testing.py"
+  - "**/*_testing.py"
 rule:
   kind: call
   any:

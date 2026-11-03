@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Prove an extension's check refuses a package that declares no type check,
-# and goes on to its environment for one that does, and that it ends on the
-# gate's verdict, kept whole under the host's var/gate.
+# or whose source types a dot between two parts of a line, and goes on to its
+# environment for one that does neither, and that it ends on the gate's
+# verdict, kept whole under the host's var/gate.
 set -euo pipefail
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
@@ -17,6 +18,8 @@ cp "$repo_dir/tools/__init__.py" "$host/tools/"
 cp "$repo_dir/tools/pipeline/__init__.py" "$repo_dir/tools/pipeline/check-plugin.sh" \
   "$repo_dir/tools/pipeline/plugin_identity.py" "$host/tools/pipeline/"
 cp "$repo_dir/tools/gate/verdict.py" "$host/tools/gate/"
+mkdir -p "$host/tools/lint"
+cp -R "$repo_dir/tools/lint/ast-grep" "$host/tools/lint/"
 
 # uv: marks that the check reached the package's environment, and goes no further.
 printf '#!/bin/sh\ntouch "%s/synced"\nexit 3\n' "$work" >"$work/bin/uv"
@@ -40,9 +43,15 @@ kept="$host/var/gate/plugin-check-example_plugin.txt"
 last=$(tail -n 1 "$work/out")
 case "$last" in "[plugin-check:example_plugin] FAILED"*) ;; *) fail "the check does not end on its verdict" ;; esac
 grep -qF "verdict kept in $kept" "$work/out" || fail "the output does not name the file that keeps the verdict"
+case "$(head -n 1 "$work/out")" in *" $kept") ;; *) fail "the check does not open on the file that keeps its verdict" ;; esac
 [ "$(head -n 1 "$kept")" = "$last" ] || fail "the kept verdict is not the closing line"
 
 printf '\n[tool.mypy]\nstrict = true\n' >>"$work/package/pyproject.toml"
+printf 'LABEL = f"{1} \302\267 {2}"\n' >"$work/package/src/example_plugin/labels.py"
+if check; then fail "a package that types a dot between two parts passed"; fi
+grep -q 'dot-typed-in-text' "$work/out" || fail "the refusal does not name the rule a typed dot breaks"
+[ ! -e "$work/synced" ] || fail "a package that types a dot was synced before it was refused"
+rm "$work/package/src/example_plugin/labels.py"
 if check; then fail "the stub environment passed"; fi
 [ -e "$work/synced" ] || fail "a package that declares its type check was refused"
 echo "plugin check tests passed"

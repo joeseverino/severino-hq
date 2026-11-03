@@ -49,7 +49,11 @@ class AuditTaskTests(SimpleTestCase):
 
 # The tasks that hand their words to a tool as paths, globs or settings, each
 # with the usage variable that carries them.
-_WORD_TAKERS = {"mise-tasks/audit/ruff": "usage_paths", "mise-tasks/audit/ast": "usage_globs"}
+_WORD_TAKERS = {
+    "mise-tasks/audit/ruff": "usage_paths",
+    "mise-tasks/audit/ast": "usage_globs",
+    "mise-tasks/audit/bcd": "usage_features",
+}
 
 
 @tag("source")

@@ -1,0 +1,76 @@
+#!/bin/sh
+#MISE description="Each browser's first version that supports the features given, Safari first, with its release date, from @mdn/browser-compat-data; read-only"
+#MISE hide=true
+#USAGE arg "<features>" var=#true help="Feature paths as browser-compat-data names them, dotted (css.properties.field-sizing html.global_attributes.popover); a path that names a group says what it holds"
+
+# The answer is a jq read of the package's own data.json, which tools/lint
+# pins (Renovate moves it), so it is the same on every machine and offline.
+# Each browser's statements come in BCD's order, its current support first,
+# and what qualifies one (a flag, a prefix, another name, partial support, a
+# removal) is said beside its version. Each word is held to a
+# feature path's characters before jq sees it as an argument. The words are
+# mise's shell-quoted parse of the arguments.
+set -euf
+
+paths=""
+eval "set -- ${usage_features:-}"
+for word; do
+    case "${word}" in
+    "" | -* | *[!A-Za-z0-9_.-]*)
+        printf 'audit:bcd: %s is not a feature path of letters, digits and _ . -\n' "${word}" >&2
+        exit 2
+        ;;
+    *) paths="${paths} ${word}" ;;
+    esac
+done
+
+data=tools/lint/node_modules/@mdn/browser-compat-data/data.json
+if [ ! -f "${data}" ]; then
+    printf 'audit:bcd: %s is not installed; mise run setup:lint-tools installs it\n' "${data}" >&2
+    exit 1
+fi
+
+# paths holds words without spaces or globs.
+# shellcheck disable=SC2086
+jq -r '
+    . as $bcd
+    | ["safari", "safari_ios", "chrome", "chrome_android", "edge", "firefox", "firefox_android"] as $browsers
+    | def released($browser; $version):
+        ($version | ltrimstr("≤")) as $v
+        | $bcd.browsers[$browser].releases[$v].release_date // empty
+        | " (\(.))";
+      def described($browser):
+        if . == null then "no data"
+        elif .version_added == false then "not supported"
+        elif .version_added == null then "unknown"
+        else
+            (.version_added | tostring) as $version
+            | $version + ([released($browser; $version)] | join(""))
+            + ([
+                (.flags // empty | " behind a flag"),
+                (.prefix // empty | " as \(.)"),
+                (.alternative_name // empty | " as \(.)"),
+                (select(.partial_implementation) | " partly"),
+                (.version_removed // empty | " until \(.)")
+              ] | join(""))
+        end;
+    $ARGS.positional[] as $path
+    | ($bcd | getpath($path | split("."))) as $node
+    | if $node == null then
+        "\($path): not a path browser-compat-data holds"
+      elif $node.__compat == null then
+        "\($path): a group, not a feature; it holds \([$node | keys[] | select(startswith("__") | not)] | .[:25] | join(", "))"
+          + (if ($node | keys | length) > 25 then ", ..." else "" end)
+      else
+        ($node.__compat) as $compat
+        | ([($compat.status // {}) | to_entries[] | select(.value) | .key] | join(", ")) as $status
+        | "\($path)" + (if $status == "" then "" else "  [\($status)]" end),
+          ($browsers[] as $browser
+            | ($compat.support[$browser] // null)
+            | (if type == "array" then . else [.] end)
+            | "  \($browser): \(map(described($browser)) | join("; "))"),
+          ([$node | keys[] | select(startswith("__") | not)]
+            | select(length > 0)
+            | "  subfeatures, each a path of its own: \(join(", "))")
+      end
+' "${data}" --args ${paths}

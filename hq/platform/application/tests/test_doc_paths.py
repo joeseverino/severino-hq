@@ -1,9 +1,11 @@
 """Every repository path a document names exists, so a reader who follows one finds the file."""
 
 import re
+from functools import cache
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
+from mcp_types import methods
 
 from .source import source_files
 
@@ -19,6 +21,20 @@ PLACEHOLDER = re.compile(r"[<>{}$]")
 OUTPUT = "var"
 
 
+@cache
+def protocol_methods() -> frozenset[str]:
+    """Every method the installed MCP SDK defines, which a document names in backticks
+    (`tools/list`) and whose first part can be a root directory's name."""
+
+    surfaces = (
+        methods.CLIENT_REQUESTS,
+        methods.CLIENT_NOTIFICATIONS,
+        methods.SERVER_REQUESTS,
+        methods.SERVER_NOTIFICATIONS,
+    )
+    return frozenset(method for surface in surfaces for method, _version in surface)
+
+
 def named_paths(text: str, roots: set[str]) -> list[tuple[int, str]]:
     """The repository paths ``text`` names in backticks, by line."""
 
@@ -27,7 +43,13 @@ def named_paths(text: str, roots: set[str]) -> list[tuple[int, str]]:
         for hit in SPAN.finditer(line):
             path = AFTER.sub("", hit.group(1))
             first = path.split("/", 1)[0]
-            if "/" in path and first in roots and first != OUTPUT and not PLACEHOLDER.search(path):
+            if (
+                "/" in path
+                and first in roots
+                and first != OUTPUT
+                and not PLACEHOLDER.search(path)
+                and path not in protocol_methods()
+            ):
                 found.append((number, path))
     return found
 
@@ -46,6 +68,10 @@ class DocumentPathTests(SimpleTestCase):
     def test_a_path_that_is_not_there_is_named(self):
         text = "Read `docs/Design.md`, `hq/nowhere.py:thing` and `tests/browser/widths.py`, in `var/gate/`."
         self.assertEqual(missing(ROOT, text), ["1: hq/nowhere.py", "1: tests/browser/widths.py"])
+
+    def test_an_mcp_method_is_not_read_as_a_path(self):
+        text = "An agent asks `tools/list`, then reads `tools/nowhere.py`."
+        self.assertEqual(missing(ROOT, text), ["1: tools/nowhere.py"])
 
     def test_every_path_a_document_names_exists(self):
         documents = [path for path in source_files(ROOT, "*.md") if "vendor" not in path.parts]

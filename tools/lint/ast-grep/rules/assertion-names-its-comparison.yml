@@ -11,6 +11,11 @@ note: >-
   Use the assertion that names the comparison (assertEqual, assertNotEqual,
   assertLess, assertLessEqual, assertGreater, assertGreaterEqual, assertIs,
   assertIsNot, assertIn, assertNotIn), or its negation for assertFalse.
+files:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/testing.py"
+  - "**/*_testing.py"
 rule:
   any:
     - pattern: $CASE.$ASSERT($FIRST)

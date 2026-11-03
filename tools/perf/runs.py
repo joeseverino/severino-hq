@@ -3,11 +3,14 @@
 A run is named by both commits and the target, and the second it started, so
 no run overwrites another of the same commit. Its document holds each side's
 report under `base` and `here`, each carrying the plan it was measured under
-and the failures it met, so a later run asking the same plan of the same commit
-can take a complete report instead of measuring it again.
+the failures it met and the load it was measured under, so a later run asking
+the same plan of the same commit under a load alike can take a complete report
+instead of measuring it again.
 """
 
+import copy
 import json
+import os
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -15,6 +18,15 @@ from pathlib import Path
 from typing import Any
 
 Report = dict[str, Any]
+# How a report's numbers are computed from what it measured. A kept report is taken
+# only under the same, so a number never stands beside one computed another way:
+# raise it when a computation changes.
+FORMAT = 3
+# How far apart, in one-minute load average, a kept report's load and this run's may be for it to
+# stand in. Cold start swings most with load, by more than a change moves it: within 2, a kept
+# base stands in on a machine as quiet or as busy as when it was measured, and one measured idle
+# never stands beside a tip measured with the cores oversubscribed, or the other way round.
+LOAD_BOUND = 2.0
 
 
 def name(here: str, base: str | None, target: str, at: datetime) -> str:
@@ -71,6 +83,7 @@ def side(commit: str, plan: dict[str, Any]) -> Report:
         "requests": plan["requests"],
         "widths": plan["widths"],
         "plan": plan,
+        "format": FORMAT,
         "measured_at": now(),
         "finished_at": None,
         "failures": [],
@@ -112,15 +125,44 @@ def _taking(report: Report, plan: dict[str, Any]) -> Report:
     return {**report, "plan": plan, "pages": [entries[page] for page in plan["pages"]]}
 
 
-def saved(out: Path, commit: str, plan: dict[str, Any]) -> tuple[str, Report] | None:
-    """The latest complete report of ``commit`` measured under a plan covering ``plan``, holding
-    just its pages, and the run it is in."""
+def load() -> float:
+    """The machine's one-minute load average, the load a side's numbers are measured under."""
+
+    return round(os.getloadavg()[0], 2)
+
+
+def alike(kept: Any, now: float) -> bool:
+    """Whether a report measured at load ``kept`` may stand beside numbers measured at ``now``; a
+    report that kept no load stands beside nothing."""
+
+    return isinstance(kept, int | float) and abs(kept - now) <= LOAD_BOUND
+
+
+def saved(out: Path, commit: str, plan: dict[str, Any], at_load: float) -> tuple[str, Report] | None:
+    """The latest complete report of ``commit`` in this ``FORMAT``, measured under a plan covering
+    ``plan`` and a load alike ``at_load``, holding just its pages, and the run it is in."""
 
     found = [
         (run, report)
         for run, report in _reports(out)
-        if report.get("commit") == commit and isinstance(report.get("plan"), dict) and complete(report)
+        if report.get("commit") == commit and report.get("format") == FORMAT and isinstance(report.get("plan"), dict)
+        if complete(report)
         if _covers(report["plan"], plan)
+        if alike(report.get("load"), at_load)
     ]
     latest = max(found, key=lambda pair: pair[1]["finished_at"], default=None)
     return latest and (latest[0], _taking(latest[1], plan))
+
+
+def stand_in(measured: Report, kept: Report) -> None:
+    """``measured``, a base this run asked for server time alone, given ``kept``'s other numbers,
+    each one ``report.measure_costs`` writes, so no number of this run's is ever ``kept``'s."""
+
+    for name in ("cold_start", "memory", "load"):
+        measured[name] = copy.deepcopy(kept[name])
+    entries = {entry["page"]: entry for entry in kept["pages"]}
+    for entry in measured["pages"]:
+        was = entries[entry["page"]]
+        entry["browser"] = copy.deepcopy(was.get("browser", {}))
+        if "queries" in was.get("server", {}):
+            entry["server"]["queries"] = was["server"]["queries"]

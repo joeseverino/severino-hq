@@ -14,21 +14,24 @@ import os
 import re
 import subprocess
 import sys
-import time
+import tempfile
+import threading
 from fnmatch import fnmatch
 from pathlib import Path
+from typing import BinaryIO
 
 from hq.platform.application.tests.tree import tagged
-from hq.platform.core.tests.task import RefError, Usage, git, usage
-from tests.mise_tasks import run_files
-from tools.gate.verdict import Step, close, run
+from hq.platform.core.tests.task import RefError, Usage, changed_paths, git, names, usage
+from tests.mise_tasks import mise_tasks, run_files, takes_the_turn
+from tools.gate.verdict import Gate, Step, run
 from tools.structural.classify import TEST
 
 ROOT = Path(__file__).resolve().parents[2]
-# Only the test run waits for the machine's heavy turn: its parallel workers
-# hold a suite's memory for most of fast's time, while each quick gate is one
-# short process, and the composed suites take the turn as their own task
-# decides.
+# The test run waits for the machine's heavy turn: its parallel workers hold a
+# suite's memory for most of fast's time. A quick gate that takes the turn of
+# its own (the shell gate's suites) runs after the tests; the rest are one
+# short process each and run beside them, and the composed suites take the
+# turn as their own task decides.
 HEAVY = ROOT / "tools" / "lib" / "heavy.sh"
 # The quick gates, each with the paths a change must touch for it to run, as
 # fnmatch patterns, where `*` crosses directories. Those selected run side by
@@ -52,10 +55,20 @@ TASKS: dict[str, tuple[str, ...]] = {
     "test:migrations": ("hq/*.py",),
     "lint:drift-sdk-contract": (*PYTHON, "hq_sdk/*", "docs/Plugins.md"),
     "lint:drift-api-document": (*PYTHON, "hq/platform/api/hq-api.openapi.json"),
+    "lint:drift-api-examples": (*PYTHON, "hq/platform/api/openapi-examples.json"),
     "lint:drift-bridge-contract": (*PYTHON, "controller/api/*", "hq/config/controller-connections.json"),
     "lint:drift-connections-reference": (*PYTHON, "docs/Connections.md"),
     "lint:drift-font": ("tools/fonts/*", "static/fonts/*", "static/css/*"),
 }
+# The shell gate reads every file its lister names, the suites among them, so a
+# change selects it when the lister names a path it touched: as this tree has
+# it, or as the base had it once deleted.
+SHELL = "lint:shell"
+SHELL_SOURCES = ROOT / "tools" / "gate" / "shell-sources.sh"
+# The shell suites also read the workflows and actions, whose run blocks are
+# shell the lister cannot name (tests/shell/test-shell-contracts.sh reads every
+# one), so a change to them selects the gate too.
+SHELL_READS = (".github/workflows/*", ".github/actions/*")
 # Paths a gate never reads, so a change to them alone leaves it out: the
 # structural bar drops test code before it pairs anything, and complexipy.toml
 # leaves it out.
@@ -72,7 +85,10 @@ EVERY_TASK = (
 )
 # Never part of the Django suite: other languages and vendored trees.
 SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
-ALWAYS = ("architecture", "new_domain")
+# Run whatever changed. The startup budgets count what settings and
+# django.setup import, so an import added anywhere they reach is one the
+# test's own imports never select.
+ALWAYS = ("architecture", "new_domain", "test_startup")
 # A test that walks a directory finds a module there through no import, so a
 # change to a module here runs every test tagged tree, in the same run as the
 # rest (hq/platform/application/tests/test_tree_tag.py holds the tag to the walks).
@@ -121,8 +137,10 @@ def reaches_tree(paths: list[str]) -> bool:
     return any(fnmatch(path, pattern) for path in paths for pattern in TREE)
 
 
-def selected_tasks(paths: list[str]) -> tuple[str, ...]:
-    """The quick gates a change can have broken: those whose paths it touches, or all when it touches EVERY_TASK."""
+def selected_tasks(paths: list[str], base: str | None = None) -> tuple[str, ...]:
+    """The quick gates a change can have broken: those whose paths it touches, or all when it touches EVERY_TASK.
+
+    A path this tree no longer has is read as ``base`` has it, for the shell gate."""
 
     def touched(patterns: tuple[str, ...], task: str = "") -> bool:
         unread = UNREAD.get(task)
@@ -130,8 +148,38 @@ def selected_tasks(paths: list[str]) -> tuple[str, ...]:
         return any(fnmatch(path, pattern) for path in read for pattern in patterns)
 
     if touched(EVERY_TASK):
-        return tuple(TASKS)
-    return tuple(task for task, patterns in TASKS.items() if touched(patterns, task))
+        return (*TASKS, SHELL)
+    selected = tuple(task for task, patterns in TASKS.items() if touched(patterns, task))
+    return (*selected, SHELL) if touched(SHELL_READS) or shell_files(paths, base) else selected
+
+
+def shell_files(paths: list[str], base: str | None = None) -> list[str]:
+    """The paths the shell gate's lister names: each as this tree has it, or as ``base`` had it."""
+
+    here = [path for path in paths if (ROOT / path).is_file()]
+    found = list_shell(ROOT, here) if here else []
+    gone = [path for path in paths if path not in here]
+    if base is None or not gone:
+        return found
+    with tempfile.TemporaryDirectory() as folder:
+        for path in gone:
+            # A path the base lacks too is no shell file of either.
+            held = subprocess.run(
+                ["git", "cat-file", "blob", f"{base}:{path}"], cwd=ROOT, capture_output=True, check=False
+            )
+            if held.returncode == 0:
+                (Path(folder) / path).parent.mkdir(parents=True, exist_ok=True)
+                (Path(folder) / path).write_bytes(held.stdout)
+        return found + list_shell(Path(folder), gone)
+
+
+def list_shell(root: Path, paths: list[str]) -> list[str]:
+    """Those of ``paths``, under ``root``, that the shell gate's lister names."""
+
+    listed = subprocess.run(
+        ["/bin/sh", str(SHELL_SOURCES), *paths], cwd=root, check=True, capture_output=True, text=True
+    )
+    return listed.stdout.splitlines()
 
 
 def tasks_command(tasks: tuple[str, ...], parallel: str) -> list[str]:
@@ -162,15 +210,6 @@ def merge_base(base: str | None) -> str:
     sys.exit("fast: no base found; pass one (mise run fast <ref>)")
 
 
-def changed_files(base: str) -> tuple[list[str], list[str]]:
-    """(present, deleted) paths: committed since the base, staged, unstaged, new."""
-
-    present = set(git("diff", "--name-only", "--diff-filter=ACMRT", base))
-    present |= set(git("ls-files", "--others", "--exclude-standard"))
-    deleted = set(git("diff", "--name-only", "--diff-filter=D", base))
-    return sorted(present), sorted(deleted)
-
-
 def module_name(path: Path) -> str:
     parts = list(path.with_suffix("").parts)
     if parts[-1] == "__init__":
@@ -179,7 +218,7 @@ def module_name(path: Path) -> str:
 
 
 def python_files() -> list[Path]:
-    found = set(git("ls-files", "--cached", "--others", "--exclude-standard", "*.py"))
+    found = set(names("ls-files", "--cached", "--others", "--exclude-standard", "*.py", root=ROOT))
     return sorted(Path(f) for f in found if (ROOT / f).exists() and not SKIP_PARTS & set(Path(f).parts))
 
 
@@ -396,9 +435,61 @@ def test_command(labels: list[str], parallel: str) -> list[str]:
     return [str(HEAVY), sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel, *labels]
 
 
+# Each step running beside the main thread, by the thread it runs on.
+BESIDE: dict[int, Beside] = {}
+
+
+class Beside:
+    """A step started on a thread of its own so the steps after it run while it
+    does, its output held and printed whole, under its label, once collected."""
+
+    def __init__(self, label: str, cmd: list[str], output: BinaryIO) -> None:
+        self.output = output
+        self.called = threading.Event()
+        self.result: Step | None = None
+        self.error: BaseException | None = None
+        self.thread = threading.Thread(target=self.run, args=(label, cmd), daemon=True)
+        self.thread.start()
+        # The next step starts once this one has, so the steps start in the order asked.
+        self.called.wait()
+
+    def run(self, label: str, cmd: list[str]) -> None:
+        BESIDE[threading.get_ident()] = self
+        try:
+            self.result = step(label, cmd)
+        # SystemExit would otherwise end this thread in silence; KeyboardInterrupt is
+        # only ever raised on the main thread.
+        except (Exception, SystemExit) as error:  # noqa: BLE001 - raised again on the main thread, in collect
+            self.error = error
+        finally:
+            del BESIDE[threading.get_ident()]
+            self.called.set()
+
+    def collect(self) -> Step:
+        self.thread.join()
+        self.output.seek(0)
+        sys.stdout.write(self.output.read().decode(errors="replace"))
+        sys.stdout.flush()
+        if self.error:
+            raise self.error
+        assert self.result
+        return self.result
+
+
 def step(label: str, cmd: list[str]) -> Step:
+    if beside := BESIDE.get(threading.get_ident()):
+        beside.called.set()
+        beside.output.write(f"[fast] {label}\n".encode())
+        return run(label, cmd, to=beside.output)
     print(f"[fast] {label}", flush=True)
     return run(label, cmd)
+
+
+def turn_takers(tasks: tuple[str, ...]) -> tuple[str, ...]:
+    """Those of the quick gates that take the machine's heavy turn, which the test run holds."""
+
+    declared = mise_tasks()
+    return tuple(task for task in tasks if takes_the_turn(declared[task]))
 
 
 def extension_suites(parallel: str) -> list[Step]:
@@ -413,12 +504,13 @@ def extension_suites(parallel: str) -> list[Step]:
 
 
 def main(asked: Usage) -> int:
-    started = time.monotonic()
     # The task's usage reads CHECK_BASE and CHECK_PARALLEL behind its own arguments.
     parallel = asked.text("parallel", "auto")
     list_only = asked.switch("list")
+    # A run opens on where its verdict is kept; a listing keeps none.
+    gate = None if list_only else Gate("fast")
     base = merge_base(asked.text("base") or None)
-    changed, deleted = changed_files(base)
+    changed, deleted = changed_paths(base, ROOT)
     files = python_files()
     reached, touched = affected(changed, deleted, files)
     read = [path for path in [*changed, *deleted] if not path.endswith(".py")]
@@ -430,21 +522,28 @@ def main(asked: Usage) -> int:
     if reaches_tree([*changed, *deleted]):
         print("[fast] a module under hq/ or hq_sdk/ changed: every test tagged tree runs too")
     labels = with_tree(labels, [*changed, *deleted])
-    if list_only:
+    if gate is None:
         print("\n".join(labels))
         return 0
 
-    steps = []
-    if tasks := selected_tasks([*changed, *deleted]):
+    tasks = selected_tasks([*changed, *deleted], base)
+    after = turn_takers(tasks) if tasks else ()
+    light = tuple(task for task in tasks if task not in after)
+    if tasks:
         print(f"[fast] the quick gates that read what changed: {' '.join(tasks)}")
-        steps.append(step("quick gates", tasks_command(tasks, parallel)))
     else:
         print("[fast] no quick gate reads what changed")
-    steps.append(step("tests", test_command(labels, parallel)))
+    # The light gates run beside the tests, their output shown after the tests'.
+    with tempfile.TemporaryFile() as held:
+        beside = Beside("quick gates, beside the tests", tasks_command(light, parallel), held) if light else None
+        tests = step("tests", test_command(labels, parallel))
+        steps = [beside.collect(), tests] if beside else [tests]
+    if after:
+        steps.append(step("quick gates that take the heavy turn", tasks_command(after, parallel)))
     if touches_shared_ui([*changed, *deleted]):
         steps.extend(extension_suites(parallel))
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))
-    close("fast", started, steps, " (full gate before push: `mise run check`)")
+    gate.close(steps, " (full gate before push: `mise run check`)")
     return 0 if all(s.ok for s in steps) else 1
 
 

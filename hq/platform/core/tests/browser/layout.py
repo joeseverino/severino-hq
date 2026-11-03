@@ -8,12 +8,14 @@ from typing import override
 lazy from playwright.sync_api import TimeoutError as LoadTimeout
 
 from hq.platform.core.tests.browser.gate import BrowserGate, answered_as
+from hq.platform.core.tests.browser.probes.axe import contrast_read
 from hq.platform.core.tests.browser.probes.boxes import (
+    ANY_SCROLLER,
     CHROME_INSETS,
-    ESCAPES,
     INTO_A_NEIGHBOR,
     NARROW_FRAMES,
     OVERLAPS,
+    SIDEWAYS,
 )
 from hq.platform.core.tests.browser.probes.palette import PAINT
 from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, SETTLE, STYLESHEETS
@@ -33,21 +35,21 @@ from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.stress import stress_estate
 from hq.platform.core.tests.browser.survey import (
     _AUDIT,
-    _CONTRAST_READ,
     _SIDEWAYS_READ,
-    _SMALL_TARGETS_READ,
     _SPILLED_CELLS,
     _SPILLED_CONTROLS,
     AS_FINDINGS,
     CHANGES_READ,
     CHIPS_READ,
     EVIDENCE_READ,
-    HEADS_READ,
     SUMMARIES_READ,
 )
 from hq.platform.core.tests.browser.widths import SPARSE_WIDTHS, WIDTHS
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES
 from hq.platform.core.tests.test_browser_fixtures import PAGES
+
+# What runs past the page's edge, wherever a box that scrolls does not hold it.
+_ESCAPES_READ = (SIDEWAYS, ANY_SCROLLER)
 
 
 class LayoutBrowserTests(BrowserGate):
@@ -105,13 +107,6 @@ class LayoutBrowserTests(BrowserGate):
         run = list(takewhile(lambda rule: hasattr(rule, "probes"), rules[at:]))
         outcomes = iter(self.outcomes([probe for rule in run for probe in rule.probes]))
         return {at + offset: list(islice(outcomes, len(rule.probes))) for offset, rule in enumerate(run)}
-
-    def in_scheme(self, scheme):
-        """The same load in the other palette. Its colors are finished rather
-        than waited for: without script no animation frame runs."""
-
-        self.page.emulate_media(color_scheme=scheme)
-        self.page.evaluate(FINISH_TRANSITIONS)
 
     # Without script: the page as the server drew it. Layout must hold before
     # progressive enhancement.
@@ -178,7 +173,7 @@ class LayoutBrowserTests(BrowserGate):
         self.assertEqual(sheets["loaded"], sheets["links"])
         self.assertEqual(sheets["empty"], [])
 
-    @reads(ESCAPES)
+    @reads(_ESCAPES_READ)
     def nothing_escapes_the_page_sideways(self, _name, found):
         self.assertEqual(found, [])
 
@@ -189,9 +184,21 @@ class LayoutBrowserTests(BrowserGate):
     def open_every_disclosure(self, _name):
         """Every disclosure and popover open, for the rules that follow."""
 
-        self.page.evaluate("() => document.querySelectorAll('details').forEach((d) => { d.open = true; })")
+        # A popover placed against an anchor in the page (a filter's panel) can
+        # escape it, so it opens with the disclosures; a centered one, a
+        # modal, covers the page by design and is held by the dialog checks.
+        # An auto popover closes the others as it opens, so each is held
+        # manual to stay shown beside the rest.
+        self.page.evaluate("""() => {
+          document.querySelectorAll('details').forEach((d) => { d.open = true; });
+          document.querySelectorAll('[popover]:not(:popover-open)').forEach((p) => {
+            if (['auto', 'none', 'normal', undefined].includes(getComputedStyle(p).positionAnchor)) return;
+            p.popover = 'manual';
+            p.showPopover();
+          });
+        }""")
 
-    @reads(ESCAPES)
+    @reads(_ESCAPES_READ)
     def nothing_escapes_the_page_sideways_with_every_disclosure_open(self, _name, found):
         self.assertEqual(found, [])
 
@@ -219,7 +226,7 @@ class LayoutBrowserTests(BrowserGate):
     def nothing_runs_out_of_its_table_cell(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads(ESCAPES, OVERLAPS)
+    @reads(_ESCAPES_READ, OVERLAPS)
     def dense_pages_keep_to_their_boxes(self, _name, escapes, overlaps):
         """Nothing escapes or overlaps with production-sized data."""
 
@@ -262,8 +269,7 @@ class LayoutBrowserTests(BrowserGate):
         if found := {check: said for check, said in self.palette().items() if said}:
             self.fail(json.dumps(found, indent=1))
 
-    @reads("() => matchMedia('(prefers-color-scheme: dark)').matches", _CONTRAST_READ)
-    def text_reads_in_the_dark_theme(self, _name, dark, report):
+    def text_reads_in_the_dark_theme(self, _name):
         """Text clears WCAG AA on whatever it sits on, in the dark palette.
 
         Color lives in tokens and each token carries both palettes, so a
@@ -273,9 +279,9 @@ class LayoutBrowserTests(BrowserGate):
         another) by measuring what the browser actually paints.
         """
 
+        dark, found = self.read([("() => matchMedia('(prefers-color-scheme: dark)').matches", None), contrast_read()])
         self.assertEqual(dark, True)
-        self.assertGreater(report["sampled"], 0)
-        self.assertEqual(report["found"], [])
+        self.assertEqual(found, [])
 
     def a_chosen_theme_paints_as_the_systems(self, name):
         """The operator's choice of theme paints what the system's preference
@@ -335,40 +341,6 @@ class LayoutBrowserTests(BrowserGate):
     def no_column_is_narrower_than_its_words(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads(_SMALL_TARGETS_READ)
-    def every_control_is_big_enough_to_hit(self, _name, found):
-        """A target is hit through at least 24 by 24 CSS px (`TARGET_MIN`,
-        WCAG 2.5.8 Target Size Minimum), counting the area its `::before` or
-        `::after` hangs over the space beside it, unless one of the
-        criterion's exceptions holds:
-
-        - Spacing: "if a 24 CSS pixel diameter circle is centered on the
-          bounding box of each, the circles do not intersect another target or
-          the circle for another undersized target". An area a target hangs
-          over another target's is shared, and counts for neither.
-        - Equivalent: "The function can be achieved through a different
-          control on the same page that meets this criterion": the control
-          a target names in `data-target-equivalent` (by its id) is at least
-          24 by 24 and in the same cell or region.
-        - Inline: "The target is in a sentence or its size is otherwise
-          constrained by the line-height of non-target text": set inline
-          among words that are no target's.
-        - User agent control: "The size of the target is determined by the
-          user agent and is not modified by the author": a control the browser
-          draws, the size of a copy no author style reaches. One HQ draws or
-          sizes, a styled tick box included, is held to the size.
-
-        A target another element is drawn over at its center (an open menu
-        lying on the page) is not reachable there, so it is not measured,
-        and neither is a disabled one or one an open modal makes inert.
-        A tick box is hit through its labels too. The stylesheet's
-        `--target-min` is held to the same size. Held on every page and width
-        the layout checks read (`every_layout_check_holds`).
-        """
-
-        if found:
-            self.fail("\n".join(found))
-
     def every_layout_check_holds(self, name):
         """Every check the layout rules make, on the page as a reader has it:
         what `dev:look --rule survey` reports, held."""
@@ -393,20 +365,11 @@ class LayoutBrowserTests(BrowserGate):
 
         self.assertEqual(found, [])
 
-    @reads(HEADS_READ)
-    def a_head_keeps_two_controls_beside_its_title(self, _name, found):
-        """A page's head draws its lead control and one more beside the title
-        on one line with its menu, folding the second into the menu where the
-        head is narrow, and offers every control once: beside the title or in
-        the menu, never both and never neither."""
-
-        self.assertEqual(found, [])
-
     @reads(PAST_THE_CLAMP)
     def a_clamped_box_shows_only_its_lines(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((CUT_DECISIONS, SELECTORS["decision_whole"]))
+    @reads((CUT_DECISIONS, [SELECTORS["decision_whole"], "*", SELECTORS["unseen"]]))
     def what_a_button_decides_is_shown_whole(self, _name, found):
         """An approval's change, beside the buttons that approve or reject
         it, wraps rather than being cut, at every width."""

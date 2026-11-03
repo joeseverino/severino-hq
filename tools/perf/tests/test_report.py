@@ -2,6 +2,7 @@
 and measures a page that redirects as the page it lands on."""
 
 import io
+import subprocess
 from contextlib import redirect_stdout
 from unittest import mock
 
@@ -9,7 +10,7 @@ from django.test import SimpleTestCase, TestCase
 
 from hq.platform.core.tests.browser.estate import Redirected, ask_as_production, landing, owner_client
 from tools.perf import report
-from tools.perf.tests.test_runs import FakeTarget, Measured
+from tools.perf.tests.test_runs import PLAN, REFUSED_LOG, FakeTarget, Measured
 
 
 class AnsweredTests(Measured):
@@ -44,7 +45,7 @@ class AskedTests(TestCase):
             self.assertEqual(report.main(), 2)
         measured.assert_not_called()
         self.assertIn("No page estate/containers", err.getvalue())
-        self.assertIn("control_plane:containers (/infrastructure/containers/)", err.getvalue())
+        self.assertIn("\n  estate/infrastructure/containers (the estate's control_plane:containers)", err.getvalue())
 
     def test_the_pages_asked_are_read_as_mise_hands_a_variadic_argument(self):
         environment = {
@@ -75,6 +76,55 @@ class AskedTests(TestCase):
         self.assertNotEqual(page, "/domains/")
         self.assertTrue(page.startswith("/domains/"), page)
         self.assertIn(f"estate/domains lands on {report.estate_name(page)}", said.getvalue())
+
+
+class ComposedTests(Measured):
+    """--image measures what production runs: the host image composed with the checkout's set."""
+
+    def compose(self, returncode: int = 0, said: str = "") -> mock.MagicMock:
+        done = subprocess.CompletedProcess([], returncode, stdout="", stderr=said)
+        patcher = mock.patch.object(report.subprocess, "run", return_value=done)
+        self.addCleanup(patcher.stop)
+        return patcher.start()
+
+    def test_a_plan_with_an_extension_set_composes_each_tree_s_host_image_with_it_from_that_tree(self):
+        composed = self.compose()
+        tree = self.out / "base"
+        with mock.patch.object(report, "run") as built:
+            image = report.image_of(tree, "ba9876543210", here=False, composed=True)
+
+        (build,) = (call.args[0] for call in built.call_args_list)
+        (compose,) = (call.args[0] for call in composed.call_args_list)
+        host = build[build.index("--tag") + 1]
+        self.assertEqual(build[:3], ["mise", "-C", str(tree)])
+        self.assertIn("image:compose", compose)
+        self.assertEqual(compose[compose.index("--host") + 1], host)
+        self.assertEqual(compose[compose.index("--context") + 1], str(tree))
+        self.assertEqual(image, compose[compose.index("--tag") + 1])
+        self.assertNotEqual(image, host)
+
+    def test_the_host_alone_is_its_image_as_built(self):
+        composed = self.compose()
+        with mock.patch.object(report, "run"):
+            image = report.image_of(self.out, "ba9876543210", here=False, composed=False)
+
+        composed.assert_not_called()
+        self.assertEqual(image, "severino-hq:perf-ba9876543210")
+
+    def test_a_composition_refused_for_its_plugin_api_starts_the_run_again_alone(self):
+        # The refusal is the collect step's, with the build's own report of the failure after it.
+        build_tail = "".join(f" {line} | RUN collectstatic\n" for line in range(40))
+        self.compose(1, said=REFUSED_LOG + build_tail + "ERROR: failed to solve: exit code: 1\n")
+        asked = report.Plan(**{**PLAN.__dict__, "image": True, "extensions": ["example.ledger.plugin:plugin"]})
+
+        with mock.patch.object(report, "run"), self.assertRaisesRegex(report.SetRefused, r"requires API 5"):
+            self.measure(FakeTarget(), asked)
+
+    def test_a_composed_image_is_kept_apart_from_the_host_image_s(self):
+        image = report.Plan(**{**PLAN.__dict__, "image": True})
+        composed = report.Plan(**{**image.__dict__, "extensions": ["example.ledger.plugin:plugin"]})
+
+        self.assertEqual((image.target, composed.target), ("image", "image:composed"))
 
 
 class Answer:

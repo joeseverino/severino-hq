@@ -34,9 +34,12 @@ PRINTING = (
 _RENDERS = frozenset(node.render.__code__ for node in PRINTING)
 
 
-@functools.cache
 def _ours() -> tuple[str, ...]:
-    """The template directories of HQ and its installed extension apps."""
+    """The template directories of HQ and its installed extension apps.
+
+    Read only for a refused print, and so at each one: the installed set and
+    the apps it names are whatever is composed then.
+    """
 
     # A manifest may name an app by its module or by its AppConfig.
     extensions = {apps.get_containing_app_config(app).name for app in installed_plugin_apps()}

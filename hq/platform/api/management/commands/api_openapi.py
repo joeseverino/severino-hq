@@ -36,9 +36,9 @@ class Command(BaseCommand):
                     ending="",
                 )
                 raise CommandError(
-                    f"{DOCUMENT_PATH.name} is behind the API; run `mise run fix` and commit the result, "
-                    f"or `mise run fix:api-examples` first when a response's shape changed, to record "
-                    f"{EXAMPLES_PATH.name} again."
+                    f"{DOCUMENT_PATH.name} is behind the API; run `mise run manage -- api_openapi` and commit the result, "
+                    f"or `mise run fix:api-examples` when a response's shape changed, which records "
+                    f"{EXAMPLES_PATH.name} again and then rewrites the document."
                 )
             self.stdout.write(f"{DOCUMENT_PATH.name} is current.")
             return

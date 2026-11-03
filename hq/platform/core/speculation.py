@@ -10,18 +10,17 @@ import json
 import re
 from collections.abc import Callable
 from contextvars import ContextVar
-from functools import cache
+from functools import lru_cache
 from typing import Any
 from urllib.parse import urlsplit
 
 from django.http import HttpRequest, HttpResponse
-from django.urls import reverse
-from django.urls.resolvers import RoutePattern
+from django.urls import get_resolver, reverse
+from django.urls.resolvers import RoutePattern, URLResolver
 from django.utils.cache import patch_vary_headers
 from django.views.decorators.cache import cache_control
 from django.views.decorators.http import require_safe
 
-lazy from hq.platform.application.plugins import plugin_token_authenticated_prefixes
 lazy from hq.platform.application.request_identity import signed_in
 lazy from hq.platform.application.routes import routed
 
@@ -77,15 +76,21 @@ def _withheld(reason: str) -> HttpResponse:
     return response
 
 
-@cache
 def sessionless() -> tuple[str, ...]:
     """Every route that answers without a session, as a URL pattern.
 
-    Read from the URL configuration: the routes marked ``login_not_required``
-    and the prefixes an extension authenticates itself.
+    Read from the URL configuration in force: the routes marked ``login_not_required``.
     """
 
-    found = {f"{prefix}*" for prefix in plugin_token_authenticated_prefixes()}
+    return _sessionless(get_resolver())
+
+
+# Keyed by the resolver ``routed`` walks, which Django makes anew whenever the
+# URLconf changes (ROOT_URLCONF, clear_url_caches), so no path that changes it
+# can leave this answering for the old one.
+@lru_cache(maxsize=1)
+def _sessionless(_in_force: URLResolver) -> tuple[str, ...]:
+    found: set[str] = set()
     for each in routed():
         pattern = each.pattern
         if getattr(pattern.callback, "login_required", True):
@@ -146,11 +151,8 @@ def answer(request: HttpRequest, get_response: Callable[[HttpRequest], HttpRespo
     if not asked:
         return _point(request, get_response(request))
     reasons: list[str] = []
-    token = _refused.set(reasons)
-    try:
+    with _refused.set(reasons):
         response = get_response(request)
-    finally:
-        _refused.reset(token)
     if reasons:
         return _withheld(reasons[0])
     target = urlsplit(response.headers.get("Location", ""))
@@ -161,14 +163,13 @@ def answer(request: HttpRequest, get_response: Callable[[HttpRequest], HttpRespo
     return response
 
 
-def before_view(request: HttpRequest, view_func: Any) -> HttpResponse | None:
+def before_view(view_func: Any) -> HttpResponse | None:
     """Refuse a speculative request for a route that answers without a session."""
 
     if _refused.get() is None:
         return None
 
-    own = request.path.startswith(plugin_token_authenticated_prefixes())
-    if own or not getattr(view_func, "login_required", True):
+    if not getattr(view_func, "login_required", True):
         return _withheld("answers without a session")
     return None
 

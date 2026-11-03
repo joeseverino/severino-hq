@@ -271,7 +271,8 @@ class ControllerPassTests(TransactionTestCase):
         try:
             self.assertTrue(self.bridge.reached.wait(120), "the pass never reached its sweep")
 
-            execute_capability(DASHBOARD_REFRESH, {}, principal=cli_principal())
+            answer = execute_capability(DASHBOARD_REFRESH, {}, principal=cli_principal())
+            self.assertTrue(answer["ok"], answer)
             code, lines = self.run_pass("--glance")
 
             self.assertEqual(code, 0, lines)

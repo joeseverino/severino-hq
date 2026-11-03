@@ -1,6 +1,7 @@
 #!/bin/sh
 # Prove test:suite has coverage judge its own floor (pyproject.toml) on the one
-# report it reads the total from, and says that same total in the step summary.
+# report it reads the total from, and says that same total in the step summary;
+# and that the runner's slowest classes reach var/gate and the summary.
 set -eu
 
 repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
@@ -20,7 +21,12 @@ cat >"${work}/bin/uv" <<'STUB'
 shift
 args="$*"
 case "${args}" in
-    "coverage run"*) echo "Ran 3 tests in 0.100s" ;;
+    "coverage run"*)
+        echo "Ran 3 tests in 0.100s"
+        echo
+        echo "Slowest test classes (load average at start / end: 1.00 1.00 1.00 / 2.00 2.00 2.00):"
+        echo "      12.5s  example.tests.test_slow.SlowTests"
+        echo "OK" ;;
     "coverage report"*)
         echo "${args}" >>"${TEST_REPORTS}"
         echo "${TEST_TOTAL}"
@@ -40,7 +46,8 @@ judge() { # judge <total> <verdict>; prints the task's exit status
     # CI: one runner, one job, so the task takes no machine-wide turn. Run as
     # mise runs a file task: in its config root, named by MISE_CONFIG_ROOT, with
     # the bound its env declares.
-    (cd "${fixture}" && CI=1 PATH="${work}/bin:${PATH}" TEST_TOTAL="$1" TEST_VERDICT="$2" \
+    rm -rf "${fixture:?}/var"
+    (cd "${fixture}" && CI=1 UV_PYTHON=3.99 PATH="${work}/bin:${PATH}" TEST_TOTAL="$1" TEST_VERDICT="$2" \
         TEST_REPORTS="${work}/reports" GITHUB_STEP_SUMMARY="${work}/summary" MISE_CONFIG_ROOT="${fixture}" SEVERINO_HEAVY_BOUND=1m \
         "./${task}") >"${work}/out" 2>&1 || status=$?
     echo "${status}"
@@ -58,10 +65,17 @@ $(cat "${work}/reports")"
     if [ "${want}" = 0 ]; then
         grep -qF "coverage ${total}%" "${work}/summary" ||
             fail "coverage ${total}%: the summary does not say the total judged"
+        grep -qF "<code>example.tests.test_slow.SlowTests</code>" "${work}/summary" ||
+            fail "coverage ${total}%: the summary does not name the slowest class"
     else
         grep -qF "Coverage failure: total of ${total} is less than fail-under=90" "${work}/out" ||
             fail "coverage ${total}%: coverage's verdict is not shown"
     fi
+    kept="${fixture}/var/gate/test-classes-3.99.txt"
+    { grep -q '^Slowest test classes' "${kept}" && grep -qF 'example.tests.test_slow.SlowTests' "${kept}" &&
+        ! grep -q '^OK' "${kept}"; } 2>/dev/null ||
+        fail "coverage ${total}%: var/gate does not keep the slowest classes, and only them
+$(cat "${kept}" 2>/dev/null)"
 done
 
 if [ "${failures}" -ne 0 ]; then

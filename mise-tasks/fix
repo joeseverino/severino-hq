@@ -3,7 +3,7 @@
 
 # The same file set the format gates read, so a fix run leaves them nothing
 # to report. The derived files load Django, so fix:derived writes them on an
-# empty database inside the heavy turn.
+# empty database, one process at a time, outside the heavy turn.
 set -eu
 # shellcheck source=tools/lib/mise-files.sh
 . ./tools/lib/mise-files.sh

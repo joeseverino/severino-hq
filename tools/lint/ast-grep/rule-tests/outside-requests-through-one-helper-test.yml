@@ -1,0 +1,23 @@
+id: outside-requests-through-one-helper
+valid:
+  - 'from hq.platform.core.outside_requests import connections_of_its_own'
+  - |
+    with connections_of_its_own():
+        ask()
+  - |
+    async with thread_of_its_own():
+        await serve()
+  - 'connections.all(initialized_only=True)'
+  - 'creation.connection.close()'
+  - 'handle.close()'
+invalid:
+  - 'from django.db import close_old_connections'
+  - 'lazy from django.db import close_old_connections, connections'
+  - 'close_old_connections()'
+  - 'db.close_old_connections()'
+  - 'from asgiref.sync import ThreadSensitiveContext, sync_to_async'
+  - |
+    async with asgiref.sync.ThreadSensitiveContext():
+        await serve()
+  - 'connection.close()'
+  - 'connections.close_all()'

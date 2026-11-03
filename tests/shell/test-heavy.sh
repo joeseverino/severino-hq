@@ -3,7 +3,8 @@
 # bound that runs out exits 75 naming the holder, a killed command frees the
 # turn, a heavy command inside a turn runs, a file task's body runs once, a
 # waiting one names the holder again at its interval, a turn prints the load
-# average as it starts and ends, a run of tests takes it only when it is
+# average as it starts and ends and the peak memory of the tree it ran, under
+# CI too, a run of tests takes it only when it is
 # heavy, CI takes no lock, every heavy task carries a bound
 # that, run out, stops what it started and frees the turn, and two heavy tasks
 # asked together queue on the turn however long the second waits.
@@ -74,11 +75,13 @@ SEVERINO_HEAVY_HOLDER="${holder}" SEVERINO_HEAVY_WAIT=0 "${heavy}" true 2>/dev/n
 [ "${status}" -eq 75 ] || fail "a process outside the turn borrowed it by naming the holder"
 
 status=0
-CI=true "${heavy}" true || status=$?
+CI=true "${heavy}" true 2>/dev/null || status=$?
 [ "${status}" -eq 0 ] || fail "under CI a heavy command waited for the lock"
 
 # A second heavy command says whom it waits for, says it again at its
-# interval, then runs once the first ends.
+# interval, then runs once the first ends. Its stderr is a fifo, read only
+# through fd 8: a `cat` of it waits for a writer that never comes, until the
+# suite's bound.
 fifo waiting
 # shellcheck disable=SC2016  # expanded by the inner shell
 SEVERINO_HEAVY_EVERY=1 "${heavy}" sh -c 'echo ran >"$1"' sh "${work}/second" 2>"${work}/waiting" &
@@ -87,8 +90,8 @@ exec 8<"${work}/waiting"
 read -r said <&8 || fail "the second heavy command did not say it was waiting"
 names_holder "${said}" "the waiting line"
 case "${said}" in
-    *" 600s"*" in the background."*) ;;
-    *) fail "the waiting line does not tell an agent to run a gate that may wait in the background: ${said}" ;;
+    *"keeps running in the background"*"never start a second copy."*) ;;
+    *) fail "the waiting line does not tell an agent that a call past its timeout goes on, so no second copy starts: ${said}" ;;
 esac
 read -r said <&8 || fail "the second heavy command did not say it was still waiting"
 case "${said}" in
@@ -101,8 +104,47 @@ echo go >"${work}/release"
 wait "${holder}" || fail "the holder failed"
 holder=""
 wait "${second}" || fail "the waiting heavy command failed once the turn was free"
+told=""
+while read -r said <&8; do told="${told} ${said}"; done
 exec 8<&-
+case "${told}" in
+    *"heavy: waited "[1-9]*"s for the turn"*) ;;
+    *) fail "a command that waited did not say for how long, which a gate's closing line reads: ${told}" ;;
+esac
 [ "$(cat "${work}/second")" = ran ] || fail "the waiting heavy command did not run"
+
+# A waiting heavy command sleeps on the lock: three intervals of waiting cost
+# it, and everything it starts, less than half a second of CPU between them,
+# where a waiter that polls the lock spends a core the whole time. Perl's
+# times() reads the CPU of every process the waiter started once each ends.
+hold
+fifo cost
+# shellcheck disable=SC2016  # expanded by perl
+SEVERINO_HEAVY_EVERY=1 perl -e '
+    my $out = shift;
+    system { $ARGV[0] } @ARGV;
+    my (undef, undef, $user, $system) = times;
+    open my $spent, ">", $out or die "$out: $!\n";
+    printf $spent "%d\n", ($user + $system) * 100;
+    exit($? >> 8);
+' "${work}/spent" "${heavy}" true 2>"${work}/cost" &
+waiter=$!
+exec 8<"${work}/cost"
+intervals=0
+while [ "${intervals}" -lt 3 ] && IFS= read -r said <&8; do
+    case "${said}" in
+        *"still waiting after "*) intervals="$((intervals + 1))" ;;
+    esac
+done
+[ "${intervals}" -eq 3 ] || fail "the waiter stopped waiting before three intervals passed"
+echo go >"${work}/release"
+wait "${holder}" || fail "the holder failed"
+holder=""
+cat <&8 >/dev/null
+exec 8<&-
+wait "${waiter}" || fail "the waiter failed once the turn was free"
+spent="$(cat "${work}/spent")"
+[ "${spent}" -lt 50 ] || fail "waiting three intervals for the turn spent $((spent / 100)).$((spent % 100 / 10))s of CPU, not under 0.5s"
 
 hold
 kill -KILL "${command}"
@@ -112,9 +154,32 @@ SEVERINO_HEAVY_WAIT=0 "${heavy}" true 2>/dev/null || fail "a killed command kept
 
 said="$("${heavy}" true 2>&1)" || fail "a heavy command failed"
 case "${said}" in
+    *"waited"*) fail "a command that never waited said it did: ${said}" ;;
+esac
+case "${said}" in
     *"the turn starts, load average "[0-9]*"the turn ends, load average "[0-9]*) ;;
     *) fail "a turn did not print the load average as it started and ended: ${said}" ;;
 esac
+
+# A turn's end names the peak memory its whole tree held at once: three
+# processes that each hold 32 MB read as at least their sum, which no one
+# process's own peak reaches, under CI as in a turn. Each holds past the
+# sampler's interval, and the sampler leaves nothing behind.
+mkdir "${work}/tmp"
+# shellcheck disable=SC2016  # expanded by perl
+held='my $x = "x" x (32 * 1048576); sleep 6'
+for ci in "" true; do
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    said="$(CI="${ci}" TMPDIR="${work}/tmp" "${heavy}" sh -c 'perl -e "$1" & perl -e "$1" & perl -e "$1"; wait' sh "${held}" 2>&1)" ||
+        fail "a heavy command holding memory failed: ${said}"
+    peak="${said##*, peak memory }"
+    case "${peak}" in
+        *" GB") ;;
+        [0-9]*" MB") [ "${peak% MB}" -ge 96 ] || fail "three processes of 32 MB each read as a peak of ${peak}, not their sum (CI='${ci}')" ;;
+        *) fail "a heavy command's end did not name its peak memory (CI='${ci}'): ${said}" ;;
+    esac
+    [ -z "$(ls -A "${work}/tmp")" ] || fail "the sampler left a file behind (CI='${ci}'): $(ls -A "${work}/tmp")"
+done
 
 # shellcheck disable=SC2016  # expanded by the inner shell
 said="$("${heavy}" sh -c '"$1" echo nested' sh "${heavy}" 2>/dev/null)" || fail "a heavy command inside a turn was refused"
@@ -158,7 +223,7 @@ wait "${holder}" || fail "the holder failed"
 holder=""
 
 rm -rf "${XDG_CACHE_HOME}"
-CI=true "${heavy}" true
+CI=true "${heavy}" true 2>/dev/null
 [ ! -e "${lock}" ] || fail "under CI a lock file was made"
 
 # Every task that takes the turn declares its bound and carries no mise
@@ -214,10 +279,13 @@ run = 'echo ran >first'
 extends = "heavy"
 run = 'echo ran >second'
 TOML
+# shellcheck source=tests/shell/mise-state.sh
+. "${repo}/tests/shell/mise-state.sh"
+mise_trust "${bound}" "${work}/mise-state"
 for task in hang outer; do
     rm -f "${bound}/ready"
     mkfifo "${bound}/ready"
-    MISE_TRUSTED_CONFIG_PATHS="${bound}" mise -C "${bound}" run "${task}" >/dev/null 2>&1 &
+    mise -C "${bound}" run "${task}" >/dev/null 2>&1 &
     run=$!
     read -r hung <"${bound}/ready"
     SEVERINO_HEAVY_WAIT=30 "${heavy}" true 2>/dev/null || fail "run as ${task} under ${shell}, a hung heavy task kept the turn past its bound"
@@ -236,7 +304,7 @@ done
 rm -f "${bound}/first" "${bound}/second"
 mkfifo "${bound}/together"
 hold
-MISE_TRUSTED_CONFIG_PATHS="${bound}" SEVERINO_HEAVY_EVERY=1 mise -C "${bound}" run first ::: second \
+SEVERINO_HEAVY_EVERY=1 mise -C "${bound}" run first ::: second \
     >"${bound}/together" 2>&1 &
 run=$!
 exec 7<"${bound}/together"

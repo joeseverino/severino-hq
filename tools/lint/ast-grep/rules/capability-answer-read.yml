@@ -1,0 +1,30 @@
+# A capability refuses by answering, never by raising: a missing retry key, a
+# denied grant or a bad payload comes back as {"ok": false}. A caller that
+# drops the answer turns that refusal into silence, and a fixture that set
+# nothing up passes on to a test that fails far from the cause. Test code is
+# in scope, where a dropped setup call hides longest.
+id: capability-answer-read
+language: python
+severity: error
+message: A capability's answer is dropped, so a refusal passes in silence.
+note: >-
+  Bind the answer and read it: a test asserts what it relies on
+  (`self.assertTrue(answer["ok"], answer)`), a fixture or a seed raises on a
+  refusal, and a door shows it.
+ignores:
+  # Calls mypy reads for their types, never run.
+  - "tests/sdk_consumer/consumer.py"
+rule:
+  any:
+    - kind: expression_statement
+      has: { matches: capability-call }
+    - kind: assignment
+      all:
+        - has: { field: left, pattern: _ }
+        - has: { field: right, matches: capability-call }
+utils:
+  capability-call:
+    kind: call
+    has:
+      field: function
+      regex: (^|\.)(execute_capability|run_capability)$

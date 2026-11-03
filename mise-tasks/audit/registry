@@ -1,0 +1,18 @@
+#!/bin/sh
+#MISE description="Every capability and resource HQ declares, one tab-separated line each, as describe_capabilities and describe_resources tell an agent: a capability's name, effect, target, resource and label; a resource's name, label, list fields and identifier"
+#MISE hide=true
+#MISE extends="django"
+#USAGE flag "--composed" help="With the extensions mise.local.toml names, as dev:scratch loads them"
+set -eu
+
+# The operator's shell door (manage.py hq_call) answers as the MCP tools do, so
+# this is the registry an agent reads, on the template's throwaway database.
+if [ "${usage_composed:-}" = true ]; then
+    export SEVERINO_HQ_PLUGINS="${HQ_LOCAL_PLUGINS:-}" PYTHONPATH="${HQ_LOCAL_PYTHONPATH:-}" SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION=0
+fi
+for tool in describe_capabilities describe_resources; do
+    printf '{"tool":"%s","arguments":{}}' "$tool" | uv run python manage.py hq_call
+done | jq -r '
+    (.capabilities[]? | ["capability", .name, .effect, (.target // "-"), (.resource // "-"), .label]),
+    (.resources[]? | ["resource", .name, .label, ((.operations.list.fields // []) | join(",")), (.operations.get.identifier // "-")])
+    | @tsv'

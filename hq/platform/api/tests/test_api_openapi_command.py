@@ -56,8 +56,8 @@ class CheckTests(SimpleTestCase):
         with self.assertRaises(CommandError) as raised:
             self.check()
 
-        named = set(re.findall(r"`mise run ([\w:-]+)`", str(raised.exception)))
-        self.assertLessEqual({"fix", "fix:api-examples"}, named)
+        named = set(re.findall(r"`mise run ([\w:-]+)[^`]*`", str(raised.exception)))
+        self.assertLessEqual({"manage", "fix:api-examples"}, named)
         self.assertLessEqual(named, mise_tasks().keys())
 
 

@@ -19,8 +19,11 @@
 # failure and names every gate that failed. A task that a job's task, CI or
 # the operator runs is `hide = true`: the job's wildcard and `mise run <name>`,
 # which a verdict names, still reach it. No gate
-# declares `sources`: mise judges them by file times alone, and a verdict also
-# turns on the environment and on files no list would name. A task whose body is
+# declares `sources`: mise keeps a task's record of its last passing sources
+# per checkout, by content with task.source_freshness_hash_contents, so a new
+# worktree's first run would run every gate where fast's diff runs the few it
+# touched, and a verdict also turns on the environment and on files no list
+# would name. A task whose body is
 # more than one line is a file under mise-tasks/, declared in its own #MISE
 # header, so lint:shell lints it. This file keeps the tools, the environment,
 # the templates, the development servers and the lint and scan tasks.
@@ -29,7 +32,7 @@
 # command to; nothing here needs a virtualenv made by hand. uv itself is one of
 # the tools below.
 
-min_version = "2026.10.21"
+min_version = "2026.10.25"
 
 [settings]
 # The runners, which build the images, the machines gates run on by hand, and
@@ -67,6 +70,9 @@ go = '{{ read_file(path="controller/go.mod") | regex_replace(pattern="(?ms).*^to
 shellcheck = "0.11.0"
 # The Go linter, its linters chosen in controller/.golangci.yml (lint:controller).
 "aqua:golangci/golangci-lint" = "2.15.0"
+# Runs the Go tests (test:controller) and renders go test's JSON events, which
+# it also keeps in a file for a reader that decides from them.
+"aqua:gotestyourself/gotestsum" = "1.13.0"
 jactionlint = { version = "2.4.0", workflow = "release.yaml" }
 # The workflows' security audit (lint:workflows), offline.
 zizmor = "1.31.1"
@@ -88,9 +94,20 @@ scorecard = { version = "5.6.0", lazy = true }
 age = { version = "1.3.2", lazy = true }
 # The image scan, here (image:trivy) and in Compose. Lazy, as age is.
 trivy = { version = "0.76.1", lazy = true }
+# Each image layer's bytes and the bytes a later layer leaves wasted (audit:image).
+# Lazy, as age is.
+dive = { version = "0.13.1", lazy = true }
 # Tags a proven image on main: `crane tag` PUTs the manifest's own bytes, so
 # the tag names the signed digest. Lazy, as age is.
 crane = { version = "0.22.1", lazy = true }
+# Signs and verifies the composition, here, in CI, in an extension's admission
+# and on the host, whose verifier is generated from this lock's linux-x64 entry
+# (controller/host/verifier.gen.go). Lazy, as age is.
+cosign = { version = "3.1.3", lazy = true }
+# Known advisories in the npm tools' lock and the controller's modules, the
+# Go ones judged by whether the controller calls the vulnerable code
+# (lint:audit). Lazy, as age is.
+osv-scanner = { version = "2.7.0", lazy = true }
 
 # The code graph the structural bar indexes with. Linux takes the portable
 # (static) build so the runner needs no matching libc. Lazy: only
@@ -127,9 +144,8 @@ linux-x64 = { asset_pattern = "codeql-bundle-linux64.tar.zst" }
 # "database is locked"). It is named as a test run's scratch is, for the mise
 # that ran it, so the next test run sweeps it (hq/config/sandbox.py). A gate
 # sees no extension set it did not ask for. A task extends one template and a
-# template extends none, so django-heavy and django-browser restate django's
-# env (test_browser_gate_tasks holds them to it): an env file
-# could hold it once, but mise reads one as written, never rendered, and the
+# template extends none, so django-browser restates django's env
+# (test_browser_gate_tasks holds it to it): an env file could hold it once, but mise reads one as written, never rendered, and the
 # database path is an exec. The composed suite extends django and sets what
 # it changes in its own header.
 
@@ -140,25 +156,19 @@ env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/seve
 # A task that loads the machine runs under tools/lib/heavy.sh, which says how
 # the turn is taken: its shell is mise's default behind the wrapper. Its
 # SEVERINO_HEAVY_BOUND stops a hung holder once its turn has started: well
-# above the slowest gate (the suite, a browser gate), and an aggregate's above
-# the gates it runs in turn. It carries no mise timeout, whose clock would run
+# above the slowest gate (the suite, a browser gate). It carries no mise timeout, whose clock would run
 # while the task waits for its turn.
 [task_templates.heavy]
 env = { SEVERINO_HEAVY_BOUND = "30m" }
 shell = "tools/lib/heavy.sh sh -o errexit -c"
 
-# A Django gate that loads the machine: django's env inside a heavy turn.
-[task_templates.django-heavy]
-env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false, SEVERINO_HEAVY_BOUND = "30m" }
-shell = "tools/lib/heavy.sh sh -o errexit -c"
-
-# A browser gate: django-heavy's env and turn, WebKit installed first, and the
-# test classes its task names in `vars.classes`, which mise renders from the
-# extending task's own vars.
+# A browser gate: django's env inside a heavy turn, WebKit and the lint tools
+# (axe-core, which the survey runs) installed first, and the test classes its
+# task names in `vars.classes`, which mise renders from the extending task's own vars.
 [task_templates.django-browser]
 env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false, SEVERINO_HEAVY_BOUND = "30m" }
 shell = "tools/lib/heavy.sh sh -o errexit -c"
-depends = [{ task = "setup:browser", args = ["webkit"] }]
+depends = [{ task = "setup:browser", args = ["webkit"] }, "setup:lint-tools"]
 usage = 'flag "--fallback-face" help="Draw every page in the system face, as a reader sees it before Inter loads"'
 run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test {{ vars.classes }} --noinput --parallel auto"
 
@@ -284,9 +294,7 @@ run = "uv run python -m tools.gate.fast"
 
 [tasks.lint]
 description = "After editing, or when fast is not enough: CI's lint job, every lint:* gate: lint, types, structure, dependencies, security, derived files"
-# Run-form, so the gates and the installs they depend on run inside one turn.
-extends = "heavy"
-env = { SEVERINO_HEAVY_BOUND = "2h" }
+# No turn of its own: the gates whose memory needs one take it.
 run = "uv run python -m tools.gate.verdict lint mise run -c 'lint:*'"
 
 [tasks.scan]

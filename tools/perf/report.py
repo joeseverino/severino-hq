@@ -6,10 +6,10 @@ noise. What it measures and its flags: docs/Development.md. A report, never a
 gate.
 """
 
-import copy
 import os
 import shutil
 import signal
+import subprocess
 import sys
 import time
 from collections.abc import Callable, Iterator
@@ -24,11 +24,22 @@ lazy from django.core.management import call_command
 lazy from django.test import override_settings
 lazy from playwright.sync_api import sync_playwright
 
+from hq.platform.core.attribution import from_the_shell
 from hq.platform.core.tests import task
 from hq.platform.core.tests.browser.in_flight import SETTLED
-from hq.platform.core.tests.task import ESTATE, PageRefused, RefError, estate_name, usage, worktree
+from hq.platform.core.tests.task import ESTATE, PageRefused, RefError, estate_name, trusted_mise, usage, worktree
 from tools.perf import measure, parse, runs, table
-from tools.perf.targets import COLD_STARTS, Image, NotMeasured, Scratch, clean_env, run
+from tools.perf.targets import (
+    COLD_STARTS,
+    IMAGE_MEMORY,
+    MISE_STATE,
+    SCRATCH_MEMORY,
+    Image,
+    NotMeasured,
+    Scratch,
+    clean_env,
+    run,
+)
 lazy from hq.platform.core import seeds
 lazy from hq.platform.core.tests.browser.estate import Redirected, ask_as_production, landing, navigation, owner_client
 lazy from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, viewport
@@ -59,7 +70,12 @@ class Plan:
 
     @property
     def target(self) -> str:
-        return "image" if self.image else "dev:scratch"
+        """What is served: a composed image's memory and cold start are not the host image's, so a
+        kept report of one never stands in for the other."""
+
+        if not self.image:
+            return "dev:scratch"
+        return "image:composed" if self.extensions else "image"
 
     def key(self) -> dict[str, Any]:
         """What a kept report must have been asked to stand in for a measurement under this plan."""
@@ -72,6 +88,7 @@ class Plan:
             "seed": self.seed,
             "extensions": self.extensions,
             "browser_waits_for": SETTLED,
+            "memory": IMAGE_MEMORY if self.image else SCRATCH_MEMORY,
         }
 
 
@@ -139,7 +156,9 @@ def plan() -> Plan:
             chosen = task.pages(asked.repeated("pages"), every)
         except PageRefused as refused:
             raise Unservable(f"{refused} perf serves the {ESTATE}'s pages alone.") from None
-        every, chosen = landed(seed, every, chosen)
+        # Seeded in this process rather than through manage.py, so its door binds here.
+        with from_the_shell("perf.report.plan"):
+            every, chosen = landed(seed, every, chosen)
     return Plan(
         pages=chosen,
         walked=list(dict.fromkeys([*every, *chosen])),
@@ -183,16 +202,30 @@ def base_tree(commit: str) -> Iterator[Path]:
         yield tree
 
 
-def image_of(tree: Path, commit: str, *, here: bool) -> str:
-    """The image to run for ``tree``: the one IMAGE hands over here, else one image:build makes."""
+def image_of(tree: Path, commit: str, *, here: bool, composed: bool) -> str:
+    """The image to run for ``tree``: the one IMAGE hands over here, else the host image
+    image:build makes, composed with this checkout's extension set where the plan composes one,
+    as production runs it. A base tree has no image:compose of its own, so this checkout's
+    composes it with the base's own composition/Dockerfile and staging."""
 
     if here and os.environ.get("IMAGE"):
         return os.environ["IMAGE"]
-    tag = f"severino-hq:perf-{commit}"
+    host = f"severino-hq:perf-{commit}"
     run(
-        ["mise", "-C", str(tree), "run", "image:build", "--tag", tag],
-        env=clean_env(MISE_TRUSTED_CONFIG_PATHS=str(tree)),
+        ["mise", "-C", str(tree), "run", "image:build", "--tag", host],
+        env=clean_env(**({} if here else trusted_mise(tree, tree.parent / MISE_STATE))),
     )
+    if not composed:
+        return host
+    tag = f"{host}-composed"
+    command = ["mise", "-C", str(ROOT), "run", "image:compose", "--host", host, "--tag", tag, "--context", str(tree)]
+    done = subprocess.run(command, capture_output=True, text=True, env=clean_env(), check=False)
+    if done.returncode:
+        said = f"{done.stdout}\n{done.stderr}"
+        # The build collects static under the set, so a plugin API's refusal surfaces here, above
+        # the build's own closing lines, and serve() reads it to measure the host alone.
+        tail = "\n".join(said.strip().splitlines()[-20:])
+        raise NotMeasured(f"image:compose exited {done.returncode}: {parse.api_refusal(said) or tail}")
     return tag
 
 
@@ -297,7 +330,8 @@ def measure_costs(server: Live, asked: Plan) -> None:
         for page, count in target.queries(asked.pages).items():
             server.entry(page)["server"]["queries"] = count
 
-    print(f"Measuring {report['commit']}: cold start, {COLD_STARTS} times", flush=True)
+    report["load"] = runs.load()
+    print(f"Measuring {report['commit']} at load {report['load']}: cold start, {COLD_STARTS} times", flush=True)
     recorder.attempt("cold start", cold_start)
     recorder.attempt("memory idle", lambda: memory.update(idle_bytes=target.memory()))
     try:
@@ -327,7 +361,7 @@ def serve(
     print(f"Starting {commit} ({asked.target}, {asked.seed}); its server's output is in {log}", flush=True)
     try:
         target = (
-            Image(image_of(tree, commit, here=here), log, asked.seed)
+            Image(image_of(tree, commit, here=here, composed=bool(asked.extensions)), log, asked.seed)
             if asked.image
             else Scratch(tree, log, asked.seed, trusted=not here, alone=bool(asked.alone))
         )
@@ -336,6 +370,8 @@ def serve(
     except Exception as error:
         recorder.fail("start", error)
         said = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
+        # A composed image's build can refuse the set before any server runs.
+        said += f"\n{error}"
         refused = None if asked.alone else parse.api_refusal(said)
         if refused:
             raise SetRefused(f"{commit} refused the extension set: {refused}") from error
@@ -406,8 +442,8 @@ def closing(kept: runs.Run, here: runs.Report, base: runs.Report | None) -> str:
     said += f" ({here['target']}, {kept.doc['plan']['seed']})"
     if kept.doc.get("alone"):
         said += f", the host measured alone{' on both sides' if base else ''} because {kept.doc['alone'].rstrip('.')}"
-    if reused := kept.doc.get("base_reused_from"):
-        said += f", the base's browser, memory and cold start kept from run {reused}"
+    if reused := kept_from(kept.doc):
+        said += f", {reused}"
     if base:
         said += f": {verdict(here)};"
     else:
@@ -421,15 +457,29 @@ def stop(signum: int, _frame: object) -> None:
     raise SystemExit(128 + signum)
 
 
+def kept_from(doc: dict[str, Any]) -> str | None:
+    """Which run the base's numbers but its server time are kept from, and both sides' loads, or
+    None when this run measured them."""
+
+    if not (reused := doc.get("base_reused_from")):
+        return None
+    said = f"the base's browser, memory and cold start kept from run {reused}, at load {doc['base']['load']}"
+    here = (doc.get("here") or {}).get("load")
+    return said + (f" beside this run's {here}" if here is not None else ", this run's unmeasured")
+
+
 def kept_base(commit: str, asked: Plan, kept: runs.Run) -> bool:
     """Whether the base's numbers but its server time come from a complete report of these pages
-    kept under the same plan, taken into this run."""
+    kept under the same plan and a load alike the load now, taken into this run's base."""
 
-    if not (found := runs.saved(OUT, commit, asked.key())):
+    now = runs.load()
+    if not (found := runs.saved(OUT, commit, asked.key(), now)):
+        print(f"Base {commit}: no complete run of it kept under this plan within load {runs.LOAD_BOUND} of {now}")
         return False
     source, report = found
-    print(f"Base {commit}: its browser, memory and cold start from run {source} (--fresh measures them)")
-    kept.doc["base"] = copy.deepcopy(report)
+    said = f"Base {commit}: its browser, memory and cold start from run {source}, at load {report['load']}"
+    print(f"{said} (--fresh measures them)")
+    runs.stand_in(kept.doc["base"], report)
     kept.doc["base_reused_from"] = source
     kept.save()
     return True
@@ -441,14 +491,10 @@ def measure_run(base_commit: str | None, here_commit: str, asked: Plan, kept: ru
 
     with ExitStack() as stack:
         live = {}
-        measuring = {"here"}
         if base_commit:
-            short = base_commit[:12]
-            if fresh or not kept_base(short, asked, kept):
-                measuring.add("base")
             live["base"] = serve(
                 stack.enter_context(base_tree(base_commit)),
-                short,
+                base_commit[:12],
                 here=False,
                 asked=asked,
                 kept=kept,
@@ -461,6 +507,11 @@ def measure_run(base_commit: str | None, here_commit: str, asked: Plan, kept: ru
         # history the other lacks.
         if serving:
             measure_server(serving, asked)
+        # Whether a kept base stands in is decided under the load here's numbers are measured
+        # under next, after the builds and boots, which load the machine more than measuring does.
+        measuring = set(serving)
+        if base_commit and not fresh and kept_base(base_commit[:12], asked, kept):
+            measuring.discard("base")
         # One server at a time, so the other's work is not in its numbers.
         for side, server in serving.items():
             if side in measuring:

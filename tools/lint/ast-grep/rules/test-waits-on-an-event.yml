@@ -13,6 +13,11 @@ note: >-
   Wait on what the sleep was waiting for: a threading.Event the work sets
   (event.wait(timeout) fails the test if it never comes), a thread's join, or
   a fake clock where the code reads the time.
+files:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/testing.py"
+  - "**/*_testing.py"
 rule:
   any:
     - all:

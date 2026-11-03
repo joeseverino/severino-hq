@@ -9,6 +9,14 @@ extends = "django"
 env = { SEVERINO_HQ_PLUGINS = "tests.fixtures.example_hq_plugin.plugin:plugin" }
 run = ["uv run python manage.py check", "uv run python manage.py plugins"]
 
+# The check every extension's CI runs (plugin-checks.yml), on a package of the
+# host's own, so a host change that breaks it fails here rather than in each
+# extension once it reaches main.
+["test:plugin-check"]
+description = "The extension check on a packaged example extension, as an extension's CI runs it"
+hide = true
+run = "tools/pipeline/check-plugin.sh --plugin-root examples/extension"
+
 ["test:migrations"]
 description = "No model change without its migration"
 hide = true
@@ -23,9 +31,10 @@ extends = "django"
 run = "uv run python manage.py test tests.fuzz.api_properties --noinput --parallel 1"
 
 # Go does not vary with Python, so `mise run test` runs it once, outside the
-# interpreter loop.
+# interpreter loop. gotestsum renders go test's JSON events as text, and writes
+# them to the file GOTESTSUM_JSONFILE names, which `test --at --go` reads.
 ["test:controller"]
 description = "The Go controller's tests under the race detector"
 hide = true
 extends = "heavy"
-run = "go -C controller test -race ./..."
+run = "gotestsum --format standard-quiet --raw-command -- go -C controller test -json -race ./..."

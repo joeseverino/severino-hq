@@ -44,9 +44,10 @@ class ServerTimingTests(SimpleTestCase):
 
 
 class PercentileTests(SimpleTestCase):
-    def test_median_and_nearest_rank_p95(self):
+    def test_median_and_interpolated_p95(self):
         values = [float(value) for value in range(20, 0, -1)]
-        self.assertEqual(parse.percentiles(values), (10.5, 19.0))
+        # 1 to 20: the median halfway between 10 and 11, the 95th a twentieth of the way from 19 to 20.
+        self.assertEqual(parse.percentiles(values), (10.5, 19.05))
 
     def test_one_value_is_both(self):
         self.assertEqual(parse.percentiles([4.2]), (4.2, 4.2))
@@ -62,15 +63,15 @@ class MemoryTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             parse.footprint_bytes("footprint: no process matching 123")
 
-    def test_docker_memory_in_either_unit_system(self):
-        self.assertEqual(parse.docker_memory_bytes("2.746MiB / 7.774GiB\n"), round(2.746 * 1024**2))
-        self.assertEqual(parse.docker_memory_bytes("512kB / 1GB"), 512_000)
-        self.assertEqual(parse.docker_memory_bytes("0B / 0B"), 0)
+    def test_a_container_s_anonymous_memory_is_read_from_its_memory_stat(self):
+        # The first lines of a cgroup v2 memory.stat, as a container's reads.
+        stat = "anon 102043648\nfile 4096\nkernel 5259264\nkernel_stack 49152\npagetables 446464\n"
+        self.assertEqual(parse.container_anon_bytes(stat), 102043648)
 
-    def test_docker_without_a_usage_is_refused(self):
-        for output in ("", "--", "Error response from daemon: No such container"):
+    def test_a_memory_stat_without_anonymous_memory_is_refused(self):
+        for output in ("", "file 4096\n", "cat: /sys/fs/cgroup/memory.stat: No such file or directory"):
             with self.subTest(output=output), self.assertRaises(ValueError):
-                parse.docker_memory_bytes(output)
+                parse.container_anon_bytes(output)
 
 
 class CookieTests(SimpleTestCase):

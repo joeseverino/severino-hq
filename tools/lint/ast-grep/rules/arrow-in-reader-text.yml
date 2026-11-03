@@ -8,6 +8,14 @@ language: python
 severity: error
 message: An arrow in a string a person reads or hears is said as "right arrow"; say the relation in words.
 note: Write the word ("to", "at"), or hand both values to a template that includes partials/_change.html.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
 rule:
   kind: string
   regex: "→"

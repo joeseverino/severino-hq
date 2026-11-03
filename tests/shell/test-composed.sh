@@ -12,16 +12,18 @@ trap 'rm -rf "${work}"' EXIT
 # A checkout with what the task reads: the image admits manage.py, not notes/,
 # and admits built/ only for a stage that is not /app's.
 fixture="${work}/checkout"
-mkdir -p "${fixture}/$(dirname "${task}")" "${fixture}/tools/lib" "${fixture}/tools/gate" "${fixture}/notes" "${fixture}/built" "${work}/bin" "${work}/tmp"
+mkdir -p "${fixture}/$(dirname "${task}")" "${fixture}/tools/lib" "${fixture}/tools/gate" "${fixture}/notes" "${fixture}/built" "${fixture}/deploy" "${work}/bin" "${work}/tmp"
 cp "${repo}/${task}" "${fixture}/${task}"
 cp "${repo}/tools/lib/heavy.sh" "${repo}/tools/lib/heavy-turn.sh" "${fixture}/tools/lib/"
-cp "${repo}/tools/lib/export-tree.sh" "${repo}/tools/lib/source-url.sh" "${repo}/tools/lib/extension-set.sh" "${fixture}/tools/lib/"
+cp "${repo}/tools/lib/export-tree.sh" "${repo}/tools/lib/image-tree.sh" "${repo}/tools/lib/source-url.sh" "${repo}/tools/lib/extension-set.sh" "${fixture}/tools/lib/"
 cp "${repo}/tools/__init__.py" "${fixture}/tools/"
 cp "${repo}/tools/gate/__init__.py" "${repo}/tools/gate/verdict.py" "${fixture}/tools/gate/"
-printf '*\n!built/\n!manage.py\n' >"${fixture}/Dockerfile.dockerignore"
+printf '*\n!built/\n!deploy/\n!manage.py\n' >"${fixture}/Dockerfile.dockerignore"
 printf 'FROM scratch\nCOPY --exclude=built . /app\n' >"${fixture}/Dockerfile"
 : >"${fixture}/manage.py"
 : >"${fixture}/built/main.go"
+# A name git quotes in a list of lines, as systemd's escaping writes a unit's.
+: >"${fixture}/deploy/run\x2dname.mount"
 : >"${fixture}/notes/private.md"
 git -C "${fixture}" init -q
 git -C "${fixture}" remote add origin https://example.com/hq.git
@@ -92,6 +94,7 @@ rm -f "${fixture}/var/gate/test-composed.txt"
 kept="$(cd "${fixture}" && pwd -P)/var/gate/test-composed.txt"
 [ -f "${kept}" ] || fail "the run kept no verdict in var/gate"
 grep -qF "verdict kept in ${kept}" "${work}/out" || fail "the output does not name the file that keeps the verdict"
+case "$(grep "^\[test:composed\]" "${work}/out" | head -n 1)" in *" ${kept}") ;; *) fail "the run does not open on the file that keeps its verdict" ;; esac
 case "$(grep "^\[test:composed\]" "${work}/out" | tail -n 1)" in "[test:composed] FAILED"*) ;; *) fail "the run does not end on its verdict" ;; esac
 
 # Required without an extension set, it refuses before the suite runs; with
@@ -119,12 +122,12 @@ case "${first}" in *"${work}/alpha/src, ${work}/beta-worktree/src"*) ;; *) fail 
 [ "$(cat "${work}/seen.set")" = "example_alpha.plugin:plugin,example_beta.plugin:plugin|${sources}" ] ||
     fail "the suite did not import the set named: $(cat "${work}/seen.set")"
 
-# The copy holds only what the image admits.
+# The copy holds what the image admits and only that.
 rm -f "${work}/seen"
 { echo '#!/bin/sh'; cat "${work}/uv-run"; } >"${work}/bin/uv"
 cat >>"${work}/bin/uv" <<'STUB'
-[ -f manage.py ] && [ ! -e notes ] && [ ! -e built ] && [ ! -e .git ]
+[ -f manage.py ] && [ -f 'deploy/run\x2dname.mount' ] && [ ! -e notes ] && [ ! -e built ] && [ ! -e .git ]
 STUB
-[ "$(run 0)" = 0 ] || fail "the copy holds more than the image admits"
+[ "$(run 0)" = 0 ] || fail "the copy does not hold exactly what the image admits"
 
 echo "test:composed tests passed"

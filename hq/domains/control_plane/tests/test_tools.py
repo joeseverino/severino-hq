@@ -6,6 +6,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from hq.platform.application.tests.writers import form_keyed
+
 ADDRESS = "203.0.113.7"
 
 
@@ -15,28 +17,33 @@ class ToolsRefreshTests(TestCase):
         self.client.force_login(user)
 
     def test_a_get_never_asks_for_a_refresh(self):
-        with mock.patch(
-            "hq.platform.application.capabilities.execute_capability", return_value={"ok": True}
-        ) as execute:
+        with mock.patch("hq.domains.control_plane.tool_views.execute_posted", return_value={"ok": True}) as execute:
             self.client.get(
                 reverse("control_plane:tools"),
                 {"tab": "dns", "address": ADDRESS, "refresh": "1"},
             )
 
-        payloads = [call.args[1] for call in execute.call_args_list]
+        payloads = [call.args[2] for call in execute.call_args_list]
         self.assertTrue(payloads)
         self.assertFalse(any(payload.get("refresh") for payload in payloads))
 
     def test_a_post_refreshes_and_returns_to_the_result(self):
-        with mock.patch(
-            "hq.platform.application.capabilities.execute_capability", return_value={"ok": True}
-        ) as execute:
-            response = self.client.post(reverse("control_plane:tools"), {"tab": "dns", "address": ADDRESS})
+        with mock.patch("hq.domains.control_plane.tool_views.execute_posted", return_value={"ok": True}) as execute:
+            response = self.client.post(reverse("control_plane:tools"), form_keyed({"tab": "dns", "address": ADDRESS}))
 
         execute.assert_called_once()
-        self.assertEqual(execute.call_args.args[1], {"address": ADDRESS, "refresh": True})
+        self.assertEqual(execute.call_args.args[2], {"address": ADDRESS, "refresh": True})
         self.assertRedirects(
             response,
             reverse("control_plane:tools") + f"?tab=dns&address={ADDRESS}",
             fetch_redirect_response=False,
         )
+
+    def test_a_refused_refresh_says_why_on_the_page_it_returns_to(self):
+        refused = {"ok": False, "error": {"code": "forbidden", "message": "An example refusal."}}
+        with mock.patch("hq.domains.control_plane.tool_views.execute_posted", return_value=refused):
+            response = self.client.post(
+                reverse("control_plane:tools"), form_keyed({"tab": "dns", "address": ADDRESS}), follow=True
+            )
+
+        self.assertIn("An example refusal.", [str(message) for message in response.context["messages"]])

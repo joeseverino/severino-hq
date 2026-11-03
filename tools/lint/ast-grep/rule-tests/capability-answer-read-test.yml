@@ -1,0 +1,21 @@
+id: capability-answer-read
+valid:
+  - 'answer = execute_capability("example.do", {}, principal=principal)'
+  - 'return execute_capability("example.do", {}, principal=principal)'
+  - 'self.assertTrue(execute_capability("example.do", {}, principal=principal)["ok"])'
+  - 'ran = run_capability("example.do", {}, principal=principal, idempotency_key="example-key")'
+  - 'results = {name: capabilities.execute_capability(name, {}, principal=principal) for name in names}'
+  - 'execute_capabilities("example.do")'
+invalid:
+  - 'execute_capability("example.do", {}, principal=principal)'
+  - |
+    def _held():
+        execute_capability(
+            "documentation.sync",
+            {"manifest": []},
+            principal=agent,
+        )
+  - 'capabilities.execute_capability("example.do", {}, principal=principal)'
+  - 'services.execute_capability("example.do", {})'
+  - 'run_capability("example.do", {}, principal=principal, idempotency_key="example-key")'
+  - '_ = execute_capability("example.do", {}, principal=principal)'

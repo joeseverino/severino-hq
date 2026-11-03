@@ -1,20 +1,25 @@
 """The layout rules held over single components, drawn on probe pages and pages of the stress estate."""
 
+import io
 import json
 import re
+import shutil
+import zipfile
+from contextlib import redirect_stdout
 from datetime import date, timedelta
 from decimal import Decimal
+from unittest import mock
 
 from django.template.loader import render_to_string
 
 from hq.platform.application import asks
 from hq.platform.application.asks import Ask, Standing
 from hq.platform.application.money import money
-from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries
+from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, line_chart
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
 from hq.platform.core.tests.browser.gate import add_css, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
-from hq.platform.core.tests.browser.probes.boxes import MAP, SMALL_TARGETS
+from hq.platform.core.tests.browser.probes.boxes import ANY_SCROLLER, MAP, SIDEWAYS, SMALL_TARGETS
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
 from hq.platform.core.tests.browser.probes.parts import READINGS, SPILLED_LABELS, WRAPPED, reading_problems
 from hq.platform.core.tests.browser.probes.settle import KEPT_SELECTORS, PRESS_EVERY_SHOWN, SETTLE
@@ -23,15 +28,24 @@ from hq.platform.core.tests.browser.probes.tables import (
     BLANK_TABLE,
     CELLS,
     COLUMNS_SHOWN,
+    CUT_AND_CLOSED,
+    CUT_TABLE,
+    CUT_WHEN_OPEN,
     IDENTIFIER_TABLES,
     IDENTIFIER_VALUES,
+    OPEN_ROW_TABLE,
+    OPEN_ROW_VALUES,
     PHONE_TABLE,
+    POPOVER_IN_A_CELL,
+    POPOVER_VALUES,
     PRESS_FIRST_ROW_TOGGLE,
     ROW_ARRIVES,
     ROW_TOGGLE_TABLES,
     ROW_TOGGLES,
     SORT_BY,
     TABLES_THAT_DO_NOT_FIT,
+    TITLED_CUTS,
+    TITLED_ROWS,
 )
 from hq.platform.core.tests.browser.probes.text import (
     BROKEN_TOKENS,
@@ -44,7 +58,7 @@ from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.stress import ALL_PAGES
 from hq.platform.core.tests.browser.survey import _IDENTIFIER
-from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS
+from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS, viewport
 from hq.platform.core.tests.test_browser_fixtures import PAGES
 
 
@@ -113,6 +127,88 @@ _MEASURE_A_COPY = """() => {
   const wide = copy.getBoundingClientRect().width;
   copy.remove();
   return wide;
+}"""
+
+
+# How the queue's table stands: whether it is in its narrow box, and the
+# width of every action cell shown.
+_QUEUE_COLUMNS = """([queue, act]) => {
+  const table = document.querySelector(queue);
+  return {
+    narrow: table.hasAttribute('data-narrow'),
+    acts: [...table.querySelectorAll(act)].filter((cell) => cell.checkVisibility())
+      .map((cell) => Math.round(cell.getBoundingClientRect().width)),
+  };
+}"""
+
+# A change of content inside the queue's region, as a fragment or a probe
+# makes: a part put in a row's cell and taken away.
+_CHANGE_IN_THE_QUEUE = """(cell) => {
+  const into = document.querySelector(cell);
+  into.append(document.createElement('span'));
+  into.lastChild.remove();
+}"""
+
+# Every row that offers to open, opened by a way other than its toggle: the
+# classes one row gains when its toggle opens it (and loses as it closes)
+# set on every such row directly. How many rows it opened.
+_OPEN_BY_CLASS = """(toggles) => {
+  const shown = [...document.querySelectorAll(toggles)].filter((toggle) => toggle.checkVisibility());
+  const row = shown[0].closest('tr');
+  const had = new Set(row.classList);
+  shown[0].click();
+  const gained = [...row.classList].filter((name) => !had.has(name));
+  shown[0].click();
+  shown.forEach((toggle) => toggle.closest('tr').classList.add(...gained));
+  return gained.length ? shown.length : 0;
+}"""
+
+
+# The table a reader scrolls through: the first in a region whose heading
+# sticks, with rows enough to scroll past.
+_SCROLLED_TABLE = """const table = [...document.querySelectorAll(region)]
+    .map((each) => [...each.children].find((child) => child instanceof HTMLTableElement))
+    .find((each) => each?.tHead && each.tBodies[0]?.rows.length > 12);
+  const rows = [...table.tBodies[0].rows].filter((row) => row.checkVisibility() && !row.hasAttribute('data-row-detail'));
+  const heading = table.tHead.rows[0].cells[0];
+  const clear = (box) => Math.round(box.getBoundingClientRect().top - heading.getBoundingClientRect().bottom);"""
+
+# A row deep in the table landed on by a link to it, as tables.js lands one:
+# how far below the heading the row's top is.
+_LAND_ON_A_ROW = (
+    """async (region) => {
+  """
+    + _SCROLLED_TABLE
+    + """
+  const row = rows[12];
+  row.id ||= 'example-landed-row';
+  window.location.hash = row.id;
+  await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  return clear(row);
+}"""
+)
+
+# The first control of the row above, which the window has scrolled past,
+# given the focus as the keyboard gives it: how far below the heading it is.
+_FOCUS_THE_ROW_ABOVE = (
+    """async ([region, target]) => {
+  """
+    + _SCROLLED_TABLE
+    + """
+  const control = [...rows[11].querySelectorAll(target)].find((each) => each.checkVisibility());
+  control.focus({ focusVisible: true });
+  await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  return clear(control);
+}"""
+)
+
+# Where a heading that sticks stands in the window, once its table's
+# twentieth row is scrolled to the top.
+_STUCK_HEADING_TOP = """(region) => {
+  const table = [...document.querySelector(region).children].find((child) => child instanceof HTMLTableElement);
+  const heading = table.tHead.rows[0].cells[0];
+  table.tBodies[0].rows[20].scrollIntoView({ block: 'start' });
+  return Math.round(heading.getBoundingClientRect().top);
 }"""
 
 
@@ -289,6 +385,59 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertTrue(self.page.locator(SELECTORS["one_line"]).is_visible())
                 self.assertEqual(self.page.evaluate(WRAPPED, SELECTORS["one_line"]), [])
 
+    def test_a_chart_tab_shows_which_is_chosen_and_where_the_keyboard_is(self):
+        """With no script, the chosen tab is drawn apart from the others and
+        its panel alone shows; an arrow key or a press chooses another, the
+        tab the keyboard reaches wears the focus ring, and a press draws none."""
+
+        start = date(2026, 1, 5)
+        charts = [
+            line_chart(
+                title,
+                "Example readings over a week.",
+                ((title, tuple((start + timedelta(days=day), float(day * slot + 3)) for day in range(7)), slot),),
+                unit="example",
+            )
+            for slot, title in enumerate(("Example pace", "Example cadence", "Example power"), 1)
+        ]
+        self.pages = {
+            **self.pages,
+            "chart-tabs-probe": probe(
+                render_to_string("partials/_chart_tabs.html", {"charts": charts, "group": "example"})
+            ),
+        }
+        drawn = "(tab) => { const s = getComputedStyle(tab); return [s.borderColor, s.backgroundColor, s.color]; }"
+        ring = "(tab) => getComputedStyle(tab).outlineStyle"
+        self.open("chart-tabs-probe", WIDE)
+        tabs = self.page.locator(SELECTORS["chart_tab"])
+        panels = self.page.locator(SELECTORS["chart_panel"])
+
+        def chosen():
+            looks = [tab.evaluate(drawn) for tab in tabs.all()]
+            return [at for at, look in enumerate(looks) if looks.count(look) == 1]
+
+        def shown():
+            return [at for at, panel in enumerate(panels.all()) if panel.is_visible()]
+
+        def ringed():
+            return [at for at, tab in enumerate(tabs.all()) if tab.evaluate(ring) != "none"]
+
+        self.assertEqual((chosen(), shown(), ringed()), ([0], [0], []))
+        # The key for every control (Option-Tab in WebKit, as Safari has it,
+        # and Tab elsewhere) reaches the group at its chosen radio, and an
+        # arrow chooses the next. WebKit drops :focus-visible when an arrow
+        # moves focus within a radio group, so past that the ring may be gone,
+        # but it is never left on another tab.
+        self.page.keyboard.press("Alt+Tab" if self.browser.browser_type.name == "webkit" else "Tab")
+        self.assertEqual((chosen(), shown(), ringed()), ([0], [0], [0]))
+        self.page.keyboard.press("ArrowRight")
+        self.assertEqual((chosen(), shown()), ([1], [1]))
+        self.assertLessEqual(set(ringed()), {1})
+        tabs.nth(2).click()
+        # A tab under the pointer is drawn as hovered, which is not chosen.
+        self.page.mouse.move(0, 0)
+        self.assertEqual((chosen(), shown(), ringed()), ([2], [2], []))
+
     @with_script
     def test_a_rows_ask_says_its_sentence_on_the_line_its_row_opens_to(self):
         """A row's Refresh that fails says its word in the row, which keeps
@@ -399,27 +548,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
             [said for said in refusals if "/inline-script-probe/" in said and "script-src" in said], refusals
         )
 
-    @with_script
-    def test_a_page_that_moves_by_itself_past_the_shift_limit_is_found(self):
-        """A block let in above the page's content once it is drawn pushes
-        everything down by most of the screen, a score far past `CLS_LIMIT`;
-        the page as it loaded is under it. An engine that records no layout
-        shift has nothing to say either way."""
-
-        self.open(next(iter(PAGES)), WIDE)
-        self.settle()
-        read = [SELECTORS["vendored"], CLS_LIMIT]
-        self.assertEqual(self.page.evaluate(LAYOUT_SHIFTS, read), [])
-        self.page.evaluate("""() => {
-          const block = document.createElement('div');
-          block.style.setProperty('block-size', '600px');
-          document.querySelector('main').prepend(block);
-        }""")
-        self.settle()
-        recorded = self.page.evaluate("() => PerformanceObserver.supportedEntryTypes.includes('layout-shift')")
-        found = self.page.evaluate(LAYOUT_SHIFTS, read)
-        self.assertEqual(len(found), 1 if recorded else 0, found)
-
     def test_a_hit_area_hung_past_a_control_is_no_label_and_a_word_past_it_is(self):
         """The hit area a small control hangs beside itself widens what it
         scrolls, never what it says; a word wider than its control spills."""
@@ -509,6 +637,42 @@ class ComponentLayoutTests(LayoutBrowserTests):
         found = [line for line in self.page.evaluate(CELLS) if "example-" in line]
         self.assertEqual([line.split(" runs ")[0] for line in found], ["div.example-box"])
 
+    def test_what_moves_sideways_is_allowed_only_inside_a_box_the_exemption_names(self):
+        """A box past the page's edge is found wherever it is not held by a
+        scrolling box the exemption names: under any scroller, one inside a
+        lane that scrolls is held and the lane passes; under the boxes built
+        to scroll, the lane is found for what it hides and what it holds for
+        running past the page. Either way a table's own scroll box run past
+        the page is found."""
+
+        self.open(next(iter(PAGES)), NARROWEST)
+        self.page.evaluate("""() => {
+          const wide = (name) => {
+            const box = document.createElement('div');
+            box.className = name;
+            box.style.cssText = 'inline-size: 200vw; block-size: 1rem';
+            return box;
+          };
+          const lane = document.createElement('div');
+          lane.className = 'example-lane';
+          lane.style.setProperty('overflow-x', 'auto');
+          lane.append(wide('example-in-lane'));
+          const table = document.createElement('div');
+          table.className = 'table-scroll example-table';
+          table.style.cssText = 'overflow-x: auto; inline-size: 200vw; max-inline-size: none; block-size: 1rem';
+          document.querySelector('main').append(lane, wide('example-loose'), table);
+        }""")
+
+        def found(allowed):
+            said = self.page.evaluate(SIDEWAYS, allowed)
+            return {line.split(" ")[0] for line in said if "example-" in line}
+
+        self.assertEqual(found(ANY_SCROLLER), {"div.example-loose", "div.table-scroll.example-table"})
+        self.assertEqual(
+            found(SELECTORS["sideways"]),
+            {"div.example-lane", "div.example-in-lane", "div.example-loose", "div.table-scroll.example-table"},
+        )
+
     def test_a_word_wider_than_its_chip_may_break_and_a_short_one_in_a_wide_chip_may_not(self):
         """A run is measured against the box it lays out in: a digest that
         fits its cell but not the padded chip in it breaks wherever the column
@@ -581,6 +745,32 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertEqual(len(found), 1, found)
         self.assertIn("example-loose", found[0])
 
+    def test_a_digest_wider_than_its_line_breaks_where_it_must_and_a_word_never(self):
+        """A digest in a sentence (an account's key) is wider than its line, so
+        it breaks inside the letters it holds and that is no broken word,
+        while a word of the same sentence broken in its box is found."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate(
+            """(written) => {
+              for (const [name, text, breaks] of written) {
+                const box = document.createElement('p');
+                box.className = name;
+                box.textContent = text;
+                box.style.cssText = `inline-size: 12ch; word-break: normal; overflow-wrap: ${breaks}`;
+                document.querySelector('main').append(box);
+              }
+            }""",
+            [
+                ["example-digest", "Names the account " + "abcdefghijklmnop1" * 8, "anywhere"],
+                ["example-word", "Names the account examplelongerthanitsline", "anywhere"],
+            ],
+        )
+
+        found = [line for line in self.page.evaluate(BROKEN_WORDS_IN_TEXT, _IDENTIFIER) if "example-" in line]
+        self.assertEqual([line for line in found if "example-digest" in line], [])
+        self.assertTrue(any("example-word" in line for line in found), found)
+
     def test_a_toolbars_menus_wear_a_buttons_edge_and_its_search_a_fields(self):
         """A list's filter menu, toggle and sort are pressed, so in either
         palette none is edged as the search box beside them is, and a control
@@ -602,6 +792,21 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertEqual(
             self.page.evaluate(BUTTON_EDGES, SELECTORS["pressed"]), ["button.example-edged wears a field's edge"]
         )
+
+    def test_a_failure_keeps_a_trace_of_the_test_beside_its_screenshot(self):
+        """What a failure saves, CI keeps: the page as it stood, and the trace
+        of the steps that led there, each with the page as it stood then."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        with redirect_stdout(io.StringIO()):
+            self.shoot("example-failure")
+        folder = self.failures
+        if folder is None:
+            self.fail("the shot made no folder")
+        self.addCleanup(lambda: shutil.rmtree(folder))
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["example-failure.png", "example-failure.zip"])
+        with zipfile.ZipFile(folder / "example-failure.zip") as trace:
+            self.assertTrue(any(name.endswith(".trace") for name in trace.namelist()), trace.namelist())
 
     def test_a_small_target_under_an_open_menu_is_not_measured_and_one_in_view_is(self):
         """A target drawn under another element is out of a pointer's reach,
@@ -635,8 +840,133 @@ class ComponentLayoutTests(LayoutBrowserTests):
           place(menu, '260px', '0');
           document.body.append(menu);
         }""")
-        found = self.page.evaluate(SMALL_TARGETS, ["main :is(.example-hidden, .example-shown)", TARGET_MIN])
+        found = self.page.evaluate(
+            SMALL_TARGETS, ["main :is(.example-hidden, .example-shown)", TARGET_MIN, SELECTORS["floating"]]
+        )
         self.assertEqual({finding.split(" in ")[0] for finding in found}, {"a.example-shown"})
+
+    def test_a_stand_in_under_an_open_menu_still_stands_in_for_a_small_target_in_view(self):
+        """A target the size of one, covered by a menu drawn over it, is that
+        size again once the menu is dismissed, so a small target in view that
+        names it as doing the same job passes; one naming a small stand-in
+        still fails."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          const place = (el, top, left) => {
+            el.style.setProperty('position', 'fixed');
+            el.style.setProperty('top', top);
+            el.style.setProperty('left', left);
+          };
+          const link = (id, name, top, left, size) => {
+            const el = document.createElement('a');
+            el.href = '#';
+            if (id) el.id = id;
+            el.className = name;
+            el.textContent = 'x';
+            el.style.setProperty('display', 'block');
+            el.style.setProperty('width', size);
+            el.style.setProperty('height', size);
+            place(el, top, left);
+            return el;
+          };
+          const region = document.createElement('section');
+          region.append(
+            link('example-stand-in', 'example-stand-in', '300px', '40px', '30px'),
+            link('example-small-stand-in', 'example-stand-in', '300px', '300px', '10px'),
+          );
+          // Two small ones side by side, so neither is spaced clear of the other.
+          for (const [named, left] of [['example-stand-in', '40px'], ['example-small-stand-in', '300px']]) {
+            for (const step of [0, 10]) {
+              const small = link('', `example-named-${named.includes('small') ? 'small' : 'sized'}`, '400px', `${parseInt(left) + step}px`, '8px');
+              small.dataset.targetEquivalent = named;
+              region.append(small);
+            }
+          }
+          document.querySelector('main').append(region);
+          const menu = document.createElement('div');
+          menu.style.setProperty('width', '400px');
+          menu.style.setProperty('height', '60px');
+          menu.style.setProperty('z-index', '10');
+          menu.style.setProperty('background', 'white');
+          place(menu, '285px', '0');
+          document.body.append(menu);
+        }""")
+        found = self.page.evaluate(
+            SMALL_TARGETS,
+            [
+                "main :is(.example-stand-in, .example-named-sized, .example-named-small)",
+                TARGET_MIN,
+                SELECTORS["floating"],
+            ],
+        )
+        self.assertEqual({finding.split(" in ")[0] for finding in found}, {"a.example-named-small"})
+
+    def test_a_shown_popover_is_a_layer_of_its_own_beside_the_page_beneath(self):
+        """A popover's target reaching over the area a page target hangs
+        beside its box, short of its center, leaves that area the page
+        target's: the two lie in different layers, so neither is the other's
+        neighbor. The popover's own small targets still fail."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        foot = self.page.evaluate("""() => {
+          const place = (el, top, left) => {
+            el.style.setProperty('position', 'fixed');
+            el.style.setProperty('top', top);
+            el.style.setProperty('left', left);
+          };
+          // 18px tall, hit through the 24px its ::after hangs over its edges.
+          const beneath = document.createElement('a');
+          beneath.href = '#';
+          beneath.className = 'subtle-link example-beneath';
+          beneath.textContent = 'Example heading';
+          beneath.style.setProperty('font-size', '12px');
+          beneath.style.setProperty('line-height', '18px');
+          place(beneath, '300px', '40px');
+          document.querySelector('main').append(beneath);
+          const popover = document.createElement('div');
+          popover.popover = 'manual';
+          popover.style.setProperty('inset', 'auto');
+          popover.style.setProperty('margin', '0');
+          popover.style.setProperty('padding', '0');
+          place(popover, '200px', '40px');
+          const cover = document.createElement('button');
+          cover.type = 'button';
+          cover.className = 'example-cover';
+          cover.textContent = 'Example cover';
+          cover.style.setProperty('display', 'block');
+          cover.style.setProperty('box-sizing', 'border-box');
+          cover.style.setProperty('width', '200px');
+          cover.style.setProperty('height', '30px');
+          cover.style.setProperty('margin', '40px 0 0');
+          const pair = document.createElement('div');
+          pair.style.setProperty('position', 'absolute');
+          pair.style.setProperty('top', '8px');
+          pair.style.setProperty('left', '0');
+          for (const left of ['0', '10px']) {
+            const link = document.createElement('a');
+            link.href = '#';
+            link.className = 'example-within';
+            link.textContent = 'x';
+            link.style.setProperty('position', 'absolute');
+            link.style.setProperty('left', left);
+            link.style.setProperty('font-size', '8px');
+            link.style.setProperty('line-height', '8px');
+            pair.append(link);
+          }
+          popover.append(pair, cover);
+          document.body.append(popover);
+          popover.showPopover();
+          // Its foot 1px above the heading's box, in the 3px its ::after hangs there.
+          const foot = () => cover.getBoundingClientRect().bottom - beneath.getBoundingClientRect().top;
+          place(popover, `${200 - foot() - 1}px`, '40px');
+          return foot();
+        }""")
+        self.assertEqual(foot, -1)
+        found = self.page.evaluate(
+            SMALL_TARGETS, [":is(.example-beneath, .example-cover, .example-within)", TARGET_MIN, SELECTORS["floating"]]
+        )
+        self.assertEqual({finding.split(" in ")[0] for finding in found}, {"a.example-within"})
 
     def test_a_modal_dialog_leaves_the_page_beneath_unmeasured_and_its_own_targets_measured(self):
         """A modal dialog makes the rest of the document inert, so no
@@ -665,7 +995,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
           pair(dialog, 'example-within');
           dialog.showModal();
         }""")
-        found = self.page.evaluate(SMALL_TARGETS, [":is(.example-beneath, .example-within)", TARGET_MIN])
+        found = self.page.evaluate(
+            SMALL_TARGETS, [":is(.example-beneath, .example-within)", TARGET_MIN, SELECTORS["floating"]]
+        )
         self.assertEqual({finding.split(" in ")[0] for finding in found}, {"a.example-within"})
 
     def test_an_open_menu_over_the_page_text_is_no_overlap_and_text_in_one_layer_is(self):
@@ -751,6 +1083,96 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertEqual({row["probe"] for row in rows if row["shown"]}, expected)
 
     @with_script
+    def test_a_cut_value_reads_whole_where_its_row_opens_or_a_wide_box_titles_it(self):
+        """A cut value is shown whole by its row opening, or outside a narrow
+        box by its title on hover, which tables.js gives a cut value that has
+        none; touch has no hover, so in a narrow box only an opening row
+        shows it, and a cut there in a row that cannot open is found. A cut
+        that draws no ellipsis (a clamp's counts) is found at any width,
+        title or not, since nothing tells a reader there is more to hover
+        for; a name's chip in a row's muted line draws its own. A cut with no
+        title outside a narrow box is the survey's plant."""
+
+        self.pages = {**self.pages, "cut-probe": probe(CUT_TABLE)}
+        rows = ("untitled", "titled", "opens", "clamped", "unmarked", "chip")
+        for width, expected in {
+            PHONE_SCREEN[0]: {"untitled", "titled", "clamped", "unmarked", "chip"},
+            1280: {"unmarked"},
+        }.items():
+            with self.subTest(width=width):
+                self.open("cut-probe", width)
+                self.page.evaluate(SETTLE)
+                found = self.page.evaluate(CUT_AND_CLOSED, SELECTORS["unseen"])
+                named = {row for row in rows if any(f'"{row}' in line for line in found)}
+                self.assertEqual(named, expected, found)
+
+    @with_script
+    def test_an_open_row_shows_every_value_whole(self):
+        """Opening a row is how a narrow box shows a value whole, so nothing
+        in an open row, nor in the line beneath it where a column that left
+        stands, is cut, at any width."""
+
+        self.pages = {**self.pages, "open-row-probe": probe(OPEN_ROW_TABLE, **OPEN_ROW_VALUES)}
+        for width in (PHONE_SCREEN[0], WIDE):
+            with self.subTest(width=width):
+                self.open("open-row-probe", width)
+                self.page.evaluate(SETTLE)
+                # Every row opened, as a link to it opens one whose toggle does not show.
+                self.page.locator("main " + SELECTORS["row_toggle"]).evaluate_all(
+                    "(rows) => rows.forEach((row) => row.click())"
+                )
+                self.assertEqual(self.page.evaluate(CUT_WHEN_OPEN, SELECTORS["unseen"]), [])
+
+    @with_script
+    def test_a_cut_value_keeps_its_title_only_while_it_is_cut_and_its_row_closed(self):
+        """tables.js titles a cut value where its row's toggle does not show,
+        and takes the title away once the value is whole (its box widened)
+        and once its row opens, so no title outlives its cut; closed again,
+        the row's value is titled again."""
+
+        self.pages = {**self.pages, "titled-probe": probe(TITLED_CUTS)}
+        self.open("titled-probe", PHONE_SCREEN[0])
+        self.page.evaluate(SETTLE)
+        self.assertIn("narrows", self.page.evaluate(TITLED_ROWS))
+
+        self.page.set_viewport_size(viewport(WIDE))
+        self.page.wait_for_function(f"() => ({TITLED_ROWS})().join() === 'opens'")
+
+        toggle = self.page.locator("main " + SELECTORS["row_toggle"])
+        toggle.evaluate("(button) => button.click()")
+        self.assertEqual(self.page.evaluate(TITLED_ROWS), [])
+        toggle.evaluate("(button) => button.click()")
+        self.assertEqual(self.page.evaluate(TITLED_ROWS), ["opens"])
+
+    @with_script
+    def test_a_table_that_arrives_after_the_page_marks_its_cuts(self):
+        """A table a fragment brings in once the page has loaded is measured
+        as it arrives, so a cut value in a row whose toggle does not show
+        reads whole on hover there as on a table the page was drawn with."""
+
+        later = probe(f"<template>{TITLED_CUTS}</template>")
+        self.pages = {**self.pages, "later-probe": later}
+        self.open("later-probe", WIDE)
+        self.page.evaluate("""async () => {
+          const later = document.querySelector('main > template');
+          later.replaceWith(later.content.cloneNode(true));
+          await new Promise((done) => requestAnimationFrame(done));
+        }""")
+        self.assertEqual(self.page.evaluate(TITLED_ROWS), ["opens"])
+
+    @with_script
+    def test_a_panel_a_cell_shows_shows_its_values_whole(self):
+        """A panel opened from a cell, drawn over the page, is no part of the
+        column, so an identifier in it reads whole however narrow the cell."""
+
+        self.pages = {**self.pages, "popover-probe": probe(POPOVER_IN_A_CELL, **POPOVER_VALUES)}
+        for width in (PHONE_SCREEN[0], WIDE):
+            with self.subTest(width=width):
+                self.open("popover-probe", width)
+                self.page.evaluate("() => document.querySelector('main [popover]').showPopover()")
+                self.assertEqual(self.page.evaluate(CUT_AND_CLOSED, SELECTORS["unseen"]), [])
+
+    @with_script
     def test_a_wide_table_fits_a_phone_and_opening_a_row_moves_nothing(self):
         """A table of four columns or more keeps the column that names each row
         and the ones marked key, and fits the screen; it does not stack into
@@ -781,6 +1203,32 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertEqual(again["details"], [])
                 self.assertEqual(again["columns"], closed["columns"])
                 self.assertEqual(again["rows"], closed["rows"])
+
+    @with_script
+    def test_opening_every_row_a_reader_can_open_moves_nothing_they_did_not_ask_for(self):
+        """A fold and a row's toggle pressed as a reader presses them push
+        what is below the rows they open, which the browser counts as the
+        reader's own doing; nothing else moves, at any width, so the page
+        stays under `CLS_LIMIT`."""
+
+        read = [SELECTORS["vendored"], CLS_LIMIT]
+        folds = "main " + SELECTORS["row_toggle"] + "[data-fold-toggle]"
+        rows = "main " + SELECTORS["row_toggle"] + ":not([data-fold-toggle])"
+        for name in ("dense/action-items", "dense/containers"):
+            for width in WIDTHS:
+                with self.subTest(page=name, width=width):
+                    self.open(name, width)
+                    self.settle()
+                    for toggles in (folds, rows):
+                        shown = self.page.locator(toggles).evaluate_all(
+                            "(all) => all.map((toggle, place) => toggle.checkVisibility() ? place : -1)"
+                            ".filter((place) => place >= 0)"
+                        )
+                        for place in shown:
+                            self.page.locator(toggles).nth(place).click()
+                        self.settle()
+                    self.assertTrue(self.page.locator(rows + '[aria-expanded="true"]').count())
+                    self.assertEqual(self.page.evaluate(LAYOUT_SHIFTS, read), [])
 
     @with_script
     def test_a_row_that_arrives_after_its_table_is_fitted_leaves_out_the_columns_that_left(self):
@@ -818,6 +1266,62 @@ class ComponentLayoutTests(LayoutBrowserTests):
             opened = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
             self.assertEqual(opened["columns"], closed["columns"])
             self.assertEqual(others(opened["rows"], pressed), others(closed["rows"], pressed))
+
+    @with_script
+    def test_a_table_with_rows_open_is_fitted_as_it_stands_with_them_closed(self):
+        """A table without headings, its rows opened by their toggles or by
+        any other way, keeps the columns it had closed when content inside
+        its region changes: it stays in its narrow box, and no action cell
+        widens around what an open row shows whole."""
+
+        toggles = SELECTORS["row_toggle"] + ":not([data-fold-toggle])"
+        for width in (PHONE_SCREEN[0], 820):
+            for how in ("toggle", "class"):
+                with self.subTest(width=width, opened_by=how):
+                    self.open("dense/action-items", width)
+                    self.page.locator(SELECTORS["decision_family"]).evaluate_all(PRESS_EVERY_SHOWN)
+                    self.page.evaluate(SETTLE)
+                    columns = [SELECTORS["queue_table"], SELECTORS["queue_act"]]
+                    closed = self.page.evaluate(_QUEUE_COLUMNS, columns)
+                    self.assertTrue(closed["acts"])
+                    if how == "toggle":
+                        self.page.locator(toggles).evaluate_all(PRESS_EVERY_SHOWN)
+                        self.assertTrue(self.page.locator(toggles + '[aria-expanded="true"]').count())
+                    else:
+                        self.assertTrue(self.page.evaluate(_OPEN_BY_CLASS, toggles))
+                    self.page.evaluate(_CHANGE_IN_THE_QUEUE, SELECTORS["queue_what"])
+                    self.page.evaluate(SETTLE)
+                    self.assertEqual(self.page.evaluate(_QUEUE_COLUMNS, columns), closed)
+
+    @with_script
+    def test_a_row_scrolled_to_the_top_stands_below_the_heading_that_sticks(self):
+        """A row a link lands on, and a control in the row above it given the
+        focus, are scrolled to below the table's heading, which sticks under
+        the header: neither is drawn beneath it."""
+
+        for width in (PHONE_SCREEN[0], WIDE):
+            with self.subTest(width=width):
+                self.open("dense/containers", width)
+                self.assertGreaterEqual(self.page.evaluate(_LAND_ON_A_ROW, SELECTORS["table_scroll"]), 0)
+                above = self.page.evaluate(_FOCUS_THE_ROW_ABOVE, [SELECTORS["table_scroll"], SELECTORS["target"]])
+                self.assertGreaterEqual(above, 0)
+
+    @with_script
+    def test_a_heading_sticks_at_the_top_of_a_page_with_no_header(self):
+        """The inset a heading sticks under is the chrome the page draws, so
+        on a page without the header a stuck heading is at the window's top,
+        over no row that a header would have hidden."""
+
+        rows = "".join(f"<tr><td>Example {index}</td></tr>" for index in range(60))
+        self.pages = {
+            **self.pages,
+            "headerless-probe": probe(
+                '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}</tr></thead>'
+                f"<tbody>{rows}</tbody></table>{{% endtable_region %}}"
+            ),
+        }
+        self.open("headerless-probe", WIDE)
+        self.assertEqual(self.page.evaluate(_STUCK_HEADING_TOP, SELECTORS["table_scroll"]), 0)
 
     @with_script
     def test_any_table_sorts_by_a_heading(self):
@@ -974,3 +1478,50 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertEqual(self.page.evaluate("() => window.exampleHeard"), 0)
         self.page.evaluate("() => document.querySelector('main').append(document.createElement('span'))")
         self.page.wait_for_function("() => window.exampleHeard > 0")
+
+    def test_a_palette_finding_names_the_token_that_paints_it(self):
+        """A fill or an ink one palette loses is named with the token that
+        paints it, in that palette, so the fix goes to the token every page
+        shares; a color written as a literal is said to be one."""
+
+        self.pages = {
+            **self.pages,
+            "token-probe": probe('<pre>example.com</pre><pre class="example-literal">example.net</pre>'),
+        }
+        self.open("token-probe", WIDE)
+        # Each token's dark half lost into what it sits on, and the same
+        # colors written as literals.
+        add_css(
+            self.page,
+            ":root { --code-bg: light-dark(#161922, var(--bg)); --code-ink: light-dark(#eaeef2, var(--code-bg)); }"
+            ".example-literal { background: light-dark(#161922, transparent); color: light-dark(#eaeef2, transparent); }",
+        )
+        fills = "\n".join(self.lost_fills())
+        self.assertRegex(fills, r"dark loses pre \([^\n]*; fill: --code-bg in dark")
+        self.assertRegex(fills, r"dark loses pre\.example-literal [^\n]*; fill: no token paints this")
+        self.in_scheme("dark")
+        text = "\n".join(self.palette()["contrast"])
+        self.assertRegex(text, r"pre \d[^\n]*; ink: --code-ink in dark; ground: --code-bg in dark")
+        self.assertRegex(text, r"pre\.example-literal \d[^\n]*; ink: no token paints this")
+
+    def test_a_fill_is_judged_on_its_own_box_while_the_page_grows_between_palettes(self):
+        """A live page changes between the two readings (a figure that samples
+        adds a bar to it), so each box is compared with itself: one that
+        shows in both palettes passes, and one a palette loses is found."""
+
+        self.pages = {
+            **self.pages,
+            "growing-probe": probe('<p><code>example.com</code></p><pre class="example-literal">example.net</pre>'),
+        }
+        self.open("growing-probe", WIDE)
+        add_css(self.page, ".example-literal { background: light-dark(#161922, transparent); }")
+        switch = self.in_scheme
+
+        def grown(scheme):
+            self.page.evaluate("() => document.querySelector('main').prepend(document.createElement('p'))")
+            switch(scheme)
+
+        with mock.patch.object(self, "in_scheme", grown):
+            fills = self.lost_fills()
+        self.assertEqual([fill for fill in fills if fill.startswith(("light loses code", "dark loses code"))], [])
+        self.assertTrue(any(fill.startswith("dark loses pre.example-literal") for fill in fills), fills)

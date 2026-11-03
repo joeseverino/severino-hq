@@ -120,33 +120,20 @@ DIALOGS_WITHOUT_OPENERS = """([dialogs, openers]) => {
     .map((dialog) => `dialog #${dialog.id} has no control that opens it`);
 }"""
 
-# An ask in a table's row says how its work stands without growing the row:
-# its note is given the longest thing an ask says, as ask.js writes it (the
-# state's word and its sentence), the row measured before and after, and the
-# note put back as it was.
-ASKS_THAT_GROW_THEIR_ROW = """([asks, sentence]) => [...document.querySelectorAll(asks)]
-  .filter((ask) => ask.querySelector('[data-ask-button]')?.checkVisibility() && ask.querySelector('[data-ask-note][data-ask-word]'))
-  .flatMap((ask) => {
-    const row = ask.closest('tr');
-    const note = ask.querySelector('[data-ask-note]');
-    const kept = [...note.childNodes];
-    const part = (name, text) => Object.assign(document.createElement('span'), { className: name, textContent: text });
-    const before = row.getBoundingClientRect().height;
-    note.replaceChildren(part('ask-word', 'Waiting'), part('ask-sentence', sentence));
-    const after = row.getBoundingClientRect().height;
-    note.replaceChildren(...kept);
-    if (after <= before + 1) return [];
-    const name = row.querySelector('td, th')?.textContent.trim().split(/\\s+/).slice(0, 4).join(' ');
-    return [`the row "${name}" grows from ${Math.round(before)}px to ${Math.round(after)}px when its ask says how its work stands`];
-  })"""
-
 # How many lines an element's words run over: the runs of its text that share
-# no height, and where the first starts and the last ends.
+# no height, and where the first starts and the last ends. Its text alone: a
+# range over the element would also give the box of each element inside it,
+# and a list's box spans every line its names wrap to.
 LINE_COUNT = """
 const lineRange = document.createRange();
 const linesOf = (el) => {
-  lineRange.selectNodeContents(el);
-  const rects = [...lineRange.getClientRects()].filter((r) => r.width && r.height).sort((a, b) => a.top - b.top);
+  const drawn = [];
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    lineRange.selectNodeContents(node);
+    drawn.push(...lineRange.getClientRects());
+  }
+  const rects = drawn.filter((r) => r.width && r.height).sort((a, b) => a.top - b.top);
   if (!rects.length) return {lines: 0, top: 0, bottom: 0};
   let lines = 1;
   let bottom = rects[0].bottom;

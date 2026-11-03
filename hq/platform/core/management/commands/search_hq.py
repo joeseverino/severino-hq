@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand
 
 from hq.platform.application.search import search_records
 from hq.platform.application.security import cli_principal
-from hq.platform.search_index.registry import BY_SCOPE
+from hq.platform.search_index.registry import by_scope
 
 
 class Command(BaseCommand):
@@ -13,7 +13,7 @@ class Command(BaseCommand):
 
     @override
     def add_arguments(self, parser):
-        parser.add_argument("scope", choices=sorted(BY_SCOPE))
+        parser.add_argument("scope", choices=sorted(by_scope()))
         parser.add_argument("query")
         parser.add_argument("--limit", type=int, default=50)
 

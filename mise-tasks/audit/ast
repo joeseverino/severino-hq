@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="Python docstrings over 8 lines and getattr of a literal name with a default, counted per file, read-only"
+#MISE description="Python docstrings over 8 lines (file:start-end) and getattr of a literal name with a default (file:line), each listed sorted and then counted, read-only"
 #MISE hide=true
 #USAGE arg "[globs]" var=#true help="Which files, the repository without: a glob (hq/**) for only the files it matches, or !glob (!**/tests/**) to leave them out"
 
@@ -26,15 +26,12 @@ trap 'rm -f "${found}"' EXIT
 # globs holds words without spaces, and set -f leaves their globs to ast-grep.
 # shellcheck disable=SC2086
 ast-grep scan --rule tools/audit/ast-grep.yml --json=stream ${globs} . >"${found}"
+# One line per finding, sorted by file and line, so two runs are compared by
+# a diff; ast-grep counts lines from 0. The closing line holds the totals.
 jq -rs '
-    group_by(.file)
-    | map({
-        file: .[0].file,
-        docstrings: map(select(.ruleId == "long-docstring")) | length,
-        getattrs: map(select(.ruleId == "getattr-with-default")) | length
-    })
-    | sort_by(-(.docstrings + .getattrs), .file)
-    | (["docstrings>8", "getattr-default", "file"] | @tsv),
-      (.[] | [.docstrings, .getattrs, .file] | @tsv),
-      ([(map(.docstrings) | add // 0), (map(.getattrs) | add // 0), "total"] | @tsv)
+    sort_by(.file, .range.start.line, .ruleId)
+    | (.[] | if .ruleId == "long-docstring"
+        then "\(.file):\(.range.start.line + 1)-\(.range.end.line + 1)\tlong-docstring"
+        else "\(.file):\(.range.start.line + 1)\tgetattr-with-default" end),
+      "\(map(select(.ruleId == "long-docstring")) | length) docstrings over 8 lines, \(map(select(.ruleId == "getattr-with-default")) | length) getattr of a literal name with a default"
 ' "${found}"

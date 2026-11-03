@@ -8,11 +8,12 @@ nothing here touches the image.
 """
 
 import json
-import urllib.error
-import urllib.request
 from collections.abc import Iterable, Mapping
+from itertools import batched
 from typing import Any
 from urllib.parse import parse_qs, quote, unquote
+
+from .http_read import UNREACHABLE, fetch
 
 API = "https://api.osv.dev/v1"
 TIMEOUT_SECONDS = 20
@@ -75,29 +76,29 @@ def query_of(purl: str) -> dict[str, Any] | None:
 
 
 def _post(path: str, payload: Mapping[str, Any]) -> Any:
-    return _read(
-        urllib.request.Request(
-            f"{API}{path}",
-            data=json.dumps(payload).encode(),
-            headers={"Content-Type": "application/json", "User-Agent": "Severino-HQ"},
-            method="POST",
-        )
-    )
+    return _read("POST", path, json.dumps(payload).encode())
 
 
 def _get(path: str) -> Any:
-    return _read(urllib.request.Request(f"{API}{path}", headers={"User-Agent": "Severino-HQ"}))
+    return _read("GET", path)
 
 
-def _read(request: urllib.request.Request) -> Any:
+def _read(method: str, path: str, content: bytes | None = None) -> Any:
+    """OSV's answer at ``path``. A redirect is not followed: OSV answers where
+    it is asked, and a query moved by a 302 would arrive as a GET without its
+    body."""
+
+    headers = {"User-Agent": "Severino-HQ"}
+    if content is not None:
+        headers["Content-Type"] = "application/json"
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # fixed https host
-            body = response.read(MAX_RESPONSE_BYTES + 1)
-    except urllib.error.HTTPError as exc:
-        exc.close()
-        raise OSVReadError(f"OSV returned HTTP {exc.code}.") from exc
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        response, body = fetch(
+            method, f"{API}{path}", headers=headers, timeout=TIMEOUT_SECONDS, limit=MAX_RESPONSE_BYTES, content=content
+        )
+    except UNREACHABLE as exc:
         raise OSVReadError(f"Could not reach OSV: {exc}") from exc
+    if not response.is_success:
+        raise OSVReadError(f"OSV returned HTTP {response.status_code}.")
     if len(body) > MAX_RESPONSE_BYTES:
         raise OSVReadError("OSV answered with more than HQ reads.")
     try:
@@ -111,8 +112,7 @@ def matches(purls: Iterable[str]) -> tuple[int, dict[str, list[tuple[str, str]]]
 
     asked = [(purl, query) for purl in purls if (query := query_of(purl)) is not None]
     found: dict[str, list[tuple[str, str]]] = {}
-    for start in range(0, len(asked), BATCH):
-        chunk = asked[start : start + BATCH]
+    for chunk in batched(asked, BATCH, strict=False):
         answer = _post("/querybatch", {"queries": [query for _purl, query in chunk]})
         for (purl, _query), result in zip(chunk, answer.get("results") or (), strict=False):
             ids = [

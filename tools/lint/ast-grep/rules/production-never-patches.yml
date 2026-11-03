@@ -12,7 +12,14 @@ note: >-
   Reach the code through a setting, an argument or a public name it reads. A
   stand-in that only tests and demos use belongs in a test-support module
   (named testing.py or ending in _testing.py), where the test-code rules read it.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
 ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
   - "**/testing.py"
   - "**/*_testing.py"
 rule:

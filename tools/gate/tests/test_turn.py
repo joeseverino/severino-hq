@@ -1,6 +1,6 @@
-"""A run of tests takes the machine's heavy turn only when it runs everything,
-a whole tree of it, or a browser, and a task that loads the machine whatever
-it is given always takes it."""
+"""A run of tests takes the machine's heavy turn only when it runs everything
+or a whole tree of it in parallel, or a browser; a task that loads the machine
+whatever it is given always takes it, and no other task does."""
 
 import re
 import shlex
@@ -8,7 +8,7 @@ import shlex
 from django.test import tag
 
 from hq.platform.core.test_runner import BROWSER_TESTS
-from tests.mise_tasks import body, mise_tasks, runs
+from tests.mise_tasks import body, mise_tasks, runs, takes_the_turn
 from tools.gate.tests.base import GateTestCase
 from tools.gate.turn import narrow
 
@@ -26,6 +26,9 @@ class NarrowRunTests(GateTestCase):
             with self.subTest(argv=argv):
                 self.assertTrue(narrow(argv))
 
+    def test_a_serial_run_of_a_tree_is_narrow(self):
+        self.assertTrue(narrow(["hq.platform.api", "hq.domains.contacts", "--parallel", "1"]))
+
     def test_a_test_database_does_not_make_a_run_heavy(self):
         self.assertTrue(narrow(["hq.platform.core.tests.test_audit_retention", "--parallel", "1"]))
 
@@ -39,6 +42,7 @@ class NarrowRunTests(GateTestCase):
         for label in (f"{BROWSER_TESTS}.estate", "hq.platform.core.tests.look.Look.test_look"):
             with self.subTest(label=label):
                 self.assertFalse(narrow([label]))
+                self.assertFalse(narrow([label, "--parallel", "1"]))
 
     def test_a_run_manage_py_refuses_is_heavy(self):
         self.assertFalse(narrow(["--example-no-such-option", MODULE]))
@@ -88,23 +92,31 @@ class HeavyTaskTests(GateTestCase):
             with self.subTest(task=name):
                 self.assertTrue(takes_the_turn(task))
 
+    def test_a_task_takes_the_heavy_turn_only_to_run_what_loads_the_machine(self):
+        """A turn held by a light step (an aggregate between its gates, one Django
+        process on an empty database) makes every other checkout's light step
+        queue behind it for nothing: a task that takes the turn runs a command
+        that loads the machine, a browser, Docker's VM or a run of tests whose
+        weight the first test of this class decides."""
+
+        taking = {name: task for name, task in mise_tasks().items() if takes_the_turn(task)}
+        self.assertGreater(len(taking), 10)
+        for name, task in taking.items():
+            run = "\n".join(code(text) for text in (body(task), *(path.read_text() for path in runs(task))))
+            with self.subTest(task=name):
+                self.assertTrue(HEAVY.search(run), f"{name} takes the turn and runs nothing that loads the machine")
+
 
 # A command that loads the machine whatever its arguments.
 LOADS = re.compile(
     r"\bdocker (?:build|buildx build|run)\b|\bcodeql database\b|\bgo (?:-C \S+ )?test\b|tests/shell/test-|\btrivy image\b"
 )
+# What may hold the turn: a command that loads the machine, the VM a task boots
+# for its run, a browser, a run of tests, or a look that weighs its own pages.
+HEAVY = re.compile(rf"(?m){LOADS.pattern}|\bimage:docker start\b|--group browser\b|\bmanage\.py test\b|^light_run=")
 
 
 def code(text: str) -> str:
     """A script's lines less its comments."""
 
     return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
-
-
-def takes_the_turn(task: dict) -> bool:
-    """Whether every run of the task holds the heavy turn: its shell is the
-    wrapper, or its file sources the line that runs it again under it."""
-
-    return (task["shell"] or "").startswith("tools/lib/heavy.sh ") or bool(
-        task["file"] and re.search(r"(?m)^\. .*tools/lib/heavy-turn\.sh\"?$", body(task))
-    )

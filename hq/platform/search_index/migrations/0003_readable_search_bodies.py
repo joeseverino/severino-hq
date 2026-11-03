@@ -19,9 +19,9 @@ from hq.platform.application.search_contracts import SearchDefinition
 def _definitions() -> tuple[SearchDefinition, ...]:
     # Imported at call time: the registry builds against real models, and
     # nothing about it should run while migrations are merely being loaded.
-    from hq.platform.search_index.registry import DEFINITIONS
+    from hq.platform.application.resources import resource_search_definitions
 
-    return DEFINITIONS
+    return resource_search_definitions()
 
 
 def rebuild_bodies(apps, schema_editor):
