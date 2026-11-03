@@ -32,6 +32,9 @@ KEPT = {
 }
 # The packages each image's SBOM lists: a few, named the way OSV reads them.
 PACKAGES = ("pkg:apk/alpine/musl@1.2.5-r1", "pkg:apk/alpine/openssl@3.3.2-r1", "pkg:apk/alpine/zlib@1.3.1-r1")
+# The one container its compose file starts by tag alone, so the machine holds
+# the digest it could be pinned to and HQ names that pin.
+BY_TAG = "nginx-proxy-manager"
 
 
 def containers():
@@ -76,7 +79,7 @@ def _running(name, port, image):
         "host": MACHINE,
         "host_address": LAN,
         "connection_ref": PORTAINER,
-        "image": pinned(image),
+        "image": started_by(name, image),
         "state": "running",
         "status": "Up 12 days (healthy)",
         "ports": [port],
@@ -95,6 +98,12 @@ def pinned(image):
     return image if _ref(image).digest else f"{image}@{running_digest(image)}"
 
 
+def started_by(name, image):
+    """The reference a container was started by: pinned, but for the one started by tag alone."""
+
+    return image if name == BY_TAG else pinned(image)
+
+
 def running_digest(image):
     """The digest a container's image was pulled at: its own pin, or one derived from its tag."""
 
@@ -110,7 +119,7 @@ def _pulled(name, image):
         digests=[f"{ref.name}@{running_digest(image)}"],
         created_at=iso(UP_FOR + timedelta(days=2)),
         size=180_000_000 + len(name) * 9_000_000,
-        containers=[{"container": name, "reference": pinned(image)}],
+        containers=[{"container": name, "reference": started_by(name, image), "service": name}],
     )
 
 
@@ -130,6 +139,12 @@ def _runtime(name, port):
         port_bindings=[{"container_port": f"{port}/tcp", "host_ip": LAN, "host_port": str(port)}],
         exposed_ports=[port],
         started_at=iso(UP_FOR),
+        # What it used at the last sweep: a few hundred megabytes, a little CPU.
+        memory_usage=(48 + 16 * len(name)) * 1_048_576,
+        memory_usage_basis="anon",
+        cpu_time=int(UP_FOR.total_seconds() * 1e9 * len(name) / 100),
+        usage_read_at=iso(timedelta(minutes=4)),
+        cpu_percent=round(0.4 + len(name) / 10, 1),
     )
 
 

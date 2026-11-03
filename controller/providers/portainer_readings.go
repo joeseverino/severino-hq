@@ -136,6 +136,22 @@ type PortainerRuntimeRecord struct {
 	Health         string                  `json:"health"`
 	RestartCount   int64                   `json:"restart_count"`
 	StartedAt      string                  `json:"started_at"`
+	// What it used when sampled, for a running container: its memory in
+	// bytes and how that was counted (memoryInUse), its CPU in nanoseconds
+	// since it started, and when the sample was taken. HQ takes the CPU share
+	// across two sweeps' samples.
+	MemoryUsage      int64  `json:"memory_usage"`
+	MemoryUsageBasis string `json:"memory_usage_basis"`
+	CPUTime          uint64 `json:"cpu_time"`
+	UsageReadAt      string `json:"usage_read_at"`
+}
+
+// withUsage fills in what one stats sample says the container uses.
+func (record *PortainerRuntimeRecord) withUsage(sample dockerStats) {
+	record.MemoryUsage, record.MemoryUsageBasis = memoryInUse(sample)
+	if _, ok := sampledAt(sample); ok {
+		record.CPUTime, record.UsageReadAt = sample.CPUStats.CPUUsage.TotalUsage, sample.Read
+	}
 }
 
 // PortainerComposeProject is a compose project seen in container labels, a
@@ -402,18 +418,21 @@ func (r *Registry) inspectLimit() int {
 
 type containerInspect struct {
 	doc dockerInspect
-	err error
+	// A running container's one-shot stats sample; nil for one not running.
+	stats *dockerStats
+	err   error
 }
 
-// inspectContainers inspects each container, inspectLimit at a time.
-// The answers are in the order of ids, and the first failure in that order is
-// the one the caller reports. After a failure no further inspect is started.
-func (r *Registry) inspectContainers(ctx context.Context, at portainerSite, ids []string) []containerInspect {
-	out := make([]containerInspect, len(ids))
+// inspectContainers inspects each container, and samples each running one's
+// use, inspectLimit containers at a time. The answers are in the order of the
+// containers, and the first failure in that order is the one the caller
+// reports. After a failure no further container is started.
+func (r *Registry) inspectContainers(ctx context.Context, at portainerSite, containers []dockerContainer) []containerInspect {
+	out := make([]containerInspect, len(containers))
 	var failed atomic.Bool
 	var group errgroup.Group
 	group.SetLimit(r.inspectLimit())
-	for i, id := range ids {
+	for i, container := range containers {
 		if failed.Load() {
 			break
 		}
@@ -422,7 +441,7 @@ func (r *Registry) inspectContainers(ctx context.Context, at portainerSite, ids 
 			if failed.Load() {
 				return nil
 			}
-			out[i].doc, out[i].err = portainerDocker[dockerInspect](ctx, r, at.ConnectionRef, at.EnvironmentID, "/containers/"+id+"/json", "container inspect")
+			out[i] = r.inspectOne(ctx, at, container)
 			if out[i].err != nil {
 				failed.Store(true)
 			}
@@ -431,6 +450,16 @@ func (r *Registry) inspectContainers(ctx context.Context, at portainerSite, ids 
 	}
 	_ = group.Wait() // each call returns nil and keeps its error in out
 	return out
+}
+
+// inspectOne is one container's inspect, and its stats sample when it runs.
+func (r *Registry) inspectOne(ctx context.Context, at portainerSite, container dockerContainer) containerInspect {
+	doc, err := portainerDocker[dockerInspect](ctx, r, at.ConnectionRef, at.EnvironmentID, "/containers/"+container.ID+"/json", "container inspect")
+	if err != nil || container.State != "running" {
+		return containerInspect{doc: doc, err: err}
+	}
+	sample, err := portainerDocker[dockerStats](ctx, r, at.ConnectionRef, at.EnvironmentID, oneShotStats(container.ID), "container stats")
+	return containerInspect{doc: doc, stats: &sample, err: err}
 }
 
 // runtimeRecord is how one container is run, built field by field so the
@@ -516,17 +545,17 @@ func (r *Registry) portainerRuntime(ctx context.Context, at portainerSite) ([]an
 		return nil, err
 	}
 	identified := slices.DeleteFunc(containers, func(c dockerContainer) bool { return c.ID == "" })
-	ids := make([]string, len(identified))
-	for i, container := range identified {
-		ids[i] = container.ID
-	}
-	inspects := r.inspectContainers(ctx, at, ids)
+	inspects := r.inspectContainers(ctx, at, identified)
 	found := []any{}
 	for i, container := range identified {
 		if err := inspects[i].err; err != nil {
 			return found, err
 		}
-		found = append(found, runtimeRecord(at, container, inspects[i].doc))
+		record := runtimeRecord(at, container, inspects[i].doc)
+		if sample := inspects[i].stats; sample != nil {
+			record.withUsage(*sample)
+		}
+		found = append(found, record)
 	}
 	return found, nil
 }

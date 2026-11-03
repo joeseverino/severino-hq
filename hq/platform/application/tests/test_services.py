@@ -14,8 +14,8 @@ from hq.domains.control_plane.provider_spec import SERVICE_FACET_IDS, SERVICE_FA
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.projects.models import Project
 
+from .. import estate, security
 from ..attention import services as service_attention
-from ..estate import cards as estate_cards
 from ..services import (
     alias_target,
     find_service,
@@ -647,7 +647,7 @@ class ServiceSurfaceTests(TestCase):
         self.assertEqual(item.status, "attention")
 
     def test_the_estate_card_counts_services_and_names_the_incomplete_ones(self):
-        card = next(card for card in estate_cards() if card["id"] == "hq.estate.services")
+        card = next(c for c in estate.cards(principal=security.cli_principal()) if c["id"] == "hq.estate.services")
 
         self.assertEqual(card["value"], "1")
         self.assertEqual(card["detail"], "1 not fully set up")
@@ -669,7 +669,7 @@ class ServiceSurfaceTests(TestCase):
     def test_no_estate_means_no_card(self):
         ManagedResource.objects.all().delete()
 
-        self.assertEqual(estate_cards(), ())
+        self.assertEqual(estate.cards(principal=security.cli_principal()), ())
         self.assertEqual(service_reading(), {"total": 0, "incomplete": 0})
 
 
@@ -890,7 +890,7 @@ class OriginWordingTests(TestCase):
 
         origin = Origin(address="10.0.0.9:8000", host="a-docker-host", container="probe")
 
-        self.assertEqual(origin.headline, "a-docker-host · probe")
+        self.assertEqual(origin.headline, "a-docker-host\xa0· probe")
         self.assertEqual(origin.qualifier, "")
 
     def test_an_address_nothing_claims_still_says_so(self):

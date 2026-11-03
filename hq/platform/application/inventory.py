@@ -24,6 +24,7 @@ from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS, registry_label
 from hq.domains.control_plane.reading_parts import clean_refused_parts, refused_parts
+from hq.platform.application.labels import field_label
 from hq.platform.core.audit import CONNECTION_AUDIT_TYPE, record_event
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
@@ -115,6 +116,8 @@ def _record_report(kind: str, report: dict[str, Any], controller_id: str, observ
 
     reached = report["ok"]
     records, error = _schema_records(kind, report["records"], report.get("error", ""))
+    if reached:
+        records = _from_last(kind, records)
     state = {
         "reachable": reached,
         "connected": report.get("connected", True),
@@ -152,6 +155,17 @@ def _schema_records(kind: str, records: list[Any], error: str) -> tuple[list[Any
     if refused and not error:
         error = f"{counted(refused, 'record')} did not match the {kind} schema."
     return kept, error
+
+
+def _from_last(kind: str, records: list[Any]) -> list[Any]:
+    """The records with what their reading takes from the last stored ones
+    (``ObservationSpec.from_last``); other kinds pay no query for it."""
+
+    observation = OBSERVATIONS.get(kind)
+    if observation is None or observation.from_last is None:
+        return records
+    last = ProviderInventory.objects.filter(kind=kind).values_list("records", flat=True).first()
+    return observation.from_last(last or (), records)
 
 
 def _last_records(kind: str) -> list[Any] | None:
@@ -448,22 +462,16 @@ def _difference_condition(kind: str, drift: tuple[tuple[str, str, str], ...]) ->
             "reason": "Reported",
             "message": " ".join(ended(said) for said in reported),
         }
-    titles = provider.spec_type.model_fields
+    fields = provider.spec_type.model_fields
     return {
         "type": "Drifted",
         "status": True,
         "reason": "Drifted",
         "message": " ".join(
-            _difference_phrase(_field_title(titles, field), asked, live) for field, asked, live in drift
+            _difference_phrase(field_label(field, fields[field].title if field in fields else None), asked, live)
+            for field, asked, live in drift
         ),
     }
-
-
-def _field_title(fields: Any, name: str) -> str:
-    """A setting by the title its form gives it, never its key."""
-
-    field = fields.get(name)
-    return (field.title if field is not None and field.title else "") or name.replace("_", " ").capitalize()
 
 
 # Past this, a value is described rather than repeated: a policy document is

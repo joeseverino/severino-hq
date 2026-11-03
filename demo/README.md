@@ -112,9 +112,10 @@ so Scalar does not offer GitHub Pages as one.
   page carries HQ's policy without the nonce and `'strict-dynamic'`, since a
   nonce saved into HTML is the same on every visit, and no tag carries one.
 - The first glance is healthy: no alarm on the dashboard, every control on
-  the connection panel passing, and only the three things left to do on
-  purpose (an image update, a certificate to renew and an agent's request
-  held for approval), each offering a way to do it.
+  the connection panel passing, and only the four things left to do on
+  purpose (an image update, an image run by tag alone, a certificate to
+  renew and an agent's request held for approval), each offering a way to do
+  it.
 - Every expense has its receipt.
 - Every place that describes the reader's connection says it is an example.
 - No line ends in a separator with nothing after it.

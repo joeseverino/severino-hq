@@ -8,6 +8,9 @@ a view of the vault with no second list to drift from it.
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Annotated, NotRequired, TypedDict
+
+from pydantic import WithJsonSchema
 
 from hq.domains.control_plane.connection_kinds import connection_credential
 from hq.domains.control_plane.models import ProviderConnection
@@ -15,7 +18,7 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS, observer_abilities, registry_label, resource_home
 lazy from hq.domains.control_plane.names import normalized_hostname
 
-from .connection_catalog import CONTROLLER_CONNECTIONS, connection_catalog, serialize_connection
+from .connection_catalog import CONTROLLER_CONNECTIONS
 
 # Declared next to the domains that emit them, so a gateway can import the
 # record without importing this reader. Re-exported here as the one name
@@ -33,6 +36,7 @@ from .entity_links import entity_link
 from .integration_validation import required_capability_names
 from .integrations import integration_graph
 from .moments import ago
+from .projection import shape_version
 from .security import Capability, Principal
 from .ui import ended
 lazy from . import machines
@@ -391,58 +395,89 @@ def connection_specs() -> tuple[ConnectionSpec, ...]:
     return (_controller_connection_spec(),)
 
 
-def describe_connections() -> dict:
+# The shape describe_connections answers in; it moves when that shape does.
+CONNECTIONS_SCHEMA_VERSION = 1
+
+
+class AbilityDescription(TypedDict):
+    """One ability a connection family offers, as ``describe_connections`` names it."""
+
+    name: str
+    label: str
+    summary: str
+    effect: str
+    required_scopes: list[str]
+    grant: str | None
+    capability: str | None
+    governs_kinds: list[str]
+    subject_resource: str | None
+
+
+class ConnectionDescription(TypedDict):
+    """One connection family as every adapter describes it."""
+
+    name: str
+    label: str
+    summary: str
+    required_capabilities: list[str]
+    web_route: str | None
+    management_route: str | None
+    setup_route: str | None
+    documentation_url: str | None
+    secret_store: str | None
+    abilities: list[AbilityDescription]
+    # Whether the asker's capabilities admit the family; a catalog read with no
+    # asker only describes.
+    permitted: NotRequired[bool]
+
+
+class ConnectionCatalog(TypedDict):
+    """What ``describe_connections`` answers."""
+
+    schema_version: Annotated[int, WithJsonSchema(shape_version(CONNECTIONS_SCHEMA_VERSION))]
+    connections: list[ConnectionDescription]
+
+
+def _ability(ability: ConnectionAbility) -> AbilityDescription:
     return {
-        "ok": True,
-        "schema_version": 1,
-        "connections": [
-            {
-                "name": spec.name,
-                "label": spec.label,
-                "summary": spec.summary,
-                "required_capabilities": list(required_capability_names(spec)),
-                "web_route": spec.web_route or None,
-                "management_route": spec.management_route or None,
-                "setup_route": spec.setup_route or None,
-                "documentation_url": spec.documentation_url or None,
-                "secret_store": spec.secret_store or None,
-                "abilities": [
-                    {
-                        "name": ability.name,
-                        "label": ability.label,
-                        "summary": ability.summary,
-                        "effect": ability.effect,
-                        "required_scopes": list(ability.required_scopes),
-                        "grant": ability.grant or None,
-                        "capability": ability.capability or None,
-                        "governs_kinds": list(ability.governs_kinds),
-                        "subject_resource": ability.subject_resource or None,
-                    }
-                    for ability in spec.abilities
-                ],
-            }
-            for spec in integration_graph().connections.values()
-        ],
+        "name": ability.name,
+        "label": ability.label,
+        "summary": ability.summary,
+        "effect": ability.effect,
+        "required_scopes": list(ability.required_scopes),
+        "grant": ability.grant or None,
+        "capability": ability.capability or None,
+        "governs_kinds": list(ability.governs_kinds),
+        "subject_resource": ability.subject_resource or None,
     }
 
 
-def list_connections(*, principal: Principal) -> dict:
-    """Serialize safe connection state for machine adapters; never credentials."""
+def _connection(spec: ConnectionSpec, principal: Principal | None) -> ConnectionDescription:
+    described: ConnectionDescription = {
+        "name": spec.name,
+        "label": spec.label,
+        "summary": spec.summary,
+        "required_capabilities": list(required_capability_names(spec)),
+        "web_route": spec.web_route or None,
+        "management_route": spec.management_route or None,
+        "setup_route": spec.setup_route or None,
+        "documentation_url": spec.documentation_url or None,
+        "secret_store": spec.secret_store or None,
+        "abilities": [_ability(ability) for ability in spec.abilities],
+    }
+    if principal is not None:
+        described["permitted"] = principal.permits(*spec.required_capabilities)
+    return described
 
-    groups = connection_catalog(principal=principal)
+
+def describe_connections(*, principal: Principal | None = None) -> ConnectionCatalog:
+    """Every connection family and its abilities; given ``principal``, each
+    entry says whether it is ``permitted``: whether the principal's
+    capabilities admit the family."""
+
     return {
-        "ok": True,
-        "schema_version": 1,
-        "groups": [
-            {
-                "name": group.spec.name,
-                "label": group.spec.label,
-                "summary": group.spec.summary,
-                "secret_store": group.spec.secret_store or None,
-                "instances": [serialize_connection(connection) for connection in group.connections],
-            }
-            for group in groups
-        ],
+        "schema_version": CONNECTIONS_SCHEMA_VERSION,
+        "connections": [_connection(spec, principal) for spec in integration_graph().connections.values()],
     }
 
 

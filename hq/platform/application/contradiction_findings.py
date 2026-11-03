@@ -307,6 +307,7 @@ def _unfronted_ports() -> tuple[Finding, ...]:
             Finding(
                 rule="published-port-unfronted",
                 subject=f"machine:{machine.name}",
+                part=item.running.name,
                 title=f"{item.running.name} on {machine.name} is open to the internet on "
                 f"{'port' if len(open_ports) == 1 else 'ports'} "
                 f"{', '.join(str(port) for port in open_ports)}",

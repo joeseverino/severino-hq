@@ -16,7 +16,7 @@ import (
 // What `systemctl show --timestamp=unix` prints for a failed service, a
 // waiting timer and a unit that is not installed, with a property the launcher
 // never asks for.
-const hostUnitsShown = "Id=severino-hq-backup.service\n" +
+const hostUnitsShown = "Id=severino-hq-backup.service\nDescription=Create and verify a Severino HQ backup\n" +
 	"LoadState=loaded\nUnitFileState=static\nActiveState=failed\nSubState=failed\nResult=exit-code\n" +
 	"ExecMainCode=1\nExecMainStatus=3\n" +
 	"InactiveExitTimestamp=@1767323100\nInactiveEnterTimestamp=@1767323160\n" +
@@ -56,7 +56,7 @@ func TestHostUnitsAreWhatSystemdSaysOfEachUnit(t *testing.T) {
 	const readAt = "2026-01-02T04:00:00Z"
 	want := []any{
 		runtime.HostUnitRecord{
-			Unit: "severino-hq-backup.service", Load: "loaded", FileState: "static", Active: "failed", Sub: "failed",
+			Unit: "severino-hq-backup.service", Title: "Create and verify a Severino HQ backup", Load: "loaded", FileState: "static", Active: "failed", Sub: "failed",
 			Result: "exit-code", MainCode: 1, MainStatus: 3,
 			StartedAt: "2026-01-02T03:05:00Z", EndedAt: "2026-01-02T03:06:00Z",
 			Condition: "yes", ConditionAt: "2026-01-02T03:05:00Z", ReadAt: readAt,
@@ -241,6 +241,7 @@ ExecMainStatus=0
 // exactly as systemctl show prints it for the credential mount.
 func TestHostUnitsReadAUnitNamedForAPath(t *testing.T) {
 	mount := `Id=run-severino\x2dhq\x2dsecrets.mount
+Description=Severino HQ credential tmpfs, kept out of swap
 LoadState=loaded
 ActiveState=active
 SubState=mounted
@@ -258,12 +259,35 @@ Result=success
 	if err != nil || len(records) != 2 {
 		t.Fatalf("read %d units: %v", len(records), err)
 	}
-	if unit := records[0].(runtime.HostUnitRecord).Unit; unit != `run-severino\x2dhq\x2dsecrets.mount` {
-		t.Errorf("unit %q", unit)
+	if unit := records[0].(runtime.HostUnitRecord); unit.Unit != `run-severino\x2dhq\x2dsecrets.mount` || unit.Title != "Severino HQ credential tmpfs, kept out of swap" {
+		t.Errorf("unit %+v", unit)
 	}
 	for _, refused := range []string{`run-a\b.mount`, `run-a\x2.mount`, `run-a\\x2d.mount`} {
 		if _, err := hostUnits(t, writeHostUnits(t, strings.Replace(mount, `run-severino\x2dhq\x2dsecrets.mount`, refused, 1))); err == nil {
 			t.Errorf("accepted %s", refused)
 		}
+	}
+}
+
+// A title the contract does not admit is left out, and the unit is read
+// without it, so the page names it by its name instead.
+func TestHostUnitsLeaveOutATitleTheContractRefuses(t *testing.T) {
+	unit := "Id=example.service\nLoadState=loaded\nActiveState=active\nSubState=running\n"
+	for name, title := range map[string]string{
+		"a control byte": "example\x1b[2Jcleared",
+		"a path":         "/run/example/token",
+		"an assignment":  "EXAMPLE_TOKEN=sentinel-value",
+		"a fact's bar":   "example | other",
+		"too long":       strings.Repeat("a", hostUnitTextLimit+1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			records, err := hostUnits(t, writeHostUnits(t, unit+"Description="+title+"\n"))
+			if err != nil || len(records) != 1 {
+				t.Fatalf("read %d units: %v", len(records), err)
+			}
+			if got := records[0].(runtime.HostUnitRecord); got.Unit != "example.service" || got.Title != "" {
+				t.Errorf("unit %+v", got)
+			}
+		})
 	}
 }

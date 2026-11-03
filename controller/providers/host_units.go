@@ -24,8 +24,10 @@ const hostUnitsMaxBytes = 1 << 20
 const hostUnitsRefused = "the unit state is not what systemctl show prints"
 
 var (
-	hostUnitName = api.MustPattern("HostUnitRecord", "properties", "unit")
-	hostUnitWord = api.MustPattern("HostUnitRecord", "properties", "active")
+	hostUnitName      = api.MustPattern("HostUnitRecord", "properties", "unit")
+	hostUnitWord      = api.MustPattern("HostUnitRecord", "properties", "active")
+	hostUnitText      = api.MustPattern("HostUnitRecord", "properties", "title")
+	hostUnitTextLimit = api.MustLimit("HostUnitRecord", "properties", "title", "maxLength")
 )
 
 // hostUnitProperties is every property the reading keeps, by the name
@@ -34,6 +36,7 @@ var (
 // property not named here is dropped, whatever the file holds.
 var hostUnitProperties = map[string]func(*runtime.HostUnitRecord, string) bool{
 	"Id":                     func(r *runtime.HostUnitRecord, v string) bool { return unitName(&r.Unit, v) },
+	"Description":            func(r *runtime.HostUnitRecord, v string) bool { return unitText(&r.Title, v) },
 	"LoadState":              func(r *runtime.HostUnitRecord, v string) bool { return unitWord(&r.Load, v) },
 	"UnitFileState":          func(r *runtime.HostUnitRecord, v string) bool { return unitWord(&r.FileState, v) },
 	"ActiveState":            func(r *runtime.HostUnitRecord, v string) bool { return unitWord(&r.Active, v) },
@@ -58,6 +61,16 @@ func unitName(field *string, value string) bool {
 func unitWord(field *string, value string) bool {
 	*field = value
 	return value == "" || hostUnitWord.MatchString(value)
+}
+
+// unitText is the unit file's title, for a person to read in place of a name
+// systemd escapes. A title the contract does not admit is left out, never
+// cut, and the unit is still read: HQ falls back to its name.
+func unitText(field *string, value string) bool {
+	if len(value) <= hostUnitTextLimit && hostUnitText.MatchString(value) {
+		*field = value
+	}
+	return true
 }
 
 func unitNumber(field *int, value string) bool {

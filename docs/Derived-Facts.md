@@ -127,10 +127,11 @@ Rules:
 ### The DNS query log
 
 `adguard.query_summary` is the only reading taken from a log of what people
-do, so the controller reduces it in memory before anything leaves: one record
-per name AdGuard rewrites (the estate's own names), with the count, how many
-were blocked, the distinct clients (the busiest ten kept), when it was last seen
-and the span covered (up to a day, bounded by pages read). A rewritten name
+do, so the controller reduces it in memory before anything leaves. It keeps one
+record per name AdGuard rewrites (the estate's own names), with the count and
+how many were blocked. The record also holds the distinct clients (the busiest
+ten kept), when the name was last seen and the span covered (up to a day,
+bounded by pages read). A rewritten name
 nobody looked up gets a record with a count of zero. No other queried name, no
 per-query time, answer or upstream leaves the controller, and the schema admits
 nothing else. It joins services by name only, never a device by address, so no
@@ -142,8 +143,8 @@ endpoint `adguard.dns` cannot read is that part refused (`upstreams`,
 ### Docker and proxy readings
 
 The Portainer credential feeds `portainer.environment` (each environment as a
-machine: type, status, agent and Docker versions) and, per reachable
-environment, `portainer.network`, `portainer.volume` (named volumes and bind
+machine: type, status, agent and Docker versions). Per reachable environment it
+also feeds `portainer.network`, `portainer.volume` (named volumes and bind
 mounts, with the containers mounting each), `portainer.image` (tags, digests,
 the containers running each and the reference each was started from),
 `portainer.compose_project` (stacks and compose labels) and `portainer.runtime`
@@ -190,13 +191,19 @@ are in [Secrets](Secrets.md#how-hq-reads-it).
 `host.unit` is the state of every systemd unit the repository ships
 (`SEVERINO_HOST_UNITS`): one record per unit. The set is derived, never listed:
 `Reported` in `controller/host/readings.go` walks `deploy/systemd` in the
-root-owned tree, taking each shipped unit that is not a template and each
+root-owned tree. It takes each shipped unit that is not a template, and each
 instance of a shipped template that a shipped file starts through `Unit=` or
 `OnFailure=`, so a unit added to the directory is read once installed. The
 launcher asks `systemctl show` for a fixed list of properties
-(`UnitProperties` in `controller/host/layout.go`) and mounts what it printed; the
+(`UnitProperties` in `controller/host/layout.go`) and mounts what it printed. The
 controller keeps exactly those properties and refuses a value that is not a
-unit name, a systemd state word, a number or an instant. `HostUnitRecord` in
+unit name, a systemd state word, a number or an instant. The one property of
+words is `Description`, the title the unit file gives it, read so a page names
+a unit as a person reads it rather than by a name systemd escapes
+(`run-severino\x2dhq\x2dsecrets.mount`). The repository writes every title,
+and the contract admits one only as printable ASCII on one line, bounded, with
+no slash, equals sign or bar; any other is left out, and the page shows the
+unit's name. `HostUnitRecord` in
 the bridge contract is emitted from the model of that name
 (`hq/domains/control_plane/observations/host.py`): it holds no command line, environment or path, and a
 unit that is not installed is a record saying so. Each record carries when it
@@ -206,9 +213,9 @@ was read, and a unit's state is judged as of then.
 
 | Finding | When | Severity |
 |---|---|---|
-| `unit-failed` | systemd holds a unit as failed; names its result and exit status | serious; attention when every failed unit is one a timer or path starts again |
-| `unit-not-installed` | a shipped unit is not loaded (not found, masked), its file is disabled, or a timer or path is not active | serious |
-| `timer-stalled` | an active timer is not running its unit: nothing is scheduled, it was more than two hours behind its own next elapse when read, its unit's condition did not hold, or its unit had been starting for more than two hours | serious |
+| `unit-failed` | systemd holds a unit as failed; names its result and exit status | serious; attention when every failed unit is one a timer, path or socket starts again |
+| `unit-not-installed` | a shipped unit is not loaded (not found, masked), its file is disabled, or a timer, path, socket or mount is not active | serious |
+| `timer-stalled` | an active timer is not running its unit. Nothing is scheduled, it was more than two hours behind its own next elapse when read, its unit's condition did not hold, or its unit had been starting for more than two hours | serious |
 | `unit-state-unread` | the launcher mounted no answer, or the answer was refused | attention |
 
 The rules name no unit. A renderer whose own status says its run failed is
@@ -267,9 +274,10 @@ this once; the machine list, the machine page and the connections page read it.
 ## Request paths
 
 `paths.path_to(hostname)` walks what a request for a name meets, one route per
-DNS answer that names it: the public record (proxied or not) or the internal
-rewrite, then the provider edge, a redirect, a Pages project or a tunnel, the
-proxy host or Caddy route, and the machine and container behind it. Which kinds
+DNS answer that names it. A route starts at the public record (proxied or not)
+or the internal rewrite. It then meets the provider edge, a redirect, a Pages
+project or a tunnel, the proxy host or Caddy route, and the machine and
+container behind it. Which kinds
 answer each hop is read from the registries (a provider's `facet`, `origin`,
 `fronts` and `served_certificate`; a reading's `facet`, `fronted_by`,
 `redirects_to` and `upstream`). Each hop names the reading and connection it
@@ -281,16 +289,17 @@ ingress; one with no facet (Cloudflare) at the edge. A `proxy` reading that
 neither redirects nor forwards (an NPM 404 host) ends the path at "Answers
 404". A reading with `upstream` and no facet (an NPM stream) is a route of its
 own beside the web route, one per forward on the same connection's ingress,
-with its `port`; `depends_on` leaves those routes out, since a second way in is
+with its `port`. `depends_on` leaves those routes out, since a second way in is
 not a part the name needs.
 
 The certificate is per hop: a proxied name shows the edge certificate, then the
 origin certificate the proxy behind it serves; a tailnet name shows the
 certificate the proxy serves. A Caddy route states the certificate it serves
-when the edge loads one from a file whose names cover the route (the edge
-target's read-only `certificates` operation hands over the public leaf of every
-file the edge loads, and each route names the one covering it, an exact name
-before a wildcard), and otherwise why it cannot (`ServedCertificate.unread`). A
+when the edge loads one from a file whose names cover the route, and otherwise
+why it cannot (`ServedCertificate.unread`). The edge target's read-only
+`certificates` operation hands over the public leaf of every file the edge
+loads, and each route names the one covering it, an exact name before a
+wildcard. A
 Caddy route whose upstream is a placeholder (`{http.request.host}:443`)
 forwards to whichever host the request names: its record keeps the placeholder
 and has no origin, so its path ends at the proxy. A route no declaration
@@ -331,12 +340,12 @@ says who it admits, worst first:
   perimeter check has run on its machine. Unknown ranks next to open: a gap in
   what HQ read is not evidence that the internet cannot reach something.
 
-A container's exposure is the worst of the names routed to it (`serves`), of
-any port it publishes that the host's perimeter check saw answer publicly, and,
-for the container on a machine's front door (it publishes 80 or 443, or on the
-host network its image exposes them), of every route entering that machine
-through an ingress. A route passes through a proxy rather than ending at it, so
-without that last clause the one container every public name crosses would read
+A container's exposure is the worst of the names routed to it (`serves`) and of
+any port it publishes that the host's perimeter check saw answer publicly. The
+container on a machine's front door (it publishes 80 or 443, or on the host
+network its image exposes them) also takes the worst of every route entering
+that machine through an ingress. A route passes through a proxy rather than
+ending at it, so without that rule the one container every public name crosses would read
 as reached by none. A problem is as urgent as the worst exposure of what it is
 about (`exposure.status_at`):
 
@@ -348,7 +357,7 @@ about (`exposure.status_at`):
 This applies to container advisories and container posture failures, and the
 item says which container is most exposed and how. Information stays off the
 action queue. The services list gives each name its reach in one word, with the
-route as its title, and a name open to the internet offers on its page the fix
+route as its title. A name open to the internet offers on its page the fix
 HQ can run: an access list on the proxy host it declares.
 
 ## History
@@ -366,17 +375,17 @@ first, and its Source filter picks them apart:
 - Containers: when each container last started, from Docker's inspect.
 
 Read as history (newest first, no search, no action filter, not the approval
-queue), consecutive events of one verb by one actor on one type of thing, each
-within five minutes of the last, are one line ("Created 14 containers") with
-each event behind it, and each deploy or container start lands on the page its
-time falls on. A search, another sort, an action filter or `?awaiting=1` lists
+queue), the page folds a run of events into one line ("Created 14
+containers"). A run is consecutive events of one verb by one actor on one type
+of thing, each within five minutes of the last, with each event behind its
+line. Each deploy or container start lands on the page its time falls on. A search, another sort, an action filter or `?awaiting=1` lists
 the audit rows one by one.
 
 Every condition a resource reports carries `since`, kept while the condition
 holds the same way (`hq.platform.application.conditions`), so a drift keeps the
 moment it was first seen. The topology gives a drifted declaration that moment
 and what the history holds within six hours of it
-(`hq.platform.application.history.near`), and the drift findings show both
+(`hq.platform.application.history.near`). The drift findings show both
 beside the key-level difference, so "Keep the live version" or "Apply HQ's
 settings" is decided next to the deploy, recreate or edit that likely caused it.
 
@@ -430,10 +439,10 @@ the declarations:
   (`hq/platform/application/docker_estate.py`).
 - A declaration whose spec has a `host` field runs on that machine.
 
-An estate node's last observed time is the newest of what describes it: the
-zone record for a domain, the device reading, telemetry and containers for a
-machine, and for every node its joined readings and the declarations that name
-it. A node no sweep or reading can observe says so; one that can but has not
+An estate node's last observed time is the newest of what describes it. For a
+domain that is the zone record; for a machine, the device reading, telemetry
+and containers; for every node, its joined readings and the declarations that
+name it. A node no sweep or reading can observe says so; one that can but has not
 been read says it is not observed yet.
 
 ## Relationships
@@ -459,11 +468,17 @@ the service page's "Who is allowed" band read the same joined records
 (`hq/platform/application/docker_sections.py`,
 `hq/platform/application/npm_sections.py`).
 
-Findings from these readings: `container-image-behind` (the machine's own tag
-now names a different image than the container runs; no registry is asked),
-`container-image-untagged`, and `certificate-expiring` for any
-certificate-facet reading within 21 days of expiry, by `expiry.days_until`, on
-the connection that read it (`hq/platform/application/certificate_expiry.py`).
+Findings from these readings:
+
+- `container-image-behind`: the machine's own tag now names a different image
+  than the container runs; no registry is asked.
+- `container-image-untagged`.
+- `container-image-unpinned`: started by a tag alone when the machine holds the
+  registry digest it could be pinned to, which the finding names. An image built
+  on the machine has none and is not claimed.
+- `certificate-expiring`: any certificate-facet reading within 21 days of
+  expiry, by `expiry.days_until`, on the connection that read it
+  (`hq/platform/application/certificate_expiry.py`).
 
 The machine, service, domain and declaration pages render the section, with
 "See in topology" (`?focus=<node>`), one "Not readable" line linking to the
@@ -486,116 +501,166 @@ RDAP needs no credential, so HQ reads it rather than a controller:
 domain's registrar and expiry), in
 `hq/domains/control_plane/observations/public_registry.py`.
 `hq.platform.application.public_registry.refresh` runs as the scheduled
-`registry.refresh` job, never from a page: a timer asks for it daily, and HQ
-starts it at once when a sweep found an image or digest HQ has not read. It
-reads only subjects that are due, a bounded number at a time, through the same
-ingest as a sweep, so a run with nothing due makes no request. Each reading
-stands as long as what it reads is slow to change (`READ_EVERY`): who holds an
-address or registers a domain, a week; tags, releases and vulnerabilities, a
-day; a digest's attestations, forever, since a digest never changes. A subject
-that could not be read is retried after an hour. Each record carries `read_at`,
-its age. An unconfigured registry is stored as not connected; one that cannot
-be reached, as a refused read.
+`registry.refresh` job, never from a page. A timer asks for it daily, and HQ
+starts it at once when a sweep found an image or digest HQ has not read.
+
+It reads only subjects that are due, a bounded number at a time, through the
+same ingest as a sweep, so a run with nothing due makes no request. Each
+reading stands as long as what it reads is slow to change (`READ_EVERY`):
+
+| Reading | Stands for |
+| --- | --- |
+| who holds an address or registers a domain | a week |
+| tags, releases and vulnerabilities | a day |
+| a digest's attestations | forever, since a digest never changes |
+| a subject that could not be read | an hour, then it is retried |
+
+Each record carries `read_at`, its age. An unconfigured registry is stored as
+not connected; one that cannot be reached, as a refused read.
 
 Address subjects are service origins, declared machine addresses and the public
 addresses a machine's tailnet client reports among its `endpoints` (not
 private, tailnet or documentation). The machine page names each one's holder.
-The service list names the holder of a public origin address, and the domain
-page falls back to this reading for a registration's expiry when the registrar
+The service list names the holder of a public origin address. The domain page
+falls back to this reading for a registration's expiry when the registrar
 is not read; auto-renew is then unknown, and the page says so.
 
 ### Containers and images
 
 The same refresh reads, keyless, what a running container's image is and
-whether it is current. `registry.image` is each image a container runs, read
-from its registry over the OCI distribution API with an anonymous pull token
-(`hq.platform.application.oci_registry`): the tags that carry a version, and
-the build labels naming the source repository. `registry.upstream` is each
-GitHub repository an image names that way, or lives under in `ghcr.io`: its
-recent releases and published security advisories with their version ranges
-and fixes (`hq.platform.application.github_public`). Upstreams are chosen from
-the images just read, and fewer per run, because GitHub allows an address few
-anonymous calls an hour. Every host a registry read touches is named by someone
-else (the image, the token challenge, a redirect to a CDN), so each request is
-HTTPS to a name resolving only to public addresses, a token never follows a
-redirect to another host, and a response is size-capped.
+whether it is current.
 
-`hq.platform.application.containers` joins them per running container: the
-version it runs (the tag, or the tag its digest was pulled as), newer tags of
-the same shape (`1.31.3-alpine` is compared only with `N.N.N-alpine`), and the
-advisories whose range holds that version, where a stated fix at or below it
-clears an open-ended range and a range that cannot be read is "not known",
-never "not affected". HQ's own image answers from the GitHub App's reading of
-its repository instead: the production deploy, whether it passed its checks,
-and, for whether anything is newer, whether the default branch has moved past
-it. Which container is HQ's is derived (`hq_self.own_container`).
+- `registry.image` is each image a container runs, read from its registry over
+  the OCI distribution API with an anonymous pull token
+  (`hq.platform.application.oci_registry`): the tags that carry a version, and
+  the build labels naming the source repository.
+- `registry.upstream` is each GitHub repository an image names that way, or
+  lives under in `ghcr.io`: its recent releases and published security
+  advisories with their version ranges and fixes
+  (`hq.platform.application.github_public`). Upstreams are chosen from the
+  images just read, and fewer per run, because GitHub allows an address few
+  anonymous calls an hour.
+
+Every host a registry read touches is named by someone else (the image, the
+token challenge, a redirect to a CDN). So each request is HTTPS to a name
+resolving only to public addresses, a token never follows a redirect to
+another host, and a response is size-capped.
+
+`hq.platform.application.containers` joins them per running container:
+
+- the version it runs (the tag, or the tag its digest was pulled as);
+- newer tags of the same shape (`1.31.3-alpine` is compared only with
+  `N.N.N-alpine`);
+- the advisories whose range holds that version. A stated fix at or below it
+  clears an open-ended range, and a range that cannot be read is "not known",
+  never "not affected".
+
+HQ's own image answers from the GitHub App's reading of its repository
+instead: the production deploy, whether it passed its checks, and, for whether
+anything is newer, whether the default branch has moved past it. Which
+container is HQ's is derived (`hq_self.own_container`).
+
 The containers page, each container's page and each machine's container table
-show one `ImageStanding`; the action queue holds one item per affected image and
-version, and one for every image with a newer release. With a `HEAD` of the
-manifest, the refresh also resolves the digest each running tag names now and
-the digest of the newest tag of its shape: what an upgrade would pin, and
-whether a running tag has been rebuilt since it was pulled (`moved_to`). A
-digest that could not be read makes its image due again on the next run.
+show one `ImageStanding`. The action queue holds one item per affected image
+and version, and one for every image with a newer release.
 
-`registry.digest` is what the publisher attached to each of those digests, read
-once (`hq.platform.application.oci_registry.attestations`,
-`hq.platform.application.attestations`): the in-toto statements BuildKit puts
-beside a platform's manifest, from which HQ keeps the SBOM's package URLs and
-the SLSA provenance's source, commit, builder and base images. They are
-metadata beside the image, never a layer of it: nothing is pulled and nothing
-runs. The statements are the publisher's unsigned word, and the page says
-"states", not "proves". `registry.vulnerabilities` is those packages checked
-against OSV (`hq.platform.application.osv`), keyless, one batch per thousand
-packages, each vulnerability's detail read once and kept until OSV modifies
-it: the id, the package and installed version, the fixing versions, and a
-severity where the database gives one.
+With a `HEAD` of the manifest, the refresh also resolves the digest each
+running tag names now and the digest of the newest tag of its shape. That is
+what an upgrade would pin, and whether a running tag has been rebuilt since it
+was pulled (`moved_to`). A digest that could not be read makes its image due
+again on the next run.
+
+`registry.digest` is what the publisher attached to each of those digests,
+read once (`hq.platform.application.oci_registry.attestations`,
+`hq.platform.application.attestations`). It is the in-toto statements BuildKit
+puts beside a platform's manifest, from which HQ keeps the SBOM's package URLs
+and the SLSA provenance's source, commit, builder and base images.
+
+They are metadata beside the image, never a layer of it: nothing is pulled and
+nothing runs. The statements are the publisher's unsigned word, and the page
+says "states", not "proves".
+
+`registry.vulnerabilities` is those packages checked against OSV
+(`hq.platform.application.osv`), keyless, one batch per thousand packages.
+Each vulnerability's detail is read once and kept until OSV modifies it: the
+id, the package and installed version, the fixing versions, and a severity
+where the database gives one.
 
 What an image is built from is known, most trusted first, from the container's
 declaration (`source`, for an image that does not say), the image's label, its
 provenance's stated source, then the GitHub registry it lives in
-(`containers.source_of`); the page says which, and the upstream reads follow
+(`containers.source_of`). The page says which, and the upstream reads follow
 it. An image is vulnerable when an advisory on its source matches its version,
 or when a critical or high vulnerability in its packages has a published fix; an
 unrated or unfixed one is shown, never raised.
 
-`portainer.runtime` is how each container is run, from Docker's inspect through
-Portainer: user, privilege, capabilities, host namespaces, security options,
-devices, mounts, port bindings, limits, restart policy and health check. It is
-built field by field, so the environment, command line and labels the inspect
-document also carries are never stored.
+`portainer.runtime` is how each container is run, from Docker's inspect
+through Portainer: user, privilege, capabilities, host namespaces, security
+options, devices, mounts, port bindings, limits, restart policy and health
+check. It is built field by field, so the environment, command line and labels
+the inspect document also carries are never stored.
+
+Beside its limits, a running container's record carries what it used, from one
+one-shot stats sample per sweep (`stream=false&one-shot=true`, the same
+Portainer read the dashboard glance takes):
+
+- its memory, counted as the cgroup's anonymous memory where Docker reports it
+  (production's own reading, the one `perf --image` compares with) and
+  otherwise as usage less inactive file cache, `memory_usage_basis` saying
+  which;
+- its CPU counter, with when it was sampled.
+
+A one-shot sample's counter is all the CPU since the container started, so it
+is never shown as current use. HQ takes `cpu_percent`, a share of one core,
+between the sample it last stored for the same run of the container and the
+new one as it stores the reading (`ObservationSpec.from_last`). There is none
+until two sweeps have sampled it.
+
+The glance takes its share the same way, across two samples of each container
+200 ms apart. The container page shows both against its limits, and the
+`containers` resource carries them as `usage`.
+
 `hq.platform.application.container_standard` holds each container to a
-standard over it (`hq.platform.application.standards`, the primitive the GitHub
-posture uses too): reach over the machine (privilege, the Docker socket, the
-host's process namespace, confinement off, a writable system path, a
-machine-level capability) is serious and queued, one item per check naming
-every container that fails it; hardening (a non-root user, no-new-privileges,
-its own network, bound ports, a memory limit, a health check) is shown and not
-queued. `hq.platform.application.supply_chain` holds the image to a second
-standard: pinned to a digest, its source known, its build described, its
-packages listed, no fixable serious vulnerability, no advisory against its
-version, its tag still naming what runs. A check HQ could not read is
-unavailable, never failed.
+standard over it (`hq.platform.application.standards`, the primitive the
+GitHub posture uses too):
+
+| Check | Examples | Raised |
+| --- | --- | --- |
+| reach over the machine | privilege, the Docker socket, the host's process namespace, confinement off, a writable system path, a machine-level capability | serious and queued, one item per check naming every container that fails it |
+| hardening | a non-root user, no-new-privileges, its own network, bound ports, a memory limit, a health check | shown and not queued |
+
+`hq.platform.application.supply_chain` holds the image to a second standard:
+pinned to a digest, its source known, its build described, its packages
+listed, no fixable serious vulnerability, no advisory against its version, its
+tag still naming what runs. A check HQ could not read is unavailable, never
+failed.
 
 `hq.platform.application.upgrades` plans an upgrade for every container with
-something newer published, and changes nothing: the target by digest, the size
-of the move, the advisories and package vulnerabilities it clears or would
-bring (the two digests' OSV readings compared), the writable mounts that would
-be snapshotted, what would verify it (its health check, a request to each name
-it serves), the steps, and every reason it cannot go ahead yet as an id and a
-reason (`not-declared`, `runtime-unread`, `no-target-digest`, `no-apply-path`,
-`target-affected`, `own-pipeline` for HQ's own image). A separate list says what
-keeps it from applying without a person: what is not known about the target
-(`target-unread`, `no-provenance`, `no-package-list`, `not-scanned`); anything
-but a vetted patch waits. The program an upgrade runs is in
-[Deployment](Deployment.md#container-upgrades).
+something newer published, and changes nothing. A plan holds:
+
+- the target by digest, and the size of the move;
+- the advisories and package vulnerabilities it clears or would bring (the two
+  digests' OSV readings compared);
+- the writable mounts that would be snapshotted;
+- what would verify it (its health check, a request to each name it serves);
+- the steps;
+- every reason it cannot go ahead yet, as an id and a reason (`not-declared`,
+  `runtime-unread`, `no-target-digest`, `no-apply-path`, `target-affected`,
+  `own-pipeline` for HQ's own image).
+
+A separate list says what keeps it from applying without a person: what is not
+known about the target (`target-unread`, `no-provenance`, `no-package-list`,
+`not-scanned`). Anything but a vetted patch waits. The program an upgrade runs
+is in [Deployment](Deployment.md#container-upgrades).
 
 ## GitHub
 
 The controller reads `github.repository` through HQ's GitHub App: one
 installation token per repository, read-only permissions only, minted for each
 read. A record is a repository's head and its checks, open pull requests,
-workflows waiting on an approval, deployments and the steps each ran before
-deploying whose names begin "Verify", branch rules, environments, runners,
+workflows waiting on an approval, and deployments with the steps each ran
+before deploying whose names begin "Verify". It also holds branch rules,
+environments, runners,
 alert counts by severity, admission artifacts, who has access (collaborators,
 deploy keys, the default workflow token, Actions settings), and the names of
 its Actions variables. Each part is refused on its own where the repository's
@@ -610,35 +675,40 @@ links to GitHub's list for each part holding alerts (code scanning,
 Dependabot, secret scanning; `ALERT_PAGES`), the worst first.
 
 `hq.platform.application.github_posture` holds every repository to a standard
-derived from the same record: what every repository is held to (only you have
+derived from the same record. Every repository is held to this: only you have
 access, deploy keys read-only and in use, a read-only workflow token that
-approves nothing, actions pinned to a commit, vulnerability alerts on, no
-Actions variables) and, for a public one, what GitHub gives it besides (pull
-requests required, the default branch protected from force pushes and
-deletion, secret scanning, push protection, code scanning). What a plan does
+approves nothing, actions pinned to a commit, vulnerability alerts on, and no
+Actions variables. A public one is also held to what GitHub gives it besides:
+pull requests required, the default branch protected from force pushes and
+deletion, secret scanning, push protection, code scanning. What a plan does
 not offer is "not available", never a failure. The queue holds one item per
 check not met, naming every repository that misses it.
 
 The `workflow_pins` part reads the `uses:` lines not pinned to a commit, in
 each workflow and each local composite action (`.github/actions/*/action.yml`),
-and the commit each tag or branch names now. It uses the same token with
-`contents: read` and resolves each action and tag once per sweep: a commit read
-for one repository serves the rest, and a ref one repository could not read is
-asked again by the next. A repository with no `.github/workflows` (GitHub
-answers 404) has nothing to pin, which is not a failed read. It also names each
-workflow called from another repository (`owner/repo/.github/workflows/x.yml@ref`).
-The pinning item offers one `perl -pi` per file (the same on macOS and Linux,
-where `sed -i` differs); each edit replaces only an uncommented line whose key
-is `uses:`, with `owner/action@<sha> # <tag>`, keeping its indentation and line
-ending. The command that requires pinning follows only when every line could be
-resolved and no workflow is called from another repository: requiring it first
-would stop every run that still uses a tag, and it applies to what a called
-workflow uses, which HQ does not read, so the item says to check those first. A
-repository whose workflows were not read gets the reason instead.
+and the commit each tag or branch names now. It also names each workflow
+called from another repository (`owner/repo/.github/workflows/x.yml@ref`).
+
+It uses the same token with `contents: read` and resolves each action and tag
+once per sweep: a commit read for one repository serves the rest, and a ref
+one repository could not read is asked again by the next. A repository with no
+`.github/workflows` (GitHub answers 404) has nothing to pin, which is not a
+failed read.
+
+The pinning item offers one `perl -pi` per file, the same on macOS and Linux,
+where `sed -i` differs. Each edit replaces only an uncommented line whose key
+is `uses:`, with `owner/action@<sha> # <tag>`, keeping its indentation and
+line ending.
+
+The command that requires pinning follows only when every line could be
+resolved and no workflow is called from another repository. Requiring it first
+would stop every run that still uses a tag. It also applies to what a called
+workflow uses, which HQ does not read, so the item says to check those first.
+A repository whose workflows were not read gets the reason instead.
 
 Watching shows the signed-in person's GitHub profile and the repositories they
-star: the controller's `github.profile` reading, from GitHub's public API,
-under a GitHub App token that reads one covered repository's metadata where an
+star, from the controller's `github.profile` reading. That reading comes from
+GitHub's public API, under a GitHub App token that reads one covered repository's metadata where an
 app is connected, for its allowance, and anonymously where none is. Whose profile is the login their sign-in claims
 (`hq.platform.application.linked_accounts`), never one typed into HQ;
 `hq.platform.application.github_profile.plan` hands the controller those
@@ -678,8 +748,8 @@ only the hand-off file, and no log text reaches HQ.
 ## Machine roles
 
 What a machine does for the estate is derived from the tailnet readings by the
-rules in `hq.platform.application.machine_roles.ROLES`: an exit node offers and
-has approved both default routes; the tailnet DNS server holds an address the
+rules in `hq.platform.application.machine_roles.ROLES`. An exit node offers and
+has approved both default routes. The tailnet DNS server holds an address the
 policy names as a nameserver. The machine list, the machine page's Serves card
 and search read `Machine.roles`.
 
@@ -740,8 +810,8 @@ A readable kind older than its cadence allows reads **Out of date**
 use the same words, through `credential_sight.standing`.
 
 A connection whose probe fails reports why as `failure`, a class the controller
-assigns where the request failed (`FailureClass`, `controller/runtime`):
-`credential` or `permission` (HTTP 401 or 403, or the provider's own refusal),
+assigns where the request failed (`FailureClass`, `controller/runtime`). The
+class is `credential` or `permission` (HTTP 401 or 403, or the provider's own refusal),
 `address` (the address answered with a sign-in page, a web page or a redirect
 elsewhere, not the API), or `network` (nothing answered). The
 `connection-not-answering` finding's fix follows it: the mint command, the item

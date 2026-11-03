@@ -158,7 +158,7 @@ def populate(size: int = 8) -> None:
 def dashboard(_size: int) -> dict:
     with host_only(), projection_scope():
         snapshot = operating_snapshot(principal=cli_principal())
-        dashboard_highlights()
+        dashboard_highlights(cli_principal())
     return snapshot
 
 

@@ -27,7 +27,7 @@ they share a row; either alone takes it.
 {% endcomment %}
 {% card heading="hq-release-heading" %}
   <h2 id="hq-release-heading">Release</h2>
-  {% include "partials/_problems.html" with problems=hq.problems_in.release|not_urgent only %}
+  {% include "partials/_problems.html#lines" with rest=hq.problems_in.release|not_urgent only %}
   <dl class="kv">
         <dt>Commit</dt>
           <dd>{% if release.commit_url %}{% entity release.commit_url|outside label=release.short code=True %}{% elif release.revision %}<code>{{ release.short|breakable }}</code>{% else %}<span class="muted">This build does not say which commit it is.</span>{% endif %}</dd>
@@ -60,7 +60,7 @@ they share a row; either alone takes it.
 {% if machine %}
 {% card heading="hq-where-heading" %}
   <h2 id="hq-where-heading">Runs on</h2>
-  {% include "partials/_problems.html" with problems=hq.problems_in.where|not_urgent only %}
+  {% include "partials/_problems.html#lines" with rest=hq.problems_in.where|not_urgent only %}
   <dl class="kv">
         <dt>Machine</dt>
           <dd>{% entity machine.link %} <span class="muted">{{ machine.state.0|breakable }}</span></dd>
@@ -79,7 +79,7 @@ they share a row; either alone takes it.
         {% endif %}
         {% if work.services %}
         <dt>Kept running by</dt>
-          <dd>{% for job in work.services %}<code>{{ job.unit|breakable }}</code>{% if job.last_run %} <span class="muted">since {{ job.last_run|when:"ago" }}</span>{% endif %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</dd>
+          <dd>{% for job in work.services %}{% include "partials/_unit.html" with title=job.title unit=job.unit only %}{% if job.last_run %} <span class="muted">since {{ job.last_run|when:"ago" }}</span>{% endif %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</dd>
         {% endif %}
       </dl>
 {% endcard %}
@@ -88,7 +88,7 @@ they share a row; either alone takes it.
 {% card heading="hq-reach-heading" %}
   <h2 id="hq-reach-heading">Reached through</h2>
   {% include "partials/_example_connection.html" with notice=True %}
-  {% include "partials/_problems.html" with problems=hq.problems_in.reach|not_urgent only %}
+  {% include "partials/_problems.html#lines" with rest=hq.problems_in.reach|not_urgent only %}
   <p class="muted">{{ found.connection.channel.label|breakable }}{% dot %}{{ found.proof|breakable }}</p>
   {% include "control_plane/_path_hops.html" with route=found.route label="How this page reached you" %}
   {% for hop in found.findings %}<p class="notice notice-attention"><strong>{{ hop.label|breakable }}</strong> {{ hop.check.detail|breakable }} {{ hop.check.step|breakable }}</p>{% endfor %}
@@ -107,7 +107,7 @@ they share a row; either alone takes it.
         <tbody>
           {% for job in work.jobs %}
             <tr>
-              <td class="row-gutter"><code>{{ job.unit|breakable }}</code>{% row_toggle %}</td>
+              <td class="row-gutter">{% include "partials/_unit.html" with title=job.title unit=job.unit only %}{% row_toggle %}</td>
               <td>{% if job.runs_unit %}<code>{{ job.runs|breakable }}</code>{% else %}{{ job.runs|breakable }}{% endif %}</td>
               <td>{% if job.last_run %}{{ job.last_run|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
               <td><span class="pill pill-{{ job.tone }}">{{ job.result|breakable }}</span></td>
@@ -160,12 +160,12 @@ they share a row; either alone takes it.
 {% if sight.groups %}
 <section aria-labelledby="hq-sight-heading">
   <h2 id="hq-sight-heading">Readings</h2>
-  {% include "partials/_problems.html" with problems=hq.problems_in.sight|not_urgent only %}
+  {% include "partials/_problems.html#lines" with rest=hq.problems_in.sight|not_urgent only %}
   {% comment %}A table where every row says "Never read" says one thing; it is said once.{% endcomment %}
   {% if sight.never == sight.rows|length %}
   {% card element="div" %}<p>None read yet. Once the controller runs, HQ reads {% for row in sight.rows %}{{ row.label|breakable }}{% if forloop.revcounter == 2 %} and {% elif not forloop.last %}, {% endif %}{% endfor %}.</p>{% endcard %}
   {% else %}
-  {% table_region "Readings" %}
+  {% table_region "Readings by connection" %}
     <table class="data-table">
       <thead><tr>{% table_heading "Reading" local_sort=sight.rows|sortable gutter=True %}{% table_heading "State" "status" css="key-col" local_sort=sight.rows|sortable %}{% table_heading "Records" "numeric" local_sort=sight.rows|sortable drop=2 %}{% table_heading "Last read" "status" css="optional-col" local_sort=sight.rows|sortable drop=1 %}</tr></thead>
       {% for provider, rows in sight.groups %}

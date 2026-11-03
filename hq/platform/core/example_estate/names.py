@@ -19,7 +19,11 @@ LAPTOP_NAME = "macbook-pro-16"
 PHONE_NAME = "iphone-16-pro"
 # The home's public address, from a documentation range.
 PUBLIC = "198.51.100.7"
-OWNER = "example@example.com"
+# The person who runs it: their username in HQ, first and last name, and the
+# address they sign in with.
+OWNER_USERNAME = "alex"
+OWNER_NAME = ("Alex", "Rivera")
+OWNER = f"{OWNER_USERNAME}@{ZONE}"
 SSO = "hq.platform.core.oidc.HQOIDCAuthenticationBackend"
 
 PORTAINER = "portainer"

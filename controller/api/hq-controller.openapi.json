@@ -153,7 +153,7 @@
     "/material": {
       "post": {
         "operationId": "material",
-        "summary": "Certificate material for one resource.",
+        "summary": "Certificate material for one resource, its key sealed.",
         "x-bridge-action": "material",
         "parameters": [
           {
@@ -910,25 +910,31 @@
         "type": "object",
         "properties": {
           "fullchain": {
-            "type": "string"
-          },
-          "private_key": {
-            "type": "string"
+            "type": "string",
+            "description": "The certificate and its chain, PEM-encoded, which are public."
           },
           "domains": {
             "type": "array",
             "items": {
               "type": "string"
             }
+          },
+          "slots": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^hq2\\."
+            },
+            "description": "Each secret the resource holds, by slot, sealed to the controller: only the controller opens one, and only for this resource and slot."
           }
         },
         "additionalProperties": false,
         "required": [
           "fullchain",
-          "private_key",
-          "domains"
+          "domains",
+          "slots"
         ],
-        "description": "A stored certificate's material, released only to the controller applying it."
+        "description": "A stored certificate's material, released only to the controller applying it. Its secrets cross sealed."
       },
       "Condition": {
         "type": "object",
@@ -2919,6 +2925,7 @@
         "type": "string",
         "description": "A connection provider HQ's registry declares: what a credential is for.",
         "enum": [
+          "acme",
           "adguard",
           "cloudflare_api",
           "cloudflare_dns",
@@ -2930,6 +2937,7 @@
           "tailscale"
         ],
         "x-enum-varnames": [
+          "ConnectionProviderACME",
           "ConnectionProviderAdGuard",
           "ConnectionProviderCloudflareAPI",
           "ConnectionProviderCloudflareDNS",
@@ -3119,7 +3127,6 @@
           "watched": {
             "default": [],
             "items": {
-              "additionalProperties": true,
               "type": "object"
             },
             "maxItems": 15,
@@ -3164,19 +3171,16 @@
             ]
           },
           "head": {
-            "additionalProperties": true,
             "default": {},
             "type": "object"
           },
           "checks": {
-            "additionalProperties": true,
             "default": {},
             "type": "object"
           },
           "pull_requests": {
             "default": [],
             "items": {
-              "additionalProperties": true,
               "type": "object"
             },
             "type": "array"
@@ -3191,7 +3195,6 @@
           "runs": {
             "default": [],
             "items": {
-              "additionalProperties": true,
               "type": "object"
             },
             "type": "array"
@@ -3199,13 +3202,11 @@
           "waiting": {
             "default": [],
             "items": {
-              "additionalProperties": true,
               "type": "object"
             },
             "type": "array"
           },
           "release": {
-            "additionalProperties": true,
             "type": [
               "object",
               "null"
@@ -3215,19 +3216,16 @@
           "deployments": {
             "default": [],
             "items": {
-              "additionalProperties": true,
               "type": "object"
             },
             "type": "array"
           },
           "alerts": {
-            "additionalProperties": true,
             "default": {},
             "type": "object"
           },
           "dependabot_alerts": {
             "items": {
-              "additionalProperties": true,
               "type": "object"
             },
             "type": [
@@ -3239,13 +3237,11 @@
           "artifacts": {
             "default": [],
             "items": {
-              "additionalProperties": true,
               "type": "object"
             },
             "type": "array"
           },
           "rules": {
-            "additionalProperties": true,
             "type": [
               "object",
               "null"
@@ -3255,7 +3251,6 @@
           "environments": {
             "default": [],
             "items": {
-              "additionalProperties": true,
               "type": "object"
             },
             "type": "array"
@@ -3263,7 +3258,6 @@
           "runners": {
             "default": [],
             "items": {
-              "additionalProperties": true,
               "type": "object"
             },
             "type": "array"
@@ -3271,13 +3265,11 @@
           "images": {
             "default": [],
             "items": {
-              "additionalProperties": true,
               "type": "object"
             },
             "type": "array"
           },
           "access": {
-            "additionalProperties": true,
             "type": [
               "object",
               "null"
@@ -3296,7 +3288,6 @@
           },
           "pins": {
             "items": {
-              "additionalProperties": true,
               "type": "object"
             },
             "type": [
@@ -3640,12 +3631,19 @@
       },
       "HostUnitRecord": {
         "additionalProperties": false,
-        "description": "One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships, and the controller reports no other. Each string is a unit name, one of systemd's state words or an instant in UTC; none is a path, a command line or an environment.",
+        "description": "One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships, and the controller reports no other. Each string is a unit name, one of systemd's state words, an instant in UTC or the unit file's own title for a person to read; none is a path, a command line or an environment.",
         "properties": {
           "unit": {
             "description": "Id: the unit's name.",
             "maxLength": 255,
             "pattern": "^(?:[A-Za-z0-9:_.@-]|\\\\x[0-9a-f]{2})+\\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "description": "Description: what the unit is, in the words of the unit file the repository ships. Its name when the file has none.",
+            "maxLength": 120,
+            "pattern": "^(?:|[ -.0-<>-{}~]+)$",
             "type": "string"
           },
           "load": {
@@ -4417,6 +4415,25 @@
             "type": "integer"
           },
           "started_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "memory_usage": {
+            "default": 0,
+            "type": "integer"
+          },
+          "memory_usage_basis": {
+            "default": "",
+            "type": "string"
+          },
+          "cpu_time": {
+            "default": 0,
+            "type": "integer"
+          },
+          "usage_read_at": {
             "default": null,
             "type": [
               "string",

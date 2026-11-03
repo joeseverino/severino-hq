@@ -1,0 +1,4 @@
+{% comment %}
+A systemd unit as a person reads it: its unit file's title, with its name kept
+beneath as the identifier systemctl takes; the name alone when it has no title.
+{% endcomment %}{% if title %}{{ title|breakable }}<br><code>{{ unit|breakable }}</code>{% else %}<code>{{ unit|breakable }}</code>{% endif %}

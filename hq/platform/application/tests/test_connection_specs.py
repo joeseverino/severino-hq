@@ -19,10 +19,10 @@ from ..connections import (
     ConnectionLink,
     ConnectionSpec,
     describe_connections,
-    list_connections,
 )
 from ..integrations import integration_graph
 from ..plugin_testing import offering
+from ..resources import WHOLE_RECORD, list_resource
 from ..security import Capability, Principal
 from .host_only import host_only
 from .sentinel import CONNECTION as SENTINEL_CONNECTION, SENTINEL, SentinelMixin, plant_credentials
@@ -35,6 +35,8 @@ FINANCE_OPERATOR = Principal(
     "test",
     frozenset({"example.finance.read", "write_projects"}),
 )
+# The finance reader, admitted to the registered connections read.
+FINANCE_READER = Principal("finance-reader", "test", frozenset({Capability.READ, "example.finance.read"}))
 INFRA_OPERATOR = Principal(
     "infrastructure-operator",
     "test",
@@ -83,6 +85,16 @@ def _finance_spec() -> ConnectionSpec:
     )
 
 
+def _standing(principal: Principal) -> list[dict]:
+    """Each connection as the registered ``connection.standing`` read answers it."""
+
+    return list_resource("connection.standing", principal=principal, fields=[WHOLE_RECORD])["items"]
+
+
+def _abilities(item: dict) -> list[dict]:
+    return [read["ability"] for read in item["reads"] if read["ability"]] + item["changes"]
+
+
 class ConnectionExecutionTests(SentinelMixin, TestCase):
     def test_hyphenated_plugin_route_names_are_valid(self):
         spec = replace(
@@ -110,17 +122,16 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
             observed_at=timezone.now(),
         )
 
-        outcome = list_connections(principal=READ)
-        core = next(group for group in outcome["groups"] if group["name"] == "infrastructure.controllers")
-        connection = core["instances"][0]
+        outcome = _standing(READ)
+        core = [item for item in outcome if item["family"] == "infrastructure.controllers"]
+        connection = next(item for item in core if item["label"] == "example-cloudflare")
 
-        self.assertEqual(connection["label"], "example-cloudflare")
         self.assertIn(
             "cloudflare.dns_record",
-            {ability["name"] for ability in connection["abilities"]},
+            {ability["name"] for ability in _abilities(connection)},
         )
         self.assertEqual(connection["controller_id"], "controller")
-        self.assertIn(SENTINEL_CONNECTION, {instance["label"] for instance in core["instances"]})
+        self.assertIn(SENTINEL_CONNECTION, {instance["label"] for instance in core})
         self.assertNoSentinel(outcome)
 
     def test_scope_coverage_is_derived_for_every_ability(self):
@@ -218,9 +229,8 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
 
     def test_machine_catalog_emits_the_same_safe_actions_as_the_web_projection(self):
         with offering(_finance_spec()):
-            payload = list_connections(principal=FINANCE)
+            instance = next(item for item in _standing(FINANCE_READER) if item["family"] == "example.finance")
 
-        instance = payload["groups"][0]["instances"][0]
         self.assertEqual(
             [action["name"] for action in instance["actions"]],
             ["open", "manage", "relationships"],
@@ -461,7 +471,7 @@ class ConnectionRegistrationTests(TestCase):
                 offering(spec),
                 self.assertRaisesRegex(ImproperlyConfigured, "private URL parts") as refused,
             ):
-                list_connections(principal=FINANCE)
+                connection_catalog(principal=FINANCE)
             self.assertNotIn(SENTINEL, str(refused.exception))
 
     def test_blank_controller_identity_fails_closed(self):
@@ -472,7 +482,7 @@ class ConnectionRegistrationTests(TestCase):
             offering(spec),
             self.assertRaisesRegex(ImproperlyConfigured, "invalid controller id"),
         ):
-            list_connections(principal=FINANCE)
+            connection_catalog(principal=FINANCE)
 
     def test_every_malformed_instance_fails_closed_naming_what_is_wrong(self):
         good = _finance_spec().instance_provider()[0]
@@ -494,7 +504,7 @@ class ConnectionRegistrationTests(TestCase):
                 offering(spec),
                 self.assertRaisesRegex(ImproperlyConfigured, refusal),
             ):
-                list_connections(principal=FINANCE)
+                connection_catalog(principal=FINANCE)
 
     def test_documentation_urls_are_restricted_to_safe_destinations(self):
         spec = replace(_finance_spec(), documentation_url="javascript:alert(1)")
@@ -710,20 +720,18 @@ class GrantEvidenceTests(TestCase):
                 observed_at=timezone.now(),
             )
 
-        outcome = list_connections(principal=READ)
-        core = next(g for g in outcome["groups"] if g["name"] == "infrastructure.controllers")
-        by_ref = {item["label"]: item for item in core["instances"]}
+        by_ref = {item["label"]: item for item in _standing(READ) if item["family"] == "infrastructure.controllers"}
 
         # A login key is the whole machine: named as such, and ready.
         self.assertEqual(by_ref["a-ssh"]["credential_model"], "coarse")
         self.assertEqual(by_ref["a-ssh"]["authority"], "whole_account")
         self.assertEqual(by_ref["a-ssh"]["lifecycle"], "ready")
-        self.assertTrue(all(a["evidence"] == "coarse" for a in by_ref["a-ssh"]["abilities"]))
+        self.assertTrue(all(a["evidence"] == "coarse" for a in _abilities(by_ref["a-ssh"])))
         # A scoped token nobody has asked about: reachable, with the debt named.
         self.assertEqual(by_ref["a-cloudflare_dns"]["credential_model"], "scoped")
         self.assertEqual(by_ref["a-cloudflare_dns"]["authority"], "undeclared")
         self.assertEqual(by_ref["a-cloudflare_dns"]["lifecycle"], "reachable")
-        self.assertTrue(all(a["evidence"] == "unverified" for a in by_ref["a-cloudflare_dns"]["abilities"]))
+        self.assertTrue(all(a["evidence"] == "unverified" for a in _abilities(by_ref["a-cloudflare_dns"])))
 
     def test_every_connection_provider_declares_a_credential_model(self):
         from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS
@@ -737,10 +745,10 @@ class GrantEvidenceTests(TestCase):
 
     def test_keyless_gateways_prove_themselves_without_a_credential(self):
         lookup = Principal("lookup", "test", frozenset({Capability.READ, Capability.LOOK_UP_PUBLIC_RECORDS}))
-        outcome = list_connections(principal=lookup)
-        registries = next(g for g in outcome["groups"] if g["name"] == "hq.public_registries")
-        for instance in registries["instances"]:
+        registries = [item for item in _standing(lookup) if item["family"] == "hq.public_registries"]
+        self.assertTrue(registries)
+        for instance in registries:
             self.assertEqual(instance["credential_model"], "none")
             self.assertEqual(instance["authority"], "proven")
-            self.assertTrue(all(a["evidence"] == "not_applicable" for a in instance["abilities"]))
-            self.assertTrue(all(a["grant"] == "none" for a in instance["abilities"]))
+            self.assertTrue(all(a["evidence"] == "not_applicable" for a in _abilities(instance)))
+            self.assertTrue(all(a["grant"] == "none" for a in _abilities(instance)))

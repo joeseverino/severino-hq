@@ -10,6 +10,7 @@ from typing import Any
 from django.conf import settings
 
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
+from hq.platform.application.labels import dotted
 from hq.platform.core.oidc import sso_only
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
@@ -24,8 +25,9 @@ lazy from .connections import connection_rows
 lazy from .derivations import present
 lazy from .facts import stored_snapshots
 lazy from .github_estate import REPOSITORY_KIND
-lazy from .hq_context.release import repository
+lazy from .hq_context.release_part import repository
 lazy from .hq_self import hq_hostnames
+lazy from .integration_validation import required_capability_names
 lazy from .routes import reverse
 
 NOT_READ = "Not read yet"
@@ -43,6 +45,10 @@ class CheckOutcome:
     # What would let HQ read an unread check, and where that is done.
     remedy: str = ""
     remedy_url: str = ""
+    # What a reader must hold to be told the evidence: the read gates of the
+    # connection families whose instances it names. Empty for evidence that
+    # names nothing a family gates.
+    read_capabilities: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,15 +114,17 @@ class Posture:
         names what it is short of, and an unread check is not counted as unmet."""
 
         parts = [f"{self.met_count} of {len(self.standings)} met"]
-        if failing := [standing.check.label for standing in self.unmet if standing.reading.met is False]:
+        if failing := [standing.check.label for standing in self.unmet]:
             parts.append(f"not met: {', '.join(failing)}")
         if self.unread_count:
             parts.append(f"{self.unread_count} not read yet")
-        return " · ".join(parts)
+        return dotted(*parts)
 
     @property
     def unmet(self) -> tuple[CheckStanding, ...]:
-        return tuple(standing for standing in self.standings if not standing.met)
+        """The checks read and found failing; an unread one waits on its reading."""
+
+        return tuple(standing for standing in self.standings if standing.reading.met is False)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -131,6 +139,9 @@ class Posture:
                     "evidence": standing.reading.evidence,
                     "qualified": standing.reading.qualified,
                     "stops": standing.check.stops,
+                    # What would let HQ read a check not read yet.
+                    "remedy": standing.reading.remedy or None,
+                    "remedy_url": standing.reading.remedy_url or None,
                 }
                 for standing in self.standings
             ],
@@ -257,18 +268,29 @@ def _scope(inputs) -> CheckOutcome:
 
     scoped = {setup.provider for setup in setups() if setup.permissions}
     connections = tuple(connection for group in inputs.groups for connection in group.connections)
-    broad = sorted(
-        connection.instance.label
-        for connection in connections
+    broad = [
+        (group, connection)
+        for group in inputs.groups
+        for connection in group.connections
         if connection.instance.credential_model == "coarse" and connection.instance.kind in scoped
-    )
+    ]
     if broad:
-        return CheckOutcome(met=False, evidence=f"Full account access: {', '.join(broad)}")
+        return CheckOutcome(
+            met=False,
+            evidence=f"Full account access: {', '.join(sorted(connection.instance.label for _, connection in broad))}",
+            read_capabilities=_gates_of(group for group, _ in broad),
+        )
     if not any(connection.instance.credential_model not in ("none", "") for connection in connections):
         return CheckOutcome(met=None, evidence="No connections yet", remedy="add a connection", remedy_url=_setup_url())
     if any(connection.instance.credential_model in ("", "unknown") for connection in connections):
         return CheckOutcome(met=None, evidence=NOT_READ)
     return _scoped_where_offered(connections, scoped)
+
+
+def _gates_of(groups) -> tuple[str, ...]:
+    """The union of the read gates of the connection families named."""
+
+    return tuple(dict.fromkeys(name for group in groups for name in required_capability_names(group.spec)))
 
 
 def _scoped_where_offered(connections, scoped: set[str]) -> CheckOutcome:

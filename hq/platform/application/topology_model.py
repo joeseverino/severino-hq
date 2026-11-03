@@ -87,6 +87,10 @@ class TopologyNode:
     pageviews: int | None = None
     visits: int | None = None
     actions: tuple[TopologyAction, ...] = ()
+    # The capabilities a reader must hold to be told about this node: a
+    # connection family's own, for what its provider reported. A claim about
+    # it reaches only such a reader, wherever it is derived.
+    read_capabilities: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +136,9 @@ RELATIONS: dict[str, RelationKind] = {
     "contains": RelationKind("Names", "In domain", 30),
     "redirects_to": RelationKind("Redirects to", "Redirected from", 25),
     "reaches": RelationKind("Reads", "Read through", 70),
+    # A target a connection names as an estate node, kept apart from it by
+    # its gate: the inverse is the fact a folded target leaves on that node.
+    "stands_for": RelationKind("Stands for", "Reached as", 71),
     "on_tailnet": RelationKind("Tailnet device", "Machine", 75),
     "declared_by": RelationKind("Record in HQ", "For", 80),
     "carries": RelationKind("Holds the connections", "Held on", 85),
@@ -169,9 +176,9 @@ class Topology:
 
     nodes: tuple[TopologyNode, ...]
     edges: tuple[TopologyEdge, ...]
-    # Unmet checks of HQ's standard as ``(id, evidence, read)``, here so the
-    # posture finding rule costs no query.
-    unmet_standard: tuple[tuple[str, str, bool], ...] = ()
+    # Checks of HQ's standard read and found failing, as ``(id, evidence,
+    # read_capabilities)``, here so the posture finding rule costs no query.
+    unmet_standard: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,6 +221,16 @@ def derived_id(kind: str, *parts: str) -> str:
 
     digest = sha256("\0".join(parts).encode()).hexdigest()[:16]
     return f"{kind}:{digest}"
+
+
+# Every reader of the topology holds it, so a gate is compared above it.
+_READ_FLOOR = frozenset({"read"})
+
+
+def gate_covers(holder: tuple[str, ...], gate: tuple[str, ...]) -> bool:
+    """Whether a reader ``holder``'s gate admits may be told what ``gate`` guards."""
+
+    return set(gate) - _READ_FLOOR <= set(holder) - _READ_FLOOR
 
 
 def edge_between(source: str, target: str, kind: str, label: str = "", status: str = "neutral") -> TopologyEdge:

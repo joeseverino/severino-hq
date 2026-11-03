@@ -10,9 +10,10 @@ from django.test import override_settings
 
 from hq.domains.receipts.models import Receipt
 
+from . import doors
 from .names import HQ, HQ_REVISION, HQ_SOURCE, LAN, SSO, container_id
 
-__all__ = ("as_production", "throwaway_media")
+__all__ = ("as_production", "sign_in", "throwaway_media")
 
 
 @contextmanager
@@ -35,6 +36,8 @@ def as_production():
                 # The commit this build says it is, and where it came from.
                 SEVERINO_HQ_REVISION=HQ_REVISION,
                 SEVERINO_HQ_SOURCE=HQ_SOURCE,
+                # The resource its agents' tokens are for, which turns on the MCP endpoint.
+                SEVERINO_API_RESOURCE=f"https://{HQ}/api",
             )
         )
         # Facts about the host HQ runs on, which no database row holds.
@@ -54,3 +57,11 @@ def throwaway_media():
     media = tempfile.mkdtemp()
     with mock.patch.object(storage, "base_location", media), mock.patch.object(storage, "location", media):
         yield
+
+
+def sign_in(client, owner):
+    """``owner`` signed in to ``client`` through the identity provider, so the
+    sign-in is recorded as the callback records a person's."""
+
+    with doors.page(doors.SIGN_IN):
+        client.force_login(owner, backend=SSO)

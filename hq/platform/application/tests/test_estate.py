@@ -248,13 +248,13 @@ class EstateCardTests(TestCase):
 
     def cards(self):
         with projection_scope():
-            return {card["id"]: card for card in cards()}
+            return {card["id"]: card for card in cards(principal=cli_principal())}
 
     def listed(self) -> str:
         from ..connection_catalog import connection_total
 
         with projection_scope():
-            return str(connection_total())
+            return str(connection_total(principal=cli_principal()))
 
     def test_every_figure_links_to_its_page_and_the_nearest_expiries_to_their_subject(self):
         found = self.cards()
@@ -283,7 +283,9 @@ class EstateCardTests(TestCase):
     def test_a_service_hq_reads_no_health_of_is_not_drawn_as_down(self):
         with projection_scope():
             services = estate_reading().services
-            (figure,) = (kpi for kpi in overview().kpis if kpi.url == reverse("control_plane:services"))
+            (figure,) = (
+                kpi for kpi in overview(principal=cli_principal()).kpis if kpi.url == reverse("control_plane:services")
+            )
         unread = [service for service in services if service.health.state == "unknown"]
 
         self.assertTrue(unread, "the estate has no service without a health reading")
@@ -362,7 +364,7 @@ class EdgeCertificateExpiryTests(TestCase):
 
     def figure(self):
         with projection_scope():
-            return {card["id"]: card for card in cards()}["hq.estate.certificate"]
+            return {card["id"]: card for card in cards(principal=cli_principal())}["hq.estate.certificate"]
 
     def items(self):
         with projection_scope():
@@ -524,6 +526,34 @@ class ActionItemTests(TestCase):
         self.assertIn("1.102.3", item.body)
         self.assertIn("1.102.4", item.body)
         self.assertEqual(item.subject.url, reverse("control_plane:machine", args=["example-host"]))
+
+    def test_every_tailnet_item_names_the_machine_as_its_page_does(self):
+        """A device the tailnet calls by its owner's label is one HQ lists
+        under its own name: the item is that machine's, key and links alike."""
+
+        declared("example-laptop", "machine", {"name": "example-laptop", "addresses": ["100.64.0.5"]})
+        devices(
+            device(
+                "Someone’s Laptop",
+                addresses=["100.64.0.5"],
+                update_available=True,
+                authorized=False,
+                lock_error="node key not signed",
+                advertised_routes=["192.0.2.0/24"],
+                key_expires=(timezone.now() + timedelta(days=3)).isoformat(),
+            )
+        )
+        page = reverse("control_plane:machine", args=["example-laptop"])
+
+        items = [item for item in tailnet() if item.key.startswith("tailnet-")]
+
+        self.assertEqual(machine("example-laptop").aliases, ("Someone’s Laptop",))
+        self.assertGreaterEqual(len(items), 3)
+        for item in items:
+            with self.subTest(item.key):
+                self.assertEqual(item.key.split(":", 1)[1], "example-laptop")
+                self.assertEqual(item.subject.url, page)
+                self.assertNotIn("Someone", item.title)
 
     def test_an_update_with_no_newer_device_says_what_runs(self):
         devices(device("example-host", update_available=True, client_version="1.102.3"))
@@ -917,7 +947,7 @@ class ConnectionFigureTests(TestCase):
         admin = Principal("test", "admin", frozenset(Capability))
 
         with projection_scope():
-            found = {card["id"]: card for card in cards()}
+            found = {card["id"]: card for card in cards(principal=cli_principal())}
         with projection_scope():
             listed = connections_context(principal=admin).connection_count
 

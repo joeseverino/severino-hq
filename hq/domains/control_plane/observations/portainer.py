@@ -7,8 +7,13 @@ compose's own, and registry credentials are never named, so the schema drops
 them.
 """
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
+
+from pydantic.json_schema import SkipJsonSchema
+
+from hq.platform.application.labels import dotted
+lazy from hq.platform.application.timestamps import moment
 
 from .contract import ObservationRecord, ObservationSpec, Stamp, container_key
 
@@ -169,6 +174,63 @@ class RuntimeRecord(_OnMachine):
     health: str = ""
     restart_count: int = 0
     started_at: Stamp = None
+    # What a running container used when its sweep sampled it. Memory is in
+    # bytes, counted as memory_usage_basis says (MEMORY_BASES); 0 is not
+    # sampled.
+    memory_usage: int = 0
+    memory_usage_basis: str = ""
+    # Nanoseconds of CPU since it started, and when that was sampled.
+    cpu_time: int = 0
+    usage_read_at: Stamp = None
+    # Its CPU as a share of one core (100 is one core busy) between the last
+    # sweep's sample and this one: HQ's, set as it stores the reading
+    # (with_cpu_share), so no controller sends it.
+    cpu_percent: SkipJsonSchema[float | None] = None
+
+
+# How a runtime record's memory_usage was counted, as the controller names it,
+# and what it is called where it is shown. Anonymous memory is the cgroup's
+# anon, production's own reading of a container; where Docker reports none,
+# usage less the file cache the kernel can drop.
+MEMORY_BASES = {
+    "anon": "anonymous memory",
+    "usage less inactive file": "in use, less file cache",
+}
+
+
+def cpu_share(earlier: Mapping[str, Any] | None, later: Mapping[str, Any]) -> float | None:
+    """A container's CPU between two samples as a share of one core, to a
+    tenth. None when the two do not bound a window: there is no earlier one,
+    either was taken at no known time, they are out of order, or the counter
+    went back. One sample alone is all the CPU since the container started,
+    never its current use."""
+
+    if earlier is None:
+        return None
+    start, end = moment(earlier.get("usage_read_at")), moment(later.get("usage_read_at"))
+    before, used = int(earlier.get("cpu_time") or 0), int(later.get("cpu_time") or 0)
+    if start is None or end is None or end <= start or used < before:
+        return None
+    return round((used - before) / ((end - start).total_seconds() * 1e9) * 100, 1)
+
+
+def _run(record: Mapping[str, Any]) -> tuple[str, str] | None:
+    """One run of a container: a restart starts its CPU counter again."""
+
+    started = str(record.get("started_at") or "")
+    key = container_key(record.get("host"), record.get("container"))
+    return (key, started) if key and started else None
+
+
+def with_cpu_share(last: Iterable[Mapping[str, Any]], records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Each runtime record's CPU share since the same run's sample in the
+    reading last stored, set on every record so none keeps one it was sent."""
+
+    earlier = {run: record for record in last if (run := _run(record)) is not None}
+    for record in records:
+        run = _run(record)
+        record["cpu_percent"] = cpu_share(earlier.get(run), record) if run is not None else None
+    return records
 
 
 def _machine(record: Mapping[str, Any]) -> tuple[str, ...]:
@@ -194,7 +256,7 @@ def _network(record: Mapping[str, Any]) -> str:
     parts = [str(record.get("driver", "") or ""), *(str(subnet) for subnet in record.get("subnets") or ())]
     if record.get("internal"):
         parts.append("internal, no route out")
-    return " · ".join(part for part in parts if part)
+    return dotted(*parts)
 
 
 def image_title(record: Mapping[str, Any]) -> str:
@@ -275,6 +337,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         title=lambda record: str(record.get("container", "")),
         relation="Runs",
         containers=_users("container"),
+        from_last=with_cpu_share,
     ),
     ObservationSpec(
         STACK_KIND,

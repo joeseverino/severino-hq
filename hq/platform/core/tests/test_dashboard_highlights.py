@@ -14,6 +14,7 @@ from hq.platform.application.domains import Domain, domain_dashboard_cards
 from hq.platform.application.drawings import Dot, Dots, Trend
 from hq.platform.application.plugins import NavigationItem, PluginIntegration
 from hq.platform.application.projection import projection_scope
+from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.markup import all_elements, elements, hrefs, links, select, text, with_class
 from hq.platform.application.ui import ChartSeries, DomainOverview, Kpi, stacked_bar_chart
 
@@ -63,8 +64,8 @@ class DashboardHighlightTests(SimpleTestCase):
             uncached(),
             projection_scope(),
         ):
-            cards = domain_dashboard_cards()
-            highlights = dashboard_highlights()
+            cards = domain_dashboard_cards(cli_principal())
+            highlights = dashboard_highlights(cli_principal())
         domain.integration.dashboard.assert_called_once()
         self.assertEqual(highlights["highlights"][0]["label"], "Example 1")
         self.assertEqual(highlights["highlights"][0]["cards"], cards)
@@ -86,7 +87,7 @@ class DashboardHighlightTests(SimpleTestCase):
             uncached(),
             projection_scope(),
         ):
-            result = dashboard_highlights()
+            result = dashboard_highlights(cli_principal())
         html = render_to_string(
             "core/_dashboard_highlights.html",
             {"dashboard_highlights": result["highlights"]},
@@ -102,7 +103,7 @@ class DashboardHighlightTests(SimpleTestCase):
             uncached(),
             self.assertRaises(ImproperlyConfigured),
         ):
-            domain_dashboard_cards()
+            domain_dashboard_cards(cli_principal())
 
     def test_one_metric_stays_compact_and_does_not_invoke_an_overview(self):
         overview = Mock()
@@ -113,7 +114,7 @@ class DashboardHighlightTests(SimpleTestCase):
             patch("hq.platform.application.dashboard.all_domains", return_value=(domain,)),
             uncached(),
         ):
-            result = dashboard_highlights()
+            result = dashboard_highlights(cli_principal())
         overview.assert_not_called()
         self.assertFalse(result["highlights"])
         self.assertEqual(len(result["compact"]), 1)
@@ -124,7 +125,7 @@ class DashboardHighlightTests(SimpleTestCase):
             patch("hq.platform.application.dashboard.all_domains", return_value=(domain,)),
             uncached(),
         ):
-            return dashboard_highlights()
+            return dashboard_highlights(cli_principal())
 
     def test_two_figures_read_in_the_strip_rather_than_beside_a_cards_rows(self):
         domain = contributor(1)
@@ -302,8 +303,8 @@ class DashboardHighlightQueryTests(TestCase):
                 uncached(),
                 CaptureQueriesContext(connection) as queries,
             ):
-                domain_dashboard_cards()
-                dashboard_highlights()
+                domain_dashboard_cards(cli_principal())
+                dashboard_highlights(cli_principal())
             self.assertEqual(len(queries), count)
             for domain in domains:
                 domain.integration.dashboard.assert_called_once()

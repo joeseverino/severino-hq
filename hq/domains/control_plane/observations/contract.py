@@ -158,6 +158,10 @@ class ObservationSpec:
     # kept for the one page whose capability covers them. The readings any
     # reader may open count them and never list them.
     withheld: bool = False
+    # What HQ takes as it stores a reading, from the records it last stored
+    # of the kind and the new ones: a rate across two sweeps. It returns the
+    # new records with its fields set.
+    from_last: Callable[[Iterable[Mapping[str, Any]], list[dict[str, Any]]], list[dict[str, Any]]] | None = None
 
     def __reduce__(self) -> tuple[Any, tuple[str]]:
         # A spec is a declaration, not data. A stored value that refers to one

@@ -15,6 +15,7 @@ from hq.domains.control_plane.provider_adapters.tls import (
     UPLOADED_CERTIFICATE_KIND,
 )
 from hq.domains.control_plane.provider_spec import expiry_phrase
+from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 lazy from hq.domains.control_plane.names import in_zone
 
@@ -27,6 +28,7 @@ from .first_seen import dated
 from .item_help import cannot_help, remedy_link
 from .moments import ago, when_day
 from .projection import read_once
+from .security import Principal
 from .service_health import UNKNOWN
 from .timestamps import moment
 from .ui import DomainOverview, Insight, Kpi, counted, ended
@@ -119,8 +121,6 @@ class Estate:
     services: tuple[Any, ...] = ()
     domains: tuple[str, ...] = ()
     connections: tuple[ConnectionState, ...] = ()
-    # Every connection HQ reads through, healthy or not.
-    connection_total: int = 0
     registrations: tuple[Expiry, ...] = ()
     certificates: tuple[Expiry, ...] = ()
 
@@ -163,7 +163,6 @@ def _estate() -> Estate:
         services=catalog,
         domains=domains,
         connections=connection_states(),
-        connection_total=connection_total(),
         registrations=_registrations(domains),
         certificates=_certificates(domains, hostnames),
     )
@@ -268,8 +267,12 @@ def _managed_certificates() -> list[Expiry]:
 # ----- Dashboard ------------------------------------------------------------
 
 
-def cards() -> tuple[dict[str, Any], ...]:
-    """The estate card: every figure links to the page that lists it."""
+def cards(*, principal: Principal) -> tuple[dict[str, Any], ...]:
+    """The estate card as ``principal`` reads it: every figure links to the page that lists it.
+
+    The connection count is the viewer's own, since it runs only the families
+    their capabilities permit; every other figure is the shared reading.
+    """
 
     estate = estate_reading()
     if estate.empty:
@@ -317,24 +320,23 @@ def cards() -> tuple[dict[str, Any], ...]:
                     "label": label,
                     "value": counted(max(first.days, 0), "day"),
                     "url": first.url or reverse(listed),
-                    "detail": f"{first.subject} · {first.source}"
-                    + (" · not renewed by its issuer" if first.overdue else ""),
+                    "detail": dotted(first.subject, first.source, "not renewed by its issuer" if first.overdue else ""),
                     **({"status": "attention"} if first.overdue else {}),
                 }
             )
-    if estate.connection_total:
-        found.append(_connections_card(estate))
+    if total := connection_total(principal=principal):
+        found.append(_connections_card(estate, total))
     return tuple(found)
 
 
-def _connections_card(estate: Estate) -> dict[str, Any]:
+def _connections_card(estate: Estate, total: int) -> dict[str, Any]:
     """Every connection, like machines and services; one with a problem says which."""
 
     troubled = estate.connections
     card = {
         "id": "hq.estate.connections",
         "label": "Connections",
-        "value": str(estate.connection_total),
+        "value": str(total),
         "url": reverse("control_plane:connections"),
     }
     if len(troubled) == 1:
@@ -362,8 +364,8 @@ def _answers_at(machine) -> str:
     return ", ".join((typed or reachable)[:2])
 
 
-def overview():
-    shown = cards()
+def overview(*, principal: Principal):
+    shown = cards(principal=principal)
     estate = estate_reading()
     # A service is drawn when HQ reads its health, as a machine is when a
     # connection reaches it: one with no health reading (a DNS record only,
@@ -378,7 +380,7 @@ def overview():
             tuple(
                 Dot(
                     filled=machine.state[0] == "online",
-                    tip=" · ".join(part for part in (machine.name, _answers_at(machine), machine.state[0]) if part),
+                    tip=dotted(machine.name, _answers_at(machine), machine.state[0]),
                     url=entity_link("machine", machine.name).url,
                 )
                 for machine in estate.watched
@@ -390,7 +392,7 @@ def overview():
                 # never greener than the State it leads to.
                 Dot(
                     filled=service.health.state == "good",
-                    tip=" · ".join((service.hostname, service.faults[0] if service.faults else service.health.label)),
+                    tip=dotted(service.hostname, service.faults[0] if service.faults else service.health.label),
                     url=entity_link("service", service.hostname).url,
                 )
                 for service in checked
@@ -413,7 +415,7 @@ def overview():
         ("hq.estate.certificate", estate.operator_certificates),
     ):
         if expiries and not expiries[0].overdue:
-            notes[card_id] = f"{expiries[0].subject} · {when_day(expiries[0].expires)}"
+            notes[card_id] = dotted(expiries[0].subject, when_day(expiries[0].expires))
     icons = {
         "hq.estate.machines": "server",
         "hq.estate.services": "layers",

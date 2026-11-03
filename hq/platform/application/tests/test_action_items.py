@@ -9,6 +9,7 @@ from django.test import TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.platform.application.tests.writers import form_keyed, keyed
 from hq.platform.core.models import ActionItemRead, AuditLog
 
 from ..action_items import (
@@ -180,7 +181,7 @@ class PageTests(TestCase):
         return [item["label"] for group in page.context[name] for item in group["items"]]
 
     def test_setting_one_aside_moves_it_below_and_lowers_the_count(self):
-        self.client.post(reverse("action_items_set_aside"), {"key": row_value(ITEM)})
+        self.client.post(reverse("action_items_set_aside"), form_keyed({"key": row_value(ITEM)}))
 
         page = self.client.get(reverse("action_items"))
 
@@ -191,7 +192,7 @@ class PageTests(TestCase):
 
     def test_the_dashboard_counts_what_waits_and_items_not_the_numbers_they_carry(self):
         # ITEM stands for two widgets and still waits: one thing needs you.
-        self.client.post(reverse("action_items_set_aside"), {"key": row_value(OTHER)})
+        self.client.post(reverse("action_items_set_aside"), form_keyed({"key": row_value(OTHER)}))
 
         with mock.patch("hq.platform.application.dashboard.work_queue", return_value=[ITEM, OTHER]):
             page = self.client.get(reverse("dashboard"))
@@ -206,25 +207,25 @@ class PageTests(TestCase):
         page = self.client.get(reverse("action_items"))
         self.assertContains(page, f'formaction="{reverse("action_items_set_aside")}"')
 
-        self.client.post(reverse("action_items_set_aside"), {"key": row_value(ITEM)})
+        self.client.post(reverse("action_items_set_aside"), form_keyed({"key": row_value(ITEM)}))
         self.assertEqual(waiting_count([ITEM, OTHER], self.user), 1)
         self.assertContains(
             self.client.get(reverse("action_items")), f'formaction="{reverse("action_items_bring_back")}"'
         )
 
-        self.client.post(reverse("action_items_bring_back"), {"key": row_value(ITEM)})
+        self.client.post(reverse("action_items_bring_back"), form_keyed({"key": row_value(ITEM)}))
         self.assertEqual(waiting_count([ITEM, OTHER], self.user), 2)
 
     def test_one_row_is_dismissed_without_composing_the_queue(self):
         with mock.patch("hq.platform.core.action_item_views.work_queue", side_effect=AssertionError("composed")):
             reply = self.client.post(
                 reverse("action_items_set_aside"),
-                {"key": row_value(ITEM)},
+                form_keyed({"key": row_value(ITEM)}),
                 headers={"x-requested-with": "XMLHttpRequest"},
             )
             self.assertEqual(reply.status_code, 204)
-            self.client.post(reverse("action_items_bring_back"), {"key": row_value(ITEM)})
-            self.client.post(reverse("action_items_set_aside"), {"key": row_value(OTHER)})
+            self.client.post(reverse("action_items_bring_back"), form_keyed({"key": row_value(ITEM)}))
+            self.client.post(reverse("action_items_set_aside"), form_keyed({"key": row_value(OTHER)}))
 
         self.assertEqual(
             [item["key"] for item in with_aside_state([ITEM, OTHER], self.user) if item["aside"]],
@@ -232,7 +233,7 @@ class PageTests(TestCase):
         )
 
     def test_a_row_dismissed_at_an_old_revision_does_not_hide_the_item(self):
-        self.client.post(reverse("action_items_set_aside"), {"key": f"old0 {ITEM['key']}"})
+        self.client.post(reverse("action_items_set_aside"), form_keyed({"key": f"old0 {ITEM['key']}"}))
 
         self.assertEqual(waiting_count([ITEM, OTHER], self.user), 2)
 
@@ -257,16 +258,16 @@ class PageTests(TestCase):
             )
             self.assertContains(page, "data-queue-family", count=1)
 
-            self.client.post(f"{page.context['aside_all_url']}&family={group['entries'][0]['id']}")
+            self.client.post(f"{page.context['aside_all_url']}&family={group['entries'][0]['id']}", form_keyed())
             page = self.client.get(reverse("action_items"))
 
         self.assertEqual(self.shown(page), [OTHER["label"]])
         self.assertEqual(page.context["aside_total"], 3)
 
     def test_restoring_names_what_it_restores(self):
-        self.client.post(reverse("action_items_set_aside"), {"key": [row_value(ITEM), row_value(OTHER)]})
+        self.client.post(reverse("action_items_set_aside"), form_keyed({"key": [row_value(ITEM), row_value(OTHER)]}))
 
-        self.client.post(reverse("action_items_bring_back"))
+        self.client.post(reverse("action_items_bring_back"), form_keyed())
 
         self.assertEqual(waiting_count([ITEM, OTHER], self.user), 0)
 
@@ -277,7 +278,7 @@ class PageTests(TestCase):
         self.assertEqual(url.path, reverse("action_items_set_aside"))
         self.assertEqual(parse_qs(url.query)["q"], ["gadget"])
 
-        self.client.post(page.context["aside_all_url"])
+        self.client.post(page.context["aside_all_url"], form_keyed())
 
         self.assertEqual(self.shown(self.client.get(reverse("action_items"))), [ITEM["label"]])
         filtered = self.client.get(reverse("action_items"), {"q": "gadget"})
@@ -296,12 +297,12 @@ class PageTests(TestCase):
             # The header counts everything waiting; dismissing the notices
             # leaves what needs doing where it was.
             self.assertEqual(page.context["profile_action_count"], 2)
-            self.client.post(page.context["notices_aside_url"])
+            self.client.post(page.context["notices_aside_url"], form_keyed())
             page = self.client.get(reverse("action_items"))
             self.assertEqual(self.shown(page), [ITEM["label"]])
             self.assertEqual(page.context["notice_total"], 0)
             self.assertEqual(self.shown(page, "aside_groups"), [told["label"]])
-            self.client.post(reverse("action_items_bring_back"), {"key": row_value(told)})
+            self.client.post(reverse("action_items_bring_back"), form_keyed({"key": row_value(told)}))
 
         with mock.patch("hq.platform.application.dashboard.work_queue", return_value=[ITEM, told]):
             dashboard = self.client.get(reverse("dashboard"))
@@ -353,6 +354,21 @@ class ActivityActorTests(TestCase):
         self.assertEqual(operating_snapshot(principal=reader)["recent_activity"], [])
         self.assertTrue(operating_snapshot(principal=cli_principal())["recent_activity"])
 
+    def test_a_withheld_trail_reads_differently_from_an_empty_one(self):
+        from ..dashboard import operating_snapshot
+        from ..security import Capability, Principal
+
+        reader = Principal("example-agent", "mcp", frozenset({Capability.READ}))
+        auditor = Principal("example-auditor", "mcp", frozenset({Capability.READ, Capability.READ_AUDIT_LOG}))
+
+        withheld = operating_snapshot(principal=reader)
+        empty = operating_snapshot(principal=auditor)
+
+        self.assertEqual(empty["recent_activity"], [])
+        self.assertEqual(empty["unread"], [])
+        self.assertEqual(withheld["recent_activity"], [])
+        self.assertTrue(any("recent_activity" in reason for reason in withheld["unread"]))
+
 
 class GlanceSettingsLinkTests(TestCase):
     def test_following_the_settings_link_opens_the_settings(self):
@@ -388,8 +404,8 @@ class AsideCapabilityTests(TestCase):
             self.addCleanup(patcher.stop)
 
     def test_setting_aside_and_bringing_back_are_audited_as_the_person(self):
-        self.client.post(reverse("action_items_set_aside"), {"key": row_value(ITEM)})
-        self.client.post(reverse("action_items_bring_back"), {"key": row_value(ITEM)})
+        self.client.post(reverse("action_items_set_aside"), form_keyed({"key": row_value(ITEM)}))
+        self.client.post(reverse("action_items_bring_back"), form_keyed({"key": row_value(ITEM)}))
 
         for operation in (SET_ASIDE, RESTORE):
             with self.subTest(operation=operation):
@@ -409,7 +425,7 @@ class AsideCapabilityTests(TestCase):
             internal_principal("example-purpose"),
         ):
             with self.subTest(interface=principal.interface):
-                result = execute_capability(SET_ASIDE, {"rows": rows}, principal=principal)
+                result = execute_capability(SET_ASIDE, keyed({"rows": rows}), principal=principal)
 
                 self.assertEqual(result["error"]["code"], "forbidden")
         self.assertFalse(ActionItemRead.objects.exists())
@@ -419,8 +435,10 @@ class AsideCapabilityTests(TestCase):
 
     def test_the_page_says_when_it_is_refused_and_keeps_nothing(self):
         lacking = Principal("op", "web", frozenset({Capability.READ}))
-        with mock.patch("hq.platform.core.action_item_views.web_principal", return_value=lacking):
-            response = self.client.post(reverse("action_items_set_aside"), {"key": row_value(ITEM)}, follow=True)
+        with mock.patch("hq.platform.application.web_writes.web_principal", return_value=lacking):
+            response = self.client.post(
+                reverse("action_items_set_aside"), form_keyed({"key": row_value(ITEM)}), follow=True
+            )
 
         self.assertContains(response, Capability.SET_ASIDE_ACTION_ITEMS.value)
         self.assertFalse(ActionItemRead.objects.exists())
@@ -434,7 +452,7 @@ class AsideCapabilityTests(TestCase):
             (RESTORE, {}),
         ):
             with self.subTest(payload=payload):
-                result = execute_capability(name, payload, principal=operator)
+                result = execute_capability(name, keyed(payload), principal=operator)
 
                 self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertFalse(ActionItemRead.objects.exists())

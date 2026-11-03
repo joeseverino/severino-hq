@@ -84,6 +84,14 @@ class Finding:
     # The page of what it is about, as the topology names it. Derivation sets
     # it beside the offers, so a card links its title without the topology.
     subject_link: ActionLink | None = None
+    # What a reader must hold to be told this, derived beside the subject link
+    # (findings.read_gate). A detector sets it only for evidence that names
+    # what its subject and scope do not gate, such as a posture check's.
+    read_capabilities: tuple[str, ...] = ()
+    # The one thing on its subject it is about, where the subject holds many:
+    # a container's name on its machine. A page about one of them alone tells
+    # its own problems from its neighbors' by it.
+    part: str = ""
 
 
 @dataclass(frozen=True, slots=True)

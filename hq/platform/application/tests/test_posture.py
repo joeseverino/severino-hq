@@ -186,7 +186,29 @@ class FindingTests(TestCase):
         finding = found["Password sign-in is installed"]
         self.assertEqual(finding["severity"], "attention")
         self.assertIn("a guessed or reused password", finding["explanation"])
-        self.assertIn("HQ has not read whether tailnet lock is on", found)
+
+    @override_settings(SEVERINO_POSTURE="advanced")
+    def test_a_check_not_read_yet_is_no_finding_and_says_what_would_read_it(self):
+        from ..connection_context import connections_context
+
+        unread = [
+            found
+            for found in estate_posture(connection_catalog(principal=cli_principal())).standings
+            if found.reading.met is None
+        ]
+        self.assertIn("tailnet-policy", {found.check.id for found in unread})
+
+        found = raised(RULE)
+        steps = [step["label"] for item in found for step in item["operator_steps"]]
+        for waiting in unread:
+            with self.subTest(check=waiting.check.id):
+                self.assertNotIn(f"posture.{waiting.check.id}", {item["scope"] for item in found})
+                self.assertNotIn(waiting.check.step, steps)
+        checks = connections_context(principal=cli_principal()).as_dict()["standard"]["checks"]
+        served = next(check for check in checks if check["id"] == "tailnet-policy")
+        self.assertIsNone(served["met"])
+        self.assertEqual(served["remedy"], "connect Tailscale")
+        self.assertTrue(served["remedy_url"])
 
     @override_settings(SEVERINO_POSTURE="advanced", AUTHENTICATION_BACKENDS=SSO_ONLY)
     def test_a_met_check_is_not_raised(self):
@@ -236,7 +258,8 @@ class ScopeTests(TestCase):
             abilities=(),
         )
         edge = SimpleNamespace(state="good", evidence="")
-        found = posture(Inputs(edge, (SimpleNamespace(connections=(connection,)),)))
+        group = SimpleNamespace(connections=(connection,), spec=SimpleNamespace(required_capabilities=("read",)))
+        found = posture(Inputs(edge, (group,)))
         return next(standing for standing in found.standings if standing.check.id == "scope").reading
 
     def test_a_full_account_token_where_a_scoped_one_is_offered_is_unmet(self):
@@ -244,6 +267,16 @@ class ScopeTests(TestCase):
 
         self.assertFalse(reading.met)
         self.assertEqual(reading.evidence, "Full account access: Example")
+
+    def test_a_certificate_authority_account_is_read_as_the_whole_account_it_is(self):
+        from hq.domains.control_plane.connection_kinds import connection_credential
+
+        credential = connection_credential("acme")
+        reading = self.reading(credential, "acme")
+
+        self.assertEqual(credential, "coarse")
+        self.assertTrue(reading.met)
+        self.assertTrue(reading.qualified)
 
     def test_a_login_with_no_scoped_form_is_met_but_not_a_clean_pass(self):
         reading = self.reading("coarse", "npm")

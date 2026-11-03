@@ -13,10 +13,11 @@ from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from functools import cache
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, TypedDict
 from urllib.parse import urlencode
 
 from django.conf import settings
+from pydantic import ConfigDict, WithJsonSchema, with_config
 
 from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions
 lazy from hq.domains.control_plane.models import OperationRequest
@@ -59,8 +60,10 @@ from .finding_model import (
     parse_stamp,
 )
 from .first_seen import recorded
+from .integration_validation import required_capability_names
 from .integrations import IntegrationGraph, integration_graph
-from .projection import QueryRefusal
+from .json_schemas import Written
+from .projection import QueryRefusal, shape_version
 from .security import Capability, Principal
 from .topology import derive_topology
 from .topology_model import (
@@ -70,6 +73,8 @@ from .topology_model import (
 )
 from .ui import ended
 from .workflows import (
+    WrittenAction,
+    WrittenWorkflow,
     claim_identity,
     claim_resolution_plan,
     serialize_workflow,
@@ -339,7 +344,61 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
         steps=finding_steps(finding),
         no_help_reason=_no_help_reason(finding),
         subject_link=ActionLink("subject", subject.label, "read", subject.url) if subject and subject.url else None,
+        read_capabilities=_held_to(finding, subject, principal),
+        part=finding.part,
     )
+
+
+# The resource each part of a finding is read through, whose declared
+# capabilities are that part's read gate: a topology node through the
+# relationships around it, a declared kind through its records, an observed
+# kind through its readings, a check of HQ's standard through the connection
+# standing that reports it.
+_NODE_READ = "relationships"
+_RECORDS_READ = "infrastructure.resources"
+_READINGS_READ = "readings"
+_POSTURE_READ = "connection.standing"
+
+
+def read_gate(finding: Finding, subject: TopologyNode | None) -> tuple[str, ...] | None:
+    """What a reader must hold to be told ``finding``; None when it cannot be derived.
+
+    The union of its subject node's gate, each scope's and what its detector
+    carried for the evidence it names. A subject that names no node, or a
+    scope no resource reads, leaves it underivable.
+    """
+
+    scopes = _finding_scopes(finding)
+    if (finding.subject and subject is None) or not (subject or scopes):
+        return None
+    gates = [finding.read_capabilities]
+    if subject is not None:
+        gates += [_resource_gate(_NODE_READ), subject.read_capabilities]
+    for scope in scopes:
+        if (resource := _scope_resource(scope)) is None:
+            return None
+        gates.append(_resource_gate(resource))
+    return tuple(dict.fromkeys(name for gate in gates for name in gate))
+
+
+def _held_to(finding: Finding, subject: TopologyNode | None, principal: Principal) -> tuple[str, ...]:
+    # Underivable fails closed: held at the authority it was derived at.
+    gate = read_gate(finding, subject)
+    return gate if gate is not None else tuple(sorted(str(item) for item in principal.capabilities))
+
+
+def _scope_resource(scope: str) -> str | None:
+    if posture_findings.posture_check(scope) is not None:
+        return _POSTURE_READ
+    if scope in OBSERVATIONS:
+        return _READINGS_READ
+    if scope in PROVIDERS:
+        return _RECORDS_READ
+    return None
+
+
+def _resource_gate(name: str) -> tuple[str, ...]:
+    return required_capability_names(integration_graph().resources[name])
 
 
 def _no_help_reason(finding: Finding) -> str:
@@ -526,10 +585,56 @@ def _estate_findings(principal: Principal, rule: str) -> tuple[Any, ...]:
 def finding_key(finding: Finding) -> str:
     """What a finding is about, as its item in the queue is keyed."""
 
-    return f"finding:{finding.rule}:{finding.subject or finding.scope}"
+    about = f"finding:{finding.rule}:{finding.subject or finding.scope}"
+    # Two containers on one machine are two matters, each keyed by its own.
+    return f"{about}:{finding.part}" if finding.part else about
 
 
-def serialize_finding(finding: Finding) -> dict[str, Any]:
+def rule_of(item_key: str) -> str:
+    """The rule a queue item's key names when the item is a finding, read
+    back from ``finding_key`` behind its source; empty for any other item."""
+
+    _, found, rest = item_key.partition("finding:")
+    return rest.split(":", 1)[0] if found else ""
+
+
+class FindingEvidence(TypedDict):
+    label: str
+    value: Any
+
+
+class SuggestedRemedy(TypedDict):
+    """A capability that would answer a finding, and the target it runs on."""
+
+    capability: str
+    target: Any
+    label: str
+    effect: str
+    auto: bool
+
+
+class SerializedFinding(TypedDict):
+    """One finding as every machine door carries it."""
+
+    id: str
+    rule: str
+    subject: str | None
+    scope: str | None
+    affected_scopes: list[str]
+    title: str
+    severity: str
+    explanation: str
+    evidence: list[FindingEvidence]
+    remedies: list[SuggestedRemedy]
+    offers: list[WrittenAction]
+    investigations: list[WrittenAction]
+    workflow: WrittenWorkflow | None
+    operator_steps: list[Annotated[dict[str, Any], Written(OperatorStep)]]
+    no_help_reason: str | None
+    since: str | None
+
+
+def serialize_finding(finding: Finding) -> SerializedFinding:
     return {
         "id": claim_identity(_CLAIM_NAMESPACE, finding.rule, finding.subject, finding.scope),
         "rule": finding.rule,
@@ -547,8 +652,6 @@ def serialize_finding(finding: Finding) -> dict[str, Any]:
                 "label": remedy.label,
                 "effect": remedy.effect,
                 "auto": remedy.auto,
-                "method": "POST",
-                "url": f"/api/v2/capabilities/{remedy.capability}/",
             }
             for remedy in finding.remedies
         ],
@@ -575,7 +678,31 @@ def _narrowing(severity: str, limit: int | None) -> int:
     return SEVERITIES.index(severity) if severity else len(SEVERITIES)
 
 
-def findings(*, principal: Principal, rule: str = "", severity: str = "", limit: int | None = None) -> dict[str, Any]:
+# The shape findings answers in; it moves when that shape does.
+FINDINGS_SCHEMA_VERSION = 2
+
+
+class FindingsSummary(TypedDict):
+    # Every finding raised, counted before the floor and the limit.
+    findings: int
+    severities: dict[str, int]
+    returned: int
+    truncated: bool
+
+
+# Closed, the findings within it too: every field is HQ's own, so one a
+# serializer adds fails until it is declared here.
+@with_config(ConfigDict(extra="forbid"))
+class Findings(TypedDict):
+    """What ``findings`` answers."""
+
+    schema_version: Annotated[int, WithJsonSchema(shape_version(FINDINGS_SCHEMA_VERSION))]
+    rule: str | None
+    summary: FindingsSummary
+    findings: list[SerializedFinding]
+
+
+def findings(*, principal: Principal, rule: str = "", severity: str = "", limit: int | None = None) -> Findings:
     """The serialized claims, for machine delivery adapters.
 
     ``severity`` is a floor (``attention`` also returns ``serious``) and
@@ -584,21 +711,20 @@ def findings(*, principal: Principal, rule: str = "", severity: str = "", limit:
     limit held some back.
     """
 
+    principal.require(Capability.READ)
     floor = _narrowing(severity, limit)
-    selected = rule_for(rule) if rule else None
-    raised = estate_findings(principal=principal, rule=selected.name if selected else "")
+    if rule and rule_for(rule) is None:
+        names = ", ".join(item.name for item in RULES)
+        raise InvalidFindingsQuery(f"findings: rule must be one of {names}.")
+    raised = estate_findings(principal=principal, rule=rule)
     counts: dict[str, int] = {}
     for finding in raised:
         counts[finding.severity] = counts.get(finding.severity, 0) + 1
     eligible = [finding for finding in raised if _rank(finding.severity) <= floor]
     kept = eligible[:limit]
     return {
-        "ok": True,
-        "schema_version": 2,
-        # Which rule produced this, and every rule that could have. A client
-        # that asked for an unknown one is told it got everything.
-        "rule": selected.name if selected else None,
-        "rules": [{"name": item.name, "title": item.title, "severity": item.severity} for item in RULES],
+        "schema_version": FINDINGS_SCHEMA_VERSION,
+        "rule": rule or None,
         "summary": {
             "findings": len(raised),
             "severities": counts,

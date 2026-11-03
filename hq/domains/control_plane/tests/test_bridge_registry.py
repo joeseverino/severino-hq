@@ -19,6 +19,7 @@ from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, tag
+from pydantic.json_schema import SkipJsonSchema
 
 from hq.domains.control_plane import bridge_contract, bridge_registry
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
@@ -142,7 +143,13 @@ class RegistrySchemaTests(SimpleTestCase):
                 if spec.read_by != "controller":
                     self.assertNotIn(name, self.schemas)
                     continue
-                self.assertEqual(set(self.schemas[name]["properties"]), set(spec.record.model_fields))
+                # A field HQ sets as it stores the reading is left off the wire.
+                sent = {
+                    field
+                    for field, info in spec.record.model_fields.items()
+                    if not any(isinstance(mark, SkipJsonSchema) for mark in info.metadata)
+                }
+                self.assertEqual(set(self.schemas[name]["properties"]), sent)
 
     def test_every_enumeration_names_a_constant_for_each_value(self):
         for name, schema in self.schemas.items():

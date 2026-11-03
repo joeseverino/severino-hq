@@ -13,9 +13,10 @@ from hq.domains.control_plane.models import (
 from hq.domains.projects.models import Project
 
 from ..capabilities import capability_registry, execute_capability
-from ..connections import list_connections
 from ..integrations import integration_graph
+from ..resources import WHOLE_RECORD, list_resource
 from ..security import Capability, Principal
+from .writers import keyed
 
 OPERATOR = Principal(
     "operator",
@@ -79,10 +80,9 @@ class GatewayConnectionTests(TestCase):
         self.assertNotIn("hq.github", names)
 
     def test_safe_runtime_catalog_contains_relationships_and_no_tokens(self):
-        payload = list_connections(principal=OPERATOR)
-        groups = {group["name"]: group for group in payload["groups"]}
+        items = list_resource("connection.standing", principal=OPERATOR, fields=[WHOLE_RECORD])["items"]
 
-        nws = groups["hq.nws"]["instances"][0]
+        nws = next(item for item in items if item["family"] == "hq.nws")
         self.assertEqual(nws["status_label"], "keyless")
         self.assertEqual(nws["targets"][0]["label"], "Dashboard weather")
         # No command performs a weather read, so the abilities name none. They
@@ -90,7 +90,10 @@ class GatewayConnectionTests(TestCase):
         # every check, and rendered a button to wake the controller under the
         # label "Active weather alerts".
         self.assertEqual(
-            {ability["capability"] for ability in nws["abilities"]},
+            {
+                ability["capability"]
+                for ability in [read["ability"] for read in nws["reads"] if read["ability"]] + nws["changes"]
+            },
             {None},
         )
 
@@ -117,7 +120,7 @@ class GatewayConnectionTests(TestCase):
     def test_a_review_runs_through_the_shared_executor_and_is_queued(self):
         result = execute_capability(
             "contact.submission.review",
-            {"status": "read", "assigned_to": "joe", "admin_notes": "handled"},
+            keyed({"status": "read", "assigned_to": "joe", "admin_notes": "handled"}),
             principal=OPERATOR,
             target=7,
         )
@@ -130,7 +133,7 @@ class GatewayConnectionTests(TestCase):
         ProviderInventory.objects.filter(kind="cloudflare.contact_submission").update(records=[])
         result = execute_capability(
             "contact.submission.delete",
-            {"confirm": "7"},
+            keyed({"confirm": "7"}),
             principal=OPERATOR,
             target=7,
         )
