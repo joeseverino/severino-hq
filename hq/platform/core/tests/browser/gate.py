@@ -142,6 +142,13 @@ class _Watched:
         self.result.addSubTest(test, subtest, err)
 
 
+def tab_key(browser):
+    """The key that moves focus to every control: Option-Tab in WebKit, as
+    Safari has it (plain Tab there skips buttons and links), Tab elsewhere."""
+
+    return "Alt+Tab" if browser.browser_type.name == "webkit" else "Tab"
+
+
 def add_css(page, css):
     """``css`` added to ``page`` after its own sheets, with script on or off.
 

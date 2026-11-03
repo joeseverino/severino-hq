@@ -1,5 +1,48 @@
 "use strict";
 
+// A section group opens on hover where the pointer can hover, after a small
+// delay that absorbs a pointer crossing it, and closes once the pointer has
+// left unless a press kept it. WebKit has no interestfor, the platform's
+// hover invoker, so these lines do its work; the browser still opens, closes
+// and dismisses the popover. A press on a group hover opened keeps it open
+// rather than toggling it shut. Touch and the keyboard open on a press only.
+if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+  const OPEN_DELAY_MS = 90;
+  const CLOSE_DELAY_MS = 240;
+  // The panels hover opened and no press has kept since.
+  const hovered = new WeakSet();
+  document.querySelectorAll(".nav-group").forEach((group) => {
+    const panel = group.querySelector(":scope > [popover]");
+    const button = group.querySelector(":scope > [popovertarget]");
+    let timer;
+    const later = (delay, then) => {
+      clearTimeout(timer);
+      timer = setTimeout(then, delay);
+    };
+    group.addEventListener("pointerenter", () =>
+      later(OPEN_DELAY_MS, () => {
+        if (panel.matches(":popover-open")) return;
+        hovered.add(panel);
+        panel.showPopover();
+      }),
+    );
+    group.addEventListener("pointerleave", () =>
+      later(CLOSE_DELAY_MS, () => {
+        if (hovered.has(panel)) panel.hidePopover();
+      }),
+    );
+    button.addEventListener("click", (event) => {
+      clearTimeout(timer);
+      if (hovered.delete(panel) && panel.matches(":popover-open")) event.preventDefault();
+    });
+    panel.addEventListener("toggle", (event) => {
+      if (event.newState !== "closed") return;
+      clearTimeout(timer);
+      hovered.delete(panel);
+    });
+  });
+}
+
 document.addEventListener("change", (event) => {
   const control = event.target.closest("[data-submit-on-change]");
   if (control?.form) control.form.requestSubmit();

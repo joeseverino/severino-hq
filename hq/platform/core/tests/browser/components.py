@@ -17,7 +17,7 @@ from hq.platform.application.asks import Ask, Standing
 from hq.platform.application.money import money
 from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, line_chart
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
-from hq.platform.core.tests.browser.gate import add_css, with_script
+from hq.platform.core.tests.browser.gate import add_css, tab_key, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.boxes import ANY_SCROLLER, MAP, SIDEWAYS, SMALL_TARGETS
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
@@ -448,7 +448,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         # arrow chooses the next. WebKit drops :focus-visible when an arrow
         # moves focus within a radio group, so past that the ring may be gone,
         # but it is never left on another tab.
-        self.page.keyboard.press("Alt+Tab" if self.browser.browser_type.name == "webkit" else "Tab")
+        self.page.keyboard.press(tab_key(self.browser))
         self.assertEqual((chosen(), shown(), ringed()), ([0], [0], [0]))
         self.page.keyboard.press("ArrowRight")
         self.assertEqual((chosen(), shown()), ([1], [1]))

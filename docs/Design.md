@@ -382,8 +382,10 @@ button by anchor positioning (`anchor-scope: --menu`, page.css "Menus"):
 below it from its right edge, or from its left where that would cross the
 screen (`position-try-fallbacks: flip-inline`, decided against the viewport);
 a section's links open from its left edge, and in the drawer beside the list.
-A menu opens on a press, never on hover: WebKit has no `interestfor`, and in
-Chromium the press that follows a hover would close the menu it opened.
+A menu opens on a press. A section group also opens on hover where the
+pointer can hover, and a press then keeps it open: WebKit has no
+`interestfor`, so a few lines of app.js do that one job, and the browser
+still opens, closes and dismisses the popover.
 Inside a menu every control is a plain row; a destructive one is only its
 color.
 

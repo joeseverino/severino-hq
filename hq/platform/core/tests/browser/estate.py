@@ -27,7 +27,7 @@ from django.test import Client
 from django.urls import reverse
 lazy from django.db import transaction
 
-from hq.platform.core.tests.browser.gate import BrowserGate, answered
+from hq.platform.core.tests.browser.gate import BrowserGate, answered, tab_key
 from hq.platform.core.tests.browser.in_flight import InFlight
 from hq.platform.core.tests.browser.probes.boxes import SIDEWAYS
 from hq.platform.core.tests.browser.probes.describe import TEXT_SHOWN
@@ -678,6 +678,37 @@ class ExampleEstateControlTests(BrowserGate):
         self.page.keyboard.press("Escape")
         self.assertFalse(drawer.is_visible())
 
+    def test_a_hovered_section_opens_a_press_keeps_it_and_leaving_closes_it(self):
+        """Where the pointer hovers, a section group opens under it; a press
+        then keeps it open after the pointer leaves, and one only hovered
+        closes once the pointer has gone."""
+
+        def is_open(handle):
+            return handle.evaluate("(handle) => handle.popoverTargetElement.matches(':popover-open')")
+
+        def away():
+            self.page.mouse.move(viewport(WIDE)["width"] // 2, viewport(WIDE)["height"] - 10)
+
+        self.page.clock.install()
+        self.visit(reverse("expenses:list"), WIDE)
+        handles = self.page.locator(SELECTORS["nav_menu"])
+        pressed, hovered = handles.nth(0), handles.nth(1)
+        pressed.hover()
+        self.page.clock.run_for(1000)
+        self.assertTrue(is_open(pressed))
+        pressed.click()
+        away()
+        self.page.clock.run_for(1000)
+        self.assertTrue(is_open(pressed))
+        self.page.keyboard.press("Escape")
+        self.assertFalse(is_open(pressed))
+        hovered.hover()
+        self.page.clock.run_for(1000)
+        self.assertTrue(is_open(hovered))
+        away()
+        self.page.clock.run_for(1000)
+        self.assertFalse(is_open(hovered))
+
     def test_the_header_menus_work_with_no_script_one_at_a_time(self):
         """Each header menu is the browser's own: it opens on its button with no
         script, and opening one closes the one open before it."""
@@ -719,10 +750,8 @@ class ExampleEstateControlTests(BrowserGate):
         self.page.keyboard.press("Enter")
         self.assertTrue(drawer.is_visible())
         # Its sections follow the button in the tab order, and it is not
-        # modal, so nothing outside it is made inert while it is open. Its
-        # sections are links and buttons, which WebKit reaches by Option-Tab,
-        # as Safari has it.
-        self.page.keyboard.press("Alt+Tab" if self.browser.browser_type.name == "webkit" else "Tab")
+        # modal, so nothing outside it is made inert while it is open.
+        self.page.keyboard.press(tab_key(self.browser))
         self.assertTrue(drawer.evaluate("(drawer) => drawer.contains(document.activeElement)"))
         self.assertFalse(drawer.evaluate("(drawer) => drawer.matches(':modal')"))
         self.page.keyboard.press("Escape")
