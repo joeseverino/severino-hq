@@ -2249,6 +2249,31 @@
         },
         "ok": true
       },
+      "202": {
+        "data": {
+          "applied": false,
+          "approval": {
+            "capability": "project.create",
+            "content_fingerprint": "6c9ba16f74000dd99ad2ac8841847ddd5d8537ac700937d8cae8327f35afbcfd",
+            "expires_at": "2026-01-16T09:30:00+00:00",
+            "id": "43708c02-7e78-5196-bc3a-45ca0445f068",
+            "reason": "",
+            "requested_actor": "example-automation",
+            "requested_at": "2026-01-15T09:30:00+00:00",
+            "requested_interface": "api",
+            "resource_key": "",
+            "resource_kind": "projects",
+            "review_url": "/audit/approval/43708c02-7e78-5196-bc3a-45ca0445f068/",
+            "state": "pending",
+            "target": ""
+          },
+          "message": "This change is waiting for a person to approve it in HQ. Nothing has been written and nothing is queued. Tell whoever asked, with the request id, and stop; approving it is not something a token can do.",
+          "queued": false,
+          "repeated": false,
+          "status": "awaiting_approval"
+        },
+        "ok": true
+      },
       "400": {
         "error": {
           "code": "idempotency_key_required",

@@ -321,8 +321,8 @@ class SettingTests(PolicyTestCase):
                 self.set(principal=credential)
 
     def test_a_read_can_be_denied_but_not_held(self):
-        with self.assertRaisesMessage(ValueError, "List messages only reads."):
-            self.set(spec=spec("contact.submission.list"))
+        with self.assertRaisesMessage(ValueError, "Look up a name only reads."):
+            self.set(spec=spec("lookup.name.read"))
 
     def test_an_agent_rule_cannot_reach_past_its_pocket_id_grant(self):
         AgentIdentity.objects.create(client_id="example-agent", granted=["read", "write_projects"])

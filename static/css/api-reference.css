@@ -17,7 +17,20 @@
 
 /* The viewer pins its sidebar and section bars this far down, under HQ's
    header, which is one row of one height at every width. */
-.api-reference { --scalar-custom-header-height: var(--site-header-height); }
+.api-reference {
+  --scalar-custom-header-height: var(--site-header-height);
+  /* The longest path the document serves, set by the page from the paths it
+     serves (hq/platform/api/reference.py); without it a list is as wide as
+     its own paths. */
+  --longest-path: auto;
+}
+
+/* The viewer scrolls an entry to just below the bars it is told stand over
+   the page (`data-scalar-scroll-header`, api-reference.js), as a scroll
+   margin of its own; the page's scroll padding for HQ's header would be added
+   on top, and land each entry that much lower, under the end of the one
+   before it. */
+:root:has(.api-reference) { scroll-padding-block-start: 0; }
 
 /* Said until the viewer has mounted; one that has not mounted after a while
    is said to have failed, with the document itself. Both lines share one
@@ -169,7 +182,35 @@
 
 /* A group has no operations of its own: its section is its heading, over the
    domains it holds, with no empty list beside it. */
-.api-reference .scalar-app .endpoints-card:not(:has(a)) { display: none; }
+.api-reference .scalar-app .section-column:has(> .endpoints-card:not(:has(a))) { display: none; }
+
+/* A tag's list of operations sits beside its description only where each path
+   in it fits on one line; elsewhere it takes the row under the description.
+   The list asks for its widest line and the description for a reading
+   measure, and the row wraps when both do not fit, so the browser decides
+   from what each holds, at any width the viewer's own breakpoint misses. */
+.api-reference .scalar-app .section-columns:has(> .section-column > .endpoints-card) {
+  flex-flow: row wrap;
+  gap: var(--space-12) var(--space-24);
+}
+.api-reference .scalar-app .section-columns:has(> .section-column > .endpoints-card) > .section-column {
+  flex: 1 1 20rem;
+  padding-block-start: 0;
+  &:has(> .endpoints-card) { flex: 0 1 max-content; }
+}
+
+/* Every list's path column is as wide as the longest path the document
+   holds (`--longest-path`, in characters of the path's own face, set by the
+   page from the paths it serves), so every list is one width and its edges
+   line up from section to section; narrower than that, a list stacks under
+   its description and a path wraps only where the row itself is narrower. */
+.api-reference .scalar-app .endpoints .endpoint-path {
+  display: block;
+  inline-size: var(--longest-path);
+  max-inline-size: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 
 /* Every heading the viewer draws takes one size, its `--font-size`; each
    level of the tree is given a step of its own: a section at the top (a group
@@ -181,9 +222,9 @@
 /* A path in a section's list of operations wraps at the card's edge rather
    than running under it, ending a line where api-reference.js marks a path
    may end one. Its parts are lines of one box: as a flex box of its own, the
-   viewer's, each part between two marks would be a box beside the next. */
+   viewer's, each part between two marks would be a box beside the next
+   (the path rule above). */
 .api-reference .scalar-app .endpoints .endpoint { white-space: normal; }
-.api-reference .scalar-app .endpoints .endpoint-path { display: block; min-width: 0; overflow-wrap: anywhere; }
 
 /* The viewer cuts a long value to one line behind an ellipsis: a property's
    type and the values it takes, its default and example, an operation's path,
@@ -200,6 +241,10 @@
   .endpoint-label-path,
   .composition-selector-label
 ) { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+
+/* A response's description is clamped to one line beside its status; it is
+   what the status means here, so it is read whole. */
+.api-reference .scalar-app .markdown-summary { display: block; white-space: normal; overflow: visible; }
 
 /* A code sample keeps its lines but wraps each at the column's edge, so a
    reader on a phone reads the whole request and answer without scrolling

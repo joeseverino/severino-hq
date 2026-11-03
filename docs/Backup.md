@@ -23,6 +23,11 @@ is written. The archive is `severino-hq-<UTC timestamp>.tar.gz.age` in
 `SEVERINO_BACKUP_DIR` (`/srv/severino-hq/backups` by default), mode `0600`,
 and appears whole or not at all. The host needs `sqlite3`.
 
+The seed travels in the same archive as the database, so a restore opens every
+sealed value without anyone entering it again. An identity that opens an
+archive therefore opens every secret HQ holds: keep it as you keep those
+secrets.
+
 `severino-hq-backup.timer` runs it nightly as root and keeps 30 days of
 archives. Every archive is encrypted, and only to post-quantum hybrid
 recipients (`age1pq1...`, ML-KEM-768 with X25519): a run with no recipient,

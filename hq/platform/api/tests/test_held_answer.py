@@ -1,6 +1,7 @@
 """A call held for a person answers a declared shape on both doors: the API
-document offers it beside the success on every capability's 200, and MCP's
-``execute_capability`` beside its own, and a real held answer meets each."""
+answers it at 202 Accepted on every capability that changes something, apart
+from the 200 of a call that ran, and MCP's ``execute_capability`` beside its
+own, and a real held answer meets each."""
 
 import json
 
@@ -41,6 +42,13 @@ def _offers(document, schema, name):
     return any(_offers(document, branch, name) for branch in _resolved(document, schema).get("anyOf", []))
 
 
+def _data(document, response):
+    """The schema of ``data`` in ``response``, an operation's answer at one status."""
+
+    envelope = _resolved(document, response)
+    return _resolved(document, envelope["content"]["application/json"]["schema"])["properties"]["data"]
+
+
 @override_settings(
     OIDC_ISSUER=ISSUER,
     SEVERINO_API_RESOURCE=RESOURCE,
@@ -58,32 +66,61 @@ class HeldAnswerTests(TestCase):
                 scope=CapabilityRule.Scope.AGENT, subject=subject, capability="project.create", rule="approve"
             )
 
-    def test_every_capability_that_changes_something_offers_the_held_answer_beside_its_own(self):
+    def _post(self, key, project=PROJECT):
+        with _serving():
+            return self.client.post(
+                "/api/v2/capabilities/project.create/",
+                data=json.dumps({"payload": project}),
+                content_type="application/json",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
+                HTTP_IDEMPOTENCY_KEY=key,
+            )
+
+    def _rule(self, rule):
+        CapabilityRule.objects.filter(subject="example-automation").update(rule=rule)
+
+    def test_a_held_call_resent_under_its_key_answers_202_again(self):
+        first = self._post("example-held-again")
+        again = self._post("example-held-again")
+
+        self.assertEqual((first.status_code, again.status_code), (202, 202), again.content)
+        self.assertTrue(again.json()["data"]["repeated"])
+        self.assertEqual(again.json()["data"]["approval"]["id"], first.json()["data"]["approval"]["id"])
+
+    def test_a_change_that_runs_at_once_answers_200_and_a_refused_one_its_own_status(self):
+        self._rule(CapabilityRule.Rule.ALLOW)
+        ran = self._post("example-held-ran")
+        self._rule(CapabilityRule.Rule.DENY)
+        refused = self._post("example-held-refused", PROJECT | {"slug": "refused"})
+
+        self.assertEqual(ran.status_code, 200, ran.content)
+        self.assertNotIn("status", ran.json()["data"])
+        self.assertEqual(refused.status_code, 403, refused.content)
+        self.assertFalse(refused.json()["ok"])
+
+    def test_every_capability_that_changes_something_answers_the_held_call_at_202_alone(self):
         # A read is never held for a person (``capability_policy.set_rule``).
         document = openapi.document()
         calls = {
             path: operation
             for path, operations in document["paths"].items()
             for operation in operations.values()
-            if "x-hq-capability" in operation and operation[openapi.EFFECT_EXTENSION] != "read"
+            if "x-hq-capability" in operation
         }
         self.assertTrue(calls)
         for path, operation in calls.items():
             with self.subTest(path=path):
-                envelope = _resolved(document, operation["responses"]["200"])
-                schema = _resolved(document, envelope["content"]["application/json"]["schema"])
-                self.assertTrue(_offers(document, schema["properties"]["data"], "AwaitingApproval"))
+                responses = operation["responses"]
+                ran = _data(document, responses["200"])
+                self.assertFalse(_offers(document, ran, "AwaitingApproval"))
+                if operation[openapi.EFFECT_EXTENSION] == "read":
+                    self.assertNotIn("202", responses)
+                else:
+                    self.assertEqual(_data(document, responses["202"]), {"$ref": f"{openapi.SCHEMAS}AwaitingApproval"})
 
     def test_a_held_call_answers_the_declared_shape_on_both_doors(self):
-        with _serving():
-            response = self.client.post(
-                "/api/v2/capabilities/project.create/",
-                data=json.dumps({"payload": PROJECT}),
-                content_type="application/json",
-                HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
-                HTTP_IDEMPOTENCY_KEY="example-held-api",
-            )
-        self.assertEqual(response.status_code, 200, response.content)
+        response = self._post("example-held-api")
+        self.assertEqual(response.status_code, 202, response.content)
         Contract(openapi.document()).validate(["components", "schemas", "AwaitingApproval"], response.json()["data"])
 
         with set_principal(AGENT):

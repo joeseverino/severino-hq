@@ -709,33 +709,18 @@ SEVERINO_AGENT_CALL_TIMEOUT_SECONDS = 60
 # first release of anything that acts unattended should be watched proposing
 # before it is trusted acting. Even on, it only ever queues: the controller
 # still pulls and claims, so no provider credential nears the web process.
-SEVERINO_FINDINGS_AUTO_REMEDY = False
+SEVERINO_FINDINGS_AUTO_REMEDY = env_bool("SEVERINO_FINDINGS_AUTO_REMEDY")
 # What an agent may do beyond reading, on /mcp/ and the machine API alike, one
 # switch each, all off unless a deployment turns one on. Why each stands apart
 # is beside its grant in application.security.agent_ceiling.
 SEVERINO_AGENT_ENABLE_WRITES = env_bool("SEVERINO_AGENT_ENABLE_WRITES")
 SEVERINO_AGENT_ENABLE_DOC_SYNC = env_bool("SEVERINO_AGENT_ENABLE_DOC_SYNC")
 SEVERINO_AGENT_ENABLE_INFRASTRUCTURE = env_bool("SEVERINO_AGENT_ENABLE_INFRASTRUCTURE")
-SEVERINO_AGENT_ENABLE_PRUNE = False
-SEVERINO_AGENT_ENABLE_DELETES = False
-SEVERINO_AGENT_ENABLE_CERT_RENEWAL = False
-SEVERINO_AGENT_ENABLE_LOOKUP = False
-SEVERINO_AGENT_ENABLE_CALENDAR = False
-# A switch still set as SEVERINO_MCP_ENABLE_* would read as off and silently
-# take a grant from every agent, so it stops the start and names the new one.
-_RENAMED_AGENT_SWITCHES = [
-    switch
-    for switch in ("WRITES", "DOC_SYNC", "INFRASTRUCTURE", "PRUNE", "DELETES", "CERT_RENEWAL", "LOOKUP", "CALENDAR")
-    if env_str(f"SEVERINO_MCP_ENABLE_{switch}")
-]
-if _RENAMED_AGENT_SWITCHES:
-    raise ImproperlyConfigured(
-        "Rename "
-        + ", ".join(
-            f"SEVERINO_MCP_ENABLE_{switch} to SEVERINO_AGENT_ENABLE_{switch}" for switch in _RENAMED_AGENT_SWITCHES
-        )
-        + ": each switch caps an agent on every surface, /mcp/ and the machine API alike."
-    )
+SEVERINO_AGENT_ENABLE_PRUNE = env_bool("SEVERINO_AGENT_ENABLE_PRUNE")
+SEVERINO_AGENT_ENABLE_DELETES = env_bool("SEVERINO_AGENT_ENABLE_DELETES")
+SEVERINO_AGENT_ENABLE_CERT_RENEWAL = env_bool("SEVERINO_AGENT_ENABLE_CERT_RENEWAL")
+SEVERINO_AGENT_ENABLE_LOOKUP = env_bool("SEVERINO_AGENT_ENABLE_LOOKUP")
+SEVERINO_AGENT_ENABLE_CALENDAR = env_bool("SEVERINO_AGENT_ENABLE_CALENDAR")
 # How long a change held for a person's approval stands before it lapses. A day:
 # the person it waits for sleeps, and a request still clickable a month later is
 # a change nobody is looking at any more being applied on an old decision.

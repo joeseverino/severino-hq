@@ -90,8 +90,8 @@ An operator can allow, hold, or deny each capability per client. Handle all thre
 
 | Outcome | Response | Client should |
 |---|---|---|
-| Allowed | the capability's result | carry on |
-| Held | `200`, the `AwaitingApproval` the document offers beside every capability's result: `status: "awaiting_approval"`, with `approval.review_url`; over MCP, a task to a client of the tasks extension ([below](#held-changes-as-mcp-tasks)) | report it and stop, or wait on the task; retrying returns the same request |
+| Allowed | `200`, the capability's result | carry on |
+| Held | `202 Accepted`, since nothing has happened yet: the `AwaitingApproval` the document lists under `202` on every capability that changes something, `status: "awaiting_approval"`, with `approval.review_url`; over MCP, a task to a client of the tasks extension ([below](#held-changes-as-mcp-tasks)) | report it and stop, or wait on the task; retrying returns the same request, at `202` |
 | Refused | `403`, error code `denied_by_policy` | stop |
 
 With no rules set, changes to gated infrastructure are held, and so is
@@ -499,7 +499,8 @@ input returns `409 idempotency_conflict`.
 
 Only a call that ran keeps its answer. An error, a refusal, or a call held for
 approval keeps nothing under its key. So the same key runs once the rule, the
-grant or the record that stopped it has changed.
+grant or the record that stopped it has changed, and a held call resent under
+it is held again, at `202`.
 
 Records expire after 24 hours (`SEVERINO_API_IDEMPOTENCY_TTL_SECONDS`), and
 expired records are pruned by the next keyed write.

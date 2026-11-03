@@ -402,6 +402,12 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `SEVERINO_AGENT_ENABLE_WRITES` | installer | `1` lets an agent make ordinary writes, on MCP and the machine API |
 | `SEVERINO_AGENT_ENABLE_DOC_SYNC` | installer | `1` lets an agent mirror the documentation index, without other writes |
 | `SEVERINO_AGENT_ENABLE_INFRASTRUCTURE` | installer | `1` lets an agent declare infrastructure |
+| `SEVERINO_AGENT_ENABLE_PRUNE` | installer | `1` lets an agent remove documentation index entries the vault no longer has |
+| `SEVERINO_AGENT_ENABLE_DELETES` | installer | `1`, beside `SEVERINO_AGENT_ENABLE_WRITES`, lets an agent delete records, and calendar events when the calendar switch is on too |
+| `SEVERINO_AGENT_ENABLE_CERT_RENEWAL` | installer | `1` lets an agent ask for a certificate to be renewed |
+| `SEVERINO_AGENT_ENABLE_LOOKUP` | installer | `1` lets an agent run the public-registry lookups, which leave the tailnet and tell a third party what was asked |
+| `SEVERINO_AGENT_ENABLE_CALENDAR` | installer | `1` lets an agent read the calendar and add to it, and grants nothing else |
+| `SEVERINO_FINDINGS_AUTO_REMEDY` | installer | `1` lets HQ queue a repair for a finding with nobody asking; the controller still claims and runs it |
 | `SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS` | installer | `1` lets public DNS declarations reconcile |
 | `SEVERINO_DASHBOARD_LINKS` | installer | extra dashboard links, as a JSON list of `{"label", "sub", "href"}` |
 | `HQ_CONTROLLER_ID` | installer | the installation a sweep files its findings under; the machine's name when unset |

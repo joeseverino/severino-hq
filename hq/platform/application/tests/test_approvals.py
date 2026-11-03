@@ -263,11 +263,12 @@ class HeldRequestTests(TestCase):
     def test_reading_is_never_held(self):
         """Nothing about a read waits for anybody."""
 
-        result = execute_capability(
-            "contact.submission.list",
-            {"status": "new", "limit": 1},
-            principal=Principal("reader", "mcp", frozenset({Capability.MANAGE_CONTACTS})),
-        )
+        with patch("hq.platform.application.lookup.resolve", return_value={"server": {}, "records": []}):
+            result = execute_capability(
+                "lookup.name.read",
+                {"name": "example.test"},
+                principal=Principal("reader", "mcp", frozenset({Capability.LOOK_UP_PUBLIC_RECORDS})),
+            )
 
         self.assertNotEqual(result.get("status"), "awaiting_approval")
 

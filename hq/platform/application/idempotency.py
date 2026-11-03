@@ -134,6 +134,5 @@ def execute_once(
             record.delete()
             return response, False
         record.response = response
-        record.status_code = 200
-        record.save(update_fields=("response", "status_code"))
+        record.save(update_fields=("response",))
         return response, False

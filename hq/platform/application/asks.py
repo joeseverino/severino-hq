@@ -275,8 +275,7 @@ def job_standing(job: Any) -> Standing:
     state = states.get(job.seen_state, FAILED)
     note = job.note
     if state == FAILED:
-        error = job.seen_error
-        note = error.strip().splitlines()[-1] if error else "Failed."
+        note = job.seen_error or "Failed."
     elif state == QUEUED and not note:
         note = WAITING
     return Standing(

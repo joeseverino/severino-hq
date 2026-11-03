@@ -73,7 +73,7 @@ class CapabilityCallTests(TestCase):
         result = self.call(self.spec(), {"idempotency_key": "example-once"})
 
         self.assertTrue(result["ok"], result)
-        self.assertEqual(IdempotencyRecord.objects.get().status_code, 200)
+        self.assertEqual(IdempotencyRecord.objects.get().response, result)
 
     def test_what_a_command_naming_a_connection_does_is_attributed_to_it(self):
         def handler(command, **_bound):

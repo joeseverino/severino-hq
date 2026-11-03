@@ -9,6 +9,7 @@ quietly changed meaning.
 import json
 import re
 from collections.abc import Callable, Iterable, Mapping
+from http import HTTPStatus
 from typing import Annotated, Any, Concatenate, TypedDict, Union, cast, get_args, get_type_hints
 
 from django.conf import settings
@@ -28,6 +29,7 @@ from hq.platform.application import agent_admission
 from hq.platform.application.agent_access import AgentRefusal
 from hq.platform.application.agent_limits import Limited
 from hq.platform.application.answer_fields import Outcome, Pinned
+from hq.platform.application.approvals import is_held
 from hq.platform.application.call_envelope import ENVELOPE_SCHEMA, INTEGER_TARGET, read_body
 from hq.platform.application.capabilities import (
     CapabilitiesVersion,
@@ -352,6 +354,10 @@ def _run_for_agent(request: HttpRequest, view: Callable[[APIRequest], HttpRespon
 # What every endpoint can answer, admitting its caller or once its view fails.
 ENDPOINT_CODES = answered_by(Door.ADMISSION, Door.ENDPOINT)
 
+# What a change held for a person answers: accepted, and its effect not yet
+# happened (RFC 9110, section 15.3.3).
+HELD_STATUS = HTTPStatus.ACCEPTED
+
 
 def _endpoint(
     methods: tuple[str, ...],
@@ -359,6 +365,7 @@ def _endpoint(
     title: str,
     data: Any,
     codes: Iterable[str] = (),
+    held: Any = None,
     operator_session: bool = False,
     page: str = "",
 ) -> Callable[[APIView], View]:
@@ -366,6 +373,7 @@ def _endpoint(
 
     Every argument is the endpoint's declaration, which ``openapi.py`` reads:
     ``data`` is what a success carries under ``data`` (None: not enveloped),
+    ``held`` what it carries there at HELD_STATUS (None: it holds nothing),
     ``codes`` the error codes it answers beside ENDPOINT_CODES, ``title``
     the operation in a few words, and ``page`` the route of the web page that
     shows what it answers, for one that serves a single domain.
@@ -409,6 +417,7 @@ def _endpoint(
             __hq_title__=title,
             __hq_data__=data,
             __hq_codes__=answered,
+            __hq_held__=held,
             __hq_operator_session__=operator_session,
             __hq_page__=page,
         )
@@ -747,18 +756,23 @@ def call_codes(doors: Iterable[Door]) -> frozenset[str]:
 
 
 def capability_data(spec: CapabilitySpec) -> Any | None:
-    """What a call of ``spec`` answers under ``data``: its result less the
-    ``ok`` the envelope says beside it, or that it waits for a person where it
-    changes something; None where its result names no shape (``answer_type``)."""
+    """What a call of ``spec`` that ran answers under ``data``: its result less
+    the ``ok`` the envelope says beside it; None where its result names no
+    shape (``answer_type``)."""
 
     answer = answer_type(spec)
     if answer is None:
         return None
     members = tuple(_without_outcome(member) for member in get_args(answer) or (answer,))
-    if spec.effect != "read":
-        # A read is never held for a person (``capability_policy.set_rule``).
-        members += (AwaitingApproval,)
     return members[0] if len(members) == 1 else Union[members]  # noqa: UP007 - built from a tuple of types
+
+
+def capability_held(spec: CapabilitySpec) -> Any | None:
+    """What a call of ``spec`` held for a person answers under ``data`` at
+    HELD_STATUS; None for a read, which is never held
+    (``capability_policy.set_rule``)."""
+
+    return None if spec.effect == "read" else AwaitingApproval
 
 
 def _without_outcome(kind: Any) -> Any:
@@ -782,15 +796,7 @@ type CommandAnswer = Annotated[
 ]
 
 
-# What a call answers under ``data`` where its capability names no shape of
-# its own: an object, or that it waits for a person.
-type CapabilityAnswer = Annotated[
-    CommandAnswer | AwaitingApproval,
-    Field(description="What the capability answers, in the shape its command names, or that it waits for a person."),
-]
-
-
-@_endpoint(("POST",), title="Run a capability", data=CapabilityAnswer, codes=execute_codes(None))
+@_endpoint(("POST",), title="Run a capability", data=CommandAnswer, held=AwaitingApproval, codes=execute_codes(None))
 def execute(request: APIRequest, name: str) -> HttpResponse:
     """Run one HQ capability, replaying machine writes by idempotency key."""
 
@@ -811,7 +817,8 @@ def execute(request: APIRequest, name: str) -> HttpResponse:
         idempotency_key=request.headers.get(IDEMPOTENCY_HEADER),
     )
     if result.get("ok", False):
-        response = _ok({key: value for key, value in result.items() if key != "ok"})
+        data = {key: value for key, value in result.items() if key != "ok"}
+        response = _ok(data, status=HELD_STATUS if is_held(result) else HTTPStatus.OK)
     else:
         response = _answer(refusal_of(result))
     if replayed:

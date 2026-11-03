@@ -11,8 +11,15 @@ from django.urls import reverse
 from django.views.decorators.csp import csp_override
 from django.views.decorators.http import require_safe
 
+from hq.platform.api.openapi import document
+
 
 @require_safe
 @csp_override(settings.SEVERINO_API_REFERENCE_CSP)
 def reference(request: HttpRequest) -> HttpResponse:
-    return TemplateResponse(request, "hq_api/reference.html", {"document_url": reverse("hq_api:openapi")})
+    # The longest path the document serves, in characters: every list of a
+    # tag's operations is that wide, so their edges line up (api-reference.css).
+    longest = max(map(len, document()["paths"]), default=0)
+    return TemplateResponse(
+        request, "hq_api/reference.html", {"document_url": reverse("hq_api:openapi"), "longest_path": longest}
+    )

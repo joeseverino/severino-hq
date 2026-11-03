@@ -3,6 +3,7 @@
 import contextlib
 import difflib
 import hashlib
+import itertools
 import json
 import re
 import unicodedata
@@ -45,6 +46,10 @@ REFERENCE_DARK = "api/docs/dark"
 REFERENCE_DESKTOP = (1024, WIDE)
 
 REFERENCE_PHONE = PHONE_SCREEN[0]
+
+# A laptop's window too narrow for the viewer's sidebar, yet past the width at
+# which the viewer stacks a tag's description over its list of operations.
+_LAPTOP_WINDOW = 924
 
 # The viewer is one large script: parsing it takes longer than a page's load.
 REFERENCE_READY = 30_000
@@ -472,6 +477,54 @@ _REFERENCE_AT_REST = f"""(address) => {{
   window.resting[address] = {{top: found.top, runs: last.top === found.top ? last.runs + 1 : 0}};
   return window.resting[address].runs >= 3;
 }}"""
+
+# Where the reader stands: the line under the bars pinned over the page (HQ's
+# header and any bar of the viewer's held under it), the section drawn just
+# below that line and its top, and the entry the sidebar marks as current.
+_REFERENCE_PLACE = """(root) => {
+  const viewer = document.querySelector(root);
+  const pinned = [document.querySelector('header'), ...viewer.querySelectorAll('[data-scalar-scroll-header]')]
+    .filter((bar) => bar.checkVisibility() && ['sticky', 'fixed'].includes(getComputedStyle(bar).position));
+  const line = Math.max(...pinned.map((bar) => bar.getBoundingClientRect().bottom));
+  const content = viewer.querySelector('main').getBoundingClientRect();
+  const section = document.elementFromPoint(content.left + content.width / 2, line + 2)?.closest('section[id]');
+  return {line: Math.round(line), under: section?.id ?? '',
+    top: section ? Math.round(section.getBoundingClientRect().top) : null,
+    current: viewer.querySelector('aside [aria-current="page"]')?.getAttribute('href') ?? ''};
+}"""
+
+# The links a tag's own section draws, by their address: the section whose id
+# ends with the tag's.
+_SECTION_LINKS = """([root, tag]) => {
+  const section = [...document.querySelector(root).querySelectorAll('main section[id]')].find((s) => s.id.endsWith(tag));
+  return section ? [...section.querySelectorAll('a[href^="#"]')].map((a) => a.getAttribute('href')) : null;
+}"""
+
+# The left and right edge of each tag's list of operations drawn, to the pixel.
+_LIST_EDGES = """(root) => [...document.querySelector(root).querySelectorAll('main [role="group"]:has(ul a)')]
+  .filter((card) => card.checkVisibility())
+  .map((card) => { const box = card.getBoundingClientRect(); return `${Math.round(box.left)}-${Math.round(box.right)}`; })"""
+
+# Each path in a tag's list of operations drawn over more than one line while
+# something else shares the list's row, by its text. The list is the group
+# that names it; its row is the box two levels out, which holds the tag's
+# description beside it or above it.
+_PATHS_SHARING_A_ROW = """(root) => {
+  const found = [];
+  for (const list of document.querySelector(root).querySelectorAll('main [role="group"] ul')) {
+    const card = list.closest('[role="group"]');
+    const row = card.parentElement.parentElement.getBoundingClientRect();
+    if (!card.checkVisibility() || card.getBoundingClientRect().width >= row.width - 1) continue;
+    for (const link of list.querySelectorAll('a')) {
+      const path = link.lastElementChild;
+      const range = document.createRange();
+      range.selectNodeContents(path);
+      const lines = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+      if (lines > 1) found.push(path.textContent.trim());
+    }
+  }
+  return found;
+}"""
 
 # Each run of text in the viewer drawn past a box that clips it, as the
 # survey and tables.js read a cut (`CUTS`): the box that cuts it and the text.
@@ -963,6 +1016,95 @@ class ReferenceBrowserTests(BrowserGate):
                 # Only the planted paths: what the document's own examples
                 # draw is the read-whole test's.
                 self.assertEqual([lines for lines in broken if lines.replace(" | ", "") in paths], [])
+
+    def groups(self):
+        """Each tag that holds only other tags, with the slugs of those tags."""
+
+        own = {operation["tags"][0] for item in self.document["paths"].values() for operation in item.values()}
+        under: dict[str, list[str]] = {}
+        for tag in self.document["tags"]:
+            if "parent" in tag:
+                under.setdefault(tag["parent"], []).append(scalar_slug(tag["name"]))
+        return {name: held for name, held in under.items() if name not in own}
+
+    def after_a_group(self):
+        """The address of the first tag outside any group that follows one."""
+
+        groups = self.groups()
+        tags = [tag["name"] for tag in self.document["tags"] if "parent" not in tag]
+        following = next(later for earlier, later in itertools.pairwise(tags) if earlier in groups)
+        return f"#tag/{scalar_slug(following)}"
+
+    def test_a_group_links_each_domain_it_holds(self):
+        """A tag that only groups others reads as their index wherever the page
+        lands, closed or open: a link to each domain's section under its
+        heading, never a heading alone."""
+
+        groups = self.groups()
+        self.assertTrue(groups)
+        last = next(tag["name"] for tag in reversed(self.document["tags"]) if "parent" not in tag)
+        self.visit(WIDE, fragment=f"#tag/{scalar_slug(last)}")
+        draw_whole_reference(self.page)
+        for group, held in groups.items():
+            with self.subTest(group=group):
+                links = self.page.evaluate(_SECTION_LINKS, [SELECTORS["reference"], f"/tag/{scalar_slug(group)}"])
+                self.assertEqual(links, [f"#tag/{slug}" for slug in held])
+
+    def test_a_link_in_a_groups_index_lands_on_its_domain(self):
+        """Following a domain's link in its group's index puts that domain's
+        section at the top of the view, and the sidebar marks it."""
+
+        summary = {tag["name"]: tag["summary"] for tag in self.document["tags"]}
+        group, held = next(iter(self.groups().items()))
+        domain = next(tag for tag in self.document["tags"] if scalar_slug(tag["name"]) == held[0])
+        address = f"#tag/{held[0]}"
+        self.visit(WIDE)
+        content = self.page.locator(SELECTORS["reference"]).get_by_role("main")
+        section = content.get_by_role("region", name=summary[group]).first
+        section.get_by_role("link", name=domain["summary"], exact=True).first.click()
+        self.page.wait_for_function("(address) => location.hash === address", arg=address)
+        self.page.wait_for_function(_REFERENCE_HEADING, arg=address, polling=100)
+        self.settle()
+        place = self.page.evaluate(_REFERENCE_PLACE, SELECTORS["reference"])
+        self.assertTrue(place["under"].endswith(f"/{address[1:]}"), place)
+        self.assertEqual(place["current"], address)
+
+    def test_a_path_breaks_only_in_a_list_with_the_row_to_itself(self):
+        """A tag's list of operations sits beside its description only where
+        each of its paths fits on one line there, and every list is one width,
+        so their edges line up from section to section."""
+
+        for width in (REFERENCE_PHONE, _LAPTOP_WINDOW, WIDE):
+            with self.subTest(width=width):
+                self.visit(width)
+                draw_whole_reference(self.page)
+                self.assertEqual(self.page.evaluate(_PATHS_SHARING_A_ROW, SELECTORS["reference"]), [])
+                edges = self.page.evaluate(_LIST_EDGES, SELECTORS["reference"])
+                self.assertGreater(len(edges), 1)
+                self.assertEqual(len(set(edges)), 1, edges)
+
+    def test_the_entry_named_is_the_one_under_the_bars(self):
+        """Landing on a tag shows it from its top, nothing of the one before it,
+        and as the reader scrolls either way, the entry the reference names (the
+        sidebar's current item, the bar's name where the sidebar folds away) is
+        the one drawn just under the bars over the page."""
+
+        address = self.after_a_group()
+        for width in (_LAPTOP_WINDOW, WIDE):
+            with self.subTest(width=width):
+                self.visit(width, fragment=address)
+                self.page.wait_for_function(_REFERENCE_HEADING, arg=address, polling=100)
+                self.settle()
+                place = self.page.evaluate(_REFERENCE_PLACE, SELECTORS["reference"])
+                self.assertTrue(place["under"].endswith(f"/{address[1:]}"), place)
+                self.assertAlmostEqual(place["top"], place["line"], delta=1)
+                for step in (-0.3, -0.3, -0.3, 0.5, 0.5):
+                    self.page.evaluate("(share) => window.scrollBy(0, innerHeight * share)", step)
+                    self.settle()
+                    place = self.page.evaluate(_REFERENCE_PLACE, SELECTORS["reference"])
+                    with self.subTest(step=step, under=place["under"]):
+                        self.assertTrue(place["current"])
+                        self.assertTrue(place["under"].endswith(f"/{place['current'][1:]}"), place)
 
     def test_a_link_to_an_operation_survives_a_reload(self):
         """The page lands on the entry followed last, however quickly a reader

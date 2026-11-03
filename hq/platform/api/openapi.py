@@ -9,6 +9,7 @@ and resource its registry's entry, and the tag tree the domain registry's.
 
 import json
 import re
+import unicodedata
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from http import HTTPStatus
@@ -293,7 +294,34 @@ class _Tags:
             if group is not None:
                 tag["parent"] = group["name"]
             tags.append(tag)
+        for group in groups.values():
+            if group["name"].startswith(_GROUP_PREFIX):
+                _index(group, [tag for tag in tags if tag.get("parent") == group["name"]])
         return tags
+
+
+def _index(group: dict[str, Any], held: list[dict[str, Any]]) -> None:
+    """End a group's description with a link to each domain it holds.
+
+    A group has no operations of its own, so the viewer's section for it,
+    closed, would be its heading alone; the links make it the group's index.
+    Each goes to the address the viewer gives a tag's section, `#tag/` and
+    the tag's name as its slugger writes it (`AY` in Scalar 1.76.4's
+    standalone bundle, line 1102).
+    """
+
+    links = "\n".join(f"- [{tag['summary']}](#tag/{_scalar_slug(tag['name'])})" for tag in held)
+    group["description"] = "\n\n".join(part for part in (group.get("description", ""), links) if part)
+
+
+def _scalar_slug(name: str) -> str:
+    """A tag's name as the viewer's slugger writes it: lowercased, every
+    character but a letter, number, space, `_` or `-` dropped, each run of
+    those three one `-`, none at either end."""
+
+    slug = unicodedata.normalize("NFC", name[:255].strip()).lower()
+    slug = re.sub(r"[^\w\s-]", "", slug)
+    return re.sub(r"[\s_-]+", "-", slug).strip("-")
 
 
 def _json_content(schema: dict[str, Any], examples: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -365,7 +393,12 @@ class _Builder:
         return {"recorded": {"$ref": EXAMPLES + name}}
 
     def _responses(
-        self, view: Any, operation_id: str, codes: Iterable[str], answer: tuple[str, dict[str, Any]] | None
+        self,
+        view: Any,
+        operation_id: str,
+        codes: Iterable[str],
+        answer: tuple[str, dict[str, Any]] | None,
+        held: Any,
     ) -> dict[str, Any]:
         recorded = self.examples.get(operation_id, {}).get("responses", {})
         schema: dict[str, Any]
@@ -399,6 +432,8 @@ class _Builder:
             )
             success = self.component("responses", self.responses, name, {**success, "content": _json_content(schema)})
         responses: dict[str, Any] = {"200": success}
+        if held is not None:
+            responses[str(views.HELD_STATUS)] = self.held(operation_id, held, recorded)
         for status, answered in codes_by_status(codes).items():
             name = self.refusal(status, answered)
             if str(status) in recorded:
@@ -410,6 +445,21 @@ class _Builder:
             else:
                 responses[str(status)] = {"$ref": RESPONSES + name}
         return responses
+
+    def held(self, operation_id: str, kind: Any, recorded: Mapping[str, Any]) -> dict[str, Any]:
+        """The answer at ``views.HELD_STATUS`` of a call held for a person, its data ``kind``."""
+
+        name, status, phrase = kind.__name__, str(views.HELD_STATUS), _pascal(views.HELD_STATUS.phrase)
+        envelope = self.components.schemas["Success"]
+        data = self.components.typed({name: kind})[name]
+        schema = {**envelope, "properties": {**envelope["properties"], "data": data}}
+        response: dict[str, Any] = {"description": "Accepted: held for a person, and nothing has happened yet."}
+        if status in recorded:
+            example = self.recorded(f"{operation_id}{phrase}", recorded[status])
+            return {**response, "content": _json_content(schema, example)}
+        return self.component(
+            "responses", self.responses, f"{name}{phrase}", {**response, "content": _json_content(schema)}
+        )
 
     def refusal(self, status: int, codes: list[str]) -> str:
         """The response, and its schema, for refusing at ``status`` with ``codes``, named for them."""
@@ -484,9 +534,11 @@ class _Builder:
         **fields: Any,
     ) -> None:
         # An expansion's concrete operation can refuse with fewer codes than its view declares,
-        # and answer a narrower type: its name and the schema of its data.
+        # answer a narrower type (its name and the schema of its data), and hold
+        # nothing for a person where its view can.
         codes = fields.pop("codes", view.__hq_codes__)
         answer = fields.pop("answer", None)
+        held = fields.pop("held", view.__hq_held__)
         operation_id += f"V{VERSION}"
         if operation_id in self.operation_ids:
             raise OpenAPIError(f"Operation id {operation_id!r} is derived twice.")
@@ -508,7 +560,7 @@ class _Builder:
             "summary": summary,
             **({"tags": [tag]} if tag else {}),
             **fields,
-            "responses": self._responses(view, operation_id, codes, answer),
+            "responses": self._responses(view, operation_id, codes, answer, held),
         }
         self.paths.setdefault(path, {})[method.lower()] = operation
 
@@ -618,6 +670,7 @@ class _Builder:
                 requestBody=_body(body),
                 codes=views.execute_codes(registry[name]),
                 answer=self.answer_of(registry[name]),
+                held=views.capability_held(registry[name]),
                 **{
                     "x-hq-capability": name,
                     EFFECT_EXTENSION: spec["effect"],
@@ -634,10 +687,8 @@ class _Builder:
         data = views.capability_data(spec)
         if data is None:
             return None
-        kinds = [kind for kind in get_args(data) if kind is not views.AwaitingApproval]
-        name = "".join(kind.__name__ for kind in kinds) or data.__name__
-        schema = self.components.typed({spec.name: data})[spec.name]
-        return (name if spec.effect == "read" else f"{name}OrHeld"), schema
+        name = "".join(kind.__name__ for kind in get_args(data)) or data.__name__
+        return name, self.components.typed({spec.name: data})[spec.name]
 
     def resource_list_paths(self, template: str, method: str, view: Any) -> None:
         self.operation(

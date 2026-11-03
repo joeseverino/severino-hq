@@ -12,7 +12,7 @@ document's title, and the page is still named before it mounts or where it fails
   <p class="api-reference-loading">Loading the reference.</p>
   <p class="api-reference-failed">The reference did not load. The document itself is at <a href="{{ document_url }}">{{ document_url|breakable:"." }}</a></p>
 </div>
-<div class="api-reference" id="api-reference-root" data-url="{{ document_url }}"></div>
+<div class="api-reference" id="api-reference-root" data-url="{{ document_url }}" style="--longest-path: {{ longest_path }}ch"></div>
 <noscript><p>The reference needs JavaScript. The document itself is at <a href="{{ document_url }}">{{ document_url|breakable:"." }}</a></p></noscript>
 {% endblock %}
 {% comment %}The reference fills the page under the header; its pinned sidebar runs to the bottom.{% endcomment %}

@@ -1,5 +1,5 @@
 """Each capability's answer is the shape its handler's return annotation
-names, published under ``data`` beside a held call's; a handler that names no
+names, published under ``data`` of its 200; a handler that names no
 shape, or one the host cannot resolve, answers an object and never breaks
 the document."""
 
@@ -17,7 +17,7 @@ from hq_sdk.capabilities import StrictCommand
 from .. import openapi
 
 _REF = "$ref"
-_GENERIC = openapi.SCHEMAS + "CapabilityAnswer"
+_GENERIC = openapi.SCHEMAS + "CommandAnswer"
 
 
 class ExampleCounted(TypedDict):
@@ -95,20 +95,14 @@ class CapabilityAnswerTests(SimpleTestCase):
         self.assertTrue(names)
         self.assertEqual([name for name in names if _data(document, name).get(_REF) == _GENERIC], [])
 
-    def test_an_answer_is_its_type_less_ok_or_a_held_call_where_it_changes_something(self):
+    def test_an_answer_is_its_type_less_ok_whether_it_changes_something_or_reads(self):
         specs = (_spec("example.counted", _typed), _spec("example.counted_read", _typed, "read"))
         with override_integration_graph(compile_integration_graph(capabilities=specs, resources=(), connections=())):
             document = openapi.document()
 
-        written = _data(document, "example.counted")
-        branches = [_resolved(document, branch) for branch in written["anyOf"]]
-        self.assertEqual(
-            [sorted(branch["properties"]) for branch in branches],
-            [["counted"], ["applied", "approval", "message", "queued", "repeated", "status"]],
-        )
-        self.assertEqual(
-            sorted(_resolved(document, _data(document, "example.counted_read"))["properties"]), ["counted"]
-        )
+        for name in ("example.counted", "example.counted_read"):
+            with self.subTest(name):
+                self.assertEqual(sorted(_resolved(document, _data(document, name))["properties"]), ["counted"])
 
     def test_a_handler_naming_no_shape_or_one_the_host_cannot_resolve_answers_an_object(self):
         specs = (_spec("example.plain", _plain), _spec("example.unresolvable", _unresolvable))

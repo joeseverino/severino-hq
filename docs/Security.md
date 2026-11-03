@@ -324,9 +324,26 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   role, so an agent acting for a viewer reads and does nothing else. A token
   naming a person who holds no role is refused. The person is recorded on the
   agent (`AgentIdentity.person`), and a change audited.
-- An agent refused a write on one surface is refused it on the other. A switch
-  still named `SEVERINO_MCP_ENABLE_*` stops HQ from starting and names its
-  replacement.
+- An agent refused a write on one surface is refused it on the other. Each
+  switch is off unless the deployment sets it, and turning one on lets an
+  agent do this much more, never more than its own grant:
+
+  | Switch | Lets an agent |
+  | --- | --- |
+  | `SEVERINO_AGENT_ENABLE_WRITES` | make ordinary writes, documentation sync included |
+  | `SEVERINO_AGENT_ENABLE_DOC_SYNC` | mirror the documentation index, and write nothing else |
+  | `SEVERINO_AGENT_ENABLE_PRUNE` | remove index entries the vault no longer has |
+  | `SEVERINO_AGENT_ENABLE_DELETES` | delete records, only beside the writes switch, and calendar events beside the calendar switch |
+  | `SEVERINO_AGENT_ENABLE_INFRASTRUCTURE` | declare infrastructure, which never includes asking a certificate authority for anything |
+  | `SEVERINO_AGENT_ENABLE_CERT_RENEWAL` | ask for a certificate to be renewed |
+  | `SEVERINO_AGENT_ENABLE_LOOKUP` | run the public-registry lookups: a read, but one that leaves the tailnet, spends a third party's rate limit and tells it what HQ was asked |
+  | `SEVERINO_AGENT_ENABLE_CALENDAR` | read the personal calendar and add to it, granting nothing else |
+
+- `SEVERINO_FINDINGS_AUTO_REMEDY` lets HQ queue a repair for a finding with
+  nobody asking. It is off by default, so what acts unattended is watched
+  proposing before it is trusted acting. Even on, it only queues: the
+  controller still claims and runs the repair, so no provider credential
+  nears the web process.
 - A person's own device (the phone app, a Shortcut) holds a person's standing.
   Pocket ID's RFC 9068 access tokens name the client (`client_id`). On a grant
   a person allowed, they name that person (`sub`; a client-credentials token's
@@ -540,9 +557,10 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
 - [ ] `SEVERINO_API_RESOURCE` is `https://<hq-host>/api`, the Pocket ID API
       resource's identifier. Both machine doors sit under its path, so one
       audience covers them, and the metadata names what a token is asked for.
-- [ ] `SEVERINO_AGENT_ENABLE_WRITES`, `SEVERINO_AGENT_ENABLE_DOC_SYNC` and
-      `SEVERINO_AGENT_ENABLE_INFRASTRUCTURE` are enabled only for the
-      capabilities some agent or API client actually needs.
+- [ ] Each `SEVERINO_AGENT_ENABLE_*` switch ([Agents](#agents)) is enabled
+      only for the capabilities some agent or API client actually needs.
+- [ ] `SEVERINO_FINDINGS_AUTO_REMEDY` is on only once the repairs it would
+      queue have been watched being proposed.
 - [ ] The DNS-01 token is its own connection item, with only Zone Read and
       DNS Edit on the zones it renews, and is not the Cloudflare API token.
 - [ ] No personal SSH private key is rendered for the controller. Its

@@ -54,7 +54,7 @@ class ListedCodeTests(SimpleTestCase):
         for path, operations in value["paths"].items():
             for method, operation in operations.items():
                 for status, answered in operation["responses"].items():
-                    if status == "200":
+                    if int(status) < 400:
                         continue
                     response = components["responses"].get(last(answered.get("$ref", "")), answered)
                     schema = components["schemas"][last(response["content"]["application/json"]["schema"]["$ref"])]
@@ -90,7 +90,7 @@ class CapabilityCodeListTests(SimpleTestCase):
     def _listed(self, operation):
         codes = set()
         for status, answered in operation["responses"].items():
-            if status == "200":
+            if int(status) < 400:
                 continue
             response = self.responses.get(answered.get("$ref", "").rsplit("/", 1)[-1], answered)
             schema = self.schemas[response["content"]["application/json"]["schema"]["$ref"].rsplit("/", 1)[-1]]

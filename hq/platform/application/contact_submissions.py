@@ -32,7 +32,6 @@ from .record_errors import PolicyError, RecordNotFound
 from .record_saves import written
 from .resource_operations import queue_reconcile
 from .security import Principal
-lazy from .record_answers import ContactSubmissionPage
 
 CONTACT_STATUSES = frozenset(get_args(ContactStatus))
 ASSIGNEE_LENGTH = 120
@@ -48,13 +47,6 @@ type Assignee = Annotated[
     str, Field(max_length=ASSIGNEE_LENGTH), Describe("Who is handling it.", api="Empty for nobody.")
 ]
 type AdminNotes = Annotated[str, Describe("The notes kept on it, for HQ only.", api="Empty for none.")]
-
-
-@dataclass(frozen=True, slots=True)
-class ContactListCommand:
-    status: Annotated[str, Describe("Only submissions in this state; blank for all.")] = ""
-    query: Annotated[str, Describe("Only submissions mentioning these words.")] = ""
-    limit: Annotated[int, Describe("At most this many submissions.")] = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,28 +102,6 @@ def _submission(identifier: int, current: inbox.Inbox) -> dict[str, Any]:
 
 def get_contact_submission(identifier: int) -> dict[str, Any]:
     return _submission(identifier, inbox.current())
-
-
-def execute_contact_list(
-    command: ContactListCommand,
-    *,
-    principal: Principal,
-) -> ContactSubmissionPage:
-    del principal
-    found = list_contact_submissions(
-        status=command.status,
-        query=command.query,
-        limit=command.limit,
-    )
-    page: ContactSubmissionPage = {
-        "ok": True,
-        "items": found["items"],
-        "count": found["count"],
-        "total": found["total"],
-    }
-    if "truncated" in found:
-        page["truncated"] = found["truncated"]
-    return page
 
 
 def _unconfirmed(spec: dict[str, Any], current: inbox.Inbox) -> dict[str, Any]:

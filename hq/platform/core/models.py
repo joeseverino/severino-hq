@@ -455,7 +455,6 @@ class IdempotencyRecord(models.Model):  # noqa: DJ008 - stored state, never show
     key = models.CharField(max_length=128)
     request_sha256 = models.CharField(max_length=64)
     response = models.JSONField(null=True)
-    status_code = models.PositiveSmallIntegerField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(db_index=True)
 

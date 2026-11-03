@@ -3,6 +3,60 @@
 // and HQ's policy refuses eval.
 globalThis.__zod_globalConfig = { jitless: true };
 
+// Scalar marks the entry in view (the sidebar's current item, the bar's name
+// on a phone) as each entry's section crosses the middle of the window, an
+// IntersectionObserver with this margin (`c3`, its `Section`'s, in
+// static/vendor/scalar/standalone.js line 3395). A reader's place is the top
+// of what is shown, so the end of one entry above the middle reads as that
+// entry while the next is named. Each such observer watches instead the one
+// line under the bars that stand over the page, the ones Scalar scrolls an
+// entry to just below (`data-scalar-scroll-header`). Where that line falls
+// moves with the window's height and with the bars a width shows, so each is
+// built again on a resize, watching what it watched. The bars' height is read
+// from their boxes: HQ's header declares its own as a calc of other tokens,
+// which a custom property hands back unresolved, and whether the viewer's
+// own bar is shown is its breakpoint's.
+const MIDDLE = "-49% 0px -49% 0px";
+const Observer = window.IntersectionObserver;
+const atTheLine = new Set();
+const lineUnderTheBars = () => {
+  /* eslint-disable no-restricted-syntax -- where the reading line falls, for an observer's margin, which takes lengths and no CSS: Scalar reads its bars the same way to scroll an entry under them */
+  const bars = [...document.querySelectorAll("[data-scalar-scroll-header]")]
+    .filter((bar) => ["sticky", "fixed"].includes(getComputedStyle(bar).position))
+    .map((bar) => bar.getBoundingClientRect())
+    .filter((box) => box.height > 0)
+    .sort((a, b) => a.top - b.top);
+  /* eslint-enable no-restricted-syntax */
+  let line = 0;
+  for (const box of bars) if (box.top <= line + 1) line = Math.max(line, box.bottom);
+  const top = Math.round(line);
+  return `-${top}px 0px -${Math.max(0, window.innerHeight - top - 1)}px 0px`;
+};
+class AtTheLine {
+  constructor(callback, options) {
+    this.callback = callback;
+    this.options = options;
+    this.targets = new Set();
+    this.build();
+    atTheLine.add(this);
+  }
+  build() {
+    this.inner?.disconnect();
+    this.inner = new Observer((entries) => this.callback(entries, this), { ...this.options, rootMargin: lineUnderTheBars() });
+    this.targets.forEach((target) => this.inner.observe(target));
+  }
+  observe(target) { this.targets.add(target); this.inner.observe(target); }
+  unobserve(target) { this.targets.delete(target); this.inner.unobserve(target); }
+  disconnect() { this.targets.clear(); this.inner.disconnect(); atTheLine.delete(this); }
+  takeRecords() { return this.inner.takeRecords(); }
+}
+// An expression, since a declaration of that name in a script is the global
+// itself, the one replaced.
+window.IntersectionObserver = Object.assign(function IntersectionObserver(callback, options) {
+  return options?.rootMargin === MIDDLE ? new AtTheLine(callback, options) : new Observer(callback, options);
+}, { prototype: Observer.prototype });
+window.addEventListener("resize", () => atTheLine.forEach((observer) => observer.build()), { passive: true });
+
 // Every code-sample target the bundle ships, named so all but curl can be
 // hidden: the option is a list of what to hide, with no list of what to show.
 // curl is the one sample every reader can run.

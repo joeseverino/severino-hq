@@ -8,10 +8,8 @@ from hq.domains.control_plane.provider_adapters.cloudflare import ContactStatus
 from hq.platform.application import contact_submissions
 from hq.platform.application.contact_submissions import (
     ContactDeleteCommand,
-    ContactListCommand,
     ContactReviewCommand,
     execute_contact_delete,
-    execute_contact_list,
     execute_contact_review,
 )
 from hq.platform.application.describe import Describe
@@ -72,21 +70,6 @@ class ContactSubmissionRow(TypedDict):
 
 def capabilities() -> tuple[CapabilitySpec, ...]:
     return (
-        CapabilitySpec(
-            "contact.submission.list",
-            "List the messages sent through the contact form.",
-            "read",
-            Capability.MANAGE_CONTACTS,
-            ContactListCommand,
-            execute_contact_list,
-            subject_resource="contact.submissions",
-            execution_notes=(
-                "Validate the requested status and result bound locally.",
-                "Read submissions from the stored Cloudflare API reading.",
-                "Return only the requested bounded result set.",
-            ),
-            label="List messages",
-        ),
         CapabilitySpec(
             contact_submissions.REVIEW,
             # Its last sentence is records.KEPT, which test_record_updates_told holds it to.

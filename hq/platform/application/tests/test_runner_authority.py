@@ -37,7 +37,6 @@ TRUSTING = (
     ("agent.policy.set", None, Capability.GOVERN_AGENTS),
     ("github.profile.read", None, Capability.LOOK_UP_PUBLIC_RECORDS),
     ("lookup.name.read", None, Capability.LOOK_UP_PUBLIC_RECORDS),
-    ("contact.submission.list", None, Capability.MANAGE_CONTACTS),
     ("contact.submission.review", 1, Capability.MANAGE_CONTACTS),
     ("contact.submission.delete", 1, Capability.MANAGE_CONTACTS),
     ("project.dependency_updates.set", "example-target", records_of("projects").write),

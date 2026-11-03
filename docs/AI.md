@@ -182,8 +182,8 @@ A client sees three outcomes ([What policy can do to a call](API.md#what-policy-
 
 | Outcome | Response | Client should |
 |---|---|---|
-| Allowed | the capability's result | carry on |
-| Held | `200`, `status: "awaiting_approval"`, with `approval.review_url` | report it and stop; retrying returns the same request |
+| Allowed | `200`, the capability's result | carry on |
+| Held | `202`, `status: "awaiting_approval"`, with `approval.review_url` | report it and stop; retrying returns the same request |
 | Refused | `403`, error code `denied_by_policy` | stop |
 
 Tests that hold these promises:

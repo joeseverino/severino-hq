@@ -8,6 +8,7 @@ forgot to queue its own reconcile would otherwise wait for the floor.
 import tempfile
 from datetime import timedelta
 from pathlib import Path
+from unittest import mock
 
 from django.db import connection
 from django.db.models import F
@@ -254,8 +255,11 @@ class AWriteStartsAPassAtOnceTests(_Estate):
         self.unqueue()
         self.assertTrue(cadence.pass_due())
 
-        with self.captureOnCommitCallbacks(execute=True):
-            result = execute_capability("contact.submission.list", {}, principal=cli_principal())
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            mock.patch("hq.platform.application.lookup.resolve", return_value={"server": {}, "records": []}),
+        ):
+            result = execute_capability("lookup.name.read", {"name": "example.test"}, principal=cli_principal())
 
         self.assertTrue(result["ok"], result)
         self.assertFalse(self.doorbell.exists())

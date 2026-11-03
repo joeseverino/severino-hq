@@ -47,7 +47,7 @@ class RefusalComponentTests(SimpleTestCase):
         for operations in self.document["paths"].values():
             for operation in operations.values():
                 for status, answered in operation["responses"].items():
-                    if status == "200":
+                    if int(status) < 400:
                         continue
                     response = self.components["responses"].get(_last(answered.get("$ref", "")), answered)
                     name = _last(response["content"]["application/json"]["schema"]["$ref"])

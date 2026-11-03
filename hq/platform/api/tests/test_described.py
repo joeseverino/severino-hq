@@ -75,4 +75,7 @@ class AnExtensionSaysWhatItHoldsTests(SimpleTestCase):
             rendered = {tag["name"]: tag for tag in tags.render()}
         domain = rendered["example.alpha"]
         self.assertEqual(domain["description"], "Walks and climbs.")
-        self.assertEqual(rendered[domain["parent"]]["description"], group.description)
+        said = rendered[domain["parent"]]["description"]
+        self.assertTrue(said.startswith(group.description), said)
+        # A group with no operations of its own indexes the domains it holds.
+        self.assertIn("(#tag/examplealpha)", said)
