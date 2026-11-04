@@ -4,7 +4,7 @@ while a member the contract leaves open is still struck by a secret name."""
 import json
 from typing import Any
 
-from django.test import SimpleTestCase
+from django.test import TestCase
 
 from hq.domains.control_plane import bridge_application
 from hq.domains.control_plane.bridge_actions import ACTIONS, Action
@@ -46,7 +46,7 @@ def _send(action: str, payload: Any, ran: list[tuple[str, Any]]):
     return bridge_client.request(f"/{action}", query=query, body=json.dumps(payload).encode(), app=_recording(ran))
 
 
-class DeclaredNameTests(SimpleTestCase):
+class DeclaredNameTests(TestCase):
     def test_every_kind_an_inventory_is_keyed_by_passes_unchanged(self):
         kinds = _kinds()
         self.assertTrue(kinds)
