@@ -20,7 +20,9 @@ from hq.platform.application.contracts import effect_glossary
 from hq.platform.application.dashboard import OperatingSnapshot, operating_snapshot
 from hq.platform.application.findings import Findings, FindingsQuery, findings as application_findings
 from hq.platform.application.held_answer import HeldCall
-from hq.platform.application.integration_specs import FIELD_MASK
+from hq.platform.application.input_errors import unknown_field_errors
+from hq.platform.application.integration_specs import FIELD_MASK, PAGE_FIELD
+from hq.platform.application.projection import MAX_PAGE_SIZE
 from hq.platform.application.read_models import DocumentationStatus, RecentActivity, SystemHealth
 from hq.platform.application.registry import RegistryAudit, audit_registry as audit_application_registry
 from hq.platform.application.reports import (
@@ -29,6 +31,9 @@ from hq.platform.application.reports import (
     export_year_summary as export_application_year_summary,
 )
 from hq.platform.application.resources import (
+    PAGING,
+    Cursor,
+    InvalidResourceInput,
     ResourceCatalog,
     ResourceCollection,
     describe_resources as describe_application_resources,
@@ -40,6 +45,17 @@ from hq.platform.application.topology import TopologyQuery, topology as applicat
 from hq.platform.application.topology_answer import TopologyAnswer
 from hq.platform.mcp.identity import current_principal
 from hq.platform.mcp.shapes import tool
+
+# A page's size, beside the filters; the kind's own query holds it to its bounds.
+type PageSize = Annotated[
+    int | None,
+    Field(
+        description=(
+            f"How many records a page holds, at most {MAX_PAGE_SIZE} unless `describe_resources` names a kind's "
+            "lower most; absent, the kind's own default."
+        )
+    ),
+]
 
 
 @tool("Capability catalog", requires=ANYONE)
@@ -148,23 +164,31 @@ def list_resource(
     name: str,
     filters: dict[str, Any] | None = None,
     fields: Annotated[list[str] | None, Field(description=FIELD_MASK)] = None,
+    limit: PageSize = None,
+    cursor: Cursor = None,
 ) -> ResourceCollection:
     """List any registered resource with schema-validated filters.
 
-    `name` is one of the kinds the schema lists; `describe_resources` says
-    what each holds and the `filters` it takes.
+    `name` is one of the kinds the schema lists, and `filters` what its list
+    narrows by, named for each kind below; `describe_resources` says what
+    each holds and each filter's type and choices.
 
     Each item holds the fields its kind lists, as `describe_resources`
     names them, or every field where it names none; `fields` says which
     instead.
 
     A page is bounded by `limit`: `truncated` says more follow it, `total`
-    how many matched where HQ counts them, and `next.cursor`, sent back as the
-    `cursor` filter beside the same filters, reads the page after; `next` is
-    null on the last page and on a list that does not page.
+    how many matched where HQ counts them, and `next.cursor`, sent back as
+    `cursor` beside the same filters, reads the page after; `next` is null on
+    the last page and on a list that does not page.
     """
 
-    return list_application_resource(name, filters, principal=current_principal(), strict=True, fields=fields)
+    query = dict(filters or {})
+    if paging := sorted(PAGING & query.keys()):
+        # Paging is an argument of its own, as on every tool that pages.
+        raise InvalidResourceInput(name, unknown_field_errors([f"filters.{field}" for field in paging]))
+    query |= {field: value for field, value in (("limit", limit), (PAGE_FIELD, cursor)) if value is not None}
+    return list_application_resource(name, query, principal=current_principal(), strict=True, fields=fields)
 
 
 # One record of its kind, with the fields describe_resources names for it.
@@ -211,7 +235,7 @@ def documentation_status() -> DocumentationStatus:
     first page of records, each with its title, system and where it lives.
     Sensitive records are left out.
 
-    `next.cursor`, sent as the `cursor` filter of `list_resource` with name
+    `next.cursor`, sent as the `cursor` of `list_resource` with name
     `documentation`, reads the page after; `next` is null when this page holds
     them all. Pick it to find where a doc lives or which need review;
     `audit_registry` names the records with no doc at all.

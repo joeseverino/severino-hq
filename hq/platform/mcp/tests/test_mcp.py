@@ -167,11 +167,11 @@ class ServiceTests(SentinelMixin, TestCase):
         for number in range(105):
             Project.objects.create(name=f"Project {number:03d}")
 
-        result = services.list_resource("projects", {"limit": projection.MAX_PAGE_SIZE})
+        result = services.list_resource("projects", limit=projection.MAX_PAGE_SIZE)
 
         self.assertEqual(result["count"], projection.MAX_PAGE_SIZE)
         with self.assertRaises(InvalidResourceInput):
-            services.list_resource("projects", {"limit": projection.MAX_PAGE_SIZE + 1})
+            services.list_resource("projects", limit=projection.MAX_PAGE_SIZE + 1)
 
     def test_a_missing_record_is_not_found_and_names_nothing_sent(self):
         sent = "sent-by-the-caller-7f3a"

@@ -74,7 +74,7 @@ class DocumentToolTests(SimpleTestCase):
                 async_to_sync(tool.call)(arguments)
         execute.assert_not_awaited()
         async_to_sync(tool.call)({"name": "assets"})
-        execute.assert_awaited_once_with(name="assets", filters=None, fields=None)
+        execute.assert_awaited_once_with(name="assets", filters=None, fields=None, limit=None, cursor=None)
 
     def test_a_tool_with_no_description_is_refused(self):
         def example_undescribed():

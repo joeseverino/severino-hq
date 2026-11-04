@@ -92,7 +92,19 @@ CATALOG = "describe_resources"
 # The list read an agent makes next, the action queue at its largest page, measured by its
 # structured answer's bytes and the items it holds.
 QUEUE = "list_resource action_items"
-QUEUE_CALL = {"name": "list_resource", "arguments": {"name": "action_items", "filters": {"limit": 100}}}
+QUEUE_LIMIT = 100
+
+
+def queue_call(tools: list[dict[str, Any]]) -> dict[str, Any]:
+    """The queue's largest page, asked as the listed list_resource takes its limit:
+    an argument of its own, or a filter where a ref's tool has no such argument."""
+
+    (listing,) = (tool for tool in tools if tool["name"] == "list_resource")
+    if "limit" in listing["inputSchema"].get("properties", {}):
+        return {"name": "list_resource", "arguments": {"name": "action_items", "limit": QUEUE_LIMIT}}
+    return {"name": "list_resource", "arguments": {"name": "action_items", "filters": {"limit": QUEUE_LIMIT}}}
+
+
 QUEUE_ITEMS = f"{QUEUE} items"
 
 
@@ -202,7 +214,7 @@ async def answered(server, counted: Callable[[], None]) -> tuple[dict[str, Any],
             answer = await _answer(served.application, _asked(method, ident))
             lists[method] = len(compact(answer["result"])) if "result" in answer else 0
         for ident, (name, params) in enumerate(
-            ((CATALOG, {"name": CATALOG, "arguments": {}}), (QUEUE, QUEUE_CALL)), start=len(LISTS) + 3
+            ((CATALOG, {"name": CATALOG, "arguments": {}}), (QUEUE, queue_call(result["tools"]))), start=len(LISTS) + 3
         ):
             answer = (await _answer(served.application, {**_asked("tools/call", ident), "params": params}))["result"]
             if answer.get("isError"):

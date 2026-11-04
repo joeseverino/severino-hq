@@ -79,8 +79,8 @@ class StrictBodyTests(TestCase):
         reached = []
         bodies = (
             _call('{"name":"projects","name":"assets"}'),
-            _call('{"name":"projects","filters":{"limit":NaN}}'),
-            _call('{"name":"projects","filters":{"limit":-Infinity}}'),
+            _call('{"name":"projects","limit":NaN}'),
+            _call('{"name":"projects","limit":-Infinity}'),
             b'{"jsonrpc":"2.0","id":1,"id":2,"method":"tools/list"}',
         )
         with mock.patch(TOOL, side_effect=lambda *a, **k: reached.append(a) or {"items": []}):
@@ -99,7 +99,7 @@ class StrictBodyTests(TestCase):
         # Each refused body is cut inside the repeated field or the constant, so
         # no single piece shows the fault and no piece is JSON on its own.
         repeated = _call('{"name":"projects","name":"assets"}')
-        constant = _call('{"name":"projects","filters":{"limit":NaN}}')
+        constant = _call('{"name":"projects","limit":NaN}')
         refused = (
             _cut(repeated, repeated.index(b"proj") + 2, repeated.rindex(b'"name"') + 3),
             _cut(constant, constant.index(b"NaN") + 2),

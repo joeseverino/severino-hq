@@ -10902,7 +10902,7 @@
             "type": "array"
           },
           "filters": {
-            "description": "The fields a listing narrows by; `describe_resources` given this name says each one's type and choices.",
+            "description": "The fields a listing narrows by, without `limit` and `cursor`, which page it; `describe_resources` given this name says each one's type and choices.",
             "items": {
               "type": "string"
             },

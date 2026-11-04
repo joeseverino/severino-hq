@@ -337,8 +337,11 @@ Every adapter reads `fields` beside the query, so no resource query may declare
 a field called `fields`. The registry refuses one at startup.
 
 A list read is one page. `truncated` says more follow it, and `next` is
-`{"cursor": …}`: sent back as the `cursor` filter (`?cursor=` over HTTP) with
-the same filters, it reads the page after, and the last page's `next` is null.
+`{"cursor": …}`: sent back as `cursor` (`?cursor=` over HTTP, and an argument
+of `list_resource` beside its `filters` and `limit`, as `get_findings` and
+`recent_activity` take `limit`) with the same filters, it reads the page
+after, and the last page's `next` is null. On MCP, a `limit` or `cursor` sent
+inside `filters` is refused, so paging has one place on every tool.
 A cursor is opaque and signed, and bound to the kind and filters it was issued
 under: one sent to another list, with other filters, or altered is refused as
 `invalid_input` naming `cursor`. A list cut from a queryset resumes after its
@@ -611,11 +614,15 @@ handler's signature. A call is validated by that same model before entering
 application code, and `mise run lint` holds the written document to it. A
 resource tool's `name` takes only the resources the registry serves, which
 are the ones the document's paths serve.
-What each resource holds and the filters it takes are `describe_resources`'
-answer, so the list carries the kinds as the schema's enum and, for
-`get_resource`, the field each is addressed by, never the catalog itself.
+What each resource holds and each filter's type and choices are
+`describe_resources`' answer, so the list carries the kinds as the schema's
+enum, the names of each kind's filters in `list_resource`'s description, and,
+for `get_resource`'s, the field each is addressed by, never the catalog
+itself. The filters are read from each kind's query model (`list_filters` in
+`hq/platform/application/resources.py`), so an extension's kind is described
+as it declares itself.
 With no `name`, `describe_resources` lists every kind with the `filters` its
-list narrows by; with one, as `/api/v2/resources/?name=` does, that kind with
+list narrows by, without `limit` and `cursor`, which page it; with one, as `/api/v2/resources/?name=` does, that kind with
 its list's whole `query_schema`. A filter that takes only some values (a
 status, a dimension, a resource kind, an action item's source) declares them
 as a `Literal` read from where they are declared, a model's choices or a

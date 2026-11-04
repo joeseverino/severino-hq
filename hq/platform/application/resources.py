@@ -149,6 +149,17 @@ type SearchLimit = Annotated[
 ]
 
 
+# The fields that page a list rather than narrow it: MCP's list_resource
+# takes them beside its filters, and a listing names its filters without them.
+PAGING = frozenset({"limit", PAGE_FIELD})
+
+
+def list_filters(query: type[BaseModel]) -> tuple[str, ...]:
+    """What a list query narrows by: every field but the ones that page it."""
+
+    return tuple(name for name in query.model_fields if name not in PAGING)
+
+
 class TopQuery(ResourceQuery):
     """A list's first ``limit`` by its own ranking, which a read narrows rather than pages past."""
 
@@ -603,7 +614,8 @@ class ListOperation(TypedDict):
     filters: Annotated[
         list[str],
         Describe(
-            "The fields a listing narrows by; `describe_resources` given this name says each one's type and choices."
+            "The fields a listing narrows by, without `limit` and `cursor`, which page it; `describe_resources` "
+            "given this name says each one's type and choices."
         ),
     ]
     fields: NotRequired[
@@ -690,7 +702,7 @@ def describe_resources(*, principal: Principal | None = None, name: str = "") ->
 def _listing(spec: ResourceSpec, *, whole: bool) -> ListOperation | None:
     if not spec.list_query_type:
         return None
-    listing: ListOperation = {"filters": list(spec.list_query_type.model_fields)}
+    listing: ListOperation = {"filters": list(list_filters(spec.list_query_type))}
     if spec.list_fields:
         listing["fields"] = list(spec.list_fields)
     if whole:
