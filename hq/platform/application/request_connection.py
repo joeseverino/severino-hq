@@ -381,9 +381,7 @@ class Connection:
     def tailnet_observed_at(self) -> datetime | None:
         """When the device/path evidence was last swept from Tailscale."""
 
-        if self.presence is not None:
-            return self.presence.observed_at
-        return self.observer.observed_at if self.observer is not None else None
+        return _tailnet_observed_at(self.presence, self.observer)
 
     @property
     def tailnet_current(self) -> bool:
@@ -391,8 +389,20 @@ class Connection:
         would not ask for it again. Only then is a value read from it said as
         it is now; otherwise as it was when last read, which is no fault."""
 
-        observed = self.tailnet_observed_at
-        return observed is not None and not freshness(PAGE_VISIT, observed).due
+        return _tailnet_current(self.tailnet_observed_at)
+
+
+def _tailnet_observed_at(presence, observer: tailnet.Device | None) -> datetime | None:
+    if presence is not None:
+        return presence.observed_at
+    return observer.observed_at if observer is not None else None
+
+
+def _tailnet_current(observed: datetime | None) -> bool:
+    """The one judgment of ``Connection.tailnet_current``, also handed to the
+    admission layers, which are built before the connection exists."""
+
+    return observed is not None and not freshness(PAGE_VISIT, observed).due
 
 
 def connection(request, *, edge=None, firewall=None) -> Connection:
@@ -467,6 +477,7 @@ def connection(request, *, edge=None, firewall=None) -> Connection:
             forwarding_peer=peer,
             serving=serving,
             observer=observer,
+            tailnet_current=_tailnet_current(_tailnet_observed_at(presence, observer)),
             edge=edge,
             firewall=firewall,
         ),

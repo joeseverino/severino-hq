@@ -79,6 +79,7 @@ def admission_layers(
     forwarding_peer: str,
     serving: ServingDeviceResolution,
     observer: tailnet.Device | None,
+    tailnet_current: bool,
     edge,
     firewall=None,
 ) -> tuple[Layer, ...]:
@@ -98,7 +99,7 @@ def admission_layers(
         # and this says whether the packet had to arrive there to be let in.
         _arrival_layer(firewall),
         *_policy_layers(device, forwarder, serves, request, known, forwarded=forwarded),
-        _device_layer(device, read=bool(known)),
+        _device_layer(device, read=bool(known), current=tailnet_current),
         # Under the device claim, because it is what that claim rests on: the
         # line above says the tailnet knows this node, and this says whether the
         # tailnet had to be shown a signature to believe it.
@@ -356,7 +357,7 @@ def _server_port(request) -> int:
     return int(value) if value.isdigit() else _port_of(request)
 
 
-def _device_layer(device: tailnet.Device | None, *, read: bool = True) -> Layer:
+def _device_layer(device: tailnet.Device | None, *, read: bool, current: bool) -> Layer:
     if device is None and not read:
         # With no tailnet reading, HQ cannot say whether the device is on it.
         return Layer(
@@ -364,6 +365,19 @@ def _device_layer(device: tailnet.Device | None, *, read: bool = True) -> Layer:
             "The tailnet knows this device",
             holds=False,
             detail="HQ has not read the tailnet's devices yet, so it cannot say whether this one is among them.",
+            boundary="Device identity",
+            mechanism="The tailnet device list",
+            conclusive=False,
+        )
+    if device is None and not current:
+        # A device that joined or changed address since an old reading is
+        # missing from it, and this request arrived, so one is there now.
+        return Layer(
+            "device",
+            "The tailnet knows this device",
+            holds=False,
+            detail="HQ's last reading of the tailnet has no device at this address. "
+            "A device that joined or changed address since is in the next read.",
             boundary="Device identity",
             mechanism="The tailnet device list",
             conclusive=False,
