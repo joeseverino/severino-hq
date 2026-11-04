@@ -335,11 +335,13 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .band-label { color: var(--muted); font-size: var(--text-xs); }
 .band-fact strong { font-size: var(--text-lg); font-weight: 650; line-height: 1.3; overflow-wrap: anywhere; }
 .band-fact:is(.tone-good, .tone-attention, .tone-serious) strong { color: var(--tone-ink); }
-.band-fact small { color: var(--muted); font-size: var(--text-sm); line-height: 1.4; }
+/* A line under the value: small print among words, or a list of names that
+   are each the whole of their item (`.band-note`), read by their color. */
+.band-fact :is(small, .band-note) { color: var(--muted); font-size: var(--text-sm); line-height: 1.4; }
 /* A figure in a cell or a sentence takes its tone as ink, as a band's value does, since a number is never a chip. */
 .figure:is(.tone-good, .tone-attention, .tone-serious) { color: var(--tone-ink); font-weight: 600; }
 /* A fact's link, or a word that opens its tip, is a box a target tall (`--target-min`), however few words share its line. Set by its top: an inline block's baseline is its last line, so one that wraps would rise above its fact, and the label beside it would sit by its last line. */
-.band-fact :is(strong, small) :is(a, [tabindex]) { display: inline-block; vertical-align: top; line-height: var(--target-min); }
+.band-fact :is(strong, small, .band-note) :is(a, [tabindex]) { display: inline-block; vertical-align: top; line-height: var(--target-min); }
 .page-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 .page-title-row > h1 { margin: 0; max-width: 100%; }
 .page-title-meta { margin: 0; color: var(--muted); font-size: var(--text-sm); }

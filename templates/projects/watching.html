@@ -62,7 +62,7 @@ would be a page about anybody.
     {% if profile.social %}<div><dt>X</dt><dd>@{{ profile.social|breakable }}</dd></div>{% endif %}
     <div><dt>Open to work</dt><dd>{% if profile.hireable %}Yes, on the profile{% else %}Not shown{% endif %}</dd></div>
     {% if profile.public_gists %}<div><dt>Public gists</dt><dd>{{ profile.public_gists|breakable }}</dd></div>{% endif %}
-    <div><dt>HQ's GitHub App</dt><dd>
+    <div><dt>HQ's GitHub App</dt><dd class="prose">
       {% if app_repositories %}
         Installed, reading {{ app_repositories|length }} of your repositories:
         {% for item in app_repositories %}{% if item.project %}<a href="{{ item.project.get_absolute_url }}">{{ item.repo.short|breakable }}</a>{% else %}{% entity item.repo.url|outside label=item.repo.short %}{% endif %}{% if item.repo.private %} <span class="muted">(private)</span>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}{% dot %}{% entity "https://github.com/settings/installations"|outside label="Manage on GitHub" %}

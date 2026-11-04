@@ -11,7 +11,7 @@
   {% if expense.related_asset %}<dt>Asset</dt><dd>{% entity "asset"|entity_of:expense.related_asset.slug label=expense.related_asset.item_name %}</dd>{% endif %}
   {% if expense.related_content %}<dt>Writeup or page</dt><dd>{% entity "writeup"|entity_of:expense.related_content.slug label=expense.related_content.title %}</dd>{% endif %}
   {% if document %}<dt>Document</dt><dd>{% entity document %}</dd>{% endif %}
-  {% if about %}<dt>For</dt><dd>{{ about.kind_label|breakable }} {% entity about %}</dd>{% endif %}
+  {% if about %}<dt>For</dt><dd class="prose">{{ about.kind_label|breakable }} {% entity about %}</dd>{% endif %}
 </dl>
 
 {% if expense.notes %}<h2>Notes</h2><p>{{ expense.notes|breakable|linebreaksbr }}</p>{% endif %}

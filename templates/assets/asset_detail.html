@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
 <dl class="kv">
-  {% if thing %}<dt>This is</dt><dd>{{ thing.kind_label|breakable }} {% entity thing %}</dd>{% endif %}
+  {% if thing %}<dt>This is</dt><dd class="prose">{{ thing.kind_label|breakable }} {% entity thing %}</dd>{% endif %}
   {% if domain %}<dt>Domain page</dt><dd>{% entity domain %}</dd>{% endif %}
   {% if asset.vendor %}<dt>Vendor</dt><dd>{{ asset.vendor|breakable }}</dd>{% endif %}
   <dt>Purchased</dt><dd>{{ asset.purchase_date|when }}</dd>
