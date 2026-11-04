@@ -8,7 +8,8 @@ Unix socket is the authorization: docs/Architecture.md#the-controller.
 
 import json
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
+from functools import cache
 from http import HTTPStatus
 from typing import Any
 
@@ -22,7 +23,7 @@ from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from hq.domains.control_plane.bridge_actions import ACTIONS, CONTROLLER, Action
-from hq.domains.control_plane.bridge_contract import Operation, Parameter, max_body_bytes, operations
+from hq.domains.control_plane.bridge_contract import Operation, Parameter, contract, max_body_bytes, operations
 from hq.domains.control_plane.secret_shapes import struck
 from hq.platform.application import refused_reports
 from hq.platform.application.security import CONTROLLER_INTERFACE
@@ -103,6 +104,33 @@ async def _body(request: Request, limit: int) -> bytes:
     return bytes(received)
 
 
+def _properties(node: Any) -> Iterator[str]:
+    if isinstance(node, dict):
+        members = node.get("properties")
+        if isinstance(members, dict):
+            yield from members
+        for child in node.values():
+            yield from _properties(child)
+    elif isinstance(node, list):
+        for child in node:
+            yield from _properties(child)
+
+
+@cache
+def declared_names() -> frozenset[str]:
+    """Every name the contract gives a member or a key: its properties, its
+    query parameters, and the kinds a sweep's inventory is keyed by.
+
+    Each is the contract's own word, so the door never strikes one as a
+    member named as a secret; a member the contract leaves open still is.
+    """
+
+    schemas = contract()["components"]["schemas"]
+    kinds = (kind for name in ("ResourceKind", "SweptKind") for kind in schemas[name]["enum"])
+    parameters = (parameter.name for operation in operations().values() for parameter in operation.parameters)
+    return frozenset((*_properties(schemas), *kinds, *parameters))
+
+
 async def payload_of(operation: Operation, request: Request) -> Any:
     raw = await _body(request, max_body_bytes())
     if not operation.takes_body:
@@ -116,7 +144,7 @@ async def payload_of(operation: Operation, request: Request) -> Any:
     # The bridge's one door for secrets: nothing past it holds one. Struck
     # rather than refused, since an outsider writes some of these strings.
     # Held to the contract as struck, so what an action reads conforms.
-    payload, strikes = struck(payload)
+    payload, strikes = struck(payload, declared_names())
     for pointer, what in strikes:
         logger.warning("bridge.secret_struck action=%s at=%s held=%s", operation.name, pointer, what)
     violation = operation.violation(payload)
@@ -129,7 +157,7 @@ def _refuse_secrets(operation: Operation, parameters: dict[str, Any]) -> None:
     """A query holding a secret is refused: only the controller writes one,
     and an identifier struck would name something else."""
 
-    strikes = struck(parameters)[1]
+    strikes = struck(parameters, declared_names())[1]
     if strikes:
         pointer, what = strikes[0]
         raise Refused(
