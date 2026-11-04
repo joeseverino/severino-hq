@@ -107,8 +107,7 @@ def a_task(name: str, tasks: set[str]) -> bool:
 
 
 # The jobs that run no task of their own: the proof a push stands on, the cache
-# writer, the composition and the two verdicts. Scan runs CodeQL's own action,
-# which uploads what it finds, and is named for the task that runs it locally.
+# writer, the composition and the two verdicts.
 NOT_TASK_JOBS = {"proven", "caches", "compose", "ready", "release"}
 # A second job of a task: a pull request's image, verified from the registry
 # beside its composition.

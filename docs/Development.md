@@ -220,7 +220,7 @@ suites share the machine's memory:
 | `test` | the `test:*` gates on every Python in `PYTHON_VERSIONS`, the suite as production configures it with `DJANGO_DEBUG` unset and the coverage floor, then the Go controller's race tests once |
 | `browser` | the browser gates ([Browser layout](#browser-layout)) |
 | `build` | the image build and what an image must pass |
-| `scan` | CodeQL |
+| `scan` | CodeQL's analysis, which finds no alert here; in CI, no alert GitHub holds open on the analyzed ref, so a dismissed one passes |
 
 A setting whose default follows `DEBUG` is held by a test that loads the
 settings both ways. The suite inside an image runs once, in Compose, on the

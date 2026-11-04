@@ -301,7 +301,7 @@ description = "After editing, or when fast is not enough: CI's lint job, every l
 run = "uv run python -m tools.gate.verdict lint mise run -c 'lint:*'"
 
 [tasks.scan]
-description = "To reproduce an alert CI's scan job raised: CodeQL's security-and-quality queries find no alert; slow"
+description = "To reproduce an alert CI's scan job raised: CodeQL's security-and-quality queries find no alert, and in CI none is open on GitHub for the analyzed ref; slow"
 depends = ["scan:*"]
 
 # Whether this checkout can compose its extensions: `mise doctor project` names
