@@ -381,20 +381,21 @@ controller runs on:
 | Finding | When | Severity |
 |---|---|---|
 | `render-failing` | the last run failed; names the class | attention; serious once the last success is past the allowance |
-| `render-stale` | the last recorded run did not fail, and nothing confirmed the files current within the allowance or read them in full within a day and the allowance. The renderer is not running, or fails before it takes the lock and so records nothing | serious |
+| `render-stale` | the last recorded run did not fail, and nothing had confirmed the files current within the allowance, or read them in full within a day and the allowance, when the reading was taken. The renderer is not running, or fails before it takes the lock and so records nothing | serious |
 | `connect-sync-stalled` | Connect's `sync` dependency is not `ACTIVE`, or is not reported | attention |
-| `render-status-unread` | the document is missing or was refused | attention |
+| `render-status-unread` | the document is missing or was refused, or the reading is older than the slowest the controller ever reads; then it says when it was read and, while the bridge refuses the controller's sweep, why | attention |
 
 The allowance is three runs at their latest, derived from the timer's interval
 and randomized delay (`deploy/systemd/severino-hq-secrets.timer`). So a
 renderer two runs behind is raised as the third falls due. A full read is
 forced every 24 hours (`FullEvery`), so it is overdue that allowance later.
 
-Both are measured against when the reading was taken, so a quiet stretch
-between reads raises nothing. Once the reading is older than the slowest the
-controller ever reads, they are measured against the present moment. So a
-controller that cannot start because its secrets are gone still raises them
-(`render_status_findings.Rendering._behind`).
+Both are measured against when the reading was taken, never against the
+present moment, so a quiet stretch between reads raises nothing. A reading
+older than the slowest the controller ever reads says nothing of how the
+renderer stands now, so no rule judges it: `render-status-unread` says when it
+was read instead (`reading_facts.unjudged`). A controller that cannot start
+because its secrets are gone raises that, beside the controller's own findings.
 
 Each finding names the command to run on the machine for a renderer whose unit
 HQ knows (`RENDERER_UNITS`).

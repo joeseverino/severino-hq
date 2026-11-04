@@ -1036,7 +1036,8 @@ each fails if a call comes to cost a process again.
 - **A refusal is kept until the call is accepted.** A refused call runs nothing
   of its action, so the bridge keeps it apart, in one `RefusedReport` row per
   action and controller (`hq/platform/application/refused_reports.py`), which
-  the `report-refused` finding says. The row holds what the controller was
+  the `report-refused` finding says, and a reading too old to judge names as
+  the reason it was not replaced. The row holds what the controller was
   already answered: the action, the controller its query named once the query
   passed the contract and held no secret, and the problem's detail, struck of
   secrets and cut to its length. Never the payload. A repeated refusal

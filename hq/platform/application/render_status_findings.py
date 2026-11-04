@@ -20,8 +20,6 @@ from hq.domains.control_plane.observations.host import (
     RENDER_UNREADABLE,
 )
 
-from .cadence import slowest_sweep_interval
-from .derivations import passed
 from .finding_model import (
     Finding,
     FindingEstate,
@@ -33,7 +31,7 @@ from .finding_model import (
     machine_step,
 )
 from .moments import ago, duration, when
-from .reading_facts import FactRow, rows_of, state_on_controller, stated
+from .reading_facts import FactRow, rows_of, state_on_controller, stated, taken_at, too_old, unjudged
 from .timestamps import moment
 from .topology_model import TopologyNode
 from .ui import ended
@@ -123,6 +121,7 @@ class Rendering(FactRow):
     """One renderer as its fact carries it: words and instants, in field order."""
 
     KEY = RENDER_STATUS
+    KIND = RENDER_STATUS_KIND
 
     renderer: str = ""
     state: str = RENDER_UNREADABLE
@@ -147,34 +146,32 @@ class Rendering(FactRow):
     def failed(self) -> bool:
         return self.state == RENDER_READ and self.outcome not in ("rendered", "current")
 
-    def unconfirmed(self, now: datetime) -> bool:
-        """Whether nothing has confirmed the files current within ``CONFIRMED_WITHIN``."""
+    @property
+    def unconfirmed(self) -> bool:
+        """Whether nothing had confirmed the files current within ``CONFIRMED_WITHIN``."""
 
-        return self._behind(self.confirmed_at, CONFIRMED_WITHIN, now)
+        return self._behind(self.confirmed_at, CONFIRMED_WITHIN)
 
-    def unrendered(self, now: datetime) -> bool:
-        """Whether no full read has happened within ``RENDERED_WITHIN``."""
+    @property
+    def unrendered(self) -> bool:
+        """Whether no full read had happened within ``RENDERED_WITHIN``."""
 
-        return self._behind(self.rendered_at, RENDERED_WITHIN, now)
+        return self._behind(self.rendered_at, RENDERED_WITHIN)
 
-    def _behind(self, stamp: str, within: timedelta, now: datetime) -> bool:
+    def _behind(self, stamp: str, within: timedelta) -> bool:
         """Whether ``stamp`` was more than ``within`` old when the document was
         read. A stamp that names no instant is: a renderer that has never
         succeeded has nothing current.
         """
 
+        # Judged as of the reading, never now: while HQ is not in use the
+        # controller reads hours apart, and a renderer that has run every hour
+        # since is not behind for that. A reading too old to judge is
+        # ``render-status-unread``'s (``reading_facts.unjudged``).
         when, read = moment(stamp), moment(self.read_at)
         if when is None:
             return True
-        # A document says how things stood when it was read. While HQ is not in
-        # use the controller reads hours apart, and a renderer that has run
-        # every hour since is not behind for that. A reading older than the
-        # slowest the controller ever reads means it has stopped reading, and
-        # then the document is measured against now, through ``passed``, so the
-        # answer says when it stops holding.
-        if read is None or passed(read + slowest_sweep_interval(), now=now):
-            return passed(when + within, now=now)
-        return read - when > within
+        return read is not None and read - when > within
 
 
 def rendering(record: dict[str, Any], read_at: datetime | None = None) -> Rendering:
@@ -215,7 +212,7 @@ def add(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
     state_on_controller(
         nodes,
         machine,
-        RENDER_STATUS_KIND,
+        Rendering,
         lambda snapshot: rows_of(
             snapshot,
             lambda record: rendering(record, snapshot.observed_at),
@@ -228,13 +225,15 @@ def _stated(estate: FindingEstate):
     return stated(estate, Rendering)
 
 
-def failed_units(node: TopologyNode) -> frozenset[str]:
+def failed_units(estate: FindingEstate, node: TopologyNode) -> frozenset[str]:
     """The units on ``node`` whose renderer says its last run failed.
 
     ``render-failing`` says that failure with its class, so a rule that reads
-    unit state leaves these to it.
+    unit state leaves these to it, unless the reading is too old for it to.
     """
 
+    if too_old(estate, taken_at(node, RENDER_STATUS_KIND)):
+        return frozenset()
     return frozenset(
         unit for rendering in stated_on(node) if rendering.failed and (unit := RENDERER_UNITS.get(rendering.renderer))
     )
@@ -303,7 +302,7 @@ def _failing(estate: FindingEstate) -> tuple[Finding, ...]:
         failed = tuple(rendering for rendering in renderings if rendering.failed)
         if not failed:
             continue
-        stale = any(rendering.unconfirmed(estate.now) for rendering in failed)
+        stale = any(rendering.unconfirmed for rendering in failed)
         reasons = ", ".join(dict.fromkeys(_why(rendering) for rendering in failed))
         last_good = moment(failed[0].confirmed_at) if len(failed) == 1 else None
         found.append(
@@ -347,13 +346,13 @@ def _stale_evidence(rendering: Rendering, now: datetime) -> tuple[tuple[str, str
     )
 
 
-def _stale_title(machine: str, stale: tuple[Rendering, ...], now: datetime) -> str:
+def _stale_title(machine: str, stale: tuple[Rendering, ...]) -> str:
     """What has not happened, and since when: the refresh, or only the full read."""
 
     first = stale[0]
     stamp, did = (
         (first.confirmed_at, "refreshed its credentials")
-        if first.unconfirmed(now)
+        if first.unconfirmed
         else (first.rendered_at, "read its credentials in full")
     )
     since = moment(stamp)
@@ -368,8 +367,9 @@ def _stale(estate: FindingEstate) -> tuple[Finding, ...]:
     The last run it recorded did not fail, and nothing has confirmed the
     installed files since: the timer is not firing, the unit does not start, or
     it fails before taking the lock, which records nothing. A controller that
-    stopped sweeping still raises this (``Rendering._behind``); a failed run is
-    ``render-failing``'s to say.
+    stopped reading raises ``render-status-unread`` instead, since its reading
+    no longer says whether the job runs; a failed run is ``render-failing``'s
+    to say.
     """
 
     found = []
@@ -379,7 +379,7 @@ def _stale(estate: FindingEstate) -> tuple[Finding, ...]:
             for rendering in renderings
             if rendering.state == RENDER_READ
             and not rendering.failed
-            and (rendering.unconfirmed(estate.now) or rendering.unrendered(estate.now))
+            and (rendering.unconfirmed or rendering.unrendered)
         )
         if not stale:
             continue
@@ -388,7 +388,7 @@ def _stale(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="render-stale",
                 subject=node.id,
                 scope=RENDER_STATUS_KIND,
-                title=_stale_title(node.label, stale, estate.now),
+                title=_stale_title(node.label, stale),
                 severity="serious",
                 explanation=(
                     f"It should refresh them every {duration(RENDER_EVERY)} and read "
@@ -464,13 +464,17 @@ def _sync_stalled(estate: FindingEstate) -> tuple[Finding, ...]:
 
 
 def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
-    """A renderer whose status document is missing or could not be read.
+    """A renderer whose status document is missing or could not be read, or
+    whose reading is too old to say how it stands now.
 
     HQ cannot say whether its secrets are fresh, which is not the same as
     saying they are.
     """
 
-    found = []
+    found = [
+        aged.finding("render-status-unread", RENDER_STATUS_KIND, _cannot_tell(aged.node))
+        for aged in unjudged(estate, Rendering)
+    ]
     for node, renderings in _stated(estate):
         unread = tuple(rendering for rendering in renderings if rendering.state != RENDER_READ)
         if not unread:
@@ -480,7 +484,7 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="render-status-unread",
                 subject=node.id,
                 scope=RENDER_STATUS_KIND,
-                title=f"HQ cannot tell whether {node.label}'s credentials are fresh",
+                title=_cannot_tell(node),
                 severity="attention",
                 explanation=(
                     "The job that refreshes them has not reported. It may not have "
@@ -503,6 +507,10 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
             )
         )
     return tuple(found)
+
+
+def _cannot_tell(node: TopologyNode) -> str:
+    return f"HQ cannot tell whether {node.label}'s credentials are fresh"
 
 
 # The rules this module raises, beside the detectors that decide them.

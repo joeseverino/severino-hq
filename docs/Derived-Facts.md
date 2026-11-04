@@ -207,7 +207,11 @@ unit's name. `HostUnitRecord` in
 the bridge contract is emitted from the model of that name
 (`hq/domains/control_plane/observations/host.py`): it holds no command line, environment or path, and a
 unit that is not installed is a record saying so. Each record carries when it
-was read, and a unit's state is judged as of then.
+was read, and a unit's state is judged as of then, never against the present
+moment. A reading older than the slowest the controller ever reads is judged by
+no rule: `unit-state-unread` says when it was read and, while the bridge
+refuses the controller's sweep, why (`reading_facts.unjudged`, held for every
+rule by `test_no_rule_measures_an_aged_reading_from_now`).
 
 `hq/platform/application/unit_findings.py` raises, on the same node:
 
@@ -216,7 +220,7 @@ was read, and a unit's state is judged as of then.
 | `unit-failed` | systemd holds a unit as failed; names its result and exit status | serious; attention when every failed unit is one a timer, path or socket starts again |
 | `unit-not-installed` | a shipped unit is not loaded (not found, masked), its file is disabled, or a timer, path, socket or mount is not active | serious |
 | `timer-stalled` | an active timer is not running its unit. Nothing is scheduled, it was more than two hours behind its own next elapse when read, its unit's condition did not hold, or its unit had been starting for more than two hours | serious |
-| `unit-state-unread` | the launcher mounted no answer, or the answer was refused | attention |
+| `unit-state-unread` | the launcher mounted no answer, or the answer was refused, or the reading is too old to judge | attention |
 
 The rules name no unit. A renderer whose own status says its run failed is
 `render-failing`'s to report, with the failure's class, so `unit-failed` leaves
