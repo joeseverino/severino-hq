@@ -29,6 +29,7 @@ from .freshness import freshness
 from .infrastructure import DRIFT_LABEL
 from .labels import field_label, lower_first, plural
 from .moments import ago, duration
+from .reading_facts import refusals_on
 from .render_status_findings import RENDERER_UNITS
 from .topology_lenses import _STALE_AFTER
 from .topology_model import TopologyNode
@@ -566,6 +567,39 @@ def _refresh_steps(machine: str):
     )
 
 
+def _report_refused(estate: FindingEstate) -> tuple[Finding, ...]:
+    """A call of the controller's that the bridge refuses, until one is accepted.
+
+    A refusal runs nothing of what it carried, so nothing else changes: its
+    readings only age, and every surface reads them as a quiet estate. The
+    refusal says where the call departs from the contract, never what it held.
+    """
+
+    return tuple(
+        Finding(
+            rule="report-refused",
+            subject=node.id,
+            part=refusal.action,
+            title=f"HQ refuses the controller's {refusal.action} report from {node.label}",
+            severity="serious",
+            explanation=(
+                "Nothing in it is stored, so what HQ shows from it stops changing. "
+                "HQ and the controller disagree about the contract between them; the reason "
+                "says where."
+            ),
+            evidence=(
+                ("Report", refusal.action),
+                ("Reason", refusal.detail),
+                ("Last refused", ago(refusal.refused_at, estate.now) if refusal.refused_at else "never"),
+            ),
+            steps=_controller_steps(node.label),
+            no_help_reason=cannot_run_commands(node.label),
+        )
+        for node in estate.nodes()
+        for refusal in refusals_on(node)
+    )
+
+
 def _controller_machines(estate: FindingEstate) -> dict[str, str]:
     """The machine whose controller holds each connection, by connection id."""
 
@@ -579,6 +613,17 @@ def _controller_machines(estate: FindingEstate) -> dict[str, str]:
 
 # The rules this module raises, beside the detectors that decide them.
 RULES: tuple[FindingRule, ...] = (
+    FindingRule(
+        "report-refused",
+        "HQ refuses what the controller reports",
+        "serious",
+        _report_refused,
+        operator_action=(
+            "Read the reason, then deploy HQ so the controller and HQ are built from one release. "
+            "If it stays, fix the side that departs from the contract."
+        ),
+        no_help_reason="HQ cannot change what the controller sends.",
+    ),
     FindingRule(
         "connections-lost",
         "The controller reports no connections",

@@ -3,7 +3,7 @@
 import json
 from typing import Any
 
-from django.test import SimpleTestCase, TestCase
+from django.test import TestCase
 from pydantic import BaseModel
 
 from hq.domains.control_plane import bridge_application
@@ -137,7 +137,7 @@ def _send(action: str, payload: Any, app: Any) -> bridge_client.Answer:
     return bridge_client.request(f"/{action}", query=_query(action), body=json.dumps(payload).encode(), app=app)
 
 
-class InboundDoorTests(SimpleTestCase):
+class InboundDoorTests(TestCase):
     def test_every_action_with_a_payload_has_an_example_that_conforms_and_passes(self):
         taking = {name for name, operation in operations().items() if operation.takes_body}
         self.assertEqual(set(EXAMPLES), taking)
@@ -256,7 +256,7 @@ class OutsiderTextTests(TestCase):
                 self.assertEqual(len(ProviderInventory.objects.get(kind="adguard.rewrite").records), 1)
 
 
-class AnswerTests(SimpleTestCase):
+class AnswerTests(TestCase):
     def _app(self, run) -> Any:
         return bridge_application.bridge(
             tuple(Action(action.name, run if action.name == "steps" else action.run) for action in ACTIONS)

@@ -1033,6 +1033,15 @@ each fails if a call comes to cost a process again.
   action sees it, so an action coerces nothing. A report with one departing
   member is refused whole with 422 and the JSON Pointer of that member, naming
   the member and keyword, never the value.
+- **A refusal is kept until the call is accepted.** A refused call runs nothing
+  of its action, so the bridge keeps it apart, in one `RefusedReport` row per
+  action and controller (`hq/platform/application/refused_reports.py`), which
+  the `report-refused` finding says. The row holds what the controller was
+  already answered: the action, the controller its query named once the query
+  passed the contract and held no secret, and the problem's detail, struck of
+  secrets and cut to its length. Never the payload. A repeated refusal
+  replaces its row, the next accepted call of that action by that controller
+  deletes it, and the controller is answered whether or not it is kept.
 - **Calls may run together.** Each runs on a thread with its own database
   connection; transactions begin `IMMEDIATE` and a writer waits up to the busy
   timeout for the one ahead.

@@ -21537,6 +21537,7 @@
                 "certificate-expiring",
                 "registration-lapsing",
                 "names-nothing",
+                "report-refused",
                 "connections-lost",
                 "work-that-keeps-failing",
                 "controller-sweep-stale",

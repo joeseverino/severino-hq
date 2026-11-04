@@ -7,17 +7,24 @@ the rules read the rows back. A reading that could not be taken is a row too,
 so what went quiet is said and not dropped.
 """
 
+import json
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import fields, replace
+from dataclasses import dataclass, fields, replace
+from datetime import datetime
 from typing import Any, ClassVar, Self
 
 from .finding_model import FindingEstate, fact_values
+from .timestamps import moment
 from .topology_model import TopologyNode, derived_id
 lazy from .facts import snapshots_of
+lazy from .refused_reports import open_refusals
 
 # Why a reading holds no record, when the reading itself is what failed.
 UNREAD = "unread"
 REFUSED = "refused"
+
+# A call of the controller's the bridge refused, as JSON.
+REFUSED_REPORT = "refused-report"
 
 
 class FactRow:
@@ -70,16 +77,46 @@ def state_on_controller(
 
     for snapshot in snapshots_of(kind):
         found = tuple(row.fact for row in rows(snapshot))
-        if not found:
-            continue
-        controller = snapshot.controller_id
-        node_id = derived_id("controller", controller)
-        if node_id not in nodes:
-            node_id = machine(controller) or node_id
-        node = nodes.get(node_id) or TopologyNode(
-            id=node_id, kind="controller", label=controller or "The controller", subtitle="Controller"
-        )
-        nodes[node_id] = replace(node, facts=node.facts + found)
+        if found:
+            _on_controller(nodes, machine, snapshot.controller_id, found)
+
+
+def _on_controller(
+    nodes: dict[str, TopologyNode], machine: Callable[[Any], str], controller: str, found: tuple[tuple[str, str], ...]
+) -> None:
+    node_id = derived_id("controller", controller)
+    if node_id not in nodes:
+        node_id = machine(controller) or node_id
+    node = nodes.get(node_id) or TopologyNode(
+        id=node_id, kind="controller", label=controller or "The controller", subtitle="Controller"
+    )
+    nodes[node_id] = replace(node, facts=node.facts + found)
+
+
+def add_refusals(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
+    """One fact per open refusal (``refused_reports``), on the node of the
+    controller it refused."""
+
+    for refusal in open_refusals():
+        said = json.dumps([refusal.action, refusal.detail, refusal.refused_at.isoformat()])
+        _on_controller(nodes, machine, refusal.controller_id, ((REFUSED_REPORT, said),))
+
+
+@dataclass(frozen=True, slots=True)
+class OpenRefusal:
+    """A refusal as its controller's node carries it."""
+
+    action: str
+    detail: str
+    refused_at: datetime | None
+
+
+def refusals_on(node: TopologyNode) -> tuple[OpenRefusal, ...]:
+    found = []
+    for value in fact_values(node, REFUSED_REPORT):
+        action, detail, at = json.loads(value)
+        found.append(OpenRefusal(action, detail, moment(at)))
+    return tuple(found)
 
 
 def stated[R: FactRow](estate: FindingEstate, row: type[R]) -> Iterator[tuple[TopologyNode, tuple[R, ...]]]:
