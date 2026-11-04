@@ -108,6 +108,12 @@ def queue_call(tools: list[dict[str, Any]]) -> dict[str, Any]:
 QUEUE_ITEMS = f"{QUEUE} items"
 
 
+def tool_calls(tools: list[dict[str, Any]]) -> tuple[tuple[str, dict[str, Any]], ...]:
+    """Each tool call the probe makes of the served list, by the name its answer is counted under."""
+
+    return ((CATALOG, {"name": CATALOG, "arguments": {}}), (QUEUE, queue_call(tools)))
+
+
 def resident() -> int:
     """The resident set's peak in bytes, less what tracemalloc holds for its traces: getrusage
     counts bytes on macOS, KiB on Linux."""
@@ -213,9 +219,7 @@ async def answered(server, counted: Callable[[], None]) -> tuple[dict[str, Any],
         for ident, method in enumerate(LISTS, start=3):
             answer = await _answer(served.application, _asked(method, ident))
             lists[method] = len(compact(answer["result"])) if "result" in answer else 0
-        for ident, (name, params) in enumerate(
-            ((CATALOG, {"name": CATALOG, "arguments": {}}), (QUEUE, queue_call(result["tools"]))), start=len(LISTS) + 3
-        ):
+        for ident, (name, params) in enumerate(tool_calls(result["tools"]), start=len(LISTS) + 3):
             answer = (await _answer(served.application, {**_asked("tools/call", ident), "params": params}))["result"]
             if answer.get("isError"):
                 raise SystemExit(f"mcp_probe: {name} was refused: {answer}")
@@ -269,16 +273,21 @@ class Slow:
         return {"connections": []}
 
 
-async def calls(count: int) -> dict[str, dict[str, int]]:
-    """What ``count`` slow calls, each one agent's, cost while in flight: one after another, then all at once."""
+def slow_tool(slow: Slow) -> Tool:
+    """The tool the slow calls run, on the real call path."""
 
     # Declared here, since pydantic loads only once the ledger counts.
     class NoArguments(BaseModel):
         model_config = ConfigDict(extra="forbid")
 
+    return Tool(SLOW, "A probe's slow call.", {"type": "object"}, {}, NoArguments, slow)
+
+
+async def calls(count: int) -> dict[str, dict[str, int]]:
+    """What ``count`` slow calls, each one agent's, cost while in flight: one after another, then all at once."""
+
     slow = Slow()
-    tool = Tool(SLOW, "A probe's slow call.", {"type": "object"}, {}, NoArguments, slow)
-    served = ToolServer({SLOW: tool}).served()
+    served = ToolServer({SLOW: slow_tool(slow)}).served()
     gate = TailnetGate(allowed_hosts=("127.0.0.1",), allowed_networks=("127.0.0.0/8",))
     agents = {
         f"probe-{i}": Principal(f"example-probe-{i}", MCP_INTERFACE, frozenset({Capability.READ})) for i in range(count)
