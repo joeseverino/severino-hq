@@ -12,6 +12,7 @@ the request for one would let anyone stop a sync.
 """
 
 import re
+from collections.abc import Collection
 from typing import Any
 
 # What stands where a secret was, the controller mask's own word.
@@ -43,7 +44,8 @@ _WORDS = tuple(_SHAPES)
 
 # A member named for what it holds. The contract leaves a report's status and
 # an inventory record open, so a credential with no shape of its own (a
-# password, a legacy API token) is caught by the name it travels under.
+# password, a legacy API token) is caught by the name it travels under. A
+# name the contract itself declares is its own, never a secret's.
 _SECRET_NAMES = ("private", "secret", "token", "password", "credential")
 NAMED = "a member named as a secret"
 
@@ -56,10 +58,10 @@ def _pointer(path: Path) -> str:
     return "".join("/" + str(part).replace("~", "~0").replace("/", "~1") for part in path) or "/"
 
 
-def _named_secret(key: str, value: Any) -> bool:
+def _named_secret(key: str, value: Any, declared: Collection[str]) -> bool:
     # A boolean or null holds no secret, so a flag such as a repository's
     # ``private`` is a fact about the thing, not the thing's credential.
-    if value is None or isinstance(value, bool):
+    if value is None or isinstance(value, bool) or key in declared:
         return False
     lowered = key.lower()
     return any(name in lowered for name in _SECRET_NAMES)
@@ -73,31 +75,32 @@ def _text(path: Path, text: str, strikes: list[Strike]) -> str:
     return _SHAPE.sub(strike, text)
 
 
-def _struck(path: Path, node: Any, strikes: list[Strike]) -> Any:
+def _struck(path: Path, node: Any, strikes: list[Strike], declared: Collection[str]) -> Any:
     if isinstance(node, str):
         return _text(path, node, strikes)
     if isinstance(node, list):
-        return [_struck((*path, index), child, strikes) for index, child in enumerate(node)]
+        return [_struck((*path, index), child, strikes, declared) for index, child in enumerate(node)]
     if not isinstance(node, dict):
         return node
     kept: dict[str, Any] = {}
     for member, child in node.items():
         key = _text(path, str(member), strikes)
         here = (*path, key)
-        if _named_secret(key, child):
+        if _named_secret(key, child, declared):
             strikes.append((_pointer(here), NAMED))
             kept[key] = REDACTED
         else:
-            kept[key] = _struck(here, child, strikes)
+            kept[key] = _struck(here, child, strikes, declared)
     return kept
 
 
-def struck(value: Any) -> tuple[Any, list[Strike]]:
+def struck(value: Any, declared: Collection[str] = ()) -> tuple[Any, list[Strike]]:
     """``value`` with every secret in it struck, and where each was.
 
     Every string is read, a member's name too. A member named as a secret has
-    its value struck whole, unless it holds a boolean or null.
+    its value struck whole, unless it holds a boolean or null or its name is
+    one of ``declared``, the names the contract gives its own members and keys.
     """
 
     strikes: list[Strike] = []
-    return _struck((), value, strikes), strikes
+    return _struck((), value, strikes, declared), strikes
