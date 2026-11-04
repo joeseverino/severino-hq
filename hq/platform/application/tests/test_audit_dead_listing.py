@@ -41,6 +41,9 @@ class AuditDeadListingTests(SimpleTestCase):
             )
 
         self.assertEqual(run.returncode, 0, run.stderr)
-        *listed, _closing = run.stdout.splitlines()
-        names = {line.split()[1] for line in listed if line.startswith(("hq/a_testing.py:", "hq/product.py:"))}
+        names = {
+            line.split()[1]
+            for line in run.stdout.splitlines()
+            if line.startswith(("hq/a_testing.py:", "hq/product.py:"))
+        }
         self.assertEqual(names, {"unread_seam", "tested_only"})

@@ -15,9 +15,11 @@ lazy from .integration_specs import ResourceSpec
 
 
 class Access(Protocol):
-    def admits(self, principal: Principal, /) -> bool: ...
+    def admits(self, principal: Principal, /) -> bool:
+        """Whether a door lists the operation to this caller."""
 
-    def check(self, principal: Principal, /) -> None: ...
+    def check(self, principal: Principal, /) -> None:
+        """Raise the operation's own ``AuthorizationError`` for a caller it does not admit."""
 
 
 @dataclass(frozen=True, slots=True)
